@@ -3,8 +3,34 @@ name: "Build emu (Windows)"
 on:
   workflow_call:
     # needed since it allows this to become a reusable workflow
+    inputs:
+      matrix_prj:
+        required: false
+        type: string
+        default: '["api_regular","api_experimental","steamclient_experimental_stub","steamclient_experimental","steamclient_experimental_loader","steamclient_experimental_extra","lib_game_overlay_renderer","lib_steam_old","tool_lobby_connect","tool_generate_interfaces"]'
+      matrix_arch:
+        required: false
+        type: string
+        default: '["x64","Win32"]'
+      matrix_cfg:
+        required: false
+        type: string
+        default: '["debug","release"]'
   workflow_dispatch:
     # allows manual trigger
+    inputs:
+      matrix_prj:
+        required: false
+        type: string
+        default: '["api_regular","api_experimental","steamclient_experimental_stub","steamclient_experimental","steamclient_experimental_loader","steamclient_experimental_extra","lib_game_overlay_renderer","lib_steam_old","tool_lobby_connect","tool_generate_interfaces"]'
+      matrix_arch:
+        required: false
+        type: string
+        default: '["x64","Win32"]'
+      matrix_cfg:
+        required: false
+        type: string
+        default: '["debug","release"]'
 
 permissions:
   contents: "write"
@@ -35,25 +61,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        prj: [
-            # regular api
-            "api_regular",
-            # (experimental) api + client
-            "api_experimental",
-            "steamclient_experimental_stub",
-            # client (experimental) + loader + extra dll + gameoverlaylib
-            "steamclient_experimental",
-            "steamclient_experimental_loader",
-            "steamclient_experimental_extra",
-            "lib_game_overlay_renderer",
-            # steam old lib
-            "lib_steam_old",
-            # tools
-            "tool_lobby_connect",
-            "tool_generate_interfaces",
-          ]
-        arch: ["x64", "Win32"]
-        cfg: ["debug", "release"]
+        prj: ${{ fromJSON(inputs.matrix_prj) }}
+        arch: ${{ fromJSON(inputs.matrix_arch) }}
+        cfg: ${{ fromJSON(inputs.matrix_cfg) }}
 
         exclude:
           - prj: lib_steam_old
