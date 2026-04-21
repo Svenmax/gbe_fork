@@ -341,15 +341,23 @@ static bool GBE_FindAndReplaceBytes(std::string &buffer, const std::vector<uint8
         return false;
 
     bool replaced = false;
-    auto search_begin = buffer.begin();
+    for (size_t offset = 0; offset + needle.size() <= buffer.size(); ++offset) {
+        bool matched = true;
+        for (size_t i = 0; i < needle.size(); ++i) {
+            if (static_cast<uint8>(buffer[offset + i]) != needle[i]) {
+                matched = false;
+                break;
+            }
+        }
 
-    while (search_begin != buffer.end()) {
-        auto found = std::search(search_begin, buffer.end(), needle.begin(), needle.end());
-        if (found == buffer.end())
-            break;
+        if (!matched)
+            continue;
 
-        std::copy(replacement.begin(), replacement.end(), found);
-        search_begin = found + replacement.size();
+        for (size_t i = 0; i < replacement.size(); ++i) {
+            buffer[offset + i] = static_cast<char>(replacement[i]);
+        }
+
+        offset += replacement.size() - 1;
         replaced = true;
     }
 
