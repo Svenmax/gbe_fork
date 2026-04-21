@@ -389,8 +389,10 @@ static bool GBE_ExtractDotaHelloContext(const void *pubData, uint32 cubData, GBE
 {
     context = {};
 
-    if (!pubData || cubData < 8)
+    if (!pubData || cubData < 8) {
+        GBE_GC_DebugLog("GC_DOTA_HELLO", "invalid input pubData=%p cubData=%u", pubData, cubData);
         return false;
+    }
 
     const uint8 *bytes = reinterpret_cast<const uint8 *>(pubData);
     uint32 outer_raw_emsg = 0;
@@ -398,29 +400,43 @@ static bool GBE_ExtractDotaHelloContext(const void *pubData, uint32 cubData, GBE
     std::memcpy(&outer_raw_emsg, bytes, sizeof(outer_raw_emsg));
     std::memcpy(&outer_header_length, bytes + sizeof(outer_raw_emsg), sizeof(outer_header_length));
 
-    if (GBE_GC_MaskedEMsg(outer_raw_emsg) != GBE_kEMsgClientToGC)
+    if (GBE_GC_MaskedEMsg(outer_raw_emsg) != GBE_kEMsgClientToGC) {
+        GBE_GC_DebugLog("GC_DOTA_HELLO", "unexpected outer emsg=%u", GBE_GC_MaskedEMsg(outer_raw_emsg));
         return false;
+    }
 
     const size_t outer_header_offset = 8;
     const size_t outer_body_offset = outer_header_offset + outer_header_length;
-    if (outer_body_offset > cubData)
+    if (outer_body_offset > cubData) {
+        GBE_GC_DebugLog("GC_DOTA_HELLO", "outer body offset overflow header_len=%u cubData=%u", outer_header_length, cubData);
         return false;
+    }
 
     const uint8 *outer_header = bytes + outer_header_offset;
     const uint8 *outer_body = bytes + outer_body_offset;
     const size_t outer_body_size = cubData - outer_body_offset;
 
     GBE_ProtoFieldView outer_session_field = GBE_FindProtoField(outer_header, outer_header_length, 2);
-    if (!outer_session_field.found)
+    if (!outer_session_field.found) {
+        GBE_GC_DebugLog("GC_DOTA_HELLO", "missing outer session field");
         return false;
+    }
     context.outer_session_field_raw.assign(
         reinterpret_cast<const char *>(outer_header + outer_session_field.value_offset),
         outer_session_field.value_size
     );
 
     GBE_ProtoFieldView payload_field = GBE_FindProtoField(outer_body, outer_body_size, 3);
-    if (!payload_field.found || payload_field.wire_type != 2 || payload_field.value_size < 8)
+    if (!payload_field.found || payload_field.wire_type != 2 || payload_field.value_size < 8) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_HELLO",
+            "invalid payload field found=%d wire=%u size=%zu",
+            payload_field.found ? 1 : 0,
+            payload_field.wire_type,
+            payload_field.value_size
+        );
         return false;
+    }
 
     const uint8 *payload = outer_body + payload_field.value_offset;
     uint32 inner_raw_emsg = 0;
@@ -428,13 +444,17 @@ static bool GBE_ExtractDotaHelloContext(const void *pubData, uint32 cubData, GBE
     std::memcpy(&inner_raw_emsg, payload, sizeof(inner_raw_emsg));
     std::memcpy(&inner_header_length, payload + sizeof(inner_raw_emsg), sizeof(inner_header_length));
 
-    if (GBE_GC_MaskedEMsg(inner_raw_emsg) != GBE_kEMsgGCClientHello)
+    if (GBE_GC_MaskedEMsg(inner_raw_emsg) != GBE_kEMsgGCClientHello) {
+        GBE_GC_DebugLog("GC_DOTA_HELLO", "unexpected inner emsg=%u", GBE_GC_MaskedEMsg(inner_raw_emsg));
         return false;
+    }
 
     const size_t inner_header_offset = 8;
     const size_t inner_body_offset = inner_header_offset + inner_header_length;
-    if (inner_body_offset > payload_field.value_size)
+    if (inner_body_offset > payload_field.value_size) {
+        GBE_GC_DebugLog("GC_DOTA_HELLO", "inner body offset overflow header_len=%u payload_size=%zu", inner_header_length, payload_field.value_size);
         return false;
+    }
 
     const uint8 *inner_header = payload + inner_header_offset;
     const uint8 *inner_body = payload + inner_body_offset;
@@ -442,8 +462,10 @@ static bool GBE_ExtractDotaHelloContext(const void *pubData, uint32 cubData, GBE
 
     GBE_ProtoFieldView version_field = GBE_FindProtoField(inner_body, inner_body_size, 1);
     uint64 parsed_version = 0;
-    if (!GBE_ExtractProtoFieldUint64(inner_body, inner_body_size, version_field, parsed_version))
+    if (!GBE_ExtractProtoFieldUint64(inner_body, inner_body_size, version_field, parsed_version)) {
+        GBE_GC_DebugLog("GC_DOTA_HELLO", "failed to extract version field");
         return false;
+    }
 
     context.version = static_cast<uint32>(parsed_version);
 
@@ -457,13 +479,23 @@ static bool GBE_ExtractDotaHelloContext(const void *pubData, uint32 cubData, GBE
     }
 
     context.valid = true;
+    GBE_GC_DebugLog(
+        "GC_DOTA_HELLO",
+        "parsed version=%u source_job=%llu has_source_job=%d session_raw_size=%zu",
+        context.version,
+        static_cast<unsigned long long>(context.source_job_id),
+        context.has_source_job ? 1 : 0,
+        context.outer_session_field_raw.size()
+    );
     return true;
 }
 
 static bool GBE_BuildDotaClientWelcome(uint64 steam_id, uint32 app_id, uint32 account_id, const GBE_DotaHelloContext &context, std::string &message)
 {
-    if (!context.valid || GBE_kDotaWelcomeInnerBodyOffset >= sizeof(GBE_kDotaClientWelcomeTemplate))
+    if (!context.valid || GBE_kDotaWelcomeInnerBodyOffset >= sizeof(GBE_kDotaClientWelcomeTemplate)) {
+        GBE_GC_DebugLog("GC_DOTA_WELCOME", "invalid context valid=%d offset=%zu template_size=%zu", context.valid ? 1 : 0, GBE_kDotaWelcomeInnerBodyOffset, sizeof(GBE_kDotaClientWelcomeTemplate));
         return false;
+    }
 
     std::string inner_body(
         reinterpret_cast<const char *>(GBE_kDotaClientWelcomeTemplate + GBE_kDotaWelcomeInnerBodyOffset),
@@ -472,31 +504,44 @@ static bool GBE_BuildDotaClientWelcome(uint64 steam_id, uint32 app_id, uint32 ac
 
     {
         std::vector<uint8> encoded_version;
-        if (!GBE_EncodeVarUint64WithExpectedSize(context.version, GBE_kOldDotaVersionVarint.size(), encoded_version))
+        if (!GBE_EncodeVarUint64WithExpectedSize(context.version, GBE_kOldDotaVersionVarint.size(), encoded_version)) {
+            GBE_GC_DebugLog("GC_DOTA_WELCOME", "version varint size mismatch version=%u expected=%zu", context.version, GBE_kOldDotaVersionVarint.size());
             return false;
-        if (!GBE_FindAndReplaceBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaVersionVarint.data(), GBE_kOldDotaVersionVarint.size()), encoded_version))
+        }
+        if (!GBE_FindAndReplaceBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaVersionVarint.data(), GBE_kOldDotaVersionVarint.size()), encoded_version)) {
+            GBE_GC_DebugLog("GC_DOTA_WELCOME", "failed replacing version bytes version=%u", context.version);
             return false;
+        }
     }
 
     {
         std::vector<uint8> encoded_account;
-        if (!GBE_EncodeVarUint64WithExpectedSize(account_id, GBE_kOldDotaAccountIdVarint.size(), encoded_account))
+        if (!GBE_EncodeVarUint64WithExpectedSize(account_id, GBE_kOldDotaAccountIdVarint.size(), encoded_account)) {
+            GBE_GC_DebugLog("GC_DOTA_WELCOME", "account_id varint size mismatch account_id=%u expected=%zu", account_id, GBE_kOldDotaAccountIdVarint.size());
             return false;
-        if (!GBE_FindAndReplaceBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()), encoded_account))
+        }
+        if (!GBE_FindAndReplaceBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()), encoded_account)) {
+            GBE_GC_DebugLog("GC_DOTA_WELCOME", "failed replacing account_id bytes account_id=%u", account_id);
             return false;
+        }
     }
 
     {
         std::vector<uint8> encoded_steam_id;
-        if (!GBE_EncodeVarUint64WithExpectedSize(steam_id, GBE_kOldDotaSteamIdVarint.size(), encoded_steam_id))
+        if (!GBE_EncodeVarUint64WithExpectedSize(steam_id, GBE_kOldDotaSteamIdVarint.size(), encoded_steam_id)) {
+            GBE_GC_DebugLog("GC_DOTA_WELCOME", "steam_id varint size mismatch steam_id=%llu expected=%zu", static_cast<unsigned long long>(steam_id), GBE_kOldDotaSteamIdVarint.size());
             return false;
-        if (!GBE_FindAndReplaceBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaSteamIdVarint.data(), GBE_kOldDotaSteamIdVarint.size()), encoded_steam_id))
+        }
+        if (!GBE_FindAndReplaceBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaSteamIdVarint.data(), GBE_kOldDotaSteamIdVarint.size()), encoded_steam_id)) {
+            GBE_GC_DebugLog("GC_DOTA_WELCOME", "failed replacing steam_id bytes steam_id=%llu", static_cast<unsigned long long>(steam_id));
             return false;
+        }
     }
 
     std::string inner_header;
     if (context.has_source_job) {
         GBE_AppendProtoVarIntField(inner_header, 10, context.source_job_id);
+        GBE_GC_DebugLog("GC_DOTA_WELCOME", "mirroring source_job=%llu into inner target_job", static_cast<unsigned long long>(context.source_job_id));
     }
 
     std::string inner_payload;
@@ -521,6 +566,14 @@ static bool GBE_BuildDotaClientWelcome(uint64 steam_id, uint32 app_id, uint32 ac
     GBE_AppendLittleEndian32(message, static_cast<uint32>(outer_header.size()));
     message.append(outer_header);
     message.append(outer_body);
+    GBE_GC_DebugLog(
+        "GC_DOTA_WELCOME",
+        "built welcome outer_size=%zu inner_header=%zu inner_body=%zu total=%zu",
+        outer_header.size(),
+        inner_header.size(),
+        inner_body.size(),
+        message.size()
+    );
     return true;
 }
 
@@ -1619,13 +1672,17 @@ EGCResults Steam_Game_Coordinator::SendMessage_( uint32 unMsgType, const void *p
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     if (!gc_initialized && gc_profile == GC_PROFILE_DOTA2) {
+        GBE_GC_DebugLog("GC_SEND", "initializing GC lazily for Dota2 profile");
         initialize_gc();
     }
 
-    if (!gc_initialized)
+    if (!gc_initialized) {
+        GBE_GC_DebugLog("GC_SEND", "gc not initialized, swallowing msg=%u", GBE_GC_MaskedEMsg(unMsgType));
         return k_EGCResultOK;
+    }
 
     if (gc_profile == GC_PROFILE_DOTA2 && handle_dota_client_message(unMsgType, pubData, cubData)) {
+        GBE_GC_DebugLog("GC_SEND", "handled by Dota2 replay path msg=%u", GBE_GC_MaskedEMsg(unMsgType));
         return k_EGCResultOK;
     }
 

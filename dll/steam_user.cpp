@@ -21,6 +21,18 @@
 #include "dll/base64.h"
 #include "dll/dll.h"
 
+#include <cstdio>
+
+static void GBE_LogSteamUserState(const char *scope, const char *message)
+{
+    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (!file)
+        return;
+
+    std::fprintf(file, "[%s] %s\n", scope ? scope : "STEAM_USER", message ? message : "");
+    std::fclose(file);
+}
+
 Steam_User::Steam_User(Settings *settings, Local_Storage *local_storage, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, bool is_server)
 {
     this->settings = settings;
@@ -87,7 +99,8 @@ bool Steam_User::BLoggedOn()
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    return !settings->is_offline();
+    GBE_LogSteamUserState("STEAM_USER_BLOGGEDON", "forcing BLoggedOn=true");
+    return true;
 }
 
 ELogonState Steam_User::GetLogonState()
@@ -95,17 +108,8 @@ ELogonState Steam_User::GetLogonState()
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    if (settings->is_offline()) {
-        if (call_logged_on) {
-            return k_ELogonStateLoggingOn;
-        } else if (call_logged_off) {
-            return k_ELogonStateLoggingOff;
-        } else {
-            return k_ELogonStateNotLoggedOn;
-        }
-    } else {
-        return k_ELogonStateLoggedOn;
-    }
+    GBE_LogSteamUserState("STEAM_USER_LOGONSTATE", "forcing GetLogonState=LoggedOn");
+    return k_ELogonStateLoggedOn;
 }
 
 bool Steam_User::BConnected()
@@ -113,7 +117,8 @@ bool Steam_User::BConnected()
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    return !settings->is_offline();
+    GBE_LogSteamUserState("STEAM_USER_BCONNECTED", "forcing BConnected=true");
+    return true;
 }
 
 // returns the CSteamID of the account currently logged into the Steam client

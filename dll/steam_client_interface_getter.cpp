@@ -17,6 +17,27 @@
 
 #include "dll/steam_client.h"
 
+#include <cstdio>
+
+static void GBE_LogGenericInterfaceRequest(const char *scope, const char *version, int hSteamUser, int hSteamPipe, const void *instance, bool server)
+{
+    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (!file)
+        return;
+
+    std::fprintf(
+        file,
+        "[%s] version=%s hSteamUser=%d hSteamPipe=%d server=%d ptr=%p\n",
+        scope ? scope : "GENERIC_INTERFACE",
+        version ? version : "<null>",
+        hSteamUser,
+        hSteamPipe,
+        server ? 1 : 0,
+        instance
+    );
+    std::fclose(file);
+}
+
 
 // retrieves the ISteamBilling interface associated with the handle
 ISteamBilling *Steam_Client::GetISteamBilling( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion )
@@ -356,7 +377,10 @@ ISteamMatchmakingServers *Steam_Client::GetISteamMatchmakingServers( HSteamUser 
 void *Steam_Client::GetISteamGenericInterface( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion )
 {
     PRINT_DEBUG("'%s' %i %i", pchVersion, hSteamUser, hSteamPipe);
-    if (!steam_pipes.count(hSteamPipe)) return NULL;
+    if (!steam_pipes.count(hSteamPipe)) {
+        GBE_LogGenericInterfaceRequest("GENERIC_INTERFACE", pchVersion, hSteamUser, hSteamPipe, nullptr, false);
+        return NULL;
+    }
 
     bool server = false;
     if (steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER) {
@@ -456,8 +480,12 @@ void *Steam_Client::GetISteamGenericInterface( HSteamUser hSteamUser, HSteamPipe
             steam_game_coordinator_temp = steam_game_coordinator;
         }
 
+        GBE_LogGenericInterfaceRequest("GC_INTERFACE_REQUEST", pchVersion, hSteamUser, hSteamPipe, steam_game_coordinator_temp, server);
+
         if (strcmp(pchVersion, STEAMGAMECOORDINATOR_INTERFACE_VERSION) == 0) {
-            return reinterpret_cast<void *>(static_cast<ISteamGameCoordinator *>(steam_game_coordinator_temp));
+            void *result = reinterpret_cast<void *>(static_cast<ISteamGameCoordinator *>(steam_game_coordinator_temp));
+            GBE_LogGenericInterfaceRequest("GC_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, server);
+            return result;
         }
     } else if (strstr(pchVersion, "STEAMTV_INTERFACE_V") == pchVersion) {
         if (strcmp(pchVersion, STEAMTV_INTERFACE_VERSION) == 0) {

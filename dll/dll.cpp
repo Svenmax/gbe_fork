@@ -363,9 +363,23 @@ static void *create_client_interface(const char *ver)
 STEAMAPI_API void * S_CALLTYPE SteamInternal_CreateInterface( const char *ver )
 {
     PRINT_DEBUG("%s", ver);
-    if (!get_steam_client()->IsUserLogIn() && !get_steam_client()->IsServerInit()) return NULL;
+    const bool user_logged_in = get_steam_client()->IsUserLogIn();
+    const bool server_initialized = get_steam_client()->IsServerInit();
+    GBE_GC_DebugLog(
+        "CREATE_INTERFACE",
+        "ver=%s user_logged_in=%d server_init=%d",
+        ver ? ver : "<null>",
+        user_logged_in ? 1 : 0,
+        server_initialized ? 1 : 0
+    );
+    if (!user_logged_in && !server_initialized) {
+        GBE_GC_DebugLog("CREATE_INTERFACE", "rejecting ver=%s before login/init", ver ? ver : "<null>");
+        return NULL;
+    }
 
-    return create_client_interface(ver);
+    void *created = create_client_interface(ver);
+    GBE_GC_DebugLog("CREATE_INTERFACE", "ver=%s ptr=%p", ver ? ver : "<null>", created);
+    return created;
 }
 
 // https://github.com/ValveSoftware/source-sdk-2013/blob/a36ead80b3ede9f269314c08edd3ecc23de4b160/src/public/steam/steam_api_internal.h#L30-L32
@@ -445,6 +459,11 @@ static HSteamPipe user_steam_pipe = 0;
 STEAMAPI_API steam_bool S_CALLTYPE SteamAPI_Init()
 {
     PRINT_DEBUG_ENTRY();
+    FILE *bootstrap_log = std::fopen(GBE_kGcDebugLogPath, "a");
+    if (bootstrap_log) {
+        std::fprintf(bootstrap_log, "DLL LOADED SUCCESSFULLY\n");
+        std::fclose(bootstrap_log);
+    }
     GBE_GC_DebugLog("STEAMAPI_INIT", "entered SteamAPI_Init");
     if (user_steam_pipe) return true;
     

@@ -18,6 +18,8 @@
 #include "dll/base.h"
 #include "dll/settings_parser.h"
 
+#include <cstdio>
+
 #ifndef EMU_RELEASE_BUILD
 #include "dbg_log/dbg_log.hpp"
 #endif
@@ -34,6 +36,16 @@ dbg_log dbg_logger(get_full_program_path() + "STEAM_LOG_" + std::to_string(commo
 
 
 #ifdef __WINDOWS__
+
+static void GBE_LogDllBootstrap(const char *message)
+{
+    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (!file)
+        return;
+
+    std::fprintf(file, "%s\n", message ? message : "DLL LOADED SUCCESSFULLY");
+    std::fclose(file);
+}
 
 void randombytes(char *buf, size_t size)
 {
@@ -669,6 +681,7 @@ BOOL WINAPI DllMain( HINSTANCE, DWORD dwReason, LPVOID )
 {
     switch ( dwReason ) {
         case DLL_PROCESS_ATTACH:
+            GBE_LogDllBootstrap("DLL LOADED SUCCESSFULLY");
             PRINT_DEBUG("experimental DLL_PROCESS_ATTACH");
             if (!settings_disable_lan_only()) {
                 PRINT_DEBUG("Hooking lan only functions");
