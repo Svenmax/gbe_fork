@@ -63,6 +63,19 @@ jobs:
           key: "${{ env.DEPS_CACHE_KEY }}-${{ env.PREMAKE_ACTION }}"
           path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
 
+      # extra helpers/tools, these are not built inside the deps build dir
+      - name: "Clone third-party build helpers (common/linux)"
+        uses: actions/checkout@v6
+        with:
+          ref: "third-party/common/linux"
+          path: "${{env.THIRD_PARTY_BASE_DIR}}/common/linux"
+
+      - name: "Clone third-party build helpers (build/linux)"
+        uses: actions/checkout@v6
+        with:
+          ref: "third-party/build/linux"
+          path: "${{env.THIRD_PARTY_BASE_DIR}}/build/linux"
+
       # fix folder permissions! not sure why this fails
       # nested subdirs "build/linux/release" cause permission problems
       - name: "Give all permissions to repo folder"
