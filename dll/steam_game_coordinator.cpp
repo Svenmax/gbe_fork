@@ -944,6 +944,30 @@ static bool GBE_EncodeVarUint64WithExpectedSize(uint64 value, size_t expected_si
     return true;
 }
 
+static bool GBE_TryPatchDotaAccountIdVarint(std::string &message, uint32 account_id, const char *log_scope)
+{
+    std::string encoded_account_raw;
+    GBE_AppendVarUint64(encoded_account_raw, account_id);
+    if (encoded_account_raw.size() != GBE_kOldDotaAccountIdVarint.size()) {
+        GBE_GC_DebugLog(
+            log_scope,
+            "skipping account_id varint replacement account_id=%u encoded_size=%zu expected=%zu",
+            account_id,
+            encoded_account_raw.size(),
+            GBE_kOldDotaAccountIdVarint.size()
+        );
+        return true;
+    }
+
+    const std::vector<uint8> encoded_account(encoded_account_raw.begin(), encoded_account_raw.end());
+    if (!GBE_FindAndReplaceBytes(message, GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()), encoded_account)) {
+        GBE_GC_DebugLog(log_scope, "failed replacing account_id bytes account_id=%u", account_id);
+        return false;
+    }
+
+    return true;
+}
+
 static bool GBE_ExtractProtoFieldUint64(const uint8 *data, size_t size, const GBE_ProtoFieldView &view, uint64 &value)
 {
     if (!view.found)
@@ -990,10 +1014,7 @@ static bool GBE_ParseDirectProtoContext(const void *pubData, uint32 cubData, Pro
 static bool GBE_PatchDotaTemplateIdentifiers(std::string &message, uint32 account_id, uint64 steam_id, bool replace_account, bool replace_steam_id)
 {
     if (replace_account) {
-        std::vector<uint8> encoded_account;
-        if (!GBE_EncodeVarUint64WithExpectedSize(account_id, GBE_kOldDotaAccountIdVarint.size(), encoded_account))
-            return false;
-        if (!GBE_FindAndReplaceBytes(message, GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()), encoded_account))
+        if (!GBE_TryPatchDotaAccountIdVarint(message, account_id, "GC_DOTA_PATCH"))
             return false;
     }
 
@@ -1383,15 +1404,8 @@ static bool GBE_BuildDotaWelcomeBody(uint64 steam_id, uint32 account_id, const G
     }
 
     {
-        std::vector<uint8> encoded_account;
-        if (!GBE_EncodeVarUint64WithExpectedSize(account_id, GBE_kOldDotaAccountIdVarint.size(), encoded_account)) {
-            GBE_GC_DebugLog("GC_DOTA_WELCOME", "account_id varint size mismatch account_id=%u expected=%zu", account_id, GBE_kOldDotaAccountIdVarint.size());
+        if (!GBE_TryPatchDotaAccountIdVarint(inner_body, account_id, "GC_DOTA_WELCOME"))
             return false;
-        }
-        if (!GBE_FindAndReplaceBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()), encoded_account)) {
-            GBE_GC_DebugLog("GC_DOTA_WELCOME", "failed replacing account_id bytes account_id=%u", account_id);
-            return false;
-        }
     }
 
     {

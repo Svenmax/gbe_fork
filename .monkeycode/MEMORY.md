@@ -88,3 +88,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 官方建房成功首轮顺序是先回 `7055` 成功响应，再回 `6146` 的 lobby SO 更新包；`7055` 内层包体只有 `08 01`。
   - `7038` 请求的 9 字节 inner header 使用 field10 固定 64 位 job 值，官方 `7055` 响应改为 field11 并复用同一个 job 值。
   - 首轮 `6146` 模板里包含旧 LobbyID 的 8 字节 varint 以及旧房主 SteamID 的 fixed64，需要统一替换成本地值。
+
+[Dota2 高位 AccountID 与旧抓包模板兼容性]
+- Date: 2026-04-21
+- Context: Agent 在分析 `STEAM_LOG_3127950399.zip` 与 `gbe_gc_debug.log` 的 GC 初始化失败问题时发现
+- Category: 代码模式
+- Instructions:
+  - 当前 Dota2 `ClientWelcome` 和部分 direct replay 模板里的旧 `account_id` 使用 4 字节 protobuf varint。
+  - 当本地 `GetAccountID()` 编码后超过 4 字节时，不能继续对这些模板做等长替换，否则会在 GC welcome 阶段直接构包失败。
+  - 对这类通用模板应改为“能等长替换就替换，长度不匹配时记录日志并跳过”，不要因此中断整个 GC 会话。
+  - Lobby 的 `SteamID`、`LobbyID` 和 fixed32/fixed64 替换仍需保持严格等长，不应放宽。
