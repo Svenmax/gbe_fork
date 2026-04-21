@@ -68,6 +68,7 @@ public ISteamGameCoordinator
     bool delay_init{};
     bool welcome_received{};
     std::chrono::high_resolution_clock::time_point welcome_time{};
+    bool GBE_dota_login_sync_sent{};
 
     std::vector<Econ_Item> items;
     bool items_loaded{};
@@ -108,6 +109,8 @@ public ISteamGameCoordinator
     void handle_set_item_style(const void *input, uint32 input_size);
     void handle_adjust_equip_state(const void *input, uint32 input_size);
     void handle_set_multiple_item_pos(const void *input, uint32 input_size);
+    void GBE_PushDotaLoginSyncMessages();
+    bool GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData);
     bool handle_dota_client_message(uint32 unMsgType, const void *pubData, uint32 cubData);
 
     void callback_client_welcome();
