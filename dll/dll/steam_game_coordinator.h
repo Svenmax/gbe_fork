@@ -57,6 +57,7 @@ public ISteamGameCoordinator
     {
         GC_PROFILE_INVALID = 0,
         GC_PROFILE_TF2,
+        GC_PROFILE_DOTA2,
         //GC_PROFILE_PORTAL2,
     };
 
@@ -88,6 +89,7 @@ public ISteamGameCoordinator
     void parse_gc_config();
     bool is_welcome_message(const GC_Message &message);
     void push_incoming(uint32 msg_type, const std::string &message, double delay = 0.1);
+    void push_incoming_now(uint32 msg_type, const std::string &message);
 
     std::string build_msg_header(JobID_t target_job = k_GIDNil, JobID_t source_job = k_GIDNil);
     GCMsgHdrEx_t parse_msg_header(const char *&p);
@@ -106,6 +108,7 @@ public ISteamGameCoordinator
     void handle_set_item_style(const void *input, uint32 input_size);
     void handle_adjust_equip_state(const void *input, uint32 input_size);
     void handle_set_multiple_item_pos(const void *input, uint32 input_size);
+    bool handle_dota_client_message(uint32 unMsgType, const void *pubData, uint32 cubData);
 
     void callback_client_welcome();
     void callback_server_welcome();

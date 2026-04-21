@@ -20,6 +20,8 @@
 #include "dll/settings_parser.h"
 #include "dll/client_known_interfaces.h"
 #include "dll/capicmcallback.h"
+#include <cstdarg>
+#include <cstdio>
 
 
 // https://github.com/ValveSoftware/source-sdk-2013/blob/a36ead80b3ede9f269314c08edd3ecc23de4b160/src/public/steam/steam_api_internal.h#L30-L32
@@ -31,6 +33,25 @@ struct ContextInitData {
     uintp counter{};
     CSteamAPIContext ctx{};
 };
+
+static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
+
+static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)
+{
+    FILE *file = std::fopen(GBE_kGcDebugLogPath, "a");
+    if (!file)
+        return;
+
+    std::fprintf(file, "[%s] ", scope ? scope : "GC");
+
+    va_list args;
+    va_start(args, fmt);
+    std::vfprintf(file, fmt, args);
+    va_end(args);
+
+    std::fprintf(file, "\n");
+    std::fclose(file);
+}
 
 class steam_lifetime_counters {
 private:
@@ -424,6 +445,7 @@ static HSteamPipe user_steam_pipe = 0;
 STEAMAPI_API steam_bool S_CALLTYPE SteamAPI_Init()
 {
     PRINT_DEBUG_ENTRY();
+    GBE_GC_DebugLog("STEAMAPI_INIT", "entered SteamAPI_Init");
     if (user_steam_pipe) return true;
     
     // call this first since it loads old interfaces

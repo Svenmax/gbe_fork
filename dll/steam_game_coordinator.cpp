@@ -17,6 +17,13 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include <algorithm>
+#include <array>
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+#include <string>
+#include <vector>
 #include <steammessages.pb.h>
 #include <tf2/base_gcmessages.pb.h>
 #include <tf2/econ_gcmessages.pb.h>
@@ -27,6 +34,77 @@
 using namespace gamecoordinator::tf2;
 
 constexpr int GC_MIN_VERSION = 20091217;
+static constexpr uint32 GBE_kProtoMask = 0x80000000u;
+static constexpr uint32 GBE_kEMsgClientToGC = 5452u;
+static constexpr uint32 GBE_kEMsgClientFromGC = 5453u;
+static constexpr uint32 GBE_kEMsgGCClientHello = 4006u;
+static constexpr uint32 GBE_kEMsgGCClientWelcome = 4004u;
+static constexpr uint32 GBE_kDotaAppId = 570u;
+static constexpr size_t GBE_kDotaWelcomeInnerBodyOffset = 48u;
+static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
+
+static const uint8 GBE_kDotaClientWelcomeTemplate[] = {
+    0x4D, 0x15, 0x00, 0x80, 0x14, 0x00, 0x00, 0x00, 0x09, 0xF5, 0xB6, 0x21, 0x08, 0x01, 0x00, 0x10,
+    0x01, 0x10, 0xEB, 0xFC, 0x88, 0xA1, 0xF8, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x08, 0xBA, 0x04, 0x10,
+    0xA4, 0x9F, 0x80, 0x80, 0x08, 0x1A, 0xD6, 0x06, 0xA4, 0x0F, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00,
+    0x08, 0xEB, 0x34, 0x12, 0xB0, 0x03, 0x28, 0xBF, 0xA4, 0xE0, 0x86, 0x07, 0x38, 0x01, 0x68, 0xC6,
+    0xCC, 0xBC, 0xEE, 0x0D, 0x88, 0x01, 0x00, 0x90, 0x01, 0x1B, 0xB0, 0x01, 0x09, 0xD2, 0x01, 0x32,
+    0x08, 0x9F, 0x14, 0x12, 0x2D, 0x0A, 0x0D, 0x08, 0x80, 0xFB, 0xE0, 0xCE, 0x06, 0x10, 0x8A, 0xCF,
+    0xB8, 0xE0, 0x82, 0x01, 0x0A, 0x0D, 0x08, 0x80, 0xA9, 0xC1, 0xCE, 0x06, 0x10, 0xEA, 0x98, 0xA6,
+    0xD2, 0x82, 0x01, 0x0A, 0x0D, 0x08, 0x80, 0x84, 0xC8, 0xCD, 0x06, 0x10, 0xFE, 0xCA, 0x98, 0x8E,
+    0x82, 0x01, 0xD2, 0x01, 0x47, 0x08, 0xD8, 0x3E, 0x12, 0x42, 0x08, 0xDF, 0xE5, 0xC7, 0x81, 0x06,
+    0x08, 0x82, 0xB7, 0x99, 0xB9, 0x07, 0x08, 0xB8, 0x99, 0xE2, 0xCA, 0x0A, 0x08, 0xBB, 0x8B, 0xB4,
+    0xAF, 0x0C, 0x08, 0x81, 0xFC, 0xE4, 0x9E, 0x0A, 0x08, 0xFB, 0x90, 0xE9, 0xDC, 0x0B, 0x08, 0x91,
+    0xCE, 0xA9, 0xA4, 0x0A, 0x08, 0xC9, 0xAE, 0x89, 0xA0, 0x09, 0x08, 0xE7, 0xC4, 0xD1, 0xEF, 0x05,
+    0x08, 0xA7, 0x83, 0xC7, 0xDA, 0x0C, 0x10, 0x84, 0x96, 0xCC, 0x8C, 0x0D, 0xD2, 0x01, 0x07, 0x08,
+    0x8B, 0x3F, 0x12, 0x02, 0x08, 0x6B, 0xD2, 0x01, 0x7D, 0x08, 0xA9, 0x3A, 0x12, 0x78, 0x0A, 0x16,
+    0x08, 0x02, 0x10, 0xA0, 0x98, 0xEA, 0xCE, 0x06, 0x18, 0xA4, 0x9F, 0xEA, 0xCE, 0x06, 0x20, 0xA0,
+    0x8D, 0x8F, 0xCF, 0x06, 0x28, 0x43, 0x0A, 0x16, 0x08, 0x03, 0x10, 0xB0, 0xC8, 0x8D, 0xCF, 0x06,
+    0x18, 0xB4, 0xCF, 0x8D, 0xCF, 0x06, 0x20, 0xB0, 0xBD, 0xB2, 0xCF, 0x06, 0x28, 0x43, 0x0A, 0x16,
+    0x08, 0x04, 0x10, 0xC0, 0xEF, 0xE8, 0xCE, 0x06, 0x18, 0xC4, 0xF6, 0xE8, 0xCE, 0x06, 0x20, 0xC0,
+    0xE4, 0x8D, 0xCF, 0x06, 0x28, 0x43, 0x0A, 0x16, 0x08, 0x06, 0x10, 0x90, 0xDD, 0xEB, 0xCE, 0x06,
+    0x18, 0x94, 0xE4, 0xEB, 0xCE, 0x06, 0x20, 0x90, 0xD2, 0x90, 0xCF, 0x06, 0x28, 0x43, 0x0A, 0x16,
+    0x08, 0x07, 0x10, 0xF0, 0xA4, 0xEB, 0xCE, 0x06, 0x18, 0xF4, 0xAB, 0xEB, 0xCE, 0x06, 0x20, 0xF0,
+    0x99, 0x90, 0xCF, 0x06, 0x28, 0x43, 0xD2, 0x01, 0x07, 0x08, 0x83, 0x3F, 0x12, 0x02, 0x08, 0x01,
+    0xD8, 0x01, 0xF5, 0xE8, 0xDB, 0xBF, 0x82, 0x01, 0xE0, 0x01, 0x00, 0xF0, 0x01, 0xB0, 0x18, 0x92,
+    0x02, 0x71, 0x08, 0xA7, 0x14, 0x12, 0x6C, 0x0A, 0x2F, 0x31, 0x4F, 0x63, 0x95, 0x01, 0xAF, 0x01,
+    0xC7, 0x01, 0xF9, 0x01, 0xAB, 0x02, 0x8F, 0x03, 0xF3, 0x03, 0xD7, 0x04, 0xBB, 0x05, 0x9F, 0x06,
+    0x83, 0x07, 0xE7, 0x07, 0xCB, 0x08, 0xAF, 0x09, 0x93, 0x0A, 0xDB, 0x0B, 0xD5, 0x0D, 0xCF, 0x0F,
+    0xC9, 0x11, 0x8B, 0x15, 0xAB, 0x1B, 0xE7, 0x20, 0x12, 0x39, 0x08, 0x1B, 0x12, 0x35, 0xAC, 0x02,
+    0xD8, 0x04, 0xBC, 0x05, 0xE8, 0x07, 0xB0, 0x09, 0xF8, 0x0A, 0xA4, 0x0D, 0xB4, 0x10, 0xF0, 0x15,
+    0xAC, 0x1B, 0xE8, 0x20, 0xC0, 0x25, 0xFC, 0x2A, 0xB8, 0x30, 0xF4, 0x35, 0xB0, 0x3B, 0xEC, 0x40,
+    0xA8, 0x46, 0xBC, 0x50, 0xA8, 0x5F, 0xE8, 0x6B, 0xF0, 0x79, 0xA8, 0x91, 0x01, 0xEC, 0xBD, 0x01,
+    0x80, 0xE1, 0x01, 0x98, 0x02, 0x37, 0x1A, 0xEA, 0x02, 0x12, 0xA1, 0x02, 0x08, 0xD2, 0x0F, 0x12,
+    0x9B, 0x02, 0x08, 0xF5, 0xED, 0x86, 0x41, 0x18, 0x9A, 0x01, 0x20, 0xA0, 0x01, 0x60, 0x3A, 0x68,
+    0x07, 0x70, 0x66, 0x78, 0x02, 0x90, 0x01, 0x00, 0xA0, 0x01, 0x00, 0xA8, 0x01, 0x00, 0xB0, 0x01,
+    0xA5, 0xF1, 0xFA, 0xAA, 0x06, 0xB8, 0x01, 0x02, 0xC0, 0x01, 0x3E, 0xB0, 0x02, 0x00, 0xB8, 0x02,
+    0x00, 0xC8, 0x02, 0xE5, 0xAF, 0xE4, 0xBF, 0x06, 0xD0, 0x02, 0x0C, 0x80, 0x03, 0x00, 0xB8, 0x03,
+    0x01, 0xC8, 0x03, 0x00, 0xD0, 0x03, 0x01, 0xD8, 0x03, 0xCF, 0xD2, 0x9B, 0xA7, 0x05, 0xE0, 0x03,
+    0xD5, 0x01, 0xE8, 0x03, 0x36, 0xF0, 0x03, 0x1C, 0x88, 0x04, 0x00, 0x98, 0x04, 0x07, 0xA0, 0x04,
+    0x94, 0x01, 0xA8, 0x04, 0x03, 0xB0, 0x04, 0x43, 0xB8, 0x04, 0x95, 0x02, 0xC0, 0x04, 0xD2, 0x22,
+    0xC8, 0x04, 0x01, 0xD0, 0x04, 0x03, 0xB0, 0x05, 0x00, 0xC0, 0x05, 0xA4, 0xC7, 0xC7, 0x94, 0x80,
+    0xE3, 0xC8, 0xCE, 0x75, 0xC8, 0x05, 0xC4, 0xEF, 0x8F, 0xD0, 0x05, 0xD0, 0x05, 0xAC, 0xF1, 0xEE,
+    0xBF, 0x06, 0xD8, 0x05, 0xEF, 0xDB, 0xEE, 0xBF, 0x06, 0xE0, 0x05, 0xBE, 0xC8, 0xEE, 0xBF, 0x06,
+    0xB8, 0x06, 0xE1, 0xAC, 0x8B, 0x84, 0xD0, 0x85, 0x40, 0xC0, 0x06, 0xB4, 0xA7, 0xAC, 0x9D, 0x06,
+    0xC8, 0x06, 0x80, 0x9A, 0x9A, 0x9B, 0x06, 0xD0, 0x06, 0xAC, 0xF1, 0xEE, 0xBF, 0x06, 0xD8, 0x06,
+    0xEF, 0xDB, 0xEE, 0xBF, 0x06, 0xE0, 0x06, 0x99, 0xC1, 0xE4, 0xBF, 0x06, 0xE8, 0x06, 0x00, 0x90,
+    0x07, 0x3C, 0x9A, 0x07, 0x07, 0x08, 0x01, 0x15, 0xCD, 0xCC, 0x4C, 0x3D, 0x9A, 0x07, 0x07, 0x08,
+    0x04, 0x15, 0xCD, 0xCC, 0x4C, 0x3D, 0x9A, 0x07, 0x07, 0x08, 0x02, 0x15, 0x00, 0x00, 0x00, 0x00,
+    0x9A, 0x07, 0x07, 0x08, 0x08, 0x15, 0xCD, 0xCC, 0x4C, 0x3D, 0x9A, 0x07, 0x07, 0x08, 0x10, 0x15,
+    0xCD, 0xCC, 0x4C, 0x3D, 0xC0, 0x07, 0x00, 0xC8, 0x07, 0xA0, 0x90, 0xDC, 0xB9, 0x06, 0xD0, 0x07,
+    0x00, 0xD8, 0x07, 0x00, 0xD8, 0x07, 0x00, 0xD8, 0x07, 0x00, 0xD8, 0x07, 0x00, 0x12, 0x22, 0x08,
+    0xDC, 0x0F, 0x12, 0x1D, 0x08, 0xF5, 0xED, 0x86, 0x41, 0x10, 0x00, 0x18, 0x01, 0x20, 0x00, 0x28,
+    0x00, 0x30, 0x00, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x19, 0x2D, 0x4B, 0xA7, 0x55, 0x7F, 0xD5, 0x69, 0x00, 0x22, 0x0C, 0x08, 0x01, 0x10, 0xF5,
+    0xED, 0x86, 0xC1, 0x90, 0x80, 0x80, 0x88, 0x01, 0x30, 0x01, 0x39, 0xB1, 0x4D, 0xA7, 0x55, 0x7F,
+    0xD5, 0x69, 0x00, 0x2A, 0x0E, 0x0D, 0x48, 0xA1, 0x1F, 0x42, 0x15, 0x51, 0xCB, 0xE8, 0x42, 0x1A,
+    0x02, 0x43, 0x4E, 0x48, 0x09, 0x52, 0x02, 0x43, 0x4E, 0x80, 0x01, 0x00, 0x88, 0x01, 0x00, 0x92,
+    0x01, 0x0C, 0x08, 0xA7, 0x23, 0x12, 0x07, 0x0A, 0x05, 0x08, 0xA8, 0x23, 0x12, 0x00,
+};
+
+static const std::array<uint8, 2> GBE_kOldDotaVersionVarint = { 0xEB, 0x34 };
+static const std::array<uint8, 4> GBE_kOldDotaAccountIdVarint = { 0xF5, 0xED, 0x86, 0x41 };
+static const std::array<uint8, 9> GBE_kOldDotaSteamIdVarint = { 0xF5, 0xED, 0x86, 0xC1, 0x90, 0x80, 0x80, 0x88, 0x01 };
 
 #pragma pack( push, 1 )
 //-----------------------------------------------------------------------------
@@ -85,8 +163,372 @@ static T deser_var(const char *&p)
     return output;
 }
 
+struct GBE_ProtoFieldView
+{
+    bool found{};
+    uint32 field_number{};
+    uint32 wire_type{};
+    size_t value_offset{};
+    size_t value_size{};
+};
+
+struct GBE_DotaHelloContext
+{
+    bool valid{};
+    uint32 version{};
+    std::string outer_session_field_raw;
+    uint64 source_job_id{};
+    bool has_source_job{};
+};
+
+static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)
+{
+    FILE *file = std::fopen(GBE_kGcDebugLogPath, "a");
+    if (!file)
+        return;
+
+    std::fprintf(file, "[%s] ", scope ? scope : "GC");
+
+    va_list args;
+    va_start(args, fmt);
+    std::vfprintf(file, fmt, args);
+    va_end(args);
+
+    std::fprintf(file, "\n");
+    std::fclose(file);
+}
+
+static uint32 GBE_GC_MaskedEMsg(uint32 msg_type)
+{
+    return msg_type & (~GBE_kProtoMask);
+}
+
+static bool GBE_ReadVarUint64(const uint8 *data, size_t size, size_t &offset, uint64 &value, size_t *raw_begin = nullptr, size_t *raw_end = nullptr)
+{
+    if (!data || offset >= size)
+        return false;
+
+    size_t begin = offset;
+    value = 0;
+    int shift = 0;
+
+    while (offset < size && shift <= 63) {
+        const uint8 byte = data[offset++];
+        value |= static_cast<uint64>(byte & 0x7F) << shift;
+
+        if ((byte & 0x80) == 0) {
+            if (raw_begin)
+                *raw_begin = begin;
+            if (raw_end)
+                *raw_end = offset;
+            return true;
+        }
+
+        shift += 7;
+    }
+
+    return false;
+}
+
+static GBE_ProtoFieldView GBE_FindProtoField(const uint8 *data, size_t size, uint32 wanted_field)
+{
+    GBE_ProtoFieldView view{};
+    size_t offset = 0;
+
+    while (offset < size) {
+        uint64 key = 0;
+        if (!GBE_ReadVarUint64(data, size, offset, key))
+            return {};
+
+        const uint32 field_number = static_cast<uint32>(key >> 3);
+        const uint32 wire_type = static_cast<uint32>(key & 0x7);
+        size_t value_offset = offset;
+        size_t value_size = 0;
+
+        switch (wire_type) {
+            case 0: {
+                size_t raw_begin = offset;
+                size_t raw_end = offset;
+                uint64 ignored = 0;
+                if (!GBE_ReadVarUint64(data, size, offset, ignored, &raw_begin, &raw_end))
+                    return {};
+                value_size = raw_end - raw_begin;
+                break;
+            }
+            case 1:
+                if (offset + 8 > size)
+                    return {};
+                offset += 8;
+                value_size = 8;
+                break;
+            case 2: {
+                uint64 length = 0;
+                if (!GBE_ReadVarUint64(data, size, offset, length))
+                    return {};
+                if (offset + length > size)
+                    return {};
+                value_offset = offset;
+                value_size = static_cast<size_t>(length);
+                offset += static_cast<size_t>(length);
+                break;
+            }
+            case 5:
+                if (offset + 4 > size)
+                    return {};
+                offset += 4;
+                value_size = 4;
+                break;
+            default:
+                return {};
+        }
+
+        if (field_number == wanted_field) {
+            view.found = true;
+            view.field_number = field_number;
+            view.wire_type = wire_type;
+            view.value_offset = value_offset;
+            view.value_size = value_size;
+            return view;
+        }
+    }
+
+    return {};
+}
+
+static void GBE_AppendVarUint64(std::string &buffer, uint64 value)
+{
+    do {
+        uint8 byte = static_cast<uint8>(value & 0x7F);
+        value >>= 7;
+        if (value != 0)
+            byte |= 0x80;
+        buffer.push_back(static_cast<char>(byte));
+    } while (value != 0);
+}
+
+static void GBE_AppendLittleEndian32(std::string &buffer, uint32 value)
+{
+    ser_var<uint32>(buffer, value);
+}
+
+static void GBE_AppendProtoVarIntField(std::string &buffer, uint32 field_number, uint64 value)
+{
+    GBE_AppendVarUint64(buffer, (static_cast<uint64>(field_number) << 3) | 0u);
+    GBE_AppendVarUint64(buffer, value);
+}
+
+static void GBE_AppendProtoFixed64Field(std::string &buffer, uint32 field_number, uint64 value)
+{
+    GBE_AppendVarUint64(buffer, (static_cast<uint64>(field_number) << 3) | 1u);
+    ser_var<uint64>(buffer, value);
+}
+
+static void GBE_AppendProtoBytesField(std::string &buffer, uint32 field_number, const std::string &value)
+{
+    GBE_AppendVarUint64(buffer, (static_cast<uint64>(field_number) << 3) | 2u);
+    GBE_AppendVarUint64(buffer, static_cast<uint64>(value.size()));
+    buffer.append(value);
+}
+
+static std::vector<uint8> GBE_VectorFromBytes(const uint8 *data, size_t size)
+{
+    return std::vector<uint8>(data, data + size);
+}
+
+static bool GBE_FindAndReplaceBytes(std::string &buffer, const std::vector<uint8> &needle, const std::vector<uint8> &replacement)
+{
+    if (needle.empty() || needle.size() != replacement.size())
+        return false;
+
+    bool replaced = false;
+    auto search_begin = buffer.begin();
+
+    while (search_begin != buffer.end()) {
+        auto found = std::search(search_begin, buffer.end(), needle.begin(), needle.end());
+        if (found == buffer.end())
+            break;
+
+        std::copy(replacement.begin(), replacement.end(), found);
+        search_begin = found + replacement.size();
+        replaced = true;
+    }
+
+    return replaced;
+}
+
+static bool GBE_EncodeVarUint64WithExpectedSize(uint64 value, size_t expected_size, std::vector<uint8> &encoded)
+{
+    std::string encoded_raw;
+    GBE_AppendVarUint64(encoded_raw, value);
+    if (encoded_raw.size() != expected_size)
+        return false;
+
+    encoded.assign(encoded_raw.begin(), encoded_raw.end());
+    return true;
+}
+
+static bool GBE_ExtractProtoFieldUint64(const uint8 *data, size_t size, const GBE_ProtoFieldView &view, uint64 &value)
+{
+    if (!view.found)
+        return false;
+
+    if (view.wire_type == 0) {
+        size_t offset = view.value_offset;
+        return GBE_ReadVarUint64(data, size, offset, value);
+    }
+
+    if (view.wire_type == 1 && view.value_size == 8) {
+        std::memcpy(&value, data + view.value_offset, sizeof(value));
+        return true;
+    }
+
+    return false;
+}
+
+static bool GBE_ExtractDotaHelloContext(const void *pubData, uint32 cubData, GBE_DotaHelloContext &context)
+{
+    context = {};
+
+    if (!pubData || cubData < 8)
+        return false;
+
+    const uint8 *bytes = reinterpret_cast<const uint8 *>(pubData);
+    uint32 outer_raw_emsg = 0;
+    uint32 outer_header_length = 0;
+    std::memcpy(&outer_raw_emsg, bytes, sizeof(outer_raw_emsg));
+    std::memcpy(&outer_header_length, bytes + sizeof(outer_raw_emsg), sizeof(outer_header_length));
+
+    if (GBE_GC_MaskedEMsg(outer_raw_emsg) != GBE_kEMsgClientToGC)
+        return false;
+
+    const size_t outer_header_offset = 8;
+    const size_t outer_body_offset = outer_header_offset + outer_header_length;
+    if (outer_body_offset > cubData)
+        return false;
+
+    const uint8 *outer_header = bytes + outer_header_offset;
+    const uint8 *outer_body = bytes + outer_body_offset;
+    const size_t outer_body_size = cubData - outer_body_offset;
+
+    GBE_ProtoFieldView outer_session_field = GBE_FindProtoField(outer_header, outer_header_length, 2);
+    if (!outer_session_field.found)
+        return false;
+    context.outer_session_field_raw.assign(
+        reinterpret_cast<const char *>(outer_header + outer_session_field.value_offset),
+        outer_session_field.value_size
+    );
+
+    GBE_ProtoFieldView payload_field = GBE_FindProtoField(outer_body, outer_body_size, 3);
+    if (!payload_field.found || payload_field.wire_type != 2 || payload_field.value_size < 8)
+        return false;
+
+    const uint8 *payload = outer_body + payload_field.value_offset;
+    uint32 inner_raw_emsg = 0;
+    uint32 inner_header_length = 0;
+    std::memcpy(&inner_raw_emsg, payload, sizeof(inner_raw_emsg));
+    std::memcpy(&inner_header_length, payload + sizeof(inner_raw_emsg), sizeof(inner_header_length));
+
+    if (GBE_GC_MaskedEMsg(inner_raw_emsg) != GBE_kEMsgGCClientHello)
+        return false;
+
+    const size_t inner_header_offset = 8;
+    const size_t inner_body_offset = inner_header_offset + inner_header_length;
+    if (inner_body_offset > payload_field.value_size)
+        return false;
+
+    const uint8 *inner_header = payload + inner_header_offset;
+    const uint8 *inner_body = payload + inner_body_offset;
+    const size_t inner_body_size = payload_field.value_size - inner_body_offset;
+
+    GBE_ProtoFieldView version_field = GBE_FindProtoField(inner_body, inner_body_size, 1);
+    uint64 parsed_version = 0;
+    if (!GBE_ExtractProtoFieldUint64(inner_body, inner_body_size, version_field, parsed_version))
+        return false;
+
+    context.version = static_cast<uint32>(parsed_version);
+
+    if (inner_header_length > 0) {
+        GBE_ProtoFieldView source_job_field = GBE_FindProtoField(inner_header, inner_header_length, 11);
+        uint64 source_job = 0;
+        if (GBE_ExtractProtoFieldUint64(inner_header, inner_header_length, source_job_field, source_job)) {
+            context.source_job_id = source_job;
+            context.has_source_job = true;
+        }
+    }
+
+    context.valid = true;
+    return true;
+}
+
+static bool GBE_BuildDotaClientWelcome(uint64 steam_id, uint32 app_id, uint32 account_id, const GBE_DotaHelloContext &context, std::string &message)
+{
+    if (!context.valid || GBE_kDotaWelcomeInnerBodyOffset >= sizeof(GBE_kDotaClientWelcomeTemplate))
+        return false;
+
+    std::string inner_body(
+        reinterpret_cast<const char *>(GBE_kDotaClientWelcomeTemplate + GBE_kDotaWelcomeInnerBodyOffset),
+        sizeof(GBE_kDotaClientWelcomeTemplate) - GBE_kDotaWelcomeInnerBodyOffset
+    );
+
+    {
+        std::vector<uint8> encoded_version;
+        if (!GBE_EncodeVarUint64WithExpectedSize(context.version, GBE_kOldDotaVersionVarint.size(), encoded_version))
+            return false;
+        if (!GBE_FindAndReplaceBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaVersionVarint.data(), GBE_kOldDotaVersionVarint.size()), encoded_version))
+            return false;
+    }
+
+    {
+        std::vector<uint8> encoded_account;
+        if (!GBE_EncodeVarUint64WithExpectedSize(account_id, GBE_kOldDotaAccountIdVarint.size(), encoded_account))
+            return false;
+        if (!GBE_FindAndReplaceBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()), encoded_account))
+            return false;
+    }
+
+    {
+        std::vector<uint8> encoded_steam_id;
+        if (!GBE_EncodeVarUint64WithExpectedSize(steam_id, GBE_kOldDotaSteamIdVarint.size(), encoded_steam_id))
+            return false;
+        if (!GBE_FindAndReplaceBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaSteamIdVarint.data(), GBE_kOldDotaSteamIdVarint.size()), encoded_steam_id))
+            return false;
+    }
+
+    std::string inner_header;
+    if (context.has_source_job) {
+        GBE_AppendProtoVarIntField(inner_header, 10, context.source_job_id);
+    }
+
+    std::string inner_payload;
+    GBE_AppendLittleEndian32(inner_payload, GBE_kEMsgGCClientWelcome | GBE_kProtoMask);
+    GBE_AppendLittleEndian32(inner_payload, static_cast<uint32>(inner_header.size()));
+    inner_payload.append(inner_header);
+    inner_payload.append(inner_body);
+
+    std::string outer_body;
+    GBE_AppendProtoVarIntField(outer_body, 1, app_id);
+    GBE_AppendProtoVarIntField(outer_body, 2, GBE_kEMsgGCClientWelcome | GBE_kProtoMask);
+    GBE_AppendProtoBytesField(outer_body, 3, inner_payload);
+
+    std::string outer_header;
+    // The outer fixed64 steamid lives outside the inner template, so we rebuild that header directly.
+    GBE_AppendProtoFixed64Field(outer_header, 1, steam_id);
+    GBE_AppendVarUint64(outer_header, (static_cast<uint64>(2) << 3) | 0u);
+    outer_header.append(context.outer_session_field_raw);
+
+    message.clear();
+    GBE_AppendLittleEndian32(message, GBE_kEMsgClientFromGC | GBE_kProtoMask);
+    GBE_AppendLittleEndian32(message, static_cast<uint32>(outer_header.size()));
+    message.append(outer_header);
+    message.append(outer_body);
+    return true;
+}
+
 bool Steam_Game_Coordinator::gc_enabled()
 {
+    if (gc_profile == GC_PROFILE_DOTA2)
+        return settings && settings->get_local_game_id().AppID() == GBE_kDotaAppId;
+
     return (gc_version >= GC_MIN_VERSION && gc_profile != GC_PROFILE_INVALID);
 }
 
@@ -102,10 +544,18 @@ Steam_GameServer_Items *Steam_Game_Coordinator::server_items()
 
 void Steam_Game_Coordinator::parse_gc_config()
 {
+    gc_profile = GC_PROFILE_INVALID;
+    gc_version = 0;
+
     std::string file_path = Local_Storage::get_game_settings_path() + gc_config_file;
     nlohmann::json gc_json;
-    if (!local_storage->load_json(file_path, gc_json))
+    if (!local_storage->load_json(file_path, gc_json)) {
+        if (settings->get_local_game_id().AppID() == GBE_kDotaAppId) {
+            gc_profile = GC_PROFILE_DOTA2;
+            GBE_GC_DebugLog("GC_CONFIG", "auto-enabled Dota2 GC profile for app %u", settings->get_local_game_id().AppID());
+        }
         return;
+    }
 
     try {
         std::string gc_profile_name = gc_json.value("gc_profile", std::string());
@@ -113,6 +563,8 @@ void Steam_Game_Coordinator::parse_gc_config()
             [](auto c) { return std::tolower(c); });
         if (gc_profile_name == "tf2") {
             gc_profile = GC_PROFILE_TF2;
+        } else if (gc_profile_name == "dota2" || gc_profile_name == "dota") {
+            gc_profile = GC_PROFILE_DOTA2;
         } else if (gc_profile_name == "portal2") {
             // Portal 2 is pretty much entirely compatible with TF2 protobuf structs so we can just
             // make it an alias for TF2 profile.
@@ -129,6 +581,11 @@ void Steam_Game_Coordinator::parse_gc_config()
         PRINT_DEBUG("error parsing GC config: %s", errorMessage);
         gc_version = 0;
         gc_profile = GC_PROFILE_INVALID;
+    }
+
+    if (gc_profile == GC_PROFILE_INVALID && settings->get_local_game_id().AppID() == GBE_kDotaAppId) {
+        gc_profile = GC_PROFILE_DOTA2;
+        GBE_GC_DebugLog("GC_CONFIG", "fell back to Dota2 GC profile for app %u", settings->get_local_game_id().AppID());
     }
 }
 
@@ -149,6 +606,22 @@ void Steam_Game_Coordinator::push_incoming(uint32 msg_type, const std::string &m
     new_item.created = std::chrono::high_resolution_clock::now();
     new_item.post_in = delay;
     pending_messages.push_back(new_item);
+}
+
+void Steam_Game_Coordinator::push_incoming_now(uint32 msg_type, const std::string &message)
+{
+    GC_Message new_item;
+    new_item.msg_type = msg_type;
+    new_item.msg_body = message;
+    new_item.created = std::chrono::high_resolution_clock::now();
+    new_item.post_in = 0.0;
+    incoming_messages.push(new_item);
+
+    GCMessageAvailable_t data{};
+    data.m_nMessageSize = static_cast<uint32>(message.size());
+    callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
+
+    GBE_GC_DebugLog("GC_CALLBACK", "queued msg=%u size=%u and posted GCMessageAvailable_t", GBE_GC_MaskedEMsg(msg_type), static_cast<uint32>(message.size()));
 }
 
 std::string Steam_Game_Coordinator::build_msg_header(JobID_t target_job, JobID_t source_job)
@@ -751,6 +1224,11 @@ void Steam_Game_Coordinator::initialize_gc()
 
     gc_initialized = true;
 
+    if (gc_profile == GC_PROFILE_DOTA2) {
+        GBE_GC_DebugLog("GC_INIT", "initialized Dota2 GC profile for app %u", settings->get_local_game_id().AppID());
+        return;
+    }
+
     if (is_server) {
         callback_server_welcome();
     } else {
@@ -1090,14 +1568,66 @@ void Steam_Game_Coordinator::on_client_disconnected(CSteamID steam_id)
     remove_user_items(steam_id);
 }
 
+bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const void *pubData, uint32 cubData)
+{
+    const uint32 masked_emsg = GBE_GC_MaskedEMsg(unMsgType);
+    GBE_GC_DebugLog("GC_SEND_DOTA", "outer_emsg=%u len=%u", masked_emsg, cubData);
+
+    if (masked_emsg != GBE_kEMsgClientToGC)
+        return false;
+
+    GBE_DotaHelloContext hello_context{};
+    if (!GBE_ExtractDotaHelloContext(pubData, cubData, hello_context)) {
+        GBE_GC_DebugLog("GC_SEND_DOTA", "ignored ClientToGC payload because it was not a valid Dota ClientHello");
+        return false;
+    }
+
+    std::string welcome_message;
+    const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
+    const uint32 account_id = settings->get_local_steam_id().GetAccountID();
+    const uint32 app_id = settings->get_local_game_id().AppID();
+
+    if (!GBE_BuildDotaClientWelcome(steam_id, app_id, account_id, hello_context, welcome_message)) {
+        GBE_GC_DebugLog(
+            "GC_SEND_DOTA",
+            "failed to build ClientWelcome version=%u steamid=%llu accountid=%u",
+            hello_context.version,
+            static_cast<unsigned long long>(steam_id),
+            account_id
+        );
+        return true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_SEND_DOTA",
+        "replaying ClientWelcome version=%u steamid=%llu accountid=%u target_job=%llu",
+        hello_context.version,
+        static_cast<unsigned long long>(steam_id),
+        account_id,
+        static_cast<unsigned long long>(hello_context.has_source_job ? hello_context.source_job_id : 0ull)
+    );
+
+    push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, welcome_message);
+    return true;
+}
+
 // sends a message to the Game Coordinator
 EGCResults Steam_Game_Coordinator::SendMessage_( uint32 unMsgType, const void *pubData, uint32 cubData )
 {
     PRINT_DEBUG("0x%08X %u len %u", unMsgType, (~protobuf_mask) & unMsgType, cubData);
+    GBE_GC_DebugLog("GC_SEND", "outer_emsg=%u len=%u", GBE_GC_MaskedEMsg(unMsgType), cubData);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    if (!gc_initialized && gc_profile == GC_PROFILE_DOTA2) {
+        initialize_gc();
+    }
 
     if (!gc_initialized)
         return k_EGCResultOK;
+
+    if (gc_profile == GC_PROFILE_DOTA2 && handle_dota_client_message(unMsgType, pubData, cubData)) {
+        return k_EGCResultOK;
+    }
 
     switch (unMsgType) {
         case EGCItemMsg::k_EMsgGCSetSingleItemPosition:
@@ -1161,6 +1691,9 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
+    const uint32 queued_emsg = incoming_messages.empty() ? 0u : GBE_GC_MaskedEMsg(incoming_messages.front().msg_type);
+    GBE_GC_DebugLog("GC_RETRIEVE", "queued_emsg=%u queue_size=%zu cubDest=%u", queued_emsg, incoming_messages.size(), cubDest);
+
     if (!gc_initialized || incoming_messages.empty()) {
         *pcubMsgSize = 0;
         return k_EGCResultNoMessage;
@@ -1182,6 +1715,8 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
     *pcubMsgSize = outsize;
     message.msg_body.copy(reinterpret_cast<char *>(pubDest), cubDest);
     incoming_messages.pop();
+
+    GBE_GC_DebugLog("GC_RETRIEVE", "returned_emsg=%u size=%u", GBE_GC_MaskedEMsg(*punMsgType), outsize);
 
     return k_EGCResultOK;
 }
