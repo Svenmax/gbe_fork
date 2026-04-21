@@ -74,6 +74,10 @@ public ISteamGameCoordinator
     {
         bool active{};
         uint64 lobby_id{};
+        std::string room_name;
+        uint32 game_mode{};
+        uint32 region{};
+        std::string pass_key;
     };
 
     GBE_LocalLobby GBE_local_lobby{};
@@ -119,6 +123,7 @@ public ISteamGameCoordinator
     void handle_set_multiple_item_pos(const void *input, uint32 input_size);
     void GBE_PushDotaLoginSyncMessages();
     bool GBE_HandleDotaPracticeLobbyCreateRequest(uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaPracticeLobbySetDetailsRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData);
     bool GBE_HandleDotaWrappedPostLoginRequest(const void *pubData, uint32 cubData);
     bool handle_dota_client_message(uint32 unMsgType, const void *pubData, uint32 cubData);

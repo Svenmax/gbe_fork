@@ -106,3 +106,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `7038 / k_EMsgGCPracticeLobbyCreate` 不能假设只走 `5452/5453` wrapped 路径，真实运行里也会直接以 direct GC 消息发出。
   - 建房回包逻辑需要同时兼容 direct 与 wrapped 两种入口，两者都应复用同一套 `7055 -> 6146` 发送顺序与 LobbyID 替换逻辑。
+
+[Dota2 Practice Lobby 设置同步抓包规律]
+- Date: 2026-04-21
+- Context: Agent 在分析 `/workspace/lobbysettings.zip` 的大厅设置修改抓包时发现
+- Category: 代码模式
+- Instructions:
+  - 大厅设置修改主请求是 `7046 / k_EMsgGCPracticeLobbySetDetails`，而不是 `7047`。
+  - `7046` 走外层 `5452/5453` wrapped 流程，客户端修改设置后期望收到异步 `26` 更新，而不是 `7055`。
+  - `7046` 请求里当前高置信度动态字段为：`field 1 = LobbyID`、`field 2 = room_name`、`field 5 = game_mode`、`field 9 = region`、`field 15 = pass_key`。
+  - `26` 的 inner payload 使用 direct proto 外壳且 protobuf 扩展头长度为 0，主体由多段 `field 2` SO/update message 组成，其中 `field1=2004` 的大块承载完整 lobby details。
