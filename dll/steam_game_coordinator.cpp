@@ -47,6 +47,7 @@ static constexpr uint32 GBE_kDotaCacheSubscribed = 24u;
 static constexpr uint32 GBE_kDotaPracticeLobbyDetailsUpdate = 26u;
 static constexpr uint32 GBE_kDotaPracticeLobbyCreate = 7038u;
 static constexpr uint32 GBE_kDotaPracticeLobbySetDetails = 7046u;
+static constexpr uint32 GBE_kDotaPracticeLobbySetTeamSlot = 7047u;
 static constexpr uint32 GBE_kDotaPracticeLobbyResponse = 7055u;
 static constexpr uint32 GBE_kDotaSOUpdateMultiple = 6146u;
 static constexpr size_t GBE_kDotaWelcomeInnerBodyOffset = 48u;
@@ -799,6 +800,16 @@ struct GBE_DotaPracticeLobbyDetailsRequest
     uint64 bot_dire{};
 };
 
+struct GBE_DotaPracticeLobbySetTeamSlotRequest
+{
+    bool has_team{};
+    uint32 team{};
+    bool has_slot{};
+    uint32 slot{};
+    bool has_bot_difficulty{};
+    uint32 bot_difficulty{};
+};
+
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)
 {
     FILE *file = std::fopen(GBE_kGcDebugLogPath, "a");
@@ -1155,6 +1166,29 @@ static bool GBE_ParseDotaPracticeLobbySetDetailsBody(const uint8 *body, size_t b
     return request.has_lobby_id;
 }
 
+static bool GBE_ParseDotaPracticeLobbySetTeamSlotBody(const uint8 *body, size_t body_size, GBE_DotaPracticeLobbySetTeamSlotRequest &request)
+{
+    request = {};
+
+    uint64 value = 0;
+    if (GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1), value)) {
+        request.has_team = true;
+        request.team = static_cast<uint32>(value);
+    }
+
+    if (GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2), value)) {
+        request.has_slot = true;
+        request.slot = static_cast<uint32>(value);
+    }
+
+    if (GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 3), value)) {
+        request.has_bot_difficulty = true;
+        request.bot_difficulty = static_cast<uint32>(value);
+    }
+
+    return request.has_team || request.has_slot || request.has_bot_difficulty;
+}
+
 static bool GBE_ParseDirectProtoContext(const void *pubData, uint32 cubData, ProtoBufMsgHeader_t &hdr, CMsgProtoBufHeader &protohdr, const uint8 *&body, size_t &body_size)
 {
     hdr = {};
@@ -1373,6 +1407,8 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
     uint32 bot_difficulty_dire,
     uint64 bot_radiant,
     uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
     const std::string &pass_key,
     std::string &message)
 {
@@ -1447,8 +1483,8 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
 
         std::string owner_state;
         GBE_AppendProtoFixed64Field(owner_state, 1, steam_id);
-        GBE_AppendProtoVarIntField(owner_state, 3, 4u);
-        GBE_AppendProtoVarIntField(owner_state, 7, 0u);
+        GBE_AppendProtoVarIntField(owner_state, 3, owner_team);
+        GBE_AppendProtoVarIntField(owner_state, 7, owner_slot);
         GBE_AppendProtoVarIntField(owner_state, 16, 1u);
         GBE_AppendProtoBytesField(lobby_details, 120, owner_state);
 
@@ -2953,6 +2989,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         );
     }
 
+    if (request_emsg == GBE_kDotaPracticeLobbySetTeamSlot) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Received direct 7047 source_job=%llu body_size=%zu body_prefix=%s",
+            static_cast<unsigned long long>(source_job),
+            body_size,
+            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+        );
+
+        return GBE_HandleDotaPracticeLobbySetTeamSlotRequest(
+            std::string(reinterpret_cast<const char *>(body), body_size),
+            source_job,
+            has_source_job,
+            false,
+            nullptr
+        );
+    }
+
     const uint8 *template_bytes = nullptr;
     size_t template_size = 0;
     uint32 response_emsg = 0;
@@ -3103,6 +3157,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(uint64 req
     GBE_local_lobby.bot_difficulty_dire = 4;
     GBE_local_lobby.bot_radiant = 0;
     GBE_local_lobby.bot_dire = 0;
+    GBE_local_lobby.owner_team = 0;
+    GBE_local_lobby.owner_slot = 0;
     GBE_local_lobby.pass_key.clear();
 
     GBE_GC_DebugLog(
@@ -3192,6 +3248,64 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(uint64 req
     return true;
 }
 
+bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw, const char *reason)
+{
+    std::string response_26;
+    if (!GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
+            settings->get_local_steam_id().ConvertToUint64(),
+            GBE_local_lobby.lobby_id,
+            GBE_local_lobby.room_name,
+            GBE_local_lobby.game_mode,
+            GBE_local_lobby.server_region,
+            GBE_local_lobby.bot_difficulty_radiant,
+            GBE_local_lobby.bot_difficulty_dire,
+            GBE_local_lobby.bot_radiant,
+            GBE_local_lobby.bot_dire,
+            GBE_local_lobby.owner_team,
+            GBE_local_lobby.owner_slot,
+            GBE_local_lobby.pass_key,
+            response_26)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 26 details update for LobbyID=%llu reason=%s", static_cast<unsigned long long>(GBE_local_lobby.lobby_id), reason ? reason : "unknown");
+        return false;
+    }
+
+    if (wrapped) {
+        if (!outer_session_field_raw) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for 26 LobbyID=%llu reason=%s", static_cast<unsigned long long>(GBE_local_lobby.lobby_id), reason ? reason : "unknown");
+            return false;
+        }
+
+        std::string wrapped_26;
+        if (!GBE_BuildWrappedDotaReplayMessage(response_26, *outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_26)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 26 details update for LobbyID=%llu reason=%s", static_cast<unsigned long long>(GBE_local_lobby.lobby_id), reason ? reason : "unknown");
+            return false;
+        }
+
+        push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_26);
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Sent wrapped 26 details update LobbyID=%llu reason=%s size=%zu body_prefix=%s packet_prefix=%s",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            reason ? reason : "unknown",
+            wrapped_26.size(),
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_26.data()), response_26.size(), 32).c_str(),
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(wrapped_26.data()), wrapped_26.size(), 32).c_str()
+        );
+    } else {
+        push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, response_26);
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Sent direct 26 details update LobbyID=%llu reason=%s size=%zu body_prefix=%s",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            reason ? reason : "unknown",
+            response_26.size(),
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_26.data()), response_26.size(), 32).c_str()
+        );
+    }
+
+    return true;
+}
+
 bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw)
 {
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
@@ -3236,54 +3350,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
     if (request.has_bot_dire)
         GBE_local_lobby.bot_dire = request.bot_dire;
 
-    std::string response_26;
-    if (!GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
-            settings->get_local_steam_id().ConvertToUint64(),
-            GBE_local_lobby.lobby_id,
-            GBE_local_lobby.room_name,
-            GBE_local_lobby.game_mode,
-            GBE_local_lobby.server_region,
-            GBE_local_lobby.bot_difficulty_radiant,
-            GBE_local_lobby.bot_difficulty_dire,
-            GBE_local_lobby.bot_radiant,
-            GBE_local_lobby.bot_dire,
-            GBE_local_lobby.pass_key,
-            response_26)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 26 details update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+    if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7046"))
         return true;
-    }
-
-    if (wrapped) {
-        if (!outer_session_field_raw) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for 7046 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
-            return true;
-        }
-
-        std::string wrapped_26;
-        if (!GBE_BuildWrappedDotaReplayMessage(response_26, *outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_26)) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 26 details update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
-            return true;
-        }
-
-        push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_26);
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Sent wrapped 26 details update LobbyID=%llu size=%zu body_prefix=%s packet_prefix=%s",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            wrapped_26.size(),
-            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_26.data()), response_26.size(), 32).c_str(),
-            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(wrapped_26.data()), wrapped_26.size(), 32).c_str()
-        );
-    } else {
-        push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, response_26);
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Sent direct 26 details update LobbyID=%llu size=%zu body_prefix=%s",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            response_26.size(),
-            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_26.data()), response_26.size(), 32).c_str()
-        );
-    }
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -3300,6 +3368,91 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
     return true;
 }
 
+bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw)
+{
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7047 because no local lobby is active");
+        return true;
+    }
+
+    GBE_DotaPracticeLobbySetTeamSlotRequest request{};
+    if (!GBE_ParseDotaPracticeLobbySetTeamSlotBody(reinterpret_cast<const uint8 *>(request_body.data()), request_body.size(), request)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Failed parsing 7047 body_size=%zu body_prefix=%s",
+            request_body.size(),
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(request_body.data()), request_body.size(), 48).c_str()
+        );
+        return true;
+    }
+
+    if (request.has_team)
+        GBE_local_lobby.owner_team = request.team;
+    if (request.has_slot)
+        GBE_local_lobby.owner_slot = request.slot;
+    if (request.has_bot_difficulty) {
+        if (GBE_local_lobby.owner_team == 1u)
+            GBE_local_lobby.bot_difficulty_dire = request.bot_difficulty;
+        else
+            GBE_local_lobby.bot_difficulty_radiant = request.bot_difficulty;
+    }
+
+    if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7047"))
+        return true;
+
+    if (has_request_job) {
+        std::string response_7055;
+        if (!GBE_BuildDotaPracticeLobbyResponsePayload(request_job_id, response_7055)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7055 payload for 7047 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+            return true;
+        }
+
+        if (wrapped) {
+            if (!outer_session_field_raw) {
+                GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for 7047 7055 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+                return true;
+            }
+
+            std::string wrapped_7055;
+            if (!GBE_BuildWrappedDotaReplayMessage(response_7055, *outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_7055)) {
+                GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 7055 payload for 7047 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+                return true;
+            }
+
+            push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_7055);
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Sent wrapped 7055 ack for 7047 LobbyID=%llu request_job=%llu size=%zu body_prefix=%s packet_prefix=%s",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(request_job_id),
+                wrapped_7055.size(),
+                GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_7055.data()), response_7055.size(), 32).c_str(),
+                GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(wrapped_7055.data()), wrapped_7055.size(), 32).c_str()
+            );
+        } else {
+            push_incoming_now(GBE_kDotaPracticeLobbyResponse | GBE_kProtoMask, response_7055);
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Sent direct 7055 ack for 7047 LobbyID=%llu request_job=%llu size=%zu body_prefix=%s",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(request_job_id),
+                response_7055.size(),
+                GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_7055.data()), response_7055.size(), 32).c_str()
+            );
+        }
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Team slot updated. team=%u slot=%u bot_diff_req=%u has_bot_diff=%d",
+        GBE_local_lobby.owner_team,
+        GBE_local_lobby.owner_slot,
+        request.bot_difficulty,
+        request.has_bot_difficulty ? 1 : 0
+    );
+    return true;
+}
+
 bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *pubData, uint32 cubData)
 {
     GBE_DotaWrappedDirectContext context{};
@@ -3308,7 +3461,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
 
     if (context.inner_emsg != GBE_kDotaPracticeLobbyCreate)
         if (context.inner_emsg != GBE_kDotaPracticeLobbySetDetails)
-            return false;
+            if (context.inner_emsg != GBE_kDotaPracticeLobbySetTeamSlot)
+                return false;
 
     if (context.inner_emsg == GBE_kDotaPracticeLobbyCreate) {
         GBE_GC_DebugLog(
@@ -3327,16 +3481,36 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         return GBE_HandleDotaPracticeLobbyCreateRequest(context.request_job_id, true, &context.outer_session_field_raw);
     }
 
+    if (context.inner_emsg == GBE_kDotaPracticeLobbySetDetails)
+    {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Received wrapped 7046 has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
+            context.has_request_job ? 1 : 0,
+            static_cast<unsigned long long>(context.request_job_id),
+            context.outer_session_field_raw.size(),
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
+        );
+
+        return GBE_HandleDotaPracticeLobbySetDetailsRequest(context.inner_body_raw, true, &context.outer_session_field_raw);
+    }
+
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Received wrapped 7046 has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
+        "[LOBBY] Received wrapped 7047 has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
         context.has_request_job ? 1 : 0,
         static_cast<unsigned long long>(context.request_job_id),
         context.outer_session_field_raw.size(),
         GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
     );
 
-    return GBE_HandleDotaPracticeLobbySetDetailsRequest(context.inner_body_raw, true, &context.outer_session_field_raw);
+    return GBE_HandleDotaPracticeLobbySetTeamSlotRequest(
+        context.inner_body_raw,
+        context.request_job_id,
+        context.has_request_job,
+        true,
+        &context.outer_session_field_raw
+    );
 }
 
 bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const void *pubData, uint32 cubData)
