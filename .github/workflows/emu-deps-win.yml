@@ -31,7 +31,6 @@ jobs:
         shell: "cmd"
         working-directory: ${{ github.workspace }}
         run: |
-          git config --local core.autocrlf false
           git config --system core.autocrlf false
           git config --global core.autocrlf false
 
@@ -47,34 +46,6 @@ jobs:
       - name: "Checkout branch"
         if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
         uses: actions/checkout@v6
-
-      - name: "Clone third-party deps (common/win)"
-        if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
-        uses: actions/checkout@v6
-        with:
-          ref: "third-party/common/win"
-          path: "${{env.THIRD_PARTY_BASE_DIR}}/common/win"
-
-      - name: "Clone third-party deps (deps/win)"
-        if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
-        uses: actions/checkout@v6
-        with:
-          ref: "third-party/deps/win"
-          path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/win"
-
-      - name: "Clone third-party deps (deps/common)"
-        if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
-        uses: actions/checkout@v6
-        with:
-          ref: "third-party/deps/common"
-          path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/common"
-
-      - name: "Clone third-party deps (common/win)"
-        if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
-        uses: actions/checkout@v6
-        with:
-          ref: "third-party/common/win"
-          path: "${{env.THIRD_PARTY_BASE_DIR}}/common/win"
 
       - name: "Build deps"
         if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
