@@ -14,6 +14,19 @@ on:
       - "tools/generate_emu_config/**"
       - "tools/migrate_gse/**"
       - "tools/steamclient_loader/linux/**" # these are just scripts, not built
+  push:
+    branches: ["dev"]
+    paths-ignore:
+      - "**/*.md"
+      - "dev.notes/**"
+      - "post_build/**"
+      - "z_original_repo_files/**"
+      - "sdk/*.txt"
+      - "LICENSE"
+      # tools
+      - "tools/generate_emu_config/**"
+      - "tools/migrate_gse/**"
+      - "tools/steamclient_loader/linux/**" # these are just scripts, not built
 
 permissions:
   contents: "write"
