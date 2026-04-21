@@ -52,6 +52,7 @@ static constexpr uint32 GBE_kDotaSOUpdateMultiple = 6146u;
 static constexpr size_t GBE_kDotaWelcomeInnerBodyOffset = 48u;
 static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
 static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
+static constexpr uint32 GBE_kDotaLobbyField128Value = 1776809986u;
 static constexpr const char *GBE_kDotaLobbyPlayerName = "Svenmax";
 
 static const uint8 GBE_kDotaClientWelcomeTemplate[] = {
@@ -782,12 +783,20 @@ struct GBE_DotaPracticeLobbyDetailsRequest
     uint64 lobby_id{};
     bool has_room_name{};
     std::string room_name;
+    bool has_server_region{};
+    uint32 server_region{};
     bool has_game_mode{};
     uint32 game_mode{};
-    bool has_region{};
-    uint32 region{};
+    bool has_bot_difficulty_radiant{};
+    uint32 bot_difficulty_radiant{};
     bool has_pass_key{};
     std::string pass_key;
+    bool has_bot_difficulty_dire{};
+    uint32 bot_difficulty_dire{};
+    bool has_bot_radiant{};
+    uint64 bot_radiant{};
+    bool has_bot_dire{};
+    uint64 bot_dire{};
 };
 
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)
@@ -952,12 +961,6 @@ static void GBE_AppendProtoBytesField(std::string &buffer, uint32 field_number, 
     buffer.append(value);
 }
 
-static void GBE_AppendProtoRawVarIntField(std::string &buffer, uint32 field_number, const uint8 *raw_value, size_t raw_size)
-{
-    GBE_AppendVarUint64(buffer, (static_cast<uint64>(field_number) << 3) | 0u);
-    GBE_AppendRawBytes(buffer, raw_value, raw_size);
-}
-
 static std::vector<uint8> GBE_VectorFromBytes(const uint8 *data, size_t size)
 {
     return std::vector<uint8>(data, data + size);
@@ -1116,18 +1119,38 @@ static bool GBE_ParseDotaPracticeLobbySetDetailsBody(const uint8 *body, size_t b
     if (GBE_ExtractProtoFieldBytes(body, body_size, GBE_FindProtoField(body, body_size, 2), request.room_name))
         request.has_room_name = true;
 
+    if (GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 4), value)) {
+        request.has_server_region = true;
+        request.server_region = static_cast<uint32>(value);
+    }
+
     if (GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 5), value)) {
         request.has_game_mode = true;
         request.game_mode = static_cast<uint32>(value);
     }
 
     if (GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 9), value)) {
-        request.has_region = true;
-        request.region = static_cast<uint32>(value);
+        request.has_bot_difficulty_radiant = true;
+        request.bot_difficulty_radiant = static_cast<uint32>(value);
     }
 
     if (GBE_ExtractProtoFieldBytes(body, body_size, GBE_FindProtoField(body, body_size, 15), request.pass_key))
         request.has_pass_key = true;
+
+    if (GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 43), value)) {
+        request.has_bot_difficulty_dire = true;
+        request.bot_difficulty_dire = static_cast<uint32>(value);
+    }
+
+    if (GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 44), value)) {
+        request.has_bot_radiant = true;
+        request.bot_radiant = value;
+    }
+
+    if (GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 45), value)) {
+        request.has_bot_dire = true;
+        request.bot_dire = value;
+    }
 
     return request.has_lobby_id;
 }
@@ -1345,7 +1368,11 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
     uint64 lobby_id,
     const std::string &room_name,
     uint32 game_mode,
-    uint32 region,
+    uint32 server_region,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
     const std::string &pass_key,
     std::string &message)
 {
@@ -1355,9 +1382,6 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
         0x00, 0x00, 0x00,
     };
     static const uint8 GBE_kDotaLobbyField62Value[] = { 0x08, 0xF5, 0x44, 0x12, 0x02, 0x08, 0x00 };
-    static const uint8 GBE_kDotaLobbyField94Raw[] = { 0xCD, 0xFB, 0x92, 0xDA, 0x0A };
-    static const uint8 GBE_kDotaLobbyField95Raw[] = { 0x8A, 0xB6, 0xFB, 0x8B, 0x0C };
-
     std::string body;
 
     {
@@ -1387,7 +1411,7 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
     {
         std::string lobby_details;
         GBE_AppendProtoVarIntField(lobby_details, 1, lobby_id);
-        GBE_AppendProtoVarIntField(lobby_details, 3, 4u);
+        GBE_AppendProtoVarIntField(lobby_details, 3, game_mode);
         GBE_AppendProtoVarIntField(lobby_details, 4, 0u);
         GBE_AppendProtoFixed64Field(lobby_details, 11, steam_id);
         GBE_AppendProtoVarIntField(lobby_details, 12, 1u);
@@ -1396,10 +1420,10 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
         GBE_AppendProtoBytesField(lobby_details, 16, room_name);
         GBE_AppendProtoBytesField(lobby_details, 17, std::string());
         GBE_AppendProtoBytesField(lobby_details, 17, std::string());
-        GBE_AppendProtoVarIntField(lobby_details, 21, 0u);
+        GBE_AppendProtoVarIntField(lobby_details, 21, server_region);
         GBE_AppendProtoVarIntField(lobby_details, 28, 0u);
         GBE_AppendProtoVarIntField(lobby_details, 31, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 36, game_mode);
+        GBE_AppendProtoVarIntField(lobby_details, 36, bot_difficulty_radiant);
         GBE_AppendProtoBytesField(lobby_details, 39, pass_key);
         GBE_AppendProtoVarIntField(lobby_details, 42, 0u);
         GBE_AppendProtoVarIntField(lobby_details, 43, 0u);
@@ -1414,9 +1438,9 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
         GBE_AppendProtoVarIntField(lobby_details, 75, 0u);
         GBE_AppendProtoVarIntField(lobby_details, 82, 0u);
         GBE_AppendProtoVarIntField(lobby_details, 88, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 93, 4u);
-        GBE_AppendProtoRawVarIntField(lobby_details, 94, GBE_kDotaLobbyField94Raw, sizeof(GBE_kDotaLobbyField94Raw));
-        GBE_AppendProtoRawVarIntField(lobby_details, 95, GBE_kDotaLobbyField95Raw, sizeof(GBE_kDotaLobbyField95Raw));
+        GBE_AppendProtoVarIntField(lobby_details, 93, bot_difficulty_dire);
+        GBE_AppendProtoVarIntField(lobby_details, 94, bot_radiant);
+        GBE_AppendProtoVarIntField(lobby_details, 95, bot_dire);
         GBE_AppendProtoVarIntField(lobby_details, 97, 0u);
         GBE_AppendProtoVarIntField(lobby_details, 110, 0u);
         GBE_AppendProtoVarIntField(lobby_details, 113, 0u);
@@ -1441,7 +1465,7 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
         GBE_AppendProtoVarIntField(lobby_details, 124, 0u);
         GBE_AppendProtoVarIntField(lobby_details, 124, 0u);
         GBE_AppendProtoVarIntField(lobby_details, 127, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 128, region);
+        GBE_AppendProtoVarIntField(lobby_details, 128, GBE_kDotaLobbyField128Value);
 
         std::string update;
         GBE_AppendProtoVarIntField(update, 1, 2004u);
@@ -3074,7 +3098,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(uint64 req
     GBE_local_lobby.lobby_id = GBE_GenerateDotaLobbyId();
     GBE_local_lobby.room_name.clear();
     GBE_local_lobby.game_mode = 0;
-    GBE_local_lobby.region = 0;
+    GBE_local_lobby.server_region = 0;
+    GBE_local_lobby.bot_difficulty_radiant = 0;
+    GBE_local_lobby.bot_difficulty_dire = 4;
+    GBE_local_lobby.bot_radiant = 0;
+    GBE_local_lobby.bot_dire = 0;
     GBE_local_lobby.pass_key.clear();
 
     GBE_GC_DebugLog(
@@ -3193,12 +3221,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
 
     if (request.has_room_name)
         GBE_local_lobby.room_name = request.room_name;
+    if (request.has_server_region)
+        GBE_local_lobby.server_region = request.server_region;
     if (request.has_game_mode)
         GBE_local_lobby.game_mode = request.game_mode;
-    if (request.has_region)
-        GBE_local_lobby.region = request.region;
+    if (request.has_bot_difficulty_radiant)
+        GBE_local_lobby.bot_difficulty_radiant = request.bot_difficulty_radiant;
     if (request.has_pass_key)
         GBE_local_lobby.pass_key = request.pass_key;
+    if (request.has_bot_difficulty_dire)
+        GBE_local_lobby.bot_difficulty_dire = request.bot_difficulty_dire;
+    if (request.has_bot_radiant)
+        GBE_local_lobby.bot_radiant = request.bot_radiant;
+    if (request.has_bot_dire)
+        GBE_local_lobby.bot_dire = request.bot_dire;
 
     std::string response_26;
     if (!GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
@@ -3206,7 +3242,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
             GBE_local_lobby.lobby_id,
             GBE_local_lobby.room_name,
             GBE_local_lobby.game_mode,
-            GBE_local_lobby.region,
+            GBE_local_lobby.server_region,
+            GBE_local_lobby.bot_difficulty_radiant,
+            GBE_local_lobby.bot_difficulty_dire,
+            GBE_local_lobby.bot_radiant,
+            GBE_local_lobby.bot_dire,
             GBE_local_lobby.pass_key,
             response_26)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 26 details update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
@@ -3247,9 +3287,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Room details updated. Current mode: %u region=%u name=%s password_len=%zu",
+        "[LOBBY] Room details updated. mode=%u server_region=%u bot_diff_r=%u bot_diff_d=%u bot_radiant=%llu bot_dire=%llu name=%s password_len=%zu",
         GBE_local_lobby.game_mode,
-        GBE_local_lobby.region,
+        GBE_local_lobby.server_region,
+        GBE_local_lobby.bot_difficulty_radiant,
+        GBE_local_lobby.bot_difficulty_dire,
+        static_cast<unsigned long long>(GBE_local_lobby.bot_radiant),
+        static_cast<unsigned long long>(GBE_local_lobby.bot_dire),
         GBE_local_lobby.room_name.c_str(),
         GBE_local_lobby.pass_key.size()
     );

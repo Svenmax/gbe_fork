@@ -76,7 +76,11 @@ public ISteamGameCoordinator
         uint64 lobby_id{};
         std::string room_name;
         uint32 game_mode{};
-        uint32 region{};
+        uint32 server_region{};
+        uint32 bot_difficulty_radiant{};
+        uint32 bot_difficulty_dire{};
+        uint64 bot_radiant{};
+        uint64 bot_dire{};
         std::string pass_key;
     };
 
