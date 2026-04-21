@@ -43,6 +43,7 @@ static constexpr uint32 GBE_kEMsgClientFromGC = 5453u;
 static constexpr uint32 GBE_kEMsgGCClientHello = 4006u;
 static constexpr uint32 GBE_kEMsgGCClientWelcome = 4004u;
 static constexpr uint32 GBE_kDotaAppId = 570u;
+static constexpr uint32 GBE_kDotaCacheSubscribed = 24u;
 static constexpr uint32 GBE_kDotaPracticeLobbyCreate = 7038u;
 static constexpr uint32 GBE_kDotaPracticeLobbyResponse = 7055u;
 static constexpr uint32 GBE_kDotaSOUpdateMultiple = 6146u;
@@ -1076,6 +1077,7 @@ static bool GBE_PatchDotaTemplateIdentifiers(std::string &message, uint32 accoun
 
 static bool GBE_PatchDotaLobbyTemplateIdentifiers(std::string &message, uint32 account_id, uint64 steam_id, uint64 lobby_id)
 {
+    (void)account_id;
     std::vector<uint8> encoded_lobby_id;
     if (!GBE_EncodeVarUint64WithExpectedSize(lobby_id, GBE_kOldDotaLobbyIdVarint.size(), encoded_lobby_id))
         return false;
@@ -1091,17 +1093,11 @@ static bool GBE_PatchDotaLobbyTemplateIdentifiers(std::string &message, uint32 a
     if (!GBE_FindAndReplaceBytes(message, GBE_VectorFromBytes(GBE_kOldDotaSteamIdFixed64.data(), GBE_kOldDotaSteamIdFixed64.size()), GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(steam_id_fixed64_raw.data()), steam_id_fixed64_raw.size())))
         return false;
 
-    std::string account_id_fixed32_raw;
-    GBE_AppendLittleEndian32(account_id_fixed32_raw, account_id);
-    const std::vector<uint8> old_account_id_fixed32 = GBE_VectorFromBytes(GBE_kOldDotaAccountIdFixed32.data(), GBE_kOldDotaAccountIdFixed32.size());
-    const size_t account_id_fixed32_match_count = GBE_CountBytePatternMatches(message, old_account_id_fixed32);
-    GBE_FindAndReplaceBytes(message, GBE_VectorFromBytes(GBE_kOldDotaAccountIdFixed32.data(), GBE_kOldDotaAccountIdFixed32.size()), GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(account_id_fixed32_raw.data()), account_id_fixed32_raw.size()));
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Patched template LobbyID matches=%zu SteamIDFixed64 matches=%zu AccountIDFixed32 matches=%zu body_prefix=%s",
+        "[LOBBY] Patched template LobbyID matches=%zu SteamIDFixed64 matches=%zu body_prefix=%s",
         lobby_id_match_count,
         steam_id_fixed64_match_count,
-        account_id_fixed32_match_count,
         GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(message.data()), message.size(), 32).c_str()
     );
     return true;
@@ -1225,6 +1221,19 @@ static bool GBE_BuildDotaPracticeLobbyResponsePayload(uint64 request_job_id, std
 
     message[8] = static_cast<char>(0x59);
     std::memcpy(message.data() + 9, &request_job_id, sizeof(request_job_id));
+    return true;
+}
+
+static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(uint32 account_id, uint64 steam_id, uint64 lobby_id, std::string &message)
+{
+    message.assign(reinterpret_cast<const char *>(GBE_kDotaCacheSubscribedTemplate), sizeof(GBE_kDotaCacheSubscribedTemplate));
+
+    if (!GBE_PatchDotaTemplateIdentifiers(message, account_id, steam_id, true, true))
+        return false;
+
+    if (!GBE_PatchDotaLobbyTemplateIdentifiers(message, account_id, steam_id, lobby_id))
+        return false;
+
     return true;
 }
 
@@ -2817,9 +2826,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(uint64 req
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
     const uint32 account_id = settings->get_local_steam_id().GetAccountID();
 
-    std::string response_7055;
-    if (!GBE_BuildDotaPracticeLobbyResponsePayload(request_job_id, response_7055)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7055 payload for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+    std::string response_24;
+    if (!GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(account_id, steam_id, GBE_local_lobby.lobby_id, response_24)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 24 cache update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
     }
 
@@ -2829,6 +2838,39 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(uint64 req
             return true;
         }
 
+        std::string wrapped_24;
+        if (!GBE_BuildWrappedDotaReplayMessage(response_24, *outer_session_field_raw, steam_id, wrapped_24)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 24 cache update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+            return true;
+        }
+
+        push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_24);
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Sent wrapped 24 cache update with NewLobbyID=%llu size=%zu body_prefix=%s packet_prefix=%s",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            wrapped_24.size(),
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_24.data()), response_24.size(), 32).c_str(),
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(wrapped_24.data()), wrapped_24.size(), 32).c_str()
+        );
+    } else {
+        push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, response_24);
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Sent direct 24 cache update with NewLobbyID=%llu size=%zu body_prefix=%s",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            response_24.size(),
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_24.data()), response_24.size(), 32).c_str()
+        );
+    }
+
+    std::string response_7055;
+    if (!GBE_BuildDotaPracticeLobbyResponsePayload(request_job_id, response_7055)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7055 payload for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        return true;
+    }
+
+    if (wrapped) {
         std::string wrapped_7055;
         if (!GBE_BuildWrappedDotaReplayMessage(response_7055, *outer_session_field_raw, steam_id, wrapped_7055)) {
             GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 7055 payload for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
@@ -2854,39 +2896,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(uint64 req
             static_cast<unsigned long long>(request_job_id),
             response_7055.size(),
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_7055.data()), response_7055.size(), 32).c_str()
-        );
-    }
-
-    std::string response_6146(reinterpret_cast<const char *>(GBE_kDotaPracticeLobbySOUpdateTemplate), sizeof(GBE_kDotaPracticeLobbySOUpdateTemplate));
-    if (!GBE_PatchDotaLobbyTemplateIdentifiers(response_6146, account_id, steam_id, GBE_local_lobby.lobby_id)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed patching 6146 lobby update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
-        return true;
-    }
-
-    if (wrapped) {
-        std::string wrapped_6146;
-        if (!GBE_BuildWrappedDotaReplayMessage(response_6146, *outer_session_field_raw, steam_id, wrapped_6146)) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 6146 lobby update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
-            return true;
-        }
-
-        push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_6146);
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Sent wrapped 6146 lobby SO update with NewLobbyID=%llu size=%zu body_prefix=%s packet_prefix=%s",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            wrapped_6146.size(),
-            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_6146.data()), response_6146.size(), 32).c_str(),
-            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(wrapped_6146.data()), wrapped_6146.size(), 32).c_str()
-        );
-    } else {
-        push_incoming_now(GBE_kDotaSOUpdateMultiple | GBE_kProtoMask, response_6146);
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Sent direct 6146 lobby SO update with NewLobbyID=%llu size=%zu body_prefix=%s",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            response_6146.size(),
-            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_6146.data()), response_6146.size(), 32).c_str()
         );
     }
 
