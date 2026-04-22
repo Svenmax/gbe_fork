@@ -239,3 +239,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `7038` 建房首轮应优先只发送 `24 -> 7055`，不要主动跟一条 `26`。
   - 当前本地构造的 `26` 很可能会在建房首轮覆盖模板 `24` 中更接近官方的初始成员状态，导致首屏仍需手点 slot 才刷新。
+
+[建房模板 24 的房间名/服务器区域/玩家名需要二次 patch]
+- Date: 2026-04-22
+- Context: 用户反馈首屏房主位置已正确，但房主名和服务器区域仍显示抓包样本值时确认
+- Category: 代码模式
+- Instructions:
+  - 建房首轮 `24` 当前仍使用官方模板重放，但必须在 `LobbyID/SteamID` 之外继续 patch `2004.field16(room_name)`、`2004.field21(server_region)`、`2014.member[0].field1(player_name)`。
+  - 这些值应直接来自当前进程内的建房状态：`GBE_local_lobby.room_name`、`GBE_local_lobby.server_region`、`settings->get_local_name()`；不需要也不应该从模拟器系统文件读取。

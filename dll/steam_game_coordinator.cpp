@@ -954,6 +954,73 @@ static GBE_ProtoFieldView GBE_FindProtoField(const uint8 *data, size_t size, uin
     return {};
 }
 
+static bool GBE_ReadNextProtoField(
+    const uint8 *data,
+    size_t size,
+    size_t &offset,
+    uint32 &field_number,
+    uint32 &wire_type,
+    size_t &field_offset,
+    size_t &value_offset,
+    size_t &value_size,
+    size_t &field_end)
+{
+    if (!data || offset >= size)
+        return false;
+
+    field_offset = offset;
+
+    uint64 key = 0;
+    if (!GBE_ReadVarUint64(data, size, offset, key))
+        return false;
+
+    field_number = static_cast<uint32>(key >> 3);
+    wire_type = static_cast<uint32>(key & 0x7);
+    value_offset = offset;
+    value_size = 0;
+
+    switch (wire_type) {
+        case 0: {
+            size_t raw_begin = offset;
+            size_t raw_end = offset;
+            uint64 ignored = 0;
+            if (!GBE_ReadVarUint64(data, size, offset, ignored, &raw_begin, &raw_end))
+                return false;
+            value_offset = raw_begin;
+            value_size = raw_end - raw_begin;
+            break;
+        }
+        case 1:
+            if (offset + 8 > size)
+                return false;
+            value_size = 8;
+            offset += 8;
+            break;
+        case 2: {
+            uint64 length = 0;
+            if (!GBE_ReadVarUint64(data, size, offset, length))
+                return false;
+            if (offset + length > size)
+                return false;
+            value_offset = offset;
+            value_size = static_cast<size_t>(length);
+            offset += static_cast<size_t>(length);
+            break;
+        }
+        case 5:
+            if (offset + 4 > size)
+                return false;
+            value_size = 4;
+            offset += 4;
+            break;
+        default:
+            return false;
+    }
+
+    field_end = offset;
+    return true;
+}
+
 static void GBE_AppendVarUint64(std::string &buffer, uint64 value)
 {
     do {
@@ -1382,6 +1449,213 @@ static bool GBE_PatchDotaLobbyTemplateIdentifiers(std::string &message, uint32 a
         steam_id_fixed64_match_count,
         GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(message.data()), message.size(), 32).c_str()
     );
+    return true;
+}
+
+static bool GBE_RewriteDotaLobbyTemplateObject2004(const std::string &input, const std::string &room_name, uint32 server_region, std::string &output)
+{
+    output.clear();
+
+    size_t offset = 0;
+    while (offset < input.size()) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(
+                reinterpret_cast<const uint8 *>(input.data()),
+                input.size(),
+                offset,
+                field_number,
+                wire_type,
+                field_offset,
+                value_offset,
+                value_size,
+                field_end))
+            return false;
+
+        if (field_number == 16u && wire_type == 2u) {
+            GBE_AppendProtoBytesField(output, 16u, room_name);
+            continue;
+        }
+
+        if (field_number == 21u && wire_type == 0u) {
+            GBE_AppendProtoVarIntField(output, 21u, server_region);
+            continue;
+        }
+
+        output.append(input.data() + field_offset, field_end - field_offset);
+    }
+
+    return true;
+}
+
+static bool GBE_RewriteDotaLobbyTemplateObject2014(const std::string &input, const std::string &player_name, std::string &output)
+{
+    output.clear();
+
+    size_t offset = 0;
+    while (offset < input.size()) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(
+                reinterpret_cast<const uint8 *>(input.data()),
+                input.size(),
+                offset,
+                field_number,
+                wire_type,
+                field_offset,
+                value_offset,
+                value_size,
+                field_end))
+            return false;
+
+        if (field_number == 1u && wire_type == 2u) {
+            std::string rewritten_member;
+            size_t member_offset = 0;
+            while (member_offset < value_size) {
+                uint32 member_field = 0;
+                uint32 member_wire = 0;
+                size_t member_field_offset = 0;
+                size_t member_value_offset = 0;
+                size_t member_value_size = 0;
+                size_t member_field_end = 0;
+                if (!GBE_ReadNextProtoField(
+                        reinterpret_cast<const uint8 *>(input.data()) + value_offset,
+                        value_size,
+                        member_offset,
+                        member_field,
+                        member_wire,
+                        member_field_offset,
+                        member_value_offset,
+                        member_value_size,
+                        member_field_end))
+                    return false;
+
+                if (member_field == 1u && member_wire == 2u) {
+                    GBE_AppendProtoBytesField(rewritten_member, 1u, player_name);
+                    continue;
+                }
+
+                rewritten_member.append(input.data() + value_offset + member_field_offset, member_field_end - member_field_offset);
+            }
+
+            GBE_AppendProtoBytesField(output, 1u, rewritten_member);
+            continue;
+        }
+
+        output.append(input.data() + field_offset, field_end - field_offset);
+    }
+
+    return true;
+}
+
+static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
+    std::string &message,
+    const std::string &player_name,
+    const std::string &room_name,
+    uint32 server_region)
+{
+    if (message.size() < sizeof(ProtoBufMsgHeader_t))
+        return false;
+
+    ProtoBufMsgHeader_t hdr{};
+    std::memcpy(&hdr, message.data(), sizeof(hdr));
+    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
+    if (body_offset > message.size())
+        return false;
+
+    const std::string body = message.substr(body_offset);
+    std::string rewritten_body;
+
+    size_t offset = 0;
+    while (offset < body.size()) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(
+                reinterpret_cast<const uint8 *>(body.data()),
+                body.size(),
+                offset,
+                field_number,
+                wire_type,
+                field_offset,
+                value_offset,
+                value_size,
+                field_end))
+            return false;
+
+        if (field_number != 2u || wire_type != 2u) {
+            rewritten_body.append(body.data() + field_offset, field_end - field_offset);
+            continue;
+        }
+
+        const std::string subscribed = body.substr(value_offset, value_size);
+        uint64 type_id = 0;
+        if (!GBE_ExtractProtoFieldUint64(
+                reinterpret_cast<const uint8 *>(subscribed.data()),
+                subscribed.size(),
+                GBE_FindProtoField(reinterpret_cast<const uint8 *>(subscribed.data()), subscribed.size(), 1u),
+                type_id)) {
+            rewritten_body.append(body.data() + field_offset, field_end - field_offset);
+            continue;
+        }
+
+        if (type_id != 2004u && type_id != 2014u) {
+            rewritten_body.append(body.data() + field_offset, field_end - field_offset);
+            continue;
+        }
+
+        std::string rewritten_subscribed;
+        size_t subscribed_offset = 0;
+        while (subscribed_offset < subscribed.size()) {
+            uint32 subscribed_field = 0;
+            uint32 subscribed_wire = 0;
+            size_t subscribed_field_offset = 0;
+            size_t subscribed_value_offset = 0;
+            size_t subscribed_value_size = 0;
+            size_t subscribed_field_end = 0;
+            if (!GBE_ReadNextProtoField(
+                    reinterpret_cast<const uint8 *>(subscribed.data()),
+                    subscribed.size(),
+                    subscribed_offset,
+                    subscribed_field,
+                    subscribed_wire,
+                    subscribed_field_offset,
+                    subscribed_value_offset,
+                    subscribed_value_size,
+                    subscribed_field_end))
+                return false;
+
+            if (subscribed_field == 2u && subscribed_wire == 2u) {
+                std::string rewritten_object;
+                const std::string object_data = subscribed.substr(subscribed_value_offset, subscribed_value_size);
+                const bool ok = (type_id == 2004u)
+                    ? GBE_RewriteDotaLobbyTemplateObject2004(object_data, room_name, server_region, rewritten_object)
+                    : GBE_RewriteDotaLobbyTemplateObject2014(object_data, player_name, rewritten_object);
+                if (!ok)
+                    return false;
+                GBE_AppendProtoBytesField(rewritten_subscribed, 2u, rewritten_object);
+                continue;
+            }
+
+            rewritten_subscribed.append(subscribed.data() + subscribed_field_offset, subscribed_field_end - subscribed_field_offset);
+        }
+
+        GBE_AppendProtoBytesField(rewritten_body, 2u, rewritten_subscribed);
+    }
+
+    message.resize(body_offset);
+    message.append(rewritten_body);
     return true;
 }
 
@@ -3577,6 +3851,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
 
     if (!GBE_PatchDotaLobbyTemplateIdentifiers(response_24, account_id, steam_id, GBE_local_lobby.lobby_id)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed patching template 24 cache update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        return true;
+    }
+
+    if (!GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
+            response_24,
+            std::string(settings->get_local_name()),
+            GBE_local_lobby.room_name,
+            GBE_local_lobby.server_region)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed patching template 24 room/name state for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
     }
 
