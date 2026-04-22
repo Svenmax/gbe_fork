@@ -211,3 +211,23 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `7038` 建房阶段的 `24 / CacheSubscribed` 当前优先使用 `GBE_kDotaPracticeLobbyCacheSubscribedTemplate` + `GBE_PatchDotaLobbyTemplateIdentifiers()` 的旧模板 patch 路径。
   - 在重新验证出稳定收益前，不再让建房专用 `24` 使用本地重构的 `2004/2014/2015/2016` object_data 方案。
+
+[firstcreateloby 抓包确认建房首屏落位来自首轮缓存]
+- Date: 2026-04-22
+- Context: Agent 在分析 `/workspace/firstcreateloby.zip` 并对照建房首轮 wrapped GC 消息时发现
+- Category: 代码模式
+- Instructions:
+  - `firstcreateloby.zip` 中建房首轮主链路是 `003_out_5452(7038) -> 004_in_5453(24) -> 005_in_5453(7055)`，首轮没有 `26`。
+  - 建房完成后紧接着出现的是 `006_out_5452(7009)` 和 `008_out_5452(8673)`，在此之前没有 `7047` 换位请求，因此房主首屏落位不可能来自一次额外的手动换位。
+  - 如果该抓包对应的客户端界面已显示房主在天辉 1 号位，则该初始落位信息必须已经包含在首轮 `24 / CacheSubscribed` 所携带的 lobby/member 快照里。
+
+[firstcreateloby 的真实 24 对象结构]
+- Date: 2026-04-22
+- Context: Agent 直接解析 `/workspace/firstcreateloby.zip` 中 `004_in_5453_k_EMsgClientFromGC.bin` 的 inner `24 / CacheSubscribed` 时发现
+- Category: 代码模式
+- Instructions:
+  - 该官方建房首轮 `24` 的 inner `CMsgSOCacheSubscribed` 实际对象顺序是：`2004(CSODOTALobby)`、`2013(CSODOTALobby)`、`2014(CSODOTAStaticLobby)`、`2015(CSODOTAServerLobby)`、`2016(CSODOTAServerStaticLobby)`。
+  - 其中 `2004` 已明确包含房主成员条目：`field120` 内成员 `id=<房主SteamID>`、`field3 team=0`、`field7 slot=1`、`field16 leaver_status=1`；同时 `field121=0`、`field128=<创建时间>`。
+  - `2014` 在该样本里包含一个成员静态条目，只有名字 `Svenmax` 和 `field2=0`。
+  - `2015` 在该样本里只有一个空成员条目（`field1` 的空 bytes）。
+  - `2016` 在该样本里包含一个成员静态条目，首字段是房主 `steam_id`，并带一组附加服务端成员字段。
