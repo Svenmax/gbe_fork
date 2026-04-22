@@ -1637,6 +1637,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
 
 static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
     uint64 steam_id,
+    uint32 app_id,
     uint64 lobby_id,
     const std::string &player_name,
     const std::string &room_name,
@@ -1692,9 +1693,23 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
         object_2004,
         object_2014);
 
-    message = build_protomsg_header(GBE_kDotaCacheSubscribed | GBE_kProtoMask);
+    message.clear();
+    {
+        ProtoBufMsgHeader_t hdr{};
+        hdr.m_EMsgFlagged = GBE_kDotaCacheSubscribed | GBE_kProtoMask;
+
+        CMsgProtoBufHeader protohdr;
+        protohdr.set_client_steam_id(steam_id);
+        protohdr.set_client_session_id(1);
+        protohdr.set_source_app_id(app_id);
+        hdr.m_cubProtoBufExtHdr = static_cast<uint32>(protohdr.ByteSizeLong());
+
+        ser_var<ProtoBufMsgHeader_t>(message, hdr);
+        protohdr.AppendToString(&message);
+    }
 
     CMsgSOCacheSubscribed protomsg;
+    protomsg.set_owner(steam_id);
 
     auto object_2004_entry = protomsg.add_objects();
     object_2004_entry->set_type_id(2004);
@@ -3555,6 +3570,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     std::string response_24;
     if (!GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
             steam_id,
+            settings->get_local_game_id().AppID(),
             GBE_local_lobby.lobby_id,
             std::string(settings->get_local_name()),
             GBE_local_lobby.room_name,
