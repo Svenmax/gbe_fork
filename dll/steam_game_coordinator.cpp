@@ -810,6 +810,14 @@ struct GBE_DotaPracticeLobbyDetailsRequest
     uint64 bot_dire{};
 };
 
+struct GBE_DotaPracticeLobbyCreateRequest
+{
+    bool has_pass_key{};
+    std::string pass_key;
+    bool has_lobby_details{};
+    GBE_DotaPracticeLobbyDetailsRequest lobby_details;
+};
+
 struct GBE_DotaPracticeLobbySetTeamSlotRequest
 {
     bool has_team{};
@@ -1229,6 +1237,28 @@ static bool GBE_ParseDotaPracticeLobbySetTeamSlotBody(const uint8 *body, size_t 
     }
 
     return request.has_team || request.has_slot || request.has_bot_difficulty;
+}
+
+static bool GBE_ParseDotaPracticeLobbyCreateBody(const uint8 *body, size_t body_size, GBE_DotaPracticeLobbyCreateRequest &request)
+{
+    request = {};
+
+    if (!body || body_size == 0)
+        return false;
+
+    if (GBE_ExtractProtoFieldBytes(body, body_size, GBE_FindProtoField(body, body_size, 5), request.pass_key))
+        request.has_pass_key = true;
+
+    std::string lobby_details_raw;
+    if (GBE_ExtractProtoFieldBytes(body, body_size, GBE_FindProtoField(body, body_size, 7), lobby_details_raw)) {
+        request.has_lobby_details = GBE_ParseDotaPracticeLobbySetDetailsBody(
+            reinterpret_cast<const uint8 *>(lobby_details_raw.data()),
+            lobby_details_raw.size(),
+            request.lobby_details
+        );
+    }
+
+    return request.has_lobby_details || request.has_pass_key;
 }
 
 static bool GBE_ParseDotaPracticeLobbyJoinBroadcastChannelBody(const uint8 *body, size_t body_size, GBE_DotaPracticeLobbyBroadcastChannelRequest &request)
@@ -3083,7 +3113,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             return true;
         }
 
-        return GBE_HandleDotaPracticeLobbyCreateRequest(source_job, false, nullptr);
+        return GBE_HandleDotaPracticeLobbyCreateRequest(
+            std::string(reinterpret_cast<const char *>(body), body_size),
+            source_job,
+            false,
+            nullptr
+        );
     }
 
     if (request_emsg == GBE_kDotaPracticeLobbySetDetails) {
@@ -3309,7 +3344,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     return true;
 }
 
-bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw)
+bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw)
 {
     GBE_local_lobby.active = true;
     GBE_local_lobby.lobby_id = GBE_GenerateDotaLobbyId();
@@ -3333,12 +3368,50 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(uint64 req
     GBE_local_lobby.broadcast_language_code.clear();
     GBE_local_lobby.pass_key.clear();
 
+    GBE_DotaPracticeLobbyCreateRequest request{};
+    if (GBE_ParseDotaPracticeLobbyCreateBody(reinterpret_cast<const uint8 *>(request_body.data()), request_body.size(), request)) {
+        if (request.has_lobby_details) {
+            const GBE_DotaPracticeLobbyDetailsRequest &details = request.lobby_details;
+            if (details.has_room_name)
+                GBE_local_lobby.room_name = details.room_name;
+            if (details.has_server_region)
+                GBE_local_lobby.server_region = details.server_region;
+            if (details.has_game_mode)
+                GBE_local_lobby.game_mode = details.game_mode;
+            if (details.has_bot_difficulty_radiant)
+                GBE_local_lobby.bot_difficulty_radiant = details.bot_difficulty_radiant;
+            if (details.has_allow_cheats)
+                GBE_local_lobby.allow_cheats = details.allow_cheats;
+            if (details.has_fill_with_bots)
+                GBE_local_lobby.fill_with_bots = details.fill_with_bots;
+            if (details.has_allow_spectating)
+                GBE_local_lobby.allow_spectating = details.allow_spectating;
+            if (details.has_visibility)
+                GBE_local_lobby.visibility = details.visibility;
+            if (details.has_bot_difficulty_dire)
+                GBE_local_lobby.bot_difficulty_dire = details.bot_difficulty_dire;
+            if (details.has_bot_radiant)
+                GBE_local_lobby.bot_radiant = details.bot_radiant;
+            if (details.has_bot_dire)
+                GBE_local_lobby.bot_dire = details.bot_dire;
+            if (details.has_pass_key)
+                GBE_local_lobby.pass_key = details.pass_key;
+        }
+
+        if (request.has_pass_key && GBE_local_lobby.pass_key.empty())
+            GBE_local_lobby.pass_key = request.pass_key;
+    }
+
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] State creating path=%s request_job=%llu NewLobbyID=%llu",
+        "[LOBBY] State creating path=%s request_job=%llu NewLobbyID=%llu room=%s server_region=%u mode=%u pass_len=%zu",
         wrapped ? "wrapped" : "direct",
         static_cast<unsigned long long>(request_job_id),
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        GBE_local_lobby.room_name.c_str(),
+        GBE_local_lobby.server_region,
+        GBE_local_lobby.game_mode,
+        GBE_local_lobby.pass_key.size()
     );
 
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
@@ -3416,6 +3489,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(uint64 req
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_7055.data()), response_7055.size(), 32).c_str()
         );
     }
+
+    if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7038"))
+        return true;
 
     return true;
 }
@@ -3814,7 +3890,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
             return true;
         }
 
-        return GBE_HandleDotaPracticeLobbyCreateRequest(context.request_job_id, true, &context.outer_session_field_raw);
+        return GBE_HandleDotaPracticeLobbyCreateRequest(
+            context.inner_body_raw,
+            context.request_job_id,
+            true,
+            &context.outer_session_field_raw
+        );
     }
 
     if (context.inner_emsg == GBE_kDotaPracticeLobbySetDetails)

@@ -179,3 +179,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `7149 / JoinBroadcastChannel` 的请求字段是：`field1 = channel`、`field2 = preferred_description`、`field3 = preferred_country_code`、`field4 = preferred_language_code`。
   - `7367 / LobbyUpdateBroadcastChannelInfo` 的请求字段是：`field1 = channel_id`、`field2 = country_code`、`field3 = description`、`field4 = language_code`。
   - 当前样本里 `7149` 会回 `26` 更新再回 `7055` ack，而 `7367` 和 `8054` 只看到 `26` 更新，没有看到额外 `7055` ack。
+
+[Dota2 Practice Lobby 建房首屏同步]
+- Date: 2026-04-22
+- Context: Agent 在排查首次建房后房主名、房间名和服务器地区首屏显示异常时确认
+- Category: 代码模式
+- Instructions:
+  - `7038 / CMsgPracticeLobbyCreate` 的实际房间设置在 `field7 = lobby_details`，其类型就是 `CMsgPracticeLobbySetDetails`，可直接复用 `7046` 的字段解析逻辑。
+  - 如果建房后只发 `24 + 7055`，客户端首屏可能继续显示缓存模板中的旧房主名、旧房间名或旧服务器地区；建房成功后应尽快补发一条基于本地状态的 `26` 大厅详情更新。
