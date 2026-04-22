@@ -3559,32 +3559,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     );
 
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
+    const uint32 account_id = settings->get_local_steam_id().GetAccountID();
     std::string response_24;
-    if (!GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
+    if (!GBE_BuildDotaDirectReplayMessage(
+            GBE_kDotaPracticeLobbyCacheSubscribedTemplate,
+            sizeof(GBE_kDotaPracticeLobbyCacheSubscribedTemplate),
+            account_id,
             steam_id,
-            GBE_local_lobby.lobby_id,
-            std::string(settings->get_local_name()),
-            GBE_local_lobby.room_name,
-            GBE_local_lobby.game_mode,
-            GBE_local_lobby.server_region,
-            GBE_local_lobby.allow_cheats,
-            GBE_local_lobby.fill_with_bots,
-            GBE_local_lobby.allow_spectating,
-            GBE_local_lobby.visibility,
-            GBE_local_lobby.bot_difficulty_radiant,
-            GBE_local_lobby.bot_difficulty_dire,
-            GBE_local_lobby.bot_radiant,
-            GBE_local_lobby.bot_dire,
-            GBE_local_lobby.owner_team,
-            GBE_local_lobby.owner_slot,
-            GBE_local_lobby.has_broadcast_channel,
-            GBE_local_lobby.broadcast_channel_id,
-            GBE_local_lobby.broadcast_country_code,
-            GBE_local_lobby.broadcast_description,
-            GBE_local_lobby.broadcast_language_code,
-            GBE_local_lobby.pass_key,
+            false,
+            false,
+            false,
+            0,
             response_24)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 24 cache update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building template 24 cache update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        return true;
+    }
+
+    if (!GBE_PatchDotaLobbyTemplateIdentifiers(response_24, account_id, steam_id, GBE_local_lobby.lobby_id)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed patching template 24 cache update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
     }
 

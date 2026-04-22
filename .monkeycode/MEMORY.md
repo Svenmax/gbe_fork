@@ -203,3 +203,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - Practice Lobby 建房专用的 `24 / CacheSubscribed` 外层 `ProtoBufMsgHeader_t` 必须保持空扩展头，即 `m_EMsgFlagged = 24 | protobuf_mask` 且 `m_cubProtoBufExtHdr = 0`。
   - 不要为这条建房专用 `24` 额外追加 `CMsgProtoBufHeader`；此前把 `m_cubProtoBufExtHdr` 改成 `14` 并附带 `client_steam_id / session_id / app_id` 后，客户端会出现“点击建房没有反应”。
+
+[Dota2 Practice Lobby 建房 24 当前回退到模板 patch]
+- Date: 2026-04-22
+- Context: 用户要求先恢复建房稳定性，不再继续修首屏落位时确认
+- Category: 代码模式
+- Instructions:
+  - `7038` 建房阶段的 `24 / CacheSubscribed` 当前优先使用 `GBE_kDotaPracticeLobbyCacheSubscribedTemplate` + `GBE_PatchDotaLobbyTemplateIdentifiers()` 的旧模板 patch 路径。
+  - 在重新验证出稳定收益前，不再让建房专用 `24` 使用本地重构的 `2004/2014/2015/2016` object_data 方案。
