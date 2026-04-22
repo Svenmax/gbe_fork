@@ -1121,7 +1121,8 @@ static std::string GBE_FormatHexPrefix(const uint8 *data, size_t size, size_t ma
     return stream.str();
 }
 
-static bool GBE_FindAndReplaceBytes(std::string &buffer, const std::vector<uint8> &needle, const std::vector<uint8> &replacement)
+// Raw binary template patch helper. Replacement must keep the exact same byte length.
+static bool GBE_FindAndOverwriteBytes(std::string &buffer, const std::vector<uint8> &needle, const std::vector<uint8> &replacement)
 {
     if (needle.empty() || needle.size() != replacement.size())
         return false;
@@ -1177,7 +1178,7 @@ static bool GBE_TryPatchDotaAccountIdVarint(std::string &message, uint32 account
     }
 
     const std::vector<uint8> encoded_account(encoded_account_raw.begin(), encoded_account_raw.end());
-    if (!GBE_FindAndReplaceBytes(message, GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()), encoded_account)) {
+    if (!GBE_FindAndOverwriteBytes(message, GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()), encoded_account)) {
         GBE_GC_DebugLog(log_scope, "failed replacing account_id bytes account_id=%u", account_id);
         return false;
     }
@@ -1536,7 +1537,7 @@ static bool GBE_PatchDotaTemplateIdentifiers(std::string &message, uint32 accoun
         std::vector<uint8> encoded_steam_id;
         if (!GBE_EncodeVarUint64WithExpectedSize(steam_id, GBE_kOldDotaSteamIdVarint.size(), encoded_steam_id))
             return false;
-        if (!GBE_FindAndReplaceBytes(message, GBE_VectorFromBytes(GBE_kOldDotaSteamIdVarint.data(), GBE_kOldDotaSteamIdVarint.size()), encoded_steam_id))
+        if (!GBE_FindAndOverwriteBytes(message, GBE_VectorFromBytes(GBE_kOldDotaSteamIdVarint.data(), GBE_kOldDotaSteamIdVarint.size()), encoded_steam_id))
             return false;
     }
 
@@ -1551,14 +1552,14 @@ static bool GBE_PatchDotaLobbyTemplateIdentifiers(std::string &message, uint32 a
         return false;
     const std::vector<uint8> old_lobby_id = GBE_VectorFromBytes(GBE_kOldDotaLobbyIdVarint.data(), GBE_kOldDotaLobbyIdVarint.size());
     const size_t lobby_id_match_count = GBE_CountBytePatternMatches(message, old_lobby_id);
-    if (!GBE_FindAndReplaceBytes(message, GBE_VectorFromBytes(GBE_kOldDotaLobbyIdVarint.data(), GBE_kOldDotaLobbyIdVarint.size()), encoded_lobby_id))
+    if (!GBE_FindAndOverwriteBytes(message, GBE_VectorFromBytes(GBE_kOldDotaLobbyIdVarint.data(), GBE_kOldDotaLobbyIdVarint.size()), encoded_lobby_id))
         return false;
 
     std::string steam_id_fixed64_raw;
     GBE_AppendLittleEndian64(steam_id_fixed64_raw, steam_id);
     const std::vector<uint8> old_steam_id_fixed64 = GBE_VectorFromBytes(GBE_kOldDotaSteamIdFixed64.data(), GBE_kOldDotaSteamIdFixed64.size());
     const size_t steam_id_fixed64_match_count = GBE_CountBytePatternMatches(message, old_steam_id_fixed64);
-    if (!GBE_FindAndReplaceBytes(message, GBE_VectorFromBytes(GBE_kOldDotaSteamIdFixed64.data(), GBE_kOldDotaSteamIdFixed64.size()), GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(steam_id_fixed64_raw.data()), steam_id_fixed64_raw.size())))
+    if (!GBE_FindAndOverwriteBytes(message, GBE_VectorFromBytes(GBE_kOldDotaSteamIdFixed64.data(), GBE_kOldDotaSteamIdFixed64.size()), GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(steam_id_fixed64_raw.data()), steam_id_fixed64_raw.size())))
         return false;
 
     GBE_GC_DebugLog(
@@ -2573,7 +2574,7 @@ static bool GBE_BuildDotaWelcomeBody(uint64 steam_id, uint32 account_id, const G
             GBE_GC_DebugLog("GC_DOTA_WELCOME", "version varint size mismatch version=%u expected=%zu", context.version, GBE_kOldDotaVersionVarint.size());
             return false;
         }
-        if (!GBE_FindAndReplaceBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaVersionVarint.data(), GBE_kOldDotaVersionVarint.size()), encoded_version)) {
+        if (!GBE_FindAndOverwriteBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaVersionVarint.data(), GBE_kOldDotaVersionVarint.size()), encoded_version)) {
             GBE_GC_DebugLog("GC_DOTA_WELCOME", "failed replacing version bytes version=%u", context.version);
             return false;
         }
@@ -2590,7 +2591,7 @@ static bool GBE_BuildDotaWelcomeBody(uint64 steam_id, uint32 account_id, const G
             GBE_GC_DebugLog("GC_DOTA_WELCOME", "steam_id varint size mismatch steam_id=%llu expected=%zu", static_cast<unsigned long long>(steam_id), GBE_kOldDotaSteamIdVarint.size());
             return false;
         }
-        if (!GBE_FindAndReplaceBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaSteamIdVarint.data(), GBE_kOldDotaSteamIdVarint.size()), encoded_steam_id)) {
+        if (!GBE_FindAndOverwriteBytes(inner_body, GBE_VectorFromBytes(GBE_kOldDotaSteamIdVarint.data(), GBE_kOldDotaSteamIdVarint.size()), encoded_steam_id)) {
             GBE_GC_DebugLog("GC_DOTA_WELCOME", "failed replacing steam_id bytes steam_id=%llu", static_cast<unsigned long long>(steam_id));
             return false;
         }

@@ -87,10 +87,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Date: 2026-04-21
 - Context: 用户要求在 `/workspace/gbe_fork` 实现 Practice Lobby 创建链路
 - Instructions:
-  - 拦截 `7038 / k_EMsgGCPracticeLobbyCreate` 后，不只回 `7055`，还要按顺序补发官方抓包里的 SO Cache lobby 更新包。
+  - 拦截 `7038 / k_EMsgGCPracticeLobbyCreate` 后，建房首轮应按当前官方样本发送 `24 / CacheSubscribed -> 7055`。
+  - `7038` 建房首轮不要主动补发 `26`。
   - `7055` 必须使用 9 字节扩展头，并把请求的 `SourceJobID` 填到扩展头的 `field11`。
   - 需要在 C++ 中随机生成新的 `uint64_t` LobbyID，并把抓包模板中的旧 LobbyID 全部等长替换成新值。
-  - 需要把抓包模板中的旧 SteamID/AccountID 全部替换为本地玩家真实 ID，确保客户端把本地玩家识别为房主。
+  - 需要把抓包模板中的旧 SteamID 替换为本地玩家真实 ID，确保客户端把本地玩家识别为房主。
+  - `AccountID` 需要按消息路径分别处理：能等长 raw 替换就替换；welcome 的 account-bound cache object 改走语义 patch；其余长度不匹配时记录并跳过，不要中断 GC 会话。
   - 需要在模拟器内存中持久化当前本地 lobby 状态，并为每一发建房相关回包打印调试日志。
 
 [Dota2 Practice Lobby 建房抓包规律]
@@ -99,9 +101,9 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Category: 代码模式
 - Instructions:
   - `7038 / k_EMsgGCPracticeLobbyCreate` 是走外层 `5452/5453` 包裹的 wrapped direct 流程，不是当前登录后常见的裸 direct 请求。
-  - 官方建房成功首轮顺序是先回 `7055` 成功响应，再回 `6146` 的 lobby SO 更新包；`7055` 内层包体只有 `08 01`。
+  - 早期样本里看到的 `6146` / SO 更新包不能再直接当作当前首轮顺序依据；当前最终应以 `firstcreateloby.zip` 确认过的 `24 -> 7055` 为准。
   - `7038` 请求的 9 字节 inner header 使用 field10 固定 64 位 job 值，官方 `7055` 响应改为 field11 并复用同一个 job 值。
-  - 首轮 `6146` 模板里包含旧 LobbyID 的 8 字节 varint 以及旧房主 SteamID 的 fixed64，需要统一替换成本地值。
+  - 建房首轮缓存模板里包含旧 LobbyID 的 8 字节 varint 以及旧房主 SteamID 的 fixed64，需要统一替换成本地值。
 
 [Dota2 高位 AccountID 与旧抓包模板兼容性]
 - Date: 2026-04-21
@@ -130,7 +132,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Category: 代码模式
 - Instructions:
   - `7038 / k_EMsgGCPracticeLobbyCreate` 不能假设只走 `5452/5453` wrapped 路径，真实运行里也会直接以 direct GC 消息发出。
-  - 建房回包逻辑需要同时兼容 direct 与 wrapped 两种入口，两者都应复用同一套 `7055 -> 6146` 发送顺序与 LobbyID 替换逻辑。
+  - 建房回包逻辑需要同时兼容 direct 与 wrapped 两种入口，两者都应复用同一套 `24 -> 7055` 首轮发送顺序与 LobbyID 替换逻辑。
 
 [Dota2 Practice Lobby 设置同步抓包规律]
 - Date: 2026-04-21
@@ -222,15 +224,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Category: 代码模式
 - Instructions:
   - `7038 / CMsgPracticeLobbyCreate` 的实际房间设置在 `field7 = lobby_details`，其类型就是 `CMsgPracticeLobbySetDetails`，可直接复用 `7046` 的字段解析逻辑。
-  - 如果建房后只发 `24 + 7055`，客户端首屏可能继续显示缓存模板中的旧房主名、旧房间名或旧服务器地区；建房成功后应尽快补发一条基于本地状态的 `26` 大厅详情更新。
+  - 建房首屏的关键同步应优先通过首轮 `24 + 7055` 完成，不要再把“首轮尽快补发 `26`”当成默认策略。
 
 [Dota2 Practice Lobby 首屏落位与 CacheSubscribed]
 - Date: 2026-04-22
 - Context: Agent 在排查“建房后房主不立即出现在天辉第一个位置”时发现
 - Category: 代码模式
 - Instructions:
-  - 即使 `7038` 的回包顺序已调整为 `7055 -> 24 -> 26`，如果 `24 / CacheSubscribed` 仍复用旧 lobby 模板，客户端首屏仍可能显示错误的成员落位。
-  - Practice Lobby 的 `24` 应与 `26` 共用同一份本地构造的 SO 对象数据，至少保持 `2004`、`2014`、`2015`、`2016` 的 object_data 一致，避免首屏成员状态与后续 `26` 更新不一致。
+  - 即使最终首轮顺序改回 `24 -> 7055`，如果 `24 / CacheSubscribed` 仍复用错误的 lobby 模板状态，客户端首屏仍可能显示错误的成员落位。
+  - 当前已验证更稳的做法是：建房首轮 `24` 继续走模板 patch，并把首屏所需的关键 lobby/member 状态 patch 到模板里，而不是默认要求它与后续 `26` 使用同一份本地重构 object_data。
 
 [Dota2 Practice Lobby 建房专用 24 的空扩展头要求]
 - Date: 2026-04-22
@@ -270,7 +272,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 [建房首轮不要主动发 26]
 - Date: 2026-04-22
-- Context: 用户验证改成 `24 -> 7055 -> 26` 后仍然首屏不落位，结合 `firstcreateloby.zip` 官方建房首轮无 `26` 的事实得出
+- Context: Agent 对照 `firstcreateloby.zip` 官方建房首轮链路与当前首屏表现后确认
 - Category: 代码模式
 - Instructions:
   - `7038` 建房首轮应优先只发送 `24 -> 7055`，不要主动跟一条 `26`。
@@ -308,3 +310,4 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `ClientWelcome` 模板里旧 `account_id` 的高置信度目标位于 `CMsgClientWelcome.outofdate_subscribed_caches` 中的 `type 2002 = CSODOTAGameAccountClient` 和 `type 2012 = CSODOTAGameAccountPlus`。
   - 这两个对象的 `object_data` 都应重写 `field1 = account_id`，而不是继续依赖旧模板里的 4 字节 varint 等长 raw 替换。
   - 因此 welcome 路径在高位 `AccountID` 场景下，应保留 `version` 与 `steam_id` 的等长替换，但把 `account_id` 改为对 `2002/2012` 做语义级 patch。
+  - 当前工程实现上不要直接依赖 Dota 专用 `CMsgClientWelcome` 生成类去访问 `outofdate_subscribed_caches`；更稳的做法是手工遍历 welcome 外层 protobuf 的 `field 3`，再对每个 cache payload 用 `CMsgSOCacheSubscribed` 做局部解析和重写。
