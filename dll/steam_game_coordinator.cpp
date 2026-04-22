@@ -1227,15 +1227,40 @@ static bool GBE_RewriteDotaAccountBoundObjectData(const std::string &input, uint
 
 static bool GBE_PatchDotaWelcomeAccountObjects(std::string &inner_body, uint32 account_id)
 {
-    CMsgClientWelcome welcome;
-    if (!welcome.ParseFromArray(inner_body.data(), static_cast<int>(inner_body.size())))
-        return false;
-
+    std::string rewritten_body;
     int patched_object_count = 0;
-    for (int cache_index = 0; cache_index < welcome.outofdate_subscribed_caches_size(); ++cache_index) {
-        auto *cache = welcome.mutable_outofdate_subscribed_caches(cache_index);
-        for (int object_index = 0; object_index < cache->objects_size(); ++object_index) {
-            auto *object = cache->mutable_objects(object_index);
+    size_t offset = 0;
+    while (offset < inner_body.size()) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(
+                reinterpret_cast<const uint8 *>(inner_body.data()),
+                inner_body.size(),
+                offset,
+                field_number,
+                wire_type,
+                field_offset,
+                value_offset,
+                value_size,
+                field_end))
+            return false;
+
+        if (field_number != 3u || wire_type != 2u) {
+            rewritten_body.append(inner_body.data() + field_offset, field_end - field_offset);
+            continue;
+        }
+
+        CMsgSOCacheSubscribed cache;
+        if (!cache.ParseFromArray(inner_body.data() + value_offset, static_cast<int>(value_size)))
+            return false;
+
+        int cache_patch_count = 0;
+        for (int object_index = 0; object_index < cache.objects_size(); ++object_index) {
+            auto *object = cache.mutable_objects(object_index);
             const int type_id = object->type_id();
             if (type_id != 2002 && type_id != 2012)
                 continue;
@@ -1247,12 +1272,20 @@ static bool GBE_PatchDotaWelcomeAccountObjects(std::string &inner_body, uint32 a
 
                 object->set_object_data(data_index, rewritten_object);
                 ++patched_object_count;
+                ++cache_patch_count;
             }
         }
+
+        if (cache_patch_count != 0) {
+            GBE_AppendProtoBytesField(rewritten_body, 3u, cache.SerializeAsString());
+            continue;
+        }
+
+        rewritten_body.append(inner_body.data() + field_offset, field_end - field_offset);
     }
 
     if (patched_object_count != 0) {
-        inner_body = welcome.SerializeAsString();
+        inner_body.swap(rewritten_body);
         GBE_GC_DebugLog("GC_DOTA_WELCOME", "patched welcome account-bound objects count=%d account_id=%u", patched_object_count, account_id);
     }
 
