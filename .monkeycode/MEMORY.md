@@ -247,3 +247,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 建房首轮 `24` 当前仍使用官方模板重放，但必须在 `LobbyID/SteamID` 之外继续 patch `2004.field16(room_name)`、`2004.field21(server_region)`、`2014.member[0].field1(player_name)`。
   - 这些值应直接来自当前进程内的建房状态：`GBE_local_lobby.room_name`、`GBE_local_lobby.server_region`、`settings->get_local_name()`；不需要也不应该从模拟器系统文件读取。
+
+[7046 改设置时必须保留房主默认落位]
+- Date: 2026-04-22
+- Context: Agent 在分析 `gbe_gc_debug.log` 中“建房首屏房主正确，但首次 7046 后房主消失，点击 slot 后才出现”的问题时发现
+- Category: 代码模式
+- Instructions:
+  - 建房首屏房主之所以能直接显示在天辉 1 号位，当前主要依赖首轮模板 `24` 自带的成员状态；但后续 `7046` 会改用 `GBE_local_lobby` 的本地状态构造 `26`。
+  - 因此建房初始化 `GBE_local_lobby` 时必须把房主默认状态设为 `owner_team=0`、`owner_slot=1`，否则首次 `7046` 发出的 `26` 会把房主覆盖成 `slot=0`，导致客户端里房主暂时消失。

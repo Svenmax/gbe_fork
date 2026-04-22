@@ -3778,7 +3778,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     GBE_local_lobby.bot_radiant = 0;
     GBE_local_lobby.bot_dire = 0;
     GBE_local_lobby.owner_team = 0;
-    GBE_local_lobby.owner_slot = 0;
+    GBE_local_lobby.owner_slot = 1;
     GBE_local_lobby.has_broadcast_channel = false;
     GBE_local_lobby.broadcast_channel_id = 0;
     GBE_local_lobby.broadcast_country_code.clear();
