@@ -788,6 +788,10 @@ struct GBE_DotaPracticeLobbyDetailsRequest
     std::string room_name;
     bool has_server_region{};
     uint32 server_region{};
+    bool has_lan{};
+    bool lan{};
+    bool has_lan_host_ping_location{};
+    std::string lan_host_ping_location;
     bool has_game_mode{};
     uint32 game_mode{};
     bool has_bot_difficulty_radiant{};
@@ -1232,6 +1236,14 @@ static bool GBE_ParseDotaPracticeLobbySetDetailsBody(const uint8 *body, size_t b
         request.server_region = static_cast<uint32>(value);
     }
 
+    if (GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 25), value)) {
+        request.has_lan = true;
+        request.lan = (value != 0);
+    }
+
+    if (GBE_ExtractProtoFieldBytes(body, body_size, GBE_FindProtoField(body, body_size, 48), request.lan_host_ping_location))
+        request.has_lan_host_ping_location = true;
+
     if (GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 5), value)) {
         request.has_game_mode = true;
         request.game_mode = static_cast<uint32>(value);
@@ -1452,9 +1464,27 @@ static bool GBE_PatchDotaLobbyTemplateIdentifiers(std::string &message, uint32 a
     return true;
 }
 
-static bool GBE_RewriteDotaLobbyTemplateObject2004(const std::string &input, const std::string &room_name, uint32 server_region, std::string &output)
+static bool GBE_RewriteDotaLobbyTemplateObject2004(
+    const std::string &input,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    const std::string &pass_key,
+    std::string &output)
 {
     output.clear();
+    bool saw_lan = false;
+    bool saw_lan_host_ping_location = false;
 
     size_t offset = 0;
     while (offset < input.size()) {
@@ -1476,6 +1506,21 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(const std::string &input, con
                 field_end))
             return false;
 
+        if (field_number == 3u && wire_type == 0u) {
+            GBE_AppendProtoVarIntField(output, 3u, game_mode);
+            continue;
+        }
+
+        if (field_number == 13u && wire_type == 0u) {
+            GBE_AppendProtoVarIntField(output, 13u, allow_cheats ? 1u : 0u);
+            continue;
+        }
+
+        if (field_number == 14u && wire_type == 0u) {
+            GBE_AppendProtoVarIntField(output, 14u, fill_with_bots ? 1u : 0u);
+            continue;
+        }
+
         if (field_number == 16u && wire_type == 2u) {
             GBE_AppendProtoBytesField(output, 16u, room_name);
             continue;
@@ -1486,8 +1531,61 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(const std::string &input, con
             continue;
         }
 
+        if (field_number == 31u && wire_type == 0u) {
+            GBE_AppendProtoVarIntField(output, 31u, allow_spectating ? 1u : 0u);
+            continue;
+        }
+
+        if (field_number == 36u && wire_type == 0u) {
+            GBE_AppendProtoVarIntField(output, 36u, bot_difficulty_radiant);
+            continue;
+        }
+
+        if (field_number == 39u && wire_type == 2u) {
+            GBE_AppendProtoBytesField(output, 39u, pass_key);
+            continue;
+        }
+
+        if (field_number == 57u && wire_type == 0u) {
+            saw_lan = true;
+            GBE_AppendProtoVarIntField(output, 57u, lan ? 1u : 0u);
+            continue;
+        }
+
+        if (field_number == 75u && wire_type == 0u) {
+            GBE_AppendProtoVarIntField(output, 75u, visibility);
+            continue;
+        }
+
+        if (field_number == 93u && wire_type == 0u) {
+            GBE_AppendProtoVarIntField(output, 93u, bot_difficulty_dire);
+            continue;
+        }
+
+        if (field_number == 94u && wire_type == 0u) {
+            GBE_AppendProtoVarIntField(output, 94u, bot_radiant);
+            continue;
+        }
+
+        if (field_number == 95u && wire_type == 0u) {
+            GBE_AppendProtoVarIntField(output, 95u, bot_dire);
+            continue;
+        }
+
+        if (field_number == 109u && wire_type == 2u) {
+            saw_lan_host_ping_location = true;
+            if (!lan_host_ping_location.empty())
+                GBE_AppendProtoBytesField(output, 109u, lan_host_ping_location);
+            continue;
+        }
+
         output.append(input.data() + field_offset, field_end - field_offset);
     }
+
+    if (!saw_lan)
+        GBE_AppendProtoVarIntField(output, 57u, lan ? 1u : 0u);
+    if (!saw_lan_host_ping_location && !lan_host_ping_location.empty())
+        GBE_AppendProtoBytesField(output, 109u, lan_host_ping_location);
 
     return true;
 }
@@ -1560,7 +1658,19 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
     std::string &message,
     const std::string &player_name,
     const std::string &room_name,
-    uint32 server_region)
+    uint32 game_mode,
+    uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    const std::string &pass_key)
 {
     if (message.size() < sizeof(ProtoBufMsgHeader_t))
         return false;
@@ -1640,7 +1750,23 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
                 std::string rewritten_object;
                 const std::string object_data = subscribed.substr(subscribed_value_offset, subscribed_value_size);
                 const bool ok = (type_id == 2004u)
-                    ? GBE_RewriteDotaLobbyTemplateObject2004(object_data, room_name, server_region, rewritten_object)
+                    ? GBE_RewriteDotaLobbyTemplateObject2004(
+                        object_data,
+                        room_name,
+                        game_mode,
+                        server_region,
+                        lan,
+                        lan_host_ping_location,
+                        allow_cheats,
+                        fill_with_bots,
+                        allow_spectating,
+                        visibility,
+                        bot_difficulty_radiant,
+                        bot_difficulty_dire,
+                        bot_radiant,
+                        bot_dire,
+                        pass_key,
+                        rewritten_object)
                     : GBE_RewriteDotaLobbyTemplateObject2014(object_data, player_name, rewritten_object);
                 if (!ok)
                     return false;
@@ -1792,6 +1918,8 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     const std::string &room_name,
     uint32 game_mode,
     uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
     bool allow_cheats,
     bool fill_with_bots,
     bool allow_spectating,
@@ -1856,7 +1984,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     GBE_AppendProtoVarIntField(object_2004, 48, 0u);
     GBE_AppendProtoVarIntField(object_2004, 51, 0u);
     GBE_AppendProtoVarIntField(object_2004, 53, 0u);
-    GBE_AppendProtoVarIntField(object_2004, 57, 1u);
+    GBE_AppendProtoVarIntField(object_2004, 57, lan ? 1u : 0u);
     if (has_broadcast_channel) {
         std::string broadcast_info;
         GBE_AppendProtoVarIntField(broadcast_info, 1, broadcast_channel_id);
@@ -1873,6 +2001,8 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     GBE_AppendProtoVarIntField(object_2004, 94, bot_radiant);
     GBE_AppendProtoVarIntField(object_2004, 95, bot_dire);
     GBE_AppendProtoVarIntField(object_2004, 97, 0u);
+    if (!lan_host_ping_location.empty())
+        GBE_AppendProtoBytesField(object_2004, 109, lan_host_ping_location);
     GBE_AppendProtoVarIntField(object_2004, 110, 0u);
     GBE_AppendProtoVarIntField(object_2004, 113, 0u);
 
@@ -1916,6 +2046,8 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
     const std::string &room_name,
     uint32 game_mode,
     uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
     bool allow_cheats,
     bool fill_with_bots,
     bool allow_spectating,
@@ -1945,6 +2077,8 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
         room_name,
         game_mode,
         server_region,
+        lan,
+        lan_host_ping_location,
         allow_cheats,
         fill_with_bots,
         allow_spectating,
@@ -2004,6 +2138,8 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
     const std::string &room_name,
     uint32 game_mode,
     uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
     bool allow_cheats,
     bool fill_with_bots,
     bool allow_spectating,
@@ -2035,6 +2171,8 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
         room_name,
         game_mode,
         server_region,
+        lan,
+        lan_host_ping_location,
         allow_cheats,
         fill_with_bots,
         allow_spectating,
@@ -3769,6 +3907,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     GBE_local_lobby.room_name.clear();
     GBE_local_lobby.game_mode = 0;
     GBE_local_lobby.server_region = 0;
+    GBE_local_lobby.lan = true;
+    GBE_local_lobby.lan_host_ping_location.clear();
     GBE_local_lobby.allow_cheats = false;
     GBE_local_lobby.fill_with_bots = true;
     GBE_local_lobby.allow_spectating = false;
@@ -3794,6 +3934,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
                 GBE_local_lobby.room_name = details.room_name;
             if (details.has_server_region)
                 GBE_local_lobby.server_region = details.server_region;
+            if (details.has_lan)
+                GBE_local_lobby.lan = details.lan;
+            if (details.has_lan_host_ping_location)
+                GBE_local_lobby.lan_host_ping_location = details.lan_host_ping_location;
             if (details.has_game_mode)
                 GBE_local_lobby.game_mode = details.game_mode;
             if (details.has_bot_difficulty_radiant)
@@ -3822,12 +3966,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] State creating path=%s request_job=%llu NewLobbyID=%llu room=%s server_region=%u mode=%u pass_len=%zu",
+        "[LOBBY] State creating path=%s request_job=%llu NewLobbyID=%llu room=%s server_region=%u lan=%u lan_ping=%s mode=%u pass_len=%zu",
         wrapped ? "wrapped" : "direct",
         static_cast<unsigned long long>(request_job_id),
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         GBE_local_lobby.room_name.c_str(),
         GBE_local_lobby.server_region,
+        GBE_local_lobby.lan ? 1u : 0u,
+        GBE_local_lobby.lan_host_ping_location.c_str(),
         GBE_local_lobby.game_mode,
         GBE_local_lobby.pass_key.size()
     );
@@ -3858,7 +4004,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
             response_24,
             std::string(settings->get_local_name()),
             GBE_local_lobby.room_name,
-            GBE_local_lobby.server_region)) {
+            GBE_local_lobby.game_mode,
+            GBE_local_lobby.server_region,
+            GBE_local_lobby.lan,
+            GBE_local_lobby.lan_host_ping_location,
+            GBE_local_lobby.allow_cheats,
+            GBE_local_lobby.fill_with_bots,
+            GBE_local_lobby.allow_spectating,
+            GBE_local_lobby.visibility,
+            GBE_local_lobby.bot_difficulty_radiant,
+            GBE_local_lobby.bot_difficulty_dire,
+            GBE_local_lobby.bot_radiant,
+            GBE_local_lobby.bot_dire,
+            GBE_local_lobby.pass_key)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed patching template 24 room/name state for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
     }
@@ -3949,6 +4107,8 @@ bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped
             GBE_local_lobby.room_name,
             GBE_local_lobby.game_mode,
             GBE_local_lobby.server_region,
+            GBE_local_lobby.lan,
+            GBE_local_lobby.lan_host_ping_location,
             GBE_local_lobby.allow_cheats,
             GBE_local_lobby.fill_with_bots,
             GBE_local_lobby.allow_spectating,
@@ -4038,6 +4198,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
         GBE_local_lobby.room_name = request.room_name;
     if (request.has_server_region)
         GBE_local_lobby.server_region = request.server_region;
+    if (request.has_lan)
+        GBE_local_lobby.lan = request.lan;
+    if (request.has_lan_host_ping_location)
+        GBE_local_lobby.lan_host_ping_location = request.lan_host_ping_location;
     if (request.has_game_mode)
         GBE_local_lobby.game_mode = request.game_mode;
     if (request.has_bot_difficulty_radiant)
@@ -4064,9 +4228,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Room details updated. mode=%u server_region=%u cheats=%u bots=%u spectating=%u visibility=%u bot_diff_r=%u bot_diff_d=%u bot_radiant=%llu bot_dire=%llu name=%s password_len=%zu",
+        "[LOBBY] Room details updated. mode=%u server_region=%u lan=%u lan_ping=%s cheats=%u bots=%u spectating=%u visibility=%u bot_diff_r=%u bot_diff_d=%u bot_radiant=%llu bot_dire=%llu name=%s password_len=%zu",
         GBE_local_lobby.game_mode,
         GBE_local_lobby.server_region,
+        GBE_local_lobby.lan ? 1u : 0u,
+        GBE_local_lobby.lan_host_ping_location.c_str(),
         GBE_local_lobby.allow_cheats ? 1u : 0u,
         GBE_local_lobby.fill_with_bots ? 1u : 0u,
         GBE_local_lobby.allow_spectating ? 1u : 0u,

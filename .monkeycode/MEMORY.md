@@ -150,6 +150,31 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当前 practice lobby 的服务器设置应固定为本地房间参数，不需要继续尝试从最新 `serverrigon.zip` 样本中推导可变 region 值。
   - 后续处理服务器地址相关逻辑时，可以直接按本地房间固定参数实现。
 
+[Dota2 Practice Lobby 本地房间字段映射]
+- Date: 2026-04-22
+- Context: Agent 在对照 `/workspace/SteamKit` 与 `gbe_gc_debug.log` 排查“本地房间仍显示 auto region”时发现
+- Category: 代码模式
+- Instructions:
+  - `CMsgPracticeLobbySetDetails` 中，`field25 = lan`，`field48 = lan_host_ping_location`。
+  - `CSODOTALobby` 中，`field57 = lan`，`field109 = lan_host_ping_location`。
+  - Practice Lobby 的“本地房间”显示不能只依赖 `server_region`，还需要同步 `lan` 与 `lan_host_ping_location` 到 `24/26` 的 `2004` 对象。
+
+[Dota2 Practice Lobby 7046 设置样本补充]
+- Date: 2026-04-22
+- Context: 用户补充最新 `gbe_gc_debug.log` 中第二次 `7046` 的界面操作含义
+- Category: 代码模式
+- Instructions:
+  - 第二次 `7046` 中 `body_prefix` 从 `20 00` 变为 `20 0c`，对应的是用户切换了游戏模式，不是地区设置。
+  - 因此当前把 `field5` 解析为 `game_mode` 的判断与用户实际操作一致，不能再把这条变化误判为 `server_region`。
+
+[Dota2 Practice Lobby 首屏机器人显示问题]
+- Date: 2026-04-22
+- Context: 用户补充建房时未选机器人，但进入房间首屏显示机器人，点击 slot 后恢复正常
+- Category: 代码模式
+- Instructions:
+  - 如果建房首屏显示了错误的机器人状态，而点击 slot 触发 `7047 -> 26` 后恢复，优先怀疑首轮 `24` 仍残留抓包模板中的 bot 相关字段，而不是本地 `26` 构造逻辑。
+  - 排查重点放在 `24 / CacheSubscribed` 的 `2004` 对象是否已经把 bot 相关字段按本地状态重写，而不是只修 `26`。
+
 [Dota2 Practice Lobby 新增字段映射]
 - Date: 2026-04-22
 - Context: Agent 在分析 `lobbyvsiable.zip`、`cheat.zip`、`bot.zip` 等最小操作抓包时确认
@@ -247,6 +272,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 建房首轮 `24` 当前仍使用官方模板重放，但必须在 `LobbyID/SteamID` 之外继续 patch `2004.field16(room_name)`、`2004.field21(server_region)`、`2014.member[0].field1(player_name)`。
   - 这些值应直接来自当前进程内的建房状态：`GBE_local_lobby.room_name`、`GBE_local_lobby.server_region`、`settings->get_local_name()`；不需要也不应该从模拟器系统文件读取。
+
+[建房模板 24 的 2004 需要同步更多大厅状态]
+- Date: 2026-04-22
+- Context: Agent 在排查“建房首屏误显示机器人，点击 slot 后被 26 修正”时发现
+- Category: 代码模式
+- Instructions:
+  - 建房首轮 `24` 如果只 patch 房间名、地区和玩家名，`2004` 中其余沿用抓包模板的字段仍可能污染首屏显示。
+  - 模板 `24` 的 `2004` 至少还要同步本地 `game_mode`、`allow_cheats`、`fill_with_bots`、`allow_spectating`、`visibility`、`pass_key`、`bot_difficulty_radiant`、`bot_difficulty_dire`、`bot_radiant`、`bot_dire`、`lan`、`lan_host_ping_location`，避免首屏状态与后续 `26` 不一致。
 
 [7046 改设置时必须保留房主默认落位]
 - Date: 2026-04-22

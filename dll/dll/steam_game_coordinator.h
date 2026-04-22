@@ -77,6 +77,8 @@ public ISteamGameCoordinator
         std::string room_name;
         uint32 game_mode{};
         uint32 server_region{};
+        bool lan{};
+        std::string lan_host_ping_location;
         bool allow_cheats{};
         bool fill_with_bots{};
         bool allow_spectating{};
