@@ -195,3 +195,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 即使 `7038` 的回包顺序已调整为 `7055 -> 24 -> 26`，如果 `24 / CacheSubscribed` 仍复用旧 lobby 模板，客户端首屏仍可能显示错误的成员落位。
   - Practice Lobby 的 `24` 应与 `26` 共用同一份本地构造的 SO 对象数据，至少保持 `2004`、`2014`、`2015`、`2016` 的 object_data 一致，避免首屏成员状态与后续 `26` 更新不一致。
+
+[Dota2 Practice Lobby 建房专用 24 的空扩展头要求]
+- Date: 2026-04-22
+- Context: Agent 在继续排查“点击建房没有反应”并对照 `gbe_gc_debug.log` 与旧 `24` 模板前缀时发现
+- Category: 代码模式
+- Instructions:
+  - Practice Lobby 建房专用的 `24 / CacheSubscribed` 外层 `ProtoBufMsgHeader_t` 必须保持空扩展头，即 `m_EMsgFlagged = 24 | protobuf_mask` 且 `m_cubProtoBufExtHdr = 0`。
+  - 不要为这条建房专用 `24` 额外追加 `CMsgProtoBufHeader`；此前把 `m_cubProtoBufExtHdr` 改成 `14` 并附带 `client_steam_id / session_id / app_id` 后，客户端会出现“点击建房没有反应”。
