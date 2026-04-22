@@ -299,3 +299,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 建房首屏房主之所以能直接显示在天辉 1 号位，当前主要依赖首轮模板 `24` 自带的成员状态；但后续 `7046` 会改用 `GBE_local_lobby` 的本地状态构造 `26`。
   - 因此建房初始化 `GBE_local_lobby` 时必须把房主默认状态设为 `owner_team=0`、`owner_slot=1`，否则首次 `7046` 发出的 `26` 会把房主覆盖成 `slot=0`，导致客户端里房主暂时消失。
+
+[Dota2 ClientWelcome 的 account_id 应做语义 patch]
+- Date: 2026-04-22
+- Context: Agent 在继续修复高位 `AccountID` 与旧 welcome 模板兼容问题时发现
+- Category: 代码模式
+- Instructions:
+  - `ClientWelcome` 模板里旧 `account_id` 的高置信度目标位于 `CMsgClientWelcome.outofdate_subscribed_caches` 中的 `type 2002 = CSODOTAGameAccountClient` 和 `type 2012 = CSODOTAGameAccountPlus`。
+  - 这两个对象的 `object_data` 都应重写 `field1 = account_id`，而不是继续依赖旧模板里的 4 字节 varint 等长 raw 替换。
+  - 因此 welcome 路径在高位 `AccountID` 场景下，应保留 `version` 与 `steam_id` 的等长替换，但把 `account_id` 改为对 `2002/2012` 做语义级 patch。

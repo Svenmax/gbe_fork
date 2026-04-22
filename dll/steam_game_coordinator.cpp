@@ -1185,6 +1185,80 @@ static bool GBE_TryPatchDotaAccountIdVarint(std::string &message, uint32 account
     return true;
 }
 
+static bool GBE_RewriteDotaAccountBoundObjectData(const std::string &input, uint32 account_id, std::string &output)
+{
+    output.clear();
+    bool saw_account_id = false;
+
+    size_t offset = 0;
+    while (offset < input.size()) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(
+                reinterpret_cast<const uint8 *>(input.data()),
+                input.size(),
+                offset,
+                field_number,
+                wire_type,
+                field_offset,
+                value_offset,
+                value_size,
+                field_end))
+            return false;
+
+        if (field_number == 1u && wire_type == 0u) {
+            saw_account_id = true;
+            GBE_AppendProtoVarIntField(output, 1u, account_id);
+            continue;
+        }
+
+        output.append(input.data() + field_offset, field_end - field_offset);
+    }
+
+    if (!saw_account_id)
+        GBE_AppendProtoVarIntField(output, 1u, account_id);
+
+    return true;
+}
+
+static bool GBE_PatchDotaWelcomeAccountObjects(std::string &inner_body, uint32 account_id)
+{
+    CMsgClientWelcome welcome;
+    if (!welcome.ParseFromArray(inner_body.data(), static_cast<int>(inner_body.size())))
+        return false;
+
+    int patched_object_count = 0;
+    for (int cache_index = 0; cache_index < welcome.outofdate_subscribed_caches_size(); ++cache_index) {
+        auto *cache = welcome.mutable_outofdate_subscribed_caches(cache_index);
+        for (int object_index = 0; object_index < cache->objects_size(); ++object_index) {
+            auto *object = cache->mutable_objects(object_index);
+            const int type_id = object->type_id();
+            if (type_id != 2002 && type_id != 2012)
+                continue;
+
+            for (int data_index = 0; data_index < object->object_data_size(); ++data_index) {
+                std::string rewritten_object;
+                if (!GBE_RewriteDotaAccountBoundObjectData(object->object_data(data_index), account_id, rewritten_object))
+                    return false;
+
+                object->set_object_data(data_index, rewritten_object);
+                ++patched_object_count;
+            }
+        }
+    }
+
+    if (patched_object_count != 0) {
+        inner_body = welcome.SerializeAsString();
+        GBE_GC_DebugLog("GC_DOTA_WELCOME", "patched welcome account-bound objects count=%d account_id=%u", patched_object_count, account_id);
+    }
+
+    return true;
+}
+
 static bool GBE_ExtractProtoFieldUint64(const uint8 *data, size_t size, const GBE_ProtoFieldView &view, uint64 &value)
 {
     if (!view.found)
@@ -2472,9 +2546,9 @@ static bool GBE_BuildDotaWelcomeBody(uint64 steam_id, uint32 account_id, const G
         }
     }
 
-    {
-        if (!GBE_TryPatchDotaAccountIdVarint(inner_body, account_id, "GC_DOTA_WELCOME"))
-            return false;
+    if (!GBE_PatchDotaWelcomeAccountObjects(inner_body, account_id)) {
+        GBE_GC_DebugLog("GC_DOTA_WELCOME", "failed patching welcome account-bound objects account_id=%u", account_id);
+        return false;
     }
 
     {
