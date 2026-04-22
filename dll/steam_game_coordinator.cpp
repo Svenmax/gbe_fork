@@ -3647,8 +3647,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         );
     }
 
-    if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7038"))
-        return true;
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Skipping initial 26 details update for 7038 to match official create flow LobbyID=%llu",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+    );
 
     return true;
 }
