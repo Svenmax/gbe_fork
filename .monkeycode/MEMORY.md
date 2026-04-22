@@ -113,6 +113,17 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 对这类通用模板应改为“能等长替换就替换，长度不匹配时记录日志并跳过”，不要因此中断整个 GC 会话。
   - Lobby 的 `SteamID`、`LobbyID` 和 fixed32/fixed64 替换仍需保持严格等长，不应放宽。
 
+[Dota2 登录阶段通用 24 模板对象组成]
+- Date: 2026-04-22
+- Context: Agent 在排查“首次登录后掉落物品/物品状态异常”时解析 `GBE_kDotaCacheSubscribedTemplate` 发现
+- Category: 代码模式
+- Instructions:
+  - 登录阶段通用 `24 / CacheSubscribed` 模板当前主要包含三类 SO 对象：`type 1 = CSOEconItem`、`type 7 = CSOEconGameAccountClient`、`type 2010 = CSODOTAPlayerChallenge`。
+  - 其中 `type 1 / CSOEconItem` 是 donor 账号库存快照，最可能导致首次登录时把抓包模板账号的物品状态带到当前账号。
+  - 当前登录期 `24` 路径本质上还是整包模板重放加 ID 替换，没有像 Practice Lobby `2004` 那样按字段重写 object_data。
+  - 如果后续做最小修复，优先处理登录期 `24` 里的 `type 1 / CSOEconItem`，其次再考虑 `type 7 / CSOEconGameAccountClient`；`type 2010` 主要影响挑战/活动进度，不是物品主因。
+  - Dota2 登录路径当前不会自动补发一份本地真实 `type 1` 库存，所以最小修复不应直接删掉模板里的 `type 1` bucket，而应在发送登录 `24` 前把该 bucket 的 object_data 重写为 `items.json` 中的本地真实物品列表。
+
 [Dota2 Practice Lobby 入口封装兼容性]
 - Date: 2026-04-22
 - Context: Agent 在分析 `STEAM_LOG_3783392324.zip` 与 `gbe_gc_debug.log` 的建房失败问题时发现

@@ -2735,6 +2735,68 @@ std::tuple<ProtoBufMsgHeader_t, CMsgProtoBufHeader, T, bool> Steam_Game_Coordina
     return { hdr, protohdr, protomsg, true };
 }
 
+bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::string &message)
+{
+    if (message.size() < sizeof(ProtoBufMsgHeader_t))
+        return false;
+
+    ProtoBufMsgHeader_t hdr{};
+    std::memcpy(&hdr, message.data(), sizeof(hdr));
+    if (message.size() < sizeof(hdr) + hdr.m_cubProtoBufExtHdr)
+        return false;
+
+    const char *proto_header_ptr = message.data() + sizeof(hdr);
+    const char *body_ptr = proto_header_ptr + hdr.m_cubProtoBufExtHdr;
+    const size_t body_size = message.size() - sizeof(hdr) - hdr.m_cubProtoBufExtHdr;
+
+    CMsgSOCacheSubscribed protomsg;
+    if (!protomsg.ParseFromArray(body_ptr, static_cast<int>(body_size)))
+        return false;
+
+    auto *objects = protomsg.mutable_objects();
+    const CSteamID steam_id = settings->get_local_steam_id();
+    const auto &local_items = load_items_from_file();
+    bool patched_items = false;
+
+    for (int i = 0; i < objects->size(); ++i) {
+        auto *object = objects->Mutable(i);
+        if (object->type_id() != 1u)
+            continue;
+
+        object->clear_object_data();
+        for (const Econ_Item &item : local_items) {
+            object->add_object_data(item_to_gcprotobuf(item, steam_id));
+        }
+
+        patched_items = true;
+        break;
+    }
+
+    if (!patched_items) {
+        auto *object = protomsg.add_objects();
+        object->set_type_id(1u);
+        for (const Econ_Item &item : local_items) {
+            object->add_object_data(item_to_gcprotobuf(item, steam_id));
+        }
+    }
+
+    std::string updated;
+    ser_var<ProtoBufMsgHeader_t>(updated, hdr);
+    updated.append(proto_header_ptr, hdr.m_cubProtoBufExtHdr);
+    protomsg.AppendToString(&updated);
+    message.swap(updated);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_SYNC",
+        "patched login CacheSubscribed inventory items=%zu had_type1=%d total_types=%d",
+        local_items.size(),
+        patched_items ? 1 : 0,
+        protomsg.objects_size()
+    );
+
+    return true;
+}
+
 uint64 Steam_Game_Coordinator::item_id_local_to_network(uint64 item_id)
 {
     if (item_id == 0)
@@ -3633,6 +3695,10 @@ void Steam_Game_Coordinator::GBE_PushDotaLoginSyncMessages()
             cache_subscribed_message)) {
         GBE_GC_DebugLog("GC_DOTA_SYNC", "failed to build CacheSubscribed replay steamid=%llu accountid=%u", static_cast<unsigned long long>(steam_id), account_id);
         return;
+    }
+
+    if (!GBE_PatchDotaLoginCacheSubscribedInventory(cache_subscribed_message)) {
+        GBE_GC_DebugLog("GC_DOTA_SYNC", "failed patching login CacheSubscribed inventory steamid=%llu accountid=%u", static_cast<unsigned long long>(steam_id), account_id);
     }
 
     GBE_dota_login_sync_sent = true;

@@ -126,6 +126,7 @@ public ISteamGameCoordinator
     std::string build_protomsg_header(uint32 msg_type, JobID_t target_job = k_GIDNil, JobID_t source_job = k_GIDNil);
     template <class T>
     std::tuple<ProtoBufMsgHeader_t, CMsgProtoBufHeader, T, bool> parse_protomsg(const void *input, uint32 input_size);
+    bool GBE_PatchDotaLoginCacheSubscribedInventory(std::string &message);
     uint64 item_id_local_to_network(uint64 item_id);
     uint64 item_id_network_to_local(uint64 item_id);
     std::string item_to_gcstruct(const Econ_Item &item, CSteamID steam_id);
