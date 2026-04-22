@@ -1511,14 +1511,208 @@ static bool GBE_BuildDotaPracticeLobbyResponsePayload(uint64 request_job_id, std
     return true;
 }
 
-static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(uint32 account_id, uint64 steam_id, uint64 lobby_id, std::string &message)
+static void GBE_BuildDotaPracticeLobbySOObjectData(
+    uint64 steam_id,
+    uint64 lobby_id,
+    const std::string &player_name,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
+    bool has_broadcast_channel,
+    uint32 broadcast_channel_id,
+    const std::string &broadcast_country_code,
+    const std::string &broadcast_description,
+    const std::string &broadcast_language_code,
+    const std::string &pass_key,
+    std::string &object_2015,
+    std::string &object_2016,
+    std::string &object_2004,
+    std::string &object_2014)
 {
-    (void)account_id;
-    message.assign(reinterpret_cast<const char *>(GBE_kDotaPracticeLobbyCacheSubscribedTemplate), sizeof(GBE_kDotaPracticeLobbyCacheSubscribedTemplate));
+    static const uint8 GBE_kDotaLobbyMemberTail[] = {
+        0x48, 0x00, 0x58, 0x00, 0x60, 0xE1, 0xAC, 0x8B, 0x84, 0xD0, 0x85, 0x40, 0x68, 0x00,
+        0x98, 0x01, 0x00, 0x98, 0x01, 0x00, 0x98, 0x01, 0x00, 0x98, 0x01, 0x00, 0x15, 0x00,
+        0x00, 0x00, 0x00,
+    };
+    static const uint8 GBE_kDotaLobbyField62Value[] = { 0x08, 0xF5, 0x44, 0x12, 0x02, 0x08, 0x00 };
 
-    if (!GBE_PatchDotaLobbyTemplateIdentifiers(message, account_id, steam_id, lobby_id))
-        return false;
+    object_2015.clear();
+    GBE_AppendProtoBytesField(object_2015, 1, std::string());
 
+    {
+        std::string member_bytes;
+        GBE_AppendProtoFixed64Field(member_bytes, 1, steam_id);
+        GBE_AppendRawBytes(member_bytes, GBE_kDotaLobbyMemberTail, sizeof(GBE_kDotaLobbyMemberTail));
+
+        object_2016.clear();
+        GBE_AppendProtoBytesField(object_2016, 1, member_bytes);
+    }
+
+    object_2004.clear();
+    GBE_AppendProtoVarIntField(object_2004, 1, lobby_id);
+    GBE_AppendProtoVarIntField(object_2004, 3, game_mode);
+    GBE_AppendProtoVarIntField(object_2004, 4, 0u);
+    GBE_AppendProtoFixed64Field(object_2004, 11, steam_id);
+    GBE_AppendProtoVarIntField(object_2004, 12, 1u);
+    GBE_AppendProtoVarIntField(object_2004, 13, allow_cheats ? 1u : 0u);
+    GBE_AppendProtoVarIntField(object_2004, 14, fill_with_bots ? 1u : 0u);
+    GBE_AppendProtoBytesField(object_2004, 16, room_name);
+    GBE_AppendProtoBytesField(object_2004, 17, std::string());
+    GBE_AppendProtoBytesField(object_2004, 17, std::string());
+    GBE_AppendProtoVarIntField(object_2004, 21, server_region);
+    GBE_AppendProtoVarIntField(object_2004, 28, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 31, allow_spectating ? 1u : 0u);
+    GBE_AppendProtoVarIntField(object_2004, 36, bot_difficulty_radiant);
+    GBE_AppendProtoBytesField(object_2004, 39, pass_key);
+    GBE_AppendProtoVarIntField(object_2004, 42, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 43, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 44, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 46, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 47, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 48, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 51, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 53, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 57, 1u);
+    if (has_broadcast_channel) {
+        std::string broadcast_info;
+        GBE_AppendProtoVarIntField(broadcast_info, 1, broadcast_channel_id);
+        GBE_AppendProtoBytesField(broadcast_info, 2, broadcast_country_code);
+        GBE_AppendProtoBytesField(broadcast_info, 3, broadcast_description);
+        GBE_AppendProtoBytesField(broadcast_info, 4, broadcast_language_code);
+        GBE_AppendProtoBytesField(object_2004, 58, broadcast_info);
+    }
+    GBE_AppendProtoBytesField(object_2004, 62, std::string(reinterpret_cast<const char *>(GBE_kDotaLobbyField62Value), sizeof(GBE_kDotaLobbyField62Value)));
+    GBE_AppendProtoVarIntField(object_2004, 75, visibility);
+    GBE_AppendProtoVarIntField(object_2004, 82, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 88, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 93, bot_difficulty_dire);
+    GBE_AppendProtoVarIntField(object_2004, 94, bot_radiant);
+    GBE_AppendProtoVarIntField(object_2004, 95, bot_dire);
+    GBE_AppendProtoVarIntField(object_2004, 97, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 110, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 113, 0u);
+
+    {
+        std::string owner_state;
+        GBE_AppendProtoFixed64Field(owner_state, 1, steam_id);
+        GBE_AppendProtoVarIntField(owner_state, 3, owner_team);
+        GBE_AppendProtoVarIntField(owner_state, 7, owner_slot);
+        GBE_AppendProtoVarIntField(owner_state, 16, 1u);
+        GBE_AppendProtoBytesField(object_2004, 120, owner_state);
+    }
+
+    GBE_AppendProtoVarIntField(object_2004, 121, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 124, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 124, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 124, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 124, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 124, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 124, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 124, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 124, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 124, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 124, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 124, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 127, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 128, GBE_kDotaLobbyField128Value);
+
+    object_2014.clear();
+    {
+        std::string name_entry;
+        GBE_AppendProtoBytesField(name_entry, 1, player_name);
+        GBE_AppendProtoVarIntField(name_entry, 2, 0u);
+        GBE_AppendProtoBytesField(object_2014, 1, name_entry);
+    }
+}
+
+static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
+    uint64 steam_id,
+    uint64 lobby_id,
+    const std::string &player_name,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
+    bool has_broadcast_channel,
+    uint32 broadcast_channel_id,
+    const std::string &broadcast_country_code,
+    const std::string &broadcast_description,
+    const std::string &broadcast_language_code,
+    const std::string &pass_key,
+    std::string &message)
+{
+    std::string object_2015;
+    std::string object_2016;
+    std::string object_2004;
+    std::string object_2014;
+    GBE_BuildDotaPracticeLobbySOObjectData(
+        steam_id,
+        lobby_id,
+        player_name,
+        room_name,
+        game_mode,
+        server_region,
+        allow_cheats,
+        fill_with_bots,
+        allow_spectating,
+        visibility,
+        bot_difficulty_radiant,
+        bot_difficulty_dire,
+        bot_radiant,
+        bot_dire,
+        owner_team,
+        owner_slot,
+        has_broadcast_channel,
+        broadcast_channel_id,
+        broadcast_country_code,
+        broadcast_description,
+        broadcast_language_code,
+        pass_key,
+        object_2015,
+        object_2016,
+        object_2004,
+        object_2014);
+
+    message = build_protomsg_header(GBE_kDotaCacheSubscribed | GBE_kProtoMask);
+
+    CMsgSOCacheSubscribed protomsg;
+
+    auto object_2004_entry = protomsg.add_objects();
+    object_2004_entry->set_type_id(2004);
+    object_2004_entry->add_object_data(object_2004);
+
+    auto object_2014_entry = protomsg.add_objects();
+    object_2014_entry->set_type_id(2014);
+    object_2014_entry->add_object_data(object_2014);
+
+    auto object_2015_entry = protomsg.add_objects();
+    object_2015_entry->set_type_id(2015);
+    object_2015_entry->add_object_data(object_2015);
+
+    auto object_2016_entry = protomsg.add_objects();
+    object_2016_entry->set_type_id(2016);
+    object_2016_entry->add_object_data(object_2016);
+
+    protomsg.AppendToString(&message);
     return true;
 }
 
@@ -1547,122 +1741,65 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
     const std::string &pass_key,
     std::string &message)
 {
-    static const uint8 GBE_kDotaLobbyMemberTail[] = {
-        0x48, 0x00, 0x58, 0x00, 0x60, 0xE1, 0xAC, 0x8B, 0x84, 0xD0, 0x85, 0x40, 0x68, 0x00,
-        0x98, 0x01, 0x00, 0x98, 0x01, 0x00, 0x98, 0x01, 0x00, 0x98, 0x01, 0x00, 0x15, 0x00,
-        0x00, 0x00, 0x00,
-    };
-    static const uint8 GBE_kDotaLobbyField62Value[] = { 0x08, 0xF5, 0x44, 0x12, 0x02, 0x08, 0x00 };
+    std::string object_2015;
+    std::string object_2016;
+    std::string object_2004;
+    std::string object_2014;
     std::string body;
 
-    {
-        std::string inner;
-        GBE_AppendProtoBytesField(inner, 1, std::string());
+    GBE_BuildDotaPracticeLobbySOObjectData(
+        steam_id,
+        lobby_id,
+        player_name,
+        room_name,
+        game_mode,
+        server_region,
+        allow_cheats,
+        fill_with_bots,
+        allow_spectating,
+        visibility,
+        bot_difficulty_radiant,
+        bot_difficulty_dire,
+        bot_radiant,
+        bot_dire,
+        owner_team,
+        owner_slot,
+        has_broadcast_channel,
+        broadcast_channel_id,
+        broadcast_country_code,
+        broadcast_description,
+        broadcast_language_code,
+        pass_key,
+        object_2015,
+        object_2016,
+        object_2004,
+        object_2014);
 
+    {
         std::string update;
         GBE_AppendProtoVarIntField(update, 1, 2015u);
-        GBE_AppendProtoBytesField(update, 2, inner);
+        GBE_AppendProtoBytesField(update, 2, object_2015);
         GBE_AppendProtoBytesField(body, 2, update);
     }
 
     {
-        std::string member_bytes;
-        GBE_AppendProtoFixed64Field(member_bytes, 1, steam_id);
-        GBE_AppendRawBytes(member_bytes, GBE_kDotaLobbyMemberTail, sizeof(GBE_kDotaLobbyMemberTail));
-
-        std::string member_inner;
-        GBE_AppendProtoBytesField(member_inner, 1, member_bytes);
-
         std::string update;
         GBE_AppendProtoVarIntField(update, 1, 2016u);
-        GBE_AppendProtoBytesField(update, 2, member_inner);
+        GBE_AppendProtoBytesField(update, 2, object_2016);
         GBE_AppendProtoBytesField(body, 2, update);
     }
 
     {
-        std::string lobby_details;
-        GBE_AppendProtoVarIntField(lobby_details, 1, lobby_id);
-        GBE_AppendProtoVarIntField(lobby_details, 3, game_mode);
-        GBE_AppendProtoVarIntField(lobby_details, 4, 0u);
-        GBE_AppendProtoFixed64Field(lobby_details, 11, steam_id);
-        GBE_AppendProtoVarIntField(lobby_details, 12, 1u);
-        GBE_AppendProtoVarIntField(lobby_details, 13, allow_cheats ? 1u : 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 14, fill_with_bots ? 1u : 0u);
-        GBE_AppendProtoBytesField(lobby_details, 16, room_name);
-        GBE_AppendProtoBytesField(lobby_details, 17, std::string());
-        GBE_AppendProtoBytesField(lobby_details, 17, std::string());
-        GBE_AppendProtoVarIntField(lobby_details, 21, server_region);
-        GBE_AppendProtoVarIntField(lobby_details, 28, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 31, allow_spectating ? 1u : 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 36, bot_difficulty_radiant);
-        GBE_AppendProtoBytesField(lobby_details, 39, pass_key);
-        GBE_AppendProtoVarIntField(lobby_details, 42, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 43, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 44, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 46, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 47, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 48, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 51, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 53, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 57, 1u);
-        if (has_broadcast_channel) {
-            std::string broadcast_info;
-            GBE_AppendProtoVarIntField(broadcast_info, 1, broadcast_channel_id);
-            GBE_AppendProtoBytesField(broadcast_info, 2, broadcast_country_code);
-            GBE_AppendProtoBytesField(broadcast_info, 3, broadcast_description);
-            GBE_AppendProtoBytesField(broadcast_info, 4, broadcast_language_code);
-            GBE_AppendProtoBytesField(lobby_details, 58, broadcast_info);
-        }
-        GBE_AppendProtoBytesField(lobby_details, 62, std::string(reinterpret_cast<const char *>(GBE_kDotaLobbyField62Value), sizeof(GBE_kDotaLobbyField62Value)));
-        GBE_AppendProtoVarIntField(lobby_details, 75, visibility);
-        GBE_AppendProtoVarIntField(lobby_details, 82, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 88, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 93, bot_difficulty_dire);
-        GBE_AppendProtoVarIntField(lobby_details, 94, bot_radiant);
-        GBE_AppendProtoVarIntField(lobby_details, 95, bot_dire);
-        GBE_AppendProtoVarIntField(lobby_details, 97, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 110, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 113, 0u);
-
-        std::string owner_state;
-        GBE_AppendProtoFixed64Field(owner_state, 1, steam_id);
-        GBE_AppendProtoVarIntField(owner_state, 3, owner_team);
-        GBE_AppendProtoVarIntField(owner_state, 7, owner_slot);
-        GBE_AppendProtoVarIntField(owner_state, 16, 1u);
-        GBE_AppendProtoBytesField(lobby_details, 120, owner_state);
-
-        GBE_AppendProtoVarIntField(lobby_details, 121, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 124, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 124, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 124, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 124, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 124, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 124, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 124, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 124, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 124, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 124, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 124, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 127, 0u);
-        GBE_AppendProtoVarIntField(lobby_details, 128, GBE_kDotaLobbyField128Value);
-
         std::string update;
         GBE_AppendProtoVarIntField(update, 1, 2004u);
-        GBE_AppendProtoBytesField(update, 2, lobby_details);
+        GBE_AppendProtoBytesField(update, 2, object_2004);
         GBE_AppendProtoBytesField(body, 2, update);
     }
 
     {
-        std::string name_entry;
-        GBE_AppendProtoBytesField(name_entry, 1, player_name);
-        GBE_AppendProtoVarIntField(name_entry, 2, 0u);
-
-        std::string inner;
-        GBE_AppendProtoBytesField(inner, 1, name_entry);
-
         std::string update;
         GBE_AppendProtoVarIntField(update, 1, 2014u);
-        GBE_AppendProtoBytesField(update, 2, inner);
+        GBE_AppendProtoBytesField(update, 2, object_2014);
         GBE_AppendProtoBytesField(body, 2, update);
     }
 
@@ -3415,10 +3552,31 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     );
 
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
-    const uint32 account_id = settings->get_local_steam_id().GetAccountID();
-
     std::string response_24;
-    if (!GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(account_id, steam_id, GBE_local_lobby.lobby_id, response_24)) {
+    if (!GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
+            steam_id,
+            GBE_local_lobby.lobby_id,
+            std::string(settings->get_local_name()),
+            GBE_local_lobby.room_name,
+            GBE_local_lobby.game_mode,
+            GBE_local_lobby.server_region,
+            GBE_local_lobby.allow_cheats,
+            GBE_local_lobby.fill_with_bots,
+            GBE_local_lobby.allow_spectating,
+            GBE_local_lobby.visibility,
+            GBE_local_lobby.bot_difficulty_radiant,
+            GBE_local_lobby.bot_difficulty_dire,
+            GBE_local_lobby.bot_radiant,
+            GBE_local_lobby.bot_dire,
+            GBE_local_lobby.owner_team,
+            GBE_local_lobby.owner_slot,
+            GBE_local_lobby.has_broadcast_channel,
+            GBE_local_lobby.broadcast_channel_id,
+            GBE_local_lobby.broadcast_country_code,
+            GBE_local_lobby.broadcast_description,
+            GBE_local_lobby.broadcast_language_code,
+            GBE_local_lobby.pass_key,
+            response_24)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 24 cache update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
     }

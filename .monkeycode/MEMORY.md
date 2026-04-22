@@ -187,3 +187,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `7038 / CMsgPracticeLobbyCreate` 的实际房间设置在 `field7 = lobby_details`，其类型就是 `CMsgPracticeLobbySetDetails`，可直接复用 `7046` 的字段解析逻辑。
   - 如果建房后只发 `24 + 7055`，客户端首屏可能继续显示缓存模板中的旧房主名、旧房间名或旧服务器地区；建房成功后应尽快补发一条基于本地状态的 `26` 大厅详情更新。
+
+[Dota2 Practice Lobby 首屏落位与 CacheSubscribed]
+- Date: 2026-04-22
+- Context: Agent 在排查“建房后房主不立即出现在天辉第一个位置”时发现
+- Category: 代码模式
+- Instructions:
+  - 即使 `7038` 的回包顺序已调整为 `7055 -> 24 -> 26`，如果 `24 / CacheSubscribed` 仍复用旧 lobby 模板，客户端首屏仍可能显示错误的成员落位。
+  - Practice Lobby 的 `24` 应与 `26` 共用同一份本地构造的 SO 对象数据，至少保持 `2004`、`2014`、`2015`、`2016` 的 object_data 一致，避免首屏成员状态与后续 `26` 更新不一致。
