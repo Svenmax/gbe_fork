@@ -1162,14 +1162,25 @@ static bool GBE_EncodeVarUint64WithExpectedSize(uint64 value, size_t expected_si
     return true;
 }
 
-static bool GBE_TryPatchDotaAccountIdVarint(std::string &message, uint32 account_id, const char *log_scope)
+static bool GBE_TryPatchDotaAccountIdVarint(
+    std::string &message,
+    uint32 account_id,
+    const char *log_scope,
+    uint32 request_emsg,
+    uint32 response_emsg,
+    size_t body_size,
+    const char *context_note)
 {
     std::string encoded_account_raw;
     GBE_AppendVarUint64(encoded_account_raw, account_id);
     if (encoded_account_raw.size() != GBE_kOldDotaAccountIdVarint.size()) {
         GBE_GC_DebugLog(
             log_scope,
-            "skipping account_id varint replacement account_id=%u encoded_size=%zu expected=%zu",
+            "skipping account_id varint replacement req=%u resp=%u body_size=%zu note=%s account_id=%u encoded_size=%zu expected=%zu",
+            request_emsg,
+            response_emsg,
+            body_size,
+            context_note ? context_note : "",
             account_id,
             encoded_account_raw.size(),
             GBE_kOldDotaAccountIdVarint.size()
@@ -1526,10 +1537,19 @@ static bool GBE_ParseDirectProtoContext(const void *pubData, uint32 cubData, Pro
     return true;
 }
 
-static bool GBE_PatchDotaTemplateIdentifiers(std::string &message, uint32 account_id, uint64 steam_id, bool replace_account, bool replace_steam_id)
+static bool GBE_PatchDotaTemplateIdentifiers(
+    std::string &message,
+    uint32 account_id,
+    uint64 steam_id,
+    bool replace_account,
+    bool replace_steam_id,
+    uint32 request_emsg,
+    uint32 response_emsg,
+    size_t body_size,
+    const char *context_note)
 {
     if (replace_account) {
-        if (!GBE_TryPatchDotaAccountIdVarint(message, account_id, "GC_DOTA_PATCH"))
+        if (!GBE_TryPatchDotaAccountIdVarint(message, account_id, "GC_DOTA_PATCH", request_emsg, response_emsg, body_size, context_note))
             return false;
     }
 
@@ -2355,11 +2375,15 @@ static bool GBE_BuildDotaDirectReplayMessage(
     bool replace_steam_id,
     bool has_target_job,
     uint64 target_job,
+    uint32 request_emsg,
+    uint32 response_emsg,
+    size_t body_size,
+    const char *context_note,
     std::string &message)
 {
     message.assign(reinterpret_cast<const char *>(template_bytes), template_size);
 
-    if (!GBE_PatchDotaTemplateIdentifiers(message, account_id, steam_id, replace_account, replace_steam_id))
+    if (!GBE_PatchDotaTemplateIdentifiers(message, account_id, steam_id, replace_account, replace_steam_id, request_emsg, response_emsg, body_size, context_note))
         return false;
 
     if (message.size() < sizeof(ProtoBufMsgHeader_t))
@@ -2383,13 +2407,13 @@ static bool GBE_BuildDotaDirectReplayMessage(
 
     const size_t old_header_size = hdr.m_cubProtoBufExtHdr;
     const char *body_ptr = message.data() + sizeof(ProtoBufMsgHeader_t) + old_header_size;
-    const size_t body_size = message.size() - sizeof(ProtoBufMsgHeader_t) - old_header_size;
+    const size_t serialized_body_size = message.size() - sizeof(ProtoBufMsgHeader_t) - old_header_size;
 
     std::string updated;
     hdr.m_cubProtoBufExtHdr = static_cast<uint32>(protohdr.ByteSizeLong());
     ser_var<ProtoBufMsgHeader_t>(updated, hdr);
     protohdr.AppendToString(&updated);
-    updated.append(body_ptr, body_size);
+    updated.append(body_ptr, serialized_body_size);
     message.swap(updated);
     return true;
 }
@@ -3800,6 +3824,10 @@ void Steam_Game_Coordinator::GBE_PushDotaLoginSyncMessages()
             true,
             false,
             0,
+            24u,
+            24u,
+            0,
+            "login cache subscribed template",
             cache_subscribed_message)) {
         GBE_GC_DebugLog("GC_DOTA_SYNC", "failed to build CacheSubscribed replay steamid=%llu accountid=%u", static_cast<unsigned long long>(steam_id), account_id);
         return;
@@ -4043,6 +4071,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             replace_steam_id,
             has_source_job,
             source_job,
+            request_emsg,
+            response_emsg,
+            body_size,
+            response_note,
             response_message)) {
         GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building replay req=%u resp=%u", request_emsg, response_emsg);
         return true;
@@ -4062,6 +4094,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 false,
                 false,
                 0,
+                request_emsg,
+                8678u,
+                body_size,
+                "8676 followup 8678",
                 followup_message)) {
             GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building 8678 followup after 8676");
             return true;
@@ -4164,6 +4200,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
             false,
             false,
             0,
+            7038u,
+            24u,
+            request_body.size(),
+            "practice lobby cache template",
             response_24)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building template 24 cache update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;

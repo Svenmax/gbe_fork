@@ -311,3 +311,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 这两个对象的 `object_data` 都应重写 `field1 = account_id`，而不是继续依赖旧模板里的 4 字节 varint 等长 raw 替换。
   - 因此 welcome 路径在高位 `AccountID` 场景下，应保留 `version` 与 `steam_id` 的等长替换，但把 `account_id` 改为对 `2002/2012` 做语义级 patch。
   - 当前工程实现上不要直接依赖 Dota 专用 `CMsgClientWelcome` 生成类去访问 `outofdate_subscribed_caches`；更稳的做法是手工遍历 welcome 外层 protobuf 的 `field 3`，再对每个 cache payload 用 `CMsgSOCacheSubscribed` 做局部解析和重写。
+
+[Dota2 高位 AccountID 跳过路径的处理策略]
+- Date: 2026-04-22
+- Context: 用户要求后续不要盲目把所有长度不匹配的 `account_id` 跳过路径都升级成语义 patch
+- Instructions:
+  - 对高位 `AccountID` 的旧模板兼容问题，优先保留“长度不匹配时记录并跳过”的降级策略，不要默认把所有跳过路径都升级为语义 patch。
+  - 跳过日志需要保留，并补充足够的消息上下文，至少应包含模板名或消息作用域；如有条件，再带上对应 `emsg`、selector、body size 等定位信息。
+  - 只有当某条跳过路径已经对应到明确的功能异常时，才把该路径升级成有针对性的语义 patch。
