@@ -31,6 +31,28 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[GitHub 构建触发偏好]
+- Date: 2026-04-23
+- Context: 用户要求后续触发 GitHub 构建时限定目标任务
+- Instructions:
+  - 以后如果需要触发 GitHub 构建，只触发 `win / build (api_regular, x64, debug)`，不要再主动触发其他 Windows 或 Linux 构建任务。
+
+[Dota2 7041 排查优先级]
+- Date: 2026-04-23
+- Context: 用户要求后续继续修复 “开始游戏” 路径时严格按 `/workspace/hoststartgame.zip` 对齐
+- Instructions:
+  - 后续 `7041 / k_EMsgGCPracticeLobbyLaunch` 的修复要严格按照 `hoststartgame.zip` 的消息路径实现，不要混入 dedicated `startgame.zip` 的分支节奏。
+  - 当前优先排查并实现的方向依次是：补齐 `029/030_in_5453`、让本地 lobby 状态随延时异步推进、重新审视 `connect` 地址格式是否被客户端接受、再看 `4007/8793/8727/7427/7534` 是否需要关键响应。
+
+[Dota2 dedicated startgame 样本差异]
+- Date: 2026-04-23
+- Context: Agent 在对照 `/workspace/startgame.zip` 与 `/workspace/hoststartgame.zip` 分析 dedicated 服务器开局链路时发现
+- Category: 代码模式
+- Instructions:
+  - `/workspace/startgame.zip` 不是 `hoststartgame` 的简单等价替身；它在 `7041` 之后多出一段 dedicated 专用的前置 GC 时序，包含额外的 `5453` 小包、一次 `822 / ClanState`、以及与 host 样本不同顺序的 `779 / GameConnectTokens` 与 `766 / PersonaState`。
+  - dedicated 样本里最值得优先参考的是额外的 `003/004/005/008/009/022/076/079/080` 这些 `5453`，以及 `014/017/032` 这组三条 `779`；大量尾部 `151/147/815` 和批量 `766` 更像进入比赛后或界面刷新噪声，不应先作为当前 `7041` 卡点的首要实现目标。
+  - host 样本与 dedicated 样本的 `779 / GameConnectTokens` 节奏不同：host 是 `47 -> 25 -> 47`，dedicated 是 `47 -> 47 -> 25`，不能假设 dedicated 开局仍沿用 host 的 token 顺序。
+
 [Dota2 Practice Lobby 7041 启动链路]
 - Date: 2026-04-23
 - Context: Agent 在执行 Dota2 Practice Lobby “开始游戏”启动链路实现时发现
@@ -49,6 +71,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `7041` 启动链路不能只发 `4 x 26`，还应补齐样本里的外围 Steam 消息序列，至少覆盖 `766(init) -> 5501 -> 5575 -> 779 -> 766(serversetup) -> 5575 -> 779 -> 766(run) -> 5429 -> 779 -> 766(server run) -> 766(private lobby) -> 766(run)`。
   - `004_in_766` 的 rich presence 是 `#DOTA_RP_INIT`，`024_in_766` 会把 `status` 和 `steam_display` 切到 `#DOTA_RP_PRIVATE_LOBBY`，这些不是现有 `010/018/023/026` 的简单重复包。
   - `022_in_779` 与前两条 `779` 不同，包含一组新的 connect token 数据；如果只重放前两条 `779`，启动时序仍然比官方样本短一段。
+
+[Dota2 hoststartgame 后段 direct 映射]
+- Date: 2026-04-23
+- Context: Agent 在继续对照 `/workspace/hoststartgame.zip` 修复 practice lobby 启动尾段时发现
+- Category: 代码模式
+- Instructions:
+  - `027/030` 这一组在 host 样本里可以明确对应 `7197 -> 7198`，其中 `030_in_5453` 的 outer body 不是直接以内层消息开头，前面还带有 wrapped direct 的 field1/field2，真正的内层 direct replay 模板应从 `1e 1c 00 80` 开始截取。
+  - `7041` 的本地 lobby `state/game_state` 不能在排队阶段提前写终态；应把目标状态作为队列元数据附着到 `GC_Message` 上，并在 `push_incoming_now` 或 `RunCallbacks` 真正把消息转入 `incoming_messages` 时再应用。
 
 [字段映射参考顺序]
 - Date: 2026-04-21

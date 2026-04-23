@@ -894,6 +894,30 @@ static const uint8 GBE_kDota8677Template[] = {
     0x00, 0x08, 0x01, 0x12, 0x00,
 };
 
+static const uint8 GBE_kDota7198Template[] = {
+    0x1E, 0x1C, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x38, 0x95, 0x03, 0x38, 0xE3, 0x04, 0x38, 0xA1,
+    0x1F, 0x38, 0xB4, 0x16, 0x38, 0x00, 0x38, 0xBF, 0x03, 0x38, 0xD1, 0x03, 0x38, 0xAA, 0x36, 0x38,
+    0xF3, 0x1C, 0x38, 0xA5, 0x01, 0x38, 0x30, 0x38, 0xEB, 0x08, 0x38, 0xB5, 0x02, 0x38, 0x4E, 0x38,
+    0xE1, 0x03, 0x38, 0xCF, 0x07, 0x38, 0x6B, 0x38, 0xB5, 0x04, 0x38, 0xE2, 0x07, 0x38, 0xDE, 0x06,
+    0x38, 0xB7, 0x09, 0x38, 0x00, 0x38, 0x00, 0x38, 0x00, 0x38, 0x00, 0x38, 0xD8, 0x02, 0x42, 0x09,
+    0x08, 0x95, 0x03, 0x10, 0x00, 0x18, 0x00, 0x20, 0x00, 0x42, 0x09, 0x08, 0xE3, 0x04, 0x10, 0x00,
+    0x18, 0x00, 0x20, 0x00, 0x42, 0x09, 0x08, 0xA1, 0x1F, 0x10, 0x00, 0x18, 0x00, 0x20, 0x22, 0x42,
+    0x0A, 0x08, 0xB4, 0x16, 0x10, 0x06, 0x18, 0x00, 0x20, 0xBC, 0x01, 0x42, 0x00, 0x42, 0x09, 0x08,
+    0xBF, 0x03, 0x10, 0x00, 0x18, 0x00, 0x20, 0x00, 0x42, 0x09, 0x08, 0xD1, 0x03, 0x10, 0x00, 0x18,
+    0x00, 0x20, 0x00, 0x42, 0x09, 0x08, 0xAA, 0x36, 0x10, 0x00, 0x18, 0x00, 0x20, 0x6C, 0x42, 0x09,
+    0x08, 0xF3, 0x1C, 0x10, 0x00, 0x18, 0x00, 0x20, 0x00, 0x42, 0x09, 0x08, 0xA5, 0x01, 0x10, 0x00,
+    0x18, 0x00, 0x20, 0x0E, 0x42, 0x08, 0x08, 0x30, 0x10, 0x00, 0x18, 0x00, 0x20, 0x00, 0x42, 0x0A,
+    0x08, 0xEB, 0x08, 0x10, 0x00, 0x18, 0x00, 0x20, 0xA0, 0x02, 0x42, 0x0A, 0x08, 0xB5, 0x02, 0x10,
+    0x00, 0x18, 0x00, 0x20, 0x80, 0x02, 0x42, 0x08, 0x08, 0x4E, 0x10, 0x00, 0x18, 0x00, 0x20, 0x3E,
+    0x42, 0x09, 0x08, 0xE1, 0x03, 0x10, 0x00, 0x18, 0x00, 0x20, 0x00, 0x42, 0x09, 0x08, 0xCF, 0x07,
+    0x10, 0x00, 0x18, 0x00, 0x20, 0x00, 0x42, 0x09, 0x08, 0x6B, 0x10, 0x00, 0x18, 0x00, 0x20, 0x92,
+    0x01, 0x42, 0x0A, 0x08, 0xB5, 0x04, 0x10, 0x00, 0x18, 0x00, 0x20, 0x9A, 0x02, 0x42, 0x0A, 0x08,
+    0xE2, 0x07, 0x10, 0x00, 0x18, 0x00, 0x20, 0x9C, 0x02, 0x42, 0x0A, 0x08, 0xDE, 0x06, 0x10, 0x00,
+    0x18, 0x00, 0x20, 0xBC, 0x01, 0x42, 0x0A, 0x08, 0xB7, 0x09, 0x10, 0x00, 0x18, 0x00, 0x20, 0xA2,
+    0x02, 0x42, 0x08, 0x08, 0x00, 0x10, 0x01, 0x18, 0x02, 0x20, 0x01, 0x42, 0x00, 0x42, 0x00, 0x42,
+    0x00, 0x42, 0x0A, 0x08, 0xD8, 0x02, 0x10, 0x00, 0x18, 0x00, 0x20, 0x82, 0x02,
+};
+
 static const uint8 GBE_kDota7388Profile20Template[] = {
     0xDC, 0x1C, 0x00, 0x80, 0x09, 0x00, 0x00, 0x00, 0x59, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x08, 0x00, 0x10, 0x00, 0x18, 0x20, 0x20, 0x00, 0x28, 0x00, 0x38, 0xF5, 0xED, 0x86, 0x41,
@@ -3453,7 +3477,24 @@ bool Steam_Game_Coordinator::is_welcome_message(const GC_Message &message)
         msg_type == 4005);
 }
 
-void Steam_Game_Coordinator::push_incoming(uint32 msg_type, const std::string &message, double delay)
+void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message)
+{
+    if (!message.apply_lobby_state)
+        return;
+
+    GBE_local_lobby.state = message.lobby_state;
+    GBE_local_lobby.game_state = message.lobby_game_state;
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Applied queued state=%u game_state=%u msg=%u",
+        GBE_local_lobby.state,
+        GBE_local_lobby.game_state,
+        GBE_GC_MaskedEMsg(message.msg_type)
+    );
+}
+
+void Steam_Game_Coordinator::push_incoming(uint32 msg_type, const std::string &message, double delay, bool apply_lobby_state, uint32 lobby_state, uint32 lobby_game_state)
 {
     PRINT_DEBUG("%u %.2f", msg_type, delay);
 
@@ -3462,16 +3503,23 @@ void Steam_Game_Coordinator::push_incoming(uint32 msg_type, const std::string &m
     new_item.msg_body = message;
     new_item.created = std::chrono::high_resolution_clock::now();
     new_item.post_in = delay;
+    new_item.apply_lobby_state = apply_lobby_state;
+    new_item.lobby_state = lobby_state;
+    new_item.lobby_game_state = lobby_game_state;
     pending_messages.push_back(new_item);
 }
 
-void Steam_Game_Coordinator::push_incoming_now(uint32 msg_type, const std::string &message)
+void Steam_Game_Coordinator::push_incoming_now(uint32 msg_type, const std::string &message, bool apply_lobby_state, uint32 lobby_state, uint32 lobby_game_state)
 {
     GC_Message new_item;
     new_item.msg_type = msg_type;
     new_item.msg_body = message;
     new_item.created = std::chrono::high_resolution_clock::now();
     new_item.post_in = 0.0;
+    new_item.apply_lobby_state = apply_lobby_state;
+    new_item.lobby_state = lobby_state;
+    new_item.lobby_game_state = lobby_game_state;
+    GBE_ApplyQueuedLobbyState(new_item);
     incoming_messages.push(new_item);
 
     GCMessageAvailable_t data{};
@@ -4745,6 +4793,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             response_emsg = 8674;
             response_note = "8673->8674";
             break;
+        case 7197:
+            template_bytes = GBE_kDota7198Template;
+            template_size = sizeof(GBE_kDota7198Template);
+            response_emsg = 7198;
+            response_note = "7197->7198";
+            break;
         case 8676:
             template_bytes = GBE_kDota8677Template;
             template_size = sizeof(GBE_kDota8677Template);
@@ -5225,8 +5279,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     GBE_local_lobby.server_id = GBE_GenerateDotaServerId();
     GBE_local_lobby.connect = GBE_kLocalDotaPracticeLobbyConnect;
     GBE_local_lobby.game_start_time = static_cast<uint32>(std::time(nullptr));
-    GBE_local_lobby.state = 1u;
-    GBE_local_lobby.game_state = 0u;
 
     std::array<std::string, 4> stage_messages;
     for (size_t stage_index = 0; stage_index < stage_messages.size(); ++stage_index) {
@@ -5254,6 +5306,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     }
 
     const std::array<double, 4> stage_delays = { 0.0, 0.05, 0.10, 0.15 };
+    const std::array<uint32, 4> stage_states = { 1u, 1u, 2u, 2u };
+    const std::array<uint32, 4> stage_game_states = { 0u, 0u, 0u, 1u };
     for (size_t stage_index = 0; stage_index < stage_messages.size(); ++stage_index) {
         std::string outbound_message = stage_messages[stage_index];
         if (wrapped) {
@@ -5266,23 +5320,22 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
         }
 
         if (stage_index == 0) {
-            push_incoming_now((wrapped ? GBE_kEMsgClientFromGC : GBE_kDotaPracticeLobbyDetailsUpdate) | GBE_kProtoMask, outbound_message);
+            push_incoming_now(
+                (wrapped ? GBE_kEMsgClientFromGC : GBE_kDotaPracticeLobbyDetailsUpdate) | GBE_kProtoMask,
+                outbound_message,
+                true,
+                stage_states[stage_index],
+                stage_game_states[stage_index]
+            );
         } else {
-            push_incoming((wrapped ? GBE_kEMsgClientFromGC : GBE_kDotaPracticeLobbyDetailsUpdate) | GBE_kProtoMask, outbound_message, stage_delays[stage_index]);
-        }
-
-        if (stage_index == 0) {
-            GBE_local_lobby.state = 1u;
-            GBE_local_lobby.game_state = 0u;
-        } else if (stage_index == 1) {
-            GBE_local_lobby.state = 1u;
-            GBE_local_lobby.game_state = 0u;
-        } else if (stage_index == 2) {
-            GBE_local_lobby.state = 2u;
-            GBE_local_lobby.game_state = 0u;
-        } else {
-            GBE_local_lobby.state = 2u;
-            GBE_local_lobby.game_state = 1u;
+            push_incoming(
+                (wrapped ? GBE_kEMsgClientFromGC : GBE_kDotaPracticeLobbyDetailsUpdate) | GBE_kProtoMask,
+                outbound_message,
+                stage_delays[stage_index],
+                true,
+                stage_states[stage_index],
+                stage_game_states[stage_index]
+            );
         }
 
         GBE_GC_DebugLog(
@@ -6582,6 +6635,7 @@ void Steam_Game_Coordinator::RunCallbacks()
         }
 
         if (check_timedout(it->created, it->post_in)) {
+            GBE_ApplyQueuedLobbyState(*it);
             incoming_messages.push(*it);
 
             GCMessageAvailable_t data{};

@@ -48,6 +48,9 @@ public ISteamGameCoordinator
         std::string msg_body;
         std::chrono::high_resolution_clock::time_point created{};
         double post_in{};
+        bool apply_lobby_state{};
+        uint32 lobby_state{};
+        uint32 lobby_game_state{};
     };
 
     std::vector<GC_Message> pending_messages;
@@ -128,8 +131,9 @@ public ISteamGameCoordinator
     Steam_GameServer_Items *server_items();
     void parse_gc_config();
     bool is_welcome_message(const GC_Message &message);
-    void push_incoming(uint32 msg_type, const std::string &message, double delay = 0.1);
-    void push_incoming_now(uint32 msg_type, const std::string &message);
+    void GBE_ApplyQueuedLobbyState(const GC_Message &message);
+    void push_incoming(uint32 msg_type, const std::string &message, double delay = 0.1, bool apply_lobby_state = false, uint32 lobby_state = 0, uint32 lobby_game_state = 0);
+    void push_incoming_now(uint32 msg_type, const std::string &message, bool apply_lobby_state = false, uint32 lobby_state = 0, uint32 lobby_game_state = 0);
 
     std::string build_msg_header(JobID_t target_job = k_GIDNil, JobID_t source_job = k_GIDNil);
     GCMsgHdrEx_t parse_msg_header(const char *&p);
