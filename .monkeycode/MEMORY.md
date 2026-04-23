@@ -41,6 +41,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 启动 donor 模板里的旧 `connect` 字符串长度固定为 38，做字节替换时必须保持绝对等长；当前可用的本地 loopback 替换串为 `127.000.000.01:27015 127.000.1.1:27015`。
   - 启动相关模板 patch 至少需要处理 `lobby_id`、`account_id`、`steam_id`、`match_id`、`server_id`、`game_start_time` 和 `connect`，其中 `match_id` 与 `game_start_time` 都必须维持 donor varint 的原始编码长度。
 
+[Dota2 Practice Lobby 7041 外围消息节奏]
+- Date: 2026-04-23
+- Context: Agent 在对照 `/workspace/hoststartgame.zip` 补齐启动外围消息时发现
+- Category: 代码模式
+- Instructions:
+  - `7041` 启动链路不能只发 `4 x 26`，还应补齐样本里的外围 Steam 消息序列，至少覆盖 `766(init) -> 5501 -> 5575 -> 779 -> 766(serversetup) -> 5575 -> 779 -> 766(run) -> 5429 -> 779 -> 766(server run) -> 766(private lobby) -> 766(run)`。
+  - `004_in_766` 的 rich presence 是 `#DOTA_RP_INIT`，`024_in_766` 会把 `status` 和 `steam_display` 切到 `#DOTA_RP_PRIVATE_LOBBY`，这些不是现有 `010/018/023/026` 的简单重复包。
+  - `022_in_779` 与前两条 `779` 不同，包含一组新的 connect token 数据；如果只重放前两条 `779`，启动时序仍然比官方样本短一段。
+
 [字段映射参考顺序]
 - Date: 2026-04-21
 - Context: 用户要求后续做 Dota2 GC / Lobby 字段对应时优先查工作区内的 SteamKit 定义
