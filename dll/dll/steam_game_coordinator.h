@@ -91,6 +91,12 @@ public ISteamGameCoordinator
         uint32 bot_difficulty_dire{};
         uint64 bot_radiant{};
         uint64 bot_dire{};
+        uint32 state{};
+        uint32 game_state{};
+        uint64 match_id{};
+        uint64 server_id{};
+        std::string connect;
+        uint32 game_start_time{};
         uint32 owner_team{};
         uint32 owner_slot{};
         bool has_broadcast_channel{};
@@ -148,6 +154,7 @@ public ISteamGameCoordinator
     bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw, const char *reason);
     bool GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaPracticeLobbySetDetailsRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaLeaveChatChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);

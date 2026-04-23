@@ -31,6 +31,16 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 Practice Lobby 7041 启动链路]
+- Date: 2026-04-23
+- Context: Agent 在执行 Dota2 Practice Lobby “开始游戏”启动链路实现时发现
+- Category: 代码模式
+- Instructions:
+  - `7041 / k_EMsgGCPracticeLobbyLaunch` 需要同时兼容 direct 与 `5452/5453` wrapped 两种入口。
+  - 当前高置信度官方启动顺序是连续 4 条 `26 / PracticeLobbyDetailsUpdate`：先 `state=SERVERSETUP + match_id`，再补 `server_id + game_start_time`，再切到 `state=RUN + connect`，最后补 `game_state=1` 且把 `2015` 缩成空对象。
+  - 启动 donor 模板里的旧 `connect` 字符串长度固定为 38，做字节替换时必须保持绝对等长；当前可用的本地 loopback 替换串为 `127.000.000.01:27015 127.000.1.1:27015`。
+  - 启动相关模板 patch 至少需要处理 `lobby_id`、`account_id`、`steam_id`、`match_id`、`server_id`、`game_start_time` 和 `connect`，其中 `match_id` 与 `game_start_time` 都必须维持 donor varint 的原始编码长度。
+
 [字段映射参考顺序]
 - Date: 2026-04-21
 - Context: 用户要求后续做 Dota2 GC / Lobby 字段对应时优先查工作区内的 SteamKit 定义
