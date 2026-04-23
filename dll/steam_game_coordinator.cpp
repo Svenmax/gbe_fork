@@ -1491,6 +1491,21 @@ static bool GBE_TryPatchDotaAccountIdVarint(
     return true;
 }
 
+static bool GBE_TryPatchDotaAccountIdFixed32(std::string &message, uint32 account_id, const char *log_scope)
+{
+    std::string encoded_account_raw;
+    GBE_AppendLittleEndian32(encoded_account_raw, account_id);
+    if (!GBE_FindAndOverwriteBytes(
+            message,
+            GBE_VectorFromBytes(GBE_kOldDotaAccountIdFixed32.data(), GBE_kOldDotaAccountIdFixed32.size()),
+            GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(encoded_account_raw.data()), encoded_account_raw.size()))) {
+        GBE_GC_DebugLog(log_scope, "failed replacing account_id fixed32 bytes account_id=%u", account_id);
+        return false;
+    }
+
+    return true;
+}
+
 static bool GBE_RewriteDotaAccountBoundObjectData(const std::string &input, uint32 account_id, std::string &output)
 {
     output.clear();
@@ -1880,6 +1895,8 @@ static bool GBE_PatchDotaTemplateIdentifiers(
     if (replace_account) {
         if (!GBE_TryPatchDotaAccountIdVarint(message, account_id, "GC_DOTA_PATCH", request_emsg, response_emsg, body_size, context_note))
             return false;
+        if (!GBE_TryPatchDotaAccountIdFixed32(message, account_id, "GC_DOTA_PATCH"))
+            return false;
     }
 
     if (replace_steam_id) {
@@ -1901,15 +1918,19 @@ static bool GBE_PatchDotaLobbyTemplateIdentifiers(std::string &message, uint32 a
         return false;
     const std::vector<uint8> old_lobby_id = GBE_VectorFromBytes(GBE_kOldDotaLobbyIdVarint.data(), GBE_kOldDotaLobbyIdVarint.size());
     const size_t lobby_id_match_count = GBE_CountBytePatternMatches(message, old_lobby_id);
-    if (!GBE_FindAndOverwriteBytes(message, GBE_VectorFromBytes(GBE_kOldDotaLobbyIdVarint.data(), GBE_kOldDotaLobbyIdVarint.size()), encoded_lobby_id))
+    if (!GBE_FindAndOverwriteBytes(message, GBE_VectorFromBytes(GBE_kOldDotaLobbyIdVarint.data(), GBE_kOldDotaLobbyIdVarint.size()), encoded_lobby_id)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed replacing lobby_id bytes lobby_id=%llu", static_cast<unsigned long long>(lobby_id));
         return false;
+    }
 
     std::string steam_id_fixed64_raw;
     GBE_AppendLittleEndian64(steam_id_fixed64_raw, steam_id);
     const std::vector<uint8> old_steam_id_fixed64 = GBE_VectorFromBytes(GBE_kOldDotaSteamIdFixed64.data(), GBE_kOldDotaSteamIdFixed64.size());
     const size_t steam_id_fixed64_match_count = GBE_CountBytePatternMatches(message, old_steam_id_fixed64);
-    if (!GBE_FindAndOverwriteBytes(message, GBE_VectorFromBytes(GBE_kOldDotaSteamIdFixed64.data(), GBE_kOldDotaSteamIdFixed64.size()), GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(steam_id_fixed64_raw.data()), steam_id_fixed64_raw.size())))
+    if (!GBE_FindAndOverwriteBytes(message, GBE_VectorFromBytes(GBE_kOldDotaSteamIdFixed64.data(), GBE_kOldDotaSteamIdFixed64.size()), GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(steam_id_fixed64_raw.data()), steam_id_fixed64_raw.size()))) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed replacing steam_id fixed64 bytes steam_id=%llu", static_cast<unsigned long long>(steam_id));
         return false;
+    }
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -2332,16 +2353,24 @@ static bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
     bool patch_connect,
     const char *stage_note)
 {
-    if (!GBE_PatchDotaTemplateIdentifiers(message, account_id, steam_id, true, false, GBE_kDotaPracticeLobbyLaunch, GBE_kDotaPracticeLobbyDetailsUpdate, 0, stage_note))
+    if (!GBE_PatchDotaTemplateIdentifiers(message, account_id, steam_id, true, true, GBE_kDotaPracticeLobbyLaunch, GBE_kDotaPracticeLobbyDetailsUpdate, 0, stage_note)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch template identifier patch failed stage=%s", stage_note ? stage_note : "");
         return false;
-    if (!GBE_PatchDotaLobbyTemplateIdentifiers(message, account_id, steam_id, lobby_id))
+    }
+    if (!GBE_PatchDotaLobbyTemplateIdentifiers(message, account_id, steam_id, lobby_id)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch lobby identifier patch failed stage=%s", stage_note ? stage_note : "");
         return false;
+    }
 
     std::vector<uint8> encoded_match_id;
-    if (!GBE_EncodeVarUint64WithExpectedSize(match_id, GBE_kOldDotaPracticeLobbyMatchIdVarint.size(), encoded_match_id))
+    if (!GBE_EncodeVarUint64WithExpectedSize(match_id, GBE_kOldDotaPracticeLobbyMatchIdVarint.size(), encoded_match_id)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch match_id size mismatch stage=%s match_id=%llu", stage_note ? stage_note : "", static_cast<unsigned long long>(match_id));
         return false;
-    if (!GBE_FindAndOverwriteBytes(message, GBE_VectorFromBytes(GBE_kOldDotaPracticeLobbyMatchIdVarint.data(), GBE_kOldDotaPracticeLobbyMatchIdVarint.size()), encoded_match_id))
+    }
+    if (!GBE_FindAndOverwriteBytes(message, GBE_VectorFromBytes(GBE_kOldDotaPracticeLobbyMatchIdVarint.data(), GBE_kOldDotaPracticeLobbyMatchIdVarint.size()), encoded_match_id)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch match_id patch failed stage=%s match_id=%llu", stage_note ? stage_note : "", static_cast<unsigned long long>(match_id));
         return false;
+    }
 
     if (patch_server_id) {
         std::string server_id_raw;
@@ -2349,26 +2378,36 @@ static bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
         if (!GBE_FindAndOverwriteBytes(
                 message,
                 GBE_VectorFromBytes(GBE_kOldDotaPracticeLobbyServerIdFixed64.data(), GBE_kOldDotaPracticeLobbyServerIdFixed64.size()),
-                GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(server_id_raw.data()), server_id_raw.size())))
+                GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(server_id_raw.data()), server_id_raw.size()))) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch server_id patch failed stage=%s server_id=%llu", stage_note ? stage_note : "", static_cast<unsigned long long>(server_id));
             return false;
+        }
     }
 
     if (patch_game_start_time) {
         std::vector<uint8> encoded_game_start_time;
-        if (!GBE_EncodeVarUint64WithExpectedSize(game_start_time, GBE_kOldDotaPracticeLobbyGameStartTimeVarint.size(), encoded_game_start_time))
+        if (!GBE_EncodeVarUint64WithExpectedSize(game_start_time, GBE_kOldDotaPracticeLobbyGameStartTimeVarint.size(), encoded_game_start_time)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch game_start_time size mismatch stage=%s game_start_time=%u", stage_note ? stage_note : "", game_start_time);
             return false;
+        }
         if (!GBE_FindAndOverwriteBytes(
                 message,
                 GBE_VectorFromBytes(GBE_kOldDotaPracticeLobbyGameStartTimeVarint.data(), GBE_kOldDotaPracticeLobbyGameStartTimeVarint.size()),
-                encoded_game_start_time))
+                encoded_game_start_time)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch game_start_time patch failed stage=%s game_start_time=%u", stage_note ? stage_note : "", game_start_time);
             return false;
+        }
     }
 
     if (patch_connect) {
-        if (connect.size() != std::strlen(GBE_kOldDotaPracticeLobbyConnect))
+        if (connect.size() != std::strlen(GBE_kOldDotaPracticeLobbyConnect)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch connect size mismatch stage=%s size=%zu expected=%zu", stage_note ? stage_note : "", connect.size(), std::strlen(GBE_kOldDotaPracticeLobbyConnect));
             return false;
-        if (!GBE_FindAndOverwriteString(message, GBE_kOldDotaPracticeLobbyConnect, connect))
+        }
+        if (!GBE_FindAndOverwriteString(message, GBE_kOldDotaPracticeLobbyConnect, connect)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch connect patch failed stage=%s connect=%s", stage_note ? stage_note : "", connect.c_str());
             return false;
+        }
     }
 
     return true;
