@@ -1495,11 +1495,17 @@ static bool GBE_TryPatchDotaAccountIdFixed32(std::string &message, uint32 accoun
 {
     std::string encoded_account_raw;
     GBE_AppendLittleEndian32(encoded_account_raw, account_id);
+
+    const std::vector<uint8> old_account_id_fixed32 = GBE_VectorFromBytes(GBE_kOldDotaAccountIdFixed32.data(), GBE_kOldDotaAccountIdFixed32.size());
+    const size_t match_count = GBE_CountBytePatternMatches(message, old_account_id_fixed32);
+    if (match_count == 0)
+        return true;
+
     if (!GBE_FindAndOverwriteBytes(
             message,
-            GBE_VectorFromBytes(GBE_kOldDotaAccountIdFixed32.data(), GBE_kOldDotaAccountIdFixed32.size()),
+            old_account_id_fixed32,
             GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(encoded_account_raw.data()), encoded_account_raw.size()))) {
-        GBE_GC_DebugLog(log_scope, "failed replacing account_id fixed32 bytes account_id=%u", account_id);
+        GBE_GC_DebugLog(log_scope, "failed replacing account_id fixed32 bytes account_id=%u matches=%zu", account_id, match_count);
         return false;
     }
 
