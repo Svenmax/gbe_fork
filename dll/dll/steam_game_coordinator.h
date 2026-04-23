@@ -48,6 +48,7 @@ public ISteamGameCoordinator
         std::string msg_body;
         std::chrono::high_resolution_clock::time_point created{};
         double post_in{};
+        uint64 sequence{};
         bool apply_lobby_state{};
         uint32 lobby_state{};
         uint32 lobby_game_state{};
@@ -55,6 +56,7 @@ public ISteamGameCoordinator
 
     std::vector<GC_Message> pending_messages;
     std::queue<GC_Message> incoming_messages;
+    uint64 pending_message_sequence{};
 
     enum GC_Profile
     {

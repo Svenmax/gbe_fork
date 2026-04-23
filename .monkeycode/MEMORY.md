@@ -80,6 +80,16 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `004_in_766` 的 rich presence 是 `#DOTA_RP_INIT`，`024_in_766` 会把 `status` 和 `steam_display` 切到 `#DOTA_RP_PRIVATE_LOBBY`，这些不是现有 `010/018/023/026` 的简单重复包。
   - `022_in_779` 与前两条 `779` 不同，包含一组新的 connect token 数据；如果只重放前两条 `779`，启动时序仍然比官方样本短一段。
 
+[Dota2 host start-game 抓包主链路边界]
+- Date: 2026-04-23
+- Context: Agent 在对照 `/workspace/hoststartgame.zip`、`/workspace/hoststartgeme11.zip`、`/workspace/steartgamenew.zip` 审查官方开始游戏时序时发现
+- Category: 代码模式
+- Instructions:
+  - 这 3 份 host start-game 抓包的核心主链路只稳定出现 `7041 -> 多条 26`，并穿插 `766`、`5501`、`5575`、`779`、`5429`，以及邻近的 `7197 -> 7198`、`8673 -> 8674`。
+  - 这 3 份抓包里没有看到 `4007`、`7427`、`7534`、`8793`、`8886`、`8727`、`7387`、`7038`、`7009`、`7055`、`24/25/29`，因此这些消息不能被当作官方 start-game 主链路的必经步骤。
+  - `8729` 只在其中 2 份抓包里作为请求出现，但都没有看到明确回包，不能继续把它硬当成已证实的严格请求/回包配对。
+  - 官方 `7041` 后的节奏更接近：先首条 `26`，再 `766/5501/5575/779/766/5575/779`，然后才进入后续 `26`，不能把 4 条 `26` 过早连续排到外围消息前面。
+
 [Dota2 hoststartgame 后段 direct 映射]
 - Date: 2026-04-23
 - Context: Agent 在继续对照 `/workspace/hoststartgame.zip` 修复 practice lobby 启动尾段时发现

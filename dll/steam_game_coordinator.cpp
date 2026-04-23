@@ -1398,6 +1398,12 @@ static void GBE_AppendProtoBytesField(std::string &buffer, uint32 field_number, 
     buffer.append(value);
 }
 
+static void GBE_AppendProtoFixed32Field(std::string &buffer, uint32 field_number, uint32 value)
+{
+    GBE_AppendVarUint64(buffer, (static_cast<uint64>(field_number) << 3) | 5u);
+    ser_var<uint32>(buffer, value);
+}
+
 static std::vector<uint8> GBE_VectorFromBytes(const uint8 *data, size_t size)
 {
     return std::vector<uint8>(data, data + size);
@@ -2440,8 +2446,18 @@ static bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
     bool patch_connect,
     const char *stage_note)
 {
-    if (!GBE_PatchDotaTemplateIdentifiers(message, account_id, steam_id, true, false, GBE_kDotaPracticeLobbyLaunch, GBE_kDotaPracticeLobbyDetailsUpdate, 0, stage_note)) {
+    if (!GBE_PatchDotaTemplateIdentifiers(message, account_id, steam_id, true, true, GBE_kDotaPracticeLobbyLaunch, GBE_kDotaPracticeLobbyDetailsUpdate, 0, stage_note)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch template identifier patch failed stage=%s", stage_note ? stage_note : "");
+        return false;
+    }
+
+    std::string steam_id_fixed64_raw;
+    GBE_AppendLittleEndian64(steam_id_fixed64_raw, steam_id);
+    if (!GBE_FindAndOverwriteBytes(
+            message,
+            GBE_VectorFromBytes(GBE_kOldDotaSteamIdFixed64.data(), GBE_kOldDotaSteamIdFixed64.size()),
+            GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(steam_id_fixed64_raw.data()), steam_id_fixed64_raw.size()))) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch steam_id fixed64 patch failed stage=%s steam_id=%llu", stage_note ? stage_note : "", static_cast<unsigned long long>(steam_id));
         return false;
     }
 
@@ -2727,6 +2743,54 @@ static bool GBE_BuildDota8887ResponsePayload(bool has_request_job, uint64 reques
     std::string body;
     GBE_AppendProtoVarIntField(body, 1u, 1u);
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(8887u, has_request_job, request_job_id, body, message);
+}
+
+static bool GBE_BuildDota7428ResponsePayload(bool has_request_job, uint64 request_job_id, std::string &message)
+{
+    std::string update;
+    GBE_AppendProtoVarIntField(update, 1u, 0u);
+
+    std::string body;
+    GBE_AppendProtoBytesField(body, 1u, update);
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7428u, has_request_job, request_job_id, body, message);
+}
+
+static bool GBE_BuildDota8794ResponsePayload(bool has_request_job, uint64 request_job_id, std::string &message)
+{
+    std::string body;
+    GBE_AppendProtoVarIntField(body, 1u, 1u);
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(8794u, has_request_job, request_job_id, body, message);
+}
+
+static bool GBE_BuildDota4524ResponsePayload(bool has_request_job, uint64 request_job_id, std::string &message)
+{
+    const float upload_rate_modifier = 1.0f;
+    uint32 upload_rate_modifier_raw = 0;
+    std::memcpy(&upload_rate_modifier_raw, &upload_rate_modifier, sizeof(upload_rate_modifier_raw));
+
+    std::string body;
+    GBE_AppendProtoFixed32Field(body, 1u, upload_rate_modifier_raw);
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(4524u, has_request_job, request_job_id, body, message);
+}
+
+static bool GBE_BuildDota7388MinimalResponsePayload(uint32 event_id, uint32 account_id, bool has_request_job, uint64 request_job_id, std::string &message)
+{
+    std::string body;
+    GBE_AppendProtoVarIntField(body, 1u, 0u);
+    GBE_AppendProtoVarIntField(body, 2u, 0u);
+    GBE_AppendProtoVarIntField(body, 3u, event_id);
+    GBE_AppendProtoVarIntField(body, 4u, 0u);
+    GBE_AppendProtoVarIntField(body, 5u, 0u);
+    GBE_AppendProtoVarIntField(body, 7u, account_id);
+    GBE_AppendProtoVarIntField(body, 8u, 0u);
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7388u, has_request_job, request_job_id, body, message);
+}
+
+static bool GBE_BuildDota7535ResponsePayload(uint32 account_id, bool has_request_job, uint64 request_job_id, std::string &message)
+{
+    std::string body;
+    GBE_AppendProtoVarIntField(body, 1u, account_id);
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7535u, has_request_job, request_job_id, body, message);
 }
 
 static bool GBE_BuildDotaJoinChatChannelResponsePayload(
@@ -3541,6 +3605,7 @@ void Steam_Game_Coordinator::push_incoming(uint32 msg_type, const std::string &m
     new_item.msg_body = message;
     new_item.created = std::chrono::high_resolution_clock::now();
     new_item.post_in = delay;
+    new_item.sequence = ++pending_message_sequence;
     new_item.apply_lobby_state = apply_lobby_state;
     new_item.lobby_state = lobby_state;
     new_item.lobby_game_state = lobby_game_state;
@@ -3554,6 +3619,7 @@ void Steam_Game_Coordinator::push_incoming_now(uint32 msg_type, const std::strin
     new_item.msg_body = message;
     new_item.created = std::chrono::high_resolution_clock::now();
     new_item.post_in = 0.0;
+    new_item.sequence = ++pending_message_sequence;
     new_item.apply_lobby_state = apply_lobby_state;
     new_item.lobby_state = lobby_state;
     new_item.lobby_game_state = lobby_game_state;
@@ -4847,6 +4913,89 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return true;
     }
 
+    if (request_emsg == 7427) {
+        std::string response_message;
+        if (!GBE_BuildDota7428ResponsePayload(has_source_job, source_job, response_message)) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 7428u);
+            return true;
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=%s",
+            request_emsg,
+            7428u,
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            "7427->7428 minimal notifications response"
+        );
+        push_incoming_now(7428u | GBE_kProtoMask, response_message);
+        return true;
+    }
+
+    if (request_emsg == 8793) {
+        std::string response_message;
+        if (!GBE_BuildDota8794ResponsePayload(has_source_job, source_job, response_message)) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 8794u);
+            return true;
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=%s",
+            request_emsg,
+            8794u,
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            "8793->8794 minimal success"
+        );
+        push_incoming_now(8794u | GBE_kProtoMask, response_message);
+        return true;
+    }
+
+    if (request_emsg == 4523) {
+        std::string response_message;
+        if (!GBE_BuildDota4524ResponsePayload(has_source_job, source_job, response_message)) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 4524u);
+            return true;
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=%s",
+            request_emsg,
+            4524u,
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            "4523->4524 minimal upload_rate_modifier=1.0"
+        );
+        push_incoming_now(4524u | GBE_kProtoMask, response_message);
+        return true;
+    }
+
+    if (request_emsg == 7534) {
+        uint64 account_id_field = settings->get_local_steam_id().GetAccountID();
+        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1), account_id_field);
+
+        std::string response_message;
+        if (!GBE_BuildDota7535ResponsePayload(static_cast<uint32>(account_id_field), has_source_job, source_job, response_message)) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 7535u);
+            return true;
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=7534->7535 minimal profile card account_id=%u",
+            request_emsg,
+            7535u,
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            static_cast<unsigned>(account_id_field)
+        );
+        push_incoming_now(7535u | GBE_kProtoMask, response_message);
+        return true;
+    }
+
     switch (request_emsg) {
         case 2536:
             template_bytes = GBE_kDota2538Template;
@@ -4896,6 +5045,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 return true;
             }
 
+            uint64 account_id_field = settings->get_local_steam_id().GetAccountID();
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2), account_id_field);
+
             if (profile_selector == 0x20u) {
                 template_bytes = GBE_kDota7388Profile20Template;
                 template_size = sizeof(GBE_kDota7388Profile20Template);
@@ -4905,13 +5057,28 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 template_size = sizeof(GBE_kDota7388Profile37Template);
                 response_note = "7387 selector=0x37";
             } else {
+                std::string response_message;
+                if (!GBE_BuildDota7388MinimalResponsePayload(
+                        static_cast<uint32>(profile_selector),
+                        static_cast<uint32>(account_id_field),
+                        has_source_job,
+                        source_job,
+                        response_message)) {
+                    GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building minimal 7388 selector=%llu", static_cast<unsigned long long>(profile_selector));
+                    return true;
+                }
+
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
-                    "unsupported 7387 selector=%llu body_size=%zu body_prefix=%s",
+                    "replying req=%u resp=%u source_job=%llu size=%zu note=7387 selector=%llu minimal zero points account_id=%u",
+                    request_emsg,
+                    7388u,
+                    static_cast<unsigned long long>(source_job),
+                    response_message.size(),
                     static_cast<unsigned long long>(profile_selector),
-                    body_size,
-                    GBE_FormatHexPrefix(body, body_size, 32).c_str()
+                    static_cast<unsigned>(account_id_field)
                 );
+                push_incoming_now(7388u | GBE_kProtoMask, response_message);
                 return true;
             }
 
@@ -5400,7 +5567,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
         }
     }
 
-    const std::array<double, 4> stage_delays = { 0.0, 0.05, 0.10, 0.15 };
+    const std::array<double, 4> stage_delays = { 0.0, 0.11, 0.12, 0.14 };
     const std::array<uint32, 4> stage_states = { 1u, 1u, 2u, 2u };
     const std::array<uint32, 4> stage_game_states = { 0u, 0u, 0u, 1u };
     for (size_t stage_index = 0; stage_index < stage_messages.size(); ++stage_index) {
@@ -6722,6 +6889,22 @@ void Steam_Game_Coordinator::RunCallbacks()
     if (delay_init && welcome_received && check_timedout(welcome_time, 0.2)) {
         delay_init = false;
     }
+
+    auto due_time = [](const GC_Message &message) {
+        return message.created + std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(std::chrono::duration<double>(message.post_in));
+    };
+
+    std::stable_sort(
+        pending_messages.begin(),
+        pending_messages.end(),
+        [&due_time](const GC_Message &lhs, const GC_Message &rhs) {
+            const auto lhs_due = due_time(lhs);
+            const auto rhs_due = due_time(rhs);
+            if (lhs_due != rhs_due)
+                return lhs_due < rhs_due;
+            return lhs.sequence < rhs.sequence;
+        }
+    );
 
     for (auto it = pending_messages.begin(); it != pending_messages.end();) {
         if (delay_init && !is_welcome_message(*it)) {
