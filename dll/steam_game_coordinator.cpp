@@ -43,6 +43,7 @@ static constexpr uint32 GBE_kProtoMask = 0x80000000u;
 static constexpr uint32 GBE_kEMsgClientToGC = 5452u;
 static constexpr uint32 GBE_kEMsgClientFromGC = 5453u;
 static constexpr uint32 GBE_kEMsgGCClientHello = 4006u;
+static constexpr uint32 GBE_kEMsgGCServerHello = 4007u;
 static constexpr uint32 GBE_kEMsgGCClientWelcome = 4004u;
 static constexpr uint32 GBE_kDotaAppId = 570u;
 static constexpr uint32 GBE_kDotaCacheSubscribed = 24u;
@@ -141,6 +142,36 @@ static const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyGameStartTimeVarint =
 static constexpr const char *GBE_kOldDotaPracticeLobbyConnect = "117.157.79.194:27015 10.110.4.21:27015";
 static constexpr const char *GBE_kOldDotaPracticeLobbyLobbyIdText = "29809934128949123";
 static constexpr const char *GBE_kLocalDotaPracticeLobbyConnect = "127.000.000.01:27015 127.000.1.1:27015";
+
+static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
+{
+    if (ip == 0)
+        return GBE_kLocalDotaPracticeLobbyConnect;
+
+    const uint32 octet1 = (ip >> 24) & 0xFFu;
+    const uint32 octet2 = (ip >> 16) & 0xFFu;
+    const uint32 octet3 = (ip >> 8) & 0xFFu;
+    const uint32 octet4 = ip & 0xFFu;
+
+    char endpoint[32] = {};
+    std::snprintf(
+        endpoint,
+        sizeof(endpoint),
+        "%03u.%03u.%03u.%03u:27015",
+        octet1,
+        octet2,
+        octet3,
+        octet4
+    );
+
+    std::string connect = endpoint;
+    const size_t expected_size = std::strlen(GBE_kOldDotaPracticeLobbyConnect);
+    if (connect.size() > expected_size)
+        return GBE_kLocalDotaPracticeLobbyConnect;
+
+    connect.resize(expected_size, ' ');
+    return connect;
+}
 
 static constexpr uint32 GBE_kSteamServersAvailable = 5501u;
 static constexpr uint32 GBE_kSteamAuthListAck = 5575u;
@@ -1077,6 +1108,17 @@ struct GBE_DotaHelloContext
     bool valid{};
     uint32 version{};
     std::string outer_session_field_raw;
+    uint64 source_job_id{};
+    bool has_source_job{};
+};
+
+struct GBE_DotaServerHelloContext
+{
+    bool valid{};
+    uint32 active_version{};
+    uint32 min_allowed_version{};
+    uint64 compatibility_value{};
+    uint32 universe{};
     uint64 source_job_id{};
     bool has_source_job{};
 };
@@ -3426,6 +3468,78 @@ static bool GBE_ExtractDirectDotaHelloContext(uint32 unMsgType, const void *pubD
     return true;
 }
 
+static bool GBE_ExtractDirectDotaServerHelloContext(uint32 unMsgType, const void *pubData, uint32 cubData, GBE_DotaServerHelloContext &context)
+{
+    context = {};
+
+    if (GBE_GC_MaskedEMsg(unMsgType) != GBE_kEMsgGCServerHello) {
+        GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "direct path rejected msg=%u", GBE_GC_MaskedEMsg(unMsgType));
+        return false;
+    }
+
+    if (!pubData || cubData < sizeof(ProtoBufMsgHeader_t)) {
+        GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "direct path invalid input pubData=%p cubData=%u", pubData, cubData);
+        return false;
+    }
+
+    const char *cursor = reinterpret_cast<const char *>(pubData);
+    const char *end = cursor + cubData;
+    ProtoBufMsgHeader_t hdr = deser_var<ProtoBufMsgHeader_t>(cursor);
+
+    if ((end - cursor) < hdr.m_cubProtoBufExtHdr) {
+        GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "direct path proto header overflow ext=%u cubData=%u", hdr.m_cubProtoBufExtHdr, cubData);
+        return false;
+    }
+
+    CMsgProtoBufHeader protohdr;
+    if (!protohdr.ParseFromArray(cursor, hdr.m_cubProtoBufExtHdr)) {
+        GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "direct path failed parsing CMsgProtoBufHeader ext=%u", hdr.m_cubProtoBufExtHdr);
+        return false;
+    }
+
+    cursor += hdr.m_cubProtoBufExtHdr;
+    const uint8 *body = reinterpret_cast<const uint8 *>(cursor);
+    const size_t body_size = static_cast<size_t>(end - cursor);
+
+    uint64 active_version = 0;
+    if (!GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1), active_version)) {
+        GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "direct path failed to extract active version body_size=%zu", body_size);
+        return false;
+    }
+
+    uint64 min_allowed_version = active_version;
+    GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 3), min_allowed_version);
+
+    uint64 compatibility_value = 0;
+    GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 6), compatibility_value);
+
+    uint64 universe = 0;
+    GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 7), universe);
+
+    context.valid = true;
+    context.active_version = static_cast<uint32>(active_version);
+    context.min_allowed_version = static_cast<uint32>(min_allowed_version > 0xFFFFFFFFull ? 0xFFFFFFFFu : min_allowed_version);
+    context.compatibility_value = compatibility_value;
+    context.universe = static_cast<uint32>(universe > 0xFFFFFFFFull ? 0xFFFFFFFFu : universe);
+    if (protohdr.has_job_id_source()) {
+        context.source_job_id = protohdr.job_id_source();
+        context.has_source_job = true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_SERVER_HELLO",
+        "direct path parsed active_version=%u min_allowed=%u compat=%llu universe=%u source_job=%llu has_source_job=%d body_size=%zu",
+        context.active_version,
+        context.min_allowed_version,
+        static_cast<unsigned long long>(context.compatibility_value),
+        context.universe,
+        static_cast<unsigned long long>(context.source_job_id),
+        context.has_source_job ? 1 : 0,
+        body_size
+    );
+    return true;
+}
+
 static bool GBE_BuildDotaWelcomeBody(uint64 steam_id, uint32 account_id, const GBE_DotaHelloContext &context, std::string &inner_body)
 {
     if (!context.valid || GBE_kDotaWelcomeInnerBodyOffset >= sizeof(GBE_kDotaClientWelcomeTemplate)) {
@@ -3497,6 +3611,45 @@ static bool GBE_BuildDirectDotaClientWelcome(uint64 steam_id, uint32 app_id, uin
     message.append(inner_body);
 
     GBE_GC_DebugLog("GC_DOTA_WELCOME", "built direct welcome header=%u body=%zu total=%zu", hdr.m_cubProtoBufExtHdr, inner_body.size(), message.size());
+    return true;
+}
+
+static bool GBE_BuildDirectDotaServerWelcome(uint64 steam_id, uint32 app_id, const GBE_DotaServerHelloContext &context, std::string &message)
+{
+    if (!context.valid) {
+        GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "invalid server hello context");
+        return false;
+    }
+
+    ProtoBufMsgHeader_t hdr{};
+    hdr.m_EMsgFlagged = EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask;
+
+    CMsgProtoBufHeader protohdr;
+    protohdr.set_client_steam_id(steam_id);
+    protohdr.set_client_session_id(1);
+    protohdr.set_source_app_id(app_id);
+    if (context.has_source_job)
+        protohdr.set_job_id_target(context.source_job_id);
+
+    hdr.m_cubProtoBufExtHdr = static_cast<uint32>(protohdr.ByteSizeLong());
+
+    message.clear();
+    ser_var<ProtoBufMsgHeader_t>(message, hdr);
+    protohdr.AppendToString(&message);
+
+    CMsgServerWelcome protomsg;
+    protomsg.set_min_allowed_version(context.min_allowed_version);
+    protomsg.set_active_version(context.active_version);
+    protomsg.AppendToString(&message);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_SERVER_HELLO",
+        "built direct ServerWelcome active_version=%u min_allowed=%u target_job=%llu total=%zu",
+        context.active_version,
+        context.min_allowed_version,
+        static_cast<unsigned long long>(context.has_source_job ? context.source_job_id : 0ull),
+        message.size()
+    );
     return true;
 }
 
@@ -5577,7 +5730,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
 
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
     GBE_local_lobby.server_id = GBE_GenerateDotaServerId();
-    GBE_local_lobby.connect = GBE_kLocalDotaPracticeLobbyConnect;
+    GBE_local_lobby.connect = GBE_FormatDotaPracticeLobbyConnectFromIp(network ? network->getOwnIP() : 0);
     GBE_local_lobby.game_start_time = static_cast<uint32>(std::time(nullptr));
 
     std::array<std::string, 4> stage_messages;
@@ -6430,6 +6583,39 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
 {
     const uint32 masked_emsg = GBE_GC_MaskedEMsg(unMsgType);
     GBE_GC_DebugLog("GC_SEND_DOTA", "outer_emsg=%u len=%u", masked_emsg, cubData);
+
+    if (masked_emsg == GBE_kEMsgGCServerHello) {
+        GBE_DotaServerHelloContext server_hello_context{};
+        if (!GBE_ExtractDirectDotaServerHelloContext(unMsgType, pubData, cubData, server_hello_context)) {
+            GBE_GC_DebugLog("GC_SEND_DOTA", "ignored direct ServerHello payload because parsing failed");
+            return false;
+        }
+
+        std::string welcome_message;
+        const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
+        const uint32 app_id = settings->get_local_game_id().AppID();
+        if (!GBE_BuildDirectDotaServerWelcome(steam_id, app_id, server_hello_context, welcome_message)) {
+            GBE_GC_DebugLog(
+                "GC_SEND_DOTA",
+                "failed to build ServerWelcome active_version=%u min_allowed=%u steamid=%llu",
+                server_hello_context.active_version,
+                server_hello_context.min_allowed_version,
+                static_cast<unsigned long long>(steam_id)
+            );
+            return true;
+        }
+
+        GBE_GC_DebugLog(
+            "GC_SEND_DOTA",
+            "replaying ServerWelcome active_version=%u min_allowed=%u target_job=%llu direct=1",
+            server_hello_context.active_version,
+            server_hello_context.min_allowed_version,
+            static_cast<unsigned long long>(server_hello_context.has_source_job ? server_hello_context.source_job_id : 0ull)
+        );
+
+        push_incoming_now(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, welcome_message);
+        return true;
+    }
 
     if (masked_emsg != GBE_kEMsgGCClientHello && masked_emsg != GBE_kEMsgClientToGC)
         return GBE_HandleDotaDirectPostLoginRequest(unMsgType, pubData, cubData);

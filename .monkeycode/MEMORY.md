@@ -66,6 +66,28 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 排查 practice lobby 开始游戏问题时，不能只对齐 `26` 的发送顺序，还要核对 `26` 的消息体是否与抓包 donor 足够一致。
   - 如果 `26` 的内容与官方抓包差异过大，即使顺序正确，客户端界面推进也可能失败。
 
+[Dota2 7041 启动包 patch 红线]
+- Date: 2026-04-23
+- Context: 用户补充说明 practice lobby 开始游戏阶段的 4 个高优先级实现要求
+- Instructions:
+  - 启动包里的服务器地址或 `connect` 字符串必须做绝对等长替换；如果 donor 是固定长度字符串，本地替换值也必须保持同字节数，不能破坏 protobuf 长度编码。
+  - 重放开始游戏相关 SO Update 或 `26` 时，必须确保 lobby `state` 跃迁到官方抓包里代表开始载入的枚举值，不能只替换地址字段。
+  - 开始游戏时需要生成新的 `match_id` 和伪造的 `server_id`，并在所有相关响应包里对 donor 的旧值做等长 patch。
+  - 处理 `k_EMsgGCPracticeLobbyLaunch` 及其响应时，要继续注意 wrapped/direct 的扩展头与 job 传递规则，并在开始请求后紧跟必要的 SOUpdate/状态更新以推动客户端 UI 进入载入画面。
+
+[Dota2 7041 connect 地址来源]
+- Date: 2026-04-23
+- Context: 用户要求把 practice lobby 开始游戏里的固定 `127.x.x.x` connect 地址改成本机实际 IP
+- Instructions:
+  - `7041` 启动包里的 connect 地址优先取本机实际 IPv4，不要再固定写死为 `127.x.x.x`。
+  - 即使改为本机实际 IP，替换后的 connect 字符串也必须严格保持和 donor 相同的总字节数，不允许破坏原始 protobuf 长度。
+
+[Dota2 4007 回包策略]
+- Date: 2026-04-23
+- Context: 用户要求继续排查 server-side GC 黑屏阶段时明确指定 `4007` 的实现方向
+- Instructions:
+  - `4007 / k_EMsgGCServerHello` 不要先走纯通用零值回包，应优先基于当前 Dota 客户端实际发出的 `4007` 请求体字段构造更贴近 Dota 的 `4005 / ServerWelcome`。
+
 [Dota2 dedicated startgame 样本差异]
 - Date: 2026-04-23
 - Context: Agent 在对照 `/workspace/startgame.zip` 与 `/workspace/hoststartgame.zip` 分析 dedicated 服务器开局链路时发现
