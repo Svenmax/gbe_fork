@@ -52,6 +52,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 后续 `7041 / k_EMsgGCPracticeLobbyLaunch` 的修复要严格按照 `hoststartgame.zip` 的消息路径实现，不要混入 dedicated `startgame.zip` 的分支节奏。
   - 当前优先排查并实现的方向依次是：补齐 `029/030_in_5453`、让本地 lobby 状态随延时异步推进、重新审视 `connect` 地址格式是否被客户端接受、再看 `4007/8793/8727/7427/7534` 是否需要关键响应。
 
+[Dota2 7041 后的 26 优先顺序]
+- Date: 2026-04-23
+- Context: 用户基于抓包纠正 `7041` 后的实际回复顺序
+- Instructions:
+  - `7041` 之后应先回复连续的 `26 / PracticeLobbyDetailsUpdate`，不要先去补 `8879/8095/8800` 这类低优先级 direct 请求。
+  - 如果现有实现把 `766/5501/5575/779/5429` 等外围消息插到后续 `26` 之前，需要优先重排，让四条启动 `26` 先完整发出。
+
 [Dota2 dedicated startgame 样本差异]
 - Date: 2026-04-23
 - Context: Agent 在对照 `/workspace/startgame.zip` 与 `/workspace/hoststartgame.zip` 分析 dedicated 服务器开局链路时发现
