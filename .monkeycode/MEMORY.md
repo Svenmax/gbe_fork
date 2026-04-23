@@ -90,6 +90,16 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `8729` 只在其中 2 份抓包里作为请求出现，但都没有看到明确回包，不能继续把它硬当成已证实的严格请求/回包配对。
   - 官方 `7041` 后的节奏更接近：先首条 `26`，再 `766/5501/5575/779/766/5575/779`，然后才进入后续 `26`，不能把 4 条 `26` 过早连续排到外围消息前面。
 
+[外部仓库对 Dota2 direct 响应的补充确认]
+- Date: 2026-04-23
+- Context: Agent 在阅读 `/workspace/go-dota2` 与 `/workspace/GameTracking-Dota2/Protobufs` 时发现
+- Category: 代码模式
+- Instructions:
+  - `go-dota2` 的生成客户端把 `7197 -> GCMatchmakingStatsResponse`、`7427 -> GCNotificationsResponse`、`7534 -> ClientToGCGetProfileCardResponse`、`8673 -> ClientToGCRequestGuildDataResponse`、`8793 -> ClientToGCGetCurrentPrivateCoachingSessionResponse` 都视为标准 request-response。
+  - `7534 / k_EMsgClientToGCGetProfileCardResponse` 的响应体在 `go-dota2` 中直接映射为 `CMsgDOTAProfileCard`，因此最小 `7535` 走 profile card 方向是合理的。
+  - `7428` 的结构是 `CMsgGCNotificationsResponse { update = 1 }`；`8794` 的结构是 `CMsgClientToGCGetCurrentPrivateCoachingSessionResponse { result = 1, current_session = 2 }`；`4524` 的结构是 `CMsgGCToClientAggregateMetricsBackoff { upload_rate_modifier = 1 }`。
+  - `GameTracking-Dota2/Protobufs` 与 `go-dota2` 都只明确提供了 `4007 = k_EMsgGCServerHello` 的消息号；Dota2 专属 proto 中没有可直接复用的 `CMsgServerHello` 结构，因此 `4007` 仍不能按“已知结构”安全构包。
+
 [Dota2 hoststartgame 后段 direct 映射]
 - Date: 2026-04-23
 - Context: Agent 在继续对照 `/workspace/hoststartgame.zip` 修复 practice lobby 启动尾段时发现
