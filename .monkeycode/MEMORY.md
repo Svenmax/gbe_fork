@@ -319,3 +319,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 对高位 `AccountID` 的旧模板兼容问题，优先保留“长度不匹配时记录并跳过”的降级策略，不要默认把所有跳过路径都升级为语义 patch。
   - 跳过日志需要保留，并补充足够的消息上下文，至少应包含模板名或消息作用域；如有条件，再带上对应 `emsg`、selector、body size 等定位信息。
   - 只有当某条跳过路径已经对应到明确的功能异常时，才把该路径升级成有针对性的语义 patch。
+
+[Dota2 Practice Lobby 离房与撤房链路]
+- Date: 2026-04-23
+- Context: Agent 在分析 `/workspace/create-leave.zip`、`/workspace/create-destroy.zip` 并补齐 Practice Lobby teardown 消息时发现
+- Category: 代码模式
+- Instructions:
+  - 建房成功后的房间聊天链路是 `7009 / JoinChatChannel -> 7010 / JoinChatChannelResponse`，其中聊天频道名形如 `Lobby_<lobbyid>`，`channel_type=3`，并且 `channel_id` 需要与 `lobby_id` 分开维护。
+  - 主动离开房间的链路是 `7040 / PracticeLobbyLeave -> 25 / CMsgSOCacheUnsubscribed -> 7272 / LeaveChatChannel -> 7014 / OtherLeftChannel`。
+  - 主动撤销房间的链路是 `8246 / DestroyLobbyRequest -> 25 / CMsgSOCacheUnsubscribed -> 8247 / DestroyLobbyResponse -> 7272 / LeaveChatChannel -> 7014 / OtherLeftChannel`。
+  - Dota 路径里的 `25 / CMsgSOCacheUnsubscribed` 需要使用 `owner_soid(field2)`，其中 `type=3`、`id=lobby_id`，不是旧的 `owner(field1)` 结构。
+  - leave 或 destroy 处理完 lobby 后，不要同步清掉 chat channel 状态；要保留到后续 `7272` 处理完成后再清理。

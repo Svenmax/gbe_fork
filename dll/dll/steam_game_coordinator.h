@@ -74,6 +74,10 @@ public ISteamGameCoordinator
     {
         bool active{};
         uint64 lobby_id{};
+        bool has_chat_channel{};
+        uint64 chat_channel_id{};
+        std::string chat_channel_name;
+        uint32 chat_channel_type{};
         std::string room_name;
         uint32 game_mode{};
         uint32 server_region{};
@@ -140,13 +144,17 @@ public ISteamGameCoordinator
     void handle_adjust_equip_state(const void *input, uint32 input_size);
     void handle_set_multiple_item_pos(const void *input, uint32 input_size);
     void GBE_PushDotaLoginSyncMessages();
+    bool GBE_HandleDotaJoinChatChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw, const char *reason);
     bool GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaPracticeLobbySetDetailsRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaLeaveChatChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaDestroyLobbyRequest(uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData);
     bool GBE_HandleDotaWrappedPostLoginRequest(const void *pubData, uint32 cubData);
     bool handle_dota_client_message(uint32 unMsgType, const void *pubData, uint32 cubData);
