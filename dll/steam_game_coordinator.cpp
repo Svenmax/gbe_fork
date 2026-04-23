@@ -2541,11 +2541,12 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
     const char *template_hex = GBE_GetDotaPracticeLobbyLaunchStageHex(stage_index);
     if (!template_hex)
         return false;
-    if (!GBE_DecodeHexString(template_hex, message))
+    std::string wrapped_message;
+    if (!GBE_DecodeHexString(template_hex, wrapped_message))
         return false;
 
-    return GBE_PatchDotaPracticeLobbyLaunchTemplate(
-        message,
+    if (!GBE_PatchDotaPracticeLobbyLaunchTemplate(
+        wrapped_message,
         account_id,
         steam_id,
         lobby_id,
@@ -2559,7 +2560,39 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
         stage_index == 0 ? "7041 stage1" :
         stage_index == 1 ? "7041 stage2" :
         stage_index == 2 ? "7041 stage3" : "7041 stage4"
-    );
+    ))
+        return false;
+
+    if (wrapped_message.size() < 8)
+        return false;
+
+    const uint8 *bytes = reinterpret_cast<const uint8 *>(wrapped_message.data());
+    uint32 outer_raw_emsg = 0;
+    uint32 outer_header_length = 0;
+    std::memcpy(&outer_raw_emsg, bytes, sizeof(outer_raw_emsg));
+    std::memcpy(&outer_header_length, bytes + sizeof(outer_raw_emsg), sizeof(outer_header_length));
+
+    if (GBE_GC_MaskedEMsg(outer_raw_emsg) != GBE_kEMsgClientFromGC)
+        return false;
+
+    const size_t outer_body_offset = 8u + outer_header_length;
+    if (outer_body_offset > wrapped_message.size())
+        return false;
+
+    const uint8 *outer_body = bytes + outer_body_offset;
+    const size_t outer_body_size = wrapped_message.size() - outer_body_offset;
+    GBE_ProtoFieldView payload_field = GBE_FindProtoField(outer_body, outer_body_size, 3u);
+    if (!payload_field.found || payload_field.wire_type != 2u || payload_field.value_size < 8u)
+        return false;
+
+    const uint8 *payload = outer_body + payload_field.value_offset;
+    uint32 inner_raw_emsg = 0;
+    std::memcpy(&inner_raw_emsg, payload, sizeof(inner_raw_emsg));
+    if (GBE_GC_MaskedEMsg(inner_raw_emsg) != GBE_kDotaPracticeLobbyDetailsUpdate)
+        return false;
+
+    message.assign(reinterpret_cast<const char *>(payload), payload_field.value_size);
+    return true;
 }
 
 static bool GBE_BuildDotaPracticeLobbyLaunchPeripheralMessage(

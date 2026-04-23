@@ -59,6 +59,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `7041` 之后应先回复连续的 `26 / PracticeLobbyDetailsUpdate`，不要先去补 `8879/8095/8800` 这类低优先级 direct 请求。
   - 如果现有实现把 `766/5501/5575/779/5429` 等外围消息插到后续 `26` 之前，需要优先重排，让四条启动 `26` 先完整发出。
 
+[Dota2 26 会推动界面状态]
+- Date: 2026-04-23
+- Context: 用户指出 `26 / PracticeLobbyDetailsUpdate` 与 `24` 一样会推动游戏界面变化
+- Instructions:
+  - 排查 practice lobby 开始游戏问题时，不能只对齐 `26` 的发送顺序，还要核对 `26` 的消息体是否与抓包 donor 足够一致。
+  - 如果 `26` 的内容与官方抓包差异过大，即使顺序正确，客户端界面推进也可能失败。
+
 [Dota2 dedicated startgame 样本差异]
 - Date: 2026-04-23
 - Context: Agent 在对照 `/workspace/startgame.zip` 与 `/workspace/hoststartgame.zip` 分析 dedicated 服务器开局链路时发现
