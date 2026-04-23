@@ -117,18 +117,7 @@ ISteamGameStats *Steam_Client::GetISteamGameStats( HSteamUser hSteamUser, HSteam
 ISteamUser *Steam_Client::GetISteamUser( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion )
 {
     PRINT_DEBUG("%s", pchVersion);
-    
-    if (!hSteamUser) {
-        return NULL;
-    }
-    if (!steam_pipes.count(hSteamPipe)) {
-        // Fallback for steamclient_experimental build: if pipe 1 is requested but not found,
-        // and we have other valid pipes, continue execution instead of returning NULL
-        if (hSteamPipe !=1 || steam_pipes.empty()) {
-            return NULL;
-        }
-    }
-
+    if (!steam_pipes.count(hSteamPipe) || !hSteamUser) return nullptr;
 
     Steam_User *steam_user_tmp{};
 
