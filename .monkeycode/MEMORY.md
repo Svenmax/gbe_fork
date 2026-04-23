@@ -31,6 +31,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 hoststartgame 后段 direct 处理顺序]
+- Date: 2026-04-23
+- Context: 用户要求继续补齐 `7041` 之后的 host direct 请求时明确指定实现优先级
+- Instructions:
+  - 先把 `8729 -> 8730` 补进现有 direct replay 表。
+  - 再处理 `8727 -> 8728` 和 `8886 -> 8887`。
+  - `4007` 继续单独处理，不要混进 direct replay 表，因为它更像系统级 `GCServerHello`。
+
 [GitHub 构建触发偏好]
 - Date: 2026-04-23
 - Context: 用户要求后续触发 GitHub 构建时限定目标任务

@@ -172,6 +172,22 @@ static constexpr const char *GBE_kDotaPracticeLobbyLaunchTicketAuthCompleteHex =
     "351500800f00000009f5b62108010010011086b0cfdc0309017c58ca8fc14001113a020000000000001802200030a0ffd1c10741f5b6210801001001";
 static constexpr const char *GBE_kDotaPracticeLobbyLaunchPersonaStateServerRunHex =
     "fe0200800f00000009f5b62108010010011086b0cfdc03080812e60309f5b6210801001001100118ba04300138017a075376656e6d6178c901017c58ca8fc14001fa0114b7a33b90cbbf208c93b197a18ba999e3110d5908e802ac98a3cf06f0029cb5a3cf06f80200ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f46494e44494e475f4d41544348ba04270a0d737465616d5f646973706c6179121623444f54415f52505f46494e44494e475f4d41544348ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba0491010a056c6f6262791287016c6f6262795f69643a203239383039393334313238393439313233206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a202231323322206c6f6262795f747970653a2031ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348c1040000000000000000c9040000000000000000f80400800500880500980501";
+static constexpr const char *GBE_kDota8730TemplateHex =
+    "1a22008009000000594600000000000000080112100a0e088ea83d1206cfb9cfb9d48c18001200"
+    "120f0a0d08e0d61f1205313773656318001200120d0a0b0884b0331203534b2b180012120a1008"
+    "f7a9021208d09fd090d09fd090180012160a1408bfcb03120ce58fb2e4b88ae69c80e5bcba1800"
+    "12100a0e08ded42a120632306d6dd1801800120012100a0e08f3b03a1206e6a097e889b2180012"
+    "0f0a0d08a9b63b12055b3939395d1800120e0a0c088ca4011204636963611800120f0a0d0884f0"
+    "19120575796b75791800120d0a0b08d9d20612035246351800120012160a14088d851b120ce981"
+    "97e8bfb9e58fb2e8af971800120e0a0c08b6e8261204486c6c45180012120a1008d2fe1e1208e2"
+    "969a5450e29784180012140a1208ca8737120ad184d188d0b8d181d0bf1800120f0a0d08e1fe3e"
+    "12055f6e415353180012190a170888ba28120fe99693e98195e38184e381aae381841800120012"
+    "190a170884c206120fe4bda0e694bee5ada6e588abe8b5b0180012110a0f08dcb60f1207e299a5"
+    "20e299821800120f0a0d08b3b73e12056e756d6239180012120a1008b1d5281208d0a1d09bd090"
+    "d0911800120f0a0d08b1940112054d4f4c43481800120012120a1008acc12912052d5552412d18"
+    "8080800112130a1108e9c9031209e385a4e29885e385a41800120f0a0d08c9b03c120557455853"
+    "531800120f0a0d08d4e223120553742e203118001200120f0a0d08bcc70d120543687672731800"
+    "120e0a0c08c2d2171204c2a17a2118001200120f0a0d08dfb91a1205545072737218001200";
 
 struct GBE_DotaPracticeLobbyLaunchPeripheralTemplate
 {
@@ -2691,6 +2707,28 @@ static bool GBE_BuildDotaJobReplyPayload(uint32 emsg, uint64 request_job_id, con
     return true;
 }
 
+static bool GBE_BuildDotaJobReplyOrZeroHeaderPayload(uint32 emsg, bool has_request_job, uint64 request_job_id, const std::string &body, std::string &message)
+{
+    if (has_request_job)
+        return GBE_BuildDotaJobReplyPayload(emsg, request_job_id, body, message);
+
+    return GBE_BuildDotaZeroHeaderPayload(emsg, body, message);
+}
+
+static bool GBE_BuildDota8728ResponsePayload(bool has_request_job, uint64 request_job_id, std::string &message)
+{
+    std::string body;
+    GBE_AppendProtoVarIntField(body, 1u, 1u);
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(8728u, has_request_job, request_job_id, body, message);
+}
+
+static bool GBE_BuildDota8887ResponsePayload(bool has_request_job, uint64 request_job_id, std::string &message)
+{
+    std::string body;
+    GBE_AppendProtoVarIntField(body, 1u, 1u);
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(8887u, has_request_job, request_job_id, body, message);
+}
+
 static bool GBE_BuildDotaJoinChatChannelResponsePayload(
     uint64 steam_id,
     uint64 channel_id,
@@ -4763,10 +4801,51 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
     const uint8 *template_bytes = nullptr;
     size_t template_size = 0;
+    const char *template_hex = nullptr;
     uint32 response_emsg = 0;
     bool replace_account = false;
     bool replace_steam_id = false;
     const char *response_note = "";
+
+    if (request_emsg == 8727) {
+        std::string response_message;
+        if (!GBE_BuildDota8728ResponsePayload(has_source_job, source_job, response_message)) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 8728u);
+            return true;
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=%s",
+            request_emsg,
+            8728u,
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            "8727->8728 minimal success"
+        );
+        push_incoming_now(8728u | GBE_kProtoMask, response_message);
+        return true;
+    }
+
+    if (request_emsg == 8886) {
+        std::string response_message;
+        if (!GBE_BuildDota8887ResponsePayload(has_source_job, source_job, response_message)) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 8887u);
+            return true;
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=%s",
+            request_emsg,
+            8887u,
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            "8886->8887 minimal success"
+        );
+        push_incoming_now(8887u | GBE_kProtoMask, response_message);
+        return true;
+    }
 
     switch (request_emsg) {
         case 2536:
@@ -4798,6 +4877,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             template_size = sizeof(GBE_kDota7198Template);
             response_emsg = 7198;
             response_note = "7197->7198";
+            break;
+        case 8729:
+            template_hex = GBE_kDota8730TemplateHex;
+            response_emsg = 8730;
+            response_note = "8729->8730";
             break;
         case 8676:
             template_bytes = GBE_kDota8677Template;
@@ -4863,6 +4947,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_FormatHexPrefix(body, body_size, 32).c_str()
             );
             return false;
+    }
+
+    std::string decoded_template;
+    if (template_hex != nullptr) {
+        if (!GBE_DecodeHexString(template_hex, decoded_template)) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed decoding replay template req=%u resp=%u", request_emsg, response_emsg);
+            return true;
+        }
+
+        template_bytes = reinterpret_cast<const uint8 *>(decoded_template.data());
+        template_size = decoded_template.size();
     }
 
     std::string response_message;
