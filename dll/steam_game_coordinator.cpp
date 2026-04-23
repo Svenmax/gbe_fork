@@ -2415,16 +2415,6 @@ static bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
         return false;
     }
 
-    std::string steam_id_fixed64_raw;
-    GBE_AppendLittleEndian64(steam_id_fixed64_raw, steam_id);
-    if (!GBE_FindAndOverwriteBytes(
-            message,
-            GBE_VectorFromBytes(GBE_kOldDotaSteamIdFixed64.data(), GBE_kOldDotaSteamIdFixed64.size()),
-            GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(steam_id_fixed64_raw.data()), steam_id_fixed64_raw.size()))) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch steam_id fixed64 patch failed stage=%s steam_id=%llu", stage_note ? stage_note : "", static_cast<unsigned long long>(steam_id));
-        return false;
-    }
-
     std::vector<uint8> encoded_match_id;
     if (!GBE_EncodeVarUint64WithExpectedSize(match_id, GBE_kOldDotaPracticeLobbyMatchIdVarint.size(), encoded_match_id)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch match_id size mismatch stage=%s match_id=%llu", stage_note ? stage_note : "", static_cast<unsigned long long>(match_id));
