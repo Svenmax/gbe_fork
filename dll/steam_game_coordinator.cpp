@@ -2359,7 +2359,7 @@ static bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
     bool patch_connect,
     const char *stage_note)
 {
-    if (!GBE_PatchDotaTemplateIdentifiers(message, account_id, steam_id, true, true, GBE_kDotaPracticeLobbyLaunch, GBE_kDotaPracticeLobbyDetailsUpdate, 0, stage_note)) {
+    if (!GBE_PatchDotaTemplateIdentifiers(message, account_id, steam_id, true, false, GBE_kDotaPracticeLobbyLaunch, GBE_kDotaPracticeLobbyDetailsUpdate, 0, stage_note)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch template identifier patch failed stage=%s", stage_note ? stage_note : "");
         return false;
     }
