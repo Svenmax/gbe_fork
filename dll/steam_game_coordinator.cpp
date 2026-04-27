@@ -173,7 +173,7 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
     if (combined_endpoints_size > expected_size) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] connect endpoint too long, falling back to loopback connect_size=%zu expected=%zu",
+            "[LOBBY] connect endpoint too long, falling back to loopback combined_endpoints_size=%zu expected=%zu",
             combined_endpoints_size,
             expected_size
         );
