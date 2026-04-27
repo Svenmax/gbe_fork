@@ -154,6 +154,7 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
     const uint32 octet4 = ip & 0xFFu;
 
     char endpoint[32] = {};
+    // Non-padded octets ensure the duplicated endpoint fits the donor-length connect string.
     std::snprintf(
         endpoint,
         sizeof(endpoint),
@@ -173,9 +174,6 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
     std::string connect = endpoint;
     connect.push_back(' ');
     connect.append(endpoint);
-    if (connect.size() > expected_size)
-        return GBE_kLocalDotaPracticeLobbyConnect;
-
     connect.resize(expected_size, ' ');
     return connect;
 }
