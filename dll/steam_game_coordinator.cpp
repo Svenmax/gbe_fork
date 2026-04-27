@@ -168,13 +168,14 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
 
     const size_t expected_size = std::strlen(GBE_kOldDotaPracticeLobbyConnect);
     const size_t endpoint_size = std::strlen(endpoint);
-    const size_t combined_endpoints_size = endpoint_size * 2 + 1; // two endpoints plus one space separator
-    // Falls back to loopback endpoint and returns early when two endpoints would exceed the original/reference length.
-    if (combined_endpoints_size > expected_size) {
+    const size_t separator_length = 1u;
+    const size_t combined_size = endpoint_size * 2 + separator_length; // duplicated endpoints plus one space separator
+    // Falls back to loopback endpoint and returns early when duplicated endpoints exceed the original/reference length.
+    if (combined_size > expected_size) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] connect endpoint too long, falling back to loopback combined_endpoints_size=%zu expected=%zu",
-            combined_endpoints_size,
+            "[LOBBY] connect endpoint too long, falling back to loopback combined_size=%zu expected=%zu",
+            combined_size,
             expected_size
         );
         return GBE_kLocalDotaPracticeLobbyConnect;
