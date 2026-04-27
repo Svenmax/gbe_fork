@@ -154,7 +154,7 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
     const uint32 octet4 = ip & 0xFFu;
 
     char endpoint[32] = {};
-    // Non-padded octets ensure the duplicate endpoint fits the original connect-string length.
+    // Non-padded octets ensure the duplicated endpoint fits the original connect-string length.
     std::snprintf(
         endpoint,
         sizeof(endpoint),
@@ -168,12 +168,12 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
     const size_t expected_size = std::strlen(GBE_kOldDotaPracticeLobbyConnect);
     const size_t endpoint_size = std::strlen(endpoint);
     const size_t connect_size = endpoint_size * 2 + 1; // two endpoints plus one space separator
-    // Fallback to loopback when two endpoints would exceed the original/reference length.
+    // Falls back to loopback endpoint and returns early when two endpoints would exceed the original/reference length.
     if (connect_size > expected_size) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] connect endpoint too long, falling back to loopback endpoint_size=%zu expected=%zu",
-            endpoint_size,
+            "[LOBBY] connect endpoint too long, falling back to loopback connect_size=%zu expected=%zu",
+            connect_size,
             expected_size
         );
         return GBE_kLocalDotaPracticeLobbyConnect;
