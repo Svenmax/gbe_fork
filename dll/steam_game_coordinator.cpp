@@ -157,7 +157,7 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
     std::snprintf(
         endpoint,
         sizeof(endpoint),
-        "%03u.%03u.%03u.%03u:27015",
+        "%u.%u.%u.%u:27015",
         octet1,
         octet2,
         octet3,
@@ -165,6 +165,8 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
     );
 
     std::string connect = endpoint;
+    connect.push_back(' ');
+    connect.append(endpoint);
     const size_t expected_size = std::strlen(GBE_kOldDotaPracticeLobbyConnect);
     if (connect.size() > expected_size)
         return GBE_kLocalDotaPracticeLobbyConnect;
@@ -5758,7 +5760,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
         }
     }
 
-    const std::array<double, 4> stage_delays = { 0.0, 0.01, 0.02, 0.03 };
+    const std::array<double, 4> stage_delays = { 0.0, 0.115, 0.125, 0.135 };
     const std::array<uint32, 4> stage_states = { 1u, 1u, 2u, 2u };
     const std::array<uint32, 4> stage_game_states = { 0u, 0u, 0u, 1u };
     for (size_t stage_index = 0; stage_index < stage_messages.size(); ++stage_index) {
