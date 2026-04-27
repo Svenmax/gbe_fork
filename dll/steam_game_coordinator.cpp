@@ -164,10 +164,15 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
         octet4
     );
 
+    const size_t expected_size = std::strlen(GBE_kOldDotaPracticeLobbyConnect);
+    const size_t endpoint_size = std::strlen(endpoint);
+    if (endpoint_size * 2 + 1 > expected_size)
+        return GBE_kLocalDotaPracticeLobbyConnect;
+
+    // Dota expects two endpoints separated by a space, then padded to donor length.
     std::string connect = endpoint;
     connect.push_back(' ');
     connect.append(endpoint);
-    const size_t expected_size = std::strlen(GBE_kOldDotaPracticeLobbyConnect);
     if (connect.size() > expected_size)
         return GBE_kLocalDotaPracticeLobbyConnect;
 
