@@ -167,7 +167,9 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
 
     const size_t expected_size = std::strlen(GBE_kOldDotaPracticeLobbyConnect);
     const size_t endpoint_size = std::strlen(endpoint);
-    if (endpoint_size * 2 + 1 > expected_size)
+    const size_t connect_size = endpoint_size * 2 + 1;
+    // Fallback to loopback when two endpoints would exceed the donor-length string.
+    if (connect_size > expected_size)
         return GBE_kLocalDotaPracticeLobbyConnect;
 
     // Dota expects two endpoints separated by a space, then padded to donor length.
