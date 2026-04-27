@@ -154,7 +154,8 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
     const uint32 octet4 = ip & 0xFFu;
 
     char endpoint[32] = {};
-    // Non-padded octets ensure the duplicated endpoint fits the original connect-string length.
+    // Non-padded octets ensure the duplicated endpoint fits the original connect-string length;
+    // zero-padding would make two endpoints exceed the expected size.
     std::snprintf(
         endpoint,
         sizeof(endpoint),
@@ -167,13 +168,13 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
 
     const size_t expected_size = std::strlen(GBE_kOldDotaPracticeLobbyConnect);
     const size_t endpoint_size = std::strlen(endpoint);
-    const size_t connect_size = endpoint_size * 2 + 1; // two endpoints plus one space separator
+    const size_t combined_endpoints_size = endpoint_size * 2 + 1; // two endpoints plus one space separator
     // Falls back to loopback endpoint and returns early when two endpoints would exceed the original/reference length.
-    if (connect_size > expected_size) {
+    if (combined_endpoints_size > expected_size) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] connect endpoint too long, falling back to loopback connect_size=%zu expected=%zu",
-            connect_size,
+            combined_endpoints_size,
             expected_size
         );
         return GBE_kLocalDotaPracticeLobbyConnect;
@@ -5772,6 +5773,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
         }
     }
 
+    // Delay later stage updates to interleave with early peripheral messages from the host flow.
     const std::array<double, 4> stage_delays = { 0.0, 0.115, 0.125, 0.135 };
     const std::array<uint32, 4> stage_states = { 1u, 1u, 2u, 2u };
     const std::array<uint32, 4> stage_game_states = { 0u, 0u, 0u, 1u };
