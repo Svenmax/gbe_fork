@@ -70,6 +70,8 @@ static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_de
 static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
 static constexpr uint32 GBE_kDotaLobbyField128Value = 1776809986u;
 
+static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...);
+
 static const uint8 GBE_kDotaClientWelcomeTemplate[] = {
     0x4D, 0x15, 0x00, 0x80, 0x14, 0x00, 0x00, 0x00, 0x09, 0xF5, 0xB6, 0x21, 0x08, 0x01, 0x00, 0x10,
     0x01, 0x10, 0xEB, 0xFC, 0x88, 0xA1, 0xF8, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x08, 0xBA, 0x04, 0x10,
@@ -154,21 +156,37 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
     const uint32 octet4 = ip & 0xFFu;
 
     char endpoint[32] = {};
+    // Non-padded octets ensure the duplicated endpoint fits the original connect-string length;
+    // zero-padding would make two endpoints exceed the expected size.
     std::snprintf(
         endpoint,
         sizeof(endpoint),
-        "%03u.%03u.%03u.%03u:27015",
+        "%u.%u.%u.%u:27015",
         octet1,
         octet2,
         octet3,
         octet4
     );
 
-    std::string connect = endpoint;
     const size_t expected_size = std::strlen(GBE_kOldDotaPracticeLobbyConnect);
-    if (connect.size() > expected_size)
+    const size_t endpoint_size = std::strlen(endpoint);
+    const size_t separator_length = 1u;
+    const size_t combined_size = endpoint_size * 2 + separator_length; // duplicated endpoints plus one space separator
+    // Falls back to loopback endpoint and returns early when duplicated endpoints exceed the original/reference length.
+    if (combined_size > expected_size) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] connect endpoint too long, falling back to loopback combined_size=%zu expected=%zu",
+            combined_size,
+            expected_size
+        );
         return GBE_kLocalDotaPracticeLobbyConnect;
+    }
 
+    // Dota expects two endpoints separated by a space, then padded to the original/reference length.
+    std::string connect = endpoint;
+    connect.push_back(' ');
+    connect.append(endpoint);
     connect.resize(expected_size, ' ');
     return connect;
 }
@@ -5758,7 +5776,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
         }
     }
 
-    const std::array<double, 4> stage_delays = { 0.0, 0.01, 0.02, 0.03 };
+    // Delay later stage updates to interleave with early peripheral messages from the host flow.
+    const std::array<double, 4> stage_delays = { 0.0, 0.115, 0.125, 0.135 };
     const std::array<uint32, 4> stage_states = { 1u, 1u, 2u, 2u };
     const std::array<uint32, 4> stage_game_states = { 0u, 0u, 0u, 1u };
     for (size_t stage_index = 0; stage_index < stage_messages.size(); ++stage_index) {
