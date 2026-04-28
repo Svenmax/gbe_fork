@@ -3205,6 +3205,31 @@ static bool GBE_BuildDota7451BatchPlayerResourcesResponsePayload(const std::vect
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7451u, has_request_job, request_job_id, body, message);
 }
 
+static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
+    uint64 steam_id,
+    uint32 game_state,
+    uint32 owner_team,
+    uint32 owner_slot,
+    bool has_request_job,
+    uint64 request_job_id,
+    std::string &message)
+{
+    std::string player;
+    GBE_AppendProtoFixed64Field(player, 1u, steam_id);
+
+    std::string draft;
+    GBE_AppendProtoFixed64Field(draft, 1u, steam_id);
+    GBE_AppendProtoVarIntField(draft, 2u, owner_team <= 1u ? owner_team : 0u);
+    GBE_AppendProtoVarIntField(draft, 3u, owner_slot);
+
+    std::string body;
+    GBE_AppendProtoBytesField(body, 1u, player);
+    GBE_AppendProtoVarIntField(body, 2u, game_state);
+    GBE_AppendProtoVarIntField(body, 8u, 2u);
+    GBE_AppendProtoBytesField(body, 16u, draft);
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7034u, has_request_job, request_job_id, body, message);
+}
+
 static bool GBE_BuildDotaJoinChatChannelResponsePayload(
     uint64 steam_id,
     uint64 channel_id,
@@ -5540,6 +5565,35 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             account_ids.size()
         );
         push_incoming_now(7451u | GBE_kProtoMask, response_message);
+        return true;
+    }
+
+    if (request_emsg == 7034) {
+        std::string response_message;
+        if (!GBE_BuildDota7034ConnectedPlayersResponsePayload(
+                settings->get_local_steam_id().ConvertToUint64(),
+                GBE_local_lobby.game_state,
+                GBE_local_lobby.owner_team,
+                GBE_local_lobby.owner_slot,
+                has_source_job,
+                source_job,
+                response_message)) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 7034u);
+            return true;
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=7034 minimal connected players game_state=%u team=%u slot=%u",
+            request_emsg,
+            7034u,
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            GBE_local_lobby.game_state,
+            GBE_local_lobby.owner_team,
+            GBE_local_lobby.owner_slot
+        );
+        push_incoming_now(7034u | GBE_kProtoMask, response_message);
         return true;
     }
 

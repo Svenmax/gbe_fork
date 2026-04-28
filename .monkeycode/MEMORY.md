@@ -192,6 +192,9 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 工作区内存在可直接读取的 SteamKit 仓库，可用于查询 Dota2 GC 消息号、protobuf 字段定义和 lobby 相关结构。
   - 相关任务优先先检查 `/workspace/SteamKit` 下的生成代码，再结合抓包和日志做字段映射。
+  - 当我对 GC 消息结构、SO Cache 对象或 lobby/start-game 字段没有把握时，必须先系统性阅读 `/workspace/SteamKit` 和 `/workspace/go-dota2` 的相关定义，再动手改 `gbe_fork`。
+  - `hoststartgame.zip` 是官方抓包数据，后续分析时应优先按官方样本对齐。
+  - 读取官方抓包时，可以参考 `/workspace/SteamKit/Resources/NetHookAnalyzer2` 的源码逻辑解析消息，而不是只凭肉眼或十六进制片段猜测。
 
 [Dota2 GC 登录重放约束]
 - Date: 2026-04-21
@@ -486,3 +489,26 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 主动撤销房间的链路是 `8246 / DestroyLobbyRequest -> 25 / CMsgSOCacheUnsubscribed -> 8247 / DestroyLobbyResponse -> 7272 / LeaveChatChannel -> 7014 / OtherLeftChannel`。
   - Dota 路径里的 `25 / CMsgSOCacheUnsubscribed` 需要使用 `owner_soid(field2)`，其中 `type=3`、`id=lobby_id`，不是旧的 `owner(field1)` 结构。
   - leave 或 destroy 处理完 lobby 后，不要同步清掉 chat channel 状态；要保留到后续 `7272` 处理完成后再清理。
+
+[Dota2 7034 的 team 语义与本地 owner_team 对齐]
+- Date: 2026-04-28
+- Context: Agent 在继续实现 `7034 / k_EMsgGCConnectedPlayers` 最小回包时发现
+- Category: 代码模式
+- Instructions:
+  - 当前 `GBE_local_lobby.owner_team` 的取值已经与 Dota proto `DOTA_GC_TEAM` 对齐：`0 = GOOD_GUYS`，`1 = BAD_GUYS`。
+  - 因此构造 `CMsgConnectedPlayers.PlayerDraft.team` 时可以直接复用 `owner_team`，只需在异常值场景下兜底回 `0`，不需要再额外做 UI 编号到 proto 枚举的二次映射。
+
+[gbe_fork 本地 Linux 构建前置依赖]
+- Date: 2026-04-28
+- Context: Agent 在本地验证 `steam_game_coordinator.cpp` 改动时发现
+- Category: 构建方法
+- Instructions:
+  - 当前仓库执行 `./third-party/common/linux/premake/premake5 --file=premake5.lua --genproto --os=linux gmake2` 前，需要先准备 `build/deps/linux/gmake2/protobuf/install64/bin/protoc`。
+  - 如果该 `protoc` 缺失，`premake5.lua` 会在生成工程阶段直接报 `protoc not found`，后续 `make config=debug_x64 api_regular` 无法开始。
+
+[gbe_fork 禁止本机构建]
+- Date: 2026-04-28
+- Context: 用户要求后续在该仓库中不要再尝试本机构建
+- Instructions:
+  - 后续处理 `gbe_fork` 时，不要再在当前机器上尝试执行本地构建、生成工程或编译验证。
+  - 需要验证时优先通过提交并推送到现有 PR，让远端 CI 负责构建检查。
