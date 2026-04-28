@@ -360,6 +360,7 @@ bool Steam_Networking_Utils::SetConfigValue( ESteamNetworkingConfigValue eValue,
 {
     PRINT_DEBUG("TODO %i %i " "%" PRIdPTR " %i %p", eValue, eScopeType, scopeObj, eDataType, pArg);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
     return true;
 }
 

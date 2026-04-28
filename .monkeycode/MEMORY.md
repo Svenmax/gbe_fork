@@ -31,6 +31,67 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 client/server GC 实例构造位置]
+- Date: 2026-04-28
+- Context: Agent 在继续排查 practice lobby start-game 阶段的 server-side GC 上下文同步时发现
+- Category: 代码结构
+- Instructions:
+  - 当前 `gbe_fork` 会在同一个 `dll/steam_client.cpp` 中同时构造 client-side `steam_game_coordinator` 与 server-side `steam_gameserver_game_coordinator`。
+  - 两个 coordinator 共享同一个 `network` 对象，但分别持有 `settings_client` 和 `settings_server`，因此 lobby 运行态默认仍是各自实例内状态，不能假设会自动同步。
+
+[Dota2 7038 初始 CacheSubscribed 的 helper 边界]
+- Date: 2026-04-28
+- Context: Agent 在继续修复 `7038 / PracticeLobbyCreate` 崩溃、对齐提交 `a3561972e01a81c2c6c37ef9b070c5c284cc6182` 时发现
+- Category: 代码模式
+- Instructions:
+  - `7038` 建房后发出的初始 `24 / CacheSubscribed` 只应按旧版 helper 语义改写 `2004` 和 `2014`，不要在这一步处理 `2015/2016`。
+  - 当 `rewrite_runtime_fields == false` 时，`2004 / CSODOTALobby` 的成员相关字段 `120/121/122/123/124` 应保留 donor 原始结构，不要做运行态瘦身、重排或补写 `121=0`。
+  - `2015/2016` 与 `2004` 成员结构压缩只保留给 `7041` 之后的运行态改写路径使用，不要混入建房初始 `24`。
+
+[Dota2 开始游戏卡在本地网络连接状态回调]
+- Date: 2026-04-28
+- Context: Agent 在分析 `STEAM_LOG_1395829013.log` 与 `gbe_gc_debug.log` 的新一轮开始游戏日志时发现
+- Category: 代码模式
+- Instructions:
+  - 如果 `7041` 后客户端已经把 lobby rich presence 推进到 `SERVERSETUP` 和 `RUN`，并且随后能看到 `SteamGameServer::InitGameServer()`、`SendMessage_() 4007`、`BeginAuthSession()`、`7450 -> 7451`，说明 GC 启动包主链路已经基本打通。
+  - 这时若 Steam 日志开始持续刷 `Steam_Networking_Sockets_Serialized::PostConnectionStateMsg() // TODO`，且看不到对应的真实连接状态回调消费，应优先排查本地 `SteamNetworkingSocketsSerialized` 的连接状态回调实现，而不是继续优先改 `7038/7041` 的 GC 包序。
+  - 在该阶段，`GetCertAsync() // TODO`、`GetSTUNServer() // TODO` 和重复的 `PostConnectionStateMsg() // TODO` 组合，是“客户端已启动本地 server 但没有继续进入英雄选择/游戏中”的高优先级信号。
+
+[gbe_fork 记忆文件归档位置]
+- Date: 2026-04-28
+- Context: 用户要求后续在 `gbe_fork` 相关工作中统一记录记忆位置
+- Instructions:
+  - 以后涉及 `gbe_fork` 的用户指令、偏好和项目知识，统一记录到 `gbe_fork/.monkeycode/MEMORY.md`。
+  - 不要再把 `gbe_fork` 相关记忆写到工作区根目录的 `.monkeycode/MEMORY.md`。
+
+[Dota2 选人阶段卡 INIT 的高优先级缺口]
+- Date: 2026-04-28
+- Context: Agent 在分析 `/workspace/gbe_gc_debug.log` 与 `/workspace/console.txt` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当本地服务器已经启动、客户端进入 `DOTA_GAME_UI_DOTA_INGAME`，但游戏状态仍长期停留在 `DOTA_GAMERULES_STATE_INIT` 时，优先检查 server-side `7450 / k_EMsgServerToGCRequestBatchPlayerResources` 是否被回 `7451`。
+  - 当前日志中缺失 `7451` 会直接导致 `BatchPlayerResources - Failed to get accounts`，这是比 `8880/8096/7504/8801` 这些非关键超时更高优先级的缺口。
+  - 分析 `7041` 时序问题时，要注意日志是否仍显示旧的 `0.12` 外围延时；如果是，说明运行结果还没有包含最新本地时序修正。
+
+[Dota2 7041 启动 26 的 account_id patch 风险]
+- Date: 2026-04-28
+- Context: Agent 在复查新一轮 `/workspace/gbe_gc_debug.log` 与 `/workspace/console.txt` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当 `7450 -> 7451` 已经恢复、`BatchPlayerResources - Failed to get accounts` 已消失，但进房后仍无英雄可选时，优先检查 `7041` 发出的 4 条 `26 / PracticeLobbyDetailsUpdate` 里 donor `account_id` 是否仍然残留。
+  - 如果日志出现 `skipping account_id varint replacement req=7041 resp=26 ... encoded_size=5 expected=4`，说明当前账号的 `account_id` varint 比 donor 模板更长，旧的等长字节替换会失效。
+  - 日志里的 `0.117/0.118/0.119/...` 经过 `%.2f` 输出会显示成多个 `0.12`，这不代表仍在运行旧版 `7041` 外围时序。
+  - donor 模板里的 `account_id` varint patch 现在应只按 protobuf 语义改写 `field 1`，不要再回退到无字段语义的原始字节扫描替换。
+  - 如果 donor 模板本身是“外层包裹消息”或“带 8 字节 direct proto 头的消息”，不能把整包直接当纯 protobuf 做语义重写；应先定位内层消息体，再对消息体中的 `field 1` 做 `account_id` 改写。
+
+[新生成用户 SteamID 的 account_id 范围]
+- Date: 2026-04-28
+- Context: 用户要求把通用 `generate_account_id()` 全局收敛到 4 字节 varint 范围
+- Category: 代码模式
+- Instructions:
+  - 通用 `generate_account_id()` 应只生成 `1..0x0FFFFFFF` 范围内的值，确保所有基于它生成的新 `account_id` 在 protobuf 中始终不超过 4 字节 varint。
+  - 这会同时影响 user、anon user、server、anonserver、lobby 等依赖 `generate_account_id()` 的新 ID 生成路径。
+
 [Dota2 hoststartgame 后段 direct 处理顺序]
 - Date: 2026-04-23
 - Context: 用户要求继续补齐 `7041` 之后的 host direct 请求时明确指定实现优先级
@@ -107,6 +168,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 启动 donor 模板里的旧 `connect` 字符串长度固定为 38，做字节替换时必须保持绝对等长；当前可用的本地 loopback 替换串为 `127.000.000.01:27015 127.000.1.1:27015`。
   - 启动相关模板 patch 至少需要处理 `lobby_id`、`account_id`、`steam_id`、`match_id`、`server_id`、`game_start_time` 和 `connect`，其中 `match_id` 与 `game_start_time` 都必须维持 donor varint 的原始编码长度。
 
+[Dota2 7041 网络降级使用严格 loopback connect]
+- Date: 2026-04-28
+- Context: Agent 在继续处理 `7041 / PracticeLobbyLaunch` 的 SDR 降级时发现
+- Category: 代码模式
+- Instructions:
+  - `7041` 启动阶段现在优先把 `GBE_local_lobby.server_id` 维持为 `0`，让 donor 模板中的 `server_id` 统一被 patch 成 8 字节零值，而不是本地伪造的 server SteamID。
+  - 启动阶段的 `connect` 应优先使用严格的 `127.0.0.1:27015` 双 endpoint，并通过尾部空格补齐到 donor 原始总长度，避免再依赖带零填充 octet 的旧 loopback 字符串。
+
 [Dota2 Practice Lobby 7041 外围消息节奏]
 - Date: 2026-04-23
 - Context: Agent 在对照 `/workspace/hoststartgame.zip` 补齐启动外围消息时发现
@@ -157,6 +226,9 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 工作区内存在可直接读取的 SteamKit 仓库，可用于查询 Dota2 GC 消息号、protobuf 字段定义和 lobby 相关结构。
   - 相关任务优先先检查 `/workspace/SteamKit` 下的生成代码，再结合抓包和日志做字段映射。
+  - 当我对 GC 消息结构、SO Cache 对象或 lobby/start-game 字段没有把握时，必须先系统性阅读 `/workspace/SteamKit` 和 `/workspace/go-dota2` 的相关定义，再动手改 `gbe_fork`。
+  - `hoststartgame.zip` 是官方抓包数据，后续分析时应优先按官方样本对齐。
+  - 读取官方抓包时，可以参考 `/workspace/SteamKit/Resources/NetHookAnalyzer2` 的源码逻辑解析消息，而不是只凭肉眼或十六进制片段猜测。
 
 [Dota2 GC 登录重放约束]
 - Date: 2026-04-21
@@ -425,6 +497,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 因此 welcome 路径在高位 `AccountID` 场景下，应保留 `version` 与 `steam_id` 的等长替换，但把 `account_id` 改为对 `2002/2012` 做语义级 patch。
   - 当前工程实现上不要直接依赖 Dota 专用 `CMsgClientWelcome` 生成类去访问 `outofdate_subscribed_caches`；更稳的做法是手工遍历 welcome 外层 protobuf 的 `field 3`，再对每个 cache payload 用 `CMsgSOCacheSubscribed` 做局部解析和重写。
 
+[Dota2 lobby SO Cache 的双维度 ID patch]
+- Date: 2026-04-28
+- Context: 用户要求后续处理大厅 SO Cache 时不要只盯单一 `account_id` 路径
+- Instructions:
+  - 大厅 SO Cache 里不仅要处理 `members` 列表中的 32 位 `account_id`，还要处理 `leader_id` 这类 64 位 ID 特征码。
+  - patch donor 模板时必须同时扫荡并安全替换这两个维度，不能只覆盖 `field1 account_id` 而遗漏 lobby owner / leader 的 `steam_id` 语义字段。
+  - 对 protobuf 对象做语义 patch 时，应优先按字段语义重写 `leader_id` 与 `members.account_id`，避免回退到无字段语义的整包盲扫替换。
+
 [Dota2 高位 AccountID 跳过路径的处理策略]
 - Date: 2026-04-22
 - Context: 用户要求后续不要盲目把所有长度不匹配的 `account_id` 跳过路径都升级成语义 patch
@@ -443,3 +523,82 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 主动撤销房间的链路是 `8246 / DestroyLobbyRequest -> 25 / CMsgSOCacheUnsubscribed -> 8247 / DestroyLobbyResponse -> 7272 / LeaveChatChannel -> 7014 / OtherLeftChannel`。
   - Dota 路径里的 `25 / CMsgSOCacheUnsubscribed` 需要使用 `owner_soid(field2)`，其中 `type=3`、`id=lobby_id`，不是旧的 `owner(field1)` 结构。
   - leave 或 destroy 处理完 lobby 后，不要同步清掉 chat channel 状态；要保留到后续 `7272` 处理完成后再清理。
+
+[Dota2 7034 的 team 语义与本地 owner_team 对齐]
+- Date: 2026-04-28
+- Context: Agent 在继续实现 `7034 / k_EMsgGCConnectedPlayers` 最小回包时发现
+- Category: 代码模式
+- Instructions:
+  - 当前 `GBE_local_lobby.owner_team` 的取值已经与 Dota proto `DOTA_GC_TEAM` 对齐：`0 = GOOD_GUYS`，`1 = BAD_GUYS`。
+  - 因此构造 `CMsgConnectedPlayers.PlayerDraft.team` 时可以直接复用 `owner_team`，只需在异常值场景下兜底回 `0`，不需要再额外做 UI 编号到 proto 枚举的二次映射。
+
+[gbe_fork 本地 Linux 构建前置依赖]
+- Date: 2026-04-28
+- Context: Agent 在本地验证 `steam_game_coordinator.cpp` 改动时发现
+- Category: 构建方法
+- Instructions:
+  - 当前仓库执行 `./third-party/common/linux/premake/premake5 --file=premake5.lua --genproto --os=linux gmake2` 前，需要先准备 `build/deps/linux/gmake2/protobuf/install64/bin/protoc`。
+  - 如果该 `protoc` 缺失，`premake5.lua` 会在生成工程阶段直接报 `protoc not found`，后续 `make config=debug_x64 api_regular` 无法开始。
+
+[gbe_fork 禁止本机构建]
+- Date: 2026-04-28
+- Context: 用户要求后续在该仓库中不要再尝试本机构建
+- Instructions:
+  - 后续处理 `gbe_fork` 时，不要再在当前机器上尝试执行本地构建、生成工程或编译验证。
+  - 需要验证时优先通过提交并推送到现有 PR，让远端 CI 负责构建检查。
+
+[Dota2 Lobby SO 的 2015 与 121-124 字段语义]
+- Date: 2026-04-28
+- Context: Agent 在复查 `24/26` 的大厅 SO 构造与模板 patch 时发现
+- Category: 代码模式
+- Instructions:
+  - `2015 = CSODOTAServerLobby` 在当前本地大厅路径里应保持空对象；不要把它错误地构造成 `field1 = empty bytes` 的“带一个空 member 的对象”。
+  - `2004.field121` 是 `member_indices`，单人本地大厅应归一化为单个 `0`。
+  - `2004.field122`、`field123`、`field124` 分别是 `left_member_indices`、`free_member_indices`、`requested_hero_ids`，不能再把它们当作槽位占位符批量写 `0`。
+
+[Dota2 Lobby SO 的运行态字段不能在 26 中丢失]
+- Date: 2026-04-28
+- Context: Agent 在复查 practice lobby 启动后续 `26 / PracticeLobbyDetailsUpdate` 时发现
+- Category: 代码模式
+- Instructions:
+  - 用 scratch builder 重新构造 `2004 / CSODOTALobby` 时，必须同步当前运行态字段：`state(4)`、`connect(5)`、`server_id(6)`、`game_state(22)`、`match_id(30)`、`game_start_time(87)`。
+  - 否则一旦启动后的 `7046/7047/...` 再触发新的 `26`，就会用缺字段的 `2004` 覆盖掉已启动 lobby 的运行态信息。
+
+[Dota2 比赛内 7035 4511 4508 的当前处理语义]
+- Date: 2026-04-28
+- Context: Agent 在分析 `hoststartgame` 之后的 direct 请求日志与 SteamKit/go-dota2 定义时发现
+- Category: 代码模式
+- Instructions:
+  - 当前日志里的 `7035 / k_EMsgGCAbandonCurrentGame`、`4511 / k_EMsgGCLANServerAvailable`、`4508 / k_EMsgGCGameServerInfo` 都没有 `source_job`，更接近客户端或本地服发往 GC 的上行通知，而不是明确的 request-response。
+  - 在现有 `gbe_fork` replay 框架里，对这三条消息优先做“消费并记录关键字段”的最小处理，不要先凭猜测伪造 direct reply。
+
+[Dota2 建房仅对齐 a3561972，开始游戏继续推进]
+- Date: 2026-04-28
+- Context: 用户纠正“只对齐建房，不要把其他后续修复也回退到该提交”
+- Instructions:
+  - 只让 `7038 / PracticeLobbyCreate` 建房路径对齐 `a3561972e01a81c2c6c37ef9b070c5c284cc6182`。
+  - `7041 / PracticeLobbyLaunch` 以及之后为开始游戏链路新增的修复要继续保留并往前推进，不能因为建房对齐而一起回退。
+
+[Dota2 7041 网络降级优先策略]
+- Date: 2026-04-28
+- Context: 用户要求在 `7041 / PracticeLobbyLaunch` 链路中优先绕过 `SteamNetworkingSocketsSerialized` 限制，强制客户端走 legacy UDP 直连
+- Instructions:
+  - 启动链路里凡是 donor 模板带有 `server_id`（64 位 SteamID 路由标识）的地方，优先将该 8 字节值整体清零，不要再替换成本地生成的 server SteamID。
+  - `connect` 字符串需要继续强制 patch 为纯 IP 直连目标，优先使用 `127.0.0.1:27015`，并保持原 donor 总字节长度不变。
+  - 如果启动相关 payload 中存在明显的 SDR ticket、证书或 relay 标识位，应优先做“保持长度不变的最小清零/降级”处理，目标是让客户端放弃 SDR/P2P 握手，退回原始 socket 连接。
+
+[Dota2 进图后优先拦截服务器授权请求]
+- Date: 2026-04-28
+- Context: 用户要求在客户端已成功直连本地服务器并达到 `SIGNONSTATE_FULL` 后，优先补齐服务器侧向 GC 申请比赛授权/比赛详情的回复
+- Instructions:
+  - 当进入地图后，如果本地启动的 server 再次通过 `SendMessage_` 向 GC 发起新请求，要优先把这些 server-side 请求与客户端请求区分开来处理。
+  - 优先观察并拦截 server 发出的 `k_EMsgGCServerHello` 或比赛详情/比赛授权类请求，再基于官方 donor 样本回放对应的授权包或比赛参数包。
+  - 回放给 server 的授权类消息必须动态 patch 当前 `MatchID` 和 `LobbyID`，目标是让本地服务器脱离“等待授权/等待比赛参数”状态并推进到选人界面。
+
+[Dota2 server/client GC 实例的 lobby 状态隔离]
+- Date: 2026-04-28
+- Context: Agent 在复查 `gbe_gc_debug.log` 中 server-side `4511` 多次出现 `local_lobby_id=0` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当前 `Steam_Game_Coordinator` 的 `GBE_local_lobby` 是实例级状态；client 侧在 `7038/7041` 中维护出的 lobby 运行态，不会自动出现在后起的 server-side GC 实例里。
+  - 如果日志里 server-side `4511 / k_EMsgGCLANServerAvailable` 已经上报了正确 `lobby_id`，但同时打印 `local_lobby_id=0 matches_local=0`，应优先排查 client/server GC 实例之间的 lobby 状态同步，而不是先假设缺少某条固定 donor 回包。

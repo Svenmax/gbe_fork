@@ -156,6 +156,8 @@ public ISteamGameCoordinator
     void handle_adjust_equip_state(const void *input, uint32 input_size);
     void handle_set_multiple_item_pos(const void *input, uint32 input_size);
     void GBE_PushDotaLoginSyncMessages();
+    void GBE_PublishSharedDotaLobbyState(const char *reason);
+    void GBE_RestoreSharedDotaLobbyState(const char *reason);
     bool GBE_HandleDotaJoinChatChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw, const char *reason);
     bool GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
