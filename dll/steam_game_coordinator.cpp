@@ -2420,19 +2420,31 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
 
         if (field_number == 4u && wire_type == 0u) {
             saw_state = true;
-            GBE_AppendProtoVarIntField(output, 4u, lobby_state);
+            if (lobby_state != 0u) {
+                GBE_AppendProtoVarIntField(output, 4u, lobby_state);
+            } else {
+                output.append(input.data() + field_offset, field_end - field_offset);
+            }
             continue;
         }
 
         if (field_number == 5u && wire_type == 2u) {
             saw_connect = true;
-            GBE_AppendProtoBytesField(output, 5u, connect);
+            if (!connect.empty()) {
+                GBE_AppendProtoBytesField(output, 5u, connect);
+            } else {
+                output.append(input.data() + field_offset, field_end - field_offset);
+            }
             continue;
         }
 
         if (field_number == 6u && wire_type == 1u) {
             saw_server_id = true;
-            GBE_AppendProtoFixed64Field(output, 6u, server_id);
+            if (server_id != 0u) {
+                GBE_AppendProtoFixed64Field(output, 6u, server_id);
+            } else {
+                output.append(input.data() + field_offset, field_end - field_offset);
+            }
             continue;
         }
 
@@ -2463,7 +2475,11 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
 
         if (field_number == 22u && wire_type == 0u) {
             saw_game_state = true;
-            GBE_AppendProtoVarIntField(output, 22u, lobby_game_state);
+            if (lobby_game_state != 0u) {
+                GBE_AppendProtoVarIntField(output, 22u, lobby_game_state);
+            } else {
+                output.append(input.data() + field_offset, field_end - field_offset);
+            }
             continue;
         }
 
@@ -2474,7 +2490,11 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
 
         if (field_number == 30u && wire_type == 0u) {
             saw_match_id = true;
-            GBE_AppendProtoVarIntField(output, 30u, match_id);
+            if (match_id != 0u) {
+                GBE_AppendProtoVarIntField(output, 30u, match_id);
+            } else {
+                output.append(input.data() + field_offset, field_end - field_offset);
+            }
             continue;
         }
 
@@ -2501,7 +2521,11 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
 
         if (field_number == 87u && wire_type == 0u) {
             saw_game_start_time = true;
-            GBE_AppendProtoVarIntField(output, 87u, game_start_time);
+            if (game_start_time != 0u) {
+                GBE_AppendProtoVarIntField(output, 87u, game_start_time);
+            } else {
+                output.append(input.data() + field_offset, field_end - field_offset);
+            }
             continue;
         }
 
