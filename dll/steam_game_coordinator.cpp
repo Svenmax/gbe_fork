@@ -2360,6 +2360,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
     const std::string &input,
     uint32 account_id,
     uint64 steam_id,
+    bool rewrite_runtime_fields,
     uint32 lobby_state,
     uint32 lobby_game_state,
     uint64 server_id,
@@ -2420,7 +2421,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
 
         if (field_number == 4u && wire_type == 0u) {
             saw_state = true;
-            if (lobby_state != 0u) {
+            if (rewrite_runtime_fields) {
                 GBE_AppendProtoVarIntField(output, 4u, lobby_state);
             } else {
                 output.append(input.data() + field_offset, field_end - field_offset);
@@ -2430,7 +2431,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
 
         if (field_number == 5u && wire_type == 2u) {
             saw_connect = true;
-            if (!connect.empty()) {
+            if (rewrite_runtime_fields) {
                 GBE_AppendProtoBytesField(output, 5u, connect);
             } else {
                 output.append(input.data() + field_offset, field_end - field_offset);
@@ -2440,7 +2441,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
 
         if (field_number == 6u && wire_type == 1u) {
             saw_server_id = true;
-            if (server_id != 0u) {
+            if (rewrite_runtime_fields) {
                 GBE_AppendProtoFixed64Field(output, 6u, server_id);
             } else {
                 output.append(input.data() + field_offset, field_end - field_offset);
@@ -2475,7 +2476,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
 
         if (field_number == 22u && wire_type == 0u) {
             saw_game_state = true;
-            if (lobby_game_state != 0u) {
+            if (rewrite_runtime_fields) {
                 GBE_AppendProtoVarIntField(output, 22u, lobby_game_state);
             } else {
                 output.append(input.data() + field_offset, field_end - field_offset);
@@ -2490,7 +2491,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
 
         if (field_number == 30u && wire_type == 0u) {
             saw_match_id = true;
-            if (match_id != 0u) {
+            if (rewrite_runtime_fields) {
                 GBE_AppendProtoVarIntField(output, 30u, match_id);
             } else {
                 output.append(input.data() + field_offset, field_end - field_offset);
@@ -2521,7 +2522,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
 
         if (field_number == 87u && wire_type == 0u) {
             saw_game_start_time = true;
-            if (game_start_time != 0u) {
+            if (rewrite_runtime_fields) {
                 GBE_AppendProtoVarIntField(output, 87u, game_start_time);
             } else {
                 output.append(input.data() + field_offset, field_end - field_offset);
@@ -2577,21 +2578,21 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
         output.append(input.data() + field_offset, field_end - field_offset);
     }
 
-    if (!saw_state)
+    if (rewrite_runtime_fields && !saw_state)
         GBE_AppendProtoVarIntField(output, 4u, lobby_state);
-    if (!saw_connect && !connect.empty())
+    if (rewrite_runtime_fields && !saw_connect && !connect.empty())
         GBE_AppendProtoBytesField(output, 5u, connect);
-    if (!saw_server_id && server_id != 0)
+    if (rewrite_runtime_fields && !saw_server_id && server_id != 0)
         GBE_AppendProtoFixed64Field(output, 6u, server_id);
     if (!saw_lan)
         GBE_AppendProtoVarIntField(output, 57u, lan ? 1u : 0u);
-    if (!saw_game_state)
+    if (rewrite_runtime_fields && !saw_game_state)
         GBE_AppendProtoVarIntField(output, 22u, lobby_game_state);
-    if (!saw_match_id && match_id != 0)
+    if (rewrite_runtime_fields && !saw_match_id && match_id != 0)
         GBE_AppendProtoVarIntField(output, 30u, match_id);
     if (!saw_lan_host_ping_location && !lan_host_ping_location.empty())
         GBE_AppendProtoBytesField(output, 109u, lan_host_ping_location);
-    if (!saw_game_start_time && game_start_time != 0)
+    if (rewrite_runtime_fields && !saw_game_start_time && game_start_time != 0)
         GBE_AppendProtoVarIntField(output, 87u, game_start_time);
     if (!saw_member_indices)
         GBE_AppendProtoVarIntField(output, 121u, 0u);
@@ -2719,6 +2720,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
     std::string &message,
     uint32 account_id,
     uint64 steam_id,
+    bool rewrite_runtime_fields,
     uint32 lobby_state,
     uint32 lobby_game_state,
     uint64 server_id,
@@ -2823,6 +2825,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
                         object_data,
                         account_id,
                         steam_id,
+                        rewrite_runtime_fields,
                         lobby_state,
                         lobby_game_state,
                         server_id,
@@ -6155,6 +6158,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
             response_24,
             account_id,
             steam_id,
+            false,
             GBE_local_lobby.state,
             GBE_local_lobby.game_state,
             GBE_local_lobby.server_id,

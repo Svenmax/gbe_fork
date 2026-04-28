@@ -538,10 +538,10 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当前日志里的 `7035 / k_EMsgGCAbandonCurrentGame`、`4511 / k_EMsgGCLANServerAvailable`、`4508 / k_EMsgGCGameServerInfo` 都没有 `source_job`，更接近客户端或本地服发往 GC 的上行通知，而不是明确的 request-response。
   - 在现有 `gbe_fork` replay 框架里，对这三条消息优先做“消费并记录关键字段”的最小处理，不要先凭猜测伪造 direct reply。
 
-[Dota2 建房初始 24 不要零化运行态字段]
+[Dota2 建房初始 24 不要改写运行态字段]
 - Date: 2026-04-28
 - Context: Agent 在回归建房闪退时发现
 - Category: 代码模式
 - Instructions:
-  - `7038` 之后的初始 `24 / CacheSubscribed` 仍处于未启动 lobby，`2004` 里的 `connect(5)`、`server_id(6)`、`game_state(22)`、`match_id(30)`、`game_start_time(87)` 不应被强行改写成空字符串或 `0`。
-  - 对这些运行态字段，只有在本地确实已经生成有效运行态值时才覆盖 donor；否则保留 donor 原字段，避免客户端在建房阶段因异常 lobby SO 直接闪退。
+  - `7038` 之后的初始 `24 / CacheSubscribed` 仍处于未启动 lobby，`2004` 里的 `connect(5)`、`server_id(6)`、`game_state(22)`、`match_id(30)`、`game_start_time(87)` 在这一阶段不要改写。
+  - 建房初始 `24` 只做房间名、玩家名、模式、地区、口令、成员对象等安全字段 patch；运行态字段保持 donor 原样，避免客户端在建房阶段因异常 lobby SO 直接闪退。
