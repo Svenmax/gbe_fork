@@ -70,6 +70,45 @@ static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_de
 static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
 static constexpr uint32 GBE_kDotaLobbyField128Value = 1776809986u;
 
+struct GBE_SharedDotaLobbyState {
+    bool valid{};
+    bool active{};
+    uint64 lobby_id{};
+    bool has_chat_channel{};
+    uint64 chat_channel_id{};
+    std::string chat_channel_name;
+    uint32 chat_channel_type{};
+    std::string room_name;
+    uint32 game_mode{};
+    uint32 server_region{};
+    bool lan{};
+    std::string lan_host_ping_location;
+    bool allow_cheats{};
+    bool fill_with_bots{};
+    bool allow_spectating{};
+    uint32 visibility{};
+    uint32 bot_difficulty_radiant{};
+    uint32 bot_difficulty_dire{};
+    uint64 bot_radiant{};
+    uint64 bot_dire{};
+    uint32 state{};
+    uint32 game_state{};
+    uint64 match_id{};
+    uint64 server_id{};
+    std::string connect;
+    uint32 game_start_time{};
+    uint32 owner_team{};
+    uint32 owner_slot{};
+    bool has_broadcast_channel{};
+    uint32 broadcast_channel_id{};
+    std::string broadcast_country_code;
+    std::string broadcast_description;
+    std::string broadcast_language_code;
+    std::string pass_key;
+};
+
+static GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
+
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...);
 
 static const uint8 GBE_kDotaClientWelcomeTemplate[] = {
@@ -4342,6 +4381,8 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         GBE_local_lobby.game_state,
         GBE_GC_MaskedEMsg(message.msg_type)
     );
+
+    GBE_PublishSharedDotaLobbyState("queued_state");
 }
 
 void Steam_Game_Coordinator::push_incoming(uint32 msg_type, const std::string &message, double delay, bool apply_lobby_state, uint32 lobby_state, uint32 lobby_game_state)
@@ -5027,6 +5068,20 @@ Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class N
     this->run_every_runcb->add(&Steam_Game_Coordinator::steam_run_every_runcb, this);
 
     parse_gc_config();
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_SYNC",
+        "coordinator init this=%p is_server=%u shared_lobby=%p shared_valid=%u active=%u lobby_id=%llu match_id=%llu state=%u game_state=%u",
+        static_cast<void *>(this),
+        this->is_server ? 1u : 0u,
+        static_cast<void *>(&GBE_shared_dota_lobby_state),
+        GBE_shared_dota_lobby_state.valid ? 1u : 0u,
+        GBE_shared_dota_lobby_state.active ? 1u : 0u,
+        static_cast<unsigned long long>(GBE_shared_dota_lobby_state.lobby_id),
+        static_cast<unsigned long long>(GBE_shared_dota_lobby_state.match_id),
+        GBE_shared_dota_lobby_state.state,
+        GBE_shared_dota_lobby_state.game_state
+    );
 }
 
 Steam_Game_Coordinator::~Steam_Game_Coordinator()
@@ -5424,8 +5479,134 @@ void Steam_Game_Coordinator::GBE_PushDotaLoginSyncMessages()
     push_incoming_now(24u | GBE_kProtoMask, cache_subscribed_message);
 }
 
+void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
+{
+    if (is_server)
+        return;
+
+    GBE_shared_dota_lobby_state.valid = true;
+    GBE_shared_dota_lobby_state.active = GBE_local_lobby.active;
+    GBE_shared_dota_lobby_state.lobby_id = GBE_local_lobby.lobby_id;
+    GBE_shared_dota_lobby_state.has_chat_channel = GBE_local_lobby.has_chat_channel;
+    GBE_shared_dota_lobby_state.chat_channel_id = GBE_local_lobby.chat_channel_id;
+    GBE_shared_dota_lobby_state.chat_channel_name = GBE_local_lobby.chat_channel_name;
+    GBE_shared_dota_lobby_state.chat_channel_type = GBE_local_lobby.chat_channel_type;
+    GBE_shared_dota_lobby_state.room_name = GBE_local_lobby.room_name;
+    GBE_shared_dota_lobby_state.game_mode = GBE_local_lobby.game_mode;
+    GBE_shared_dota_lobby_state.server_region = GBE_local_lobby.server_region;
+    GBE_shared_dota_lobby_state.lan = GBE_local_lobby.lan;
+    GBE_shared_dota_lobby_state.lan_host_ping_location = GBE_local_lobby.lan_host_ping_location;
+    GBE_shared_dota_lobby_state.allow_cheats = GBE_local_lobby.allow_cheats;
+    GBE_shared_dota_lobby_state.fill_with_bots = GBE_local_lobby.fill_with_bots;
+    GBE_shared_dota_lobby_state.allow_spectating = GBE_local_lobby.allow_spectating;
+    GBE_shared_dota_lobby_state.visibility = GBE_local_lobby.visibility;
+    GBE_shared_dota_lobby_state.bot_difficulty_radiant = GBE_local_lobby.bot_difficulty_radiant;
+    GBE_shared_dota_lobby_state.bot_difficulty_dire = GBE_local_lobby.bot_difficulty_dire;
+    GBE_shared_dota_lobby_state.bot_radiant = GBE_local_lobby.bot_radiant;
+    GBE_shared_dota_lobby_state.bot_dire = GBE_local_lobby.bot_dire;
+    GBE_shared_dota_lobby_state.state = GBE_local_lobby.state;
+    GBE_shared_dota_lobby_state.game_state = GBE_local_lobby.game_state;
+    GBE_shared_dota_lobby_state.match_id = GBE_local_lobby.match_id;
+    GBE_shared_dota_lobby_state.server_id = GBE_local_lobby.server_id;
+    GBE_shared_dota_lobby_state.connect = GBE_local_lobby.connect;
+    GBE_shared_dota_lobby_state.game_start_time = GBE_local_lobby.game_start_time;
+    GBE_shared_dota_lobby_state.owner_team = GBE_local_lobby.owner_team;
+    GBE_shared_dota_lobby_state.owner_slot = GBE_local_lobby.owner_slot;
+    GBE_shared_dota_lobby_state.has_broadcast_channel = GBE_local_lobby.has_broadcast_channel;
+    GBE_shared_dota_lobby_state.broadcast_channel_id = GBE_local_lobby.broadcast_channel_id;
+    GBE_shared_dota_lobby_state.broadcast_country_code = GBE_local_lobby.broadcast_country_code;
+    GBE_shared_dota_lobby_state.broadcast_description = GBE_local_lobby.broadcast_description;
+    GBE_shared_dota_lobby_state.broadcast_language_code = GBE_local_lobby.broadcast_language_code;
+    GBE_shared_dota_lobby_state.pass_key = GBE_local_lobby.pass_key;
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_SYNC",
+        "published shared lobby this=%p shared_lobby=%p reason=%s active=%u lobby_id=%llu match_id=%llu state=%u game_state=%u team=%u slot=%u connect=%s",
+        static_cast<void *>(this),
+        static_cast<void *>(&GBE_shared_dota_lobby_state),
+        reason ? reason : "unknown",
+        GBE_local_lobby.active ? 1u : 0u,
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        GBE_local_lobby.state,
+        GBE_local_lobby.game_state,
+        GBE_local_lobby.owner_team,
+        GBE_local_lobby.owner_slot,
+        GBE_local_lobby.connect.c_str()
+    );
+}
+
+void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
+{
+    if (!is_server)
+        return;
+
+    if (!GBE_shared_dota_lobby_state.valid) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "restore skipped this=%p shared_lobby=%p reason=%s valid=0",
+            static_cast<void *>(this),
+            static_cast<void *>(&GBE_shared_dota_lobby_state),
+            reason ? reason : "unknown"
+        );
+        return;
+    }
+
+    GBE_local_lobby.active = GBE_shared_dota_lobby_state.active;
+    GBE_local_lobby.lobby_id = GBE_shared_dota_lobby_state.lobby_id;
+    GBE_local_lobby.has_chat_channel = GBE_shared_dota_lobby_state.has_chat_channel;
+    GBE_local_lobby.chat_channel_id = GBE_shared_dota_lobby_state.chat_channel_id;
+    GBE_local_lobby.chat_channel_name = GBE_shared_dota_lobby_state.chat_channel_name;
+    GBE_local_lobby.chat_channel_type = GBE_shared_dota_lobby_state.chat_channel_type;
+    GBE_local_lobby.room_name = GBE_shared_dota_lobby_state.room_name;
+    GBE_local_lobby.game_mode = GBE_shared_dota_lobby_state.game_mode;
+    GBE_local_lobby.server_region = GBE_shared_dota_lobby_state.server_region;
+    GBE_local_lobby.lan = GBE_shared_dota_lobby_state.lan;
+    GBE_local_lobby.lan_host_ping_location = GBE_shared_dota_lobby_state.lan_host_ping_location;
+    GBE_local_lobby.allow_cheats = GBE_shared_dota_lobby_state.allow_cheats;
+    GBE_local_lobby.fill_with_bots = GBE_shared_dota_lobby_state.fill_with_bots;
+    GBE_local_lobby.allow_spectating = GBE_shared_dota_lobby_state.allow_spectating;
+    GBE_local_lobby.visibility = GBE_shared_dota_lobby_state.visibility;
+    GBE_local_lobby.bot_difficulty_radiant = GBE_shared_dota_lobby_state.bot_difficulty_radiant;
+    GBE_local_lobby.bot_difficulty_dire = GBE_shared_dota_lobby_state.bot_difficulty_dire;
+    GBE_local_lobby.bot_radiant = GBE_shared_dota_lobby_state.bot_radiant;
+    GBE_local_lobby.bot_dire = GBE_shared_dota_lobby_state.bot_dire;
+    GBE_local_lobby.state = GBE_shared_dota_lobby_state.state;
+    GBE_local_lobby.game_state = GBE_shared_dota_lobby_state.game_state;
+    GBE_local_lobby.match_id = GBE_shared_dota_lobby_state.match_id;
+    GBE_local_lobby.server_id = GBE_shared_dota_lobby_state.server_id;
+    GBE_local_lobby.connect = GBE_shared_dota_lobby_state.connect;
+    GBE_local_lobby.game_start_time = GBE_shared_dota_lobby_state.game_start_time;
+    GBE_local_lobby.owner_team = GBE_shared_dota_lobby_state.owner_team;
+    GBE_local_lobby.owner_slot = GBE_shared_dota_lobby_state.owner_slot;
+    GBE_local_lobby.has_broadcast_channel = GBE_shared_dota_lobby_state.has_broadcast_channel;
+    GBE_local_lobby.broadcast_channel_id = GBE_shared_dota_lobby_state.broadcast_channel_id;
+    GBE_local_lobby.broadcast_country_code = GBE_shared_dota_lobby_state.broadcast_country_code;
+    GBE_local_lobby.broadcast_description = GBE_shared_dota_lobby_state.broadcast_description;
+    GBE_local_lobby.broadcast_language_code = GBE_shared_dota_lobby_state.broadcast_language_code;
+    GBE_local_lobby.pass_key = GBE_shared_dota_lobby_state.pass_key;
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_SYNC",
+        "restored shared lobby this=%p shared_lobby=%p reason=%s active=%u lobby_id=%llu match_id=%llu state=%u game_state=%u team=%u slot=%u connect=%s",
+        static_cast<void *>(this),
+        static_cast<void *>(&GBE_shared_dota_lobby_state),
+        reason ? reason : "unknown",
+        GBE_local_lobby.active ? 1u : 0u,
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        GBE_local_lobby.state,
+        GBE_local_lobby.game_state,
+        GBE_local_lobby.owner_team,
+        GBE_local_lobby.owner_slot,
+        GBE_local_lobby.connect.c_str()
+    );
+}
+
 bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData)
 {
+    GBE_RestoreSharedDotaLobbyState("direct_post_login_request");
+
     const uint32 request_emsg = GBE_GC_MaskedEMsg(unMsgType);
 
     ProtoBufMsgHeader_t hdr{};
@@ -6131,6 +6312,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
             GBE_local_lobby.pass_key = request.pass_key;
     }
 
+    GBE_PublishSharedDotaLobbyState("7038_create");
+
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] State creating path=%s request_job=%llu NewLobbyID=%llu room=%s server_region=%u lan=%u lan_ping=%s mode=%u pass_len=%zu",
@@ -6299,6 +6482,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
         GBE_local_lobby.chat_channel_id = GBE_GenerateDotaChatChannelId();
     GBE_local_lobby.chat_channel_name = request.channel_name;
     GBE_local_lobby.chat_channel_type = request.has_channel_type ? request.channel_type : 3u;
+    GBE_PublishSharedDotaLobbyState("7009_join_chat");
 
     std::string response_7010;
     if (!GBE_BuildDotaJoinChatChannelResponsePayload(
@@ -6400,6 +6584,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
     GBE_local_lobby.broadcast_description.clear();
     GBE_local_lobby.broadcast_language_code.clear();
     GBE_local_lobby.pass_key.clear();
+    GBE_PublishSharedDotaLobbyState("7040_leave");
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -6430,6 +6615,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     GBE_local_lobby.server_id = 0;
     GBE_local_lobby.connect = GBE_FormatDotaPracticeLobbyLoopbackConnect();
     GBE_local_lobby.game_start_time = static_cast<uint32>(std::time(nullptr));
+    GBE_PublishSharedDotaLobbyState("7041_launch_init");
 
     std::array<std::string, 4> stage_messages;
     for (size_t stage_index = 0; stage_index < stage_messages.size(); ++stage_index) {
@@ -6687,6 +6873,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
         GBE_local_lobby.bot_radiant = request.bot_radiant;
     if (request.has_bot_dire)
         GBE_local_lobby.bot_dire = request.bot_dire;
+    GBE_PublishSharedDotaLobbyState("7046_set_details");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7046"))
         return true;
@@ -6740,6 +6927,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
         else
             GBE_local_lobby.bot_difficulty_radiant = request.bot_difficulty;
     }
+    GBE_PublishSharedDotaLobbyState("7047_set_team_slot");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7047"))
         return true;
@@ -6843,6 +7031,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
     GBE_local_lobby.chat_channel_id = 0;
     GBE_local_lobby.chat_channel_name.clear();
     GBE_local_lobby.chat_channel_type = 0;
+    GBE_PublishSharedDotaLobbyState("7272_leave_chat");
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -6876,6 +7065,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequ
     GBE_local_lobby.broadcast_country_code = request.has_country_code ? request.country_code : std::string();
     GBE_local_lobby.broadcast_description = request.has_description ? request.description : std::string();
     GBE_local_lobby.broadcast_language_code = request.has_language_code ? request.language_code : std::string();
+    GBE_PublishSharedDotaLobbyState("7149_join_broadcast");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7149"))
         return true;
@@ -6942,6 +7132,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyUpdateBroadcastChannelInfoReques
         GBE_local_lobby.broadcast_description = request.description;
     if (request.has_language_code)
         GBE_local_lobby.broadcast_language_code = request.language_code;
+    GBE_PublishSharedDotaLobbyState("7367_update_broadcast");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7367"))
         return true;
@@ -6980,6 +7171,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCloseBroadcastChannelReq
     GBE_local_lobby.broadcast_country_code.clear();
     GBE_local_lobby.broadcast_description.clear();
     GBE_local_lobby.broadcast_language_code.clear();
+    GBE_PublishSharedDotaLobbyState("8054_close_broadcast");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "8054"))
         return true;
@@ -7072,6 +7264,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDestroyLobbyRequest(uint64 request_jo
     GBE_local_lobby.broadcast_description.clear();
     GBE_local_lobby.broadcast_language_code.clear();
     GBE_local_lobby.pass_key.clear();
+    GBE_PublishSharedDotaLobbyState("8246_destroy");
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -7290,7 +7483,12 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
     const uint32 masked_emsg = GBE_GC_MaskedEMsg(unMsgType);
     GBE_GC_DebugLog("GC_SEND_DOTA", "outer_emsg=%u len=%u", masked_emsg, cubData);
 
+    if (is_server)
+        GBE_RestoreSharedDotaLobbyState("handle_dota_client_message");
+
     if (masked_emsg == GBE_kEMsgGCServerHello) {
+        GBE_RestoreSharedDotaLobbyState("server_hello");
+
         GBE_DotaServerHelloContext server_hello_context{};
         if (!GBE_ExtractDirectDotaServerHelloContext(unMsgType, pubData, cubData, server_hello_context)) {
             GBE_GC_DebugLog("GC_SEND_DOTA", "ignored direct ServerHello payload because parsing failed");

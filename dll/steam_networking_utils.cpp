@@ -17,10 +17,6 @@
 
 #include "dll/steam_networking_utils.h"
 
-
-FnSteamNetConnectionStatusChanged Steam_Networking_Utils::connection_status_changed_callback = nullptr;
-FnSteamNetAuthenticationStatusChanged Steam_Networking_Utils::auth_status_changed_callback = nullptr;
-
 void Steam_Networking_Utils::steam_callback(void *object, Common_Message *msg)
 {
     // PRINT_DEBUG_ENTRY();
@@ -53,16 +49,6 @@ Steam_Networking_Utils::~Steam_Networking_Utils()
 {
     this->network->rmCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Networking_Utils::steam_callback, this);
     this->run_every_runcb->remove(&Steam_Networking_Utils::steam_run_every_runcb, this);
-}
-
-FnSteamNetConnectionStatusChanged Steam_Networking_Utils::get_global_connection_status_changed_callback()
-{
-    return connection_status_changed_callback;
-}
-
-FnSteamNetAuthenticationStatusChanged Steam_Networking_Utils::get_global_auth_status_changed_callback()
-{
-    return auth_status_changed_callback;
 }
 
 void Steam_Networking_Utils::free_steam_message_data(SteamNetworkingMessage_t *pMsg)
@@ -375,18 +361,6 @@ bool Steam_Networking_Utils::SetConfigValue( ESteamNetworkingConfigValue eValue,
     PRINT_DEBUG("TODO %i %i " "%" PRIdPTR " %i %p", eValue, eScopeType, scopeObj, eDataType, pArg);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    if (eScopeType == k_ESteamNetworkingConfig_Global && eDataType == k_ESteamNetworkingConfig_Ptr) {
-        if (eValue == k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged) {
-            connection_status_changed_callback = pArg ? *static_cast<FnSteamNetConnectionStatusChanged const *>(pArg) : nullptr;
-            return true;
-        }
-
-        if (eValue == k_ESteamNetworkingConfig_Callback_AuthStatusChanged) {
-            auth_status_changed_callback = pArg ? *static_cast<FnSteamNetAuthenticationStatusChanged const *>(pArg) : nullptr;
-            return true;
-        }
-    }
-
     return true;
 }
 
@@ -403,39 +377,7 @@ ESteamNetworkingGetConfigValueResult Steam_Networking_Utils::GetConfigValue( ESt
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-
-    if (eScopeType != k_ESteamNetworkingConfig_Global) {
-        return k_ESteamNetworkingGetConfigValue_BadScopeObj;
-    }
-
-    const void *value_bytes = nullptr;
-    if (eValue == k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged) {
-        value_bytes = &connection_status_changed_callback;
-    } else if (eValue == k_ESteamNetworkingConfig_Callback_AuthStatusChanged) {
-        value_bytes = &auth_status_changed_callback;
-    } else {
-        return k_ESteamNetworkingGetConfigValue_BadValue;
-    }
-
-    if (pOutDataType) {
-        *pOutDataType = k_ESteamNetworkingConfig_Ptr;
-    }
-
-    if (!cbResult) {
-        return k_ESteamNetworkingGetConfigValue_BufferTooSmall;
-    }
-
-    const size_t required_size = (eValue == k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged)
-        ? sizeof(connection_status_changed_callback)
-        : sizeof(auth_status_changed_callback);
-    if (!pResult || *cbResult < required_size) {
-        *cbResult = required_size;
-        return k_ESteamNetworkingGetConfigValue_BufferTooSmall;
-    }
-
-    memcpy(pResult, value_bytes, required_size);
-    *cbResult = required_size;
-    return k_ESteamNetworkingGetConfigValue_OK;
+    return k_ESteamNetworkingGetConfigValue_BadValue;
 }
 
 

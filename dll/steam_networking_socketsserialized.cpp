@@ -16,43 +16,6 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/steam_networking_socketsserialized.h"
-#include "dll/steam_networking_utils.h"
-
-
-namespace {
-
-template <typename T>
-const T *as_serialized_callback_payload(const void *pMsg, uint32 cbMsg)
-{
-    if (!pMsg) return nullptr;
-
-    if (cbMsg == sizeof(T)) {
-        return static_cast<const T *>(pMsg);
-    }
-
-    if (cbMsg == sizeof(int) + sizeof(T)) {
-        const auto *bytes = static_cast<const uint8_t *>(pMsg);
-        int callback_id = 0;
-        memcpy(&callback_id, bytes, sizeof(callback_id));
-        if (callback_id == T::k_iCallback) {
-            return reinterpret_cast<const T *>(bytes + sizeof(callback_id));
-        }
-    }
-
-    return nullptr;
-}
-
-template <typename T>
-bool post_serialized_callback(SteamCallBacks *callbacks, const void *pMsg, uint32 cbMsg)
-{
-    const T *payload = as_serialized_callback_payload<T>(pMsg, cbMsg);
-    if (!payload) return false;
-
-    callbacks->addCBResult(T::k_iCallback, const_cast<T *>(payload), sizeof(T));
-    return true;
-}
-
-}
 
 
 void Steam_Networking_Sockets_Serialized::steam_callback(void *object, Common_Message *msg)
@@ -150,46 +113,8 @@ int Steam_Networking_Sockets_Serialized::GetCachedRelayTicket( uint32 idxTicket,
 
 void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pMsg, uint32 cbMsg )
 {
-    PRINT_DEBUG("cbMsg=%u", cbMsg);
-
-    FnSteamNetConnectionStatusChanged connection_status_changed = nullptr;
-    FnSteamNetAuthenticationStatusChanged auth_status_changed = nullptr;
-    SteamNetConnectionStatusChangedCallback_t connection_status{};
-    SteamNetAuthenticationStatus_t auth_status{};
-    bool have_connection_status = false;
-    bool have_auth_status = false;
-
-    {
-        std::lock_guard<std::recursive_mutex> lock(global_mutex);
-
-        if (const auto *payload = as_serialized_callback_payload<SteamNetConnectionStatusChangedCallback_t>(pMsg, cbMsg)) {
-            connection_status = *payload;
-            have_connection_status = true;
-            callbacks->addCBResult(connection_status.k_iCallback, &connection_status, sizeof(connection_status));
-            connection_status_changed = Steam_Networking_Utils::get_global_connection_status_changed_callback();
-        } else if (const auto *payload = as_serialized_callback_payload<SteamNetAuthenticationStatus_t>(pMsg, cbMsg)) {
-            auth_status = *payload;
-            have_auth_status = true;
-            callbacks->addCBResult(auth_status.k_iCallback, &auth_status, sizeof(auth_status));
-            auth_status_changed = Steam_Networking_Utils::get_global_auth_status_changed_callback();
-        } else if (post_serialized_callback<SteamNetworkingSocketsConfigUpdated_t>(callbacks, pMsg, cbMsg) ||
-                   post_serialized_callback<SteamNetworkingSocketsRecvP2PFailure_t>(callbacks, pMsg, cbMsg) ||
-                   post_serialized_callback<SteamNetworkingSocketsRecvP2PRendezvous_t>(callbacks, pMsg, cbMsg) ||
-                   post_serialized_callback<SteamNetworkingSocketsCert_t>(callbacks, pMsg, cbMsg)) {
-            return;
-        } else {
-            PRINT_DEBUG("unhandled serialized networking callback payload size=%u", cbMsg);
-            return;
-        }
-    }
-
-    if (have_connection_status && connection_status_changed) {
-        connection_status_changed(&connection_status);
-    }
-
-    if (have_auth_status && auth_status_changed) {
-        auth_status_changed(&auth_status);
-    }
+    PRINT_DEBUG_TODO();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
 }
 
 bool Steam_Networking_Sockets_Serialized::GetSTUNServer(int dont_know, char *buf, unsigned int len)

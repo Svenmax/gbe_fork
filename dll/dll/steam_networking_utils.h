@@ -53,15 +53,9 @@ public ISteamNetworkingUtils
     static void steam_callback(void *object, Common_Message *msg);
     static void steam_run_every_runcb(void *object);
 
-    static FnSteamNetConnectionStatusChanged connection_status_changed_callback;
-    static FnSteamNetAuthenticationStatusChanged auth_status_changed_callback;
-
 public:
     Steam_Networking_Utils(class Settings *settings, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb);
     ~Steam_Networking_Utils();
-
-    static FnSteamNetConnectionStatusChanged get_global_connection_status_changed_callback();
-    static FnSteamNetAuthenticationStatusChanged get_global_auth_status_changed_callback();
 
     /// Allocate and initialize a message object.  Usually the reason
     /// you call this is to pass it to ISteamNetworkingSockets::SendMessages.

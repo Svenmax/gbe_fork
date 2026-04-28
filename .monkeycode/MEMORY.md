@@ -31,6 +31,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 client/server GC 实例构造位置]
+- Date: 2026-04-28
+- Context: Agent 在继续排查 practice lobby start-game 阶段的 server-side GC 上下文同步时发现
+- Category: 代码结构
+- Instructions:
+  - 当前 `gbe_fork` 会在同一个 `dll/steam_client.cpp` 中同时构造 client-side `steam_game_coordinator` 与 server-side `steam_gameserver_game_coordinator`。
+  - 两个 coordinator 共享同一个 `network` 对象，但分别持有 `settings_client` 和 `settings_server`，因此 lobby 运行态默认仍是各自实例内状态，不能假设会自动同步。
+
 [Dota2 7038 初始 CacheSubscribed 的 helper 边界]
 - Date: 2026-04-28
 - Context: Agent 在继续修复 `7038 / PracticeLobbyCreate` 崩溃、对齐提交 `a3561972e01a81c2c6c37ef9b070c5c284cc6182` 时发现
@@ -571,15 +579,6 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 只让 `7038 / PracticeLobbyCreate` 建房路径对齐 `a3561972e01a81c2c6c37ef9b070c5c284cc6182`。
   - `7041 / PracticeLobbyLaunch` 以及之后为开始游戏链路新增的修复要继续保留并往前推进，不能因为建房对齐而一起回退。
 
-[SteamNetworkingSocketsSerialized 状态消息转发约定]
-- Date: 2026-04-28
-- Context: Agent 在继续排查 `7041` 后本地 networking 卡点时发现
-- Category: 代码模式
-- Instructions:
-  - `SteamNetworkingSocketsSerialized::PostConnectionStateMsg()` 需要把外部 networking 库送进来的序列化状态结构重新投递到 Steam callback 队列，否则客户端即使进入 `SERVERSETUP/RUN` 也可能卡在本地连接阶段。
-  - 当前这类序列化状态消息至少要覆盖 `SteamNetConnectionStatusChangedCallback_t` 与 `SteamNetAuthenticationStatus_t`，并兼容“纯 payload”与“前置 4 字节 callback id + payload”两种内存布局。
-  - 如果游戏通过 `ISteamNetworkingUtils::SetGlobalCallback_*` 注册了 connection/auth callback，转发 `PostConnectionStateMsg()` 时还要同步触发对应的全局函数指针，不能只塞进常规 Steam callback 队列。
-
 [Dota2 7041 网络降级优先策略]
 - Date: 2026-04-28
 - Context: 用户要求在 `7041 / PracticeLobbyLaunch` 链路中优先绕过 `SteamNetworkingSocketsSerialized` 限制，强制客户端走 legacy UDP 直连
@@ -587,3 +586,19 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 启动链路里凡是 donor 模板带有 `server_id`（64 位 SteamID 路由标识）的地方，优先将该 8 字节值整体清零，不要再替换成本地生成的 server SteamID。
   - `connect` 字符串需要继续强制 patch 为纯 IP 直连目标，优先使用 `127.0.0.1:27015`，并保持原 donor 总字节长度不变。
   - 如果启动相关 payload 中存在明显的 SDR ticket、证书或 relay 标识位，应优先做“保持长度不变的最小清零/降级”处理，目标是让客户端放弃 SDR/P2P 握手，退回原始 socket 连接。
+
+[Dota2 进图后优先拦截服务器授权请求]
+- Date: 2026-04-28
+- Context: 用户要求在客户端已成功直连本地服务器并达到 `SIGNONSTATE_FULL` 后，优先补齐服务器侧向 GC 申请比赛授权/比赛详情的回复
+- Instructions:
+  - 当进入地图后，如果本地启动的 server 再次通过 `SendMessage_` 向 GC 发起新请求，要优先把这些 server-side 请求与客户端请求区分开来处理。
+  - 优先观察并拦截 server 发出的 `k_EMsgGCServerHello` 或比赛详情/比赛授权类请求，再基于官方 donor 样本回放对应的授权包或比赛参数包。
+  - 回放给 server 的授权类消息必须动态 patch 当前 `MatchID` 和 `LobbyID`，目标是让本地服务器脱离“等待授权/等待比赛参数”状态并推进到选人界面。
+
+[Dota2 server/client GC 实例的 lobby 状态隔离]
+- Date: 2026-04-28
+- Context: Agent 在复查 `gbe_gc_debug.log` 中 server-side `4511` 多次出现 `local_lobby_id=0` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当前 `Steam_Game_Coordinator` 的 `GBE_local_lobby` 是实例级状态；client 侧在 `7038/7041` 中维护出的 lobby 运行态，不会自动出现在后起的 server-side GC 实例里。
+  - 如果日志里 server-side `4511 / k_EMsgGCLANServerAvailable` 已经上报了正确 `lobby_id`，但同时打印 `local_lobby_id=0 matches_local=0`，应优先排查 client/server GC 实例之间的 lobby 状态同步，而不是先假设缺少某条固定 donor 回包。
