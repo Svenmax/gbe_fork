@@ -1603,6 +1603,74 @@ static bool GBE_EncodeVarUint64WithExpectedSize(uint64 value, size_t expected_si
     return true;
 }
 
+static bool GBE_RewriteProtoVarintBytesRecursive(
+    const std::string &input,
+    const std::vector<uint8> &old_encoded,
+    uint64 new_value,
+    std::string &output,
+    size_t &replacement_count)
+{
+    output.clear();
+    replacement_count = 0;
+
+    size_t offset = 0;
+    while (offset < input.size()) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(
+                reinterpret_cast<const uint8 *>(input.data()),
+                input.size(),
+                offset,
+                field_number,
+                wire_type,
+                field_offset,
+                value_offset,
+                value_size,
+                field_end))
+            return false;
+
+        if (wire_type == 0u) {
+            GBE_AppendVarUint64(output, (static_cast<uint64>(field_number) << 3) | wire_type);
+
+            const uint8 *raw_value = reinterpret_cast<const uint8 *>(input.data() + value_offset);
+            if (value_size == old_encoded.size()
+                && std::memcmp(raw_value, old_encoded.data(), value_size) == 0) {
+                GBE_AppendVarUint64(output, new_value);
+                ++replacement_count;
+            } else {
+                output.append(input.data() + value_offset, value_size);
+            }
+
+            continue;
+        }
+
+        if (wire_type == 2u) {
+            std::string nested_input(input.data() + value_offset, value_size);
+            std::string nested_output;
+            size_t nested_replacement_count = 0;
+            if (GBE_RewriteProtoVarintBytesRecursive(
+                    nested_input,
+                    old_encoded,
+                    new_value,
+                    nested_output,
+                    nested_replacement_count)
+                && nested_replacement_count > 0) {
+                GBE_AppendProtoBytesField(output, field_number, nested_output);
+                replacement_count += nested_replacement_count;
+                continue;
+            }
+        }
+
+        output.append(input.data() + field_offset, field_end - field_offset);
+    }
+
+    return true;
+}
+
 static bool GBE_TryPatchDotaAccountIdVarint(
     std::string &message,
     uint32 account_id,
@@ -1615,6 +1683,31 @@ static bool GBE_TryPatchDotaAccountIdVarint(
     std::string encoded_account_raw;
     GBE_AppendVarUint64(encoded_account_raw, account_id);
     if (encoded_account_raw.size() != GBE_kOldDotaAccountIdVarint.size()) {
+        std::string rewritten_message;
+        size_t replacement_count = 0;
+        if (GBE_RewriteProtoVarintBytesRecursive(
+                message,
+                GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()),
+                account_id,
+                rewritten_message,
+                replacement_count)
+            && replacement_count > 0) {
+            message.swap(rewritten_message);
+            GBE_GC_DebugLog(
+                log_scope,
+                "rewrote account_id varint through protobuf req=%u resp=%u body_size=%zu note=%s account_id=%u encoded_size=%zu old_size=%zu replacements=%zu",
+                request_emsg,
+                response_emsg,
+                body_size,
+                context_note ? context_note : "",
+                account_id,
+                encoded_account_raw.size(),
+                GBE_kOldDotaAccountIdVarint.size(),
+                replacement_count
+            );
+            return true;
+        }
+
         GBE_GC_DebugLog(
             log_scope,
             "skipping account_id varint replacement req=%u resp=%u body_size=%zu note=%s account_id=%u encoded_size=%zu expected=%zu",

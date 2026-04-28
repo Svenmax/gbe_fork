@@ -47,6 +47,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当前日志中缺失 `7451` 会直接导致 `BatchPlayerResources - Failed to get accounts`，这是比 `8880/8096/7504/8801` 这些非关键超时更高优先级的缺口。
   - 分析 `7041` 时序问题时，要注意日志是否仍显示旧的 `0.12` 外围延时；如果是，说明运行结果还没有包含最新本地时序修正。
 
+[Dota2 7041 启动 26 的 account_id patch 风险]
+- Date: 2026-04-28
+- Context: Agent 在复查新一轮 `/workspace/gbe_gc_debug.log` 与 `/workspace/console.txt` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当 `7450 -> 7451` 已经恢复、`BatchPlayerResources - Failed to get accounts` 已消失，但进房后仍无英雄可选时，优先检查 `7041` 发出的 4 条 `26 / PracticeLobbyDetailsUpdate` 里 donor `account_id` 是否仍然残留。
+  - 如果日志出现 `skipping account_id varint replacement req=7041 resp=26 ... encoded_size=5 expected=4`，说明当前账号的 `account_id` varint 比 donor 模板更长，旧的等长字节替换会失效。
+  - 日志里的 `0.117/0.118/0.119/...` 经过 `%.2f` 输出会显示成多个 `0.12`，这不代表仍在运行旧版 `7041` 外围时序。
+
 [Dota2 hoststartgame 后段 direct 处理顺序]
 - Date: 2026-04-23
 - Context: 用户要求继续补齐 `7041` 之后的 host direct 请求时明确指定实现优先级
