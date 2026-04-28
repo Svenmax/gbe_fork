@@ -56,6 +56,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 如果日志出现 `skipping account_id varint replacement req=7041 resp=26 ... encoded_size=5 expected=4`，说明当前账号的 `account_id` varint 比 donor 模板更长，旧的等长字节替换会失效。
   - 日志里的 `0.117/0.118/0.119/...` 经过 `%.2f` 输出会显示成多个 `0.12`，这不代表仍在运行旧版 `7041` 外围时序。
   - donor 模板里的 `account_id` varint patch 现在应只按 protobuf 语义改写 `field 1`，不要再回退到无字段语义的原始字节扫描替换。
+  - 如果 donor 模板本身是“外层包裹消息”或“带 8 字节 direct proto 头的消息”，不能把整包直接当纯 protobuf 做语义重写；应先定位内层消息体，再对消息体中的 `field 1` 做 `account_id` 改写。
 
 [新生成用户 SteamID 的 account_id 范围]
 - Date: 2026-04-28
@@ -458,6 +459,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 这两个对象的 `object_data` 都应重写 `field1 = account_id`，而不是继续依赖旧模板里的 4 字节 varint 等长 raw 替换。
   - 因此 welcome 路径在高位 `AccountID` 场景下，应保留 `version` 与 `steam_id` 的等长替换，但把 `account_id` 改为对 `2002/2012` 做语义级 patch。
   - 当前工程实现上不要直接依赖 Dota 专用 `CMsgClientWelcome` 生成类去访问 `outofdate_subscribed_caches`；更稳的做法是手工遍历 welcome 外层 protobuf 的 `field 3`，再对每个 cache payload 用 `CMsgSOCacheSubscribed` 做局部解析和重写。
+
+[Dota2 lobby SO Cache 的双维度 ID patch]
+- Date: 2026-04-28
+- Context: 用户要求后续处理大厅 SO Cache 时不要只盯单一 `account_id` 路径
+- Instructions:
+  - 大厅 SO Cache 里不仅要处理 `members` 列表中的 32 位 `account_id`，还要处理 `leader_id` 这类 64 位 ID 特征码。
+  - patch donor 模板时必须同时扫荡并安全替换这两个维度，不能只覆盖 `field1 account_id` 而遗漏 lobby owner / leader 的 `steam_id` 语义字段。
+  - 对 protobuf 对象做语义 patch 时，应优先按字段语义重写 `leader_id` 与 `members.account_id`，避免回退到无字段语义的整包盲扫替换。
 
 [Dota2 高位 AccountID 跳过路径的处理策略]
 - Date: 2026-04-22

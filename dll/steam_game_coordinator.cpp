@@ -1674,6 +1674,42 @@ static bool GBE_RewriteProtoVarintBytesRecursive(
     return true;
 }
 
+static bool GBE_RewriteAccountIdVarintInDirectProtoBody(
+    std::string &message,
+    uint32 account_id,
+    size_t &replacement_count)
+{
+    replacement_count = 0;
+
+    if (message.size() < sizeof(ProtoBufMsgHeader_t))
+        return false;
+
+    ProtoBufMsgHeader_t hdr{};
+    std::memcpy(&hdr, message.data(), sizeof(hdr));
+
+    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
+    if (body_offset > message.size())
+        return false;
+
+    const std::string body = message.substr(body_offset);
+    std::string rewritten_body;
+    if (!GBE_RewriteProtoVarintBytesRecursive(
+            body,
+            GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()),
+            1u,
+            account_id,
+            rewritten_body,
+            replacement_count))
+        return false;
+
+    if (replacement_count == 0)
+        return true;
+
+    message.resize(body_offset);
+    message.append(rewritten_body);
+    return true;
+}
+
 static bool GBE_TryPatchDotaAccountIdVarint(
     std::string &message,
     uint32 account_id,
@@ -1685,23 +1721,21 @@ static bool GBE_TryPatchDotaAccountIdVarint(
 {
     std::string encoded_account_raw;
     GBE_AppendVarUint64(encoded_account_raw, account_id);
+
     std::string rewritten_message;
     size_t replacement_count = 0;
-    if (!GBE_RewriteProtoVarintBytesRecursive(
+    const bool full_message_parse_ok = GBE_RewriteProtoVarintBytesRecursive(
             message,
             GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()),
             1u,
             account_id,
             rewritten_message,
-            replacement_count)) {
-        GBE_GC_DebugLog(log_scope, "failed parsing account_id varint rewrite req=%u resp=%u note=%s", request_emsg, response_emsg, context_note ? context_note : "");
-        return false;
-    }
-
-    if (replacement_count == 0) {
+            replacement_count);
+    if (full_message_parse_ok && replacement_count > 0) {
+        message.swap(rewritten_message);
         GBE_GC_DebugLog(
             log_scope,
-            "no semantic account_id varint replacements req=%u resp=%u body_size=%zu note=%s account_id=%u encoded_size=%zu donor_size=%zu target_field=%u",
+            "rewrote semantic account_id varint req=%u resp=%u body_size=%zu note=%s account_id=%u encoded_size=%zu donor_size=%zu replacements=%zu target_field=%u scope=full_message",
             request_emsg,
             response_emsg,
             body_size,
@@ -1709,15 +1743,46 @@ static bool GBE_TryPatchDotaAccountIdVarint(
             account_id,
             encoded_account_raw.size(),
             GBE_kOldDotaAccountIdVarint.size(),
+            replacement_count,
             1u
         );
         return true;
     }
 
-    message.swap(rewritten_message);
+    size_t direct_body_replacements = 0;
+    if (GBE_RewriteAccountIdVarintInDirectProtoBody(message, account_id, direct_body_replacements) && direct_body_replacements > 0) {
+        GBE_GC_DebugLog(
+            log_scope,
+            "rewrote semantic account_id varint req=%u resp=%u body_size=%zu note=%s account_id=%u encoded_size=%zu donor_size=%zu replacements=%zu target_field=%u scope=direct_body",
+            request_emsg,
+            response_emsg,
+            body_size,
+            context_note ? context_note : "",
+            account_id,
+            encoded_account_raw.size(),
+            GBE_kOldDotaAccountIdVarint.size(),
+            direct_body_replacements,
+            1u
+        );
+        return true;
+    }
+
+    if (!full_message_parse_ok) {
+        GBE_GC_DebugLog(
+            log_scope,
+            "account_id semantic rewrite skipped full parse req=%u resp=%u note=%s account_id=%u encoded_size=%zu donor_size=%zu",
+            request_emsg,
+            response_emsg,
+            context_note ? context_note : "",
+            account_id,
+            encoded_account_raw.size(),
+            GBE_kOldDotaAccountIdVarint.size()
+        );
+    }
+
     GBE_GC_DebugLog(
         log_scope,
-        "rewrote semantic account_id varint req=%u resp=%u body_size=%zu note=%s account_id=%u encoded_size=%zu donor_size=%zu replacements=%zu target_field=%u",
+        "no semantic account_id varint replacements req=%u resp=%u body_size=%zu note=%s account_id=%u encoded_size=%zu donor_size=%zu target_field=%u",
         request_emsg,
         response_emsg,
         body_size,
@@ -1725,7 +1790,6 @@ static bool GBE_TryPatchDotaAccountIdVarint(
         account_id,
         encoded_account_raw.size(),
         GBE_kOldDotaAccountIdVarint.size(),
-        replacement_count,
         1u
     );
     return true;
@@ -1902,6 +1966,57 @@ static bool GBE_ExtractProtoPackedUint32Field(const uint8 *data, size_t size, co
         if (!GBE_ReadVarUint64(data, end, offset, value))
             return false;
         values.push_back(static_cast<uint32>(value > 0xFFFFFFFFull ? 0xFFFFFFFFu : value));
+    }
+
+    return true;
+}
+
+static bool GBE_RewriteDotaLobbyTemplateMemberObject(
+    const std::string &input,
+    uint32 account_id,
+    uint64 steam_id,
+    std::string &output)
+{
+    output.clear();
+
+    size_t offset = 0;
+    while (offset < input.size()) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(
+                reinterpret_cast<const uint8 *>(input.data()),
+                input.size(),
+                offset,
+                field_number,
+                wire_type,
+                field_offset,
+                value_offset,
+                value_size,
+                field_end))
+            return false;
+
+        if (field_number == 1u) {
+            if (wire_type == 1u) {
+                GBE_AppendProtoFixed64Field(output, 1u, steam_id);
+                continue;
+            }
+
+            if (wire_type == 0u) {
+                GBE_AppendProtoVarIntField(output, 1u, account_id);
+                continue;
+            }
+        }
+
+        if (field_number == 55u && wire_type == 0u) {
+            GBE_AppendProtoVarIntField(output, 55u, account_id);
+            continue;
+        }
+
+        output.append(input.data() + field_offset, field_end - field_offset);
     }
 
     return true;
@@ -2208,6 +2323,8 @@ static bool GBE_PatchDotaLobbyTemplateIdentifiers(std::string &message, uint32 a
 
 static bool GBE_RewriteDotaLobbyTemplateObject2004(
     const std::string &input,
+    uint32 account_id,
+    uint64 steam_id,
     const std::string &room_name,
     uint32 game_mode,
     uint32 server_region,
@@ -2255,6 +2372,11 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
 
         if (field_number == 13u && wire_type == 0u) {
             GBE_AppendProtoVarIntField(output, 13u, allow_cheats ? 1u : 0u);
+            continue;
+        }
+
+        if (field_number == 11u && wire_type == 1u) {
+            GBE_AppendProtoFixed64Field(output, 11u, steam_id);
             continue;
         }
 
@@ -2318,6 +2440,18 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
             saw_lan_host_ping_location = true;
             if (!lan_host_ping_location.empty())
                 GBE_AppendProtoBytesField(output, 109u, lan_host_ping_location);
+            continue;
+        }
+
+        if (field_number == 120u && wire_type == 2u) {
+            std::string rewritten_member;
+            if (!GBE_RewriteDotaLobbyTemplateMemberObject(
+                    std::string(input.data() + value_offset, value_size),
+                    account_id,
+                    steam_id,
+                    rewritten_member))
+                return false;
+            GBE_AppendProtoBytesField(output, 120u, rewritten_member);
             continue;
         }
 
@@ -2396,8 +2530,56 @@ static bool GBE_RewriteDotaLobbyTemplateObject2014(const std::string &input, con
     return true;
 }
 
+static bool GBE_RewriteDotaLobbyTemplateObject2016(
+    const std::string &input,
+    uint32 account_id,
+    uint64 steam_id,
+    std::string &output)
+{
+    output.clear();
+
+    size_t offset = 0;
+    while (offset < input.size()) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(
+                reinterpret_cast<const uint8 *>(input.data()),
+                input.size(),
+                offset,
+                field_number,
+                wire_type,
+                field_offset,
+                value_offset,
+                value_size,
+                field_end))
+            return false;
+
+        if (field_number == 1u && wire_type == 2u) {
+            std::string rewritten_member;
+            if (!GBE_RewriteDotaLobbyTemplateMemberObject(
+                    std::string(input.data() + value_offset, value_size),
+                    account_id,
+                    steam_id,
+                    rewritten_member))
+                return false;
+            GBE_AppendProtoBytesField(output, 1u, rewritten_member);
+            continue;
+        }
+
+        output.append(input.data() + field_offset, field_end - field_offset);
+    }
+
+    return true;
+}
+
 static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
     std::string &message,
+    uint32 account_id,
+    uint64 steam_id,
     const std::string &player_name,
     const std::string &room_name,
     uint32 game_mode,
@@ -2462,7 +2644,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
             continue;
         }
 
-        if (type_id != 2004u && type_id != 2014u) {
+        if (type_id != 2004u && type_id != 2014u && type_id != 2016u) {
             rewritten_body.append(body.data() + field_offset, field_end - field_offset);
             continue;
         }
@@ -2494,6 +2676,8 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
                 const bool ok = (type_id == 2004u)
                     ? GBE_RewriteDotaLobbyTemplateObject2004(
                         object_data,
+                        account_id,
+                        steam_id,
                         room_name,
                         game_mode,
                         server_region,
@@ -2509,7 +2693,9 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
                         bot_dire,
                         pass_key,
                         rewritten_object)
-                    : GBE_RewriteDotaLobbyTemplateObject2014(object_data, player_name, rewritten_object);
+                    : (type_id == 2014u)
+                        ? GBE_RewriteDotaLobbyTemplateObject2014(object_data, player_name, rewritten_object)
+                        : GBE_RewriteDotaLobbyTemplateObject2016(object_data, account_id, steam_id, rewritten_object);
                 if (!ok)
                     return false;
                 GBE_AppendProtoBytesField(rewritten_subscribed, 2u, rewritten_object);
@@ -2716,24 +2902,6 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
     if (!GBE_DecodeHexString(template_hex, wrapped_message))
         return false;
 
-    if (!GBE_PatchDotaPracticeLobbyLaunchTemplate(
-        wrapped_message,
-        account_id,
-        steam_id,
-        lobby_id,
-        server_id,
-        match_id,
-        game_start_time,
-        connect,
-        stage_index >= 1,
-        stage_index >= 1,
-        stage_index >= 2,
-        stage_index == 0 ? "7041 stage1" :
-        stage_index == 1 ? "7041 stage2" :
-        stage_index == 2 ? "7041 stage3" : "7041 stage4"
-    ))
-        return false;
-
     if (wrapped_message.size() < 8)
         return false;
 
@@ -2756,13 +2924,36 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
     if (!payload_field.found || payload_field.wire_type != 2u || payload_field.value_size < 8u)
         return false;
 
-    const uint8 *payload = outer_body + payload_field.value_offset;
+    std::string inner_payload(
+        reinterpret_cast<const char *>(outer_body + payload_field.value_offset),
+        payload_field.value_size
+    );
+
+    if (!GBE_PatchDotaPracticeLobbyLaunchTemplate(
+        inner_payload,
+        account_id,
+        steam_id,
+        lobby_id,
+        server_id,
+        match_id,
+        game_start_time,
+        connect,
+        stage_index >= 1,
+        stage_index >= 1,
+        stage_index >= 2,
+        stage_index == 0 ? "7041 stage1" :
+        stage_index == 1 ? "7041 stage2" :
+        stage_index == 2 ? "7041 stage3" : "7041 stage4"
+    ))
+        return false;
+
+    const uint8 *payload = reinterpret_cast<const uint8 *>(inner_payload.data());
     uint32 inner_raw_emsg = 0;
     std::memcpy(&inner_raw_emsg, payload, sizeof(inner_raw_emsg));
     if (GBE_GC_MaskedEMsg(inner_raw_emsg) != GBE_kDotaPracticeLobbyDetailsUpdate)
         return false;
 
-    message.assign(reinterpret_cast<const char *>(payload), payload_field.value_size);
+    message.swap(inner_payload);
     return true;
 }
 
@@ -5648,6 +5839,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
 
     if (!GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
             response_24,
+            account_id,
+            steam_id,
             std::string(settings->get_local_name()),
             GBE_local_lobby.room_name,
             GBE_local_lobby.game_mode,
