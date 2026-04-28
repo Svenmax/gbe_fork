@@ -31,6 +31,21 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[网络问题处理约束]
+- Date: 2026-04-28
+- Context: 用户要求后续处理网络问题时避免修改 DNS 配置
+- Instructions:
+  - 以后遇到网络问题，不要修改 DNS 配置。
+  - 如需处理网络访问异常，优先做只读诊断或采用不改 DNS 的替代方案，并先向用户说明。
+
+[旧 steamapi 仓库的有效参考边界]
+- Date: 2026-04-28
+- Context: Agent 在全面排查 `/workspace/steamapi/unpacked/steam_api` 是否能帮助当前 Dota2 practice lobby / GC 卡点时发现
+- Category: 代码结构
+- Instructions:
+  - 旧 `steamapi` 中的 `Steam_Game_Coordinator` 基本只是 `ISteamGameCoordinator` 的队列壳，真实的出站消费由 `SKYNET_API_Worker` 完成，不包含 Dota2-specific practice lobby、match auth、server hello/welcome 逻辑。
+  - 该仓库真正可借鉴的是单进程内 client/server 双实例共享 `Networking`、通过本地回环和 lobby 快照/增量消息做状态同步的架构模式，而不是具体 GC 协议实现。
+
 [Dota2 client/server GC 实例构造位置]
 - Date: 2026-04-28
 - Context: Agent 在继续排查 practice lobby start-game 阶段的 server-side GC 上下文同步时发现
@@ -602,3 +617,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 当前 `Steam_Game_Coordinator` 的 `GBE_local_lobby` 是实例级状态；client 侧在 `7038/7041` 中维护出的 lobby 运行态，不会自动出现在后起的 server-side GC 实例里。
   - 如果日志里 server-side `4511 / k_EMsgGCLANServerAvailable` 已经上报了正确 `lobby_id`，但同时打印 `local_lobby_id=0 matches_local=0`，应优先排查 client/server GC 实例之间的 lobby 状态同步，而不是先假设缺少某条固定 donor 回包。
+
+[Dota2 server-side 4007 后的 24 区分]
+- Date: 2026-04-28
+- Context: Agent 在对照 `console.log`、`gbe_gc_debug.log` 与 direct replay 代码路径时发现
+- Category: 代码模式
+- Instructions:
+  - server-side `4007 / k_EMsgGCServerHello` 之后看到的极小 `24 / CacheSubscribed`，不能默认当作 practice lobby SO cache；需要结合日志确认它是否只是一条过瘦的默认 cache。
+  - 真正与 practice lobby 运行态对应的 `24` 应包含 `2004 / 2014 / 2015 / 2016` 这四类 SO，并能和日志里的 `owner=<Lobby:...>` 语义对上；排查时不要把它和纯 inventory `type_id=1` cache 混为一谈。
