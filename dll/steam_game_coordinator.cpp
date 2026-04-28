@@ -5659,6 +5659,57 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
     );
 }
 
+bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const char *reason)
+{
+    if (!is_server)
+        return false;
+
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.match_id == 0)
+        return false;
+
+    Steam_Client *steam_client = get_steam_client();
+    if (!steam_client || !steam_client->steam_gameserver)
+        return false;
+
+    Steam_GameServer *game_server = steam_client->steam_gameserver;
+    if (!game_server->BLoggedOn())
+        return false;
+
+    const uint64 server_id = game_server->GetSteamID().ConvertToUint64();
+    if (server_id == 0 || GBE_local_lobby.server_id == server_id)
+        return false;
+
+    const uint64 previous_server_id = GBE_local_lobby.server_id;
+    GBE_local_lobby.server_id = server_id;
+
+    if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id)
+        GBE_shared_dota_lobby_state.server_id = server_id;
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_SYNC",
+        "adopted game server SteamID as lobby server_id reason=%s lobby_id=%llu match_id=%llu old=%llu new=%llu",
+        reason ? reason : "unknown",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        static_cast<unsigned long long>(previous_server_id),
+        static_cast<unsigned long long>(server_id)
+    );
+
+    if (!GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, reason ? reason : "server_id_sync")) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "failed queueing direct 26 after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(GBE_local_lobby.match_id),
+            static_cast<unsigned long long>(server_id)
+        );
+        return false;
+    }
+
+    return true;
+}
+
 bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData)
 {
     GBE_RestoreSharedDotaLobbyState("direct_post_login_request");
@@ -6054,6 +6105,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         uint64 lobby_id = 0;
         GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), lobby_id);
 
+        const bool matches_local_lobby = (lobby_id != 0 && lobby_id == GBE_local_lobby.lobby_id);
+        if (matches_local_lobby)
+            GBE_TrySyncDotaLobbyServerIdFromGameServer("4511_lan_server_available");
+
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "consumed req=%u source_job=%llu note=lan server available notification lobby_id=%llu local_lobby_id=%llu matches_local=%u",
@@ -6061,7 +6116,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             static_cast<unsigned long long>(source_job),
             static_cast<unsigned long long>(lobby_id),
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            (lobby_id != 0 && lobby_id == GBE_local_lobby.lobby_id) ? 1u : 0u
+            matches_local_lobby ? 1u : 0u
         );
         return true;
     }
@@ -6111,6 +6166,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             server_cluster,
             allow_custom_games
         );
+
+        GBE_TrySyncDotaLobbyServerIdFromGameServer("4508_game_server_info");
         return true;
     }
 

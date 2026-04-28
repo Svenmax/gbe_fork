@@ -191,6 +191,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `7041` 启动阶段现在优先把 `GBE_local_lobby.server_id` 维持为 `0`，让 donor 模板中的 `server_id` 统一被 patch 成 8 字节零值，而不是本地伪造的 server SteamID。
   - 启动阶段的 `connect` 应优先使用严格的 `127.0.0.1:27015` 双 endpoint，并通过尾部空格补齐到 donor 原始总长度，避免再依赖带零填充 octet 的旧 loopback 字符串。
 
+[Dota2 启动后需用真实 GameServer SteamID 回填 server_id]
+- Date: 2026-04-28
+- Context: Agent 在分析“服务器无法定位 game session”日志并对照 `4511 / LANServerAvailable` 与 `4508 / GameServerInfo` 上行通知时发现
+- Category: 代码模式
+- Instructions:
+  - `7041` 初始阶段保留 `server_id=0` 是允许的，但这只是启动期占位，不应贯穿整个运行态。
+  - 当本地 game server 已经登录 Steam 并开始发送 `4511 / k_EMsgGCLANServerAvailable`、`4508 / k_EMsgGCGameServerInfo` 时，应从 `SteamGameServer::GetSteamID()` 取真实 `GameServer SteamID` 回填到当前 lobby 的 `server_id`。
+  - 回填真实 `server_id` 后，还需要再补发一条 server-side direct `26 / PracticeLobbyDetailsUpdate`，把更新后的 `server_id(6)` 同步进 Dota 自己维护的 GC SOCache；只改 `GBE_local_lobby.server_id` 不足以修复 session 绑定。
+
 [Dota2 Practice Lobby 7041 外围消息节奏]
 - Date: 2026-04-23
 - Context: Agent 在对照 `/workspace/hoststartgame.zip` 补齐启动外围消息时发现
