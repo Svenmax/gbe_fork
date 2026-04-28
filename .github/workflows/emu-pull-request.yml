@@ -34,17 +34,17 @@ permissions:
 jobs:
   emu-win-all:
     name: "win"
-    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    if: ${{ !cancelled() && github.event_name == 'push' }}
     uses: "./.github/workflows/emu-build-all-win.yml"
 
   emu-linux-all:
     name: "linux"
-    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    if: ${{ !cancelled() && github.event_name == 'push' }}
     uses: "./.github/workflows/emu-build-all-linux.yml"
 
   emu-win-debug:
     name: "win"
-    if: ${{ !cancelled() && github.event_name == 'push' }}
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     uses: "./.github/workflows/emu-build-all-win.yml"
     with:
       matrix_prj: '["api_regular"]'
