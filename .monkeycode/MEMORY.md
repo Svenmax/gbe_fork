@@ -40,6 +40,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当 `rewrite_runtime_fields == false` 时，`2004 / CSODOTALobby` 的成员相关字段 `120/121/122/123/124` 应保留 donor 原始结构，不要做运行态瘦身、重排或补写 `121=0`。
   - `2015/2016` 与 `2004` 成员结构压缩只保留给 `7041` 之后的运行态改写路径使用，不要混入建房初始 `24`。
 
+[Dota2 开始游戏卡在本地网络连接状态回调]
+- Date: 2026-04-28
+- Context: Agent 在分析 `STEAM_LOG_1395829013.log` 与 `gbe_gc_debug.log` 的新一轮开始游戏日志时发现
+- Category: 代码模式
+- Instructions:
+  - 如果 `7041` 后客户端已经把 lobby rich presence 推进到 `SERVERSETUP` 和 `RUN`，并且随后能看到 `SteamGameServer::InitGameServer()`、`SendMessage_() 4007`、`BeginAuthSession()`、`7450 -> 7451`，说明 GC 启动包主链路已经基本打通。
+  - 这时若 Steam 日志开始持续刷 `Steam_Networking_Sockets_Serialized::PostConnectionStateMsg() // TODO`，且看不到对应的真实连接状态回调消费，应优先排查本地 `SteamNetworkingSocketsSerialized` 的连接状态回调实现，而不是继续优先改 `7038/7041` 的 GC 包序。
+  - 在该阶段，`GetCertAsync() // TODO`、`GetSTUNServer() // TODO` 和重复的 `PostConnectionStateMsg() // TODO` 组合，是“客户端已启动本地 server 但没有继续进入英雄选择/游戏中”的高优先级信号。
+
 [gbe_fork 记忆文件归档位置]
 - Date: 2026-04-28
 - Context: 用户要求后续在 `gbe_fork` 相关工作中统一记录记忆位置
@@ -150,6 +159,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当前高置信度官方启动顺序是连续 4 条 `26 / PracticeLobbyDetailsUpdate`：先 `state=SERVERSETUP + match_id`，再补 `server_id + game_start_time`，再切到 `state=RUN + connect`，最后补 `game_state=1` 且把 `2015` 缩成空对象。
   - 启动 donor 模板里的旧 `connect` 字符串长度固定为 38，做字节替换时必须保持绝对等长；当前可用的本地 loopback 替换串为 `127.000.000.01:27015 127.000.1.1:27015`。
   - 启动相关模板 patch 至少需要处理 `lobby_id`、`account_id`、`steam_id`、`match_id`、`server_id`、`game_start_time` 和 `connect`，其中 `match_id` 与 `game_start_time` 都必须维持 donor varint 的原始编码长度。
+
+[Dota2 7041 网络降级使用严格 loopback connect]
+- Date: 2026-04-28
+- Context: Agent 在继续处理 `7041 / PracticeLobbyLaunch` 的 SDR 降级时发现
+- Category: 代码模式
+- Instructions:
+  - `7041` 启动阶段现在优先把 `GBE_local_lobby.server_id` 维持为 `0`，让 donor 模板中的 `server_id` 统一被 patch 成 8 字节零值，而不是本地伪造的 server SteamID。
+  - 启动阶段的 `connect` 应优先使用严格的 `127.0.0.1:27015` 双 endpoint，并通过尾部空格补齐到 donor 原始总长度，避免再依赖带零填充 octet 的旧 loopback 字符串。
 
 [Dota2 Practice Lobby 7041 外围消息节奏]
 - Date: 2026-04-23
@@ -553,3 +570,20 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 只让 `7038 / PracticeLobbyCreate` 建房路径对齐 `a3561972e01a81c2c6c37ef9b070c5c284cc6182`。
   - `7041 / PracticeLobbyLaunch` 以及之后为开始游戏链路新增的修复要继续保留并往前推进，不能因为建房对齐而一起回退。
+
+[SteamNetworkingSocketsSerialized 状态消息转发约定]
+- Date: 2026-04-28
+- Context: Agent 在继续排查 `7041` 后本地 networking 卡点时发现
+- Category: 代码模式
+- Instructions:
+  - `SteamNetworkingSocketsSerialized::PostConnectionStateMsg()` 需要把外部 networking 库送进来的序列化状态结构重新投递到 Steam callback 队列，否则客户端即使进入 `SERVERSETUP/RUN` 也可能卡在本地连接阶段。
+  - 当前这类序列化状态消息至少要覆盖 `SteamNetConnectionStatusChangedCallback_t` 与 `SteamNetAuthenticationStatus_t`，并兼容“纯 payload”与“前置 4 字节 callback id + payload”两种内存布局。
+  - 如果游戏通过 `ISteamNetworkingUtils::SetGlobalCallback_*` 注册了 connection/auth callback，转发 `PostConnectionStateMsg()` 时还要同步触发对应的全局函数指针，不能只塞进常规 Steam callback 队列。
+
+[Dota2 7041 网络降级优先策略]
+- Date: 2026-04-28
+- Context: 用户要求在 `7041 / PracticeLobbyLaunch` 链路中优先绕过 `SteamNetworkingSocketsSerialized` 限制，强制客户端走 legacy UDP 直连
+- Instructions:
+  - 启动链路里凡是 donor 模板带有 `server_id`（64 位 SteamID 路由标识）的地方，优先将该 8 字节值整体清零，不要再替换成本地生成的 server SteamID。
+  - `connect` 字符串需要继续强制 patch 为纯 IP 直连目标，优先使用 `127.0.0.1:27015`，并保持原 donor 总字节长度不变。
+  - 如果启动相关 payload 中存在明显的 SDR ticket、证书或 relay 标识位，应优先做“保持长度不变的最小清零/降级”处理，目标是让客户端放弃 SDR/P2P 握手，退回原始 socket 连接。

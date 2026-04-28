@@ -143,12 +143,32 @@ static const std::array<uint8, 8> GBE_kOldDotaPracticeLobbyServerIdFixed64 = { 0
 static const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyGameStartTimeVarint = { 0xAE, 0xBB, 0xA3, 0xCF, 0x06 };
 static constexpr const char *GBE_kOldDotaPracticeLobbyConnect = "117.157.79.194:27015 10.110.4.21:27015";
 static constexpr const char *GBE_kOldDotaPracticeLobbyLobbyIdText = "29809934128949123";
-static constexpr const char *GBE_kLocalDotaPracticeLobbyConnect = "127.000.000.01:27015 127.000.1.1:27015";
+static constexpr const char *GBE_kLocalDotaPracticeLobbyLoopbackEndpoint = "127.0.0.1:27015";
+
+static std::string GBE_BuildDotaPracticeLobbyConnectPair(const std::string &endpoint)
+{
+    const size_t expected_size = std::strlen(GBE_kOldDotaPracticeLobbyConnect);
+    const size_t separator_length = 1u;
+    const size_t combined_size = endpoint.size() * 2 + separator_length;
+    if (combined_size > expected_size)
+        return std::string();
+
+    std::string connect = endpoint;
+    connect.push_back(' ');
+    connect.append(endpoint);
+    connect.resize(expected_size, ' ');
+    return connect;
+}
+
+static std::string GBE_FormatDotaPracticeLobbyLoopbackConnect()
+{
+    return GBE_BuildDotaPracticeLobbyConnectPair(GBE_kLocalDotaPracticeLobbyLoopbackEndpoint);
+}
 
 static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
 {
     if (ip == 0)
-        return GBE_kLocalDotaPracticeLobbyConnect;
+        return GBE_FormatDotaPracticeLobbyLoopbackConnect();
 
     const uint32 octet1 = (ip >> 24) & 0xFFu;
     const uint32 octet2 = (ip >> 16) & 0xFFu;
@@ -170,8 +190,7 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
 
     const size_t expected_size = std::strlen(GBE_kOldDotaPracticeLobbyConnect);
     const size_t endpoint_size = std::strlen(endpoint);
-    const size_t separator_length = 1u;
-    const size_t combined_size = endpoint_size * 2 + separator_length; // duplicated endpoints plus one space separator
+    const size_t combined_size = endpoint_size * 2 + 1u; // duplicated endpoints plus one space separator
     // Falls back to loopback endpoint and returns early when duplicated endpoints exceed the original/reference length.
     if (combined_size > expected_size) {
         GBE_GC_DebugLog(
@@ -180,15 +199,11 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
             combined_size,
             expected_size
         );
-        return GBE_kLocalDotaPracticeLobbyConnect;
+        return GBE_FormatDotaPracticeLobbyLoopbackConnect();
     }
 
     // Dota expects two endpoints separated by a space, then padded to the original/reference length.
-    std::string connect = endpoint;
-    connect.push_back(' ');
-    connect.append(endpoint);
-    connect.resize(expected_size, ' ');
-    return connect;
+    return GBE_BuildDotaPracticeLobbyConnectPair(endpoint);
 }
 
 static constexpr uint32 GBE_kSteamServersAvailable = 5501u;
@@ -2934,23 +2949,6 @@ static uint64 GBE_GenerateDotaMatchId()
     }
 
     return 8781757536ull;
-}
-
-static uint64 GBE_GenerateDotaServerId()
-{
-    std::random_device device;
-    std::mt19937_64 generator(
-        (static_cast<uint64>(device()) << 32) ^
-        static_cast<uint64>(std::chrono::high_resolution_clock::now().time_since_epoch().count())
-    );
-
-    for (int attempt = 0; attempt < 128; ++attempt) {
-        const uint64 candidate = 0x0100000000000000ull | (generator() & 0x00FFFFFFFFFFFFFFull);
-        if (candidate != 0)
-            return candidate;
-    }
-
-    return 0x0102030405060708ull;
 }
 
 static const char *GBE_GetDotaPracticeLobbyLaunchStageHex(size_t stage_index)
@@ -6429,8 +6427,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     const uint32 account_id = settings->get_local_steam_id().GetAccountID();
 
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
-    GBE_local_lobby.server_id = GBE_GenerateDotaServerId();
-    GBE_local_lobby.connect = GBE_FormatDotaPracticeLobbyConnectFromIp(network ? network->getOwnIP() : 0);
+    GBE_local_lobby.server_id = 0;
+    GBE_local_lobby.connect = GBE_FormatDotaPracticeLobbyLoopbackConnect();
     GBE_local_lobby.game_start_time = static_cast<uint32>(std::time(nullptr));
 
     std::array<std::string, 4> stage_messages;
