@@ -1606,6 +1606,7 @@ static bool GBE_EncodeVarUint64WithExpectedSize(uint64 value, size_t expected_si
 static bool GBE_RewriteProtoVarintBytesRecursive(
     const std::string &input,
     const std::vector<uint8> &old_encoded,
+    uint32 target_field_number,
     uint64 new_value,
     std::string &output,
     size_t &replacement_count)
@@ -1637,7 +1638,8 @@ static bool GBE_RewriteProtoVarintBytesRecursive(
             GBE_AppendVarUint64(output, (static_cast<uint64>(field_number) << 3) | wire_type);
 
             const uint8 *raw_value = reinterpret_cast<const uint8 *>(input.data() + value_offset);
-            if (value_size == old_encoded.size()
+            if (field_number == target_field_number
+                && value_size == old_encoded.size()
                 && std::memcmp(raw_value, old_encoded.data(), value_size) == 0) {
                 GBE_AppendVarUint64(output, new_value);
                 ++replacement_count;
@@ -1655,6 +1657,7 @@ static bool GBE_RewriteProtoVarintBytesRecursive(
             if (GBE_RewriteProtoVarintBytesRecursive(
                     nested_input,
                     old_encoded,
+                    target_field_number,
                     new_value,
                     nested_output,
                     nested_replacement_count)
@@ -1682,52 +1685,49 @@ static bool GBE_TryPatchDotaAccountIdVarint(
 {
     std::string encoded_account_raw;
     GBE_AppendVarUint64(encoded_account_raw, account_id);
-    if (encoded_account_raw.size() != GBE_kOldDotaAccountIdVarint.size()) {
-        std::string rewritten_message;
-        size_t replacement_count = 0;
-        if (GBE_RewriteProtoVarintBytesRecursive(
-                message,
-                GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()),
-                account_id,
-                rewritten_message,
-                replacement_count)
-            && replacement_count > 0) {
-            message.swap(rewritten_message);
-            GBE_GC_DebugLog(
-                log_scope,
-                "rewrote account_id varint through protobuf req=%u resp=%u body_size=%zu note=%s account_id=%u encoded_size=%zu old_size=%zu replacements=%zu",
-                request_emsg,
-                response_emsg,
-                body_size,
-                context_note ? context_note : "",
-                account_id,
-                encoded_account_raw.size(),
-                GBE_kOldDotaAccountIdVarint.size(),
-                replacement_count
-            );
-            return true;
-        }
+    std::string rewritten_message;
+    size_t replacement_count = 0;
+    if (!GBE_RewriteProtoVarintBytesRecursive(
+            message,
+            GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()),
+            1u,
+            account_id,
+            rewritten_message,
+            replacement_count)) {
+        GBE_GC_DebugLog(log_scope, "failed parsing account_id varint rewrite req=%u resp=%u note=%s", request_emsg, response_emsg, context_note ? context_note : "");
+        return false;
+    }
 
+    if (replacement_count == 0) {
         GBE_GC_DebugLog(
             log_scope,
-            "skipping account_id varint replacement req=%u resp=%u body_size=%zu note=%s account_id=%u encoded_size=%zu expected=%zu",
+            "no semantic account_id varint replacements req=%u resp=%u body_size=%zu note=%s account_id=%u encoded_size=%zu donor_size=%zu target_field=%u",
             request_emsg,
             response_emsg,
             body_size,
             context_note ? context_note : "",
             account_id,
             encoded_account_raw.size(),
-            GBE_kOldDotaAccountIdVarint.size()
+            GBE_kOldDotaAccountIdVarint.size(),
+            1u
         );
         return true;
     }
 
-    const std::vector<uint8> encoded_account(encoded_account_raw.begin(), encoded_account_raw.end());
-    if (!GBE_FindAndOverwriteBytes(message, GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()), encoded_account)) {
-        GBE_GC_DebugLog(log_scope, "failed replacing account_id bytes account_id=%u", account_id);
-        return false;
-    }
-
+    message.swap(rewritten_message);
+    GBE_GC_DebugLog(
+        log_scope,
+        "rewrote semantic account_id varint req=%u resp=%u body_size=%zu note=%s account_id=%u encoded_size=%zu donor_size=%zu replacements=%zu target_field=%u",
+        request_emsg,
+        response_emsg,
+        body_size,
+        context_note ? context_note : "",
+        account_id,
+        encoded_account_raw.size(),
+        GBE_kOldDotaAccountIdVarint.size(),
+        replacement_count,
+        1u
+    );
     return true;
 }
 

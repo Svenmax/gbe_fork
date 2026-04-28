@@ -124,9 +124,11 @@ bool set_env_variable(const std::string &name, const std::string &value)
 
 unsigned generate_account_id()
 {
-    int a = 0;
+    constexpr uint32 kMaxFourByteVarintAccountId = 0x0FFFFFFF;
+
+    uint32 a = 0;
     randombytes((char *)&a, sizeof(a));
-    a = abs(a);
+    a %= kMaxFourByteVarintAccountId;
     if (!a) ++a;
     return a;
 }

@@ -55,6 +55,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当 `7450 -> 7451` 已经恢复、`BatchPlayerResources - Failed to get accounts` 已消失，但进房后仍无英雄可选时，优先检查 `7041` 发出的 4 条 `26 / PracticeLobbyDetailsUpdate` 里 donor `account_id` 是否仍然残留。
   - 如果日志出现 `skipping account_id varint replacement req=7041 resp=26 ... encoded_size=5 expected=4`，说明当前账号的 `account_id` varint 比 donor 模板更长，旧的等长字节替换会失效。
   - 日志里的 `0.117/0.118/0.119/...` 经过 `%.2f` 输出会显示成多个 `0.12`，这不代表仍在运行旧版 `7041` 外围时序。
+  - donor 模板里的 `account_id` varint patch 现在应只按 protobuf 语义改写 `field 1`，不要再回退到无字段语义的原始字节扫描替换。
+
+[新生成用户 SteamID 的 account_id 范围]
+- Date: 2026-04-28
+- Context: 用户要求把通用 `generate_account_id()` 全局收敛到 4 字节 varint 范围
+- Category: 代码模式
+- Instructions:
+  - 通用 `generate_account_id()` 应只生成 `1..0x0FFFFFFF` 范围内的值，确保所有基于它生成的新 `account_id` 在 protobuf 中始终不超过 4 字节 varint。
+  - 这会同时影响 user、anon user、server、anonserver、lobby 等依赖 `generate_account_id()` 的新 ID 生成路径。
 
 [Dota2 hoststartgame 后段 direct 处理顺序]
 - Date: 2026-04-23
