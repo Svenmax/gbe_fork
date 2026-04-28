@@ -3731,63 +3731,6 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
     return true;
 }
 
-static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(
-    uint64 steam_id,
-    uint32 account_id,
-    const std::string &player_name,
-    std::string &message)
-{
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)
-        return false;
-
-    if (!GBE_BuildDotaDirectReplayMessage(
-            GBE_kDotaPracticeLobbyCacheSubscribedTemplate,
-            sizeof(GBE_kDotaPracticeLobbyCacheSubscribedTemplate),
-            account_id,
-            steam_id,
-            false,
-            false,
-            false,
-            0,
-            7038u,
-            24u,
-            0,
-            "practice lobby cache template",
-            message)) {
-        return false;
-    }
-
-    if (!GBE_PatchDotaLobbyTemplateIdentifiers(message, account_id, steam_id, GBE_local_lobby.lobby_id))
-        return false;
-
-    return GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
-        message,
-        account_id,
-        steam_id,
-        false,
-        GBE_local_lobby.state,
-        GBE_local_lobby.game_state,
-        GBE_local_lobby.server_id,
-        GBE_local_lobby.match_id,
-        GBE_local_lobby.game_start_time,
-        GBE_local_lobby.connect,
-        player_name,
-        GBE_local_lobby.room_name,
-        GBE_local_lobby.game_mode,
-        GBE_local_lobby.server_region,
-        GBE_local_lobby.lan,
-        GBE_local_lobby.lan_host_ping_location,
-        GBE_local_lobby.allow_cheats,
-        GBE_local_lobby.fill_with_bots,
-        GBE_local_lobby.allow_spectating,
-        GBE_local_lobby.visibility,
-        GBE_local_lobby.bot_difficulty_radiant,
-        GBE_local_lobby.bot_difficulty_dire,
-        GBE_local_lobby.bot_radiant,
-        GBE_local_lobby.bot_dire,
-        GBE_local_lobby.pass_key);
-}
-
 static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
     uint64 steam_id,
     uint64 lobby_id,
@@ -5536,6 +5479,62 @@ void Steam_Game_Coordinator::GBE_PushDotaLoginSyncMessages()
     push_incoming_now(24u | GBE_kProtoMask, cache_subscribed_message);
 }
 
+bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &player_name, std::string &message)
+{
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)
+        return false;
+
+    const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
+    const uint32 account_id = settings->get_local_steam_id().GetAccountID();
+
+    if (!GBE_BuildDotaDirectReplayMessage(
+            GBE_kDotaPracticeLobbyCacheSubscribedTemplate,
+            sizeof(GBE_kDotaPracticeLobbyCacheSubscribedTemplate),
+            account_id,
+            steam_id,
+            false,
+            false,
+            false,
+            0,
+            7038u,
+            24u,
+            0,
+            "practice lobby cache template",
+            message)) {
+        return false;
+    }
+
+    if (!GBE_PatchDotaLobbyTemplateIdentifiers(message, account_id, steam_id, GBE_local_lobby.lobby_id))
+        return false;
+
+    return GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
+        message,
+        account_id,
+        steam_id,
+        false,
+        GBE_local_lobby.state,
+        GBE_local_lobby.game_state,
+        GBE_local_lobby.server_id,
+        GBE_local_lobby.match_id,
+        GBE_local_lobby.game_start_time,
+        GBE_local_lobby.connect,
+        player_name,
+        GBE_local_lobby.room_name,
+        GBE_local_lobby.game_mode,
+        GBE_local_lobby.server_region,
+        GBE_local_lobby.lan,
+        GBE_local_lobby.lan_host_ping_location,
+        GBE_local_lobby.allow_cheats,
+        GBE_local_lobby.fill_with_bots,
+        GBE_local_lobby.allow_spectating,
+        GBE_local_lobby.visibility,
+        GBE_local_lobby.bot_difficulty_radiant,
+        GBE_local_lobby.bot_difficulty_dire,
+        GBE_local_lobby.bot_radiant,
+        GBE_local_lobby.bot_dire,
+        GBE_local_lobby.pass_key);
+}
+
 void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
 {
     if (is_server)
@@ -6387,12 +6386,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
 
     std::string response_24;
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
-    const uint32 account_id = settings->get_local_steam_id().GetAccountID();
-    if (!GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(
-            steam_id,
-            account_id,
-            std::string(settings->get_local_name()),
-            response_24)) {
+    if (!GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(std::string(settings->get_local_name()), response_24)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building template 24 cache update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
     }
@@ -7534,11 +7528,7 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
             std::string lobby_cache_message;
-            if (GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(
-                    steam_id,
-                    settings->get_local_steam_id().GetAccountID(),
-                    std::string(settings->get_local_name()),
-                    lobby_cache_message)) {
+            if (GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(std::string(settings->get_local_name()), lobby_cache_message)) {
                 GBE_GC_DebugLog(
                     "GC_DOTA_SERVER_HELLO",
                     "queueing direct lobby CacheSubscribed after ServerWelcome lobby_id=%llu state=%u game_state=%u size=%zu",
