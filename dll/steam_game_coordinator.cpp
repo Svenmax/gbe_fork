@@ -2637,11 +2637,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
         }
 
         if ((field_number == 122u || field_number == 123u || field_number == 124u) && wire_type == 0u) {
-            if (!rewrite_runtime_fields) {
-                output.append(input.data() + field_offset, field_end - field_offset);
-                continue;
-            }
-
+            output.append(input.data() + field_offset, field_end - field_offset);
             continue;
         }
 
