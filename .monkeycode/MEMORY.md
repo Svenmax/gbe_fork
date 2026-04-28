@@ -512,3 +512,28 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 后续处理 `gbe_fork` 时，不要再在当前机器上尝试执行本地构建、生成工程或编译验证。
   - 需要验证时优先通过提交并推送到现有 PR，让远端 CI 负责构建检查。
+
+[Dota2 Lobby SO 的 2015 与 121-124 字段语义]
+- Date: 2026-04-28
+- Context: Agent 在复查 `24/26` 的大厅 SO 构造与模板 patch 时发现
+- Category: 代码模式
+- Instructions:
+  - `2015 = CSODOTAServerLobby` 在当前本地大厅路径里应保持空对象；不要把它错误地构造成 `field1 = empty bytes` 的“带一个空 member 的对象”。
+  - `2004.field121` 是 `member_indices`，单人本地大厅应归一化为单个 `0`。
+  - `2004.field122`、`field123`、`field124` 分别是 `left_member_indices`、`free_member_indices`、`requested_hero_ids`，不能再把它们当作槽位占位符批量写 `0`。
+
+[Dota2 Lobby SO 的运行态字段不能在 26 中丢失]
+- Date: 2026-04-28
+- Context: Agent 在复查 practice lobby 启动后续 `26 / PracticeLobbyDetailsUpdate` 时发现
+- Category: 代码模式
+- Instructions:
+  - 用 scratch builder 重新构造 `2004 / CSODOTALobby` 时，必须同步当前运行态字段：`state(4)`、`connect(5)`、`server_id(6)`、`game_state(22)`、`match_id(30)`、`game_start_time(87)`。
+  - 否则一旦启动后的 `7046/7047/...` 再触发新的 `26`，就会用缺字段的 `2004` 覆盖掉已启动 lobby 的运行态信息。
+
+[Dota2 比赛内 7035 4511 4508 的当前处理语义]
+- Date: 2026-04-28
+- Context: Agent 在分析 `hoststartgame` 之后的 direct 请求日志与 SteamKit/go-dota2 定义时发现
+- Category: 代码模式
+- Instructions:
+  - 当前日志里的 `7035 / k_EMsgGCAbandonCurrentGame`、`4511 / k_EMsgGCLANServerAvailable`、`4508 / k_EMsgGCGameServerInfo` 都没有 `source_job`，更接近客户端或本地服发往 GC 的上行通知，而不是明确的 request-response。
+  - 在现有 `gbe_fork` replay 框架里，对这三条消息优先做“消费并记录关键字段”的最小处理，不要先凭猜测伪造 direct reply。
