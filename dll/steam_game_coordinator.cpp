@@ -1796,6 +1796,24 @@ static bool GBE_ExtractProtoFieldBytes(const uint8 *data, size_t size, const GBE
     return true;
 }
 
+static bool GBE_ExtractProtoPackedUint32Field(const uint8 *data, size_t size, const GBE_ProtoFieldView &view, std::vector<uint32> &values)
+{
+    values.clear();
+    if (!view.found || view.wire_type != 2u || !data || view.value_offset + view.value_size > size)
+        return false;
+
+    size_t offset = view.value_offset;
+    const size_t end = view.value_offset + view.value_size;
+    while (offset < end) {
+        uint64 value = 0;
+        if (!GBE_ReadVarUint64(data, end, offset, value))
+            return false;
+        values.push_back(static_cast<uint32>(value > 0xFFFFFFFFull ? 0xFFFFFFFFu : value));
+    }
+
+    return true;
+}
+
 static bool GBE_ParseDotaPracticeLobbySetDetailsBody(const uint8 *body, size_t body_size, GBE_DotaPracticeLobbyDetailsRequest &request)
 {
     request = {};
@@ -2889,6 +2907,18 @@ static bool GBE_BuildDota7535ResponsePayload(uint32 account_id, bool has_request
     std::string body;
     GBE_AppendProtoVarIntField(body, 1u, account_id);
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7535u, has_request_job, request_job_id, body, message);
+}
+
+static bool GBE_BuildDota7451BatchPlayerResourcesResponsePayload(const std::vector<uint32> &account_ids, bool has_request_job, uint64 request_job_id, std::string &message)
+{
+    std::string body;
+    for (uint32 account_id : account_ids) {
+        std::string result;
+        GBE_AppendProtoVarIntField(result, 1u, account_id);
+        GBE_AppendProtoBytesField(body, 6u, result);
+    }
+
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7451u, has_request_job, request_job_id, body, message);
 }
 
 static bool GBE_BuildDotaJoinChatChannelResponsePayload(
@@ -5202,6 +5232,30 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             static_cast<unsigned>(account_id_field)
         );
         push_incoming_now(7535u | GBE_kProtoMask, response_message);
+        return true;
+    }
+
+    if (request_emsg == 7450) {
+        std::vector<uint32> account_ids;
+        if (!GBE_ExtractProtoPackedUint32Field(body, body_size, GBE_FindProtoField(body, body_size, 1), account_ids) || account_ids.empty())
+            account_ids.push_back(settings->get_local_steam_id().GetAccountID());
+
+        std::string response_message;
+        if (!GBE_BuildDota7451BatchPlayerResourcesResponsePayload(account_ids, has_source_job, source_job, response_message)) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 7451u);
+            return true;
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=7450->7451 minimal batch player resources accounts=%zu",
+            request_emsg,
+            7451u,
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            account_ids.size()
+        );
+        push_incoming_now(7451u | GBE_kProtoMask, response_message);
         return true;
     }
 

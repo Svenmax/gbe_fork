@@ -31,6 +31,22 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[gbe_fork 记忆文件归档位置]
+- Date: 2026-04-28
+- Context: 用户要求后续在 `gbe_fork` 相关工作中统一记录记忆位置
+- Instructions:
+  - 以后涉及 `gbe_fork` 的用户指令、偏好和项目知识，统一记录到 `gbe_fork/.monkeycode/MEMORY.md`。
+  - 不要再把 `gbe_fork` 相关记忆写到工作区根目录的 `.monkeycode/MEMORY.md`。
+
+[Dota2 选人阶段卡 INIT 的高优先级缺口]
+- Date: 2026-04-28
+- Context: Agent 在分析 `/workspace/gbe_gc_debug.log` 与 `/workspace/console.txt` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当本地服务器已经启动、客户端进入 `DOTA_GAME_UI_DOTA_INGAME`，但游戏状态仍长期停留在 `DOTA_GAMERULES_STATE_INIT` 时，优先检查 server-side `7450 / k_EMsgServerToGCRequestBatchPlayerResources` 是否被回 `7451`。
+  - 当前日志中缺失 `7451` 会直接导致 `BatchPlayerResources - Failed to get accounts`，这是比 `8880/8096/7504/8801` 这些非关键超时更高优先级的缺口。
+  - 分析 `7041` 时序问题时，要注意日志是否仍显示旧的 `0.12` 外围延时；如果是，说明运行结果还没有包含最新本地时序修正。
+
 [Dota2 hoststartgame 后段 direct 处理顺序]
 - Date: 2026-04-23
 - Context: 用户要求继续补齐 `7041` 之后的 host direct 请求时明确指定实现优先级
