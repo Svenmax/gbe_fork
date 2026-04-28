@@ -2553,6 +2553,11 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
         }
 
         if (field_number == 120u && wire_type == 2u) {
+            if (!rewrite_runtime_fields) {
+                output.append(input.data() + field_offset, field_end - field_offset);
+                continue;
+            }
+
             std::string rewritten_member;
             if (!GBE_RewriteDotaLobbyTemplateMemberObject(
                     std::string(input.data() + value_offset, value_size),
@@ -2565,6 +2570,11 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
         }
 
         if (field_number == 121u && wire_type == 0u) {
+            if (!rewrite_runtime_fields) {
+                output.append(input.data() + field_offset, field_end - field_offset);
+                continue;
+            }
+
             if (!saw_member_indices) {
                 GBE_AppendProtoVarIntField(output, 121u, 0u);
                 saw_member_indices = true;
@@ -2572,8 +2582,14 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
             continue;
         }
 
-        if ((field_number == 122u || field_number == 123u || field_number == 124u) && wire_type == 0u)
+        if ((field_number == 122u || field_number == 123u || field_number == 124u) && wire_type == 0u) {
+            if (!rewrite_runtime_fields) {
+                output.append(input.data() + field_offset, field_end - field_offset);
+                continue;
+            }
+
             continue;
+        }
 
         output.append(input.data() + field_offset, field_end - field_offset);
     }
@@ -2594,7 +2610,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
         GBE_AppendProtoBytesField(output, 109u, lan_host_ping_location);
     if (rewrite_runtime_fields && !saw_game_start_time && game_start_time != 0)
         GBE_AppendProtoVarIntField(output, 87u, game_start_time);
-    if (!saw_member_indices)
+    if (rewrite_runtime_fields && !saw_member_indices)
         GBE_AppendProtoVarIntField(output, 121u, 0u);
 
     return true;
@@ -2791,7 +2807,10 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
             continue;
         }
 
-        if (type_id != 2004u && type_id != 2014u && type_id != 2015u && type_id != 2016u) {
+        const bool should_rewrite_type = rewrite_runtime_fields
+            ? (type_id == 2004u || type_id == 2014u || type_id == 2015u || type_id == 2016u)
+            : (type_id == 2004u || type_id == 2014u);
+        if (!should_rewrite_type) {
             rewritten_body.append(body.data() + field_offset, field_end - field_offset);
             continue;
         }

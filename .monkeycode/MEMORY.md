@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 7038 初始 CacheSubscribed 的 helper 边界]
+- Date: 2026-04-28
+- Context: Agent 在继续修复 `7038 / PracticeLobbyCreate` 崩溃、对齐提交 `a3561972e01a81c2c6c37ef9b070c5c284cc6182` 时发现
+- Category: 代码模式
+- Instructions:
+  - `7038` 建房后发出的初始 `24 / CacheSubscribed` 只应按旧版 helper 语义改写 `2004` 和 `2014`，不要在这一步处理 `2015/2016`。
+  - 当 `rewrite_runtime_fields == false` 时，`2004 / CSODOTALobby` 的成员相关字段 `120/121/122/123/124` 应保留 donor 原始结构，不要做运行态瘦身、重排或补写 `121=0`。
+  - `2015/2016` 与 `2004` 成员结构压缩只保留给 `7041` 之后的运行态改写路径使用，不要混入建房初始 `24`。
+
 [gbe_fork 记忆文件归档位置]
 - Date: 2026-04-28
 - Context: 用户要求后续在 `gbe_fork` 相关工作中统一记录记忆位置
