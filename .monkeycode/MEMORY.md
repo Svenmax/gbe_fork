@@ -585,7 +585,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 [Dota2 7034 的 team 语义与本地 owner_team 对齐]
 - Date: 2026-04-28
-- Context: Agent 在继续实现 `7034 / k_EMsgGCConnectedPlayers` 最小回包时发现
+- Context: Agent 在继续实现并细化 `7034 / k_EMsgGCConnectedPlayers` 最小回包时发现
 - Category: 代码模式
 - Instructions:
   - 当前 `GBE_local_lobby.owner_team` 的取值已经与 Dota proto `DOTA_GC_TEAM` 对齐：`0 = GOOD_GUYS`，`1 = BAD_GUYS`。
@@ -593,6 +593,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当客户端已经进入 `DOTA_GAME_UI_DOTA_INGAME`，但 server 侧日志仍出现“Need to tell GC player is no longer connected”并发送带 `disconnected_players` 草稿的 `7034` 时，回给 server 的 `7034` 不能只带 `steam_id` 和 `player_draft`；至少还要在 `connected_players[0]` 中补齐 `leaver_state.lobby_state` 和 `leaver_state.game_state`，让 GC 返回的玩家连接态与当前 lobby 运行态一致。
   - 后续继续排查 `7034` 时，优先打开字段级摘要日志，直接比对 request/response 里的 `connected_players`、`disconnected_players`、`send_reason`、`player_draft` 和 `leaver_state`，不要再只凭消息号和长度猜字段缺口。
   - 当 server 发出的 `7034` request 真实形态是 `disconnected_players=1`、`send_reason=GAME_STATE(2)`、并自带 `building_state` 等比赛统计字段时，response 应优先镜像这些外围字段，只最小化把玩家连接态修正为 `connected_players=1`；不要再把 `send_reason`、`building_state` 等字段硬编码成另一个形态。
+  - 如果 `7034` request 已经显式带了 `disconnected_players[0].leaver_state` 草稿，response 不要再把 `disconnected_players` 整段直接清零；至少要把该玩家的 `disconnected_players[0].leaver_state` 一并回给 server，避免 server 继续停留在“没有 leaver state 可上报”的状态。
   - `7034.PlayerDraft.team_slot` 目前高置信度更接近队内 0-based 槽位，而不是 lobby UI 的原始 slot 编号；例如 lobby `slot=3` 时，本地服日志会显示 `input slot 2`。
 
 [Dota2 game_session_manifest 的排查边界]
@@ -641,10 +642,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 [Dota2 比赛内 7035 4511 4508 的当前处理语义]
 - Date: 2026-04-28
-- Context: Agent 在分析 `hoststartgame` 之后的 direct 请求日志与 SteamKit/go-dota2 定义时发现
+- Context: Agent 在分析 `hoststartgame` 之后的 direct 请求日志与 SteamKit/go-dota2 定义，并确认 `7035` 体为空时发现
 - Category: 代码模式
 - Instructions:
   - 当前日志里的 `7035 / k_EMsgGCAbandonCurrentGame`、`4511 / k_EMsgGCLANServerAvailable`、`4508 / k_EMsgGCGameServerInfo` 都没有 `source_job`，更接近客户端或本地服发往 GC 的上行通知，而不是明确的 request-response。
+  - `SteamKit` 里的 `CMsgAbandonCurrentGame` 当前是空消息；如果日志显示 `7035 len=8`，通常只是 direct proto 头，没有额外 body 字段，处理时不要先脑补 abandon 参数语义。
   - 在现有 `gbe_fork` replay 框架里，对这三条消息优先做“消费并记录关键字段”的最小处理，不要先凭猜测伪造 direct reply。
 
 [Dota2 建房仅对齐 a3561972，开始游戏继续推进]

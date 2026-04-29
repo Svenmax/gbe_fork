@@ -2215,6 +2215,9 @@ struct GBE_Dota7034RequestShape
     uint32 dire_kills{};
     uint32 radiant_lead{};
     uint32 building_state{};
+    uint64 disconnected_steam_id{};
+    uint32 disconnected_lobby_state{};
+    uint32 disconnected_game_state{};
     bool has_game_state{};
     bool has_send_reason{};
     bool has_first_blood_happened{};
@@ -2222,6 +2225,10 @@ struct GBE_Dota7034RequestShape
     bool has_dire_kills{};
     bool has_radiant_lead{};
     bool has_building_state{};
+    bool has_disconnected_player{};
+    bool has_disconnected_steam_id{};
+    bool has_disconnected_lobby_state{};
+    bool has_disconnected_game_state{};
 };
 
 struct GBE_DotaEmptyRequestShape
@@ -2272,7 +2279,42 @@ static GBE_Dota7034RequestShape GBE_ParseDota7034RequestShape(const uint8 *data,
     if (GBE_ExtractProtoFieldUint32(data, size, view, shape.building_state))
         shape.has_building_state = true;
 
+    std::string disconnected_player_raw;
+    if (GBE_ExtractProtoFieldBytes(data, size, GBE_FindProtoField(data, size, 7u), disconnected_player_raw) && !disconnected_player_raw.empty()) {
+        shape.has_disconnected_player = true;
+
+        const uint8 *player_data = reinterpret_cast<const uint8 *>(disconnected_player_raw.data());
+        const size_t player_size = disconnected_player_raw.size();
+        uint64 disconnected_steam_id = 0;
+        if (GBE_ExtractProtoFieldUint64(player_data, player_size, GBE_FindProtoField(player_data, player_size, 1u), disconnected_steam_id)) {
+            shape.disconnected_steam_id = disconnected_steam_id;
+            shape.has_disconnected_steam_id = true;
+        }
+
+        std::string leaver_state_raw;
+        if (GBE_ExtractProtoFieldBytes(player_data, player_size, GBE_FindProtoField(player_data, player_size, 3u), leaver_state_raw) && !leaver_state_raw.empty()) {
+            const uint8 *leaver_state_data = reinterpret_cast<const uint8 *>(leaver_state_raw.data());
+            const size_t leaver_state_size = leaver_state_raw.size();
+            if (GBE_ExtractProtoFieldUint32(leaver_state_data, leaver_state_size, GBE_FindProtoField(leaver_state_data, leaver_state_size, 1u), shape.disconnected_lobby_state))
+                shape.has_disconnected_lobby_state = true;
+            if (GBE_ExtractProtoFieldUint32(leaver_state_data, leaver_state_size, GBE_FindProtoField(leaver_state_data, leaver_state_size, 2u), shape.disconnected_game_state))
+                shape.has_disconnected_game_state = true;
+        }
+    }
+
     return shape;
+}
+
+static std::string GBE_BuildDota7034LeaverStatePayload(uint32 lobby_state, uint32 game_state)
+{
+    std::string leaver_state;
+    GBE_AppendProtoVarIntField(leaver_state, 1u, lobby_state);
+    GBE_AppendProtoVarIntField(leaver_state, 2u, game_state);
+    GBE_AppendProtoVarIntField(leaver_state, 3u, 0u);
+    GBE_AppendProtoVarIntField(leaver_state, 4u, 0u);
+    GBE_AppendProtoVarIntField(leaver_state, 5u, 0u);
+    GBE_AppendProtoVarIntField(leaver_state, 6u, 0u);
+    return leaver_state;
 }
 
 static GBE_DotaEmptyRequestShape GBE_ParseDotaEmptyRequestShape(const uint8 *data, size_t size)
@@ -3870,13 +3912,7 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     uint64 request_job_id,
     std::string &message)
 {
-    std::string leaver_state;
-    GBE_AppendProtoVarIntField(leaver_state, 1u, lobby_state);
-    GBE_AppendProtoVarIntField(leaver_state, 2u, game_state);
-    GBE_AppendProtoVarIntField(leaver_state, 3u, 0u);
-    GBE_AppendProtoVarIntField(leaver_state, 4u, 0u);
-    GBE_AppendProtoVarIntField(leaver_state, 5u, 0u);
-    GBE_AppendProtoVarIntField(leaver_state, 6u, 0u);
+    const std::string leaver_state = GBE_BuildDota7034LeaverStatePayload(lobby_state, game_state);
 
     std::string player;
     GBE_AppendProtoFixed64Field(player, 1u, steam_id);
@@ -3903,6 +3939,22 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     if (request_shape.has_building_state)
         GBE_AppendProtoVarIntField(body, 15u, request_shape.building_state);
     GBE_AppendProtoBytesField(body, 16u, draft);
+
+    if (request_shape.has_disconnected_player && (!request_shape.has_disconnected_steam_id || request_shape.disconnected_steam_id == steam_id)) {
+        uint32 disconnected_lobby_state = request_shape.has_disconnected_lobby_state ? request_shape.disconnected_lobby_state : lobby_state;
+        uint32 disconnected_game_state = request_shape.has_disconnected_game_state ? request_shape.disconnected_game_state : game_state;
+        if (disconnected_lobby_state < lobby_state)
+            disconnected_lobby_state = lobby_state;
+        if (disconnected_game_state < game_state)
+            disconnected_game_state = game_state;
+
+        std::string disconnected_player;
+        GBE_AppendProtoFixed64Field(disconnected_player, 1u, steam_id);
+        GBE_AppendProtoBytesField(disconnected_player, 3u, GBE_BuildDota7034LeaverStatePayload(disconnected_lobby_state, disconnected_game_state));
+        GBE_AppendProtoVarIntField(disconnected_player, 4u, 0u);
+        GBE_AppendProtoBytesField(body, 7u, disconnected_player);
+    }
+
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7034u, has_request_job, request_job_id, body, message);
 }
 
@@ -6815,9 +6867,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     if (request_emsg == 7035) {
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
-            "consumed req=%u source_job=%llu note=client-side abandon notification active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
+            "consumed req=%u source_job=%llu note=empty AbandonCurrentGame request body_size=%zu active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
             request_emsg,
             static_cast<unsigned long long>(source_job),
+            body_size,
             GBE_local_lobby.active ? 1u : 0u,
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
             GBE_local_lobby.state,
