@@ -699,5 +699,5 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Context: Agent 在分析“非默认位置仍在 `7041` 后立刻 `7035`”的新日志并回看 direct builder 时发现
 - Category: 代码模式
 - Instructions:
-  - `7047` 直构的 `26 / PracticeLobbyDetailsUpdate` 和直构的 `24 / CacheSubscribed` 都会经过 `GBE_BuildDotaPracticeLobbySOObjectData(...)`；其中 `2016` 如果继续复用 donor 固定 member tail，会把 `team/slot` 残留成 donor 默认位。
-  - 直构 `2016` 时至少要显式写入当前 `steam_id`、`team`、`slot`、`leaver_status=0`、`leaver_actions=0`，不能只替换 `steam_id` 后保留 donor 其余成员字段。
+  - `2016` 的 SO 类型是 `CSODOTAServerStaticLobby`，不是 `CSODOTALobbyMember`；不要往 `2016` 的成员里写 `team`、`slot`、`leaver_status`、`leaver_actions` 这些仅属于 `CSODOTALobbyMember` 的字段。
+  - 对 `2016` 的最小安全重写是：只在其 `all_members` 内更新 `CSODOTAServerStaticLobbyMember.field 1 = steam_id`，其余 server-static 字段沿用 donor 或保持缺省。
