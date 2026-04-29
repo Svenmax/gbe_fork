@@ -607,11 +607,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 需要验证时优先通过提交并推送到现有 PR，让远端 CI 负责构建检查。
 
 [Dota2 Lobby SO 的 2015 与 121-124 字段语义]
-- Date: 2026-04-28
-- Context: Agent 在复查 `24/26` 的大厅 SO 构造与模板 patch 时发现
+- Date: 2026-04-29
+- Context: Agent 在结合官方 `firstcreateloby.zip` 与“换位置后开始游戏仍闪退”的新日志复查 `24/26` 的大厅 SO 构造时修正
 - Category: 代码模式
 - Instructions:
-  - `2015 = CSODOTAServerLobby` 在当前本地大厅路径里应保持空对象；不要把它错误地构造成 `field1 = empty bytes` 的“带一个空 member 的对象”。
+  - `2015 = CSODOTAServerLobby` 不能一概保持空对象；在建房后和 `7047` 换位后的直构 `24/26` 路径里，最小安全形态应与官方样本一致，包含一个 `field1 = empty bytes` 的空成员条目，用来和 `2004/2014/2016` 对齐成员基数。
+  - 只有 `7041` 启动四阶段里的最后一条 `26` 进入 `game_state=1` 时，才应把 `2015` 缩成空对象。
   - `2004.field121` 是 `member_indices`，单人本地大厅应归一化为单个 `0`。
   - `2004.field122`、`field123`、`field124` 分别是 `left_member_indices`、`free_member_indices`、`requested_hero_ids`，不能再把它们当作槽位占位符批量写 `0`。
 

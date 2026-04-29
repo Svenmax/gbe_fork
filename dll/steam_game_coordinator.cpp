@@ -3649,6 +3649,13 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     static const uint8 GBE_kDotaLobbyField62Value[] = { 0x08, 0xF5, 0x44, 0x12, 0x02, 0x08, 0x00 };
 
     object_2015.clear();
+    {
+        // Keep server-lobby member cardinality aligned with 2004/2014/2016.
+        // CSODOTAServerLobbyMember is currently empty, so the minimal legal
+        // representation for one member is a repeated field-1 entry with an
+        // empty embedded message.
+        GBE_AppendProtoBytesField(object_2015, 1, std::string());
+    }
 
     {
         std::string member_bytes;
