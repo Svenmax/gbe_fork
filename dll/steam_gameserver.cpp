@@ -342,7 +342,6 @@ CSteamID Steam_GameServer::GetSteamID()
 {
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    if (!logged_in) return CSteamID(0, 0, k_EUniversePublic, k_EAccountTypeAnonGameServer); // blank anon server id
     return settings->get_local_steam_id();
 }
 

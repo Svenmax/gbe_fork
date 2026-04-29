@@ -123,6 +123,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当 `7034` 预热已经生效、`7450 -> 7451` 正常、`PR:OnFullyJoinedServer` 也已出现，但仍卡在 `DOTA_GAMERULES_STATE_INIT` 时，优先检查握手阶段是否出现 `Server SteamID in handshake is ... but SteamID from SteamNetworkingSockets is ...`。
   - 当前 `gbe_fork` 的 `Steam_GameServer::GetSteamID()` 受 `logged_in` 门控，而 `logged_in` 原本要等 `RunCallbacks()` 延迟约 `0.1s` 后才置真，这会在本地连接握手窗口里泄露空的 anon gameserver SteamID `72057594037927936`。
   - 旧 `steamapi` 在 `LogOn/LogOnAnonymous` 时就立即置 `logged_in = true`；后续若再遇到同类握手不一致，应优先沿用这一路径排查，而不是先回到 `7034` 或 `Steam_Networking_Sockets_*`。
+  - 如果提前置 `logged_in` 后握手里仍然出现空的 anon gameserver SteamID，说明当前引擎取 `GetSteamID()` 的时机仍可能早于或绕过登录态判断；这种情况下应直接让 `Steam_GameServer::GetSteamID()` 始终返回 `settings->get_local_steam_id()`，不要再用 `logged_in` 把它降级成空 anon server id。
 
 [GitHub 构建触发偏好]
 - Date: 2026-04-23
