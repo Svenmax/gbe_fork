@@ -189,16 +189,12 @@ static constexpr const char *GBE_kLocalDotaPracticeLobbyLoopbackEndpoint = "127.
 
 static std::string GBE_BuildDotaPracticeLobbyConnectPair(const std::string &endpoint)
 {
-    const size_t expected_size = std::strlen(GBE_kOldDotaPracticeLobbyConnect);
-    const size_t separator_length = 1u;
-    const size_t combined_size = endpoint.size() * 2 + separator_length;
-    if (combined_size > expected_size)
+    if (endpoint.empty())
         return std::string();
 
     std::string connect = endpoint;
     connect.push_back(' ');
     connect.append(endpoint);
-    connect.resize(expected_size, ' ');
     return connect;
 }
 
@@ -211,20 +207,6 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromEndpoint(const char *en
 {
     if (!endpoint || endpoint[0] == '\0')
         return GBE_FormatDotaPracticeLobbyLoopbackConnect();
-
-    const size_t expected_size = std::strlen(GBE_kOldDotaPracticeLobbyConnect);
-    const size_t endpoint_size = std::strlen(endpoint);
-    const size_t combined_size = endpoint_size * 2 + 1u;
-    if (combined_size > expected_size) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] connect endpoint too long, falling back to loopback endpoint=%s combined_size=%zu expected=%zu",
-            endpoint,
-            combined_size,
-            expected_size
-        );
-        return GBE_FormatDotaPracticeLobbyLoopbackConnect();
-    }
 
     return GBE_BuildDotaPracticeLobbyConnectPair(endpoint);
 }
@@ -3452,13 +3434,19 @@ static bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
     }
 
     if (patch_connect) {
-        if (connect.size() != std::strlen(GBE_kOldDotaPracticeLobbyConnect)) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch connect size mismatch stage=%s size=%zu expected=%zu", stage_note ? stage_note : "", connect.size(), std::strlen(GBE_kOldDotaPracticeLobbyConnect));
-            return false;
-        }
-        if (!GBE_FindAndOverwriteString(message, GBE_kOldDotaPracticeLobbyConnect, connect)) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch connect patch failed stage=%s connect=%s", stage_note ? stage_note : "", connect.c_str());
-            return false;
+        if (connect.size() == std::strlen(GBE_kOldDotaPracticeLobbyConnect)) {
+            if (!GBE_FindAndOverwriteString(message, GBE_kOldDotaPracticeLobbyConnect, connect)) {
+                GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch connect patch failed stage=%s connect=%s", stage_note ? stage_note : "", connect.c_str());
+                return false;
+            }
+        } else {
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Launch connect size changed stage=%s size=%zu expected=%zu; skipping fixed-width overwrite and relying on proto rewrite",
+                stage_note ? stage_note : "",
+                connect.size(),
+                std::strlen(GBE_kOldDotaPracticeLobbyConnect)
+            );
         }
     }
 
