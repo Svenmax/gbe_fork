@@ -340,9 +340,10 @@ bool Steam_GameServer::BSecure()
  
 CSteamID Steam_GameServer::GetSteamID()
 {
-    PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return settings->get_local_steam_id();
+    CSteamID id = settings->get_local_steam_id();
+    PRINT_DEBUG("returning %llu logged_in=%i offline=%i", id.ConvertToUint64(), logged_in ? 1 : 0, settings->is_offline() ? 1 : 0);
+    return id;
 }
 
 

@@ -124,6 +124,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当前 `gbe_fork` 的 `Steam_GameServer::GetSteamID()` 受 `logged_in` 门控，而 `logged_in` 原本要等 `RunCallbacks()` 延迟约 `0.1s` 后才置真，这会在本地连接握手窗口里泄露空的 anon gameserver SteamID `72057594037927936`。
   - 旧 `steamapi` 在 `LogOn/LogOnAnonymous` 时就立即置 `logged_in = true`；后续若再遇到同类握手不一致，应优先沿用这一路径排查，而不是先回到 `7034` 或 `Steam_Networking_Sockets_*`。
   - 如果提前置 `logged_in` 后握手里仍然出现空的 anon gameserver SteamID，说明当前引擎取 `GetSteamID()` 的时机仍可能早于或绕过登录态判断；这种情况下应直接让 `Steam_GameServer::GetSteamID()` 始终返回 `settings->get_local_steam_id()`，不要再用 `logged_in` 把它降级成空 anon server id。
+  - 如果以上两步都已做且日志仍在 `S2C_CHALLENGE` 之后立刻报 `Server SteamID in handshake is 72057594037927936 ...`，则根因更可能位于底层连接握手包本身或更靠近 `SteamNetworkingSockets` 的身份填充路径，而不是 `7034`、`7450/7451` 或普通 `ISteamGameServer::GetSteamID()` 导出路径。
 
 [GitHub 构建触发偏好]
 - Date: 2026-04-23
