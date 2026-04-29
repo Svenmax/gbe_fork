@@ -2491,7 +2491,6 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
     bool saw_game_state = false;
     bool saw_match_id = false;
     bool saw_game_start_time = false;
-    bool saw_member_indices = false;
     bool saw_lan = false;
     bool saw_lan_host_ping_location = false;
 
@@ -2673,24 +2672,12 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
         }
 
         if (field_number == 121u && wire_type == 0u) {
-            if (!rewrite_runtime_fields) {
-                output.append(input.data() + field_offset, field_end - field_offset);
-                continue;
-            }
-
-            if (!saw_member_indices) {
-                GBE_AppendProtoVarIntField(output, 121u, 0u);
-                saw_member_indices = true;
-            }
+            output.append(input.data() + field_offset, field_end - field_offset);
             continue;
         }
 
         if ((field_number == 122u || field_number == 123u || field_number == 124u) && wire_type == 0u) {
-            if (!rewrite_runtime_fields) {
-                output.append(input.data() + field_offset, field_end - field_offset);
-                continue;
-            }
-
+            output.append(input.data() + field_offset, field_end - field_offset);
             continue;
         }
 
@@ -2713,8 +2700,6 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
         GBE_AppendProtoBytesField(output, 109u, lan_host_ping_location);
     if (rewrite_runtime_fields && !saw_game_start_time && game_start_time != 0)
         GBE_AppendProtoVarIntField(output, 87u, game_start_time);
-    if (rewrite_runtime_fields && !saw_member_indices)
-        GBE_AppendProtoVarIntField(output, 121u, 0u);
 
     return true;
 }
@@ -2866,6 +2851,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
     uint64 bot_dire,
     uint32 owner_team,
     uint32 owner_slot,
+    bool rewrite_empty_2015,
     const std::string &pass_key)
 {
     if (message.size() < sizeof(ProtoBufMsgHeader_t))
@@ -2917,7 +2903,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
         }
 
         const bool should_rewrite_type = rewrite_runtime_fields
-            ? (type_id == 2004u || type_id == 2014u || type_id == 2015u || type_id == 2016u)
+            ? (type_id == 2004u || type_id == 2014u || type_id == 2016u || (rewrite_empty_2015 && type_id == 2015u))
             : (type_id == 2004u || type_id == 2014u);
         if (!should_rewrite_type) {
             rewritten_body.append(body.data() + field_offset, field_end - field_offset);
@@ -3249,7 +3235,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
             match_id,
             game_start_time,
             connect,
-            std::string(),
+            GBE_GetDotaLobbyOwnerName(),
             room_name,
             game_mode,
             server_region,
@@ -3265,6 +3251,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
             bot_dire,
             owner_team,
             owner_slot,
+            stage_index == 3,
             pass_key))
         return false;
 
@@ -5640,6 +5627,7 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTem
         GBE_local_lobby.bot_dire,
         GBE_local_lobby.owner_team,
         GBE_local_lobby.owner_slot,
+        false,
         GBE_local_lobby.pass_key);
 }
 

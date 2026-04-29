@@ -677,3 +677,19 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - donor-based `7041` 四条启动 `26 / PracticeLobbyDetailsUpdate` 不能只 patch `account_id`、`steam_id`、`lobby_id`、`match_id`、`server_id`、`game_start_time` 和 `connect`；其中内层 `2004/2016` 的成员 `team/slot` 也必须按当前运行态重写。
   - 对启动 `26` 做 runtime rewrite 时，不能再用空字符串或零值覆盖 `room_name`、`game_mode`、`server_region`、`pass_key`、bot 配置等 lobby 字段；应传入当前 `GBE_local_lobby` 的真实状态。
+
+[Dota2 7041 启动 26 的 2014/2015 阶段语义]
+- Date: 2026-04-29
+- Context: Agent 在分析“`7041` 后仍立刻 `7035`”的新日志并回看当前 rewrite 逻辑时发现
+- Category: 代码模式
+- Instructions:
+  - `7041` 启动阶段的四条 `26 / PracticeLobbyDetailsUpdate` 不应在前 3 条就把 `2015` 清空；只有最后一条进入 `game_state=1` 的阶段才应把 `2015` 缩成空对象。
+  - 启动阶段若重写 `2014`，必须保留当前玩家名，不能把 `player_name` 传成空字符串，否则会把 lobby 静态成员名清空。
+
+[Dota2 7041 启动 26 的 121/122/123/124 处理边界]
+- Date: 2026-04-29
+- Context: Agent 在复查 `CSODOTALobby` 的 proto 定义与当前 runtime rewrite 实现时发现
+- Category: 代码模式
+- Instructions:
+  - `CSODOTALobby.field 121` 是 `member_indices`，`122` 是 `left_member_indices`，`123` 是 `free_member_indices`，`124` 是 `requested_hero_ids`；不要把 `124` 混成成员索引字段处理。
+  - 在 donor-based `7041` 启动 `26` 的 runtime rewrite 中，如果暂时没有完全确认这组字段的运行态重建语义，优先保留 donor 原始 `121/122/123/124`，不要强行压成 `121=0` 或直接删除 `122/123/124`。
