@@ -743,3 +743,18 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - Dota2 practice lobby 当前连接端口固定为 `:27015`，不要继续把 `4508` 上报的 `server_port` 泛化进 `connect` 字符串逻辑。
   - 现阶段先不要动 `Steam_Networking_Sockets_*` 相关实现；优先继续沿 `connect` 链路收敛和修复问题。
   - 如果对开源项目或接口用法没有把握，先去查官方文档、GitHub 或公开资料，不要凭主观猜测扩展实现。
+
+[旧 steamapi 的局域网链路参考优先级]
+- Date: 2026-04-29
+- Context: 用户在当前日志已证明 `7034` 早期缺口被补上后，要求优先从旧 `steamapi` 学习其“不改 `Steam_Networking_Sockets_*` 仍可实现局域网联机”的做法
+- Instructions:
+  - 后续继续排查当前 Dota2 局域网联机卡点时，优先对照 `/workspace/steamapi/unpacked/steam_api` 的局域网链路实现，先找它是如何在不修改 `Steam_Networking_Sockets_*` 的前提下跑通本地 server/client 联机的。
+  - 在完成这轮旧 `steamapi` 对照之前，不要直接跳回 `Steam_Networking_Sockets_*` 改动。
+
+[旧 steamapi 的 generic 玩家接入生命周期]
+- Date: 2026-04-29
+- Context: Agent 在对照旧 `steamapi` 的局域网联机实现时发现
+- Category: 代码模式
+- Instructions:
+  - 旧 `steamapi` 局域网链路里，`Steam_GameServer::SendUserConnectAndAuthenticate`、`BeginAuthSession`、`CreateUnauthenticatedUserConnection` 在 generic 层面都会尽早落到 `add_player()`，并通过统一的 player lifecycle 维护“玩家已进服”的状态。
+  - 当前 `gbe_fork` 虽然也会 `add_player()`，但如果 Dota server-side GC 仍卡在过早的连接态建立时机，可以优先把这条 generic `on_client_connected()` 生命周期桥接到 Dota-specific connected players 预热，而不是先去修改 `Steam_Networking_Sockets_*`。

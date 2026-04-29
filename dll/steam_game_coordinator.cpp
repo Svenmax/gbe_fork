@@ -5948,6 +5948,54 @@ void Steam_Game_Coordinator::on_client_connected(CSteamID steam_id)
     if (!steam_id.BIndividualAccount())
         return;
 
+    if (is_server && gc_profile == GC_PROFILE_DOTA2) {
+        GBE_RestoreSharedDotaLobbyState("on_client_connected");
+
+        const uint64 connected_steam_id = steam_id.ConvertToUint64();
+        const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
+        if (gc_initialized && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && connected_steam_id != 0 && connected_steam_id == owner_steam_id) {
+            GBE_Dota7034RequestShape synthetic_connected_players_request{};
+            synthetic_connected_players_request.has_send_reason = true;
+            synthetic_connected_players_request.send_reason = 4u;
+
+            std::string connected_players_message;
+            if (GBE_BuildDota7034ConnectedPlayersResponsePayload(
+                    owner_steam_id,
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    GBE_local_lobby.owner_team,
+                    GBE_local_lobby.owner_slot,
+                    synthetic_connected_players_request,
+                    false,
+                    0ull,
+                    connected_players_message)) {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "queueing synthetic direct 7034 on client connect steam_id=%llu lobby_id=%llu state=%u game_state=%u team=%u slot=%u size=%zu",
+                    static_cast<unsigned long long>(connected_steam_id),
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    GBE_local_lobby.owner_team,
+                    GBE_local_lobby.owner_slot,
+                    connected_players_message.size()
+                );
+                push_incoming_now(7034u | GBE_kProtoMask, connected_players_message);
+            } else {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "failed building synthetic direct 7034 on client connect steam_id=%llu lobby_id=%llu state=%u game_state=%u team=%u slot=%u",
+                    static_cast<unsigned long long>(connected_steam_id),
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    GBE_local_lobby.owner_team,
+                    GBE_local_lobby.owner_slot
+                );
+            }
+        }
+    }
+
     if (gc_initialized) {
         request_user_items(steam_id, generate_steam_api_call_id(), true);
     }
