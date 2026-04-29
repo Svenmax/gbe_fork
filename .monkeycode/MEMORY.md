@@ -592,6 +592,8 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 因此构造 `CMsgConnectedPlayers.PlayerDraft.team` 时可以直接复用 `owner_team`，只需在异常值场景下兜底回 `0`，不需要再额外做 UI 编号到 proto 枚举的二次映射。
   - 当客户端已经进入 `DOTA_GAME_UI_DOTA_INGAME`，但 server 侧日志仍出现“Need to tell GC player is no longer connected”并发送带 `disconnected_players` 草稿的 `7034` 时，回给 server 的 `7034` 不能只带 `steam_id` 和 `player_draft`；至少还要在 `connected_players[0]` 中补齐 `leaver_state.lobby_state` 和 `leaver_state.game_state`，让 GC 返回的玩家连接态与当前 lobby 运行态一致。
   - 后续继续排查 `7034` 时，优先打开字段级摘要日志，直接比对 request/response 里的 `connected_players`、`disconnected_players`、`send_reason`、`player_draft` 和 `leaver_state`，不要再只凭消息号和长度猜字段缺口。
+  - 当 server 发出的 `7034` request 真实形态是 `disconnected_players=1`、`send_reason=GAME_STATE(2)`、并自带 `building_state` 等比赛统计字段时，response 应优先镜像这些外围字段，只最小化把玩家连接态修正为 `connected_players=1`；不要再把 `send_reason`、`building_state` 等字段硬编码成另一个形态。
+  - `7034.PlayerDraft.team_slot` 目前高置信度更接近队内 0-based 槽位，而不是 lobby UI 的原始 slot 编号；例如 lobby `slot=3` 时，本地服日志会显示 `input slot 2`。
 
 [Dota2 game_session_manifest 的排查边界]
 - Date: 2026-04-29

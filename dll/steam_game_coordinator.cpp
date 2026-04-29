@@ -2219,6 +2219,61 @@ static std::string GBE_FormatDota7034Summary(const uint8 *data, size_t size)
     return stream.str();
 }
 
+struct GBE_Dota7034RequestShape
+{
+    uint32 game_state{};
+    uint32 send_reason{};
+    uint32 first_blood_happened{};
+    uint32 radiant_kills{};
+    uint32 dire_kills{};
+    uint32 radiant_lead{};
+    uint32 building_state{};
+    bool has_game_state{};
+    bool has_send_reason{};
+    bool has_first_blood_happened{};
+    bool has_radiant_kills{};
+    bool has_dire_kills{};
+    bool has_radiant_lead{};
+    bool has_building_state{};
+};
+
+static GBE_Dota7034RequestShape GBE_ParseDota7034RequestShape(const uint8 *data, size_t size)
+{
+    GBE_Dota7034RequestShape shape{};
+    if (!data || size == 0)
+        return shape;
+
+    GBE_ProtoFieldView view = GBE_FindProtoField(data, size, 2u);
+    if (GBE_ExtractProtoFieldUint32(data, size, view, shape.game_state))
+        shape.has_game_state = true;
+
+    view = GBE_FindProtoField(data, size, 8u);
+    if (GBE_ExtractProtoFieldUint32(data, size, view, shape.send_reason))
+        shape.has_send_reason = true;
+
+    view = GBE_FindProtoField(data, size, 6u);
+    if (GBE_ExtractProtoFieldUint32(data, size, view, shape.first_blood_happened))
+        shape.has_first_blood_happened = true;
+
+    view = GBE_FindProtoField(data, size, 11u);
+    if (GBE_ExtractProtoFieldUint32(data, size, view, shape.radiant_kills))
+        shape.has_radiant_kills = true;
+
+    view = GBE_FindProtoField(data, size, 12u);
+    if (GBE_ExtractProtoFieldUint32(data, size, view, shape.dire_kills))
+        shape.has_dire_kills = true;
+
+    view = GBE_FindProtoField(data, size, 14u);
+    if (GBE_ExtractProtoFieldUint32(data, size, view, shape.radiant_lead))
+        shape.has_radiant_lead = true;
+
+    view = GBE_FindProtoField(data, size, 15u);
+    if (GBE_ExtractProtoFieldUint32(data, size, view, shape.building_state))
+        shape.has_building_state = true;
+
+    return shape;
+}
+
 static bool GBE_RewriteDotaLobbyTemplateMemberObject(
     const std::string &input,
     uint32 account_id,
@@ -3693,6 +3748,7 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     uint32 game_state,
     uint32 owner_team,
     uint32 owner_slot,
+    const GBE_Dota7034RequestShape &request_shape,
     bool has_request_job,
     uint64 request_job_id,
     std::string &message)
@@ -3713,12 +3769,22 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     std::string draft;
     GBE_AppendProtoFixed64Field(draft, 1u, steam_id);
     GBE_AppendProtoVarIntField(draft, 2u, owner_team <= 1u ? owner_team : 0u);
-    GBE_AppendProtoVarIntField(draft, 3u, owner_slot);
+    GBE_AppendProtoVarIntField(draft, 3u, owner_slot > 0u ? (owner_slot - 1u) : 0u);
 
     std::string body;
     GBE_AppendProtoBytesField(body, 1u, player);
     GBE_AppendProtoVarIntField(body, 2u, game_state);
-    GBE_AppendProtoVarIntField(body, 8u, 4u);
+    if (request_shape.has_first_blood_happened)
+        GBE_AppendProtoVarIntField(body, 6u, request_shape.first_blood_happened);
+    GBE_AppendProtoVarIntField(body, 8u, request_shape.has_send_reason ? request_shape.send_reason : 2u);
+    if (request_shape.has_radiant_kills)
+        GBE_AppendProtoVarIntField(body, 11u, request_shape.radiant_kills);
+    if (request_shape.has_dire_kills)
+        GBE_AppendProtoVarIntField(body, 12u, request_shape.dire_kills);
+    if (request_shape.has_radiant_lead)
+        GBE_AppendProtoVarIntField(body, 14u, request_shape.radiant_lead);
+    if (request_shape.has_building_state)
+        GBE_AppendProtoVarIntField(body, 15u, request_shape.building_state);
     GBE_AppendProtoBytesField(body, 16u, draft);
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7034u, has_request_job, request_job_id, body, message);
 }
@@ -6422,6 +6488,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == 7034) {
+        const GBE_Dota7034RequestShape request_shape = GBE_ParseDota7034RequestShape(body, body_size);
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "parsed req=%u source_job=%llu body_size=%zu summary=%s",
@@ -6438,6 +6505,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_local_lobby.game_state,
                 GBE_local_lobby.owner_team,
                 GBE_local_lobby.owner_slot,
+                request_shape,
                 has_source_job,
                 source_job,
                 response_message)) {
