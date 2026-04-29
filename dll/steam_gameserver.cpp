@@ -257,6 +257,8 @@ void Steam_GameServer::LogOn( const char *pszToken )
 {
     PRINT_DEBUG("%s", pszToken);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    logged_in = true;
+    settings->set_offline(false);
     call_servers_connected = true;
     call_servers_disconnected = false;
     logon_time = std::chrono::high_resolution_clock::now();
@@ -279,6 +281,8 @@ void Steam_GameServer::LogOnAnonymous()
 {
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    logged_in = true;
+    settings->set_offline(false);
     call_servers_connected = true;
     call_servers_disconnected = false;
     logon_time = std::chrono::high_resolution_clock::now();

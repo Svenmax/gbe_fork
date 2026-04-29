@@ -115,6 +115,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 再处理 `8727 -> 8728` 和 `8886 -> 8887`。
   - `4007` 继续单独处理，不要混进 direct replay 表，因为它更像系统级 `GCServerHello`。
 
+[Dota2 INIT 卡点的新高优先级握手缺口]
+- Date: 2026-04-29
+- Context: Agent 在分析本轮 `/workspace/console.log` 与 `/workspace/gbe_gc_debug.log`、并对照旧 `steamapi` 的 gameserver 登录时序时发现
+- Category: 代码模式
+- Instructions:
+  - 当 `7034` 预热已经生效、`7450 -> 7451` 正常、`PR:OnFullyJoinedServer` 也已出现，但仍卡在 `DOTA_GAMERULES_STATE_INIT` 时，优先检查握手阶段是否出现 `Server SteamID in handshake is ... but SteamID from SteamNetworkingSockets is ...`。
+  - 当前 `gbe_fork` 的 `Steam_GameServer::GetSteamID()` 受 `logged_in` 门控，而 `logged_in` 原本要等 `RunCallbacks()` 延迟约 `0.1s` 后才置真，这会在本地连接握手窗口里泄露空的 anon gameserver SteamID `72057594037927936`。
+  - 旧 `steamapi` 在 `LogOn/LogOnAnonymous` 时就立即置 `logged_in = true`；后续若再遇到同类握手不一致，应优先沿用这一路径排查，而不是先回到 `7034` 或 `Steam_Networking_Sockets_*`。
+
 [GitHub 构建触发偏好]
 - Date: 2026-04-23
 - Context: 用户要求后续触发 GitHub 构建时限定目标任务
