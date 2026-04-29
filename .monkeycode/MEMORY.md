@@ -603,6 +603,8 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `game_session_config` 和 `game_session_manifest` 不属于 Dota GC direct 消息，而是 Source2 `CSVCMsg_ServerInfo` 的字段：`field 19 = game_session_config`、`field 20 = game_session_manifest`。
   - `spawngroupmanifest`、`manifestincomplete` 属于 Source2 `CNETMsg_SpawnGroup_Load / ManifestUpdate` 网络消息，也不在当前 `steam_game_coordinator.cpp` 的 GC 处理层。
   - 因此如果 server 卡在 `ss_waitingforgamesessionmanifest`，不能只在 GC direct 消息里补外围响应；需要同时确认 Source2 server->client 网络层是否真的发出了 session config/manifest，并确认客户端是否成功应用了这些消息。
+  - 在 `7034` 已经对齐、但客户端仍稳定出现 `8880/8096/7504/8801` 超时的场景下，优先先补最小 direct 响应消除 GC 噪音，再判断 `INIT` 卡住是否仍与 Source2 session/manifest 层有关。
+  - 当缺少 `7504/8096/8801/8880` 的 donor 抓包时，优先遵循“解析请求格式而后回复”原则：先按 proto 解析 request，再基于解析结果生成最小合法 response；不要继续完全忽略 request 体盲回固定包。
 
 [gbe_fork 本地 Linux 构建前置依赖]
 - Date: 2026-04-28
@@ -715,3 +717,19 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `2016` 的 SO 类型是 `CSODOTAServerStaticLobby`，不是 `CSODOTALobbyMember`；不要往 `2016` 的成员里写 `team`、`slot`、`leaver_status`、`leaver_actions` 这些仅属于 `CSODOTALobbyMember` 的字段。
   - 对 `2016` 的最小安全重写是：只在其 `all_members` 内更新 `CSODOTAServerStaticLobbyMember.field 1 = steam_id`，其余 server-static 字段沿用 donor 或保持缺省。
+
+[Dota2 7041 connect 不能长期停留在 loopback 占位]
+- Date: 2026-04-29
+- Context: 用户指出当前 `7041` 启动时虽然有 `GBE_FormatDotaPracticeLobbyConnectFromIp(...)`，但实际仍把 `connect` 无条件写成 loopback，占位后也没有用后续真实地址推进
+- Category: 代码模式
+- Instructions:
+  - `7041` 启动阶段不能长期把 lobby `connect` 固定为 loopback 占位；若能拿到本机实际 IP，应优先生成真实的纯 IP connect 字符串，而不是始终写死 `127.0.0.1:27015`。
+  - 当本地 game server 后续通过 `4508 / k_EMsgGCGameServerInfo` 上报真实 `public_ip/private_ip/server_port` 后，应优先用这些运行态地址回写 lobby `connect`，而不是只记录日志不更新状态。
+
+[Dota2 connect 排查的当前用户纠偏]
+- Date: 2026-04-29
+- Context: 用户纠正当前 `connect` 链路排查方向
+- Instructions:
+  - Dota2 practice lobby 当前连接端口固定为 `:27015`，不要继续把 `4508` 上报的 `server_port` 泛化进 `connect` 字符串逻辑。
+  - 现阶段先不要动 `Steam_Networking_Sockets_*` 相关实现；优先继续沿 `connect` 链路收敛和修复问题。
+  - 如果对开源项目或接口用法没有把握，先去查官方文档、GitHub 或公开资料，不要凭主观猜测扩展实现。
