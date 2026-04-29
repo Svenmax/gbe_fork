@@ -2070,6 +2070,8 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
     std::string &output)
 {
     output.clear();
+    bool saw_leaver_status = false;
+    bool saw_leaver_actions = false;
 
     size_t offset = 0;
     while (offset < input.size()) {
@@ -2108,8 +2110,26 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
             continue;
         }
 
+        if (field_number == 16u && wire_type == 0u) {
+            saw_leaver_status = true;
+            GBE_AppendProtoVarIntField(output, 16u, 0u);
+            continue;
+        }
+
+        if (field_number == 28u && wire_type == 0u) {
+            saw_leaver_actions = true;
+            GBE_AppendProtoVarIntField(output, 28u, 0u);
+            continue;
+        }
+
         output.append(input.data() + field_offset, field_end - field_offset);
     }
+
+    if (!saw_leaver_status)
+        GBE_AppendProtoVarIntField(output, 16u, 0u);
+
+    if (!saw_leaver_actions)
+        GBE_AppendProtoVarIntField(output, 28u, 0u);
 
     return true;
 }
@@ -3613,7 +3633,8 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
         GBE_AppendProtoFixed64Field(owner_state, 1, steam_id);
         GBE_AppendProtoVarIntField(owner_state, 3, owner_team);
         GBE_AppendProtoVarIntField(owner_state, 7, owner_slot);
-        GBE_AppendProtoVarIntField(owner_state, 16, 1u);
+        GBE_AppendProtoVarIntField(owner_state, 16, 0u);
+        GBE_AppendProtoVarIntField(owner_state, 28, 0u);
         GBE_AppendProtoBytesField(object_2004, 120, owner_state);
     }
 

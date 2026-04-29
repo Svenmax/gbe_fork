@@ -206,6 +206,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - server-side `steam_game_coordinator` 的 `settings->get_local_steam_id()` 代表的是 GameServer SteamID，不能直接拿它去填 `CSODOTALobby.all_members[0].id`、`leader_id`、`2016` 成员对象或 `7034` connected players 响应里的玩家身份字段。
   - practice lobby 的 owner/player 身份需要在 client-side 建房时单独保存为共享运行态字段（`owner_steam_id`、`owner_account_id`、`owner_name`），供 server-side lobby SO/cache 和 connected-player 响应复用。
+
+[Dota2 lobby member 默认断线态陷阱]
+- Date: 2026-04-29
+- Context: Agent 在分析“`NOLOBBY` 已消失但游戏仍卡在 `DOTA_GAMERULES_STATE_INIT`”的新日志时发现
+- Category: 代码模式
+- Instructions:
+  - `CSODOTALobbyMember.leaver_status` 的字段号是 `16`，值 `1` 对应 `DOTA_LEAVER_DISCONNECTED`；如果在 `2004 / CSODOTALobby` 的 `all_members` 或 `2016` member 对象里把它写成 `1`，Dota 会继续把玩家视为断线未就位。
+  - 直接构造 practice lobby SO 对象时，owner member 的 `leaver_status(16)` 和 `leaver_actions(28)` 应显式写 `0`。
+  - 模板重写路径在改写 lobby member 对象时，也应把 `leaver_status(16)` 和 `leaver_actions(28)` 归零，避免 donor 模板残留 `DOTA_LEAVER_DISCONNECTED`。
   - 回填真实 `server_id` 后，还需要再补发一条 server-side direct `26 / PracticeLobbyDetailsUpdate`，把更新后的 `server_id(6)` 同步进 Dota 自己维护的 GC SOCache；只改 `GBE_local_lobby.server_id` 不足以修复 session 绑定。
 
 [Dota2 Practice Lobby 7041 外围消息节奏]
