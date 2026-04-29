@@ -669,3 +669,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - server-side `4007 / k_EMsgGCServerHello` 之后看到的极小 `24 / CacheSubscribed`，不能默认当作 practice lobby SO cache；需要结合日志确认它是否只是一条过瘦的默认 cache。
   - 真正与 practice lobby 运行态对应的 `24` 应包含 `2004 / 2014 / 2015 / 2016` 这四类 SO，并能和日志里的 `owner=<Lobby:...>` 语义对上；排查时不要把它和纯 inventory `type_id=1` cache 混为一谈。
+
+[Dota2 7041 启动 26 的 runtime rewrite 约束]
+- Date: 2026-04-29
+- Context: Agent 在继续修复 practice lobby 非默认位置启动即 `7035` abandon 的问题时发现
+- Category: 代码模式
+- Instructions:
+  - donor-based `7041` 四条启动 `26 / PracticeLobbyDetailsUpdate` 不能只 patch `account_id`、`steam_id`、`lobby_id`、`match_id`、`server_id`、`game_start_time` 和 `connect`；其中内层 `2004/2016` 的成员 `team/slot` 也必须按当前运行态重写。
+  - 对启动 `26` 做 runtime rewrite 时，不能再用空字符串或零值覆盖 `room_name`、`game_mode`、`server_region`、`pass_key`、bot 配置等 lobby 字段；应传入当前 `GBE_local_lobby` 的真实状态。

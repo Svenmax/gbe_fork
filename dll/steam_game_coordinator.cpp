@@ -2067,9 +2067,13 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
     const std::string &input,
     uint32 account_id,
     uint64 steam_id,
+    uint32 owner_team,
+    uint32 owner_slot,
     std::string &output)
 {
     output.clear();
+    bool saw_team = false;
+    bool saw_slot = false;
     bool saw_leaver_status = false;
     bool saw_leaver_actions = false;
 
@@ -2116,6 +2120,18 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
             continue;
         }
 
+        if (field_number == 3u && wire_type == 0u) {
+            saw_team = true;
+            GBE_AppendProtoVarIntField(output, 3u, owner_team <= 1u ? owner_team : 0u);
+            continue;
+        }
+
+        if (field_number == 7u && wire_type == 0u) {
+            saw_slot = true;
+            GBE_AppendProtoVarIntField(output, 7u, owner_slot);
+            continue;
+        }
+
         if (field_number == 28u && wire_type == 0u) {
             saw_leaver_actions = true;
             GBE_AppendProtoVarIntField(output, 28u, 0u);
@@ -2124,6 +2140,12 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
 
         output.append(input.data() + field_offset, field_end - field_offset);
     }
+
+    if (!saw_team)
+        GBE_AppendProtoVarIntField(output, 3u, owner_team <= 1u ? owner_team : 0u);
+
+    if (!saw_slot)
+        GBE_AppendProtoVarIntField(output, 7u, owner_slot);
 
     if (!saw_leaver_status)
         GBE_AppendProtoVarIntField(output, 16u, 0u);
@@ -2457,6 +2479,8 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
     uint32 bot_difficulty_dire,
     uint64 bot_radiant,
     uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
     const std::string &pass_key,
     std::string &output)
 {
@@ -2640,6 +2664,8 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
                     std::string(input.data() + value_offset, value_size),
                     account_id,
                     steam_id,
+                    owner_team,
+                    owner_slot,
                     rewritten_member))
                 return false;
             GBE_AppendProtoBytesField(output, 120u, rewritten_member);
@@ -2767,6 +2793,8 @@ static bool GBE_RewriteDotaLobbyTemplateObject2016(
     const std::string &input,
     uint32 account_id,
     uint64 steam_id,
+    uint32 owner_team,
+    uint32 owner_slot,
     std::string &output)
 {
     output.clear();
@@ -2797,6 +2825,8 @@ static bool GBE_RewriteDotaLobbyTemplateObject2016(
                     std::string(input.data() + value_offset, value_size),
                     account_id,
                     steam_id,
+                    owner_team,
+                    owner_slot,
                     rewritten_member))
                 return false;
             GBE_AppendProtoBytesField(output, 1u, rewritten_member);
@@ -2834,6 +2864,8 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
     uint32 bot_difficulty_dire,
     uint64 bot_radiant,
     uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
     const std::string &pass_key)
 {
     if (message.size() < sizeof(ProtoBufMsgHeader_t))
@@ -2941,13 +2973,15 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
                         bot_difficulty_dire,
                         bot_radiant,
                         bot_dire,
+                        owner_team,
+                        owner_slot,
                         pass_key,
                         rewritten_object)
                     : (type_id == 2014u)
                         ? GBE_RewriteDotaLobbyTemplateObject2014(object_data, player_name, rewritten_object)
-                        : (type_id == 2015u)
+                    : (type_id == 2015u)
                             ? GBE_RewriteDotaLobbyTemplateObject2015(object_data, rewritten_object)
-                            : GBE_RewriteDotaLobbyTemplateObject2016(object_data, account_id, steam_id, rewritten_object);
+                            : GBE_RewriteDotaLobbyTemplateObject2016(object_data, account_id, steam_id, owner_team, owner_slot, rewritten_object);
                 if (!ok)
                     return false;
                 GBE_AppendProtoBytesField(rewritten_subscribed, 2u, rewritten_object);
@@ -3128,6 +3162,22 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
     uint64 match_id,
     uint32 game_start_time,
     const std::string &connect,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
+    const std::string &pass_key,
     std::string &message)
 {
     const char *template_hex = GBE_GetDotaPracticeLobbyLaunchStageHex(stage_index);
@@ -3186,6 +3236,36 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
     uint32 inner_raw_emsg = 0;
     std::memcpy(&inner_raw_emsg, payload, sizeof(inner_raw_emsg));
     if (GBE_GC_MaskedEMsg(inner_raw_emsg) != GBE_kDotaPracticeLobbyDetailsUpdate)
+        return false;
+
+    if (!GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
+            inner_payload,
+            account_id,
+            steam_id,
+            true,
+            stage_index <= 1 ? 1u : 2u,
+            stage_index == 3 ? 1u : 0u,
+            server_id,
+            match_id,
+            game_start_time,
+            connect,
+            std::string(),
+            room_name,
+            game_mode,
+            server_region,
+            lan,
+            lan_host_ping_location,
+            allow_cheats,
+            fill_with_bots,
+            allow_spectating,
+            visibility,
+            bot_difficulty_radiant,
+            bot_difficulty_dire,
+            bot_radiant,
+            bot_dire,
+            owner_team,
+            owner_slot,
+            pass_key))
         return false;
 
     message.swap(inner_payload);
@@ -5558,6 +5638,8 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTem
         GBE_local_lobby.bot_difficulty_dire,
         GBE_local_lobby.bot_radiant,
         GBE_local_lobby.bot_dire,
+        GBE_local_lobby.owner_team,
+        GBE_local_lobby.owner_slot,
         GBE_local_lobby.pass_key);
 }
 
@@ -6801,6 +6883,22 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
                 GBE_local_lobby.match_id,
                 GBE_local_lobby.game_start_time,
                 GBE_local_lobby.connect,
+                GBE_local_lobby.room_name,
+                GBE_local_lobby.game_mode,
+                GBE_local_lobby.server_region,
+                GBE_local_lobby.lan,
+                GBE_local_lobby.lan_host_ping_location,
+                GBE_local_lobby.allow_cheats,
+                GBE_local_lobby.fill_with_bots,
+                GBE_local_lobby.allow_spectating,
+                GBE_local_lobby.visibility,
+                GBE_local_lobby.bot_difficulty_radiant,
+                GBE_local_lobby.bot_difficulty_dire,
+                GBE_local_lobby.bot_radiant,
+                GBE_local_lobby.bot_dire,
+                GBE_local_lobby.owner_team,
+                GBE_local_lobby.owner_slot,
+                GBE_local_lobby.pass_key,
                 stage_messages[stage_index])) {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
