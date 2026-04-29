@@ -693,3 +693,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `CSODOTALobby.field 121` 是 `member_indices`，`122` 是 `left_member_indices`，`123` 是 `free_member_indices`，`124` 是 `requested_hero_ids`；不要把 `124` 混成成员索引字段处理。
   - 在 donor-based `7041` 启动 `26` 的 runtime rewrite 中，如果暂时没有完全确认这组字段的运行态重建语义，优先保留 donor 原始 `121/122/123/124`，不要强行压成 `121=0` 或直接删除 `122/123/124`。
+
+[Dota2 直构 2016 不能继续使用 donor 固定成员尾巴]
+- Date: 2026-04-29
+- Context: Agent 在分析“非默认位置仍在 `7041` 后立刻 `7035`”的新日志并回看 direct builder 时发现
+- Category: 代码模式
+- Instructions:
+  - `7047` 直构的 `26 / PracticeLobbyDetailsUpdate` 和直构的 `24 / CacheSubscribed` 都会经过 `GBE_BuildDotaPracticeLobbySOObjectData(...)`；其中 `2016` 如果继续复用 donor 固定 member tail，会把 `team/slot` 残留成 donor 默认位。
+  - 直构 `2016` 时至少要显式写入当前 `steam_id`、`team`、`slot`、`leaver_status=0`、`leaver_actions=0`，不能只替换 `steam_id` 后保留 donor 其余成员字段。

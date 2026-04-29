@@ -3623,11 +3623,6 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     std::string &object_2004,
     std::string &object_2014)
 {
-    static const uint8 GBE_kDotaLobbyMemberTail[] = {
-        0x48, 0x00, 0x58, 0x00, 0x60, 0xE1, 0xAC, 0x8B, 0x84, 0xD0, 0x85, 0x40, 0x68, 0x00,
-        0x98, 0x01, 0x00, 0x98, 0x01, 0x00, 0x98, 0x01, 0x00, 0x98, 0x01, 0x00, 0x15, 0x00,
-        0x00, 0x00, 0x00,
-    };
     static const uint8 GBE_kDotaLobbyField62Value[] = { 0x08, 0xF5, 0x44, 0x12, 0x02, 0x08, 0x00 };
 
     object_2015.clear();
@@ -3635,7 +3630,10 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     {
         std::string member_bytes;
         GBE_AppendProtoFixed64Field(member_bytes, 1, steam_id);
-        GBE_AppendRawBytes(member_bytes, GBE_kDotaLobbyMemberTail, sizeof(GBE_kDotaLobbyMemberTail));
+        GBE_AppendProtoVarIntField(member_bytes, 3u, owner_team <= 1u ? owner_team : 0u);
+        GBE_AppendProtoVarIntField(member_bytes, 7u, owner_slot);
+        GBE_AppendProtoVarIntField(member_bytes, 16u, 0u);
+        GBE_AppendProtoVarIntField(member_bytes, 28u, 0u);
 
         object_2016.clear();
         GBE_AppendProtoBytesField(object_2016, 1, member_bytes);
