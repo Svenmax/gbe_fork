@@ -198,6 +198,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `7041` 初始阶段保留 `server_id=0` 是允许的，但这只是启动期占位，不应贯穿整个运行态。
   - 当本地 game server 已经登录 Steam 并开始发送 `4511 / k_EMsgGCLANServerAvailable`、`4508 / k_EMsgGCGameServerInfo` 时，应从 `SteamGameServer::GetSteamID()` 取真实 `GameServer SteamID` 回填到当前 lobby 的 `server_id`。
+
+[Dota2 server-side lobby owner 身份边界]
+- Date: 2026-04-28
+- Context: Agent 在继续修复 practice lobby 启动后 `NETWORK_DISCONNECT_REJECT_NOLOBBY` 时发现
+- Category: 代码模式
+- Instructions:
+  - server-side `steam_game_coordinator` 的 `settings->get_local_steam_id()` 代表的是 GameServer SteamID，不能直接拿它去填 `CSODOTALobby.all_members[0].id`、`leader_id`、`2016` 成员对象或 `7034` connected players 响应里的玩家身份字段。
+  - practice lobby 的 owner/player 身份需要在 client-side 建房时单独保存为共享运行态字段（`owner_steam_id`、`owner_account_id`、`owner_name`），供 server-side lobby SO/cache 和 connected-player 响应复用。
   - 回填真实 `server_id` 后，还需要再补发一条 server-side direct `26 / PracticeLobbyDetailsUpdate`，把更新后的 `server_id(6)` 同步进 Dota 自己维护的 GC SOCache；只改 `GBE_local_lobby.server_id` 不足以修复 session 绑定。
 
 [Dota2 Practice Lobby 7041 外围消息节奏]

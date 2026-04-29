@@ -100,6 +100,9 @@ public ISteamGameCoordinator
         uint32 game_state{};
         uint64 match_id{};
         uint64 server_id{};
+        uint64 owner_steam_id{};
+        uint32 owner_account_id{};
+        std::string owner_name;
         std::string connect;
         uint32 game_start_time{};
         uint32 owner_team{};
@@ -160,6 +163,9 @@ public ISteamGameCoordinator
     void GBE_PublishSharedDotaLobbyState(const char *reason);
     void GBE_RestoreSharedDotaLobbyState(const char *reason);
     bool GBE_TrySyncDotaLobbyServerIdFromGameServer(const char *reason);
+    uint64 GBE_GetDotaLobbyOwnerSteamId() const;
+    uint32 GBE_GetDotaLobbyOwnerAccountId() const;
+    std::string GBE_GetDotaLobbyOwnerName() const;
     bool GBE_HandleDotaJoinChatChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw, const char *reason);
     bool GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
