@@ -649,6 +649,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `SteamKit` 里的 `CMsgAbandonCurrentGame` 当前是空消息；如果日志显示 `7035 len=8`，通常只是 direct proto 头，没有额外 body 字段，处理时不要先脑补 abandon 参数语义。
   - 在现有 `gbe_fork` replay 框架里，对这三条消息优先做“消费并记录关键字段”的最小处理，不要先凭猜测伪造 direct reply。
 
+[Dota2 server-side 首轮 connected players 需要更早预热]
+- Date: 2026-04-29
+- Context: Agent 在分析新一轮 `console.log` 与 `gbe_gc_debug.log` 时发现 `CheckUpdateConnectedPlayers` 的“no leaver state”报错发生在 server 自发 `7034` 之前
+- Category: 代码模式
+- Instructions:
+  - 如果 `console.log` 里 `Need to tell GC player is no longer connected, but we don't have a leaver state?` 出现在第一次 `Send msg 7034` 之前，那么仅修 `7034` reply 形态还不够，因为它只能影响后续状态同步，修不到这次最早的 server 判定。
+  - 这类场景下应优先考虑在 server-side `4007 / k_EMsgGCServerHello` 完成 `4005 / ServerWelcome` 与 lobby `24` 之后，主动补一条无 job 的 `7034` 预热 server 侧的 connected players 视图，而不是等 server 自己晚些时候再发第一条 `7034`。
+
 [Dota2 建房仅对齐 a3561972，开始游戏继续推进]
 - Date: 2026-04-28
 - Context: 用户纠正“只对齐建房，不要把其他后续修复也回退到该提交”
