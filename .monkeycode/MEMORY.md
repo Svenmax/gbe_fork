@@ -217,6 +217,24 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 模板重写路径在改写 lobby member 对象时，也应把 `leaver_status(16)` 和 `leaver_actions(28)` 归零，避免 donor 模板残留 `DOTA_LEAVER_DISCONNECTED`。
   - 回填真实 `server_id` 后，还需要再补发一条 server-side direct `26 / PracticeLobbyDetailsUpdate`，把更新后的 `server_id(6)` 同步进 Dota 自己维护的 GC SOCache；只改 `GBE_local_lobby.server_id` 不足以修复 session 绑定。
 
+[Dota2 7041 后若客户端主动发 7035 要优先转查启动回退]
+- Date: 2026-04-29
+- Context: Agent 在分析“点击开始游戏后直接闪退”的 `STEAM_LOG_3126989041.log` 与 `gbe_gc_debug.log` 时发现
+- Category: 代码模式
+- Instructions:
+  - 如果 `7041` 后 `gbe_gc_debug.log` 只看到 `4 x 26` 和外围 `766/5501/5575/779/5429`，却完全看不到后续的 `4007/4005`、`7034`、`7450/7451`、`4508/4511`，要先判断客户端是否已经在启动早期主动回发了 `7035 / k_EMsgGCAbandonCurrentGame`。
+  - 一旦 Steam 日志在 `7041` 后很快出现 `Send msg 7035`、`Client ... SIGNONSTATE_FULL -> SIGNONSTATE_NONE`、随后再次进入 `SteamInternal_GameServer_Init`，这说明当前问题已经从“卡 INIT / leaver_status”前移成“启动序列触发客户端放弃当前对局”。
+  - 这种情况下，应优先复查 `7041` 后的 `26 / PracticeLobbyDetailsUpdate` 与外围消息的时序和内容一致性，不要继续把排查重点放在更后面的 server-side GC 链路或 `leaver_status` 上。
+
+[Dota2 启动期 server-side 24 不能回放固定 donor 座位]
+- Date: 2026-04-29
+- Context: Agent 在分析“只有天辉一号位能开，其他位置点击开始游戏立刻闪退”的新复现差异时发现
+- Category: 代码模式
+- Instructions:
+  - `ServerWelcome` 之后 server-side 额外补发的 lobby `24 / CacheSubscribed`，如果仍从 donor 模板回放成员对象，就可能把 `CSODOTALobbyMember.team/slot` 带回模板里的固定座位。
+  - 这种固定 donor 座位与当前 `7047 / PracticeLobbySetTeamSlot` 选中的实际位置不一致时，Dota 可能会在启动早期直接回发 `7035 / AbandonCurrentGame` 并随后崩溃。
+  - 启动期这条 server-side `24` 应优先按当前运行态直接构包，显式带上最新的 `owner_team` 和 `owner_slot`，不要继续依赖 donor 模板中的成员座位信息。
+
 [Dota2 Practice Lobby 7041 外围消息节奏]
 - Date: 2026-04-23
 - Context: Agent 在对照 `/workspace/hoststartgame.zip` 补齐启动外围消息时发现
