@@ -2063,6 +2063,162 @@ static bool GBE_ExtractProtoPackedUint32Field(const uint8 *data, size_t size, co
     return true;
 }
 
+static std::string GBE_FormatDota7034LeaverStateSummary(const std::string &input)
+{
+    uint32 lobby_state = 0;
+    uint32 game_state = 0;
+    uint32 leaver_detected = 0;
+    uint32 first_blood_happened = 0;
+    uint32 discard_match_results = 0;
+    uint32 mass_disconnect = 0;
+
+    GBE_ExtractProtoFieldUint32(reinterpret_cast<const uint8 *>(input.data()), input.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()), input.size(), 1u), lobby_state);
+    GBE_ExtractProtoFieldUint32(reinterpret_cast<const uint8 *>(input.data()), input.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()), input.size(), 2u), game_state);
+    GBE_ExtractProtoFieldUint32(reinterpret_cast<const uint8 *>(input.data()), input.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()), input.size(), 3u), leaver_detected);
+    GBE_ExtractProtoFieldUint32(reinterpret_cast<const uint8 *>(input.data()), input.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()), input.size(), 4u), first_blood_happened);
+    GBE_ExtractProtoFieldUint32(reinterpret_cast<const uint8 *>(input.data()), input.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()), input.size(), 5u), discard_match_results);
+    GBE_ExtractProtoFieldUint32(reinterpret_cast<const uint8 *>(input.data()), input.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()), input.size(), 6u), mass_disconnect);
+
+    char buffer[192];
+    std::snprintf(
+        buffer,
+        sizeof(buffer),
+        "lobby_state=%u game_state=%u leaver_detected=%u first_blood=%u discard=%u mass_disconnect=%u",
+        lobby_state,
+        game_state,
+        leaver_detected,
+        first_blood_happened,
+        discard_match_results,
+        mass_disconnect);
+    return std::string(buffer);
+}
+
+static std::string GBE_FormatDota7034PlayerSummary(const std::string &input)
+{
+    uint64 steam_id = 0;
+    uint32 hero_id = 0;
+    uint32 disconnect_reason = 0;
+    std::string leaver_state_raw;
+
+    GBE_ExtractProtoFieldUint64(reinterpret_cast<const uint8 *>(input.data()), input.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()), input.size(), 1u), steam_id);
+    GBE_ExtractProtoFieldUint32(reinterpret_cast<const uint8 *>(input.data()), input.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()), input.size(), 2u), hero_id);
+    GBE_ExtractProtoFieldUint32(reinterpret_cast<const uint8 *>(input.data()), input.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()), input.size(), 4u), disconnect_reason);
+    GBE_ExtractProtoFieldBytes(reinterpret_cast<const uint8 *>(input.data()), input.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()), input.size(), 3u), leaver_state_raw);
+
+    std::ostringstream stream;
+    stream << "steam_id=" << static_cast<unsigned long long>(steam_id)
+           << " hero_id=" << hero_id
+           << " disconnect_reason=" << disconnect_reason;
+    if (!leaver_state_raw.empty())
+        stream << " leaver_state{" << GBE_FormatDota7034LeaverStateSummary(leaver_state_raw) << '}';
+    return stream.str();
+}
+
+static std::string GBE_FormatDota7034DraftSummary(const std::string &input)
+{
+    uint64 steam_id = 0;
+    uint32 team = 0;
+    uint32 team_slot = 0;
+
+    GBE_ExtractProtoFieldUint64(reinterpret_cast<const uint8 *>(input.data()), input.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()), input.size(), 1u), steam_id);
+    GBE_ExtractProtoFieldUint32(reinterpret_cast<const uint8 *>(input.data()), input.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()), input.size(), 2u), team);
+    GBE_ExtractProtoFieldUint32(reinterpret_cast<const uint8 *>(input.data()), input.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()), input.size(), 3u), team_slot);
+
+    char buffer[128];
+    std::snprintf(
+        buffer,
+        sizeof(buffer),
+        "steam_id=%llu team=%u team_slot=%u",
+        static_cast<unsigned long long>(steam_id),
+        team,
+        team_slot);
+    return std::string(buffer);
+}
+
+static std::string GBE_FormatDota7034Summary(const uint8 *data, size_t size)
+{
+    if (!data || size == 0)
+        return "empty";
+
+    uint32 game_state = 0;
+    uint32 send_reason = 0;
+    uint32 radiant_kills = 0;
+    uint32 dire_kills = 0;
+    uint32 radiant_lead = 0;
+    uint32 building_state = 0;
+    uint32 connected_count = 0;
+    uint32 disconnected_count = 0;
+    uint32 draft_count = 0;
+    std::string first_connected;
+    std::string first_disconnected;
+    std::string first_draft;
+
+    size_t offset = 0;
+    while (offset < size) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(data, size, offset, field_number, wire_type, field_offset, value_offset, value_size, field_end))
+            break;
+
+        if (field_number == 1u && wire_type == 2u) {
+            ++connected_count;
+            if (first_connected.empty())
+                first_connected = GBE_FormatDota7034PlayerSummary(std::string(reinterpret_cast<const char *>(data + value_offset), value_size));
+            continue;
+        }
+
+        if (field_number == 7u && wire_type == 2u) {
+            ++disconnected_count;
+            if (first_disconnected.empty())
+                first_disconnected = GBE_FormatDota7034PlayerSummary(std::string(reinterpret_cast<const char *>(data + value_offset), value_size));
+            continue;
+        }
+
+        if (field_number == 16u && wire_type == 2u) {
+            ++draft_count;
+            if (first_draft.empty())
+                first_draft = GBE_FormatDota7034DraftSummary(std::string(reinterpret_cast<const char *>(data + value_offset), value_size));
+            continue;
+        }
+
+        GBE_ProtoFieldView view{ true, field_number, wire_type, value_offset, value_size };
+        if (field_number == 2u)
+            GBE_ExtractProtoFieldUint32(data, size, view, game_state);
+        else if (field_number == 8u)
+            GBE_ExtractProtoFieldUint32(data, size, view, send_reason);
+        else if (field_number == 11u)
+            GBE_ExtractProtoFieldUint32(data, size, view, radiant_kills);
+        else if (field_number == 12u)
+            GBE_ExtractProtoFieldUint32(data, size, view, dire_kills);
+        else if (field_number == 14u)
+            GBE_ExtractProtoFieldUint32(data, size, view, radiant_lead);
+        else if (field_number == 15u)
+            GBE_ExtractProtoFieldUint32(data, size, view, building_state);
+    }
+
+    std::ostringstream stream;
+    stream << "game_state=" << game_state
+           << " send_reason=" << send_reason
+           << " connected=" << connected_count
+           << " disconnected=" << disconnected_count
+           << " drafts=" << draft_count
+           << " radiant_kills=" << radiant_kills
+           << " dire_kills=" << dire_kills
+           << " radiant_lead=" << radiant_lead
+           << " building_state=" << building_state;
+    if (!first_connected.empty())
+        stream << " connected0{" << first_connected << '}';
+    if (!first_disconnected.empty())
+        stream << " disconnected0{" << first_disconnected << '}';
+    if (!first_draft.empty())
+        stream << " draft0{" << first_draft << '}';
+    return stream.str();
+}
+
 static bool GBE_RewriteDotaLobbyTemplateMemberObject(
     const std::string &input,
     uint32 account_id,
@@ -3533,6 +3689,7 @@ static bool GBE_BuildDota7451BatchPlayerResourcesResponsePayload(const std::vect
 
 static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     uint64 steam_id,
+    uint32 lobby_state,
     uint32 game_state,
     uint32 owner_team,
     uint32 owner_slot,
@@ -3540,8 +3697,18 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     uint64 request_job_id,
     std::string &message)
 {
+    std::string leaver_state;
+    GBE_AppendProtoVarIntField(leaver_state, 1u, lobby_state);
+    GBE_AppendProtoVarIntField(leaver_state, 2u, game_state);
+    GBE_AppendProtoVarIntField(leaver_state, 3u, 0u);
+    GBE_AppendProtoVarIntField(leaver_state, 4u, 0u);
+    GBE_AppendProtoVarIntField(leaver_state, 5u, 0u);
+    GBE_AppendProtoVarIntField(leaver_state, 6u, 0u);
+
     std::string player;
     GBE_AppendProtoFixed64Field(player, 1u, steam_id);
+    GBE_AppendProtoBytesField(player, 3u, leaver_state);
+    GBE_AppendProtoVarIntField(player, 4u, 0u);
 
     std::string draft;
     GBE_AppendProtoFixed64Field(draft, 1u, steam_id);
@@ -3551,7 +3718,7 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     std::string body;
     GBE_AppendProtoBytesField(body, 1u, player);
     GBE_AppendProtoVarIntField(body, 2u, game_state);
-    GBE_AppendProtoVarIntField(body, 8u, 2u);
+    GBE_AppendProtoVarIntField(body, 8u, 4u);
     GBE_AppendProtoBytesField(body, 16u, draft);
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7034u, has_request_job, request_job_id, body, message);
 }
@@ -6255,9 +6422,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == 7034) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "parsed req=%u source_job=%llu body_size=%zu summary=%s",
+            request_emsg,
+            static_cast<unsigned long long>(source_job),
+            body_size,
+            GBE_FormatDota7034Summary(body, body_size).c_str()
+        );
+
         std::string response_message;
         if (!GBE_BuildDota7034ConnectedPlayersResponsePayload(
                 GBE_GetDotaLobbyOwnerSteamId(),
+                GBE_local_lobby.state,
                 GBE_local_lobby.game_state,
                 GBE_local_lobby.owner_team,
                 GBE_local_lobby.owner_slot,
@@ -6268,16 +6445,30 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             return true;
         }
 
+        size_t response_body_offset = 8u;
+        if (response_message.size() >= 8u) {
+            uint32 response_header_length = 0;
+            std::memcpy(&response_header_length, response_message.data() + 4, sizeof(response_header_length));
+            response_body_offset += response_header_length;
+        }
+        const uint8 *response_body = response_body_offset <= response_message.size()
+            ? reinterpret_cast<const uint8 *>(response_message.data() + response_body_offset)
+            : nullptr;
+        const size_t response_body_size = response_body_offset <= response_message.size()
+            ? (response_message.size() - response_body_offset)
+            : 0u;
+
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=7034 minimal connected players game_state=%u team=%u slot=%u",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=7034 connected players game_state=%u team=%u slot=%u summary=%s",
             request_emsg,
             7034u,
             static_cast<unsigned long long>(source_job),
             response_message.size(),
             GBE_local_lobby.game_state,
             GBE_local_lobby.owner_team,
-            GBE_local_lobby.owner_slot
+            GBE_local_lobby.owner_slot,
+            GBE_FormatDota7034Summary(response_body, response_body_size).c_str()
         );
         push_incoming_now(7034u | GBE_kProtoMask, response_message);
         return true;

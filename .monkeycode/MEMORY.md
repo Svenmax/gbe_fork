@@ -590,6 +590,17 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 当前 `GBE_local_lobby.owner_team` 的取值已经与 Dota proto `DOTA_GC_TEAM` 对齐：`0 = GOOD_GUYS`，`1 = BAD_GUYS`。
   - 因此构造 `CMsgConnectedPlayers.PlayerDraft.team` 时可以直接复用 `owner_team`，只需在异常值场景下兜底回 `0`，不需要再额外做 UI 编号到 proto 枚举的二次映射。
+  - 当客户端已经进入 `DOTA_GAME_UI_DOTA_INGAME`，但 server 侧日志仍出现“Need to tell GC player is no longer connected”并发送带 `disconnected_players` 草稿的 `7034` 时，回给 server 的 `7034` 不能只带 `steam_id` 和 `player_draft`；至少还要在 `connected_players[0]` 中补齐 `leaver_state.lobby_state` 和 `leaver_state.game_state`，让 GC 返回的玩家连接态与当前 lobby 运行态一致。
+  - 后续继续排查 `7034` 时，优先打开字段级摘要日志，直接比对 request/response 里的 `connected_players`、`disconnected_players`、`send_reason`、`player_draft` 和 `leaver_state`，不要再只凭消息号和长度猜字段缺口。
+
+[Dota2 game_session_manifest 的排查边界]
+- Date: 2026-04-29
+- Context: Agent 在分析“server 卡在 `ss_waitingforgamesessionmanifest`、客户端停在 `DOTA_GAMERULES_STATE_INIT`”的新日志并对照 Source2 网络 proto 时发现
+- Category: 代码结构
+- Instructions:
+  - `game_session_config` 和 `game_session_manifest` 不属于 Dota GC direct 消息，而是 Source2 `CSVCMsg_ServerInfo` 的字段：`field 19 = game_session_config`、`field 20 = game_session_manifest`。
+  - `spawngroupmanifest`、`manifestincomplete` 属于 Source2 `CNETMsg_SpawnGroup_Load / ManifestUpdate` 网络消息，也不在当前 `steam_game_coordinator.cpp` 的 GC 处理层。
+  - 因此如果 server 卡在 `ss_waitingforgamesessionmanifest`，不能只在 GC direct 消息里补外围响应；需要同时确认 Source2 server->client 网络层是否真的发出了 session config/manifest，并确认客户端是否成功应用了这些消息。
 
 [gbe_fork 本地 Linux 构建前置依赖]
 - Date: 2026-04-28
