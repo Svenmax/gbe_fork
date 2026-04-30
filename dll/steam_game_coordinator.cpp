@@ -3875,8 +3875,12 @@ static bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
                 message,
                 GBE_VectorFromBytes(GBE_kOldDotaPracticeLobbyGameStartTimeVarint.data(), GBE_kOldDotaPracticeLobbyGameStartTimeVarint.size()),
                 encoded_game_start_time)) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch game_start_time patch failed stage=%s game_start_time=%u", stage_note ? stage_note : "", game_start_time);
-            return false;
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Launch game_start_time patch skipped stage=%s game_start_time=%u; donor does not expose expected template bytes",
+                stage_note ? stage_note : "",
+                game_start_time
+            );
         }
     }
 
