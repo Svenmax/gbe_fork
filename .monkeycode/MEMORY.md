@@ -205,6 +205,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 这种情况下，问题不再是 `7035` 早退，而是 `4511` 后的权威运行态没有跟着延后的 launch `26` 一起推进到最终状态。
   - 如果日志里出现延后的 `stage=2/3/4` 已排队，但后续 `restored shared lobby reason=4511_lan_server_available` 仍显示 `state=1 game_state=0`，优先检查 shared lobby 是否被旧状态覆盖。
 
+[Dota2 server coordinator 也必须能发布 shared lobby]
+- Date: 2026-04-30
+- Context: Agent 在继续修复 practice lobby host startgame 卡在 loading、并追到 `4511` 后状态回退问题时发现
+- Category: 代码模式
+- Instructions:
+  - 当前 `dll/steam_game_coordinator.cpp` 里的 `GBE_PublishSharedDotaLobbyState()` 不能禁止 `is_server` 路径写 shared state；否则 server coordinator 在 `4511` 后推进出的 `state/game_state/server_id/match_id` 不会落到 shared lobby。
+  - 一旦 shared lobby 仍停留在旧值，后续 `GBE_SendDotaPracticeLobbyDetailsUpdate()` 开头调用 `GBE_RestoreSharedDotaLobbyState()` 时，就会把 server 侧刚推进到的运行态重新拉回旧状态。
+  - 如果日志显示 `updated authoritative lobby state after deferred 7041 launch ... state=2 game_state=1` 紧接着又出现 `restored shared lobby ... state=1 game_state=0`，应优先检查是否又恢复了 `GBE_PublishSharedDotaLobbyState()` 对 server 的早退。
+
 [GitHub 构建触发偏好]
 - Date: 2026-04-23
 - Context: 用户要求后续触发 GitHub 构建时限定目标任务

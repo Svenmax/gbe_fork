@@ -6634,9 +6634,6 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPay
 
 void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
 {
-    if (is_server)
-        return;
-
     GBE_shared_dota_lobby_state.valid = true;
     GBE_shared_dota_lobby_state.active = GBE_local_lobby.active;
     GBE_shared_dota_lobby_state.lobby_id = GBE_local_lobby.lobby_id;
