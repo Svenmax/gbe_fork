@@ -1296,9 +1296,10 @@ STEAMAPI_API steam_bool SteamGameServer_BSecure()
 
 STEAMAPI_API uint64 SteamGameServer_GetSteamID()
 {
-    PRINT_DEBUG_ENTRY();
     if (!steamclient_instance) return 0;
-    return get_steam_client()->steam_gameserver->GetSteamID().ConvertToUint64();
+    uint64 id = get_steam_client()->steam_gameserver->GetSteamID().ConvertToUint64();
+    PRINT_DEBUG("returning %llu", id);
+    return id;
 }
 
 STEAMAPI_API ISteamClient *SteamGameServerClient()
@@ -1773,10 +1774,11 @@ STEAMCLIENT_API int Steam_GSGetSteamGameConnectToken(HSteamUser hUser, HSteamPip
 
 STEAMCLIENT_API uint64 Steam_GSGetSteamID( void *phSteamHandle )
 {
-    PRINT_DEBUG_ENTRY();
     if (!phSteamHandle) return 0;
     ISteamGameServer002 *gs = reinterpret_cast<ISteamGameServer002 *>(phSteamHandle);
-    return gs->GetSteamID().ConvertToUint64();
+    uint64 id = gs->GetSteamID().ConvertToUint64();
+    PRINT_DEBUG("returning %llu handle=%p", id, phSteamHandle);
+    return id;
 }
 
 STEAMCLIENT_API void Steam_GSLogOff( void *phSteamHandle )

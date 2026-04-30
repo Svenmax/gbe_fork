@@ -17,6 +17,28 @@
 
 #include "dll/steam_networking_socketsserialized.h"
 
+#include <algorithm>
+#include <cstring>
+
+namespace {
+
+int GBE_CopySerializedNetworkingJson(const char *json, void *buf, uint32 cbBuf)
+{
+    if (!json)
+        json = "{}";
+
+    const size_t required = std::strlen(json) + 1;
+    if (buf && cbBuf > 0) {
+        const size_t to_copy = std::min<size_t>(required, cbBuf);
+        std::memcpy(buf, json, to_copy);
+        reinterpret_cast<char *>(buf)[to_copy - 1] = '\0';
+    }
+
+    return static_cast<int>(required);
+}
+
+}
+
 
 void Steam_Networking_Sockets_Serialized::steam_callback(void *object, Common_Message *msg)
 {
@@ -70,7 +92,14 @@ SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     struct SteamNetworkingSocketsCert_t data = {};
-    data.m_eResult = k_EResultOK;
+    data.m_eResult = k_EResultFail;
+    const char *message = "Goldberg serialized cert is unavailable";
+    std::strncpy(data.m_certOrMsg, message, sizeof(data.m_certOrMsg) - 1);
+    data.m_certOrMsg[sizeof(data.m_certOrMsg) - 1] = '\0';
+    data.m_cbCert = 0;
+    data.m_caKeyID = 0;
+    data.m_cbSignature = 0;
+    data.m_cbPrivKey = 0;
 
     auto ret = callback_results->addCallResult(data.k_iCallback, &data, sizeof(data));
     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
@@ -81,7 +110,7 @@ int Steam_Networking_Sockets_Serialized::GetNetworkConfigJSON( void *buf, uint32
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return 0;
+    return GBE_CopySerializedNetworkingJson("{}", buf, cbBuf);
 }
 
 int Steam_Networking_Sockets_Serialized::GetNetworkConfigJSON( void *buf, uint32 cbBuf )
@@ -121,6 +150,8 @@ bool Steam_Networking_Sockets_Serialized::GetSTUNServer(int dont_know, char *buf
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    if (buf && len > 0)
+        buf[0] = '\0';
     return false;
 }
 

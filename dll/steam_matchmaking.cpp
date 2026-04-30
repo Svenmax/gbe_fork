@@ -282,6 +282,37 @@ Steam_Matchmaking::~Steam_Matchmaking()
     this->run_every_runcb->remove(&Steam_Matchmaking::steam_matchmaking_run_every_runcb, this);
 }
 
+CSteamID Steam_Matchmaking::CreateLobbyImmediate(ELobbyType eLobbyType, int cMaxMembers)
+{
+    PRINT_DEBUG("type: %i max_members: %i", eLobbyType, cMaxMembers);
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    CSteamID existing_lobby_id = settings->get_lobby();
+    Lobby *existing_lobby = get_lobby(existing_lobby_id);
+    if (existing_lobby && !existing_lobby->deleted() && existing_lobby->owner() == settings->get_local_steam_id().ConvertToUint64()) {
+        existing_lobby->set_joinable(true);
+        existing_lobby->set_member_limit(cMaxMembers);
+        existing_lobby->set_type(eLobbyType);
+        trigger_lobby_dataupdate(existing_lobby_id, existing_lobby_id, true);
+        return existing_lobby_id;
+    }
+
+    Lobby lobby{};
+    CSteamID lobby_id = generate_steam_id_lobby();
+    lobby.set_room_id(lobby_id.ConvertToUint64());
+    lobby.set_joinable(true);
+    lobby.set_member_limit(cMaxMembers);
+    lobby.set_type(eLobbyType);
+    lobby.set_owner(settings->get_local_steam_id().ConvertToUint64());
+    lobby.set_appid(settings->get_local_game_id().AppID());
+    add_member_to_lobby(&lobby, settings->get_local_steam_id());
+    lobbies.push_back(lobby);
+
+    on_self_enter_leave_lobby(lobby_id, eLobbyType, false);
+    trigger_lobby_dataupdate(lobby_id, lobby_id, true);
+    return lobby_id;
+}
+
 
 // game server favorites storage
 // saves basic details about a multiplayer game server locally

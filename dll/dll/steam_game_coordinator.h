@@ -79,6 +79,7 @@ public ISteamGameCoordinator
     {
         bool active{};
         uint64 lobby_id{};
+        uint64 generic_lobby_id{};
         bool has_chat_channel{};
         uint64 chat_channel_id{};
         std::string chat_channel_name;
@@ -100,6 +101,9 @@ public ISteamGameCoordinator
         uint32 game_state{};
         uint64 match_id{};
         uint64 server_id{};
+        uint64 owner_steam_id{};
+        uint32 owner_account_id{};
+        std::string owner_name;
         std::string connect;
         uint32 game_start_time{};
         uint32 owner_team{};
@@ -156,8 +160,16 @@ public ISteamGameCoordinator
     void handle_adjust_equip_state(const void *input, uint32 input_size);
     void handle_set_multiple_item_pos(const void *input, uint32 input_size);
     void GBE_PushDotaLoginSyncMessages();
+    bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &player_name, std::string &message);
+    bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const std::string &player_name, std::string &message);
     void GBE_PublishSharedDotaLobbyState(const char *reason);
     void GBE_RestoreSharedDotaLobbyState(const char *reason);
+    void GBE_LeaveGenericLobby();
+    bool GBE_SyncGenericLobbyGameServer(const char *reason);
+    bool GBE_TrySyncDotaLobbyServerIdFromGameServer(const char *reason);
+    uint64 GBE_GetDotaLobbyOwnerSteamId() const;
+    uint32 GBE_GetDotaLobbyOwnerAccountId() const;
+    std::string GBE_GetDotaLobbyOwnerName() const;
     bool GBE_HandleDotaJoinChatChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw, const char *reason);
     bool GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
