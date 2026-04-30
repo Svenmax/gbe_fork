@@ -2889,10 +2889,33 @@ static bool GBE_PatchDotaTemplateIdentifiers(
 
     if (replace_steam_id) {
         std::vector<uint8> encoded_steam_id;
-        if (!GBE_EncodeVarUint64WithExpectedSize(steam_id, GBE_kOldDotaSteamIdVarint.size(), encoded_steam_id))
+        if (!GBE_EncodeVarUint64WithExpectedSize(steam_id, GBE_kOldDotaSteamIdVarint.size(), encoded_steam_id)) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_PATCH",
+                "steam_id template rewrite skipped due to size mismatch req=%u resp=%u note=%s steam_id=%llu encoded_expected=%zu",
+                request_emsg,
+                response_emsg,
+                context_note ? context_note : "",
+                static_cast<unsigned long long>(steam_id),
+                GBE_kOldDotaSteamIdVarint.size());
             return false;
-        if (!GBE_FindAndOverwriteBytes(message, GBE_VectorFromBytes(GBE_kOldDotaSteamIdVarint.data(), GBE_kOldDotaSteamIdVarint.size()), encoded_steam_id))
+        }
+
+        const std::vector<uint8> old_steam_id_varint = GBE_VectorFromBytes(GBE_kOldDotaSteamIdVarint.data(), GBE_kOldDotaSteamIdVarint.size());
+        const size_t steam_id_match_count = GBE_CountBytePatternMatches(message, old_steam_id_varint);
+        if (steam_id_match_count != 0 && !GBE_FindAndOverwriteBytes(message, old_steam_id_varint, encoded_steam_id))
             return false;
+
+        if (steam_id_match_count == 0) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_PATCH",
+                "steam_id template rewrite skipped; donor does not expose expected varint req=%u resp=%u note=%s steam_id=%llu expected_size=%zu",
+                request_emsg,
+                response_emsg,
+                context_note ? context_note : "",
+                static_cast<unsigned long long>(steam_id),
+                GBE_kOldDotaSteamIdVarint.size());
+        }
     }
 
     return true;

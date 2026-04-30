@@ -40,6 +40,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当本地 lobby 仍处于 `state=1, game_state=0` 时，`7034` 应等待官方后续 `4511 -> 24 -> 4506 -> 018/26` 的时序推进，而不是把缺失 `4506` 的恢复逻辑硬挂在这个首个 `7034` 上。
   - 如果后续仍看不到 `4506`，应先复查本地为什么没进入官方链路，而不是先在首个 `7034` 上发明替代回复。
 
+[Dota2 4511 后的 016 donor 不应强依赖旧 steam_id varint 模板命中]
+- Date: 2026-04-30
+- Context: Agent 在基于 `a29a71dc` 新增的阶段日志复查 `4511` 后 official launch cache `24` 构建失败时发现
+- Category: 代码模式
+- Instructions:
+  - `practice lobby launch official cache template` 在 `4511` 窗口使用的 donor `016` 可能不暴露 `GBE_kOldDotaSteamIdVarint` 这组旧 `steam_id` 模板字节。
+  - 当 `account_id` 语义改写已只是 skipped/no replacements，而失败点收敛到 `launch cache template identifier patch failed` 时，应优先把顶层 `steam_id` varint 模板替换从 hard failure 放宽为“未命中则记录日志并继续”。
+  - 后续真正需要保证的运行态字段，应优先依赖 inner `24` 对象重写与 owner SOID 修正，而不是要求 donor 一定包含旧 `steam_id` 顶层模板字节。
+
 [Dota2 4511 后目标 873-byte CacheSubscribed donor 对应抓包 016 而不是 038]
 - Date: 2026-04-30
 - Context: Agent 在继续对照 `/workspace/lobbystartgamedota2/` 中 `ClientFromGC` 样本大小与 `/workspace/lobbystartgame.log` 的 `4511 -> 24` 时序时发现
