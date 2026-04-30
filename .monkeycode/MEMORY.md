@@ -1143,3 +1143,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `8870` 本身不是立刻回包的 direct；它更像一个“挂起后续推进”的标记，应该让紧随其后的那次 `7034` 触发官方 `024/025` 双 `26` 窗口，而不是在 `8870` 收到时马上 synthetic 回一条 `26`。
   - 官方后段 `26` 的关键 `game_state` 推进值依次是：`018 -> 0`，`021/024 -> 1`，`025 -> 2`，`030 -> 3`，`032 -> 10`，`043/046 -> 4`；如果本地推进值不按这组序列走，容易再次偏离 `WAIT_FOR_PLAYERS_TO_LOAD/HERO_SELECTION/STRATEGY_TIME/PRE_GAME` 的真实节奏。
   - `039 out 8744` 应回官方 `042 in 8745`，随后 `040/045 out 7034` 再分别驱动官方 `043/046 in 26`，不要把 `8744` 混成普通空请求直接吞掉。
+
+[Dota2 host startgame 的 persona/auth/ticket 外围消息要按阶段去重排队]
+- Date: 2026-04-30
+- Context: Agent 在继续排查“已进入游戏但 dashboard 仍显示主机载入中”，并对照 `/workspace/hoststartgame_unpacked/` 的 `7501/766/5501/5575/779/5429` 顺序时发现
+- Category: 代码模式
+- Instructions:
+  - official 样本里的 rich presence/persona 不是单条静态消息；它会沿 `#DOTA_RP_INIT -> #DOTA_RP_FINDING_MATCH(SERVERSETUP) -> #DOTA_RP_FINDING_MATCH(RUN) -> #DOTA_RP_PRIVATE_LOBBY(RUN)` 逐步推进，并夹着 `5501/5575/779/5429` 这类外围消息。
+  - 这些外围消息不能在 `4511/server_id` 首次同步时一次性全量倾倒；更稳妥的做法是按 launch 阶段去重排队：`7041` 只发 init persona，`server_id` 同步后补 `5501/5575/779 + setup persona`，`4506` 后补 `5575/779 + run persona`，`PRE_GAME 046` 窗口再补 `5429/779 + server-run/private-lobby persona`。
+  - 如果后续 dashboard 状态仍异常，优先先核对这些 persona/rich presence 阶段消息是否根本没发、发重了，或发到了错误阶段，而不是先怀疑 `CSODOTALobby.state/game_state` 顶层推进。
