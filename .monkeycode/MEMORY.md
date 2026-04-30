@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 4511 后的 launch CacheSubscribed 应改为单条 runtime snapshot]
+- Date: 2026-04-30
+- Context: Agent 在继续修复 practice lobby host `start game` 卡在 `DOTA_GAMERULES_STATE_INIT`、并收口 `4511` 后 donor 双 `24` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当 `server_id` 在 `4511` 窗口首次从 `0` 同步成真实 gameserver SteamID 时，优先下发一条按当前运行态直构的 `24 / CacheSubscribed`，并携带 `extra_startup_account_id=owner account_id`。
+  - 不要在这条 `4511` 后窗口继续发送 donor-based prelude 小 `24` 加 donor 大 `24` 的双 `24` 组合；这组 `41 + 6376/6377` 更容易触发客户端 `Lobby object destroyed`。
+  - 这条 runtime `24` 应沿用当前权威 lobby 的 `state/game_state/server_id/match_id/connect`，不要把状态硬回退到模板默认值。
+
 [网络问题处理约束]
 - Date: 2026-04-28
 - Context: 用户要求后续处理网络问题时避免修改 DNS 配置

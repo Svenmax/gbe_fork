@@ -6637,6 +6637,78 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTem
         GBE_local_lobby.pass_key);
 }
 
+static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
+    uint64 steam_id,
+    uint64 lobby_id,
+    uint32 lobby_state,
+    uint32 lobby_game_state,
+    uint64 server_id,
+    uint64 match_id,
+    uint32 game_start_time,
+    const std::string &connect,
+    const std::string &player_name,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
+    bool has_broadcast_channel,
+    uint32 broadcast_channel_id,
+    const std::string &broadcast_country_code,
+    const std::string &broadcast_description,
+    const std::string &broadcast_language_code,
+    const std::string &pass_key,
+    uint32 extra_startup_account_id,
+    std::string &message)
+{
+    if (steam_id == 0 || lobby_id == 0)
+        return false;
+
+    return GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
+        steam_id,
+        lobby_id,
+        lobby_state,
+        lobby_game_state,
+        server_id,
+        match_id,
+        game_start_time,
+        connect,
+        player_name,
+        room_name,
+        game_mode,
+        server_region,
+        lan,
+        lan_host_ping_location,
+        allow_cheats,
+        fill_with_bots,
+        allow_spectating,
+        visibility,
+        bot_difficulty_radiant,
+        bot_difficulty_dire,
+        bot_radiant,
+        bot_dire,
+        owner_team,
+        owner_slot,
+        has_broadcast_channel,
+        broadcast_channel_id,
+        broadcast_country_code,
+        broadcast_description,
+        broadcast_language_code,
+        pass_key,
+        extra_startup_account_id,
+        message);
+}
+
 bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const std::string &player_name, std::string &message)
 {
     GBE_RestoreSharedDotaLobbyState("cache_payload");
@@ -6644,12 +6716,8 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPay
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)
         return false;
 
-    const uint64 steam_id = GBE_GetDotaLobbyOwnerSteamId();
-    if (steam_id == 0)
-        return false;
-
-    return GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
-        steam_id,
+    return GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
+        GBE_GetDotaLobbyOwnerSteamId(),
         GBE_local_lobby.lobby_id,
         GBE_local_lobby.state,
         GBE_local_lobby.game_state,
@@ -7012,22 +7080,15 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
     GBE_SyncGenericLobbyGameServer(reason);
 
     if (previous_server_id == 0) {
-        std::string launch_cache_prelude_message;
         std::string launch_cache_message;
         const uint64 steam_id = GBE_GetDotaLobbyOwnerSteamId();
         const uint32 account_id = GBE_GetDotaLobbyOwnerAccountId();
         if (steam_id != 0 && account_id != 0 &&
-                GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedPreludeTemplateReplay(
-                    account_id,
+                GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
                     steam_id,
                     GBE_local_lobby.lobby_id,
-                    launch_cache_prelude_message) &&
-                GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(
-                    account_id,
-                    steam_id,
-                    GBE_local_lobby.lobby_id,
-                    1u,
-                    0u,
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
                     GBE_local_lobby.server_id,
                     GBE_local_lobby.match_id,
                     GBE_local_lobby.game_start_time,
@@ -7048,24 +7109,18 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
                     GBE_local_lobby.bot_dire,
                     GBE_local_lobby.owner_team,
                     GBE_local_lobby.owner_slot,
+                    GBE_local_lobby.has_broadcast_channel,
+                    GBE_local_lobby.broadcast_channel_id,
+                    GBE_local_lobby.broadcast_country_code,
+                    GBE_local_lobby.broadcast_description,
+                    GBE_local_lobby.broadcast_language_code,
                     GBE_local_lobby.pass_key,
                     account_id,
                     launch_cache_message)) {
-            push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, launch_cache_prelude_message);
-            GBE_GC_DebugLog(
-                "GC_DOTA_SYNC",
-                "queued launch CacheSubscribed prelude after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu size=%zu",
-                reason ? reason : "unknown",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                static_cast<unsigned long long>(GBE_local_lobby.match_id),
-                static_cast<unsigned long long>(server_id),
-                launch_cache_prelude_message.size()
-            );
-
             push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, launch_cache_message);
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
-                "queued launch CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu size=%zu",
+                "queued runtime CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu size=%zu",
                 reason ? reason : "unknown",
                 static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                 static_cast<unsigned long long>(GBE_local_lobby.match_id),
