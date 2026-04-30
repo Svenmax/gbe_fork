@@ -3864,6 +3864,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
             owner_team,
             owner_slot,
             stage_index == 3,
+            stage_index == 3 ? account_id : 0u,
             pass_key))
         return false;
 
