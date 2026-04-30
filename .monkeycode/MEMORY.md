@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 late-stage official 26 donor 应按阶段决定是否重写 2015]
+- Date: 2026-04-30
+- Context: Agent 在继续压缩 practice lobby host startgame 后半段 `26` 包体并对照官方 `024/025/030/032/043/046` donor 时发现
+- Category: 代码模式
+- Instructions:
+  - `official 018` 与 `official 021` 这类 launch early-stage donor 仍需要重写 `2015`，并按当前 owner account 补一份 startup account data。
+  - `official 024/025/030/032/043/046` 这类 late-stage donor 的 `2015` 应优先保留 donor 原始小对象，不要再统一强制清空并追加 startup account data；否则本地 `26` 容易从官方 `512/514` 膨胀到 `922/924`。
+  - 继续排查 UI 状态错乱时，应优先关注这些 late-stage `26` 的 `2015` 是否仍被错误放大，而不是先改动官方消息顺序。
+
 [Dota2 官方 launch prelude 里的首个 7034 不能提前回复 018 或 runtime 26]
 - Date: 2026-04-30
 - Context: Agent 在继续按 `/workspace/lobbystartgamedota2/` 与 `/workspace/lobbystartgame.log` 逐条核对 `4508 -> 7034 -> 4511 -> 24 -> 4506 -> 26` 时发现

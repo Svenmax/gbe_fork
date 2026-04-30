@@ -3040,6 +3040,52 @@ static bool GBE_ForceDotaLobbyUpdateOwnerSOID(std::string &message, uint64 lobby
     return true;
 }
 
+static void GBE_LogDotaSOMultipleObjectsSummary(const char *tag, const char *label, const std::string &message)
+{
+    if (message.size() < sizeof(ProtoBufMsgHeader_t))
+        return;
+
+    ProtoBufMsgHeader_t hdr{};
+    std::memcpy(&hdr, message.data(), sizeof(hdr));
+    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
+    if (body_offset > message.size())
+        return;
+
+    CMsgSOMultipleObjects protomsg;
+    if (!protomsg.ParseFromArray(message.data() + body_offset, static_cast<int>(message.size() - body_offset)))
+        return;
+
+    GBE_GC_DebugLog(
+        tag,
+        "%s owner_type=%u owner_id=%llu objects=%d",
+        label ? label : "dota_so_summary",
+        protomsg.has_owner_soid() ? protomsg.owner_soid().type() : 0u,
+        static_cast<unsigned long long>(protomsg.has_owner_soid() ? protomsg.owner_soid().id() : 0ull),
+        protomsg.objects_size()
+    );
+
+    for (int object_index = 0; object_index < protomsg.objects_size(); ++object_index) {
+        const auto &object = protomsg.objects(object_index);
+        std::string sizes;
+        for (int data_index = 0; data_index < object.object_data_size(); ++data_index) {
+            if (!sizes.empty())
+                sizes.push_back(',');
+            sizes.append(std::to_string(object.object_data(data_index).size()));
+        }
+
+        GBE_GC_DebugLog(
+            tag,
+            "%s object[%d] type=%d size_uncompressed=%u objects_modified=%u object_data_sizes=%s",
+            label ? label : "dota_so_summary",
+            object_index,
+            object.type_id(),
+            object.has_size_uncompressed() ? object.size_uncompressed() : 0u,
+            object.has_objects_modified() ? object.objects_modified() : 0u,
+            sizes.empty() ? "-" : sizes.c_str()
+        );
+    }
+}
+
 static bool GBE_RewriteDotaLobbyTemplateObject2004(
     const std::string &input,
     uint32 account_id,
@@ -4006,6 +4052,8 @@ static bool GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
     const std::string &pass_key,
     uint32 lobby_state,
     uint32 lobby_game_state,
+    bool rewrite_2015,
+    uint32 extra_startup_account_id,
     std::string &message)
 {
     if (!wrapped_template_hex)
@@ -4062,8 +4110,8 @@ static bool GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
             bot_dire,
             owner_team,
             owner_slot,
-            true,
-            account_id,
+            rewrite_2015,
+            extra_startup_account_id,
             pass_key))
         return false;
 
@@ -7831,7 +7879,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == 7034) {
-        auto queue_official_26 = [&](const char *template_hex, uint32 next_state, uint32 next_game_state, const char *note) -> bool {
+        auto queue_official_26 = [&](const char *template_hex, uint32 next_state, uint32 next_game_state, bool rewrite_2015, uint32 extra_startup_account_id, const char *note) -> bool {
             std::string response_message;
             if (!GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
                     template_hex,
@@ -7862,6 +7910,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     GBE_local_lobby.pass_key,
                     next_state,
                     next_game_state,
+                    rewrite_2015,
+                    extra_startup_account_id,
                     response_message)) {
                 GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building official 26 reply req=%u note=%s state=%u game_state=%u", request_emsg, note ? note : "unknown", next_state, next_game_state);
                 return false;
@@ -7881,6 +7931,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             );
             if (note && std::strcmp(note, "official packet 018 after 7034 fallback missing 4506") == 0) {
                 GBE_LogHexDump("GC_DOTA_DIRECT", "official_018_local_reply", response_message, 64u);
+            }
+            if (note && std::strncmp(note, "official packet ", 16) == 0) {
+                GBE_LogDotaSOMultipleObjectsSummary("GC_DOTA_DIRECT", note, response_message);
             }
             return true;
         };
@@ -7906,36 +7959,36 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             }
 
             if (GBE_dota_launch_pending_8870 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 1u) {
-                if (!queue_official_26(GBE_kDotaOfficial024PracticeLobby26Hex, 2u, 1u, "official packet 024 after 8870/7034"))
+                if (!queue_official_26(GBE_kDotaOfficial024PracticeLobby26Hex, 2u, 1u, false, 0u, "official packet 024 after 8870/7034"))
                     return true;
                 GBE_dota_launch_pending_8870 = false;
-                if (queue_official_26(GBE_kDotaOfficial025PracticeLobby26Hex, 2u, 2u, "official packet 025 after 8870/7034"))
+                if (queue_official_26(GBE_kDotaOfficial025PracticeLobby26Hex, 2u, 2u, false, 0u, "official packet 025 after 8870/7034"))
                     return true;
                 return true;
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 0u) {
-                if (queue_official_26(GBE_kDotaOfficial021PracticeLobby26Hex, 2u, 1u, "official packet 021 after 7034"))
+                if (queue_official_26(GBE_kDotaOfficial021PracticeLobby26Hex, 2u, 1u, true, GBE_GetDotaLobbyOwnerAccountId(), "official packet 021 after 7034"))
                     return true;
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 2u) {
-                if (queue_official_26(GBE_kDotaOfficial030PracticeLobby26Hex, 2u, 3u, "official packet 030 after 8330/7034"))
+                if (queue_official_26(GBE_kDotaOfficial030PracticeLobby26Hex, 2u, 3u, false, 0u, "official packet 030 after 8330/7034"))
                     return true;
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 3u) {
-                if (queue_official_26(GBE_kDotaOfficial032PracticeLobby26Hex, 2u, 10u, "official packet 032 after 7034"))
+                if (queue_official_26(GBE_kDotaOfficial032PracticeLobby26Hex, 2u, 10u, false, 0u, "official packet 032 after 7034"))
                     return true;
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u && request_shape.has_send_reason && request_shape.send_reason == 2u) {
-                if (queue_official_26(GBE_kDotaOfficial043PracticeLobby26Hex, 2u, 4u, "official packet 043 after 8744/7034"))
+                if (queue_official_26(GBE_kDotaOfficial043PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 043 after 8744/7034"))
                     return true;
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && request_shape.has_send_reason && request_shape.send_reason == 5u) {
-                if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, "official packet 046 after disconnected-player 7034"))
+                if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 after disconnected-player 7034"))
                     return true;
             }
 
@@ -8063,6 +8116,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     GBE_local_lobby.pass_key,
                     2u,
                     0u,
+                    true,
+                    GBE_GetDotaLobbyOwnerAccountId(),
                     stage_message)) {
                 push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, stage_message, true, 2u, 0u);
                 GBE_GC_DebugLog(
