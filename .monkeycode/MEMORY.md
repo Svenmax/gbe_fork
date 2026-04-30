@@ -135,6 +135,16 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 在这种窗口里，若 `match_id/server_id/game_start_time` 仍全为 `0`，`7040` 处理可以继续给客户端下发 `25 / CMsgSOCacheUnsubscribed`，但不能立刻清空内部 `GBE_local_lobby`。
   - 否则后续 `7041` 会因为 `no local lobby is active` 被全部丢弃，直接把 host startgame 链路在本地截断。
 
+[Dota2 官方 host startgame 的 7041 后续 SO 节奏]
+- Date: 2026-04-30
+- Context: Agent 在对照 `/workspace/lobbystartgame.log` 与 `lobbystartgamedota2.zip` 的官方抓包时发现
+- Category: 代码模式
+- Instructions:
+  - 官方 `7041 / PracticeLobbyLaunch` 之后，客户端不会立刻发送 `7035 / AbandonCurrentGame`；如果本地日志在启动包之后立刻出现空 `7035`，应视为异常回退信号。
+  - 官方链路会先收到一条较大的 `24 / CacheSubscribed`，其中 `CSODOTALobby` 会先落地 `server_id`、`match_id`、`state=SERVERSETUP`，并带上 `CSODOTAServerLobby.extra_startup_messages[0] = 8869`。
+  - 在这条 `24` 之后，官方才继续通过多条 `26 / UpdateMultiple` 把 lobby `state/game_state` 依次推进到 `RUN / WAIT_FOR_PLAYERS_TO_LOAD / HERO_SELECTION / STRATEGY_TIME / PRE_GAME`。
+  - 如果本地实现只重放启动 `26`，但没有提供这条带 `server_id/match_id/8869` 的大 `24`，客户端和服务器虽然可能进入 `INGAME` UI，但游戏规则状态容易长期停在 `INIT`。
+
 [GitHub 构建触发偏好]
 - Date: 2026-04-23
 - Context: 用户要求后续触发 GitHub 构建时限定目标任务

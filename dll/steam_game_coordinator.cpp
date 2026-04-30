@@ -52,6 +52,7 @@ static constexpr uint32 GBE_kDotaPracticeLobbyDetailsUpdate = 26u;
 static constexpr uint32 GBE_kDotaJoinChatChannel = 7009u;
 static constexpr uint32 GBE_kDotaJoinChatChannelResponse = 7010u;
 static constexpr uint32 GBE_kDotaOtherLeftChannel = 7014u;
+static constexpr uint32 GBE_kDotaLobbyAdditionalAccountData = 8869u;
 static constexpr uint32 GBE_kDotaPracticeLobbyCreate = 7038u;
 static constexpr uint32 GBE_kDotaPracticeLobbyLeave = 7040u;
 static constexpr uint32 GBE_kDotaPracticeLobbyLaunch = 7041u;
@@ -4043,6 +4044,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     const std::string &broadcast_description,
     const std::string &broadcast_language_code,
     const std::string &pass_key,
+    uint32 extra_startup_account_id,
     std::string &object_2015,
     std::string &object_2016,
     std::string &object_2004,
@@ -4057,6 +4059,16 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
         // representation for one member is a repeated field-1 entry with an
         // empty embedded message.
         GBE_AppendProtoBytesField(object_2015, 1, std::string());
+
+        if (extra_startup_account_id != 0) {
+            std::string startup_payload;
+            GBE_AppendProtoVarIntField(startup_payload, 1u, extra_startup_account_id);
+
+            std::string startup_message;
+            GBE_AppendProtoVarIntField(startup_message, 1u, GBE_kDotaLobbyAdditionalAccountData);
+            GBE_AppendProtoBytesField(startup_message, 2u, startup_payload);
+            GBE_AppendProtoBytesField(object_2015, 2u, startup_message);
+        }
     }
 
     {
@@ -4176,6 +4188,7 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
     const std::string &broadcast_description,
     const std::string &broadcast_language_code,
     const std::string &pass_key,
+    uint32 extra_startup_account_id,
     std::string &message)
 {
     std::string object_2015;
@@ -4213,6 +4226,7 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
         broadcast_description,
         broadcast_language_code,
         pass_key,
+        extra_startup_account_id,
         object_2015,
         object_2016,
         object_2004,
@@ -4319,6 +4333,7 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
         broadcast_description,
         broadcast_language_code,
         pass_key,
+        0,
         object_2015,
         object_2016,
         object_2004,
@@ -6150,6 +6165,7 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPay
         GBE_local_lobby.broadcast_description,
         GBE_local_lobby.broadcast_language_code,
         GBE_local_lobby.pass_key,
+        0,
         message);
 }
 
@@ -6390,6 +6406,67 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
         static_cast<unsigned long long>(previous_server_id),
         static_cast<unsigned long long>(server_id)
     );
+
+    if (previous_server_id == 0) {
+        std::string launch_cache_message;
+        const uint64 steam_id = GBE_GetDotaLobbyOwnerSteamId();
+        const uint32 account_id = GBE_GetDotaLobbyOwnerAccountId();
+        if (steam_id != 0 && account_id != 0 && GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
+                steam_id,
+                GBE_local_lobby.lobby_id,
+                1u,
+                0u,
+                GBE_local_lobby.server_id,
+                GBE_local_lobby.match_id,
+                GBE_local_lobby.game_start_time,
+                GBE_local_lobby.connect,
+                GBE_GetDotaLobbyOwnerName(),
+                GBE_local_lobby.room_name,
+                GBE_local_lobby.game_mode,
+                GBE_local_lobby.server_region,
+                GBE_local_lobby.lan,
+                GBE_local_lobby.lan_host_ping_location,
+                GBE_local_lobby.allow_cheats,
+                GBE_local_lobby.fill_with_bots,
+                GBE_local_lobby.allow_spectating,
+                GBE_local_lobby.visibility,
+                GBE_local_lobby.bot_difficulty_radiant,
+                GBE_local_lobby.bot_difficulty_dire,
+                GBE_local_lobby.bot_radiant,
+                GBE_local_lobby.bot_dire,
+                GBE_local_lobby.owner_team,
+                GBE_local_lobby.owner_slot,
+                GBE_local_lobby.has_broadcast_channel,
+                GBE_local_lobby.broadcast_channel_id,
+                GBE_local_lobby.broadcast_country_code,
+                GBE_local_lobby.broadcast_description,
+                GBE_local_lobby.broadcast_language_code,
+                GBE_local_lobby.pass_key,
+                account_id,
+                launch_cache_message)) {
+            push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, launch_cache_message);
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "queued launch CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu size=%zu",
+                reason ? reason : "unknown",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                static_cast<unsigned long long>(server_id),
+                launch_cache_message.size()
+            );
+        } else {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "failed building launch CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu owner_steam_id=%llu owner_account_id=%u",
+                reason ? reason : "unknown",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                static_cast<unsigned long long>(server_id),
+                static_cast<unsigned long long>(steam_id),
+                account_id
+            );
+        }
+    }
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, reason ? reason : "server_id_sync")) {
         GBE_GC_DebugLog(
@@ -6916,6 +6993,23 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "consumed req=%u source_job=%llu note=empty AbandonCurrentGame request body_size=%zu active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
+            request_emsg,
+            static_cast<unsigned long long>(source_job),
+            body_size,
+            GBE_local_lobby.active ? 1u : 0u,
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            static_cast<unsigned long long>(GBE_local_lobby.match_id),
+            static_cast<unsigned long long>(GBE_local_lobby.server_id)
+        );
+        return true;
+    }
+
+    if (request_emsg == 4506) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "consumed req=%u source_job=%llu note=server available acknowledgement body_size=%zu active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
             request_emsg,
             static_cast<unsigned long long>(source_job),
             body_size,
