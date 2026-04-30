@@ -135,6 +135,7 @@ struct GBE_SharedDotaLobbyState {
     uint32 game_start_time{};
     uint32 owner_team{};
     uint32 owner_slot{};
+    uint32 owner_hero_id{};
     bool has_broadcast_channel{};
     uint32 broadcast_channel_id{};
     std::string broadcast_country_code;
@@ -2364,6 +2365,8 @@ struct GBE_Dota7034RequestShape
     uint32 dire_kills{};
     uint32 radiant_lead{};
     uint32 building_state{};
+    uint64 connected_steam_id{};
+    uint32 connected_hero_id{};
     uint64 disconnected_steam_id{};
     uint32 disconnected_lobby_state{};
     uint32 disconnected_game_state{};
@@ -2374,6 +2377,9 @@ struct GBE_Dota7034RequestShape
     bool has_dire_kills{};
     bool has_radiant_lead{};
     bool has_building_state{};
+    bool has_connected_player{};
+    bool has_connected_steam_id{};
+    bool has_connected_hero_id{};
     bool has_disconnected_player{};
     bool has_disconnected_steam_id{};
     bool has_disconnected_lobby_state{};
@@ -2427,6 +2433,25 @@ static GBE_Dota7034RequestShape GBE_ParseDota7034RequestShape(const uint8 *data,
     view = GBE_FindProtoField(data, size, 15u);
     if (GBE_ExtractProtoFieldUint32(data, size, view, shape.building_state))
         shape.has_building_state = true;
+
+    std::string connected_player_raw;
+    if (GBE_ExtractProtoFieldBytes(data, size, GBE_FindProtoField(data, size, 1u), connected_player_raw) && !connected_player_raw.empty()) {
+        shape.has_connected_player = true;
+
+        const uint8 *player_data = reinterpret_cast<const uint8 *>(connected_player_raw.data());
+        const size_t player_size = connected_player_raw.size();
+        uint64 connected_steam_id = 0;
+        if (GBE_ExtractProtoFieldUint64(player_data, player_size, GBE_FindProtoField(player_data, player_size, 1u), connected_steam_id)) {
+            shape.connected_steam_id = connected_steam_id;
+            shape.has_connected_steam_id = true;
+        }
+
+        uint32 connected_hero_id = 0;
+        if (GBE_ExtractProtoFieldUint32(player_data, player_size, GBE_FindProtoField(player_data, player_size, 2u), connected_hero_id)) {
+            shape.connected_hero_id = connected_hero_id;
+            shape.has_connected_hero_id = true;
+        }
+    }
 
     std::string disconnected_player_raw;
     if (GBE_ExtractProtoFieldBytes(data, size, GBE_FindProtoField(data, size, 7u), disconnected_player_raw) && !disconnected_player_raw.empty()) {
@@ -2545,11 +2570,13 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
     uint64 steam_id,
     uint32 owner_team,
     uint32 owner_slot,
+    uint32 owner_hero_id,
     std::string &output)
 {
     output.clear();
     bool saw_team = false;
     bool saw_slot = false;
+    bool saw_hero_id = false;
     bool saw_leaver_status = false;
     bool saw_leaver_actions = false;
 
@@ -2590,6 +2617,13 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
             continue;
         }
 
+        if (field_number == 2u && wire_type == 0u) {
+            saw_hero_id = true;
+            if (owner_hero_id != 0u)
+                GBE_AppendProtoVarIntField(output, 2u, owner_hero_id);
+            continue;
+        }
+
         if (field_number == 16u && wire_type == 0u) {
             saw_leaver_status = true;
             GBE_AppendProtoVarIntField(output, 16u, 0u);
@@ -2622,6 +2656,9 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
 
     if (!saw_slot)
         GBE_AppendProtoVarIntField(output, 7u, owner_slot);
+
+    if (!saw_hero_id && owner_hero_id != 0u)
+        GBE_AppendProtoVarIntField(output, 2u, owner_hero_id);
 
     if (!saw_leaver_status)
         GBE_AppendProtoVarIntField(output, 16u, 0u);
@@ -3175,6 +3212,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
     uint64 bot_dire,
     uint32 owner_team,
     uint32 owner_slot,
+    uint32 owner_hero_id,
     const std::string &pass_key,
     std::string &output)
 {
@@ -3364,14 +3402,15 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
             }
 
             std::string rewritten_member;
-            if (!GBE_RewriteDotaLobbyTemplateMemberObject(
-                    std::string(input.data() + value_offset, value_size),
-                    account_id,
-                    steam_id,
-                    owner_team,
-                    owner_slot,
-                    rewritten_member))
-                return false;
+                if (!GBE_RewriteDotaLobbyTemplateMemberObject(
+                        std::string(input.data() + value_offset, value_size),
+                        account_id,
+                        steam_id,
+                        owner_team,
+                        owner_slot,
+                        owner_hero_id,
+                        rewritten_member))
+                    return false;
             GBE_AppendProtoBytesField(output, 120u, rewritten_member);
             continue;
         }
@@ -3621,6 +3660,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
     uint64 bot_dire,
     uint32 owner_team,
     uint32 owner_slot,
+    uint32 owner_hero_id,
     bool rewrite_2015,
     uint32 extra_startup_account_id,
     const std::string &pass_key)
@@ -3733,6 +3773,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
                         bot_dire,
                         owner_team,
                         owner_slot,
+                        owner_hero_id,
                         pass_key,
                         rewritten_object)
                     : (type_id == 2014u)
@@ -4017,6 +4058,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
     uint64 bot_dire,
     uint32 owner_team,
     uint32 owner_slot,
+    uint32 owner_hero_id,
     const std::string &pass_key,
     std::string &message)
 {
@@ -4076,6 +4118,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
             bot_dire,
             owner_team,
             owner_slot,
+            owner_hero_id,
             stage_index == 3,
             stage_index == 3 ? account_id : 0u,
             pass_key))
@@ -4111,6 +4154,7 @@ static bool GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
     uint64 bot_dire,
     uint32 owner_team,
     uint32 owner_slot,
+    uint32 owner_hero_id,
     const std::string &pass_key,
     uint32 lobby_state,
     uint32 lobby_game_state,
@@ -4172,6 +4216,7 @@ static bool GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
             bot_dire,
             owner_team,
             owner_slot,
+            owner_hero_id,
             rewrite_2015,
             extra_startup_account_id,
             pass_key))
@@ -4481,6 +4526,8 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
 
     std::string player;
     GBE_AppendProtoFixed64Field(player, 1u, steam_id);
+    if (request_shape.has_connected_steam_id && request_shape.connected_steam_id == steam_id && request_shape.has_connected_hero_id && request_shape.connected_hero_id != 0u)
+        GBE_AppendProtoVarIntField(player, 2u, request_shape.connected_hero_id);
     GBE_AppendProtoBytesField(player, 3u, leaver_state);
     GBE_AppendProtoVarIntField(player, 4u, 0u);
 
@@ -4602,6 +4649,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     uint64 bot_dire,
     uint32 owner_team,
     uint32 owner_slot,
+    uint32 owner_hero_id,
     bool has_broadcast_channel,
     uint32 broadcast_channel_id,
     const std::string &broadcast_country_code,
@@ -4701,6 +4749,8 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     {
         std::string owner_state;
         GBE_AppendProtoFixed64Field(owner_state, 1, steam_id);
+        if (owner_hero_id != 0u)
+            GBE_AppendProtoVarIntField(owner_state, 2, owner_hero_id);
         GBE_AppendProtoVarIntField(owner_state, 3, owner_team);
         GBE_AppendProtoVarIntField(owner_state, 7, owner_slot);
         GBE_AppendProtoVarIntField(owner_state, 16, 0u);
@@ -4746,6 +4796,7 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
     uint64 bot_dire,
     uint32 owner_team,
     uint32 owner_slot,
+    uint32 owner_hero_id,
     bool has_broadcast_channel,
     uint32 broadcast_channel_id,
     const std::string &broadcast_country_code,
@@ -4784,6 +4835,7 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
         bot_dire,
         owner_team,
         owner_slot,
+        owner_hero_id,
         has_broadcast_channel,
         broadcast_channel_id,
         broadcast_country_code,
@@ -4860,6 +4912,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWra
     uint64 bot_dire,
     uint32 owner_team,
     uint32 owner_slot,
+    uint32 owner_hero_id,
     const std::string &pass_key,
     uint32 extra_startup_account_id,
     std::string &message)
@@ -4932,6 +4985,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWra
         bot_dire,
         owner_team,
         owner_slot,
+        owner_hero_id,
         rewrite_2015,
         extra_startup_account_id,
         pass_key)) {
@@ -5024,6 +5078,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(
     uint64 bot_dire,
     uint32 owner_team,
     uint32 owner_slot,
+    uint32 owner_hero_id,
     const std::string &pass_key,
     uint32 extra_startup_account_id,
     std::string &message)
@@ -5059,6 +5114,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(
         bot_dire,
         owner_team,
         owner_slot,
+        owner_hero_id,
         pass_key,
         extra_startup_account_id,
         message);
@@ -5089,6 +5145,7 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
     uint64 bot_dire,
     uint32 owner_team,
     uint32 owner_slot,
+    uint32 owner_hero_id,
     bool has_broadcast_channel,
     uint32 broadcast_channel_id,
     const std::string &broadcast_country_code,
@@ -5128,6 +5185,7 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
         bot_dire,
         owner_team,
         owner_slot,
+        owner_hero_id,
         has_broadcast_channel,
         broadcast_channel_id,
         broadcast_country_code,
@@ -6880,6 +6938,7 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl(
     uint64 bot_dire,
     uint32 owner_team,
     uint32 owner_slot,
+    uint32 owner_hero_id,
     const std::string &pass_key,
     bool rewrite_runtime_fields,
     bool rewrite_2015,
@@ -6937,6 +6996,7 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl(
         bot_dire,
         owner_team,
         owner_slot,
+        owner_hero_id,
         rewrite_2015,
         extra_startup_account_id,
         pass_key);
@@ -6975,6 +7035,7 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTem
         GBE_local_lobby.bot_dire,
         GBE_local_lobby.owner_team,
         GBE_local_lobby.owner_slot,
+        GBE_local_lobby.owner_hero_id,
         GBE_local_lobby.pass_key,
         false,
         false,
@@ -7007,6 +7068,7 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
     uint64 bot_dire,
     uint32 owner_team,
     uint32 owner_slot,
+    uint32 owner_hero_id,
     bool has_broadcast_channel,
     uint32 broadcast_channel_id,
     const std::string &broadcast_country_code,
@@ -7044,6 +7106,7 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
         bot_dire,
         owner_team,
         owner_slot,
+        owner_hero_id,
         has_broadcast_channel,
         broadcast_channel_id,
         broadcast_country_code,
@@ -7086,6 +7149,7 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPay
         GBE_local_lobby.bot_dire,
         GBE_local_lobby.owner_team,
         GBE_local_lobby.owner_slot,
+        GBE_local_lobby.owner_hero_id,
         GBE_local_lobby.has_broadcast_channel,
         GBE_local_lobby.broadcast_channel_id,
         GBE_local_lobby.broadcast_country_code,
@@ -7130,6 +7194,7 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
     GBE_shared_dota_lobby_state.game_start_time = GBE_local_lobby.game_start_time;
     GBE_shared_dota_lobby_state.owner_team = GBE_local_lobby.owner_team;
     GBE_shared_dota_lobby_state.owner_slot = GBE_local_lobby.owner_slot;
+    GBE_shared_dota_lobby_state.owner_hero_id = GBE_local_lobby.owner_hero_id;
     GBE_shared_dota_lobby_state.has_broadcast_channel = GBE_local_lobby.has_broadcast_channel;
     GBE_shared_dota_lobby_state.broadcast_channel_id = GBE_local_lobby.broadcast_channel_id;
     GBE_shared_dota_lobby_state.broadcast_country_code = GBE_local_lobby.broadcast_country_code;
@@ -7204,6 +7269,11 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             changed = true;
         }
 
+        if (GBE_shared_dota_lobby_state.owner_hero_id != 0 && GBE_local_lobby.owner_hero_id != GBE_shared_dota_lobby_state.owner_hero_id) {
+            GBE_local_lobby.owner_hero_id = GBE_shared_dota_lobby_state.owner_hero_id;
+            changed = true;
+        }
+
         if (changed) {
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
@@ -7253,6 +7323,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
     GBE_local_lobby.game_start_time = GBE_shared_dota_lobby_state.game_start_time;
     GBE_local_lobby.owner_team = GBE_shared_dota_lobby_state.owner_team;
     GBE_local_lobby.owner_slot = GBE_shared_dota_lobby_state.owner_slot;
+    GBE_local_lobby.owner_hero_id = GBE_shared_dota_lobby_state.owner_hero_id;
     GBE_local_lobby.has_broadcast_channel = GBE_shared_dota_lobby_state.has_broadcast_channel;
     GBE_local_lobby.broadcast_channel_id = GBE_shared_dota_lobby_state.broadcast_channel_id;
     GBE_local_lobby.broadcast_country_code = GBE_shared_dota_lobby_state.broadcast_country_code;
@@ -7455,6 +7526,7 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
                     GBE_local_lobby.bot_dire,
                     GBE_local_lobby.owner_team,
                     GBE_local_lobby.owner_slot,
+                    GBE_local_lobby.owner_hero_id,
                     GBE_local_lobby.pass_key,
                     account_id,
                     runtime_cache_message)) {
@@ -7969,6 +8041,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     GBE_local_lobby.bot_dire,
                     GBE_local_lobby.owner_team,
                     GBE_local_lobby.owner_slot,
+                    GBE_local_lobby.owner_hero_id,
                     GBE_local_lobby.pass_key,
                     next_state,
                     next_game_state,
@@ -8002,6 +8075,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.match_id != 0 && GBE_local_lobby.server_id != 0) {
             const GBE_Dota7034RequestShape request_shape = GBE_ParseDota7034RequestShape(body, body_size);
+
+            if (request_shape.has_connected_steam_id && request_shape.connected_steam_id == GBE_GetDotaLobbyOwnerSteamId() && request_shape.has_connected_hero_id && request_shape.connected_hero_id != 0u && GBE_local_lobby.owner_hero_id != request_shape.connected_hero_id) {
+                GBE_local_lobby.owner_hero_id = request_shape.connected_hero_id;
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "updated owner hero from 7034 request hero_id=%u source_job=%llu state=%u game_state=%u",
+                    GBE_local_lobby.owner_hero_id,
+                    static_cast<unsigned long long>(source_job),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state
+                );
+                GBE_PublishSharedDotaLobbyState("7034_connected_player_hero");
+            }
 
             if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u) {
                 GBE_GC_DebugLog(
@@ -8184,6 +8270,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     GBE_local_lobby.bot_dire,
                     GBE_local_lobby.owner_team,
                     GBE_local_lobby.owner_slot,
+                    GBE_local_lobby.owner_hero_id,
                     GBE_local_lobby.pass_key,
                     2u,
                     0u,
@@ -8551,6 +8638,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     GBE_local_lobby.game_start_time = 0;
     GBE_local_lobby.owner_team = 0;
     GBE_local_lobby.owner_slot = 1;
+    GBE_local_lobby.owner_hero_id = 0;
     GBE_local_lobby.has_broadcast_channel = false;
     GBE_local_lobby.broadcast_channel_id = 0;
     GBE_local_lobby.broadcast_country_code.clear();
@@ -8846,6 +8934,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
     GBE_local_lobby.game_start_time = 0;
     GBE_local_lobby.owner_team = 0;
     GBE_local_lobby.owner_slot = 1;
+    GBE_local_lobby.owner_hero_id = 0;
     GBE_local_lobby.has_broadcast_channel = false;
     GBE_local_lobby.broadcast_channel_id = 0;
     GBE_local_lobby.broadcast_country_code.clear();
@@ -8913,6 +9002,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
             GBE_local_lobby.bot_dire,
             GBE_local_lobby.owner_team,
             GBE_local_lobby.owner_slot,
+            GBE_local_lobby.owner_hero_id,
             GBE_local_lobby.pass_key,
             stage1_message)) {
         GBE_GC_DebugLog(
@@ -8997,6 +9087,7 @@ bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped
             GBE_local_lobby.bot_dire,
             GBE_local_lobby.owner_team,
             GBE_local_lobby.owner_slot,
+            GBE_local_lobby.owner_hero_id,
             GBE_local_lobby.has_broadcast_channel,
             GBE_local_lobby.broadcast_channel_id,
             GBE_local_lobby.broadcast_country_code,
@@ -9491,6 +9582,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDestroyLobbyRequest(uint64 request_jo
     GBE_local_lobby.game_start_time = 0;
     GBE_local_lobby.owner_team = 0;
     GBE_local_lobby.owner_slot = 1;
+    GBE_local_lobby.owner_hero_id = 0;
     GBE_local_lobby.has_broadcast_channel = false;
     GBE_local_lobby.broadcast_channel_id = 0;
     GBE_local_lobby.broadcast_country_code.clear();

@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 PRE_GAME 的 owner hero 必须从 7034 connected player 贯穿到 2004 member field 2]
+- Date: 2026-04-30
+- Context: Agent 在继续排查“已进入游戏但 dashboard 仍显示主机载入中”并对照 `console.log` 与官方 `046` donor 时发现
+- Category: 代码模式
+- Instructions:
+  - `7034 / PLAYER_HERO` 请求里的 connected player `field 2 = hero_id` 不是可忽略噪音；当本地真实请求 hero 与 donor 宿主 hero 不一致时，后续 donor `046` 或 runtime `26` 若继续保留 donor 原值，会把 `CSODOTALobby.all_members[0].hero_id` 固定在错误英雄上。
+  - practice lobby 的 `2004.field 120` 成员对象里，`field 2` 就是 member hero_id；donor 重写函数和 runtime `GBE_BuildDotaPracticeLobbySOObjectData(...)` 都必须同步写入当前 owner hero。
+  - 运行态上应在收到 `7034` 的 connected player hero 后更新共享 lobby state，并在 create/leave/destroy 时显式清零该 hero，避免旧局 hero 残留到下一次 lobby 生命周期。
+
 [Dota2 PRE_GAME 后不要用通用 runtime 26 覆盖 donor 046 建立的 lobby 视图]
 - Date: 2026-04-30
 - Context: Agent 在对照新上传的 `gbe_gc_debug.log` 与 `console.log`，排查 dashboard 仍显示 host loading 时发现
