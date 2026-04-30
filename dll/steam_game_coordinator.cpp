@@ -1750,6 +1750,40 @@ static std::string GBE_FormatHexPrefix(const uint8 *data, size_t size, size_t ma
     return stream.str();
 }
 
+static std::string GBE_FormatHex(const uint8 *data, size_t size)
+{
+    if (!data || size == 0)
+        return std::string();
+
+    std::ostringstream stream;
+    stream << std::hex << std::setfill('0');
+    for (size_t i = 0; i < size; ++i) {
+        if (i != 0)
+            stream << ' ';
+        stream << std::setw(2) << static_cast<unsigned int>(data[i]);
+    }
+    return stream.str();
+}
+
+static void GBE_LogHexDump(const char *tag, const char *label, const std::string &message, size_t bytes_per_line)
+{
+    if (!tag || !label || message.empty() || bytes_per_line == 0)
+        return;
+
+    GBE_GC_DebugLog(tag, "%s size=%zu", label, message.size());
+    for (size_t offset = 0; offset < message.size(); offset += bytes_per_line) {
+        const size_t chunk_size = std::min(bytes_per_line, message.size() - offset);
+        GBE_GC_DebugLog(
+            tag,
+            "%s chunk offset=%zu size=%zu hex=%s",
+            label,
+            offset,
+            chunk_size,
+            GBE_FormatHex(reinterpret_cast<const uint8 *>(message.data()) + offset, chunk_size).c_str()
+        );
+    }
+}
+
 // Raw binary template patch helper. Replacement must keep the exact same byte length.
 static bool GBE_FindAndOverwriteBytes(std::string &buffer, const std::vector<uint8> &needle, const std::vector<uint8> &replacement)
 {
@@ -7829,6 +7863,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 next_state,
                 next_game_state
             );
+            if (note && std::strcmp(note, "official packet 018 after 7034 fallback missing 4506") == 0) {
+                GBE_LogHexDump("GC_DOTA_DIRECT", "official_018_local_reply", response_message, 64u);
+            }
             return true;
         };
 
