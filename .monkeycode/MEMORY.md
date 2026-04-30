@@ -31,6 +31,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[当官方抓包已给出正确时序时，优先反查本地处理而不是删消息]
+- Date: 2026-04-30
+- Context: 用户在指出“抓包里 4511 之后就是 24，这是官方正确时序”时明确纠正 Agent 的排障方式
+- Instructions:
+  - 当官方抓包已经明确给出正确时序时，不能因为本地遇到异常就先假设“跳过某条消息”或“官方不需要这条消息”。
+  - 优先反查本地对该消息的构造、重写、封装、owner、对象顺序和字段处理，先证明是自己的处理不一致，再谈调整时序。
+  - 下结论前必须先仔细核对抓包数据与本地日志，避免把“本地处理有问题”误判成“官方链路不需要这条消息”。
+
 [Dota2 官方 018 donor 的 2015 对象不能重复追加 startup account data]
 - Date: 2026-04-30
 - Context: Agent 在对比 `/workspace/gbe_gc_debug.log` 中 `official_018_local_reply` 与 `GBE_kDotaOfficial018PracticeLobby26Hex` 的 inner `26` 时发现
@@ -65,6 +73,23 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - donor-based `26 / CMsgSOMultipleObjects` 即使内部 `2004/2015/2014/2016` 字段都已改成运行态值，顶层 `owner_soid` 仍可能保留 donor 旧 lobby id。
   - 这种情况下 `gbe_gc_debug.log` 可见 `field 6` 仍是 `type=3 id=<donor_lobby_id>`，而 `console.log` 会在收到 `26` 后立刻打印 `Lobby object destroyed`，且没有后续 `WAIT_FOR_PLAYERS_TO_LOAD` 或第二个 `7034`。
   - 所有 donor 重写得到的 `26`（包括 `official 018/021/...` 和 launch stage donor `26`）在最终返回前都必须调用 `GBE_ForceDotaLobbyUpdateOwnerSOID(message, lobby_id)`，不能只改内部对象字段。
+
+[Dota2 4511 后的 synthetic runtime CacheSubscribed 可能需要完全跳过]
+- Date: 2026-04-30
+- Context: Agent 在连续对照 `/workspace/console.log` 与 `/workspace/gbe_gc_debug.log` 时发现 `4511` 后收到 runtime `24 size=704` 之前就会先出现两次 `Lobby object destroyed, previous lobby_id=0, match_id=0`
+- Category: 代码模式
+- Instructions:
+  - 即使已经把 `4511` 后的双 `24` 收敛成单条 runtime `24`，这条 synthetic `CacheSubscribed` 仍可能在客户端侧先把 lobby cache 冲掉，然后导致后续 `7034 -> official 018` 收到后再次 `Lobby object destroyed`。
+  - 当日志呈现 `4511 -> recv 24(size=704) -> Lobby object destroyed x2 -> 4508 -> 7034 -> recv 26(size=919) -> Lobby object destroyed` 这种模式时，应优先尝试完全跳过 `4511` 后下发给客户端的 runtime `24`，只保留共享运行态同步与后续 donor `26` progression。
+
+[Dota2 4511 后的 24 应优先使用官方 launch cache template replay]
+- Date: 2026-04-30
+- Context: Agent 在收到用户纠正“抓包里 4511 之后就是 24”后，继续对照 `/workspace/lobbystartgame.log` 与本地日志时发现官方 `4511` 后的 `24` 是 `873 bytes`，而本地 synthetic `24` 只有 `704 bytes`
+- Category: 代码模式
+- Instructions:
+  - `4511` 后的 `24` 不能简单删除；官方链路里确实存在这条 `CacheSubscribed`。
+  - 当本地 `4511` 后的 `24` 明显比官方小很多（例如 `704` vs `873`），并且客户端在收到该 `24` 时立刻出现 `Lobby object destroyed`，应优先把该 `24` 的构造从 `GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(...)` 切换到 `GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(...)`，复用官方 launch cache donor 模板再做运行态字段重写。
+  - “跳过 `4511` 后的 `24`”只能作为临时排障猜想，不应作为最终修复方向；用户已确认官方抓包里存在这条 `24`。
 
 [Dota2 官方 018 donor 的剩余 LaunchTemplate 模板 patch 应一次性放宽]
 - Date: 2026-04-30

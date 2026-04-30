@@ -7386,7 +7386,8 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
         const uint32 account_id = GBE_GetDotaLobbyOwnerAccountId();
         if (steam_id != 0 && account_id != 0) {
             std::string runtime_cache_message;
-            if (GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
+            if (GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(
+                    account_id,
                     steam_id,
                     GBE_local_lobby.lobby_id,
                     GBE_local_lobby.state,
@@ -7411,18 +7412,13 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
                     GBE_local_lobby.bot_dire,
                     GBE_local_lobby.owner_team,
                     GBE_local_lobby.owner_slot,
-                    GBE_local_lobby.has_broadcast_channel,
-                    GBE_local_lobby.broadcast_channel_id,
-                    GBE_local_lobby.broadcast_country_code,
-                    GBE_local_lobby.broadcast_description,
-                    GBE_local_lobby.broadcast_language_code,
                     GBE_local_lobby.pass_key,
                     account_id,
                     runtime_cache_message)) {
                 push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, runtime_cache_message);
                 GBE_GC_DebugLog(
                     "GC_DOTA_SYNC",
-                    "queued runtime CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu state=%u game_state=%u size=%zu",
+                    "queued official-template CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu state=%u game_state=%u size=%zu",
                     reason ? reason : "unknown",
                     static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                     static_cast<unsigned long long>(GBE_local_lobby.match_id),
@@ -7434,7 +7430,7 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
             } else {
                 GBE_GC_DebugLog(
                     "GC_DOTA_SYNC",
-                    "failed building runtime CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu owner_steam_id=%llu owner_account_id=%u",
+                    "failed building official-template CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu owner_steam_id=%llu owner_account_id=%u",
                     reason ? reason : "unknown",
                     static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                     static_cast<unsigned long long>(GBE_local_lobby.match_id),
