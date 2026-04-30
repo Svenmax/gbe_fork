@@ -126,6 +126,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 如果提前置 `logged_in` 后握手里仍然出现空的 anon gameserver SteamID，说明当前引擎取 `GetSteamID()` 的时机仍可能早于或绕过登录态判断；这种情况下应直接让 `Steam_GameServer::GetSteamID()` 始终返回 `settings->get_local_steam_id()`，不要再用 `logged_in` 把它降级成空 anon server id。
   - 如果以上两步都已做且日志仍在 `S2C_CHALLENGE` 之后立刻报 `Server SteamID in handshake is 72057594037927936 ...`，则根因更可能位于底层连接握手包本身或更靠近 `SteamNetworkingSockets` 的身份填充路径，而不是 `7034`、`7450/7451` 或普通 `ISteamGameServer::GetSteamID()` 导出路径。
 
+[Dota2 host startgame 的 direct 7040 过渡窗口]
+- Date: 2026-04-30
+- Context: Agent 在继续排查 practice lobby `start game` 回主界面问题时发现
+- Category: 代码模式
+- Instructions:
+  - 如果日志显示 `7038` 建房成功后立刻收到一个空的 direct `7040`，并在其后紧跟多条 direct `7041`，则这个 `7040` 更像启动过渡信号而不是真正离房。
+  - 在这种窗口里，若 `match_id/server_id/game_start_time` 仍全为 `0`，`7040` 处理可以继续给客户端下发 `25 / CMsgSOCacheUnsubscribed`，但不能立刻清空内部 `GBE_local_lobby`。
+  - 否则后续 `7041` 会因为 `no local lobby is active` 被全部丢弃，直接把 host startgame 链路在本地截断。
+
 [GitHub 构建触发偏好]
 - Date: 2026-04-23
 - Context: 用户要求后续触发 GitHub 构建时限定目标任务

@@ -7443,6 +7443,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
         return true;
     }
 
+    const bool preserve_lobby_for_launch =
+        !wrapped &&
+        GBE_local_lobby.match_id == 0 &&
+        GBE_local_lobby.server_id == 0 &&
+        GBE_local_lobby.game_start_time == 0;
+
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
     std::string response_25;
     if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
@@ -7465,6 +7471,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
         push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_25);
     } else {
         push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
+    }
+
+    if (preserve_lobby_for_launch) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Preserving local lobby after direct 7040 for pending launch LobbyID=%llu owner_steam_id=%llu state=%u game_state=%u",
+            static_cast<unsigned long long>(lobby_id),
+            static_cast<unsigned long long>(GBE_local_lobby.owner_steam_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state
+        );
+        return true;
     }
 
     GBE_local_lobby.active = false;
