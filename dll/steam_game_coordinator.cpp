@@ -3066,22 +3066,13 @@ static void GBE_LogDotaSOMultipleObjectsSummary(const char *tag, const char *lab
 
     for (int object_index = 0; object_index < protomsg.objects_size(); ++object_index) {
         const auto &object = protomsg.objects(object_index);
-        std::string sizes;
-        for (int data_index = 0; data_index < object.object_data_size(); ++data_index) {
-            if (!sizes.empty())
-                sizes.push_back(',');
-            sizes.append(std::to_string(object.object_data(data_index).size()));
-        }
-
         GBE_GC_DebugLog(
             tag,
-            "%s object[%d] type=%d size_uncompressed=%u objects_modified=%u object_data_sizes=%s",
+            "%s object[%d] type=%d object_data_size=%zu",
             label ? label : "dota_so_summary",
             object_index,
             object.type_id(),
-            object.has_size_uncompressed() ? object.size_uncompressed() : 0u,
-            object.has_objects_modified() ? object.objects_modified() : 0u,
-            sizes.empty() ? "-" : sizes.c_str()
+            object.object_data().size()
         );
     }
 }
