@@ -891,3 +891,27 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 仅推进 Dota-specific 的 `24/26/7034/7041` 还不够；当 host 的 `server_id` 首次就绪后，还需要同步通用 `Steam_Matchmaking::SetLobbyGameServer(...)`，让 generic lobby snapshot 也带上 `gameserver(id/ip/port)`。
   - 这样本地客户端侧才能走到旧 `steamapi` 依赖的 `LobbyGameCreated_t` / `LobbyDataUpdate_t` 联动，而不是只看到 Dota 自己的 lobby 运行态更新。
   - 该通用 gameserver 同步应继续保持 Dota lobby connect 的 `:27015` 约束，不要把 `4508.server_port` 直接推广成 lobby connect 端口语义。
+
+[优先排查老 steamapi 联机路径与 24/26 SO 生命周期]
+- Date: 2026-04-30
+- Context: 用户在 generic lobby gameserver 同步已打通后，要求继续排查 host startgame 卡点时补充的新偏好
+- Instructions:
+  - 继续排查时不要改 `dll/steam_networking_socketsserialized.cpp`。
+  - 优先学习 `/workspace/steamapi/unpacked/steam_api` 的旧联机路径，确认本地 host/client 是如何通过 generic lobby、snapshot 和 player lifecycle 跑通的。
+  - 同时重点检查 `24/26` 对应的 lobby SO 生命周期，解释并修复客户端每次收到 `26` 后打印 `Lobby object destroyed` 的原因。
+
+[Dota2 launch donor 的 prelude 小 24 也必须绑定 Lobby owner_soid]
+- Date: 2026-04-30
+- Context: Agent 在继续排查 host startgame 的 `Lobby object destroyed` 时发现
+- Category: 代码模式
+- Instructions:
+  - `GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWrappedTemplate(...)` 生成的 donor-based `24 / CacheSubscribed`，无论是否启用 runtime rewrite，都必须在外层 `CMsgSOCacheSubscribed` 上强制写 `owner_soid = <type=3, id=lobby_id>` 并清掉旧 `owner`。
+  - 这条约束不仅适用于大 `038` launch `24`，也适用于前置的 prelude 小 `24`；否则客户端可能在后续 `26` 到来时把 lobby SO 视为已销毁或 owner 失配。
+
+[Dota2 direct 4007 必须按 CMsgServerHello.version 回 4005]
+- Date: 2026-04-30
+- Context: Agent 在检查 `Version out of date (GC wants 200, we are 6778)!` 时发现
+- Category: 代码模式
+- Instructions:
+  - direct `4007 / k_EMsgGCServerHello` 的 body 在 `base_gcmessages.proto` 里只有 `CMsgServerHello.version = field 1`，不能把它按自定义多字段结构解析。
+  - 当前 host launch 路径下，`4005 / k_EMsgGCServerWelcome` 的 `min_allowed_version` 和 `active_version` 应直接镜像 `4007.version`；否则客户端会把 GC 版本误判成 `200` 一类错误值，并打印 `Version out of date`。

@@ -3024,6 +3024,58 @@ static bool GBE_PatchDotaLobbyTemplateIdentifiersIfPresent(std::string &message,
     return true;
 }
 
+static bool GBE_ForceDotaLobbyCacheOwnerSOID(std::string &message, uint64 lobby_id)
+{
+    if (message.size() < sizeof(ProtoBufMsgHeader_t))
+        return false;
+
+    ProtoBufMsgHeader_t hdr{};
+    std::memcpy(&hdr, message.data(), sizeof(hdr));
+    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
+    if (body_offset > message.size())
+        return false;
+
+    CMsgSOCacheSubscribed protomsg;
+    if (!protomsg.ParseFromArray(message.data() + body_offset, static_cast<int>(message.size() - body_offset)))
+        return false;
+
+    protomsg.clear_owner();
+    CMsgSOIDOwner *owner_soid = protomsg.mutable_owner_soid();
+    owner_soid->set_type(3u);
+    owner_soid->set_id(lobby_id);
+
+    std::string updated = message.substr(0, body_offset);
+    protomsg.AppendToString(&updated);
+    message.swap(updated);
+    return true;
+}
+
+static bool GBE_ForceDotaLobbyUpdateOwnerSOID(std::string &message, uint64 lobby_id)
+{
+    if (message.size() < sizeof(ProtoBufMsgHeader_t))
+        return false;
+
+    ProtoBufMsgHeader_t hdr{};
+    std::memcpy(&hdr, message.data(), sizeof(hdr));
+    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
+    if (body_offset > message.size())
+        return false;
+
+    CMsgSOMultipleObjects protomsg;
+    if (!protomsg.ParseFromArray(message.data() + body_offset, static_cast<int>(message.size() - body_offset)))
+        return false;
+
+    protomsg.clear_owner();
+    CMsgSOIDOwner *owner_soid = protomsg.mutable_owner_soid();
+    owner_soid->set_type(3u);
+    owner_soid->set_id(lobby_id);
+
+    std::string updated = message.substr(0, body_offset);
+    protomsg.AppendToString(&updated);
+    message.swap(updated);
+    return true;
+}
+
 static bool GBE_RewriteDotaLobbyTemplateObject2004(
     const std::string &input,
     uint32 account_id,
@@ -4497,7 +4549,9 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
     }
 
     CMsgSOCacheSubscribed protomsg;
-    protomsg.set_owner(steam_id);
+    auto *owner_soid = protomsg.mutable_owner_soid();
+    owner_soid->set_type(3u);
+    owner_soid->set_id(lobby_id);
 
     auto object_2004_entry = protomsg.add_objects();
     object_2004_entry->set_type_id(2004);
@@ -4584,9 +4638,9 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWra
     }
 
     if (!rewrite_runtime_fields)
-        return true;
+        return GBE_ForceDotaLobbyCacheOwnerSOID(message, lobby_id);
 
-    return GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
+    if (!GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
         message,
         account_id,
         steam_id,
@@ -4615,7 +4669,10 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWra
         owner_slot,
         rewrite_2015,
         extra_startup_account_id,
-        pass_key);
+        pass_key))
+        return false;
+
+    return GBE_ForceDotaLobbyCacheOwnerSOID(message, lobby_id);
 }
 
 static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedPreludeTemplateReplay(
@@ -4843,7 +4900,7 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
     GBE_AppendLittleEndian32(message, GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask);
     GBE_AppendLittleEndian32(message, 0u);
     message.append(body);
-    return true;
+    return GBE_ForceDotaLobbyUpdateOwnerSOID(message, lobby_id);
 }
 
 static bool GBE_BuildDotaDirectReplayMessage(
@@ -5093,26 +5150,19 @@ static bool GBE_ExtractDirectDotaServerHelloContext(uint32 unMsgType, const void
     const uint8 *body = reinterpret_cast<const uint8 *>(cursor);
     const size_t body_size = static_cast<size_t>(end - cursor);
 
-    uint64 active_version = 0;
-    if (!GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1), active_version)) {
-        GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "direct path failed to extract active version body_size=%zu", body_size);
+    CMsgServerHello protomsg;
+    if (!protomsg.ParseFromArray(body, static_cast<int>(body_size)) || !protomsg.has_version()) {
+        GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "direct path failed parsing CMsgServerHello body_size=%zu", body_size);
         return false;
     }
 
-    uint64 min_allowed_version = active_version;
-    GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 3), min_allowed_version);
-
-    uint64 compatibility_value = 0;
-    GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 6), compatibility_value);
-
-    uint64 universe = 0;
-    GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 7), universe);
+    const uint32 version = protomsg.version();
 
     context.valid = true;
-    context.active_version = static_cast<uint32>(active_version);
-    context.min_allowed_version = static_cast<uint32>(min_allowed_version > 0xFFFFFFFFull ? 0xFFFFFFFFu : min_allowed_version);
-    context.compatibility_value = compatibility_value;
-    context.universe = static_cast<uint32>(universe > 0xFFFFFFFFull ? 0xFFFFFFFFu : universe);
+    context.active_version = version;
+    context.min_allowed_version = version;
+    context.compatibility_value = 0;
+    context.universe = 0;
     if (protohdr.has_job_id_source()) {
         context.source_job_id = protohdr.job_id_source();
         context.has_source_job = true;
