@@ -5047,6 +5047,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedPreludeTemplateReplay
         0ull,
         0u,
         0u,
+        0u,
         std::string(),
         0u,
         message);

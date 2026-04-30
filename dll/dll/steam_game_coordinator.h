@@ -108,6 +108,7 @@ public ISteamGameCoordinator
         uint32 game_start_time{};
         uint32 owner_team{};
         uint32 owner_slot{};
+        uint32 owner_hero_id{};
         bool has_broadcast_channel{};
         uint32 broadcast_channel_id{};
         std::string broadcast_country_code;
