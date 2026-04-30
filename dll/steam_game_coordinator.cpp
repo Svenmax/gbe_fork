@@ -3135,6 +3135,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
     const std::string &input,
     uint32 account_id,
     uint64 steam_id,
+    uint64 lobby_id,
     bool rewrite_runtime_fields,
     uint32 lobby_state,
     uint32 lobby_game_state,
@@ -3161,6 +3162,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
     std::string &output)
 {
     output.clear();
+    bool saw_lobby_id = false;
     bool saw_state = false;
     bool saw_connect = false;
     bool saw_server_id = false;
@@ -3189,6 +3191,16 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
                 value_size,
                 field_end))
             return false;
+
+        if (field_number == 1u && wire_type == 0u) {
+            saw_lobby_id = true;
+            if (rewrite_runtime_fields) {
+                GBE_AppendProtoVarIntField(output, 1u, lobby_id);
+            } else {
+                output.append(input.data() + field_offset, field_end - field_offset);
+            }
+            continue;
+        }
 
         if (field_number == 3u && wire_type == 0u) {
             GBE_AppendProtoVarIntField(output, 3u, game_mode);
@@ -3360,6 +3372,8 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
         output.append(input.data() + field_offset, field_end - field_offset);
     }
 
+    if (rewrite_runtime_fields && !saw_lobby_id && lobby_id != 0)
+        GBE_AppendProtoVarIntField(output, 1u, lobby_id);
     if (rewrite_runtime_fields && !saw_state)
         GBE_AppendProtoVarIntField(output, 4u, lobby_state);
     if (rewrite_runtime_fields && !saw_connect && !connect.empty())
@@ -3566,6 +3580,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
     std::string &message,
     uint32 account_id,
     uint64 steam_id,
+    uint64 lobby_id,
     bool rewrite_runtime_fields,
     uint32 lobby_state,
     uint32 lobby_game_state,
@@ -3678,6 +3693,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
                         object_data,
                         account_id,
                         steam_id,
+                        lobby_id,
                         rewrite_runtime_fields,
                         lobby_state,
                         lobby_game_state,
@@ -4019,6 +4035,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
             inner_payload,
             account_id,
             steam_id,
+            lobby_id,
             true,
             stage_index <= 1 ? 1u : 2u,
             stage_index == 3 ? 1u : 0u,
@@ -4112,6 +4129,7 @@ static bool GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
             inner_payload,
             account_id,
             steam_id,
+            lobby_id,
             true,
             lobby_state,
             lobby_game_state,
@@ -4863,6 +4881,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWra
         message,
         account_id,
         steam_id,
+        lobby_id,
         rewrite_runtime_fields,
         lobby_state,
         lobby_game_state,
@@ -6851,6 +6870,7 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl(
         message,
         account_id,
         steam_id,
+        lobby_id,
         rewrite_runtime_fields,
         lobby_state,
         lobby_game_state,

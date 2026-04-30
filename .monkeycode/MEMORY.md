@@ -40,6 +40,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 本地 `2015` 中 `local[256..639]` 会被整块重复到 `local[659..1042]`，根因是 `GBE_RewriteDotaLobbyTemplateObject2015(...)` 忽略了 `clear_existing_startup_data`，保留 donor 现有 startup account data 后又额外 append 一份。
   - donor-based `2015` 重写路径必须先移除已有的 `8869 / k_EMsgDotaLobbyAdditionalAccountData` 条目，再按当前 owner account 只补一份 startup data。
 
+[Dota2 官方 018 donor 的 2004 对象必须显式重写 lobby_id]
+- Date: 2026-04-30
+- Context: Agent 在解码最新 `official_018_local_reply` 的 `2004/2015/2014/2016` 对象并与 donor `018` 对比时发现
+- Category: 代码模式
+- Instructions:
+  - 即使 `server_id`、`match_id`、`game_start_time`、`connect` 等字段已经被后续 proto 重写覆盖，`GBE_RewriteDotaLobbyTemplateObject2004(...)` 仍可能遗漏 `field 1 = lobby_id`，导致 donor 原始 lobby id 被完整透传。
+  - 当 `official_018_local_reply` 已收敛到接近官方大小但后续 `7034 -> 021 -> 8870` 仍未触发时，应优先解码 `type=2004`，确认 `lobby_id` 是否仍停留在 donor 值而不是当前运行态 lobby id。
+  - donor-based `2004` 重写路径在 `rewrite_runtime_fields == true` 时必须显式重写 `field 1 = lobby_id`，不能只依赖前面的模板字节替换或 owner SOID 修正。
+
 [Dota2 官方 018 donor 的剩余 LaunchTemplate 模板 patch 应一次性放宽]
 - Date: 2026-04-30
 - Context: Agent 在连续多轮 host startgame 调试中发现首个 `7034 -> official 018` 路径会沿着 `lobby_id -> match_id -> server_id -> game_start_time` 逐个暴露新的固定模板命中失败
