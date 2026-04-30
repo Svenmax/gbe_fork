@@ -49,6 +49,23 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当 `official_018_local_reply` 已收敛到接近官方大小但后续 `7034 -> 021 -> 8870` 仍未触发时，应优先解码 `type=2004`，确认 `lobby_id` 是否仍停留在 donor 值而不是当前运行态 lobby id。
   - donor-based `2004` 重写路径在 `rewrite_runtime_fields == true` 时必须显式重写 `field 1 = lobby_id`，不能只依赖前面的模板字节替换或 owner SOID 修正。
 
+[Dota2 018 关键字段全对后若仍无第二个 7034，应转向排查客户端状态机]
+- Date: 2026-04-30
+- Context: Agent 在修复 `official_018_local_reply` 的 `2015` 重复块和 `2004.lobby_id` 残留后，复查新一轮 `gbe_gc_debug.log` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当 `official_018_local_reply` 已收敛到 `919 bytes`，且 `2004` 中的 `lobby_id/match_id/server_id/game_start_time/connect` 都已经是当前运行态值，但日志仍停在首个 `7034 -> 018` 之后，没有继续出现第二个 `7034 -> 021 -> 8870` 时，GC `018` 包体不再是最高优先级嫌疑。
+  - 这类情况下应优先查看游戏侧/客户端侧状态机日志，确认是否真的进入了 `DOTA_GAMERULES_STATE_WAIT_FOR_PLAYERS_TO_LOAD`，以及为什么没有继续发送官方链路中的下一个 `7034`。
+
+[Dota2 donor 26 重写后必须强制刷新 top-level owner_soid]
+- Date: 2026-04-30
+- Context: Agent 在对照 `/workspace/console.log` 与 `official_018_local_reply` 顶层字段时发现收到 `919` bytes 的 `018` 后立即出现 `Lobby object destroyed, previous lobby_id=0, match_id=0`
+- Category: 代码模式
+- Instructions:
+  - donor-based `26 / CMsgSOMultipleObjects` 即使内部 `2004/2015/2014/2016` 字段都已改成运行态值，顶层 `owner_soid` 仍可能保留 donor 旧 lobby id。
+  - 这种情况下 `gbe_gc_debug.log` 可见 `field 6` 仍是 `type=3 id=<donor_lobby_id>`，而 `console.log` 会在收到 `26` 后立刻打印 `Lobby object destroyed`，且没有后续 `WAIT_FOR_PLAYERS_TO_LOAD` 或第二个 `7034`。
+  - 所有 donor 重写得到的 `26`（包括 `official 018/021/...` 和 launch stage donor `26`）在最终返回前都必须调用 `GBE_ForceDotaLobbyUpdateOwnerSOID(message, lobby_id)`，不能只改内部对象字段。
+
 [Dota2 官方 018 donor 的剩余 LaunchTemplate 模板 patch 应一次性放宽]
 - Date: 2026-04-30
 - Context: Agent 在连续多轮 host startgame 调试中发现首个 `7034 -> official 018` 路径会沿着 `lobby_id -> match_id -> server_id -> game_start_time` 逐个暴露新的固定模板命中失败

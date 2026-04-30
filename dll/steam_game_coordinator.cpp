@@ -4065,7 +4065,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
         return false;
 
     message.swap(inner_payload);
-    return true;
+    return GBE_ForceDotaLobbyUpdateOwnerSOID(message, lobby_id);
 }
 
 static bool GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
@@ -4159,7 +4159,7 @@ static bool GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
         return false;
 
     message.swap(inner_payload);
-    return true;
+    return GBE_ForceDotaLobbyUpdateOwnerSOID(message, lobby_id);
 }
 
 static bool GBE_BuildDotaPracticeLobbyLaunchPeripheralMessage(
