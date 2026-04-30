@@ -49,6 +49,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当 `account_id` 语义改写已只是 skipped/no replacements，而失败点收敛到 `launch cache template identifier patch failed` 时，应优先把顶层 `steam_id` varint 模板替换从 hard failure 放宽为“未命中则记录日志并继续”。
   - 后续真正需要保证的运行态字段，应优先依赖 inner `24` 对象重写与 owner SOID 修正，而不是要求 donor 一定包含旧 `steam_id` 顶层模板字节。
 
+[Dota2 host startgame 已可进入完整 launch 状态链，但 4511/4506 后包体大小仍未完全贴齐官方]
+- Date: 2026-04-30
+- Context: Agent 在复查基于 `7f9a3342` 的新一轮 `/workspace/gbe_gc_debug.log` 与 `/workspace/console.log` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当前实现已能稳定走通 `4511 -> 24 -> 4506 -> 26 -> 7034 -> 021 -> 8870 -> 024/025 -> 8330/8331 -> 030 -> 032 -> 8744/8745 -> 043 -> 046`，并成功进入游戏。
+  - 其中关键转折是：放宽 `4511` 后 official launch cache `24` 的顶层 `steam_id` varint 模板依赖后，`queued official-template CacheSubscribed after server_id sync` 成功出现，后续整条状态机恢复正常。
+  - 当前本地包体大小仍与官方抓包不完全一致，例如 `4511` 后 `24` 为 `919` 而不是官方 `873`，`4506` 后首个 `26` 为 `919` 而不是官方 `873`，后续多数 `26` 为 `922/924` 而不是 `911/917/512/514`；因此若后续目标是字节级贴齐，仍需继续精修对象集合和字段重写。
+
 [Dota2 4511 后目标 873-byte CacheSubscribed donor 对应抓包 016 而不是 038]
 - Date: 2026-04-30
 - Context: Agent 在继续对照 `/workspace/lobbystartgamedota2/` 中 `ClientFromGC` 样本大小与 `/workspace/lobbystartgame.log` 的 `4511 -> 24` 时序时发现
