@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 官方 launch prelude 里的首个 7034 不能提前回复 018 或 runtime 26]
+- Date: 2026-04-30
+- Context: Agent 在继续按 `/workspace/lobbystartgamedota2/` 与 `/workspace/lobbystartgame.log` 逐条核对 `4508 -> 7034 -> 4511 -> 24 -> 4506 -> 26` 时发现
+- Category: 代码模式
+- Instructions:
+  - 官方 practice lobby host startgame 的 prelaunch 窗口里，首个 `7034` 出现在 `4508` 之后、`4511` 之前，这一拍不应提前下发 `018` 风格的 `26`，也不应回退成 runtime `26`。
+  - 当本地 lobby 仍处于 `state=1, game_state=0` 时，`7034` 应等待官方后续 `4511 -> 24 -> 4506 -> 018/26` 的时序推进，而不是把缺失 `4506` 的恢复逻辑硬挂在这个首个 `7034` 上。
+  - 如果后续仍看不到 `4506`，应先复查本地为什么没进入官方链路，而不是先在首个 `7034` 上发明替代回复。
+
 [Dota2 4511 后目标 873-byte CacheSubscribed donor 对应抓包 016 而不是 038]
 - Date: 2026-04-30
 - Context: Agent 在继续对照 `/workspace/lobbystartgamedota2/` 中 `ClientFromGC` 样本大小与 `/workspace/lobbystartgame.log` 的 `4511 -> 24` 时序时发现

@@ -7842,8 +7842,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             const GBE_Dota7034RequestShape request_shape = GBE_ParseDota7034RequestShape(body, body_size);
 
             if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u) {
-                if (queue_official_26(GBE_kDotaOfficial018PracticeLobby26Hex, 2u, 0u, "official packet 018 after 7034 fallback missing 4506"))
-                    return true;
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "consumed req=%u source_job=%llu note=prelaunch 7034 waits for official 4511/24/4506 progression active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu summary=%s",
+                    request_emsg,
+                    static_cast<unsigned long long>(source_job),
+                    GBE_local_lobby.active ? 1u : 0u,
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                    static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                    GBE_FormatDota7034Summary(body, body_size).c_str()
+                );
+                return true;
             }
 
             if (GBE_dota_launch_pending_8870 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 1u) {
