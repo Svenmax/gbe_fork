@@ -205,6 +205,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 这种情况下，问题不再是 `7035` 早退，而是 `4511` 后的权威运行态没有跟着延后的 launch `26` 一起推进到最终状态。
   - 如果日志里出现延后的 `stage=2/3/4` 已排队，但后续 `restored shared lobby reason=4511_lan_server_available` 仍显示 `state=1 game_state=0`，优先检查 shared lobby 是否被旧状态覆盖。
 
+[Dota2 practice lobby 需要 backing generic Steam lobby]
+- Date: 2026-04-30
+- Context: Agent 在继续排查 host `start game` 长期停在 `DOTA_GAMERULES_STATE_INIT` 时发现
+- Category: 依赖关系
+- Instructions:
+  - 当前 `7038 / PracticeLobbyCreate` 默认只生成 Dota-specific `lobby_id`，这不足以驱动旧 `steamapi` 依赖的 generic `ISteamMatchmaking` lobby 链路。
+  - 如果没有同步创建 backing generic Steam lobby，后续 `SetLobbyGameServer(...)` 就没有真实目标可更新，也不会触发期望的 `LobbyGameCreated_t` / `LobbyDataUpdate_t` 联动。
+  - 后续排查应优先确认日志里是否已经出现 `GenericLobbyID=` 和 `synced generic lobby gameserver ... generic_lobby_id=...`，再决定是否回到更底层的 networking/serialized 路径。
+
 [Dota2 server coordinator 也必须能发布 shared lobby]
 - Date: 2026-04-30
 - Context: Agent 在继续修复 practice lobby host startgame 卡在 loading、并追到 `4511` 后状态回退问题时发现

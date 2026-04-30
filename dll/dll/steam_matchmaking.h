@@ -127,6 +127,8 @@ public:
     Steam_Matchmaking(class Settings *settings, class Local_Storage *local_storage, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb);
     ~Steam_Matchmaking();
 
+    CSteamID CreateLobbyImmediate(ELobbyType eLobbyType, int cMaxMembers);
+
     // game server favorites storage
     // saves basic details about a multiplayer game server locally
 

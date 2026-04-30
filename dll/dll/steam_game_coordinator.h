@@ -79,6 +79,7 @@ public ISteamGameCoordinator
     {
         bool active{};
         uint64 lobby_id{};
+        uint64 generic_lobby_id{};
         bool has_chat_channel{};
         uint64 chat_channel_id{};
         std::string chat_channel_name;
@@ -163,6 +164,7 @@ public ISteamGameCoordinator
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const std::string &player_name, std::string &message);
     void GBE_PublishSharedDotaLobbyState(const char *reason);
     void GBE_RestoreSharedDotaLobbyState(const char *reason);
+    void GBE_LeaveGenericLobby();
     bool GBE_SyncGenericLobbyGameServer(const char *reason);
     bool GBE_TrySyncDotaLobbyServerIdFromGameServer(const char *reason);
     uint64 GBE_GetDotaLobbyOwnerSteamId() const;
