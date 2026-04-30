@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 PRE_GAME 后不要用通用 runtime 26 覆盖 donor 046 建立的 lobby 视图]
+- Date: 2026-04-30
+- Context: Agent 在对照新上传的 `gbe_gc_debug.log` 与 `console.log`，排查 dashboard 仍显示 host loading 时发现
+- Category: 代码模式
+- Instructions:
+  - `PRE_GAME` 阶段首个 `PLAYER_HERO` `7034` 之后，若后续同类 `7034_launch_poll` 回落到当前通用 `GBE_SendDotaPracticeLobbyDetailsUpdate(...)` 生成的精简 runtime `26`，客户端会删除 donor `046` 刚建立的 `CSODOTALobby.all_members[0].hero_id`，并清空一批 `team_details`、事件显示和 lobby 时间字段。
+  - 这类字段回退比顶层 `CSODOTALobby.state` 更像 dashboard 仍显示 loading 的根因；官方 `043/046` 的 `2004.state` 始终保持 `RUN`，问题不在继续推进顶层 state。
+  - 因此 `state=RUN && game_state=PRE_GAME && send_reason=PLAYER_HERO` 的后续轮询，应继续使用 `046` 风格 donor，而不是通用 runtime `26`。
+
 [Dota2 PRE_GAME 后的 official 046 只应在 043 之后消费一次]
 - Date: 2026-04-30
 - Context: Agent 在继续对照 `/workspace/lobbystartgame.log` 与本地 `PLAYER_HERO` 轮询日志，排查“返回主界面仍显示主机载入中”时发现
