@@ -187,6 +187,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 这条 donor 的 `lobby_id`、`steam_id fixed64` 等标识符也应按“若字段存在则 patch”的策略处理，而不是要求模板字节必须命中后才允许发送。
   - 如果日志出现 `Failed replacing lobby_id bytes` 或 `failed building launch CacheSubscribed after server_id sync`，应优先检查是否又回到了 strict 标识符替换路径。
 
+[Dota2 7041 过早推进到 RUN 会诱发 7035]
+- Date: 2026-04-30
+- Context: Agent 在分析本轮 `gbe_gc_debug.log` 与 `console.log`、确认大 `038` 已成功下发后的新卡点时发现
+- Category: 代码模式
+- Instructions:
+  - 如果 `7041` 阶段在 `server_id` 仍为 `0` 时就连续下发后续三条 launch `26`，把 lobby 状态推进到 `state=2/game_state=1`，客户端很容易在 `4511` 前立刻发送空 `7035 / AbandonCurrentGame`。
+  - 当前更接近官方的修正方向是：`7041` 先只发启动第一条 `26` 触发载入，把其余 launch `26` 和外围 follow-up 挪到 `4511` 同步出 `server_id`、并下发 `037/038` 之后再继续发送。
+  - 如果新日志里仍看到 `7035` 早于 `4511/大24`，优先检查是否又在 `7041` 初始窗口里把状态推进到了 `RUN`。
+
 [GitHub 构建触发偏好]
 - Date: 2026-04-23
 - Context: 用户要求后续触发 GitHub 构建时限定目标任务

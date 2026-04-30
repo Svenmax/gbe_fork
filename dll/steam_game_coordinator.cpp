@@ -6931,6 +6931,120 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
                 static_cast<unsigned long long>(server_id),
                 launch_cache_message.size()
             );
+
+            std::array<std::string, 3> deferred_stage_messages;
+            for (size_t deferred_stage_index = 0; deferred_stage_index < deferred_stage_messages.size(); ++deferred_stage_index) {
+                const size_t stage_index = deferred_stage_index + 1u;
+                if (!GBE_BuildDotaPracticeLobbyLaunchStagePayload(
+                        stage_index,
+                        account_id,
+                        steam_id,
+                        GBE_local_lobby.lobby_id,
+                        GBE_local_lobby.server_id,
+                        GBE_local_lobby.match_id,
+                        GBE_local_lobby.game_start_time,
+                        GBE_local_lobby.connect,
+                        GBE_local_lobby.owner_name,
+                        GBE_local_lobby.room_name,
+                        GBE_local_lobby.game_mode,
+                        GBE_local_lobby.server_region,
+                        GBE_local_lobby.lan,
+                        GBE_local_lobby.lan_host_ping_location,
+                        GBE_local_lobby.allow_cheats,
+                        GBE_local_lobby.fill_with_bots,
+                        GBE_local_lobby.allow_spectating,
+                        GBE_local_lobby.visibility,
+                        GBE_local_lobby.bot_difficulty_radiant,
+                        GBE_local_lobby.bot_difficulty_dire,
+                        GBE_local_lobby.bot_radiant,
+                        GBE_local_lobby.bot_dire,
+                        GBE_local_lobby.owner_team,
+                        GBE_local_lobby.owner_slot,
+                        GBE_local_lobby.pass_key,
+                        deferred_stage_messages[deferred_stage_index])) {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_SYNC",
+                        "failed building deferred 7041 launch stage after server_id sync reason=%s stage=%zu lobby_id=%llu match_id=%llu server_id=%llu",
+                        reason ? reason : "unknown",
+                        stage_index + 1u,
+                        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                        static_cast<unsigned long long>(GBE_local_lobby.server_id)
+                    );
+                    return false;
+                }
+            }
+
+            const std::array<uint32, 3> deferred_stage_states = { 1u, 2u, 2u };
+            const std::array<uint32, 3> deferred_stage_game_states = { 0u, 0u, 1u };
+            for (size_t deferred_stage_index = 0; deferred_stage_index < deferred_stage_messages.size(); ++deferred_stage_index) {
+                push_incoming_now(
+                    GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
+                    deferred_stage_messages[deferred_stage_index],
+                    true,
+                    deferred_stage_states[deferred_stage_index],
+                    deferred_stage_game_states[deferred_stage_index]
+                );
+
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "queued deferred 7041 launch stage after server_id sync reason=%s stage=%zu lobby_id=%llu match_id=%llu server_id=%llu size=%zu",
+                    reason ? reason : "unknown",
+                    deferred_stage_index + 2u,
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                    static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                    deferred_stage_messages[deferred_stage_index].size()
+                );
+            }
+
+            static const std::array<GBE_DotaPracticeLobbyLaunchPeripheralTemplate, 13> deferred_peripheral_templates = {{
+                { GBE_kSteamPersonaState, GBE_kDotaPracticeLobbyLaunchPersonaStateInitHex, 0.05, false },
+                { GBE_kSteamServersAvailable, GBE_kDotaPracticeLobbyLaunchServersAvailableHex, 0.06, false },
+                { GBE_kSteamAuthListAck, GBE_kDotaPracticeLobbyLaunchAuthListAckStage1Hex, 0.07, false },
+                { GBE_kSteamGameConnectTokens, GBE_kDotaPracticeLobbyLaunchGameConnectTokensStage1Hex, 0.08, false },
+                { GBE_kSteamPersonaState, GBE_kDotaPracticeLobbyLaunchPersonaStateSetupHex, 0.09, false },
+                { GBE_kSteamAuthListAck, GBE_kDotaPracticeLobbyLaunchAuthListAckStage2Hex, 0.10, false },
+                { GBE_kSteamGameConnectTokens, GBE_kDotaPracticeLobbyLaunchGameConnectTokensStage2Hex, 0.11, false },
+                { GBE_kSteamPersonaState, GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex, 0.117, false },
+                { GBE_kSteamTicketAuthComplete, GBE_kDotaPracticeLobbyLaunchTicketAuthCompleteHex, 0.119, true },
+                { GBE_kSteamGameConnectTokens, GBE_kDotaPracticeLobbyLaunchGameConnectTokensStage3Hex, 0.120, false },
+                { GBE_kSteamPersonaState, GBE_kDotaPracticeLobbyLaunchPersonaStateServerRunHex, 0.121, true },
+                { GBE_kSteamPersonaState, GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex, 0.122, false },
+                { GBE_kSteamPersonaState, GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex, 0.123, false },
+            }};
+
+            for (const auto &peripheral_template : deferred_peripheral_templates) {
+                std::string peripheral_message;
+                if (!GBE_BuildDotaPracticeLobbyLaunchPeripheralMessage(
+                        peripheral_template.hex,
+                        steam_id,
+                        GBE_local_lobby.lobby_id,
+                        GBE_local_lobby.server_id,
+                        peripheral_template.patch_server_id,
+                        peripheral_message)) {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_SYNC",
+                        "failed building deferred 7041 peripheral after server_id sync reason=%s emsg=%u lobby_id=%llu server_id=%llu",
+                        reason ? reason : "unknown",
+                        peripheral_template.emsg,
+                        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                        static_cast<unsigned long long>(GBE_local_lobby.server_id)
+                    );
+                    return false;
+                }
+
+                push_incoming(peripheral_template.emsg | GBE_kProtoMask, peripheral_message, peripheral_template.delay);
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "queued deferred 7041 peripheral after server_id sync reason=%s emsg=%u lobby_id=%llu delay=%.2f size=%zu",
+                    reason ? reason : "unknown",
+                    peripheral_template.emsg,
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    peripheral_template.delay,
+                    peripheral_message.size()
+                );
+            }
         } else {
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
@@ -8121,144 +8235,82 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     GBE_local_lobby.game_start_time = static_cast<uint32>(std::time(nullptr));
     GBE_PublishSharedDotaLobbyState("7041_launch_init");
 
-    std::array<std::string, 4> stage_messages;
-    for (size_t stage_index = 0; stage_index < stage_messages.size(); ++stage_index) {
-        if (!GBE_BuildDotaPracticeLobbyLaunchStagePayload(
-                stage_index,
-                account_id,
-                steam_id,
-                GBE_local_lobby.lobby_id,
-                GBE_local_lobby.server_id,
-                GBE_local_lobby.match_id,
-                GBE_local_lobby.game_start_time,
-                GBE_local_lobby.connect,
-                GBE_local_lobby.owner_name,
-                GBE_local_lobby.room_name,
-                GBE_local_lobby.game_mode,
-                GBE_local_lobby.server_region,
-                GBE_local_lobby.lan,
-                GBE_local_lobby.lan_host_ping_location,
-                GBE_local_lobby.allow_cheats,
-                GBE_local_lobby.fill_with_bots,
-                GBE_local_lobby.allow_spectating,
-                GBE_local_lobby.visibility,
-                GBE_local_lobby.bot_difficulty_radiant,
-                GBE_local_lobby.bot_difficulty_dire,
-                GBE_local_lobby.bot_radiant,
-                GBE_local_lobby.bot_dire,
-                GBE_local_lobby.owner_team,
-                GBE_local_lobby.owner_slot,
-                GBE_local_lobby.pass_key,
-                stage_messages[stage_index])) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_LOBBY",
-                "[LOBBY] Failed building 7041 launch stage=%zu LobbyID=%llu match_id=%llu server_id=%llu connect=%s",
-                stage_index + 1,
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                static_cast<unsigned long long>(GBE_local_lobby.match_id),
-                static_cast<unsigned long long>(GBE_local_lobby.server_id),
-                GBE_local_lobby.connect.c_str()
-            );
-            return true;
-        }
-    }
-
-    // Host captures show three UpdateMultiple packets landing before TicketAuthComplete,
-    // with only one PersonaState inserted between the 2nd and 3rd deferred updates.
-    const std::array<double, 4> stage_delays = { 0.0, 0.115, 0.116, 0.118 };
-    const std::array<uint32, 4> stage_states = { 1u, 1u, 2u, 2u };
-    const std::array<uint32, 4> stage_game_states = { 0u, 0u, 0u, 1u };
-    for (size_t stage_index = 0; stage_index < stage_messages.size(); ++stage_index) {
-        std::string outbound_message = stage_messages[stage_index];
-        if (wrapped) {
-            std::string wrapped_message;
-            if (!GBE_BuildWrappedDotaReplayMessage(outbound_message, *outer_session_field_raw, steam_id, wrapped_message)) {
-                GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 7041 launch stage=%zu LobbyID=%llu", stage_index + 1, static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
-                return true;
-            }
-            outbound_message.swap(wrapped_message);
-        }
-
-        if (stage_index == 0) {
-            push_incoming_now(
-                (wrapped ? GBE_kEMsgClientFromGC : GBE_kDotaPracticeLobbyDetailsUpdate) | GBE_kProtoMask,
-                outbound_message,
-                true,
-                stage_states[stage_index],
-                stage_game_states[stage_index]
-            );
-        } else {
-            push_incoming(
-                (wrapped ? GBE_kEMsgClientFromGC : GBE_kDotaPracticeLobbyDetailsUpdate) | GBE_kProtoMask,
-                outbound_message,
-                stage_delays[stage_index],
-                true,
-                stage_states[stage_index],
-                stage_game_states[stage_index]
-            );
-        }
-
+    std::string stage1_message;
+    if (!GBE_BuildDotaPracticeLobbyLaunchStagePayload(
+            0,
+            account_id,
+            steam_id,
+            GBE_local_lobby.lobby_id,
+            GBE_local_lobby.server_id,
+            GBE_local_lobby.match_id,
+            GBE_local_lobby.game_start_time,
+            GBE_local_lobby.connect,
+            GBE_local_lobby.owner_name,
+            GBE_local_lobby.room_name,
+            GBE_local_lobby.game_mode,
+            GBE_local_lobby.server_region,
+            GBE_local_lobby.lan,
+            GBE_local_lobby.lan_host_ping_location,
+            GBE_local_lobby.allow_cheats,
+            GBE_local_lobby.fill_with_bots,
+            GBE_local_lobby.allow_spectating,
+            GBE_local_lobby.visibility,
+            GBE_local_lobby.bot_difficulty_radiant,
+            GBE_local_lobby.bot_difficulty_dire,
+            GBE_local_lobby.bot_radiant,
+            GBE_local_lobby.bot_dire,
+            GBE_local_lobby.owner_team,
+            GBE_local_lobby.owner_slot,
+            GBE_local_lobby.pass_key,
+            stage1_message)) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Sent 7041 launch stage=%zu path=%s LobbyID=%llu match_id=%llu server_id=%llu game_start=%u connect=%s size=%zu body_prefix=%s",
-            stage_index + 1,
-            wrapped ? "wrapped" : "direct",
+            "[LOBBY] Failed building 7041 launch stage=1 LobbyID=%llu match_id=%llu server_id=%llu connect=%s",
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
             static_cast<unsigned long long>(GBE_local_lobby.match_id),
             static_cast<unsigned long long>(GBE_local_lobby.server_id),
-            GBE_local_lobby.game_start_time,
-            GBE_local_lobby.connect.c_str(),
-            outbound_message.size(),
-            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(outbound_message.data()), outbound_message.size(), 32).c_str()
+            GBE_local_lobby.connect.c_str()
         );
+        return true;
     }
 
-    static const std::array<GBE_DotaPracticeLobbyLaunchPeripheralTemplate, 13> peripheral_templates = {{
-        { GBE_kSteamPersonaState, GBE_kDotaPracticeLobbyLaunchPersonaStateInitHex, 0.05, false },
-        { GBE_kSteamServersAvailable, GBE_kDotaPracticeLobbyLaunchServersAvailableHex, 0.06, false },
-        { GBE_kSteamAuthListAck, GBE_kDotaPracticeLobbyLaunchAuthListAckStage1Hex, 0.07, false },
-        { GBE_kSteamGameConnectTokens, GBE_kDotaPracticeLobbyLaunchGameConnectTokensStage1Hex, 0.08, false },
-        { GBE_kSteamPersonaState, GBE_kDotaPracticeLobbyLaunchPersonaStateSetupHex, 0.09, false },
-        { GBE_kSteamAuthListAck, GBE_kDotaPracticeLobbyLaunchAuthListAckStage2Hex, 0.10, false },
-        { GBE_kSteamGameConnectTokens, GBE_kDotaPracticeLobbyLaunchGameConnectTokensStage2Hex, 0.11, false },
-        { GBE_kSteamPersonaState, GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex, 0.117, false },
-        { GBE_kSteamTicketAuthComplete, GBE_kDotaPracticeLobbyLaunchTicketAuthCompleteHex, 0.119, true },
-        { GBE_kSteamGameConnectTokens, GBE_kDotaPracticeLobbyLaunchGameConnectTokensStage3Hex, 0.120, false },
-        { GBE_kSteamPersonaState, GBE_kDotaPracticeLobbyLaunchPersonaStateServerRunHex, 0.121, true },
-        { GBE_kSteamPersonaState, GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex, 0.122, false },
-        { GBE_kSteamPersonaState, GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex, 0.123, false },
-    }};
-
-    for (const auto &peripheral_template : peripheral_templates) {
-        std::string peripheral_message;
-        if (!GBE_BuildDotaPracticeLobbyLaunchPeripheralMessage(
-                peripheral_template.hex,
-                steam_id,
-                GBE_local_lobby.lobby_id,
-                GBE_local_lobby.server_id,
-                peripheral_template.patch_server_id,
-                peripheral_message)) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_LOBBY",
-                "[LOBBY] Failed building 7041 peripheral emsg=%u LobbyID=%llu server_id=%llu",
-                peripheral_template.emsg,
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                static_cast<unsigned long long>(GBE_local_lobby.server_id)
-            );
+    if (wrapped) {
+        std::string wrapped_message;
+        if (!GBE_BuildWrappedDotaReplayMessage(stage1_message, *outer_session_field_raw, steam_id, wrapped_message)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 7041 launch stage=1 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
             return true;
         }
-
-        push_incoming(peripheral_template.emsg | GBE_kProtoMask, peripheral_message, peripheral_template.delay);
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Sent 7041 peripheral emsg=%u LobbyID=%llu delay=%.2f size=%zu body_prefix=%s",
-            peripheral_template.emsg,
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            peripheral_template.delay,
-            peripheral_message.size(),
-            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(peripheral_message.data()), peripheral_message.size(), 24).c_str()
-        );
+        stage1_message.swap(wrapped_message);
     }
+
+    push_incoming_now(
+        (wrapped ? GBE_kEMsgClientFromGC : GBE_kDotaPracticeLobbyDetailsUpdate) | GBE_kProtoMask,
+        stage1_message,
+        true,
+        1u,
+        0u
+    );
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Sent 7041 launch stage=1 path=%s LobbyID=%llu match_id=%llu server_id=%llu game_start=%u connect=%s size=%zu body_prefix=%s",
+        wrapped ? "wrapped" : "direct",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        static_cast<unsigned long long>(GBE_local_lobby.server_id),
+        GBE_local_lobby.game_start_time,
+        GBE_local_lobby.connect.c_str(),
+        stage1_message.size(),
+        GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(stage1_message.data()), stage1_message.size(), 32).c_str()
+    );
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Deferring remaining 7041 launch follow-ups until server_id sync LobbyID=%llu match_id=%llu server_id=%llu",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        static_cast<unsigned long long>(GBE_local_lobby.server_id)
+    );
 
     return true;
 }
