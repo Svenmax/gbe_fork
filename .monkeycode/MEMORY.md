@@ -178,6 +178,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 这类小 donor 不应强制要求存在 `lobby_id` 或 `steam_id fixed64` 的模板占位；应按“若字段存在则 patch”的方式处理可选标识符，再保留其余 payload 原貌。
   - 当前 `gbe_fork` 已将该小 `24` 放在 `queued launch CacheSubscribed after server_id sync ...` 之前发送，后续若继续对齐官方 launch 窗口，应以这一顺序为基线继续比对日志。
 
+[Dota2 官方 038 大 24 的标识符改写约束]
+- Date: 2026-04-30
+- Context: Agent 在根据新一轮 `gbe_gc_debug.log` 排查 launch-time 大 `24` 未实际发出的问题时发现
+- Category: 代码模式
+- Instructions:
+  - 官方 `038` 大 `24` 在当前 donor 中不能再假设一定存在可供原始字节替换的 `lobby_id` 模板片段；否则 strict `lobby_id` patch 会直接导致整条 launch `24` 构建失败。
+  - 这条 donor 的 `lobby_id`、`steam_id fixed64` 等标识符也应按“若字段存在则 patch”的策略处理，而不是要求模板字节必须命中后才允许发送。
+  - 如果日志出现 `Failed replacing lobby_id bytes` 或 `failed building launch CacheSubscribed after server_id sync`，应优先检查是否又回到了 strict 标识符替换路径。
+
 [GitHub 构建触发偏好]
 - Date: 2026-04-23
 - Context: 用户要求后续触发 GitHub 构建时限定目标任务

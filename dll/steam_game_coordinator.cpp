@@ -4692,7 +4692,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(
     return GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWrappedTemplate(
         GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex,
         "practice lobby launch official cache template",
-        true,
+        false,
         true,
         true,
         account_id,
