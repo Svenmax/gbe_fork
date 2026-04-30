@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 server connect 后首个 7034 可能替代缺失的 4506]
+- Date: 2026-04-30
+- Context: Agent 在逐条阅读新一轮 `/workspace/console.log` 与 `/workspace/gbe_gc_debug.log`、定位 host startgame 仍回主界面时发现
+- Category: 代码模式
+- Instructions:
+  - 当前本地链路里，`7041` 启动后 server 侧可能不会实际发出 `4506`，而是直接在 `4511/4508` 之后收到首个 `7034`。
+  - 如果此时 lobby 仍停在 `state=1, game_state=0`，不能让该 `7034` 落回 runtime `26`；应优先把它视作缺失 `4506` 的恢复窗口，先下发官方 `018` 风格的 `26`，把状态推进到 `2/0`。
+  - 否则后续 `7034` 不会进入官方 `021/024/025/...` donor progression，容易再次触发客户端 `Lobby object destroyed`。
+
 [Dota2 4511 后的 launch CacheSubscribed 应改为单条 runtime snapshot]
 - Date: 2026-04-30
 - Context: Agent 在继续修复 practice lobby host `start game` 卡在 `DOTA_GAMERULES_STATE_INIT`、并收口 `4511` 后 donor 双 `24` 时发现

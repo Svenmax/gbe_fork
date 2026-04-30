@@ -7260,36 +7260,8 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
         const uint64 steam_id = GBE_GetDotaLobbyOwnerSteamId();
         const uint32 account_id = GBE_GetDotaLobbyOwnerAccountId();
         if (steam_id != 0 && account_id != 0) {
-            std::string prelude_cache_message;
-            if (GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedPreludeTemplateReplay(
-                    account_id,
-                    steam_id,
-                    GBE_local_lobby.lobby_id,
-                    prelude_cache_message)) {
-                push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, prelude_cache_message);
-                GBE_GC_DebugLog(
-                    "GC_DOTA_SYNC",
-                    "queued official prelude CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu size=%zu",
-                    reason ? reason : "unknown",
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    static_cast<unsigned long long>(GBE_local_lobby.match_id),
-                    static_cast<unsigned long long>(server_id),
-                    prelude_cache_message.size()
-                );
-            } else {
-                GBE_GC_DebugLog(
-                    "GC_DOTA_SYNC",
-                    "failed building official prelude CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu",
-                    reason ? reason : "unknown",
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    static_cast<unsigned long long>(GBE_local_lobby.match_id),
-                    static_cast<unsigned long long>(server_id)
-                );
-            }
-
-            std::string official_cache_message;
-            if (GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(
-                    account_id,
+            std::string runtime_cache_message;
+            if (GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
                     steam_id,
                     GBE_local_lobby.lobby_id,
                     GBE_local_lobby.state,
@@ -7314,23 +7286,30 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
                     GBE_local_lobby.bot_dire,
                     GBE_local_lobby.owner_team,
                     GBE_local_lobby.owner_slot,
+                    GBE_local_lobby.has_broadcast_channel,
+                    GBE_local_lobby.broadcast_channel_id,
+                    GBE_local_lobby.broadcast_country_code,
+                    GBE_local_lobby.broadcast_description,
+                    GBE_local_lobby.broadcast_language_code,
                     GBE_local_lobby.pass_key,
                     account_id,
-                    official_cache_message)) {
-                push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, official_cache_message);
+                    runtime_cache_message)) {
+                push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, runtime_cache_message);
                 GBE_GC_DebugLog(
                     "GC_DOTA_SYNC",
-                    "queued official CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu size=%zu",
+                    "queued runtime CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu state=%u game_state=%u size=%zu",
                     reason ? reason : "unknown",
                     static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                     static_cast<unsigned long long>(GBE_local_lobby.match_id),
                     static_cast<unsigned long long>(server_id),
-                    official_cache_message.size()
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    runtime_cache_message.size()
                 );
             } else {
                 GBE_GC_DebugLog(
                     "GC_DOTA_SYNC",
-                    "failed building official CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu owner_steam_id=%llu owner_account_id=%u",
+                    "failed building runtime CacheSubscribed after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu owner_steam_id=%llu owner_account_id=%u",
                     reason ? reason : "unknown",
                     static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                     static_cast<unsigned long long>(GBE_local_lobby.match_id),
@@ -7851,6 +7830,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.match_id != 0 && GBE_local_lobby.server_id != 0) {
             const GBE_Dota7034RequestShape request_shape = GBE_ParseDota7034RequestShape(body, body_size);
+
+            if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u) {
+                if (queue_official_26(GBE_kDotaOfficial018PracticeLobby26Hex, 2u, 0u, "official packet 018 after 7034 fallback missing 4506"))
+                    return true;
+            }
 
             if (GBE_dota_launch_pending_8870 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 1u) {
                 if (!queue_official_26(GBE_kDotaOfficial024PracticeLobby26Hex, 2u, 1u, "official packet 024 after 8870/7034"))
