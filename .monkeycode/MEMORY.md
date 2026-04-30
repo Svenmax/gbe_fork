@@ -31,6 +31,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 官方 018 donor 的 lobby_id patch 不能走严格命中]
+- Date: 2026-04-30
+- Context: Agent 在继续修复 host startgame 缺失 `4506` 时，对照新一轮 `/workspace/gbe_gc_debug.log` 发现首个 `7034` 已命中官方 `018` 分支，但构建阶段仍失败
+- Category: 代码模式
+- Instructions:
+  - 当首个 `7034` 作为缺失 `4506` 的恢复窗口去重放官方 `018` donor 时，`LaunchTemplate` 内的 `lobby_id` 不应再要求模板字节必须命中。
+  - 如果日志出现 `Launch lobby_id patch failed/skipped stage=official packet 018 ...`，应把这类 `lobby_id` patch 视为可选项：找不到 donor 模板字节时继续发送后续语义改写后的消息，而不是整包失败并回退到 runtime `26`。
+
 [Dota2 server connect 后首个 7034 可能替代缺失的 4506]
 - Date: 2026-04-30
 - Context: Agent 在逐条阅读新一轮 `/workspace/console.log` 与 `/workspace/gbe_gc_debug.log`、定位 host startgame 仍回主界面时发现
