@@ -163,6 +163,7 @@ public ISteamGameCoordinator
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const std::string &player_name, std::string &message);
     void GBE_PublishSharedDotaLobbyState(const char *reason);
     void GBE_RestoreSharedDotaLobbyState(const char *reason);
+    bool GBE_SyncGenericLobbyGameServer(const char *reason);
     bool GBE_TrySyncDotaLobbyServerIdFromGameServer(const char *reason);
     uint64 GBE_GetDotaLobbyOwnerSteamId() const;
     uint32 GBE_GetDotaLobbyOwnerAccountId() const;

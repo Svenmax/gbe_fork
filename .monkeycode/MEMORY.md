@@ -214,6 +214,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 一旦 shared lobby 仍停留在旧值，后续 `GBE_SendDotaPracticeLobbyDetailsUpdate()` 开头调用 `GBE_RestoreSharedDotaLobbyState()` 时，就会把 server 侧刚推进到的运行态重新拉回旧状态。
   - 如果日志显示 `updated authoritative lobby state after deferred 7041 launch ... state=2 game_state=1` 紧接着又出现 `restored shared lobby ... state=1 game_state=0`，应优先检查是否又恢复了 `GBE_PublishSharedDotaLobbyState()` 对 server 的早退。
 
+[SteamNetworkingSocketsSerialized 不能返回空证书假成功]
+- Date: 2026-04-30
+- Context: Agent 在分析新一轮 host startgame 日志、确认 GC lobby 状态已推进到 `state=2/game_state=1` 但控制台仍反复报 `Cert request returned invalid cert` 时发现
+- Category: 代码模式
+- Instructions:
+  - `dll/steam_networking_socketsserialized.cpp` 里的 `GetCertAsync()` 不能再返回 `k_EResultOK` 配合空 `SteamNetworkingSocketsCert_t` 负载；这会把问题从“无证书”变成更糟的“无效证书”。
+  - 如果当前并没有真实可用的 SteamDatagram 证书，应优先返回明确失败结果，并把 `m_cbCert/m_cbSignature/m_cbPrivKey` 维持为 `0`，不要伪造空成功。
+  - `GetNetworkConfigJSON()` 也不应继续返回裸 `0`；至少要返回可解析的最小 JSON，避免引擎把它当成完全缺失的 network config。
+
 [GitHub 构建触发偏好]
 - Date: 2026-04-23
 - Context: 用户要求后续触发 GitHub 构建时限定目标任务
@@ -857,3 +866,19 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 旧 `steamapi` 局域网链路里，`Steam_GameServer::SendUserConnectAndAuthenticate`、`BeginAuthSession`、`CreateUnauthenticatedUserConnection` 在 generic 层面都会尽早落到 `add_player()`，并通过统一的 player lifecycle 维护“玩家已进服”的状态。
   - 当前 `gbe_fork` 虽然也会 `add_player()`，但如果 Dota server-side GC 仍卡在过早的连接态建立时机，可以优先把这条 generic `on_client_connected()` 生命周期桥接到 Dota-specific connected players 预热，而不是先去修改 `Steam_Networking_Sockets_*`。
+
+[旧 steamapi 对照优先于动 serialized]
+- Date: 2026-04-30
+- Context: 用户要求继续排查 lobby 联机卡点时，先看旧 `steamapi` 的做法，尽量不要先改 `steam_networking_socketsserialized`
+- Instructions:
+  - 后续优先分析 `/workspace/steamapi/unpacked/steam_api` 里 lobby 联机和本地 server/client 接入路径，先确认旧实现是靠哪些 generic 生命周期和 connect 流程跑通的。
+  - 在旧 `steamapi` 对照结论清楚之前，尽量先不要改 `dll/steam_networking_socketsserialized.cpp`。
+
+[Dota host startgame 也要同步通用 lobby gameserver 快照]
+- Date: 2026-04-30
+- Context: Agent 在对照旧 `steamapi` 的 lobby/LAN 流程并继续排查 `DOTA_GAMERULES_STATE_INIT` 卡点时发现
+- Category: 代码模式
+- Instructions:
+  - 仅推进 Dota-specific 的 `24/26/7034/7041` 还不够；当 host 的 `server_id` 首次就绪后，还需要同步通用 `Steam_Matchmaking::SetLobbyGameServer(...)`，让 generic lobby snapshot 也带上 `gameserver(id/ip/port)`。
+  - 这样本地客户端侧才能走到旧 `steamapi` 依赖的 `LobbyGameCreated_t` / `LobbyDataUpdate_t` 联动，而不是只看到 Dota 自己的 lobby 运行态更新。
+  - 该通用 gameserver 同步应继续保持 Dota lobby connect 的 `:27015` 约束，不要把 `4508.server_port` 直接推广成 lobby connect 端口语义。

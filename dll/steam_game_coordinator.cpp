@@ -6831,6 +6831,72 @@ std::string Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerName() const
     return std::string(settings->get_local_name());
 }
 
+bool Steam_Game_Coordinator::GBE_SyncGenericLobbyGameServer(const char *reason)
+{
+    if (!is_server)
+        return false;
+
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.server_id == 0)
+        return false;
+
+    Steam_Client *steam_client = get_steam_client();
+    if (!steam_client || !steam_client->steam_matchmaking || !steam_client->steam_gameserver)
+        return false;
+
+    Steam_GameServer *game_server = steam_client->steam_gameserver;
+    if (!game_server->BLoggedOn())
+        return false;
+
+    const uint32 lobby_ip = game_server->GetPublicIP_old();
+    constexpr uint16 lobby_port = 27015u;
+    CSteamID lobby_steam_id((uint64)GBE_local_lobby.lobby_id);
+    CSteamID gameserver_steam_id((uint64)GBE_local_lobby.server_id);
+    if (!lobby_steam_id.IsLobby() || !gameserver_steam_id.IsValid())
+        return false;
+
+    uint32 previous_ip = 0;
+    uint16 previous_port = 0;
+    CSteamID previous_server_id = k_steamIDNil;
+    const bool had_previous_gameserver = steam_client->steam_matchmaking->GetLobbyGameServer(
+        lobby_steam_id,
+        &previous_ip,
+        &previous_port,
+        &previous_server_id);
+
+    if (had_previous_gameserver &&
+            previous_server_id == gameserver_steam_id &&
+            previous_ip == lobby_ip &&
+            previous_port == lobby_port) {
+        return false;
+    }
+
+    steam_client->steam_matchmaking->SetLobbyGameServer(
+        lobby_steam_id,
+        lobby_ip,
+        lobby_port,
+        gameserver_steam_id);
+
+    if (steam_client->steam_user) {
+        steam_client->steam_user->AdvertiseGame(gameserver_steam_id, lobby_ip, lobby_port);
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_SYNC",
+        "synced generic lobby gameserver reason=%s lobby_id=%llu server_id=%llu ip=%s port=%u had_previous=%u previous_server_id=%llu previous_ip=%s previous_port=%u",
+        reason ? reason : "unknown",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.server_id),
+        GBE_FormatIPv4(lobby_ip).c_str(),
+        static_cast<unsigned>(lobby_port),
+        had_previous_gameserver ? 1u : 0u,
+        static_cast<unsigned long long>(previous_server_id.ConvertToUint64()),
+        GBE_FormatIPv4(previous_ip).c_str(),
+        static_cast<unsigned>(previous_port)
+    );
+
+    return true;
+}
+
 bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const char *reason)
 {
     if (!is_server)
@@ -6866,6 +6932,8 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
         static_cast<unsigned long long>(previous_server_id),
         static_cast<unsigned long long>(server_id)
     );
+
+    GBE_SyncGenericLobbyGameServer(reason);
 
     if (previous_server_id == 0) {
         std::string launch_cache_prelude_message;
