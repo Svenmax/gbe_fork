@@ -931,5 +931,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Category: 代码模式
 - Instructions:
   - 当 `4511` 首次把 lobby `server_id` 从 `0` 同步成真实 gameserver SteamID 后，应优先下发官方 donor 对应的 prelude 小 `24` 和 official 大 `24`，不要立刻排一长串 synthetic `26` 与外围 persona/auth/ticket 消息。
-  - 这个窗口里的 `4506`、`7034`、`8330` 更接近客户端的 launch 轮询/推进信号；服务端应优先回 `26`，以及在 `8330` 后回 `8331` 再跟一条 `26`。
+  - 这个窗口里的 `4506`、`7034`、`8330` 更接近客户端的 launch 轮询/推进信号；`4506` 后应先落到官方 `018` 对应的 `state=2/game_state=0`，`8330` 只回 `8331`，不要立刻再跟一条 synthetic `26`。
   - `4005 / ServerWelcome` 之后不要再主动 synthetic 推一条 `7034`；官方节奏是客户端自己发 `7034`，服务端再根据该轮询推进 lobby 状态。
+
+[Dota2 host startgame 后段窗口要按 8870 挂起和官方 game_state 序列推进]
+- Date: 2026-04-30
+- Context: Agent 在继续对照 `/workspace/lobbystartgamedota2.zip` 的 `021-046` 窗口并接入官方 donor `26/8745` 时发现
+- Category: 代码模式
+- Instructions:
+  - `8870` 本身不是立刻回包的 direct；它更像一个“挂起后续推进”的标记，应该让紧随其后的那次 `7034` 触发官方 `024/025` 双 `26` 窗口，而不是在 `8870` 收到时马上 synthetic 回一条 `26`。
+  - 官方后段 `26` 的关键 `game_state` 推进值依次是：`018 -> 0`，`021/024 -> 1`，`025 -> 2`，`030 -> 3`，`032 -> 10`，`043/046 -> 4`；如果本地推进值不按这组序列走，容易再次偏离 `WAIT_FOR_PLAYERS_TO_LOAD/HERO_SELECTION/STRATEGY_TIME/PRE_GAME` 的真实节奏。
+  - `039 out 8744` 应回官方 `042 in 8745`，随后 `040/045 out 7034` 再分别驱动官方 `043/046 in 26`，不要把 `8744` 混成普通空请求直接吞掉。
