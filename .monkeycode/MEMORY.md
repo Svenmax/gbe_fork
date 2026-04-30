@@ -924,3 +924,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - direct `4007 / k_EMsgGCServerHello` 的 body 在 `base_gcmessages.proto` 里只有 `CMsgServerHello.version = field 1`，不能把它按自定义多字段结构解析。
   - 当前 host launch 路径下，`4005 / k_EMsgGCServerWelcome` 的 `min_allowed_version` 和 `active_version` 应直接镜像 `4007.version`；否则客户端会把 GC 版本误判成 `200` 一类错误值，并打印 `Version out of date`。
+
+[Dota2 host startgame 首段窗口应由 4506/7034/8330 驱动 26]
+- Date: 2026-04-30
+- Context: Agent 在重新对照 `/workspace/lobbystartgamedota2.zip` 的 `015-032` 首段窗口并修改 `steam_game_coordinator.cpp` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当 `4511` 首次把 lobby `server_id` 从 `0` 同步成真实 gameserver SteamID 后，应优先下发官方 donor 对应的 prelude 小 `24` 和 official 大 `24`，不要立刻排一长串 synthetic `26` 与外围 persona/auth/ticket 消息。
+  - 这个窗口里的 `4506`、`7034`、`8330` 更接近客户端的 launch 轮询/推进信号；服务端应优先回 `26`，以及在 `8330` 后回 `8331` 再跟一条 `26`。
+  - `4005 / ServerWelcome` 之后不要再主动 synthetic 推一条 `7034`；官方节奏是客户端自己发 `7034`，服务端再根据该轮询推进 lobby 状态。
