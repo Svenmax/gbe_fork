@@ -3841,8 +3841,12 @@ static bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
         return false;
     }
     if (!GBE_FindAndOverwriteBytes(message, GBE_VectorFromBytes(GBE_kOldDotaPracticeLobbyMatchIdVarint.data(), GBE_kOldDotaPracticeLobbyMatchIdVarint.size()), encoded_match_id)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch match_id patch failed stage=%s match_id=%llu", stage_note ? stage_note : "", static_cast<unsigned long long>(match_id));
-        return false;
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Launch match_id patch skipped stage=%s match_id=%llu; donor does not expose expected template bytes",
+            stage_note ? stage_note : "",
+            static_cast<unsigned long long>(match_id)
+        );
     }
 
     if (patch_server_id) {
