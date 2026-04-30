@@ -71,6 +71,37 @@ static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_de
 static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
 static constexpr uint32 GBE_kDotaLobbyField128Value = 1776809986u;
 
+static const char GBE_kDotaOfficialLobbyStartupAccountDataTemplate[] =
+    "\010\365\355\206A\022\274\001\n\005\010\002\020\300\014\n\005\010\005\020\310\001"
+    "\n\004\010\012\020d\n\004\010\013\020d\n\005\010\014\020\336\002"
+    "\n\004\010\"\020d\n\004\010#\0202\n\005\010%\020\356\005"
+    "\n\005\010(\020\300\014\n\004\010*\0202\n\005\010,\020\333\003"
+    "\n\005\010/\020\254\002\n\005\0105\020\336\002\n\004\010E\020d"
+    "\n\004\010K\020d\n\005\010Q\020\330\004\n\005\010S\020\333\003"
+    "\n\005\010T\020\275\025\n\005\010U\020\226\001\n\004\010h\0202"
+    "\n\005\010\303\002\020\001\n\005\010\220\003\020\001"
+    "\n\005\010\221\003\020\001\n\005\010\222\003\020\001"
+    "\n\005\010\232\003\020\006\n\005\010\315\003\020\003"
+    "\n\005\010\316\003\020\010\n\005\010\317\003\020\026"
+    "\032\006\010\206\001\020\206\001\032\006\010\321\017\020\322\017"
+    "\032\006\010\211\047\020\212\047\032\006\010\221N\020\222N"
+    "\032\006\010\371U\020\372U\032\006\010\341]\020\342]"
+    "\032\010\010\321\211\002\020\322\211\002"
+    "\032\010\010\271\221\002\020\272\221\002"
+    "\032\010\010\211\241\002\020\212\241\002"
+    "\032\010\010\301\270\002\020\302\270\002"
+    "\032\010\010\221\310\002\020\222\310\002"
+    "\032\010\010\341\327\002\020\342\327\002"
+    "\032\010\010\231\357\002\020\232\357\002"
+    "\032\010\010\211\236\003\020\212\236\003"
+    "\032\010\010\211\233\004\020\212\233\004"
+    "\032\010\010\371\311\004\020\372\311\004"
+    "\032\010\010\351\370\004\020\352\370\004"
+    "\032\010\010\271\210\005\020\272\210\005"
+    "\032\010\010\241\220\005\020\242\220\005"
+    "\032\010\010\211\230\005\020\212\230\005"
+    "\032\010\010\301\254\006\020\302\254\006";
+
 struct GBE_SharedDotaLobbyState {
     bool valid{};
     bool active{};
@@ -504,6 +535,146 @@ static constexpr const char *GBE_kDotaPracticeLobbyLaunchStage4Hex =
     "f8 07 00 80 08 f3 ba a3 cf 06 12 07 08 df 0f 12\n"
     "02 0a 00 12 05 08 dd 0f 12 00 19 62 01 96 26 fa\n"
     "e7 69 00 32 0b 08 03 10 83 cf a2 b4 a2 ff f9 34";
+
+static constexpr const char *GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex =
+    "4d15008014000000090eac2b7cdec1400110dbc3fdeafdffffffff0108ba041098808080081ae9311800008000000000\n"
+    "128d10080112190895a3edce0610f5ed8641180120982b780092010408011005121908ca8da2801010f5ed8641180520\n"
+    "b8307800920104084a1006121908eaa5c18d1010f5ed8641180620f72d780092010408321001121d08b5ccc18d1010f5\n"
+    "ed8641180420fb26400148067800920104080f1000121d0898e6c18d1010f5ed8641180a20b92a400148067800920104\n"
+    "08231002121e0899e6c18d1010f5ed8641180d20d44e40014806780092010508e80710041236088fc3c1c01010f5ed86\n"
+    "41180e208b32621b08011a170a0b1800220028bb1730003a0010011800200028f2e606780092010408661003124208e8\n"
+    "e8d1d71010f5ed8641180f20a82e62090890031a0400000000621c08011a180a0b1800220028bb1730003a0010011884\n"
+    "abc01920002800780092010408581000121d08d7f391821210f5ed8641181020ba2a4001480678009201040823100412\n"
+    "19088eb2f9831210f5ed86411811208430780092010408301001121908e09d8f841210f5ed8641181620883078009201\n"
+    "04080910021226088efd86931b10f5ed8641181320f91f4001620908d5011a0401000000780092010408351003121d08\n"
+    "e48f88931b10f5ed8641181220cb2640014806780092010408101004122708d88f9ac32210f5ed864118904e20ea2f40\n"
+    "01620908d5011a04010000007800920104084910011235089a8cd5c32210f5ed8641188f4e20fa264001480662150801\n"
+    "1a110a0b1800220028ba1730003a00100118007800920104080f1001122708b6fdfcd32210f5ed8641188d4e20a72b40\n"
+    "01620908d5011a04010000007800920104084b100312450899a9a9e72610f5ed8641188c4e20992d4001620908d5011a\n"
+    "0401000000621c08011a180a0b1800220028bb1730003a00100118d88cb628200028007800920104084a1004122708cf\n"
+    "8fedea2d10f5ed8641188b4e20b1254001620908d5011a04010000007800920104083a1000122708ed879f8b2e10f5ed\n"
+    "8641188a4e20a12a4001620908d5011a04010000007800920104086310041227089dd182802f10f5ed864118884e20ce\n"
+    "2b4001620908d5011a0401000000780092010408081000122708bda98fa73710f5ed864118874e20da284001620908d5\n"
+    "011a04010000007800920104084c1000122708eda6ffc44810f5ed864118fe4d20da2c4001620908d5011a0401000000\n"
+    "780092010408371003122708ddb198d85e10f5ed864118fd4d209b244001620908d5011a04010000007800920104083f\n"
+    "1003122708a5cc8bb65f10f5ed864118fc4d20e9254001620908d5011a0401000000780092010408341003122d08a589\n"
+    "99b85f10f5ed864118f84d209d604824621608011a120a0b1800220028c41730003a0010cd0118007800121e0895869a\n"
+    "b85f10f5ed864118f74d20f86140014822780092010408541007124d089d869ab85f10f5ed864118f64d20e66a400148\n"
+    "22622d08011a290a22180022176e70635f646f74615f6865726f5f6f6772655f6d61676928d21730003a00108a02185c\n"
+    "78009201040854100a121e0895dd9bb85f10f5ed864118ee4d20bc9401481f780092010508e8071002121408cde09bb8\n"
+    "5f10f5ed864118ea4d20fc89017800122808f5e99bb85f10f5ed864118f14d20a3b9014808620908d5011a0401000000\n"
+    "7800920104082e1001122808bd86f6a16010f5ed864118e44d20c49401481f620908d5011a0401000000780092010408\n"
+    "04100712280885b7e5a36010f5ed864118ec4d20cb98014822620908d5011a0401000000780092010408511000122808\n"
+    "8db7e5a36010f5ed864118e34d20ca98014822620908d5011a040100000078009201040851100312280895b7e5a36010\n"
+    "f5ed864118e24d20c998014822620908d5011a04010000007800920104085110011228089db7e5a36010f5ed864118e1\n"
+    "4d20c898014822620908d5011a0401000000780092010408511004122908a5b7e5a36010f5ed864118e04d20c7980148\n"
+    "22620908d5011a0401000000780092010508e8071006122808adb7e5a36010f5ed864118df4d20c698014822620908d5\n"
+    "011a04010000007800920104085110021228089d82e6a36010f5ed864118eb4d20b4b1014822620908d5011a04010000\n"
+    "007800920104083b1000122808a582e6a36010f5ed864118de4d20b5b1014822620908d5011a04010000007800920104\n"
+    "083b1001122808ad82e6a36010f5ed864118dd4d20b6b1014822620908d5011a04010000007800920104083b10041228\n"
+    "08b582e6a36010f5ed864118dc4d20f1b5014822620908d5011a04010000007800920104083b1002122808bd82e6a360\n"
+    "10f5ed864118db4d20f2b5014822620908d5011a04010000007800920104083b1003124f088580eba36010f5ed864118\n"
+    "00208705620908ac031a0454000000623008011a2c0a22180322176e70635f646f74615f6865726f5f6f6772655f6d61\n"
+    "676928db1730003a0010992b18b6fdbe027800121f08c5a7f1a36010f5ed864118e74d20f88e01400148227800920104\n"
+    "08021000121f08cda7f1a36010f5ed864118da4d20f78e0140014822780092010408021001121f08d5a7f1a36010f5ed\n"
+    "864118d94d20f68e0140014822780092010408021002121f08dda7f1a36010f5ed864118d84d20f58e01400148227800\n"
+    "92010408021003121f08e5a7f1a36010f5ed864118d74d20f48e0140014822780092010408021005122708add8eea361\n"
+    "10f5ed864118fa4d20fd1f4001620908d5011a04010000007800920104081d1004121c088dd5fd9a6b10f5ed864118fb\n"
+    "4d209a20481f780092010408171002121f088591cbe07910f5ed864118f54d20e1950240034807780092010408541002\n"
+    "12aa2108da0f122f08f5ed8641101318c90138c2fcc3bf0640004801500158006000700078038001aff1a9a505880102\n"
+    "900190c9a4b30f122f08f5ed8641101318ca0138c2fcc3bf0640004801500158006008700078038001eb8faba80d8801\n"
+    "029001b68dd0d30c122f08f5ed8641101318cb0138c2fcc3bf0640004801500158006000700078038001f1cda4e20388\n"
+    "0102900192ff8a9f05122f08f5ed8641101318f5033888df90ac0640004818500158006001700078038001a9ebf9d00e\n"
+    "8801059001e092cea903122f08f5ed8641101318f6033888df90ac06400048185001580060007000780380018f8df5f2\n"
+    "058801059001e78ea28b0b122f08f5ed8641101318f7033888df90ac064000481850015800600070007803800182d895\n"
+    "c3048801059001b8cad0ee01122f08f5ed8641101318e90738c489c0ab064000481650015800600070007803800191ea\n"
+    "b8bb0b88010a900196baaab20d122f08f5ed8641101318ea0738c489c0ab06400048165001580060007000780380018b\n"
+    "ef8fe80288010a9001c2ee8b870b122f08f5ed8641101318eb0738c489c0ab0640004816500158006001700078038001\n"
+    "b99aa1a50e88010a9001abd8e2e70e122f08f5ed8641101318cd08389bfdb1ab06400048155001580060007000780380\n"
+    "018893babf0f88010b90018aa187df0c122e08f5ed8641101318ce08389bfdb1ab064000481550015800600070007803\n"
+    "800195b0afa90d88010b9001c4c5a723122f08f5ed8641101318cf08389bfdb1ab064000481550015800600070007803\n"
+    "80018bef8fe80288010b9001c2ee8b870b122f08f5ed8641101318b109388fb89bab0640004814500158006000700078\n"
+    "038001a2bbfca20c88010c9001d2de8df60b122f08f5ed8641101318b209388fb89bab06400048145001580060017001\n"
+    "78038001c596e98c0988010c900199b3cdb702122f08f5ed8641101318b309388fb89bab064000481450015800600070\n"
+    "0078038001b093fa8c0f88010c9001cdd4adb008122f08f5ed8641101318a50d38c2c0969d064000480b500158006000\n"
+    "700078038001a2bbfca20c8801119001d2de8df60b122f08f5ed8641101318a60d38c2c0969d064000480b5001580060\n"
+    "00700078038001d9bdbdb302880111900196def6a20e122f08f5ed8641101318a70d38c2c0969d064000480b50015800\n"
+    "6000700078038001e3fecffc0188011190019eebb78406122f08f5ed8641101318b51038e697e39b0640004806500158\n"
+    "006000700078038001e3f5cfa2048801159001fdb9828803122f08f5ed8641101318b61038e697e39b06400048065001\n"
+    "58006000700078038001f4f4879e0b8801159001c9ded1ce04122f08f5ed8641101318b71038e697e39b064000480650\n"
+    "0158006000700078038001f4efb1ac0e8801159001f0b090a70e122f08f5ed8641101318c91a38f5ff97ab0640004813\n"
+    "500158006001700078038001b1fbcbf00d8801229001bb9193ed0c122f08f5ed8641101318ca1a38f5ff97ab06400048\n"
+    "1350015800600070007803800190e891f2078801229001bef3ada208122f08f5ed8641101318cb1a38f5ff97ab064000\n"
+    "4813500158006000700078038001d9bdbdb302880122900196def6a20e122f08f5ed8641101318ad1b389bd5a99d0640\n"
+    "004805500158006000700078038001f8a99b89018801239001969cb1850f122f08f5ed8641101318ae1b389bd5a99d06\n"
+    "40004805500158006000700078038001a097c3c70b8801239001cb95e59f0a122f08f5ed8641101318af1b389bd5a99d\n"
+    "0640004805500158006000700078038001968fe7b6088801239001d4a29c8607122f08f5ed8641101318f51c38e0f2f7\n"
+    "aa0640004810500158006000700078038001b7c7c3fd0a880125900185d5adec0e122f08f5ed8641101318f61c38e0f2\n"
+    "f7aa0640014810500158006002700378038001c1bfff910b88012590019aad93b30f122f08f5ed8641101318f71c38e0\n"
+    "f2f7aa06400048105001580060007000780380018f8df5f2058801259001e78ea28b0b122f08f5ed8641101318a11f38\n"
+    "b8e7c2bf0640004803500158006001700078038001c5fcbee1058801289001c5fcbee105122f08f5ed8641101318a21f\n"
+    "38b8e7c2bf0640004803500158006006700078038001e5b6c399068801289001e5b4d5c308122f08f5ed8641101318a3\n"
+    "1f38b8e7c2bf0640004803500158006000700078038001f4ade1b8048801289001b8a3ca9908122f08f5ed8641101318\n"
+    "e920388a98e39b0640004807500158006000700078038001c8d1cdb50e88012a9001c3dfd5950b122f08f5ed86411013\n"
+    "18ea20388a98e39b0640004807500158006000700078038001ada283c00588012a9001cab5ff830f122f08f5ed864110\n"
+    "1318eb20388a98e39b0640004807500158006000700078038001b093fa8c0f88012a9001cdd4adb008122f08f5ed8641\n"
+    "101318b12238a1b2ccab0640004817500158006000700078038001c289f5bb0888012c9001a093ee9908122f08f5ed86\n"
+    "41101318b22238a1b2ccab0640004817500158006000700078038001ac858cca0e88012c9001a086d09b08122f08f5ed\n"
+    "8641101318b32238a1b2ccab0640004817500158006001700278038001d9bdbdb30288012c900196def6a20e122f08f5\n"
+    "ed8641101318dd2438b9adc2bf064000481d500158006000700078038001e2a5c4dd0a88012f9001ead5da8505122f08\n"
+    "f5ed8641101318de2438b9adc2bf064000481d500158006000700078038001968fe7b60888012f9001d4a29c8607122f\n"
+    "08f5ed8641101318df2438b9adc2bf064000481d500158006001700078038001f1cda4e20388012f900192ff8a9f0512\n"
+    "2f08f5ed8641101318b529389efbb19c064000480a500158006001700178038001ecbfb8d10e8801359001ecefefd20a\n"
+    "122f08f5ed8641101318b629389efbb19c064000480a500158006000700078038001efa7bdd70c880135900181db9491\n"
+    "03122f08f5ed8641101318b729389efbb19c064000480a500158006000700078038001bfd8f7cc07880135900184b6f2\n"
+    "a10c122f08f5ed8641101318b93038aab699ac064000481a500158006000700078038001d9bdbdb30288013e900196de\n"
+    "f6a20e122f08f5ed8641101318ba3038aab699ac064000481a500158006000700078038001dcf9c8890f88013e9001d2\n"
+    "e792d00c122f08f5ed8641101318bb3038aab699ac064000481a500158006000700078038001e8a195d90d88013e9001\n"
+    "d1ab9ee603122f08f5ed86411013189d313891fdab9d064000480c50015800600070007803800194d7b3e00488013f90\n"
+    "0180e9e1d804122f08f5ed86411013189e313891fdab9d064000480c500158006000700078038001b291cea00e88013f\n"
+    "9001cddbe7c809122f08f5ed86411013189f313891fdab9d064000480c5001580060007000780380018893babf0f8801\n"
+    "3f90018aa187df0c122e08f5ed8641101318f53538b1b9b19c0640004808500158006000700078038001bfaedefc0b88\n"
+    "01459001fee68b36122f08f5ed8641101318f63538b1b9b19c0640004808500158006000700078038001f1cda4e20388\n"
+    "0145900192ff8a9f05122e08f5ed8641101318f73538b1b9b19c064000480850015800600170007803800198ecd4b40c\n"
+    "880145900192d68f4e122f08f5ed8641101318cd3a38e2ff94ac0640004812500158006000700078038001d9bdbdb302\n"
+    "88014b900196def6a20e122f08f5ed8641101318ce3a38e2ff94ac064000481250015800600070007803800182b1c3b5\n"
+    "0588014b9001b98c83ca04122f08f5ed8641101318cf3a38e2ff94ac0640004812500158006000700078038001b0d2c2\n"
+    "a40988014b9001e286fcc601122f08f5ed8641101318a53f3887b0f7aa064000480f500158006000700078038001e8a1\n"
+    "95d90d8801519001d1ab9ee603122f08f5ed8641101318a63f3887b0f7aa064000480f50015800600070007803800196\n"
+    "8fe7b6088801519001d4a29c8607122f08f5ed8641101318a73f3887b0f7aa064001480f500158006001700378038001\n"
+    "96fa9f9d0c8801519001fdc88cf002122f08f5ed8641101318ed4038d2a7ddaa064000480e5001580060007000780380\n"
+    "01f4ade1b8048801539001b8a3ca9908122f08f5ed8641101318ee4038d2a7ddaa064000480e50015800600170027803\n"
+    "8001a8fad4e4038801539001b390b6c50e122f08f5ed8641101318ef4038d2a7ddaa064000480e500158006000700078\n"
+    "038001f5ffe3a90988015390019ca18bae0a122f08f5ed8641101318d1413887cfc2bf06400048025001580060147000\n"
+    "78038001bf90a7b30f8801549001c0f684ab0e122f08f5ed8641101318d2413887cfc2bf064001480250015800601270\n"
+    "0378038001d9f8fea8038801549001e0f3ec8505122f08f5ed8641101318d3413887cfc2bf0640004802500158006000\n"
+    "700078038001b4b8f9b30e8801549001c6f3e7c008122f08f5ed8641101318b54238e8caccab06400048095001580060\n"
+    "007000780380019fd3af9b0d8801559001babd8aec03122e08f5ed8641101318b64238e8caccab064000480950015800\n"
+    "600170007803800198bfd585048801559001fab2ce29122f08f5ed8641101318b74238e8caccab064000480950015800\n"
+    "6000700078038001f1cda4e203880155900192ff8a9f05122f08f5ed8641101318e54b38a2ea93ac0640004819500158\n"
+    "006000700078038001ddf7a8c3038801619001d4e099df03122f08f5ed8641101318e64b38a2ea93ac06400048195001\n"
+    "5800600070007803800182d895c3048801619001b8cad0ee01122f08f5ed8641101318e74b38a2ea93ac064000481950\n"
+    "01580060007000780380019b85b8a5088801619001fac3ccbc01122f08f5ed8641101318a15138878a97ab0640004811\n"
+    "500158006000700078038001e8a195d90d8801689001d1ab9ee603122e08f5ed8641101318a25138878a97ab06400048\n"
+    "1150015800600070007803800195b0afa90d8801689001c4c5a723122e08f5ed8641101318a35138878a97ab06400048\n"
+    "1150015800600070007803800198ecd4b40c880168900192d68f4e122f08f5ed8641101318e952389cd29bac06400048\n"
+    "1c500158006000700078038001a097c3c70b88016a9001cb95e59f0a122f08f5ed8641101318ea52389cd29bac064000\n"
+    "481c5001580060007000780380018893babf0f88016a90018aa187df0c122f08f5ed8641101318eb52389cd29bac0640\n"
+    "00481c500158006000700078038001c3b1d3c10e88016a9001c690838101122f08f5ed8641101318895938c194e19b06\n"
+    "40004804500158006000700078038001e8a195d90d8801729001d1ab9ee603122f08f5ed86411013188a5938c194e19b\n"
+    "0640004804500158006000700078038001d9bdbdb302880172900196def6a20e122f08f5ed86411013188b5938c194e1\n"
+    "9b06400048045001580060007000780380019bec9ff8048801729001c1deb08503123008f5ed8641101318816438eedf\n"
+    "99ac064000481b500158006000700078038001e6fae5980e880180019001f291f8e50e123008f5ed8641101318826438\n"
+    "eedf99ac064000481b5001580060007000780380019f96aedc01880180019001f5c9c5d40e123008f5ed864110131883\n"
+    "6438eedf99ac064000481b5001580060007000780380019fc4b2fa0e8801800190019fc4b2fa0e123008f5ed86411013\n"
+    "18e96b38d5aee9a9064000480d500158006000700078038001a2bbfca20c88018a019001d2de8df60b123008f5ed8641\n"
+    "101318ea6b38d5aee9a9064000480d500158006000700078038001d9bdbdb30288018a01900196def6a20e123008f5ed\n"
+    "8641101318eb6b38d5aee9a9064000480d500158006000700078038001b2efa2d80a88018a019001fa8492980219a715\n"
+    "e32931f16909220c080110f5ed86c190808088012801300039b692f15331f16900";
+
+static constexpr const char *GBE_kDotaPracticeLobbyLaunchCacheSubscribedPreludeHex =
+    "4d15008014000000090eac2b7cdec1400110dbc3fdeafdffffffff0108ba041098808080081a2a180000800000000019"
+    "fafc724931f16900220c080110f5ed86c19080808801300139b692f15331f16900";
 
 static const uint8 GBE_kDotaCacheSubscribedTemplate[] = {
     0x18, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x12, 0xC8, 0x18, 0x08, 0x01, 0x12, 0x19, 0x08,
@@ -1648,6 +1819,40 @@ static bool GBE_EncodeVarUint64WithExpectedSize(uint64 value, size_t expected_si
     return true;
 }
 
+static bool GBE_BuildDotaLobbyAdditionalStartupAccountDataPayload(uint32 account_id, std::string &payload)
+{
+    payload.assign(
+        GBE_kDotaOfficialLobbyStartupAccountDataTemplate,
+        sizeof(GBE_kDotaOfficialLobbyStartupAccountDataTemplate) - 1u
+    );
+
+    std::vector<uint8> encoded_account_id;
+    if (!GBE_EncodeVarUint64WithExpectedSize(account_id, GBE_kOldDotaAccountIdVarint.size(), encoded_account_id))
+        return false;
+
+    return GBE_FindAndOverwriteBytes(
+        payload,
+        GBE_VectorFromBytes(GBE_kOldDotaAccountIdVarint.data(), GBE_kOldDotaAccountIdVarint.size()),
+        encoded_account_id
+    );
+}
+
+static bool GBE_AppendDotaLobbyAdditionalStartupAccountMessage(std::string &object_2015, uint32 account_id)
+{
+    if (account_id == 0)
+        return true;
+
+    std::string startup_payload;
+    if (!GBE_BuildDotaLobbyAdditionalStartupAccountDataPayload(account_id, startup_payload))
+        return false;
+
+    std::string startup_message;
+    GBE_AppendProtoVarIntField(startup_message, 1u, GBE_kDotaLobbyAdditionalAccountData);
+    GBE_AppendProtoBytesField(startup_message, 2u, startup_payload);
+    GBE_AppendProtoBytesField(object_2015, 2u, startup_message);
+    return true;
+}
+
 static bool GBE_RewriteProtoVarintBytesRecursive(
     const std::string &input,
     const std::vector<uint8> &old_encoded,
@@ -2783,6 +2988,41 @@ static bool GBE_PatchDotaLobbyTemplateIdentifiers(std::string &message, uint32 a
     return true;
 }
 
+static bool GBE_PatchDotaLobbyTemplateIdentifiersIfPresent(std::string &message, uint64 steam_id, uint64 lobby_id)
+{
+    std::vector<uint8> encoded_lobby_id;
+    if (!GBE_EncodeVarUint64WithExpectedSize(lobby_id, GBE_kOldDotaLobbyIdVarint.size(), encoded_lobby_id))
+        return false;
+
+    const std::vector<uint8> old_lobby_id = GBE_VectorFromBytes(GBE_kOldDotaLobbyIdVarint.data(), GBE_kOldDotaLobbyIdVarint.size());
+    const size_t lobby_id_match_count = GBE_CountBytePatternMatches(message, old_lobby_id);
+    if (lobby_id_match_count != 0 && !GBE_FindAndOverwriteBytes(message, old_lobby_id, encoded_lobby_id)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed replacing optional lobby_id bytes lobby_id=%llu", static_cast<unsigned long long>(lobby_id));
+        return false;
+    }
+
+    std::string steam_id_fixed64_raw;
+    GBE_AppendLittleEndian64(steam_id_fixed64_raw, steam_id);
+    const std::vector<uint8> old_steam_id_fixed64 = GBE_VectorFromBytes(GBE_kOldDotaSteamIdFixed64.data(), GBE_kOldDotaSteamIdFixed64.size());
+    const size_t steam_id_fixed64_match_count = GBE_CountBytePatternMatches(message, old_steam_id_fixed64);
+    if (steam_id_fixed64_match_count != 0 && !GBE_FindAndOverwriteBytes(
+            message,
+            old_steam_id_fixed64,
+            GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(steam_id_fixed64_raw.data()), steam_id_fixed64_raw.size()))) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed replacing optional steam_id fixed64 bytes steam_id=%llu", static_cast<unsigned long long>(steam_id));
+        return false;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Patched optional template identifiers LobbyID matches=%zu SteamIDFixed64 matches=%zu body_prefix=%s",
+        lobby_id_match_count,
+        steam_id_fixed64_match_count,
+        GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(message.data()), message.size(), 32).c_str()
+    );
+    return true;
+}
+
 static bool GBE_RewriteDotaLobbyTemplateObject2004(
     const std::string &input,
     uint32 account_id,
@@ -3032,10 +3272,15 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
     return true;
 }
 
-static bool GBE_RewriteDotaLobbyTemplateObject2015(const std::string &, std::string &output)
+static bool GBE_RewriteDotaLobbyTemplateObject2015(
+    const std::string &input,
+    bool clear_existing_startup_data,
+    uint32 extra_startup_account_id,
+    std::string &output)
 {
-    output.clear();
-    return true;
+    (void)clear_existing_startup_data;
+    output = input;
+    return GBE_AppendDotaLobbyAdditionalStartupAccountMessage(output, extra_startup_account_id);
 }
 
 static bool GBE_RewriteDotaLobbyTemplateObject2014(const std::string &input, const std::string &player_name, std::string &output)
@@ -3202,7 +3447,8 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
     uint64 bot_dire,
     uint32 owner_team,
     uint32 owner_slot,
-    bool rewrite_empty_2015,
+    bool rewrite_2015,
+    uint32 extra_startup_account_id,
     const std::string &pass_key)
 {
     if (message.size() < sizeof(ProtoBufMsgHeader_t))
@@ -3254,7 +3500,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
         }
 
         const bool should_rewrite_type = rewrite_runtime_fields
-            ? (type_id == 2004u || type_id == 2014u || type_id == 2016u || (rewrite_empty_2015 && type_id == 2015u))
+            ? (type_id == 2004u || type_id == 2014u || type_id == 2016u || (rewrite_2015 && type_id == 2015u))
             : (type_id == 2004u || type_id == 2014u);
         if (!should_rewrite_type) {
             rewritten_body.append(body.data() + field_offset, field_end - field_offset);
@@ -3317,7 +3563,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
                     : (type_id == 2014u)
                         ? GBE_RewriteDotaLobbyTemplateObject2014(object_data, player_name, rewritten_object)
                     : (type_id == 2015u)
-                            ? GBE_RewriteDotaLobbyTemplateObject2015(object_data, rewritten_object)
+                            ? GBE_RewriteDotaLobbyTemplateObject2015(object_data, rewrite_runtime_fields, extra_startup_account_id, rewritten_object)
                             : GBE_RewriteDotaLobbyTemplateObject2016(object_data, account_id, steam_id, owner_team, owner_slot, rewritten_object);
                 if (!ok)
                     return false;
@@ -3393,6 +3639,44 @@ static const char *GBE_GetDotaPracticeLobbyLaunchStageHex(size_t stage_index)
         case 3: return GBE_kDotaPracticeLobbyLaunchStage4Hex;
         default: return nullptr;
     }
+}
+
+static bool GBE_ExtractWrappedClientFromGCPayload(
+    const std::string &wrapped_message,
+    uint32 expected_inner_emsg,
+    std::string &inner_payload)
+{
+    inner_payload.clear();
+    if (wrapped_message.size() < 8u)
+        return false;
+
+    const uint8 *bytes = reinterpret_cast<const uint8 *>(wrapped_message.data());
+    uint32 outer_raw_emsg = 0;
+    uint32 outer_header_length = 0;
+    std::memcpy(&outer_raw_emsg, bytes, sizeof(outer_raw_emsg));
+    std::memcpy(&outer_header_length, bytes + sizeof(outer_raw_emsg), sizeof(outer_header_length));
+
+    if (GBE_GC_MaskedEMsg(outer_raw_emsg) != GBE_kEMsgClientFromGC)
+        return false;
+
+    const size_t outer_body_offset = 8u + outer_header_length;
+    if (outer_body_offset > wrapped_message.size())
+        return false;
+
+    const uint8 *outer_body = bytes + outer_body_offset;
+    const size_t outer_body_size = wrapped_message.size() - outer_body_offset;
+    const GBE_ProtoFieldView payload_field = GBE_FindProtoField(outer_body, outer_body_size, 3u);
+    if (!payload_field.found || payload_field.wire_type != 2u || payload_field.value_size < 8u)
+        return false;
+
+    inner_payload.assign(
+        reinterpret_cast<const char *>(outer_body + payload_field.value_offset),
+        payload_field.value_size
+    );
+
+    uint32 inner_raw_emsg = 0;
+    std::memcpy(&inner_raw_emsg, inner_payload.data(), sizeof(inner_raw_emsg));
+    return GBE_GC_MaskedEMsg(inner_raw_emsg) == expected_inner_emsg;
 }
 
 static bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
@@ -3530,33 +3814,9 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
     std::string wrapped_message;
     if (!GBE_DecodeHexString(template_hex, wrapped_message))
         return false;
-
-    if (wrapped_message.size() < 8)
+    std::string inner_payload;
+    if (!GBE_ExtractWrappedClientFromGCPayload(wrapped_message, GBE_kDotaPracticeLobbyDetailsUpdate, inner_payload))
         return false;
-
-    const uint8 *bytes = reinterpret_cast<const uint8 *>(wrapped_message.data());
-    uint32 outer_raw_emsg = 0;
-    uint32 outer_header_length = 0;
-    std::memcpy(&outer_raw_emsg, bytes, sizeof(outer_raw_emsg));
-    std::memcpy(&outer_header_length, bytes + sizeof(outer_raw_emsg), sizeof(outer_header_length));
-
-    if (GBE_GC_MaskedEMsg(outer_raw_emsg) != GBE_kEMsgClientFromGC)
-        return false;
-
-    const size_t outer_body_offset = 8u + outer_header_length;
-    if (outer_body_offset > wrapped_message.size())
-        return false;
-
-    const uint8 *outer_body = bytes + outer_body_offset;
-    const size_t outer_body_size = wrapped_message.size() - outer_body_offset;
-    GBE_ProtoFieldView payload_field = GBE_FindProtoField(outer_body, outer_body_size, 3u);
-    if (!payload_field.found || payload_field.wire_type != 2u || payload_field.value_size < 8u)
-        return false;
-
-    std::string inner_payload(
-        reinterpret_cast<const char *>(outer_body + payload_field.value_offset),
-        payload_field.value_size
-    );
 
     if (!GBE_PatchDotaPracticeLobbyLaunchTemplate(
         inner_payload,
@@ -3574,12 +3834,6 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
         stage_index == 1 ? "7041 stage2" :
         stage_index == 2 ? "7041 stage3" : "7041 stage4"
     ))
-        return false;
-
-    const uint8 *payload = reinterpret_cast<const uint8 *>(inner_payload.data());
-    uint32 inner_raw_emsg = 0;
-    std::memcpy(&inner_raw_emsg, payload, sizeof(inner_raw_emsg));
-    if (GBE_GC_MaskedEMsg(inner_raw_emsg) != GBE_kDotaPracticeLobbyDetailsUpdate)
         return false;
 
     if (!GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
@@ -4062,12 +4316,12 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
 
         if (extra_startup_account_id != 0) {
             std::string startup_payload;
-            GBE_AppendProtoVarIntField(startup_payload, 1u, extra_startup_account_id);
-
-            std::string startup_message;
-            GBE_AppendProtoVarIntField(startup_message, 1u, GBE_kDotaLobbyAdditionalAccountData);
-            GBE_AppendProtoBytesField(startup_message, 2u, startup_payload);
-            GBE_AppendProtoBytesField(object_2015, 2u, startup_message);
+            if (GBE_BuildDotaLobbyAdditionalStartupAccountDataPayload(extra_startup_account_id, startup_payload)) {
+                std::string startup_message;
+                GBE_AppendProtoVarIntField(startup_message, 1u, GBE_kDotaLobbyAdditionalAccountData);
+                GBE_AppendProtoBytesField(startup_message, 2u, startup_payload);
+                GBE_AppendProtoBytesField(object_2015, 2u, startup_message);
+            }
         }
     }
 
@@ -4261,6 +4515,213 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
 
     protomsg.AppendToString(&message);
     return true;
+}
+
+static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWrappedTemplate(
+    const char *wrapped_template_hex,
+    const char *template_note,
+    bool require_lobby_identifiers,
+    bool rewrite_runtime_fields,
+    bool rewrite_2015,
+    uint32 account_id,
+    uint64 steam_id,
+    uint64 lobby_id,
+    uint32 lobby_state,
+    uint32 lobby_game_state,
+    uint64 server_id,
+    uint64 match_id,
+    uint32 game_start_time,
+    const std::string &connect,
+    const std::string &player_name,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
+    const std::string &pass_key,
+    uint32 extra_startup_account_id,
+    std::string &message)
+{
+    std::string wrapped_message;
+    if (!wrapped_template_hex || !GBE_DecodeHexString(wrapped_template_hex, wrapped_message))
+        return false;
+
+    if (!GBE_PatchDotaTemplateIdentifiers(
+            wrapped_message,
+            account_id,
+            steam_id,
+            true,
+            true,
+            GBE_kDotaPracticeLobbyLaunch,
+            GBE_kDotaCacheSubscribed,
+            0,
+            template_note ? template_note : "practice lobby launch cache template")) {
+        return false;
+    }
+
+    if (!GBE_ExtractWrappedClientFromGCPayload(wrapped_message, GBE_kDotaCacheSubscribed, message)) {
+        return false;
+    }
+
+    if (require_lobby_identifiers) {
+        if (!GBE_PatchDotaLobbyTemplateIdentifiers(message, account_id, steam_id, lobby_id))
+            return false;
+    } else {
+        if (!GBE_PatchDotaLobbyTemplateIdentifiersIfPresent(message, steam_id, lobby_id))
+            return false;
+    }
+
+    if (!rewrite_runtime_fields)
+        return true;
+
+    return GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
+        message,
+        account_id,
+        steam_id,
+        rewrite_runtime_fields,
+        lobby_state,
+        lobby_game_state,
+        server_id,
+        match_id,
+        game_start_time,
+        connect,
+        player_name,
+        room_name,
+        game_mode,
+        server_region,
+        lan,
+        lan_host_ping_location,
+        allow_cheats,
+        fill_with_bots,
+        allow_spectating,
+        visibility,
+        bot_difficulty_radiant,
+        bot_difficulty_dire,
+        bot_radiant,
+        bot_dire,
+        owner_team,
+        owner_slot,
+        rewrite_2015,
+        extra_startup_account_id,
+        pass_key);
+}
+
+static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedPreludeTemplateReplay(
+    uint32 account_id,
+    uint64 steam_id,
+    uint64 lobby_id,
+    std::string &message)
+{
+    return GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWrappedTemplate(
+        GBE_kDotaPracticeLobbyLaunchCacheSubscribedPreludeHex,
+        "practice lobby launch prelude cache template",
+        false,
+        false,
+        false,
+        account_id,
+        steam_id,
+        lobby_id,
+        0u,
+        0u,
+        0ull,
+        0ull,
+        0u,
+        std::string(),
+        std::string(),
+        std::string(),
+        0u,
+        0u,
+        false,
+        std::string(),
+        false,
+        false,
+        false,
+        0u,
+        0u,
+        0u,
+        0ull,
+        0ull,
+        0u,
+        0u,
+        std::string(),
+        0u,
+        message);
+}
+
+static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(
+    uint32 account_id,
+    uint64 steam_id,
+    uint64 lobby_id,
+    uint32 lobby_state,
+    uint32 lobby_game_state,
+    uint64 server_id,
+    uint64 match_id,
+    uint32 game_start_time,
+    const std::string &connect,
+    const std::string &player_name,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
+    const std::string &pass_key,
+    uint32 extra_startup_account_id,
+    std::string &message)
+{
+    return GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWrappedTemplate(
+        GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex,
+        "practice lobby launch official cache template",
+        true,
+        true,
+        true,
+        account_id,
+        steam_id,
+        lobby_id,
+        lobby_state,
+        lobby_game_state,
+        server_id,
+        match_id,
+        game_start_time,
+        connect,
+        player_name,
+        room_name,
+        game_mode,
+        server_region,
+        lan,
+        lan_host_ping_location,
+        allow_cheats,
+        fill_with_bots,
+        allow_spectating,
+        visibility,
+        bot_difficulty_radiant,
+        bot_difficulty_dire,
+        bot_radiant,
+        bot_dire,
+        owner_team,
+        owner_slot,
+        pass_key,
+        extra_startup_account_id,
+        message);
 }
 
 static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
@@ -6120,6 +6581,7 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTem
         GBE_local_lobby.owner_team,
         GBE_local_lobby.owner_slot,
         false,
+        0,
         GBE_local_lobby.pass_key);
 }
 
@@ -6408,42 +6870,56 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
     );
 
     if (previous_server_id == 0) {
+        std::string launch_cache_prelude_message;
         std::string launch_cache_message;
         const uint64 steam_id = GBE_GetDotaLobbyOwnerSteamId();
         const uint32 account_id = GBE_GetDotaLobbyOwnerAccountId();
-        if (steam_id != 0 && account_id != 0 && GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
-                steam_id,
-                GBE_local_lobby.lobby_id,
-                1u,
-                0u,
-                GBE_local_lobby.server_id,
-                GBE_local_lobby.match_id,
-                GBE_local_lobby.game_start_time,
-                GBE_local_lobby.connect,
-                GBE_GetDotaLobbyOwnerName(),
-                GBE_local_lobby.room_name,
-                GBE_local_lobby.game_mode,
-                GBE_local_lobby.server_region,
-                GBE_local_lobby.lan,
-                GBE_local_lobby.lan_host_ping_location,
-                GBE_local_lobby.allow_cheats,
-                GBE_local_lobby.fill_with_bots,
-                GBE_local_lobby.allow_spectating,
-                GBE_local_lobby.visibility,
-                GBE_local_lobby.bot_difficulty_radiant,
-                GBE_local_lobby.bot_difficulty_dire,
-                GBE_local_lobby.bot_radiant,
-                GBE_local_lobby.bot_dire,
-                GBE_local_lobby.owner_team,
-                GBE_local_lobby.owner_slot,
-                GBE_local_lobby.has_broadcast_channel,
-                GBE_local_lobby.broadcast_channel_id,
-                GBE_local_lobby.broadcast_country_code,
-                GBE_local_lobby.broadcast_description,
-                GBE_local_lobby.broadcast_language_code,
-                GBE_local_lobby.pass_key,
-                account_id,
-                launch_cache_message)) {
+        if (steam_id != 0 && account_id != 0 &&
+                GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedPreludeTemplateReplay(
+                    account_id,
+                    steam_id,
+                    GBE_local_lobby.lobby_id,
+                    launch_cache_prelude_message) &&
+                GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(
+                    account_id,
+                    steam_id,
+                    GBE_local_lobby.lobby_id,
+                    1u,
+                    0u,
+                    GBE_local_lobby.server_id,
+                    GBE_local_lobby.match_id,
+                    GBE_local_lobby.game_start_time,
+                    GBE_local_lobby.connect,
+                    GBE_GetDotaLobbyOwnerName(),
+                    GBE_local_lobby.room_name,
+                    GBE_local_lobby.game_mode,
+                    GBE_local_lobby.server_region,
+                    GBE_local_lobby.lan,
+                    GBE_local_lobby.lan_host_ping_location,
+                    GBE_local_lobby.allow_cheats,
+                    GBE_local_lobby.fill_with_bots,
+                    GBE_local_lobby.allow_spectating,
+                    GBE_local_lobby.visibility,
+                    GBE_local_lobby.bot_difficulty_radiant,
+                    GBE_local_lobby.bot_difficulty_dire,
+                    GBE_local_lobby.bot_radiant,
+                    GBE_local_lobby.bot_dire,
+                    GBE_local_lobby.owner_team,
+                    GBE_local_lobby.owner_slot,
+                    GBE_local_lobby.pass_key,
+                    account_id,
+                    launch_cache_message)) {
+            push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, launch_cache_prelude_message);
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "queued launch CacheSubscribed prelude after server_id sync reason=%s lobby_id=%llu match_id=%llu server_id=%llu size=%zu",
+                reason ? reason : "unknown",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                static_cast<unsigned long long>(server_id),
+                launch_cache_prelude_message.size()
+            );
+
             push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, launch_cache_message);
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
@@ -8568,30 +9044,15 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
         push_incoming_now(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, welcome_message);
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
-            std::string lobby_cache_message;
-            if (GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(GBE_GetDotaLobbyOwnerName(), lobby_cache_message)) {
-                GBE_GC_DebugLog(
-                    "GC_DOTA_SERVER_HELLO",
-                    "queueing direct lobby CacheSubscribed after ServerWelcome lobby_id=%llu state=%u game_state=%u team=%u slot=%u size=%zu",
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state,
-                    GBE_local_lobby.owner_team,
-                    GBE_local_lobby.owner_slot,
-                    lobby_cache_message.size()
-                );
-                push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, lobby_cache_message);
-            } else {
-                GBE_GC_DebugLog(
-                    "GC_DOTA_SERVER_HELLO",
-                    "failed building direct lobby CacheSubscribed after ServerWelcome lobby_id=%llu state=%u game_state=%u team=%u slot=%u",
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state,
-                    GBE_local_lobby.owner_team,
-                    GBE_local_lobby.owner_slot
-                );
-            }
+            GBE_GC_DebugLog(
+                "GC_DOTA_SERVER_HELLO",
+                "skipping synthetic CacheSubscribed after ServerWelcome to match official launch timing lobby_id=%llu state=%u game_state=%u team=%u slot=%u",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state,
+                GBE_local_lobby.owner_team,
+                GBE_local_lobby.owner_slot
+            );
 
             if (is_server) {
                 GBE_Dota7034RequestShape synthetic_connected_players_request{};

@@ -145,6 +145,39 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 在这条 `24` 之后，官方才继续通过多条 `26 / UpdateMultiple` 把 lobby `state/game_state` 依次推进到 `RUN / WAIT_FOR_PLAYERS_TO_LOAD / HERO_SELECTION / STRATEGY_TIME / PRE_GAME`。
   - 如果本地实现只重放启动 `26`，但没有提供这条带 `server_id/match_id/8869` 的大 `24`，客户端和服务器虽然可能进入 `INGAME` UI，但游戏规则状态容易长期停在 `INIT`。
 
+[Dota2 启动期 24 贴近官方优先于最小构造]
+- Date: 2026-04-30
+- Context: 用户在上传新一轮测试日志后要求继续调整 host startgame 启动期 `24 / CacheSubscribed`
+- Instructions:
+  - 启动期额外补发的 lobby `24` 应尽量贴近官方抓包中的大 `24`，不要只停留在最小字段构造。
+  - 后续优先通过新日志与官方样本逐字段缩小 `2004/2015/2016/2014` 对象差异，再决定是否继续补更多启动后续消息。
+
+[Dota2 官方 038 donor 的包装层约束]
+- Date: 2026-04-30
+- Context: Agent 在把 `/workspace/lobbystartgamedota2.zip` 中的 `038_in_5453_k_EMsgClientFromGC.bin` 接入 launch-time `24` 重放时发现
+- Category: 代码模式
+- Instructions:
+  - 官方 `038_in_5453_k_EMsgClientFromGC.bin` 不是裸的 direct `24`，而是一条外层 `5453 / k_EMsgClientFromGC`，真实的 direct `24 / CacheSubscribed` 在外层 protobuf `field 3` 的 payload 里。
+  - 后续若继续复用这条 donor 或类似的官方 wrapped 消息，必须先解 outer `5453`，再对 inner direct 消息做 `account_id/steam_id/lobby_id/server_id/match_id` 和 SO object patch，不能把整条 wrapped 消息直接当 direct `24` 交给 SO 改写逻辑。
+
+[Dota2 host startgame 官方抓包的关键 launch 窗口顺序]
+- Date: 2026-04-30
+- Context: Agent 在复查 `/workspace/lobbystartgamedota2.zip` 与 `/workspace/lobbystartgame.log` 的 launch 窗口时发现
+- Category: 代码模式
+- Instructions:
+  - `033/035/036` 之后，官方会先收到一条很小的 wrapped `5453`（`037`，内层是小 `24`），紧接着再收到大 `24`（`038`）。
+  - 大 `24`（`038`）之后，官方紧邻的 direct 交互至少包括：`039 out 8744 -> 042 in 8745`，以及 `040/045 out 7034 -> 043/046 in 26`。
+  - 这说明 `038` 不是孤立 donor；它前面有一个小 `24` 过渡，后面紧跟 guild contracts 与 connected players 驱动的状态推进。如果后续仍卡在 `INIT/WAIT_FOR_PLAYERS_TO_LOAD` 之后，可以优先对照这一窗口补齐或重排相邻 direct 消息。
+
+[Dota2 启动期 037 小 24 的接入方式]
+- Date: 2026-04-30
+- Context: Agent 在把官方 `037_in_5453_k_EMsgClientFromGC.bin` 接入 launch-time `24` 预热窗口时发现
+- Category: 代码模式
+- Instructions:
+  - 官方 `037` 是一条非常小的 wrapped `5453`，适合作为 `server_id` 首次落地后的 `24` 预热包，排在大 `038` 之前。
+  - 这类小 donor 不应强制要求存在 `lobby_id` 或 `steam_id fixed64` 的模板占位；应按“若字段存在则 patch”的方式处理可选标识符，再保留其余 payload 原貌。
+  - 当前 `gbe_fork` 已将该小 `24` 放在 `queued launch CacheSubscribed after server_id sync ...` 之前发送，后续若继续对齐官方 launch 窗口，应以这一顺序为基线继续比对日志。
+
 [GitHub 构建触发偏好]
 - Date: 2026-04-23
 - Context: 用户要求后续触发 GitHub 构建时限定目标任务
