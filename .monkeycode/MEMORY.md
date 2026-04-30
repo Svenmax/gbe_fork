@@ -196,6 +196,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当前更接近官方的修正方向是：`7041` 先只发启动第一条 `26` 触发载入，把其余 launch `26` 和外围 follow-up 挪到 `4511` 同步出 `server_id`、并下发 `037/038` 之后再继续发送。
   - 如果新日志里仍看到 `7035` 早于 `4511/大24`，优先检查是否又在 `7041` 初始窗口里把状态推进到了 `RUN`。
 
+[Dota2 4511 后不能让权威 lobby 状态回退到 1/0]
+- Date: 2026-04-30
+- Context: Agent 在分析“host loading 一直转圈”的新日志时发现
+- Category: 代码模式
+- Instructions:
+  - 当 `4511` 后已经成功下发 `037/038` 和延后的 `7041` stage2/3/4，若服务端权威 `GBE_local_lobby` 或 shared lobby 状态又被后续逻辑恢复成 `state=1/game_state=0`，客户端会停在 `host loading`，只看到 `DOTA_GAMERULES_STATE_INIT`。
+  - 这种情况下，问题不再是 `7035` 早退，而是 `4511` 后的权威运行态没有跟着延后的 launch `26` 一起推进到最终状态。
+  - 如果日志里出现延后的 `stage=2/3/4` 已排队，但后续 `restored shared lobby reason=4511_lan_server_available` 仍显示 `state=1 game_state=0`，优先检查 shared lobby 是否被旧状态覆盖。
+
 [GitHub 构建触发偏好]
 - Date: 2026-04-23
 - Context: 用户要求后续触发 GitHub 构建时限定目标任务

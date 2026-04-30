@@ -6998,6 +6998,21 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
                 );
             }
 
+            GBE_local_lobby.state = deferred_stage_states.back();
+            GBE_local_lobby.game_state = deferred_stage_game_states.back();
+            GBE_PublishSharedDotaLobbyState("server_id_sync_deferred_launch");
+
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "updated authoritative lobby state after deferred 7041 launch reason=%s lobby_id=%llu match_id=%llu server_id=%llu state=%u game_state=%u",
+                reason ? reason : "unknown",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state
+            );
+
             static const std::array<GBE_DotaPracticeLobbyLaunchPeripheralTemplate, 13> deferred_peripheral_templates = {{
                 { GBE_kSteamPersonaState, GBE_kDotaPracticeLobbyLaunchPersonaStateInitHex, 0.05, false },
                 { GBE_kSteamServersAvailable, GBE_kDotaPracticeLobbyLaunchServersAvailableHex, 0.06, false },
