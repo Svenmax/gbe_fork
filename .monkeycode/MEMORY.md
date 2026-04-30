@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 官方 018 donor 的 2015 对象不能重复追加 startup account data]
+- Date: 2026-04-30
+- Context: Agent 在对比 `/workspace/gbe_gc_debug.log` 中 `official_018_local_reply` 与 `GBE_kDotaOfficial018PracticeLobby26Hex` 的 inner `26` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当前 `official_018_local_reply` 比 donor inner `26` 多出 405 bytes，其中核心差异是 `type=2015` 对象从 donor 的 411 bytes 膨胀到本地的 814 bytes。
+  - 本地 `2015` 中 `local[256..639]` 会被整块重复到 `local[659..1042]`，根因是 `GBE_RewriteDotaLobbyTemplateObject2015(...)` 忽略了 `clear_existing_startup_data`，保留 donor 现有 startup account data 后又额外 append 一份。
+  - donor-based `2015` 重写路径必须先移除已有的 `8869 / k_EMsgDotaLobbyAdditionalAccountData` 条目，再按当前 owner account 只补一份 startup data。
+
 [Dota2 官方 018 donor 的剩余 LaunchTemplate 模板 patch 应一次性放宽]
 - Date: 2026-04-30
 - Context: Agent 在连续多轮 host startgame 调试中发现首个 `7034 -> official 018` 路径会沿着 `lobby_id -> match_id -> server_id -> game_start_time` 逐个暴露新的固定模板命中失败

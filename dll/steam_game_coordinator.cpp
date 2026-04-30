@@ -3386,8 +3386,42 @@ static bool GBE_RewriteDotaLobbyTemplateObject2015(
     uint32 extra_startup_account_id,
     std::string &output)
 {
-    (void)clear_existing_startup_data;
-    output = input;
+    output.clear();
+
+    size_t offset = 0;
+    while (offset < input.size()) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(
+                reinterpret_cast<const uint8 *>(input.data()),
+                input.size(),
+                offset,
+                field_number,
+                wire_type,
+                field_offset,
+                value_offset,
+                value_size,
+                field_end))
+            return false;
+
+        if (clear_existing_startup_data && field_number == 2u && wire_type == 2u) {
+            uint64 startup_type = 0;
+            if (GBE_ExtractProtoFieldUint64(
+                    reinterpret_cast<const uint8 *>(input.data()) + value_offset,
+                    value_size,
+                    GBE_FindProtoField(reinterpret_cast<const uint8 *>(input.data()) + value_offset, value_size, 1u),
+                    startup_type)
+                && startup_type == GBE_kDotaLobbyAdditionalAccountData)
+                continue;
+        }
+
+        output.append(input.data() + field_offset, field_end - field_offset);
+    }
+
     return GBE_AppendDotaLobbyAdditionalStartupAccountMessage(output, extra_startup_account_id);
 }
 
