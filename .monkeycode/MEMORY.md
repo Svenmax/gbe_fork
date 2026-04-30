@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 官方 018 donor 的剩余 LaunchTemplate 模板 patch 应一次性放宽]
+- Date: 2026-04-30
+- Context: Agent 在连续多轮 host startgame 调试中发现首个 `7034 -> official 018` 路径会沿着 `lobby_id -> match_id -> server_id -> game_start_time` 逐个暴露新的固定模板命中失败
+- Category: 代码模式
+- Instructions:
+  - 为了尽快让首个官方 `018` 真正发出并产出 `official_018_local_reply`，`GBE_PatchDotaPracticeLobbyLaunchTemplate(...)` 中剩余依赖 donor 固定模板字节/字符串的 patch 应一次性放宽，而不是每轮只改一个。
+  - 这包括 `steam_id fixed64`、`account_id fixed32`、`lobby_id/match_id/game_start_time` 的 varint 宽度不匹配与模板字节命中失败，以及 `connect` 固定字符串覆盖失败。
+  - 这些 donor/模板命中类 patch 在 debug 阶段应记录 skipped 日志并继续发送；真正的字段残留问题在拿到 `official_018_local_reply` 完整 dump 后再做精确核对。
+
 [Dota2 官方 018 donor 的 game_start_time patch 也不能走严格命中]
 - Date: 2026-04-30
 - Context: Agent 在继续修复 host startgame 的首个 `7034 -> official 018` 路径时，对照最新一轮 `gbe_gc_debug.log` 发现 `lobby_id`、`match_id`、`server_id` 放宽后又卡在 `game_start_time` 固定模板替换
