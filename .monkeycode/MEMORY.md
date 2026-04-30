@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 PRE_GAME 后的 official 046 只应在 043 之后消费一次]
+- Date: 2026-04-30
+- Context: Agent 在继续对照 `/workspace/lobbystartgame.log` 与本地 `PLAYER_HERO` 轮询日志，排查“返回主界面仍显示主机载入中”时发现
+- Category: 代码模式
+- Instructions:
+  - 官方 practice lobby host startgame 在 `8744/8745 -> 043` 进入 `PRE_GAME` 后，只观察到一次 `PLAYER_HERO` 的 `7034 (39 bytes)` 紧跟一条 `046` 风格 `26 (514 bytes)`，用于把 `CSODOTALobby.all_members[0].hero_id` 推到客户端。
+  - 后续周期性的 `PLAYER_HERO` `7034` 轮询不应继续无限重放 official donor `046`；否则本地会持续发出额外的 `519-byte 26`，并可能让 dashboard 里的 host 状态长期停留在 loading 样式。
+  - 实现上应把 `046` 视为 `043` 之后的一次性 follow-up：在进入 `PRE_GAME` 的 official `043` 路径置位，首个命中的 `PRE_GAME + send_reason=PLAYER_HERO` 请求消费后清掉，后续回到常规 runtime lobby update。
+
 [Dota2 late-stage official 26 donor 应按阶段决定是否重写 2015]
 - Date: 2026-04-30
 - Context: Agent 在继续压缩 practice lobby host startgame 后半段 `26` 包体并对照官方 `024/025/030/032/043/046` donor 时发现

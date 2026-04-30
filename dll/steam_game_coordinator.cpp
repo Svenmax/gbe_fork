@@ -145,6 +145,7 @@ struct GBE_SharedDotaLobbyState {
 
 static GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 static bool GBE_dota_launch_pending_8870 = false;
+static bool GBE_dota_launch_pending_046 = false;
 
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...);
 
@@ -3074,6 +3075,76 @@ static void GBE_LogDotaSOMultipleObjectsSummary(const char *tag, const char *lab
             object.type_id(),
             object.object_data().size()
         );
+
+        if (object.type_id() == 2004) {
+            const std::string &object_data = object.object_data();
+            const uint8 *object_bytes = reinterpret_cast<const uint8 *>(object_data.data());
+            const size_t object_size = object_data.size();
+            uint64 lobby_id = 0;
+            uint32 lobby_state = 0;
+            std::string connect;
+            uint64 server_id = 0;
+            uint32 game_state = 0;
+            uint64 match_id = 0;
+            uint32 game_start_time = 0;
+            const bool has_lobby_id = GBE_ExtractProtoFieldUint64(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 1u), lobby_id);
+            const bool has_lobby_state = GBE_ExtractProtoFieldUint32(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 4u), lobby_state);
+            const bool has_connect = GBE_ExtractProtoFieldBytes(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 5u), connect);
+            const bool has_server_id = GBE_ExtractProtoFieldUint64(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 6u), server_id);
+            const bool has_game_state = GBE_ExtractProtoFieldUint32(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 22u), game_state);
+            const bool has_match_id = GBE_ExtractProtoFieldUint64(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 30u), match_id);
+            const bool has_game_start_time = GBE_ExtractProtoFieldUint32(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 87u), game_start_time);
+            GBE_GC_DebugLog(
+                tag,
+                "%s object[%d] type=2004 lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu game_start_time=%u connect=%s flags[lobby_id=%u state=%u game_state=%u match_id=%u server_id=%u start_time=%u connect=%u]",
+                label ? label : "dota_so_summary",
+                object_index,
+                static_cast<unsigned long long>(lobby_id),
+                lobby_state,
+                game_state,
+                static_cast<unsigned long long>(match_id),
+                static_cast<unsigned long long>(server_id),
+                game_start_time,
+                has_connect ? connect.c_str() : "",
+                has_lobby_id ? 1u : 0u,
+                has_lobby_state ? 1u : 0u,
+                has_game_state ? 1u : 0u,
+                has_match_id ? 1u : 0u,
+                has_server_id ? 1u : 0u,
+                has_game_start_time ? 1u : 0u,
+                has_connect ? 1u : 0u
+            );
+            continue;
+        }
+
+        if (object.type_id() == 2016) {
+            const std::string &object_data = object.object_data();
+            const uint8 *object_bytes = reinterpret_cast<const uint8 *>(object_data.data());
+            const size_t object_size = object_data.size();
+            uint32 member_count = 0;
+            size_t offset = 0;
+            while (offset < object_size) {
+                uint32 field_number = 0;
+                uint32 wire_type = 0;
+                size_t field_offset = 0;
+                size_t value_offset = 0;
+                size_t value_size = 0;
+                size_t field_end = 0;
+                if (!GBE_ReadNextProtoField(object_bytes, object_size, offset, field_number, wire_type, field_offset, value_offset, value_size, field_end))
+                    break;
+                if (field_number == 1u && wire_type == 2u)
+                    ++member_count;
+                offset = field_end;
+            }
+
+            GBE_GC_DebugLog(
+                tag,
+                "%s object[%d] type=2016 member_count=%u",
+                label ? label : "dota_so_summary",
+                object_index,
+                member_count
+            );
+        }
     }
 }
 
@@ -7974,13 +8045,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u && request_shape.has_send_reason && request_shape.send_reason == 2u) {
-                if (queue_official_26(GBE_kDotaOfficial043PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 043 after 8744/7034"))
+                if (queue_official_26(GBE_kDotaOfficial043PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 043 after 8744/7034")) {
+                    GBE_dota_launch_pending_046 = true;
                     return true;
+                }
             }
 
-            if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && request_shape.has_send_reason && request_shape.send_reason == 5u) {
-                if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 after disconnected-player 7034"))
+            if (GBE_dota_launch_pending_046 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && request_shape.has_send_reason && request_shape.send_reason == 5u) {
+                if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 after disconnected-player 7034")) {
+                    GBE_dota_launch_pending_046 = false;
                     return true;
+                }
             }
 
             if (!GBE_dota_launch_pending_8870) {
@@ -8702,6 +8777,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
 
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
     GBE_dota_launch_pending_8870 = false;
+    GBE_dota_launch_pending_046 = false;
     std::string response_25;
     if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for 7040 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
@@ -8798,6 +8874,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
     const uint32 account_id = settings->get_local_steam_id().GetAccountID();
     GBE_dota_launch_pending_8870 = false;
+    GBE_dota_launch_pending_046 = false;
 
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
     GBE_local_lobby.server_id = 0;
@@ -9380,6 +9457,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDestroyLobbyRequest(uint64 request_jo
         }
     }
 
+    GBE_dota_launch_pending_046 = false;
     GBE_LeaveGenericLobby();
     GBE_local_lobby.active = false;
     GBE_local_lobby.lobby_id = 0;
