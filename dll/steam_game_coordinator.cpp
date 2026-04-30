@@ -3856,8 +3856,12 @@ static bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
                 message,
                 GBE_VectorFromBytes(GBE_kOldDotaPracticeLobbyServerIdFixed64.data(), GBE_kOldDotaPracticeLobbyServerIdFixed64.size()),
                 GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(server_id_raw.data()), server_id_raw.size()))) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Launch server_id patch failed stage=%s server_id=%llu", stage_note ? stage_note : "", static_cast<unsigned long long>(server_id));
-            return false;
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Launch server_id patch skipped stage=%s server_id=%llu; donor does not expose expected template bytes",
+                stage_note ? stage_note : "",
+                static_cast<unsigned long long>(server_id)
+            );
         }
     }
 

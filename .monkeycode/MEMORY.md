@@ -31,6 +31,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 官方 018 donor 的 server_id patch 也不能走严格命中]
+- Date: 2026-04-30
+- Context: Agent 在继续修复 host startgame 的首个 `7034 -> official 018` 路径时，对照最新一轮 `gbe_gc_debug.log` 发现 `lobby_id` 与 `match_id` 放宽后又卡在 `server_id` 固定模板替换
+- Category: 代码模式
+- Instructions:
+  - 当 `official packet 018 after 7034 fallback missing 4506` 已进入 donor 重放路径时，`LaunchTemplate` 内的 `server_id` 固定字节替换也不能再作为 hard failure。
+  - 如果 donor 不暴露预期的 `server_id` 模板字节，应记录 skipped 日志并继续发送，优先拿到真实发出的 `official_018_local_reply` 完整 dump，再判断 donor 中是否仍残留旧 `server_id`。
+
 [Dota2 官方 018 donor 的 match_id patch 也不能走严格命中]
 - Date: 2026-04-30
 - Context: Agent 在继续修复 host startgame 的首个 `7034 -> official 018` 路径时，对照前一次测试日志发现 `lobby_id` 放宽后又卡在 `match_id` 固定模板替换
