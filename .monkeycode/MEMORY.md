@@ -31,6 +31,17 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 4511 后目标 873-byte CacheSubscribed donor 对应抓包 016 而不是 038]
+- Date: 2026-04-30
+- Context: Agent 在继续对照 `/workspace/lobbystartgamedota2/` 中 `ClientFromGC` 样本大小与 `/workspace/lobbystartgame.log` 的 `4511 -> 24` 时序时发现
+- Category: 代码模式
+- Instructions:
+  - `016_in_5453_k_EMsgClientFromGC.bin` 的文件大小是 `913`，与日志中的内层 `24 / CacheSubscribed` `873 bytes` 高度对应，说明它很可能就是 `4511` 后那条目标 donor wrapped 样本。
+  - 当前误用的 `038_in_5453_k_EMsgClientFromGC.bin` 文件大小是 `6417`，对应日志里那条大 `24 / CacheSubscribed` `6377 bytes`，不能再拿它当 `4511` 后的 official cache template。
+  - 后续若再核对 `4511` 后的 official cache template，应优先从 `016` 这类 `913 -> 873` 的 wrapped 样本验证，而不是从 `038` 这类大缓存样本出发。
+  - 进一步直接解包后已确认：`016` 的内层消息类型就是 `24 / CacheSubscribed`，对象顺序为 `2004 -> 2013 -> 2014 -> 2015 -> 2016`，各 `object_data` 长度分别约为 `183 / 0 / 13 / 405 / 201`。
+  - 同样直接解包后已确认：`038` 的内层虽然也是 `24 / CacheSubscribed`，但对象只有两类，分别是 `type_id=1` 的 51 个条目和 `type_id=2010` 的 87 个条目，属于完全不同的大缓存集合，不是 practice lobby launch 的那套对象。
+
 [当官方抓包已给出正确时序时，优先反查本地处理而不是删消息]
 - Date: 2026-04-30
 - Context: 用户在指出“抓包里 4511 之后就是 24，这是官方正确时序”时明确纠正 Agent 的排障方式
@@ -38,6 +49,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当官方抓包已经明确给出正确时序时，不能因为本地遇到异常就先假设“跳过某条消息”或“官方不需要这条消息”。
   - 优先反查本地对该消息的构造、重写、封装、owner、对象顺序和字段处理，先证明是自己的处理不一致，再谈调整时序。
   - 下结论前必须先仔细核对抓包数据与本地日志，避免把“本地处理有问题”误判成“官方链路不需要这条消息”。
+
+[Dota2 host startgame 必须严格按官方抓包顺序和结构构建回复]
+- Date: 2026-04-30
+- Context: 用户在上传新日志时再次强调“严格按照我抓包的数据顺序、结构来构建和回复”
+- Instructions:
+  - Dota2 host startgame 相关的 GC 构造与回复，必须以官方抓包为唯一时序和结构真值。
+  - 构造 `24/26` 等消息时，优先复用官方 donor/template，并严格保持官方的消息顺序、对象顺序、顶层结构和封装方式；只有在确认字段需要运行态替换时才做最小改写。
+  - 遇到本地异常时，优先证明“本地构造与官方哪里不一致”，而不是先发明新时序、新结构或删除官方存在的消息。
 
 [Dota2 官方 018 donor 的 2015 对象不能重复追加 startup account data]
 - Date: 2026-04-30
@@ -90,6 +109,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `4511` 后的 `24` 不能简单删除；官方链路里确实存在这条 `CacheSubscribed`。
   - 当本地 `4511` 后的 `24` 明显比官方小很多（例如 `704` vs `873`），并且客户端在收到该 `24` 时立刻出现 `Lobby object destroyed`，应优先把该 `24` 的构造从 `GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(...)` 切换到 `GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(...)`，复用官方 launch cache donor 模板再做运行态字段重写。
   - “跳过 `4511` 后的 `24`”只能作为临时排障猜想，不应作为最终修复方向；用户已确认官方抓包里存在这条 `24`。
+
+[当前 4511 后选到的 official cache template 仍与抓包不符]
+- Date: 2026-04-30
+- Context: Agent 在将 `4511` 后的 `24` 改为 `GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(...)` 后复查新日志时发现
+- Category: 代码模式
+- Instructions:
+  - 当前本地 `4511` 后的 `24` 已不再是 synthetic `704 bytes`，但变成了 `6376 bytes`，而官方抓包里的对应 `24` 仍是 `873 bytes`。
+  - 这说明“改用 donor template”这个方向是对的，但当前选用的 template/提取方式/封装层级仍然不对，不能把 `6376` 当成已经贴近官方。
+  - 下一步应继续严格对照抓包，确认 `GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex` 是否对应错误样本、是否提取了错误层级，或是否把额外对象/封装一并发给了客户端。
 
 [Dota2 官方 018 donor 的剩余 LaunchTemplate 模板 patch 应一次性放宽]
 - Date: 2026-04-30
