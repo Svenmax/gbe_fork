@@ -4732,8 +4732,10 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWra
     std::string &message)
 {
     std::string wrapped_message;
-    if (!wrapped_template_hex || !GBE_DecodeHexString(wrapped_template_hex, wrapped_message))
+    if (!wrapped_template_hex || !GBE_DecodeHexString(wrapped_template_hex, wrapped_message)) {
+        GBE_GC_DebugLog("GC_DOTA_SYNC", "launch cache template decode failed note=%s has_template=%u", template_note ? template_note : "unknown", wrapped_template_hex ? 1u : 0u);
         return false;
+    }
 
     if (!GBE_PatchDotaTemplateIdentifiers(
             wrapped_message,
@@ -4745,19 +4747,25 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWra
             GBE_kDotaCacheSubscribed,
             0,
             template_note ? template_note : "practice lobby launch cache template")) {
+        GBE_GC_DebugLog("GC_DOTA_SYNC", "launch cache template identifier patch failed note=%s", template_note ? template_note : "unknown");
         return false;
     }
 
     if (!GBE_ExtractWrappedClientFromGCPayload(wrapped_message, GBE_kDotaCacheSubscribed, message)) {
+        GBE_GC_DebugLog("GC_DOTA_SYNC", "launch cache template inner extraction failed note=%s wrapped_size=%zu", template_note ? template_note : "unknown", wrapped_message.size());
         return false;
     }
 
     if (require_lobby_identifiers) {
-        if (!GBE_PatchDotaLobbyTemplateIdentifiers(message, account_id, steam_id, lobby_id))
+        if (!GBE_PatchDotaLobbyTemplateIdentifiers(message, account_id, steam_id, lobby_id)) {
+            GBE_GC_DebugLog("GC_DOTA_SYNC", "launch cache required lobby identifier patch failed note=%s lobby_id=%llu", template_note ? template_note : "unknown", static_cast<unsigned long long>(lobby_id));
             return false;
+        }
     } else {
-        if (!GBE_PatchDotaLobbyTemplateIdentifiersIfPresent(message, steam_id, lobby_id))
+        if (!GBE_PatchDotaLobbyTemplateIdentifiersIfPresent(message, steam_id, lobby_id)) {
+            GBE_GC_DebugLog("GC_DOTA_SYNC", "launch cache optional lobby identifier patch failed note=%s lobby_id=%llu", template_note ? template_note : "unknown", static_cast<unsigned long long>(lobby_id));
             return false;
+        }
     }
 
     if (!rewrite_runtime_fields)
@@ -4793,10 +4801,26 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWra
         owner_slot,
         rewrite_2015,
         extra_startup_account_id,
-        pass_key))
+        pass_key)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "launch cache runtime state patch failed note=%s lobby_id=%llu state=%u game_state=%u server_id=%llu match_id=%llu body_size=%zu",
+            template_note ? template_note : "unknown",
+            static_cast<unsigned long long>(lobby_id),
+            lobby_state,
+            lobby_game_state,
+            static_cast<unsigned long long>(server_id),
+            static_cast<unsigned long long>(match_id),
+            message.size());
         return false;
+    }
 
-    return GBE_ForceDotaLobbyCacheOwnerSOID(message, lobby_id);
+    if (!GBE_ForceDotaLobbyCacheOwnerSOID(message, lobby_id)) {
+        GBE_GC_DebugLog("GC_DOTA_SYNC", "launch cache owner soid patch failed note=%s lobby_id=%llu body_size=%zu", template_note ? template_note : "unknown", static_cast<unsigned long long>(lobby_id), message.size());
+        return false;
+    }
+
+    return true;
 }
 
 static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedPreludeTemplateReplay(
