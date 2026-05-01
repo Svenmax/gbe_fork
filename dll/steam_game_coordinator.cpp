@@ -3898,6 +3898,16 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
                         GBE_FormatProtoFieldLayoutSummary(object_data).c_str(),
                         GBE_FormatProtoFieldLayoutSummary(rewritten_object).c_str()
                     );
+                    if (std::strcmp(debug_label, "official packet 046 after disconnected-player 7034") == 0 && (type_id == 2004u || type_id == 2016u)) {
+                        GBE_GC_DebugLog(
+                            "GC_DOTA_PATCH",
+                            "%s rewrite object type=%llu input_hex=%s output_hex=%s",
+                            debug_label,
+                            static_cast<unsigned long long>(type_id),
+                            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(object_data.data()), object_data.size(), 256).c_str(),
+                            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(rewritten_object.data()), rewritten_object.size(), 256).c_str()
+                        );
+                    }
                 }
                 GBE_AppendProtoBytesField(rewritten_subscribed, 2u, rewritten_object);
                 continue;
