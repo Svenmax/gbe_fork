@@ -1230,3 +1230,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 官方 `4511 -> 24` 的初始 lobby cache 中，`CSODOTALobby.all_members[0].leaver_status` 仍是 `DOTA_LEAVER_DISCONNECTED`；后续早期 `26` 才伴随 `state: SERVERSETUP -> RUN` 进入下一阶段。
   - donor/template 路径里的 `GBE_RewriteDotaLobbyTemplateMemberObject(...)` 不能把 member `field 16 = leaver_status` 与 `field 28 = leaver_actions` 无条件重写成 `0`，也不要在 donor 原本缺失时强行补这两个字段。
   - 否则本地 `24` 会过早显示 `DOTA_LEAVER_NONE`，破坏官方 `DISCONNECTED -> 后续修正` 的状态过渡，影响继续排查 dashboard `host loading` 问题时对关键 `26` 窗口的对照。
+
+[Dota2 新 GC 客户端实例恢复私有房间时只补一次当前 24/26 快照]
+- Date: 2026-05-01
+- Context: Agent 在继续排查“profile 已到 PRIVATE_LOBBY 但 dashboard 仍显示主机载入中”，并复查 `GBE_RestoreSharedDotaLobbyState(...)` / `initialize_gc()` 与最新 `gbe_gc_debug.log` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当新的客户端 `Steam_Game_Coordinator` 实例启动时，如果 shared lobby 已经处于 `state=2, game_state=4` 的 practice private lobby，单靠 adopt shared runtime 和 rich presence 重放还不够；当前实例还需要补一份当前时刻的 lobby SO 快照给本地缓存。
+  - 这次补发应复用现有当前态构建器，只发一次 direct `24 / CacheSubscribed` 加一次 direct `26 / LobbyDetailsUpdate`，顺序保持 `24 -> 26`，不要发明新的包结构。
+  - 触发点应尽量收敛到“Dota2 GC 初始化”或“客户端从空本地 lobby 完整 adopt shared lobby”这类新实例恢复场景，避免在同一实例的正常 launch 状态推进中反复追加额外 `24/26`。

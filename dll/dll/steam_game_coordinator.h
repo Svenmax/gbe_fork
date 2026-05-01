@@ -74,6 +74,7 @@ public ISteamGameCoordinator
     bool welcome_received{};
     std::chrono::high_resolution_clock::time_point welcome_time{};
     bool GBE_dota_login_sync_sent{};
+    bool GBE_dota_private_lobby_snapshot_replayed{};
 
     struct GBE_LocalLobby
     {
@@ -166,6 +167,7 @@ public ISteamGameCoordinator
     void GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *status, const char *lobby_state, bool include_party, bool include_lobby = true);
     void GBE_ClearDotaPracticeLobbyLaunchRichPresence();
     void GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(const char *reason);
+    void GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(const char *reason);
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &player_name, std::string &message);
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const std::string &player_name, std::string &message);
     void GBE_PublishSharedDotaLobbyState(const char *reason);
