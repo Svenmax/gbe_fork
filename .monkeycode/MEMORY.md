@@ -1380,3 +1380,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 当 practice lobby 已进入 `state=2, game_state=4` 时，本地 rich presence/persona 仍不应立刻切到 `#DOTA_RP_PRIVATE_LOBBY`；官方在这之前还会经过 `5429`、后续 Steam 侧链路，再晚一拍才出现最终 `766(private-lobby)`。
   - 因此恢复 shared lobby 或重放 rich presence 时，不能只看到 `game_state=4` 就默认 `PRIVATE_LOBBY`；应至少等到“private lobby persona 已实际发送”的闩锁成立后，再把状态从 `#DOTA_RP_FINDING_MATCH + RUN` 切到 `#DOTA_RP_PRIVATE_LOBBY + RUN`。
+
+[Dota2 当前真实运行里 PRIVATE_LOBBY 更适合挂在 RUN 后续 game_state 边沿上]
+- Date: 2026-05-01
+- Context: Agent 在顺序读完用户最新 `console.log` 与 `gbe_gc_debug.log`，并对照 `steamhoststart-hero` 的晚期 persona 时序后发现
+- Category: 代码模式
+- Instructions:
+  - 当前这套 host start 流里，`7197/8673` 并不会在 `game_state=4` 时稳定出现；实际能稳定观察到的晚期 `RUN` 边沿是 `26` 把 lobby 从 `game_state=1 -> 2 -> 3` 推进到英雄选择/策略时间。
+  - 因此如果要做最小实现来恢复 dashboard 的“Leave / Return to Game”，优先把 `PRIVATE_LOBBY` persona 闩锁挂在“`046` 已跑过且随后进入 `RUN` 的后续 game_state（当前日志里至少是 `>=2`）”上，而不是继续依赖 `7197/8673 && game_state==4`。
+  - `7197/8673` 更适合保留为兜底补发时机；shared lobby rich presence 重放则只应依赖 `PrivateLobbyPersona` 闩锁位，而不是再次直接判断 `game_state==4`。

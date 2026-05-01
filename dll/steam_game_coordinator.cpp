@@ -6267,6 +6267,23 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         GBE_GC_MaskedEMsg(message.msg_type)
     );
 
+    // The official persona flip happens after the run-phase lobby state has
+    // already advanced past the early 046 pregame donor chain. Latch the
+    // private-lobby persona on the first later run-state edge we actually see.
+    if (GBE_local_lobby.state == 2u &&
+        GBE_local_lobby.game_state >= 2u &&
+        !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona) &&
+        (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePregameRunPersona)) {
+        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
+        GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+            GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
+            GBE_kSteamPersonaState,
+            GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
+            false,
+            "launch persona private lobby on late run-state edge"
+        );
+    }
+
     GBE_PublishSharedDotaLobbyState("queued_state");
 }
 
@@ -9569,7 +9586,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     if ((request_emsg == 7197u || request_emsg == 8673u) &&
         GBE_local_lobby.active &&
         GBE_local_lobby.state == 2u &&
-        GBE_local_lobby.game_state == 4u) {
+        GBE_local_lobby.game_state >= 2u &&
+        !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona)) {
         GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
         GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
             GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
@@ -9577,8 +9595,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
             false,
             request_emsg == 7197u
-                ? "launch persona private lobby after 7197"
-                : "launch persona private lobby after 8673"
+                ? "launch persona private lobby after 7197 fallback"
+                : "launch persona private lobby after 8673 fallback"
         );
     }
 
@@ -11361,16 +11379,12 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
     const char *lobby_state = nullptr;
     bool include_party = false;
 
-    if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u) {
+    if (GBE_local_lobby.state == 2u) {
         if (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona) {
             status = "#DOTA_RP_PRIVATE_LOBBY";
         } else {
             status = "#DOTA_RP_FINDING_MATCH";
         }
-        lobby_state = "RUN";
-        include_party = true;
-    } else if (GBE_local_lobby.state == 2u) {
-        status = "#DOTA_RP_FINDING_MATCH";
         lobby_state = "RUN";
         include_party = true;
     } else if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u) {
