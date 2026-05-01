@@ -2539,6 +2539,32 @@ static std::string GBE_FormatDotaLobbyIndexFieldSummary(const std::string &input
     return stream.str();
 }
 
+static uint32 GBE_CountProtoRepeatedBytesField(const std::string &input, uint32 target_field)
+{
+    const uint8 *data = reinterpret_cast<const uint8 *>(input.data());
+    const size_t size = input.size();
+
+    uint32 count = 0;
+    size_t offset = 0;
+    while (offset < size) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(data, size, offset, field_number, wire_type, field_offset, value_offset, value_size, field_end))
+            break;
+
+        if (field_number == target_field && wire_type == 2u)
+            ++count;
+
+        offset = field_end;
+    }
+
+    return count;
+}
+
 static std::string GBE_FormatProtoTopLevelFieldSummary(const uint8 *data, size_t size)
 {
     if (!data || size == 0)
@@ -3506,6 +3532,7 @@ static void GBE_LogDotaSOMultipleObjectsSummary(const char *tag, const char *lab
             uint64 match_id = 0;
             uint32 game_start_time = 0;
             std::string owner_state;
+            const uint32 team_details_count = GBE_CountProtoRepeatedBytesField(object_data, 17u);
             const bool has_lobby_id = GBE_ExtractProtoFieldUint64(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 1u), lobby_id);
             const bool has_lobby_state = GBE_ExtractProtoFieldUint32(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 4u), lobby_state);
             const bool has_connect = GBE_ExtractProtoFieldBytes(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 5u), connect);
@@ -3516,7 +3543,7 @@ static void GBE_LogDotaSOMultipleObjectsSummary(const char *tag, const char *lab
             const bool has_owner_state = GBE_ExtractProtoFieldBytes(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 120u), owner_state);
             GBE_GC_DebugLog(
                 tag,
-                "%s object[%d] type=2004 lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu game_start_time=%u connect=%s flags[lobby_id=%u state=%u game_state=%u match_id=%u server_id=%u start_time=%u connect=%u]",
+                "%s object[%d] type=2004 lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu game_start_time=%u connect=%s team_details=%u flags[lobby_id=%u state=%u game_state=%u match_id=%u server_id=%u start_time=%u connect=%u]",
                 label ? label : "dota_so_summary",
                 object_index,
                 static_cast<unsigned long long>(lobby_id),
@@ -3526,6 +3553,7 @@ static void GBE_LogDotaSOMultipleObjectsSummary(const char *tag, const char *lab
                 static_cast<unsigned long long>(server_id),
                 game_start_time,
                 has_connect ? connect.c_str() : "",
+                team_details_count,
                 has_lobby_id ? 1u : 0u,
                 has_lobby_state ? 1u : 0u,
                 has_game_state ? 1u : 0u,
@@ -5173,7 +5201,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
             GBE_AppendProtoVarIntField(member_bytes, 2, owner_hero_id);
         GBE_AppendProtoVarIntField(member_bytes, 3, owner_team);
         GBE_AppendProtoVarIntField(member_bytes, 7, owner_slot);
-        GBE_AppendProtoVarIntField(member_bytes, 16, 0u);
+        GBE_AppendProtoFixed32Field(member_bytes, 16u, 0u);
         GBE_AppendProtoVarIntField(member_bytes, 28, 0u);
 
         object_2016.clear();
@@ -5242,7 +5270,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
             GBE_AppendProtoVarIntField(owner_state, 2, owner_hero_id);
         GBE_AppendProtoVarIntField(owner_state, 3, owner_team);
         GBE_AppendProtoVarIntField(owner_state, 7, owner_slot);
-        GBE_AppendProtoVarIntField(owner_state, 16, 0u);
+        GBE_AppendProtoFixed32Field(owner_state, 16u, 0u);
         GBE_AppendProtoVarIntField(owner_state, 28, 0u);
         GBE_AppendProtoBytesField(object_2004, 120, owner_state);
     }
@@ -5695,17 +5723,18 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
     const std::string &pass_key,
     std::string &message)
 {
-    std::string object_2015;
-    std::string object_2016;
-    std::string object_2004;
-    std::string object_2014;
-    std::string body;
+    (void)has_broadcast_channel;
+    (void)broadcast_channel_id;
+    (void)broadcast_country_code;
+    (void)broadcast_description;
+    (void)broadcast_language_code;
 
-    GBE_BuildDotaPracticeLobbySOObjectData(
+    return GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
+        GBE_kDotaOfficial046PracticeLobby26Hex,
+        "current direct 26 details update",
+        static_cast<uint32>(steam_id & 0xFFFFFFFFu),
         steam_id,
         lobby_id,
-        lobby_state,
-        lobby_game_state,
         server_id,
         match_id,
         game_start_time,
@@ -5727,60 +5756,12 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
         owner_team,
         owner_slot,
         owner_hero_id,
-        has_broadcast_channel,
-        broadcast_channel_id,
-        broadcast_country_code,
-        broadcast_description,
-        broadcast_language_code,
         pass_key,
-        0,
-        object_2015,
-        object_2016,
-        object_2004,
-        object_2014);
-
-    {
-        std::string update;
-        GBE_AppendProtoVarIntField(update, 1, 2015u);
-        GBE_AppendProtoBytesField(update, 2, object_2015);
-        GBE_AppendProtoBytesField(body, 2, update);
-    }
-
-    {
-        std::string update;
-        GBE_AppendProtoVarIntField(update, 1, 2016u);
-        GBE_AppendProtoBytesField(update, 2, object_2016);
-        GBE_AppendProtoBytesField(body, 2, update);
-    }
-
-    {
-        std::string update;
-        GBE_AppendProtoVarIntField(update, 1, 2004u);
-        GBE_AppendProtoBytesField(update, 2, object_2004);
-        GBE_AppendProtoBytesField(body, 2, update);
-    }
-
-    {
-        std::string update;
-        GBE_AppendProtoVarIntField(update, 1, 2014u);
-        GBE_AppendProtoBytesField(update, 2, object_2014);
-        GBE_AppendProtoBytesField(body, 2, update);
-    }
-
-    GBE_AppendProtoFixed64Field(body, 3, GBE_kDotaLobbyDetailsTimestamp);
-
-    {
-        std::string lobby_ref;
-        GBE_AppendProtoVarIntField(lobby_ref, 1, 3u);
-        GBE_AppendProtoVarIntField(lobby_ref, 2, lobby_id);
-        GBE_AppendProtoBytesField(body, 6, lobby_ref);
-    }
-
-    message.clear();
-    GBE_AppendLittleEndian32(message, GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask);
-    GBE_AppendLittleEndian32(message, 0u);
-    message.append(body);
-    return GBE_ForceDotaLobbyUpdateOwnerSOID(message, lobby_id);
+        lobby_state,
+        lobby_game_state,
+        false,
+        0u,
+        message);
 }
 
 static bool GBE_BuildDotaDirectReplayMessage(

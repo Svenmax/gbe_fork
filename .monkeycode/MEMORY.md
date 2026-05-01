@@ -1425,3 +1425,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 不能只凭 `game_state=4` 就默认 `#DOTA_RP_PRIVATE_LOBBY`，但一旦 `046` 路径已经跑过并且 `GBE_kDotaLaunchPeripheralStagePregameRunPersona` 已经置位，shared-lobby restore/reapply 就可以把本地 rich presence 呈现为 `#DOTA_RP_PRIVATE_LOBBY + RUN`。
   - 如果仍强制等到 `GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona` 最终置位才允许重放 private 状态，新的 coordinator 客户端实例会在 `PRE_GAME` 之后持续把 dashboard 刷回 host-loading/FINDING_MATCH，甚至可能抑制后续晚期 Steam 链的继续推进。
   - 更精确的条件是：`state=2 && game_state=4 && PregameRunPersona 已置位` 时允许本地 rich presence 呈现为 private；而最终 `PrivateLobbyPersona` 位仍保留给真正补发的晚期 `766(private-lobby)` 作为完成标记。
+
+[Dota2 synthetic 26 应复用官方 donor，避免用极简 2004 覆盖 team_details]
+- Date: 2026-05-01
+- Context: Agent 在继续排查“profile 已到 PRIVATE_LOBBY 但 dashboard 仍显示主机载入中”，并复查 `GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(...)` 与 `GBE_BuildDotaPracticeLobbySOObjectData(...)` 时发现
+- Category: 代码模式
+- Instructions:
+  - 后续 synthetic `26 / LobbyDetailsUpdate` 不宜再从零构造精简 `2004/2014/2015/2016` 组合；极简 builder 当前会把 `2004.field 17` 退化成两个空 message，覆盖掉官方 donor 里已有的 team details / 队伍完成度视图。
+  - 更稳妥的最小实现是复用现成的官方 `26` donor（当前可直接复用 `046` 模板）作为骨架，再通过 `GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(...)` 只重写运行时字段。
+  - runtime 自建 member/owner_state 若仍需保留，`leaver_status(field 16)` 必须继续按 fixed32 编码，不能写成 varint。
