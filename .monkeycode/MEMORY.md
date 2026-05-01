@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 prelaunch direct 26 不能无条件复用 official 046 donor]
+- Date: 2026-05-01
+- Context: Agent 在顺序完整阅读本轮 `/workspace/console.log` 与 `/workspace/gbe_gc_debug.log`，并对照 `GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(...)` 后发现
+- Category: 代码模式
+- Instructions:
+  - 建房后的 `7047 / SetTeamSlot` 与 `7046 / SetDetails` 会在 launch 之前立即触发 direct `26 / LobbyDetailsUpdate`；本轮客户端日志里这三次更新都固定收到 `26 size=470`，对应服务器日志里的 `current direct 26 details update`。
+  - 当这些 prelaunch `26` 误走 official `046` donor 路径时，日志会出现 `lobby_id/server_id/match_id/game_start_time/connect patch skipped` 或 `size mismatch`，而客户端侧虽然不一定立刻报错，但房间名和槽位更新会失效，表现为 lobby SO 被带坏。
+  - 因此 `GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(...)` 至少要按 runtime 字段分流：`server_id/match_id/game_start_time/connect` 仍为空的 prelaunch 阶段继续使用旧的本地直拼 `26`，只有进入 launch/runtime 后才允许复用 official `046` donor。
+
 [Dota2 7034 请求里的 draft 字段也可作为 owner_team/owner_slot 的回填来源]
 - Date: 2026-05-01
 - Context: Agent 在继续排查“当前测试里没有 7047，但 owner_team 长期停在 0”并核对 `dll/steam_game_coordinator.cpp` 的 `7034` 解析与 builder 后发现
