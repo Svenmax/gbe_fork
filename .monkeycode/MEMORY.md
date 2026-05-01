@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 当前 lobby 运行态应先捕获快照，再交给 24/26 builder 消费]
+- Date: 2026-05-01
+- Context: Agent 在为 practice lobby 做最小去补丁化收束、梳理 `cache_template_replay`、`cache_payload`、`details_update` 与 `replay_current_private_lobby_snapshot` 的公共输入时发现
+- Category: 代码模式
+- Instructions:
+  - `24/26` 相关 builder 不应各自零散地直接读取 `GBE_local_lobby` 多个字段；应先通过统一入口捕获一次当前 lobby 快照，再把该快照传给 builder，减少同一语义被多条路径重复拆装。
+  - 这个统一入口默认可以先执行 `GBE_RestoreSharedDotaLobbyState(...)`，但从 `GBE_RestoreSharedDotaLobbyState(...)` 内部触发的 snapshot replay 路径必须禁用二次 restore，否则会形成 restore -> replay -> restore 的递归链。
+  - prelaunch/launch 的阶段判断也应复用同一个谓词，例如以 `server_id/match_id/game_start_time/connect` 是否都为空来统一定义 prelaunch，而不是在不同函数里重复写判断条件。
+
 [Dota2 scratch prelaunch 2004.field17 不能继续发两个空 team_details]
 - Date: 2026-05-01
 - Context: Agent 在继续排查 prelaunch direct `26` 仍需保留 scratch builder 的前提下，复查 `GBE_BuildDotaPracticeLobbySOObjectData(...)` 与 `go-dota2` 的 `CSODOTALobby.team_details` 结构时发现
