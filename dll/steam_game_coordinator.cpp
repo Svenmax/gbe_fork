@@ -2903,6 +2903,11 @@ static bool GBE_IsDotaRankTypeSupported(uint32 rank_type)
     }
 }
 
+static bool GBE_IsDotaDireTeam(uint32 team)
+{
+    return team == 1u || team == 3u;
+}
+
 static bool GBE_RewriteDotaLobbyTemplateMemberObject(
     const std::string &input,
     uint32 account_id,
@@ -2966,7 +2971,7 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
 
         if (field_number == 3u && wire_type == 0u) {
             saw_team = true;
-            GBE_AppendProtoVarIntField(output, 3u, owner_team <= 1u ? owner_team : 0u);
+            GBE_AppendProtoVarIntField(output, 3u, owner_team);
             continue;
         }
 
@@ -2996,7 +3001,7 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
     }
 
     if (!saw_team)
-        GBE_AppendProtoVarIntField(output, 3u, owner_team <= 1u ? owner_team : 0u);
+        GBE_AppendProtoVarIntField(output, 3u, owner_team);
 
     if (!saw_slot)
         GBE_AppendProtoVarIntField(output, 7u, owner_slot);
@@ -4912,7 +4917,7 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
 
     std::string draft;
     GBE_AppendProtoFixed64Field(draft, 1u, steam_id);
-    GBE_AppendProtoVarIntField(draft, 2u, owner_team <= 1u ? owner_team : 0u);
+    GBE_AppendProtoVarIntField(draft, 2u, owner_team);
     GBE_AppendProtoVarIntField(draft, 3u, owner_slot > 0u ? (owner_slot - 1u) : 0u);
 
     std::string body;
@@ -5134,7 +5139,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
         GBE_AppendProtoFixed64Field(member_bytes, 1, steam_id);
         if (owner_hero_id != 0u)
             GBE_AppendProtoVarIntField(member_bytes, 2, owner_hero_id);
-        GBE_AppendProtoVarIntField(member_bytes, 3, owner_team <= 1u ? owner_team : 0u);
+        GBE_AppendProtoVarIntField(member_bytes, 3, owner_team);
         GBE_AppendProtoVarIntField(member_bytes, 7, owner_slot);
         GBE_AppendProtoVarIntField(member_bytes, 16, 0u);
         GBE_AppendProtoVarIntField(member_bytes, 28, 0u);
@@ -10593,7 +10598,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
     if (request.has_slot)
         GBE_local_lobby.owner_slot = request.slot;
     if (request.has_bot_difficulty) {
-        if (GBE_local_lobby.owner_team == 1u)
+        if (GBE_IsDotaDireTeam(GBE_local_lobby.owner_team))
             GBE_local_lobby.bot_difficulty_dire = request.bot_difficulty;
         else
             GBE_local_lobby.bot_difficulty_radiant = request.bot_difficulty;

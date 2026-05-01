@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 lobby owner_team 必须保留原始 Dota 队伍号而不是压成 0/1]
+- Date: 2026-05-01
+- Context: Agent 在继续排查“rich presence 已经是 PRIVATE_LOBBY，但 dashboard 仍显示主机载入中”并顺序阅读最新 `console.log` 与 `gbe_gc_debug.log` 后发现
+- Category: 代码模式
+- Instructions:
+  - `7047 / SetTeamSlot` 里记录的队伍号在当前场景下是 Dota 原始队伍号，日志可见真实 host 被分到 `team 2`；不能假设只有 `0/1` 两种值。
+  - 如果在 `2016.member.team`、`7034 draft.team` 或 runtime `2016` builder 里用 `owner_team <= 1 ? owner_team : 0` 这类逻辑，会把真实的 `team 2/3` 错写成 `0`，从而出现 `hero_id` 已正确同步但 `owner_state.team/member.team` 长期为 `0` 的视图断层。
+  - `2004.owner_state.team`、`2016.member.team`、`7034` 相关 draft/team 字段应统一保留当前 `owner_team` 原值；若需要判断 dire 侧，至少要兼容 `team=3`。
+
 [Dota2 晚期 Steam 侧 5410/5432 更适合作为时序闩锁而不是固定字节模板]
 - Date: 2026-05-01
 - Context: Agent 在继续实现 practice lobby host startgame 的官方晚链 `5429 -> 5410 -> 5432/5575 -> 766`，并对照 `/workspace/steamhoststart-hero/` 与 `/workspace/steamhoststartlobbyandleave/` 的官方抓包时发现
