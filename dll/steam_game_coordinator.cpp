@@ -2706,6 +2706,9 @@ struct GBE_Dota7034RequestShape
     uint32 building_state{};
     uint64 connected_steam_id{};
     uint32 connected_hero_id{};
+    uint64 draft_steam_id{};
+    uint32 draft_team{};
+    uint32 draft_team_slot{};
     uint64 disconnected_steam_id{};
     uint32 disconnected_lobby_state{};
     uint32 disconnected_game_state{};
@@ -2719,6 +2722,10 @@ struct GBE_Dota7034RequestShape
     bool has_connected_player{};
     bool has_connected_steam_id{};
     bool has_connected_hero_id{};
+    bool has_draft{};
+    bool has_draft_steam_id{};
+    bool has_draft_team{};
+    bool has_draft_team_slot{};
     bool has_disconnected_player{};
     bool has_disconnected_steam_id{};
     bool has_disconnected_lobby_state{};
@@ -2812,6 +2819,31 @@ static GBE_Dota7034RequestShape GBE_ParseDota7034RequestShape(const uint8 *data,
                 shape.has_disconnected_lobby_state = true;
             if (GBE_ExtractProtoFieldUint32(leaver_state_data, leaver_state_size, GBE_FindProtoField(leaver_state_data, leaver_state_size, 2u), shape.disconnected_game_state))
                 shape.has_disconnected_game_state = true;
+        }
+    }
+
+    std::string draft_raw;
+    if (GBE_ExtractProtoFieldBytes(data, size, GBE_FindProtoField(data, size, 16u), draft_raw) && !draft_raw.empty()) {
+        shape.has_draft = true;
+
+        const uint8 *draft_data = reinterpret_cast<const uint8 *>(draft_raw.data());
+        const size_t draft_size = draft_raw.size();
+        uint64 draft_steam_id = 0;
+        if (GBE_ExtractProtoFieldUint64(draft_data, draft_size, GBE_FindProtoField(draft_data, draft_size, 1u), draft_steam_id)) {
+            shape.draft_steam_id = draft_steam_id;
+            shape.has_draft_steam_id = true;
+        }
+
+        uint32 draft_team = 0;
+        if (GBE_ExtractProtoFieldUint32(draft_data, draft_size, GBE_FindProtoField(draft_data, draft_size, 2u), draft_team)) {
+            shape.draft_team = draft_team;
+            shape.has_draft_team = true;
+        }
+
+        uint32 draft_team_slot = 0;
+        if (GBE_ExtractProtoFieldUint32(draft_data, draft_size, GBE_FindProtoField(draft_data, draft_size, 3u), draft_team_slot)) {
+            shape.draft_team_slot = draft_team_slot;
+            shape.has_draft_team_slot = true;
         }
     }
 
@@ -8966,6 +8998,33 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.match_id != 0 && GBE_local_lobby.server_id != 0) {
             const GBE_Dota7034RequestShape request_shape = GBE_ParseDota7034RequestShape(body, body_size);
+
+            bool updated_owner_team_or_slot_from_7034 = false;
+            if (request_shape.has_draft_steam_id && request_shape.draft_steam_id == GBE_GetDotaLobbyOwnerSteamId()) {
+                if (request_shape.has_draft_team && GBE_local_lobby.owner_team != request_shape.draft_team) {
+                    GBE_local_lobby.owner_team = request_shape.draft_team;
+                    updated_owner_team_or_slot_from_7034 = true;
+                }
+
+                const uint32 draft_owner_slot = request_shape.has_draft_team_slot ? (request_shape.draft_team_slot + 1u) : 0u;
+                if (draft_owner_slot != 0u && GBE_local_lobby.owner_slot != draft_owner_slot) {
+                    GBE_local_lobby.owner_slot = draft_owner_slot;
+                    updated_owner_team_or_slot_from_7034 = true;
+                }
+            }
+
+            if (updated_owner_team_or_slot_from_7034) {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "updated owner team/slot from 7034 draft team=%u slot=%u source_job=%llu state=%u game_state=%u",
+                    GBE_local_lobby.owner_team,
+                    GBE_local_lobby.owner_slot,
+                    static_cast<unsigned long long>(source_job),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state
+                );
+                GBE_PublishSharedDotaLobbyState("7034_draft_team_slot");
+            }
 
             if (request_shape.has_connected_steam_id && request_shape.connected_steam_id == GBE_GetDotaLobbyOwnerSteamId() && request_shape.has_connected_hero_id && request_shape.connected_hero_id != 0u && GBE_local_lobby.owner_hero_id != request_shape.connected_hero_id) {
                 GBE_local_lobby.owner_hero_id = request_shape.connected_hero_id;

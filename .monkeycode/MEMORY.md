@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 7034 请求里的 draft 字段也可作为 owner_team/owner_slot 的回填来源]
+- Date: 2026-05-01
+- Context: Agent 在继续排查“当前测试里没有 7047，但 owner_team 长期停在 0”并核对 `dll/steam_game_coordinator.cpp` 的 `7034` 解析与 builder 后发现
+- Category: 代码模式
+- Instructions:
+  - `7034` 的 protobuf 顶层 `field 16` 是 draft 条目，内部结构与 connected players 回复里构造的 draft 一致：`field 1=steam_id`、`field 2=team`、`field 3=team_slot`。
+  - 当前代码原先只从 `7034` 提取 `connected_player.steam_id/hero_id`，没有解析 draft，因此在 `7047 / SetTeamSlot` 缺失时，`owner_team/owner_slot` 会一直保留初始化值。
+  - 当 `7034.draft.steam_id` 命中 lobby owner 时，应优先把 `draft.team` 回填到 `owner_team`，并把零基 `draft.team_slot` 转回本地一基 `owner_slot`。
+
 [Dota2 lobby owner_team 必须保留原始 Dota 队伍号而不是压成 0/1]
 - Date: 2026-05-01
 - Context: Agent 在继续排查“rich presence 已经是 PRIVATE_LOBBY，但 dashboard 仍显示主机载入中”并顺序阅读最新 `console.log` 与 `gbe_gc_debug.log` 后发现
