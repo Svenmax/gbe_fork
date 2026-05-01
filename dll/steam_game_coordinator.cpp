@@ -181,9 +181,12 @@ enum : uint32 {
     GBE_kDotaLaunchPeripheralStageAuthListAckPrelude = 1u << 16,
     GBE_kDotaLaunchPeripheralStageServersAvailablePost8744 = 1u << 17,
     GBE_kDotaLaunchPeripheralStageAuthListAckPost046 = 1u << 18,
+    GBE_kDotaLaunchPeripheralStageLateGamesPlayed = 1u << 19,
+    GBE_kDotaLaunchPeripheralStageLateAuthList = 1u << 20,
 };
 
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...);
+static bool GBE_ShouldTrackDotaPracticeLobbyLateSteamChain();
 
 static const uint8 GBE_kDotaClientWelcomeTemplate[] = {
     0x4D, 0x15, 0x00, 0x80, 0x14, 0x00, 0x00, 0x00, 0x09, 0xF5, 0xB6, 0x21, 0x08, 0x01, 0x00, 0x10,
@@ -307,7 +310,9 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
 }
 
 static constexpr uint32 GBE_kSteamServersAvailable = 5501u;
+static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
 static constexpr uint32 GBE_kSteamAuthListAck = 5575u;
+static constexpr uint32 GBE_kSteamAuthList = 5432u;
 static constexpr uint32 GBE_kSteamGameConnectTokens = 779u;
 static constexpr uint32 GBE_kSteamPersonaState = 766u;
 static constexpr uint32 GBE_kSteamTicketAuthComplete = 5429u;
@@ -9113,13 +9118,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 after disconnected-player 7034")) {
                     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_FINDING_MATCH", "RUN", true);
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStageAuthListAckPost046,
-                        GBE_kSteamAuthListAck,
-                        GBE_kDotaPracticeLobbyLaunchAuthListAckStage2Hex,
-                        false,
-                        "launch auth list ack after 046"
-                    );
-                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageTicketAuthComplete,
                         GBE_kSteamTicketAuthComplete,
                         GBE_kDotaPracticeLobbyLaunchTicketAuthCompleteHex,
@@ -9155,13 +9153,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && request_shape.has_send_reason && request_shape.send_reason == 5u) {
                 if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 for pregame 7034 launch poll")) {
                     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_FINDING_MATCH", "RUN", true);
-                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStageAuthListAckPost046,
-                        GBE_kSteamAuthListAck,
-                        GBE_kDotaPracticeLobbyLaunchAuthListAckStage2Hex,
-                        false,
-                        "launch auth list ack on repeated pregame 7034"
-                    );
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageTicketAuthComplete,
                         GBE_kSteamTicketAuthComplete,
@@ -9583,21 +9574,43 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return true;
     }
 
-    if ((request_emsg == 7197u || request_emsg == 8673u) &&
-        GBE_local_lobby.active &&
-        GBE_local_lobby.state == 2u &&
-        GBE_local_lobby.game_state >= 2u &&
-        !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona)) {
-        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
-        GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-            GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
-            GBE_kSteamPersonaState,
-            GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
-            false,
-            request_emsg == 7197u
-                ? "launch persona private lobby after 7197 fallback"
-                : "launch persona private lobby after 8673 fallback"
+    if (request_emsg == GBE_kSteamGamesPlayedWithDataBlob && GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()) {
+        GBE_dota_launch_peripheral_stage_mask |= GBE_kDotaLaunchPeripheralStageLateGamesPlayed;
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "consumed req=%u source_job=%llu note=late steam chain games played observed active=%u lobby_id=%llu state=%u game_state=%u body_size=%zu body_prefix=%s",
+            request_emsg,
+            static_cast<unsigned long long>(source_job),
+            GBE_local_lobby.active ? 1u : 0u,
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            body_size,
+            GBE_FormatHexPrefix(body, body_size, 48).c_str()
         );
+        return true;
+    }
+
+    if (request_emsg == GBE_kSteamAuthList && GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()) {
+        GBE_dota_launch_peripheral_stage_mask |= GBE_kDotaLaunchPeripheralStageLateAuthList;
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "consumed req=%u source_job=%llu note=late steam chain auth list observed late_games_played=%u active=%u lobby_id=%llu state=%u game_state=%u body_size=%zu body_prefix=%s",
+            request_emsg,
+            static_cast<unsigned long long>(source_job),
+            (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageLateGamesPlayed) ? 1u : 0u,
+            GBE_local_lobby.active ? 1u : 0u,
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            body_size,
+            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+        );
+
+        if (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageLateGamesPlayed) {
+            GBE_FinalizeDotaPracticeLobbyLateSteamChain("launch persona private lobby after late 5410/5432 chain");
+        }
+        return true;
     }
 
     switch (request_emsg) {
@@ -11303,6 +11316,46 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
 void Steam_Game_Coordinator::GBE_ResetDotaPracticeLobbyLaunchPeripheralState()
 {
     GBE_dota_launch_peripheral_stage_mask = 0;
+}
+
+static bool GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()
+{
+    return
+        GBE_local_lobby.active &&
+        GBE_local_lobby.lobby_id != 0 &&
+        GBE_local_lobby.state == 2u &&
+        GBE_local_lobby.game_state >= 2u &&
+        (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePregameRunPersona) &&
+        !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona);
+}
+
+bool Steam_Game_Coordinator::GBE_FinalizeDotaPracticeLobbyLateSteamChain(const char *reason)
+{
+    if (!GBE_ShouldTrackDotaPracticeLobbyLateSteamChain())
+        return false;
+
+    if (!(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageLateGamesPlayed) ||
+        !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageLateAuthList)) {
+        return false;
+    }
+
+    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
+    if (!GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+            GBE_kDotaLaunchPeripheralStageAuthListAckPost046,
+            GBE_kSteamAuthListAck,
+            GBE_kDotaPracticeLobbyLaunchAuthListAckStage2Hex,
+            false,
+            reason ? reason : "launch auth list ack after late steam chain")) {
+        return false;
+    }
+
+    return GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+        GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
+        GBE_kSteamPersonaState,
+        GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
+        false,
+        reason ? reason : "launch persona private lobby after late steam chain"
+    );
 }
 
 void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *status, const char *lobby_state, bool include_party, bool include_lobby)

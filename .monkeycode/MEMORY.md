@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 晚期 Steam 侧 5410/5432 更适合作为时序闩锁而不是固定字节模板]
+- Date: 2026-05-01
+- Context: Agent 在继续实现 practice lobby host startgame 的官方晚链 `5429 -> 5410 -> 5432/5575 -> 766`，并对照 `/workspace/steamhoststart-hero/` 与 `/workspace/steamhoststartlobbyandleave/` 的官方抓包时发现
+- Category: 代码模式
+- Instructions:
+  - 官方两份样本里的晚期 `5410 / k_EMsgClientGamesPlayedWithDataBlob` 与 `5432 / k_EMsgClientAuthList` 都是客户端外发消息，应该在 `SendMessage_ -> handle_dota_client_message -> GBE_HandleDotaDirectPostLoginRequest(...)` 路径上观察并驱动阶段推进，而不是伪造成客户端入站消息。
+  - 这两类消息的包体长度在不同官方样本里并不固定，例如 `5410` 既有 `114` 也有 `116` bytes，`5432` 既有 `139` 也有 `40` bytes，因此更稳妥的实现是把它们当作“晚期官方时序标记”来消费，而不是做固定 donor 字节白名单匹配。
+  - `046` 后的第二轮 `5575` 与最终 `766 PRIVATE_LOBBY` 应在观察到晚期 `5410 -> 5432` 顺序后再补发；`7197/8673` 不应继续抢在这条官方 Steam 链之前触发第一次 `PRIVATE_LOBBY` 切换。
+
 [Dota2 official 032 后的 037/038 CacheSubscribed 不能改成 lobby owner]
 - Date: 2026-05-01
 - Context: Agent 在继续排查 `032` 后两条 `24` 导致客户端立即报 `Lobby object destroyed`，并直接解码 `/workspace/lobbystartgamedota2/037_in_5453_k_EMsgClientFromGC.bin` 与 `038_in_5453_k_EMsgClientFromGC.bin` 的 protobuf 后发现
