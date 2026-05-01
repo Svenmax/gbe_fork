@@ -2355,7 +2355,8 @@ static std::string GBE_FormatProtoRepeatedVarIntFieldSummary(const std::string &
 
         if (field_number == target_field && wire_type == 0u) {
             uint64 value = 0;
-            if (GBE_ReadProtoVarInt(data + value_offset, value_size, value)) {
+            size_t field_value_offset = value_offset;
+            if (GBE_ReadVarUint64(data, size, field_value_offset, value)) {
                 if (!first)
                     stream << ',';
                 first = false;
