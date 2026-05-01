@@ -3662,6 +3662,9 @@ static bool GBE_RewriteDotaLobbyTemplateObject2016(
     uint32 owner_hero_id,
     std::string &output)
 {
+    (void)account_id;
+    (void)owner_team;
+    (void)owner_slot;
     output.clear();
 
     size_t offset = 0;
@@ -3686,19 +3689,48 @@ static bool GBE_RewriteDotaLobbyTemplateObject2016(
 
         if (field_number == 1u && wire_type == 2u) {
             std::string rewritten_member;
-            if (!GBE_RewriteDotaLobbyTemplateMemberObject(
-                    std::string(input.data() + value_offset, value_size),
-                    account_id,
-                    steam_id,
-                    owner_team,
-                    owner_slot,
-                    owner_hero_id,
-                    rewritten_member))
-                return false;
+            bool saw_hero_id = false;
+            size_t member_offset = 0;
+            while (member_offset < value_size) {
+                uint32 member_field = 0;
+                uint32 member_wire = 0;
+                size_t member_field_offset = 0;
+                size_t member_value_offset = 0;
+                size_t member_value_size = 0;
+                size_t member_field_end = 0;
+                if (!GBE_ReadNextProtoField(
+                        reinterpret_cast<const uint8 *>(input.data()) + value_offset,
+                        value_size,
+                        member_offset,
+                        member_field,
+                        member_wire,
+                        member_field_offset,
+                        member_value_offset,
+                        member_value_size,
+                        member_field_end))
+                    return false;
+
+                if (member_field == 1u && member_wire == 1u) {
+                    GBE_AppendProtoFixed64Field(rewritten_member, 1u, steam_id);
+                    continue;
+                }
+
+                if (member_field == 2u && member_wire == 0u) {
+                    saw_hero_id = true;
+                    if (owner_hero_id != 0u)
+                        GBE_AppendProtoVarIntField(rewritten_member, 2u, owner_hero_id);
+                    continue;
+                }
+
+                rewritten_member.append(input.data() + value_offset + member_field_offset, member_field_end - member_field_offset);
+            }
+
+            if (!saw_hero_id && owner_hero_id != 0u)
+                GBE_AppendProtoVarIntField(rewritten_member, 2u, owner_hero_id);
 
             GBE_GC_DebugLog(
                 "GC_DOTA_PATCH",
-                "2016 member rewrite passthrough hero field input_layout=%s output_layout=%s input_summary={%s} output_summary={%s}",
+                "2016 member rewrite selective hero field input_layout=%s output_layout=%s input_summary={%s} output_summary={%s}",
                 GBE_FormatProtoFieldLayoutSummary(std::string(input.data() + value_offset, value_size)).c_str(),
                 GBE_FormatProtoFieldLayoutSummary(rewritten_member).c_str(),
                 GBE_FormatDotaLobbyMemberStateSummary(std::string(input.data() + value_offset, value_size)).c_str(),
