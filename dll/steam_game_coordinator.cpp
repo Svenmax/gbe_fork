@@ -1974,6 +1974,16 @@ static bool GBE_AppendDotaLobbyAdditionalStartupAccountMessage(std::string &obje
     return true;
 }
 
+static std::string GBE_BuildDotaLobbyTeamDetailsPayload(bool is_home_team)
+{
+    std::string team_details;
+    // Keep scratch-built 2004.field17 structurally non-empty so prelaunch
+    // updates do not collapse official team-details/completion state.
+    GBE_AppendProtoVarIntField(team_details, 8u, 0u);
+    GBE_AppendProtoVarIntField(team_details, 17u, is_home_team ? 1u : 0u);
+    return team_details;
+}
+
 static bool GBE_RewriteProtoVarintBytesRecursive(
     const std::string &input,
     const std::vector<uint8> &old_encoded,
@@ -5225,8 +5235,8 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     GBE_AppendProtoVarIntField(object_2004, 13, allow_cheats ? 1u : 0u);
     GBE_AppendProtoVarIntField(object_2004, 14, fill_with_bots ? 1u : 0u);
     GBE_AppendProtoBytesField(object_2004, 16, room_name);
-    GBE_AppendProtoBytesField(object_2004, 17, std::string());
-    GBE_AppendProtoBytesField(object_2004, 17, std::string());
+    GBE_AppendProtoBytesField(object_2004, 17, GBE_BuildDotaLobbyTeamDetailsPayload(true));
+    GBE_AppendProtoBytesField(object_2004, 17, GBE_BuildDotaLobbyTeamDetailsPayload(false));
     GBE_AppendProtoVarIntField(object_2004, 21, server_region);
     GBE_AppendProtoVarIntField(object_2004, 22, lobby_game_state);
     GBE_AppendProtoVarIntField(object_2004, 28, 0u);

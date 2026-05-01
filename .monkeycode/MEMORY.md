@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 scratch prelaunch 2004.field17 不能继续发两个空 team_details]
+- Date: 2026-05-01
+- Context: Agent 在继续排查 prelaunch direct `26` 仍需保留 scratch builder 的前提下，复查 `GBE_BuildDotaPracticeLobbySOObjectData(...)` 与 `go-dota2` 的 `CSODOTALobby.team_details` 结构时发现
+- Category: 代码模式
+- Instructions:
+  - `CSODOTALobby.field 17` 的元素类型是 `CLobbyTeamDetails`，不是可随意留空的占位字段；当前 scratch builder 若连续发两个空 message，会把客户端看到的队伍详情与完成度视图压扁。
+  - 在 launch 前 `26` 仍不得误走 official `046` donor 的前提下，scratch `2004` 至少应保留两个最小非空 `team_details` 条目，而不是两个空壳字段。
+  - 一个可接受的最小形态是显式写出 `team_complete=false`，并用 `is_home_team=true/false` 区分两侧，这样既不引入额外猜测字段，也避免覆盖掉 team-details 结构本身。
+
 [Dota2 同 lobby 的 runtime 恢复不能只重放 rich presence，还要补当前 private lobby snapshot]
 - Date: 2026-05-01
 - Context: Agent 在继续排查“dashboard 仍显示主机载入中”并顺序对照最新 `gbe_gc_debug.log` 与 `GBE_RestoreSharedDotaLobbyState(...)` 后发现
