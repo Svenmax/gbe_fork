@@ -162,7 +162,8 @@ enum : uint32 {
     GBE_kDotaLaunchPeripheralStageTicketAuthComplete = 1u << 8,
     GBE_kDotaLaunchPeripheralStageGameConnectTokens3 = 1u << 9,
     GBE_kDotaLaunchPeripheralStageServerRunPersona = 1u << 10,
-    GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona = 1u << 11,
+    GBE_kDotaLaunchPeripheralStagePregameRunPersona = 1u << 11,
+    GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona = 1u << 12,
 };
 
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...);
@@ -8375,11 +8376,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         "launch persona server-run before private lobby"
                     );
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
+                        GBE_kDotaLaunchPeripheralStagePregameRunPersona,
                         GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
+                        GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex,
                         false,
-                        "launch persona private lobby on pregame 7034"
+                        "launch persona run on pregame 7034"
                     );
                     GBE_dota_launch_pending_046 = false;
                     return true;
@@ -8411,11 +8412,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         "launch persona server-run on repeated pregame 7034"
                     );
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
+                        GBE_kDotaLaunchPeripheralStagePregameRunPersona,
                         GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
+                        GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex,
                         false,
-                        "launch persona private lobby on repeated pregame 7034"
+                        "launch persona run on repeated pregame 7034"
                     );
                     return true;
                 }
@@ -8707,6 +8708,21 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
         GBE_TrySyncDotaLobbyServerIdFromGameServer("4508_game_server_info");
         return true;
+    }
+
+    if ((request_emsg == 7197u || request_emsg == 8673u) &&
+        GBE_local_lobby.active &&
+        GBE_local_lobby.state == 2u &&
+        GBE_local_lobby.game_state == 4u) {
+        GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+            GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
+            GBE_kSteamPersonaState,
+            GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
+            false,
+            request_emsg == 7197u
+                ? "launch persona private lobby after 7197"
+                : "launch persona private lobby after 8673"
+        );
     }
 
     switch (request_emsg) {

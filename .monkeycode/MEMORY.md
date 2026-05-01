@@ -31,6 +31,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 抓包分析默认以 steamhoststartlobbyandleave 为主]
+- Date: 2026-05-01
+- Context: 用户要求“以后抓包数据主要看 steamhoststartlobbyandleave 里的”
+- Instructions:
+  - 后续分析 Dota2 练习房间/返回面板相关抓包时，默认优先参考 `/workspace/steamhoststartlobbyandleave/` 中的数据。
+  - 如需对比其他目录抓包，应以 `steamhoststartlobbyandleave` 为主真值来源，避免混用不同场景样本得出错误结论。
+
 [Dota2 新 coordinator 客户端实例必须从 shared lobby 完整恢复并重放 rich presence]
 - Date: 2026-05-01
 - Context: Agent 在继续排查“日志已到 PRIVATE_LOBBY 但 dashboard 仍显示主机载入中”并对照 `steam_game_coordinator.cpp` 的 constructor、`GBE_RestoreSharedDotaLobbyState(...)` 与最新 `gbe_gc_debug.log` 时发现
@@ -1177,7 +1184,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Category: 代码模式
 - Instructions:
   - official 样本里的 rich presence/persona 不是单条静态消息；它会沿 `#DOTA_RP_INIT -> #DOTA_RP_FINDING_MATCH(SERVERSETUP) -> #DOTA_RP_FINDING_MATCH(RUN) -> #DOTA_RP_PRIVATE_LOBBY(RUN)` 逐步推进，并夹着 `5501/5575/779/5429` 这类外围消息。
-  - 这些外围消息不能在 `4511/server_id` 首次同步时一次性全量倾倒；更稳妥的做法是按 launch 阶段去重排队：`7041` 只发 init persona，`server_id` 同步后补 `5501/5575/779 + setup persona`，`4506` 后补 `5575/779 + run persona`，`PRE_GAME 046` 窗口再补 `5429/779 + server-run/private-lobby persona`。
+  - 这些外围消息不能在 `4511/server_id` 首次同步时一次性全量倾倒；更稳妥的做法是按 launch 阶段去重排队：`7041` 只发 init persona，`server_id` 同步后补 `5501/5575/779 + setup persona`，`4506` 后补 `5575/779 + run persona`，`PRE_GAME 046` 窗口先补 `5429/779 + 766(server-run) + 766(run)`，最终 `766(private-lobby)` 需要再晚一拍，贴近官方 `025 out 7501(PRIVATE_LOBBY) -> 026 in 766(PRIVATE_LOBBY)` 的节奏。
   - 如果后续 dashboard 状态仍异常，优先先核对这些 persona/rich presence 阶段消息是否根本没发、发重了，或发到了错误阶段，而不是先怀疑 `CSODOTALobby.state/game_state` 顶层推进。
 
 [Dota2 host startgame 的 dashboard 状态还依赖客户端主动 rich presence 上传]
