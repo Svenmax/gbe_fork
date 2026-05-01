@@ -1443,3 +1443,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 后续 synthetic `26 / LobbyDetailsUpdate` 不宜再从零构造精简 `2004/2014/2015/2016` 组合；极简 builder 当前会把 `2004.field 17` 退化成两个空 message，覆盖掉官方 donor 里已有的 team details / 队伍完成度视图。
   - 更稳妥的最小实现是复用现成的官方 `26` donor（当前可直接复用 `046` 模板）作为骨架，再通过 `GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(...)` 只重写运行时字段。
   - runtime 自建 member/owner_state 若仍需保留，`leaver_status(field 16)` 必须继续按 fixed32 编码，不能写成 varint。
+
+[Dota2 launch donor 的 2004.field 16 与 046 后 persona 模板都必须显式改写]
+- Date: 2026-05-01
+- Context: Agent 在顺序读完新的 `gbe_gc_debug.log` 并对照 `GBE_RewriteDotaLobbyTemplateObject2004(...)`、`GBE_HandleDotaDirectPostLoginRequest(...)` 后发现
+- Category: 代码模式
+- Instructions:
+  - `7046` 把 `GBE_local_lobby.room_name` 更新成新房间名后，如果 launch/official donor 的 `2004.field 16` 没有在模板重写阶段显式覆盖，客户端会继续 adopt donor 自带的旧 `game_name`，表现为建房后名称错乱、点槽位或 launch 后又跳回旧名字。
+  - 因此 `GBE_RewriteDotaLobbyTemplateObject2004(...)` 不能只改 `lobby_id/state/connect/server_id/...` 这些运行时字段；也要把 `field 16 / room_name` 重写为当前 `GBE_local_lobby.room_name`，并在 donor 缺失该字段时补回去。
+  - 当 `046` 已经把 lobby 推到 `state=2, game_state=4` 并且本地 rich presence 已切成 `#DOTA_RP_PRIVATE_LOBBY` 后，紧随其后的两条 `766` 不能继续排队 `...ServerRunHex` / `...RunHex` 这类 `FINDING_MATCH` 模板；必须改用现成的 `...ServerPrivateLobbyHex` 与 `...PrivateLobbyHex`，否则客户端会被后续 persona 包重新刷回 host-loading 视图。

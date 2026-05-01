@@ -3659,6 +3659,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
     bool saw_game_start_time = false;
     bool saw_lan = false;
     bool saw_lan_host_ping_location = false;
+    bool saw_room_name = false;
 
     size_t offset = 0;
     while (offset < input.size()) {
@@ -3730,6 +3731,12 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
             continue;
         }
 
+        if (field_number == 16u && wire_type == 2u) {
+            saw_room_name = true;
+            GBE_AppendProtoBytesField(output, 16u, room_name);
+            continue;
+        }
+
         if (field_number == 11u && wire_type == 1u) {
             GBE_AppendProtoFixed64Field(output, 11u, steam_id);
             continue;
@@ -3737,11 +3744,6 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
 
         if (field_number == 14u && wire_type == 0u) {
             GBE_AppendProtoVarIntField(output, 14u, fill_with_bots ? 1u : 0u);
-            continue;
-        }
-
-        if (field_number == 16u && wire_type == 2u) {
-            output.append(input.data() + field_offset, field_end - field_offset);
             continue;
         }
 
@@ -3872,6 +3874,8 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
         GBE_AppendProtoFixed64Field(output, 6u, server_id);
     if (!saw_lan)
         GBE_AppendProtoVarIntField(output, 57u, lan ? 1u : 0u);
+    if (!saw_room_name)
+        GBE_AppendProtoBytesField(output, 16u, room_name);
     if (rewrite_runtime_fields && !saw_game_state)
         GBE_AppendProtoVarIntField(output, 22u, lobby_game_state);
     if (rewrite_runtime_fields && !saw_match_id && match_id != 0)
@@ -9270,14 +9274,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageServerRunPersona,
                         GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStateServerRunHex,
+                        GBE_kDotaPracticeLobbyLaunchPersonaStateServerPrivateLobbyHex,
                         true,
                         "launch persona server-run after 046"
                     );
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStagePregameRunPersona,
                         GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex,
+                        GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
                         false,
                         "launch persona run after 046"
                     );
@@ -9306,14 +9310,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageServerRunPersona,
                         GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStateServerRunHex,
+                        GBE_kDotaPracticeLobbyLaunchPersonaStateServerPrivateLobbyHex,
                         true,
                         "launch persona server-run on repeated pregame 7034"
                     );
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStagePregameRunPersona,
                         GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex,
+                        GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
                         false,
                         "launch persona run on repeated pregame 7034"
                     );
