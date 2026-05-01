@@ -1187,4 +1187,22 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 官方 launch 后段不是单纯“服务端回几条 `766`”；每个 persona 阶段前，客户端还会先主动上传一条 `7501 k_EMsgClientRichPresenceUpload`。
   - 这 4 条 `7501` 的阶段分别对应：`#DOTA_RP_INIT + SERVERSETUP`、`#DOTA_RP_FINDING_MATCH + SERVERSETUP + party_state: IN_MATCH`、`#DOTA_RP_FINDING_MATCH + RUN + party_state: IN_MATCH`、`#DOTA_RP_PRIVATE_LOBBY + RUN + party_state: IN_MATCH`。
+
+[Dota2 返回 dashboard 时官方 7035 走 wrapped 25 与双 PostGame 7010]
+- Date: 2026-05-01
+- Context: Agent 在对照 `/workspace/steamhoststartlobbyandleave/061-075` 官方抓包并实现 `7035` 修复时发现
+- Category: 代码模式
+- Instructions:
+  - 返回主界面阶段的官方关键链路不是 replay 新的 `24/26`；而是 `061 out 5452(inner 7035) -> 062 in 5453(inner 25) -> 063 in 5453(inner 7010) -> 064 in 5453(inner 7010)`。
+  - 这两个 `7010` 都是同一个 `PostGame_<lobby_id>` channel 响应，字段特征是 `field6=18`、`field8=1`，不能直接复用普通 lobby chat 的 `7009 -> 7010` 构造。
+  - 处理这段链路时应优先走 wrapped `5453` 回复，并在 `7035` 窗口把 rich presence 先维持到 `#DOTA_RP_PRIVATE_LOBBY + party_state: IN_MATCH` 的过渡态；不要再猜测需要补新的 `24/26`。
   - 如果日志里只有 synthetic `766` 而完全没有本地 rich presence 更新，dashboard 仍显示“主机载入中”时，应优先补齐本地 `SteamFriends` rich presence 阶段更新，而不是继续只追加更多 inbound `766`。
+
+[Dota2 official donor member 重写不能提前清零 leaver_status]
+- Date: 2026-05-01
+- Context: Agent 在继续对照 `/workspace/lobbystartgame.log`、`/workspace/console.log` 与 `steam_game_coordinator.cpp` 的 launch cache / official 26 donor 重写路径时发现
+- Category: 代码模式
+- Instructions:
+  - 官方 `4511 -> 24` 的初始 lobby cache 中，`CSODOTALobby.all_members[0].leaver_status` 仍是 `DOTA_LEAVER_DISCONNECTED`；后续早期 `26` 才伴随 `state: SERVERSETUP -> RUN` 进入下一阶段。
+  - donor/template 路径里的 `GBE_RewriteDotaLobbyTemplateMemberObject(...)` 不能把 member `field 16 = leaver_status` 与 `field 28 = leaver_actions` 无条件重写成 `0`，也不要在 donor 原本缺失时强行补这两个字段。
+  - 否则本地 `24` 会过早显示 `DOTA_LEAVER_NONE`，破坏官方 `DISCONNECTED -> 后续修正` 的状态过渡，影响继续排查 dashboard `host loading` 问题时对关键 `26` 窗口的对照。
