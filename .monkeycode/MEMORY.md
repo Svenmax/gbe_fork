@@ -31,6 +31,24 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 新 coordinator 客户端实例必须从 shared lobby 完整恢复并重放 rich presence]
+- Date: 2026-05-01
+- Context: Agent 在继续排查“日志已到 PRIVATE_LOBBY 但 dashboard 仍显示主机载入中”并对照 `steam_game_coordinator.cpp` 的 constructor、`GBE_RestoreSharedDotaLobbyState(...)` 与最新 `gbe_gc_debug.log` 时发现
+- Category: 代码模式
+- Instructions:
+  - launch 后半段可能出现新的 `Steam_Game_Coordinator` 客户端实例；如果此时新的实例 `GBE_local_lobby.active == false`，旧的“只对已激活且同 lobby 的客户端做增量同步”逻辑会直接跳过共享 lobby 恢复。
+  - 这会导致日志里虽然已经执行过 `#DOTA_RP_PRIVATE_LOBBY` rich presence 更新，但切回 dashboard 时实际生效的新实例既没有当前 lobby runtime，也没有按当前 `state/game_state/server_id` 重新补 rich presence。
+  - 修复此类问题时，应允许客户端在 `shared_lobby.active == true` 且本地 lobby 为空时完整 adopt shared lobby，并按当前阶段重放 rich presence；`state=1,game_state=0,server_id=0` 对应 `#DOTA_RP_INIT/SERVERSETUP`，`state=1,game_state=0,server_id!=0` 对应 `#DOTA_RP_FINDING_MATCH/SERVERSETUP`，`state=2` 对应 `RUN`，其中 `game_state=4` 对应 `#DOTA_RP_PRIVATE_LOBBY`。
+
+[Dota2 退出练习房间时官方 rich presence 会先停留在 PRIVATE_LOBBY 再回到 INIT]
+- Date: 2026-05-01
+- Context: Agent 在分析最新的 `steamhoststartlobbyandleave.zip` 官方抓包时发现
+- Category: 代码模式
+- Instructions:
+  - 官方在点击返回主界面后的离场阶段，不是直接从 `#DOTA_RP_PRIVATE_LOBBY` 跳到 `#DOTA_RP_INIT`；中间会先看到一次 `7501/766` 仍然维持 `#DOTA_RP_PRIVATE_LOBBY` 与 `party_state: IN_MATCH`，随后才出现 `#DOTA_RP_INIT` 的回落。
+  - 这说明离场逻辑需要保留一个短暂的私房间态过渡，而不是在收到 leave/destroy 时立即把 rich presence 清成空值；最终回到主界面后才应切到 `#DOTA_RP_INIT`。
+  - 官方抓包里还出现了 `PostGame_<lobby_id>` 相关字符串和一次额外的 `RequestFriendData`/`ServiceMethodResponse` 刷新，说明返回主界面阶段会伴随一次好友数据重载。
+
 [Dota2 PRE_GAME 的 owner hero 必须从 7034 connected player 贯穿到 2004 member field 2]
 - Date: 2026-04-30
 - Context: Agent 在继续排查“已进入游戏但 dashboard 仍显示主机载入中”并对照 `console.log` 与官方 `046` donor 时发现
