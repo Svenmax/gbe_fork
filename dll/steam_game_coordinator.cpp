@@ -7336,8 +7336,28 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             changed = true;
         }
 
+        if (GBE_local_lobby.state != GBE_shared_dota_lobby_state.state) {
+            GBE_local_lobby.state = GBE_shared_dota_lobby_state.state;
+            changed = true;
+        }
+
+        if (GBE_local_lobby.game_state != GBE_shared_dota_lobby_state.game_state) {
+            GBE_local_lobby.game_state = GBE_shared_dota_lobby_state.game_state;
+            changed = true;
+        }
+
         if (GBE_shared_dota_lobby_state.game_start_time != 0 && GBE_local_lobby.game_start_time != GBE_shared_dota_lobby_state.game_start_time) {
             GBE_local_lobby.game_start_time = GBE_shared_dota_lobby_state.game_start_time;
+            changed = true;
+        }
+
+        if (GBE_local_lobby.owner_team != GBE_shared_dota_lobby_state.owner_team) {
+            GBE_local_lobby.owner_team = GBE_shared_dota_lobby_state.owner_team;
+            changed = true;
+        }
+
+        if (GBE_local_lobby.owner_slot != GBE_shared_dota_lobby_state.owner_slot) {
+            GBE_local_lobby.owner_slot = GBE_shared_dota_lobby_state.owner_slot;
             changed = true;
         }
 

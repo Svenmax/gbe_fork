@@ -49,6 +49,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 这说明离场逻辑需要保留一个短暂的私房间态过渡，而不是在收到 leave/destroy 时立即把 rich presence 清成空值；最终回到主界面后才应切到 `#DOTA_RP_INIT`。
   - 官方抓包里还出现了 `PostGame_<lobby_id>` 相关字符串和一次额外的 `RequestFriendData`/`ServiceMethodResponse` 刷新，说明返回主界面阶段会伴随一次好友数据重载。
 
+[Dota2 客户端同 lobby 的 shared runtime 恢复也必须同步 state 和 game_state]
+- Date: 2026-05-01
+- Context: Agent 在分析一轮修复后的新 `gbe_gc_debug.log` 时发现 `PRIVATE_LOBBY` 已设置成功，但很快又被客户端侧 `restore_client_runtime` 重放回 `FINDING_MATCH`
+- Category: 代码模式
+- Instructions:
+  - 当客户端 `GBE_local_lobby` 已经 active 且 lobby_id 与 shared lobby 相同，旧逻辑若只同步 `server_id/connect/match_id/game_start_time`，会保留陈旧的 `state=1,game_state=0`。
+  - 这会导致后续 `GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(...)` 按旧状态再次写出 `#DOTA_RP_FINDING_MATCH / SERVERSETUP`，把刚刚进入 `PRE_GAME` 时设置的 `#DOTA_RP_PRIVATE_LOBBY / RUN` 覆盖掉。
+  - 因此客户端增量恢复路径必须至少同步 `state`、`game_state`，并一并带上 `owner_team/owner_slot` 等与 connected player/rich presence 推断相关的运行态字段。
+
 [Dota2 PRE_GAME 的 owner hero 必须从 7034 connected player 贯穿到 2004 member field 2]
 - Date: 2026-04-30
 - Context: Agent 在继续排查“已进入游戏但 dashboard 仍显示主机载入中”并对照 `console.log` 与官方 `046` donor 时发现
