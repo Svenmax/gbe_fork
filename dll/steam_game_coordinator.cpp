@@ -5334,6 +5334,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWra
     const char *template_note,
     bool require_lobby_identifiers,
     bool rewrite_runtime_fields,
+    bool force_lobby_owner_soid,
     bool rewrite_2015,
     uint32 account_id,
     uint64 steam_id,
@@ -5402,8 +5403,12 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWra
         }
     }
 
-    if (!rewrite_runtime_fields)
+    if (!rewrite_runtime_fields) {
+        if (!force_lobby_owner_soid)
+            return true;
+
         return GBE_ForceDotaLobbyCacheOwnerSOID(message, lobby_id);
+    }
 
     if (!GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
         message,
@@ -5470,6 +5475,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedPreludeTemplateReplay
         false,
         false,
         false,
+        false,
         account_id,
         steam_id,
         lobby_id,
@@ -5510,6 +5516,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedLargePreludeTemplateR
     return GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWrappedTemplate(
         GBE_kDotaPracticeLobbyLaunchCacheSubscribedLargePreludeHex,
         "practice lobby launch large prelude cache template",
+        false,
         false,
         false,
         false,
@@ -5579,6 +5586,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(
         GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex,
         "practice lobby launch official cache template",
         false,
+        true,
         true,
         true,
         account_id,

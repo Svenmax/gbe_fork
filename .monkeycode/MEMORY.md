@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 official 032 后的 037/038 CacheSubscribed 不能改成 lobby owner]
+- Date: 2026-05-01
+- Context: Agent 在继续排查 `032` 后两条 `24` 导致客户端立即报 `Lobby object destroyed`，并直接解码 `/workspace/lobbystartgamedota2/037_in_5453_k_EMsgClientFromGC.bin` 与 `038_in_5453_k_EMsgClientFromGC.bin` 的 protobuf 后发现
+- Category: 代码模式
+- Instructions:
+  - 官方 `037/038` 的 `CMsgSOCacheSubscribed.owner_soid` 是 `type=1, id=<owner steamid>`，不是 `type=3, id=<lobby_id>`。
+  - 其中 `037` 没有任何对象，`038` 只包含 `type_id=1` 与 `type_id=2010`，并不携带 `2004` 大厅对象。
+  - 因此在重放这两条官方 prelude `24` 时，不能像 lobby `24` 那样强行调用 `GBE_ForceDotaLobbyCacheOwnerSOID(...)` 把 owner 改成当前 lobby；否则客户端会把当前 lobby cache 覆盖成一组不含大厅对象的缓存，触发 `Lobby object destroyed`。
+
 [Dota2 的 28->29 仅回 owner_soid 不足以恢复官方 8744 后半程]
 - Date: 2026-05-01
 - Context: Agent 在按顺序完整阅读用户新上传的 `gbe_gc_debug.log`，并确认 `2433f7ae` 已让 `28 / CacheSubscriptionRefresh -> 29 / CacheSubscribedUpToDate` 成功发生后发现
