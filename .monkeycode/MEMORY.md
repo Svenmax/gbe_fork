@@ -40,6 +40,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 如果英雄选择阶段 UI 恰好消费 `2015` 的 server-lobby member 顺序，而本地又把 donor 的 `all_members` 原样透传，就可能出现 lobby/building 显示槽位正确，但 hero selection 暂时落到该队伍第一个格子的现象。
   - donor-based `2015` 重写时，应继续移除旧的 `8869` 并补当前 owner account 的 startup data，同时把 `field 1 / all_members` 规范成当前本地 lobby 的单个空 placeholder member，而不是继承 donor 里的成员布局。
 
+[Dota2 英雄选择前后的 donor 2004 并不会在切阶段时改 owner slot]
+- Date: 2026-05-01
+- Context: Agent 在继续排查“hero selection 把 Dire 3 暂时显示成 Dire 1”并顺序复核 `gbe_gc_debug.log` 第 520-719 行与 `console.log` 第 1207-1218 行后发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里 `official packet 021/024/025/030/032 after 7034` 的 donor `26` 在 `2004` 上都保持同一模式：`owner_state.team/slot` 持续为目标 owner 的真实值，`field121` 始终是单个 `0`，而 `field124` 在这些 donor `26` 里缺失。
+  - 从 `WAIT_FOR_PLAYERS_TO_LOAD` 进入 `HERO_SELECTION` 时，客户端日志可见唯一明确 SO 变化是 `CSODOTALobby.game_state` 切换；没有观察到同窗口里新的 slot 字段更新。
+  - 因此若英雄选择界面出现临时错位，应优先怀疑“进入该阶段后 UI 重新解释了先前缓存下来的辅助布局字段”，而不是误判为切阶段瞬间有新的 `owner_state.slot`/`2016.slot` 被写坏。
+
 [Dota2 若 7047/launch/046 全链都保持同一 team/slot，进游戏错位更可能发生在 GC 下游]
 - Date: 2026-05-01
 - Context: Agent 在顺序读完整轮 `gbe_gc_debug.log`，并验证“主机载入中”已解决后继续排查 slot 错位时发现
@@ -1497,3 +1506,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `7046` 把 `GBE_local_lobby.room_name` 更新成新房间名后，如果 launch/official donor 的 `2004.field 16` 没有在模板重写阶段显式覆盖，客户端会继续 adopt donor 自带的旧 `game_name`，表现为建房后名称错乱、点槽位或 launch 后又跳回旧名字。
   - 因此 `GBE_RewriteDotaLobbyTemplateObject2004(...)` 不能只改 `lobby_id/state/connect/server_id/...` 这些运行时字段；也要把 `field 16 / room_name` 重写为当前 `GBE_local_lobby.room_name`，并在 donor 缺失该字段时补回去。
   - 当 `046` 已经把 lobby 推到 `state=2, game_state=4` 并且本地 rich presence 已切成 `#DOTA_RP_PRIVATE_LOBBY` 后，紧随其后的两条 `766` 不能继续排队 `...ServerRunHex` / `...RunHex` 这类 `FINDING_MATCH` 模板；必须改用现成的 `...ServerPrivateLobbyHex` 与 `...PrivateLobbyHex`，否则客户端会被后续 persona 包重新刷回 host-loading 视图。
+
+[Dota2 2004 的 hero-select 相关数组要与索引字段分开观察]
+- Date: 2026-05-01
+- Context: Agent 在继续排查“hero selection 把 Dire 3 暂时显示成 Dire 1”并复查 `CSODOTALobby` proto 字段时发现
+- Category: 代码模式
+- Instructions:
+  - `CSODOTALobby.field 124` 是 `requested_hero_ids`，`field 132` 是 `requested_hero_teams`；它们属于 hero-select 语义，不应继续和 `121/122/123` 这些成员索引字段混在同一含义里理解。
+  - 后续如果 hero-select 槽位仍异常，要优先核对 donor `2004` 在 `124/132` 上是否残留旧请求数组，再决定是否清理或重建，而不是只盯 `all_members.team/slot`。

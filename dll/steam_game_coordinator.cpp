@@ -2543,13 +2543,14 @@ static std::string GBE_FormatProtoRepeatedVarIntFieldSummary(const std::string &
     return stream.str();
 }
 
-static std::string GBE_FormatDotaLobbyIndexFieldSummary(const std::string &input)
+static std::string GBE_FormatDotaLobbyAuxFieldSummary(const std::string &input)
 {
     std::ostringstream stream;
     stream << "121=[" << GBE_FormatProtoRepeatedVarIntFieldSummary(input, 121u)
            << "] 122=[" << GBE_FormatProtoRepeatedVarIntFieldSummary(input, 122u)
            << "] 123=[" << GBE_FormatProtoRepeatedVarIntFieldSummary(input, 123u)
            << "] 124=[" << GBE_FormatProtoRepeatedVarIntFieldSummary(input, 124u)
+           << "] 132=[" << GBE_FormatProtoRepeatedVarIntFieldSummary(input, 132u)
            << ']';
     return stream.str();
 }
@@ -3902,9 +3903,9 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
 
     GBE_GC_DebugLog(
         "GC_DOTA_PATCH",
-        "2004 index field summary input={%s} output={%s}",
-        GBE_FormatDotaLobbyIndexFieldSummary(input).c_str(),
-        GBE_FormatDotaLobbyIndexFieldSummary(output).c_str()
+        "2004 aux field summary input={%s} output={%s}",
+        GBE_FormatDotaLobbyAuxFieldSummary(input).c_str(),
+        GBE_FormatDotaLobbyAuxFieldSummary(output).c_str()
     );
 
     return true;
@@ -9158,6 +9159,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 );
                 return true;
             }
+
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "consumed req=%u source_job=%llu note=runtime 7034 active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu summary=%s",
+                request_emsg,
+                static_cast<unsigned long long>(source_job),
+                GBE_local_lobby.active ? 1u : 0u,
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state,
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                GBE_FormatDota7034Summary(body, body_size).c_str()
+            );
 
             if (GBE_dota_launch_pending_8870 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 1u) {
                 if (!queue_official_26(GBE_kDotaOfficial024PracticeLobby26Hex, 2u, 1u, false, 0u, "official packet 024 after 8870/7034"))
