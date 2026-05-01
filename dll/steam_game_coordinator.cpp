@@ -3766,7 +3766,8 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
     uint32 owner_hero_id,
     bool rewrite_2015,
     uint32 extra_startup_account_id,
-    const std::string &pass_key)
+    const std::string &pass_key,
+    const char *debug_label)
 {
     if (message.size() < sizeof(ProtoBufMsgHeader_t))
         return false;
@@ -3886,6 +3887,18 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
                             : GBE_RewriteDotaLobbyTemplateObject2016(object_data, account_id, steam_id, owner_team, owner_slot, owner_hero_id, rewritten_object);
                 if (!ok)
                     return false;
+                if (debug_label && std::strncmp(debug_label, "official packet ", 16) == 0 && (type_id == 2004u || type_id == 2015u || type_id == 2016u)) {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_PATCH",
+                        "%s rewrite object type=%llu input_size=%zu output_size=%zu input_layout=%s output_layout=%s",
+                        debug_label,
+                        static_cast<unsigned long long>(type_id),
+                        object_data.size(),
+                        rewritten_object.size(),
+                        GBE_FormatProtoFieldLayoutSummary(object_data).c_str(),
+                        GBE_FormatProtoFieldLayoutSummary(rewritten_object).c_str()
+                    );
+                }
                 GBE_AppendProtoBytesField(rewritten_subscribed, 2u, rewritten_object);
                 continue;
             }
@@ -4236,7 +4249,8 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
             owner_hero_id,
             stage_index == 3,
             stage_index == 3 ? account_id : 0u,
-            pass_key))
+            pass_key,
+            nullptr))
         return false;
 
     message.swap(inner_payload);
@@ -4334,7 +4348,8 @@ static bool GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
             owner_hero_id,
             rewrite_2015,
             extra_startup_account_id,
-            pass_key))
+            pass_key,
+            stage_note))
         return false;
 
     message.swap(inner_payload);
@@ -5133,7 +5148,8 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWra
         owner_hero_id,
         rewrite_2015,
         extra_startup_account_id,
-        pass_key)) {
+        pass_key,
+        template_note)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "launch cache runtime state patch failed note=%s lobby_id=%llu state=%u game_state=%u server_id=%llu match_id=%llu body_size=%zu",
@@ -7148,7 +7164,8 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl(
         owner_hero_id,
         rewrite_2015,
         extra_startup_account_id,
-        pass_key);
+        pass_key,
+        nullptr);
 }
 
 bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &player_name, std::string &message)
