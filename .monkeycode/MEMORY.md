@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 practice lobby 的 2016 实际是 CSODOTAServerStaticLobby，不能按 team/slot member 重写]
+- Date: 2026-05-01
+- Context: Agent 在继续排查“hero selection 暂时把 Dire 3 显示成 Dire 1”并重新核对 `dota_gcmessages_common_lobby.proto`、`console.log` 与 `steam_game_coordinator.cpp` 的 `2016` 重写逻辑时发现
+- Category: 代码模式
+- Instructions:
+  - `2016` 对应的是 `CSODOTAServerStaticLobby`，其 `all_members[0]` 原始字段布局与 `CSODOTAServerStaticLobbyMember` 一致：常见字段是 `steam_id/rank_tier/coach_rating/favorite_team_packed/disabled_random_hero_bits/banned_hero_ids`，并不包含 `team/slot/hero_id/leaver_status` 这套 `CSODOTALobbyMember` 语义。
+  - 因此 donor/runtime `2016` 不能继续复用 `GBE_RewriteDotaLobbyTemplateMemberObject(...)` 去补 `field 3/7/2/16/28`；那会把错误 schema 的字段塞进 server-static 对象，污染英雄选择阶段读取到的 server static lobby 数据。
+  - `2016` 的最小安全处理应只修正它真实存在的身份字段，例如 `all_members[].steam_id`，而本地 scratch 构造的 `2016` 也应至少保持为 server-static 的最小合法形态，而不是伪造出 lobby member 状态对象。
+
 [Dota2 hero selection 若只剩 create-time 的 2004 请求英雄数组，应在 donor rewrite 中主动清掉]
 - Date: 2026-05-01
 - Context: Agent 在按顺序读完整份新 `console.log` 与 `gbe_gc_debug.log`，确认 `owner_state`、`2016.member[0]` 与 server 内实际分配始终保持 `team=1 slot=3`，且后续 runtime `26` 再未维护 `2004.field124/132` 后发现

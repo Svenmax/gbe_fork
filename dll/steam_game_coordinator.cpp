@@ -2507,6 +2507,37 @@ static std::string GBE_FormatDotaLobbyMemberStateSummary(const std::string &inpu
     return std::string(buffer);
 }
 
+static std::string GBE_FormatDotaServerStaticLobbyMemberSummary(const std::string &input)
+{
+    const uint8 *data = reinterpret_cast<const uint8 *>(input.data());
+    const size_t size = input.size();
+
+    uint64 steam_id = 0;
+    uint32 rank_tier = 0;
+    uint32 coach_rating = 0;
+    uint32 favorite_team_packed_lo = 0;
+
+    const bool has_steam_id = GBE_ExtractProtoFieldUint64(data, size, GBE_FindProtoField(data, size, 1u), steam_id);
+    const bool has_rank_tier = GBE_ExtractProtoFieldUint32(data, size, GBE_FindProtoField(data, size, 3u), rank_tier);
+    const bool has_coach_rating = GBE_ExtractProtoFieldUint32(data, size, GBE_FindProtoField(data, size, 7u), coach_rating);
+    const bool has_favorite_team_packed = GBE_ExtractProtoFieldUint32(data, size, GBE_FindProtoField(data, size, 12u), favorite_team_packed_lo);
+
+    char buffer[256];
+    std::snprintf(
+        buffer,
+        sizeof(buffer),
+        "steam_id=%llu rank_tier=%u coach_rating=%u favorite_team_packed_lo=%u flags[steam_id=%u rank_tier=%u coach_rating=%u favorite_team_packed=%u]",
+        static_cast<unsigned long long>(steam_id),
+        rank_tier,
+        coach_rating,
+        favorite_team_packed_lo,
+        has_steam_id ? 1u : 0u,
+        has_rank_tier ? 1u : 0u,
+        has_coach_rating ? 1u : 0u,
+        has_favorite_team_packed ? 1u : 0u);
+    return std::string(buffer);
+}
+
 static std::string GBE_FormatProtoRepeatedVarIntFieldSummary(const std::string &input, uint32 target_field)
 {
     const uint8 *data = reinterpret_cast<const uint8 *>(input.data());
@@ -3089,6 +3120,50 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
     if (force_connected_leaver_state && !saw_leaver_actions)
         GBE_AppendProtoVarIntField(output, 28u, 0u);
 
+    return true;
+}
+
+static bool GBE_RewriteDotaServerStaticLobbyMemberObject(
+    const std::string &input,
+    uint64 steam_id,
+    std::string &output)
+{
+    output.clear();
+    bool saw_steam_id = false;
+
+    size_t offset = 0;
+    while (offset < input.size()) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(
+                reinterpret_cast<const uint8 *>(input.data()),
+                input.size(),
+                offset,
+                field_number,
+                wire_type,
+                field_offset,
+                value_offset,
+                value_size,
+                field_end))
+            return false;
+
+        if (field_number == 1u && wire_type == 1u) {
+            saw_steam_id = true;
+            GBE_AppendProtoFixed64Field(output, 1u, steam_id);
+            continue;
+        }
+
+        output.append(input.data() + field_offset, field_end - field_offset);
+    }
+
+    if (saw_steam_id)
+        return true;
+
+    GBE_AppendProtoFixed64Field(output, 1u, steam_id);
     return true;
 }
 
@@ -4052,6 +4127,12 @@ static bool GBE_RewriteDotaLobbyTemplateObject2016(
     bool force_connected_leaver_state,
     std::string &output)
 {
+    (void)account_id;
+    (void)owner_team;
+    (void)owner_slot;
+    (void)owner_hero_id;
+    (void)force_connected_leaver_state;
+
     output.clear();
 
     size_t offset = 0;
@@ -4076,24 +4157,19 @@ static bool GBE_RewriteDotaLobbyTemplateObject2016(
 
         if (field_number == 1u && wire_type == 2u) {
             std::string rewritten_member;
-            if (!GBE_RewriteDotaLobbyTemplateMemberObject(
+            if (!GBE_RewriteDotaServerStaticLobbyMemberObject(
                     std::string(input.data() + value_offset, value_size),
-                    account_id,
                     steam_id,
-                    owner_team,
-                    owner_slot,
-                    owner_hero_id,
-                    force_connected_leaver_state,
                     rewritten_member))
                 return false;
 
             GBE_GC_DebugLog(
                 "GC_DOTA_PATCH",
-                "2016 member rewrite synced owner state input_layout=%s output_layout=%s input_summary={%s} output_summary={%s}",
+                "2016 server static member rewrite synced steam_id input_layout=%s output_layout=%s input_summary={%s} output_summary={%s}",
                 GBE_FormatProtoFieldLayoutSummary(std::string(input.data() + value_offset, value_size)).c_str(),
                 GBE_FormatProtoFieldLayoutSummary(rewritten_member).c_str(),
-                GBE_FormatDotaLobbyMemberStateSummary(std::string(input.data() + value_offset, value_size)).c_str(),
-                GBE_FormatDotaLobbyMemberStateSummary(rewritten_member).c_str()
+                GBE_FormatDotaServerStaticLobbyMemberSummary(std::string(input.data() + value_offset, value_size)).c_str(),
+                GBE_FormatDotaServerStaticLobbyMemberSummary(rewritten_member).c_str()
             );
 
             GBE_AppendProtoBytesField(output, 1u, rewritten_member);
@@ -5239,12 +5315,6 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     {
         std::string member_bytes;
         GBE_AppendProtoFixed64Field(member_bytes, 1, steam_id);
-        if (owner_hero_id != 0u)
-            GBE_AppendProtoVarIntField(member_bytes, 2, owner_hero_id);
-        GBE_AppendProtoVarIntField(member_bytes, 3, owner_team);
-        GBE_AppendProtoVarIntField(member_bytes, 7, owner_slot);
-        GBE_AppendProtoFixed32Field(member_bytes, 16u, 0u);
-        GBE_AppendProtoVarIntField(member_bytes, 28, 0u);
 
         object_2016.clear();
         GBE_AppendProtoBytesField(object_2016, 1, member_bytes);
