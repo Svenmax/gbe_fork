@@ -31,6 +31,24 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 021 这类 launch donor 的 2015 必须规范化 server-lobby member cardinality]
+- Date: 2026-05-01
+- Context: Agent 在顺序读完最新 `console.log` 与 `gbe_gc_debug.log`，确认英雄选择阶段唯一显著异物是 `official packet 021 after 7034` 的 `type=2015 object_data_size=405`，且控制台同步打印 `CSODOTAServerLobby.extra_startup_messages[0]: id: 8869` 后发现
+- Category: 代码模式
+- Instructions:
+  - `official 021` 这类 launch early-stage donor 的 `2015 / CSODOTAServerLobby` 除了 `8869` startup data 外，还会携带 donor 自带的 `all_members` 布局；由于 `CSODOTAServerLobbyMember` 在当前客户端 schema 里是空消息，这些 entries 只会泄漏 donor 的成员 cardinality/order。
+  - 如果英雄选择阶段 UI 恰好消费 `2015` 的 server-lobby member 顺序，而本地又把 donor 的 `all_members` 原样透传，就可能出现 lobby/building 显示槽位正确，但 hero selection 暂时落到该队伍第一个格子的现象。
+  - donor-based `2015` 重写时，应继续移除旧的 `8869` 并补当前 owner account 的 startup data，同时把 `field 1 / all_members` 规范成当前本地 lobby 的单个空 placeholder member，而不是继承 donor 里的成员布局。
+
+[Dota2 若 7047/launch/046 全链都保持同一 team/slot，进游戏错位更可能发生在 GC 下游]
+- Date: 2026-05-01
+- Context: Agent 在顺序读完整轮 `gbe_gc_debug.log`，并验证“主机载入中”已解决后继续排查 slot 错位时发现
+- Category: 代码模式
+- Instructions:
+  - 如果日志里从 `7047`、`7041`、`4511/4506`、多轮 official `7034 -> 26` 到最终 `046`/runtime snapshot 都持续显示同一个 `owner_state.team/slot` 与 `2016.member.team/slot`，则 GC/SO builder 侧大概率已经把槽位保持住了。
+  - 这类情况下，后续不应继续优先修改 `2004/2016/7034` 的 GC 重写逻辑；更应怀疑游戏启动后的下游消费方，例如 server/game init 对 slot 的解释方式、team-local slot 编码或其他非 GC 数据源。
+  - 本轮样本里 `team=1 slot=3` 在 `7047`、launch donor rewrite、`043/046` 以及 runtime private snapshot 中都保持一致，可作为“GC 侧未丢槽”的判据样本。
+
 [Dota2 当前 lobby 运行态应先捕获快照，再交给 24/26 builder 消费]
 - Date: 2026-05-01
 - Context: Agent 在为 practice lobby 做最小去补丁化收束、梳理 `cache_template_replay`、`cache_payload`、`details_update` 与 `replay_current_private_lobby_snapshot` 的公共输入时发现

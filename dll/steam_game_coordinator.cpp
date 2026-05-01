@@ -3917,6 +3917,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2015(
     std::string &output)
 {
     output.clear();
+    bool wrote_member_placeholder = false;
 
     size_t offset = 0;
     while (offset < input.size()) {
@@ -3938,6 +3939,17 @@ static bool GBE_RewriteDotaLobbyTemplateObject2015(
                 field_end))
             return false;
 
+        if (field_number == 1u && wire_type == 2u) {
+            // CSODOTAServerLobbyMember is schema-empty in this client build, so
+            // donor member entries only carry cardinality/order. Keep a single
+            // local placeholder member to avoid inheriting donor launch layouts.
+            if (!wrote_member_placeholder) {
+                GBE_AppendProtoBytesField(output, 1u, std::string());
+                wrote_member_placeholder = true;
+            }
+            continue;
+        }
+
         if (clear_existing_startup_data && field_number == 2u && wire_type == 2u) {
             uint64 startup_type = 0;
             if (GBE_ExtractProtoFieldUint64(
@@ -3951,6 +3963,9 @@ static bool GBE_RewriteDotaLobbyTemplateObject2015(
 
         output.append(input.data() + field_offset, field_end - field_offset);
     }
+
+    if (!wrote_member_placeholder)
+        GBE_AppendProtoBytesField(output, 1u, std::string());
 
     return GBE_AppendDotaLobbyAdditionalStartupAccountMessage(output, extra_startup_account_id);
 }
