@@ -1337,3 +1337,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当新的客户端 `Steam_Game_Coordinator` 实例启动时，如果 shared lobby 已经处于 `state=2, game_state=4` 的 practice private lobby，单靠 adopt shared runtime 和 rich presence 重放还不够；当前实例还需要补一份当前时刻的 lobby SO 快照给本地缓存。
   - 这次补发应复用现有当前态构建器，只发一次 direct `24 / CacheSubscribed` 加一次 direct `26 / LobbyDetailsUpdate`，顺序保持 `24 -> 26`，不要发明新的包结构。
   - 触发点应尽量收敛到“Dota2 GC 初始化”或“客户端从空本地 lobby 完整 adopt shared lobby”这类新实例恢复场景，避免在同一实例的正常 launch 状态推进中反复追加额外 `24/26`。
+
+[Dota2 的 2016 member 需要区分 donor 重写与 runtime 自建]
+- Date: 2026-05-01
+- Context: Agent 在继续排查“已到 PRE_GAME 但 dashboard 仍显示主机载入中”，并对照 `gbe_gc_debug.log` 中 `2016.member[0]` 与 `steam_game_coordinator.cpp` 的 object `2016` donor/runtime 路径时发现
+- Category: 代码模式
+- Instructions:
+  - donor `2016` 重写不应继续只改 `hero_id`；它至少要与 `2004.field 120 owner_state` 对齐 owner 的 `steam_id`、`hero_id`、`team`、`slot`，这样 `all_members[0]` 才不会长期停留在 donor 的错误队伍/槽位。
+  - 但 donor 路径仍应保留官方样本自带的 `leaver_status/leaver_actions` 过渡，不要在 template rewrite 时无条件清零；这与 `4511 -> 24` 初始 `DISCONNECTED` 过渡有关。
+  - runtime 自建 `2016` 则应显式补全 owner 的 `team`、`slot`、`leaver_status=0`、`leaver_actions=0`，避免在没有 donor 成员负载的 `24/26` 快照里再次退化成“只有 steam_id/hero_id”的精简 member 视图。
