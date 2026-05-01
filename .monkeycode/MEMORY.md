@@ -500,6 +500,8 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 这条 donor 的 `lobby_id`、`steam_id fixed64` 等标识符也应按“若字段存在则 patch”的策略处理，而不是要求模板字节必须命中后才允许发送。
   - `032` 后第二个 `24` 应直接重放 wrapped `038` donor 提取出的内层大缓存，并保留 donor 原始对象集；不要再用当前 runtime lobby cache builder 按 `state=2/game_state=10` 重写出一个小很多的替代包。
   - 这条 `038` builder 只需要做可选标识符 patch 和 owner SOID 对齐，不应继续做 runtime state / `2015` 重写；否则即使顺序对了，包体对象集合也会退回非官方的 `918`-byte 级别替代物。
+  - 当大 `038` 已经成功下发后，客户端可能会先发一条 `28 / k_ESOMsg_CacheSubscriptionRefresh`，请求体只带当前 lobby 的 `owner_soid(type=3,id=lobby_id)`；如果这一步无人响应，后续官方 `039 out 8744` 往往根本不会出现。
+  - 这种情况下应优先回一条最小合法的 `29 / CMsgSOCacheSubscribedUpToDate`，至少带相同的 `owner_soid`，先把客户端从 cache refresh 分支带回后续 launch 主链，再继续核对 `8744/043/046`。
   - 如果日志出现 `Failed replacing lobby_id bytes` 或 `failed building launch CacheSubscribed after server_id sync`，应优先检查是否又回到了 strict 标识符替换路径。
 
 [Dota2 7041 过早推进到 RUN 会诱发 7035]

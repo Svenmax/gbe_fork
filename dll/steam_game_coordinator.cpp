@@ -49,6 +49,9 @@ static constexpr uint32 GBE_kDotaAppId = 570u;
 static constexpr uint32 GBE_kDotaCacheSubscribed = 24u;
 static constexpr uint32 GBE_kDotaCacheUnsubscribed = 25u;
 static constexpr uint32 GBE_kDotaPracticeLobbyDetailsUpdate = 26u;
+static constexpr uint32 GBE_kDotaCacheSubscriptionCheck = 27u;
+static constexpr uint32 GBE_kDotaCacheSubscriptionRefresh = 28u;
+static constexpr uint32 GBE_kDotaCacheSubscribedUpToDate = 29u;
 static constexpr uint32 GBE_kDotaJoinChatChannel = 7009u;
 static constexpr uint32 GBE_kDotaJoinChatChannelResponse = 7010u;
 static constexpr uint32 GBE_kDotaOtherLeftChannel = 7014u;
@@ -5014,6 +5017,17 @@ static bool GBE_BuildDotaLobbyCacheUnsubscribedPayload(uint64 lobby_id, std::str
     return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheUnsubscribed, body, message);
 }
 
+static bool GBE_BuildDotaLobbyCacheSubscribedUpToDatePayload(uint64 lobby_id, std::string &message)
+{
+    std::string owner_soid;
+    GBE_AppendProtoVarIntField(owner_soid, 1u, 3u);
+    GBE_AppendProtoVarIntField(owner_soid, 2u, lobby_id);
+
+    std::string body;
+    GBE_AppendProtoBytesField(body, 2u, owner_soid);
+    return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheSubscribedUpToDate, body, message);
+}
+
 static bool GBE_BuildDotaDestroyLobbyResponsePayload(uint64 request_job_id, std::string &message)
 {
     std::string body;
@@ -9085,6 +9099,71 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_FormatProtoTopLevelFieldSummary(body, body_size).c_str(),
             GBE_FormatHexPrefix(body, body_size, 32).c_str()
         );
+    }
+
+    if (request_emsg == GBE_kDotaCacheSubscriptionRefresh) {
+        uint64 requested_owner_type = 0;
+        uint64 requested_owner_id = 0;
+        std::string owner_soid;
+        if (GBE_ExtractProtoFieldBytes(body, body_size, GBE_FindProtoField(body, body_size, 2u), owner_soid)) {
+            GBE_ExtractProtoFieldUint64(
+                reinterpret_cast<const uint8 *>(owner_soid.data()),
+                owner_soid.size(),
+                GBE_FindProtoField(reinterpret_cast<const uint8 *>(owner_soid.data()), owner_soid.size(), 1u),
+                requested_owner_type);
+            GBE_ExtractProtoFieldUint64(
+                reinterpret_cast<const uint8 *>(owner_soid.data()),
+                owner_soid.size(),
+                GBE_FindProtoField(reinterpret_cast<const uint8 *>(owner_soid.data()), owner_soid.size(), 2u),
+                requested_owner_id);
+        }
+
+        const bool matches_lobby_owner =
+            GBE_local_lobby.active &&
+            requested_owner_type == 3u &&
+            requested_owner_id != 0 &&
+            requested_owner_id == GBE_local_lobby.lobby_id;
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "observed req=%u source_job=%llu note=cache subscription refresh owner_type=%llu owner_id=%llu active=%u lobby_id=%llu state=%u game_state=%u body_prefix=%s",
+            request_emsg,
+            static_cast<unsigned long long>(source_job),
+            static_cast<unsigned long long>(requested_owner_type),
+            static_cast<unsigned long long>(requested_owner_id),
+            GBE_local_lobby.active ? 1u : 0u,
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            GBE_FormatHexPrefix(body, body_size, 32).c_str()
+        );
+
+        if (matches_lobby_owner) {
+            std::string response_message;
+            if (!GBE_BuildDotaLobbyCacheSubscribedUpToDatePayload(GBE_local_lobby.lobby_id, response_message)) {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "failed building reply req=%u resp=%u lobby_id=%llu",
+                    request_emsg,
+                    GBE_kDotaCacheSubscribedUpToDate,
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+                );
+                return true;
+            }
+
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "replying req=%u resp=%u source_job=%llu size=%zu note=cache subscription refresh acknowledged owner_type=%llu owner_id=%llu",
+                request_emsg,
+                GBE_kDotaCacheSubscribedUpToDate,
+                static_cast<unsigned long long>(source_job),
+                response_message.size(),
+                static_cast<unsigned long long>(requested_owner_type),
+                static_cast<unsigned long long>(requested_owner_id)
+            );
+            push_incoming_now(GBE_kDotaCacheSubscribedUpToDate | GBE_kProtoMask, response_message);
+            return true;
+        }
     }
 
     if (request_emsg == GBE_kDotaAbandonCurrentGame) {
