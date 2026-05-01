@@ -2382,6 +2382,51 @@ static std::string GBE_FormatDotaLobbyIndexFieldSummary(const std::string &input
     return stream.str();
 }
 
+static std::string GBE_FormatProtoTopLevelFieldSummary(const uint8 *data, size_t size)
+{
+    if (!data || size == 0)
+        return "empty";
+
+    std::ostringstream stream;
+    bool first = true;
+    size_t offset = 0;
+    while (offset < size) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(data, size, offset, field_number, wire_type, field_offset, value_offset, value_size, field_end))
+            break;
+
+        if (!first)
+            stream << ',';
+        first = false;
+        stream << field_number << ':' << wire_type << ':' << value_size;
+
+        if (wire_type == 0u) {
+            uint64 value = 0;
+            size_t field_value_offset = value_offset;
+            if (GBE_ReadVarUint64(data, size, field_value_offset, value))
+                stream << '=' << value;
+        } else if (wire_type == 1u && value_size == 8u) {
+            uint64 value = 0;
+            std::memcpy(&value, data + value_offset, sizeof(value));
+            stream << '=' << value;
+        } else if (wire_type == 5u && value_size == 4u) {
+            uint32 value = 0;
+            std::memcpy(&value, data + value_offset, sizeof(value));
+            stream << '=' << value;
+        }
+    }
+
+    if (first)
+        return "empty";
+
+    return stream.str();
+}
+
 static std::string GBE_FormatProtoFieldLayoutSummary(const std::string &input)
 {
     std::ostringstream stream;
@@ -8731,6 +8776,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return true;
     }
 
+    if (request_emsg == 8744u) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "observed req=%u source_job=%llu body_size=%zu fields=%s body_prefix=%s",
+            request_emsg,
+            static_cast<unsigned long long>(source_job),
+            body_size,
+            GBE_FormatProtoTopLevelFieldSummary(body, body_size).c_str(),
+            GBE_FormatHexPrefix(body, body_size, 32).c_str()
+        );
+    }
+
     if (request_emsg == GBE_kDotaAbandonCurrentGame) {
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
@@ -9105,6 +9162,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         template_size = decoded_template.size();
     }
 
+    bool mirror_source_job_to_target = has_source_job;
+    if (request_emsg == 8744u)
+        mirror_source_job_to_target = false;
+
     std::string response_message;
     if (!GBE_BuildDotaDirectReplayMessage(
             template_bytes,
@@ -9113,7 +9174,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             settings->get_local_steam_id().ConvertToUint64(),
             replace_account,
             replace_steam_id,
-            has_source_job,
+            mirror_source_job_to_target,
             source_job,
             request_emsg,
             response_emsg,
@@ -9122,6 +9183,32 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             response_message)) {
         GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building replay req=%u resp=%u", request_emsg, response_emsg);
         return true;
+    }
+
+    if (request_emsg == 8744u) {
+        size_t response_body_offset = 8u;
+        if (response_message.size() >= 8u) {
+            uint32 response_header_length = 0;
+            std::memcpy(&response_header_length, response_message.data() + 4, sizeof(response_header_length));
+            response_body_offset += response_header_length;
+        }
+        const uint8 *response_body = response_body_offset <= response_message.size()
+            ? reinterpret_cast<const uint8 *>(response_message.data() + response_body_offset)
+            : nullptr;
+        const size_t response_body_size = response_body_offset <= response_message.size()
+            ? (response_message.size() - response_body_offset)
+            : 0u;
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "observed resp=%u for req=%u source_job=%llu body_size=%zu fields=%s body_prefix=%s",
+            response_emsg,
+            request_emsg,
+            static_cast<unsigned long long>(source_job),
+            response_body_size,
+            GBE_FormatProtoTopLevelFieldSummary(response_body, response_body_size).c_str(),
+            GBE_FormatHexPrefix(response_body, response_body_size, 32).c_str()
+        );
     }
 
     GBE_GC_DebugLog("GC_DOTA_DIRECT", "replying req=%u resp=%u source_job=%llu size=%zu note=%s", request_emsg, response_emsg, static_cast<unsigned long long>(source_job), response_message.size(), response_note);

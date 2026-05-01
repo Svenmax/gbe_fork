@@ -100,6 +100,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - practice lobby 的 `2004.field 120` 成员对象里，`field 2` 就是 member hero_id；donor 重写函数和 runtime `GBE_BuildDotaPracticeLobbySOObjectData(...)` 都必须同步写入当前 owner hero。
   - 运行态上应在收到 `7034` 的 connected player hero 后更新共享 lobby state，并在 create/leave/destroy 时显式清零该 hero，避免旧局 hero 残留到下一次 lobby 生命周期。
 
+[Dota2 official 8745 小回包应保持 donor 零 job header]
+- Date: 2026-05-01
+- Context: Agent 在继续对照 `/workspace/lobbystartgamedota2/039-046` 官方 startgame 样本并比对本地 `8744 -> 8745` 日志时发现
+- Category: 代码模式
+- Instructions:
+  - 官方 `042_in_5453_k_EMsgClientFromGC.bin` 的总长度是 `56` bytes，字节前缀与当前 `GBE_kDotaOfficial8745TemplateHex` 一致，说明 `8745` 的 body 模板本身没问题。
+  - 当前本地 `replying req=8744 resp=8745 size=65` 的额外 `9` bytes 来自把请求 `source_job` 镜像进了 protobuf 扩展头的 `job_id_target`；但官方这条 `8745` donor 没有该 target job 字段。
+  - 因此 `8744 -> 8745` 这条 direct reply 应保持 donor 的零/空 job header，不要像常规 direct job reply 那样自动回填 `job_id_target`。
+
 [Dota2 PRE_GAME 后不要用通用 runtime 26 覆盖 donor 046 建立的 lobby 视图]
 - Date: 2026-04-30
 - Context: Agent 在对照新上传的 `gbe_gc_debug.log` 与 `console.log`，排查 dashboard 仍显示 host loading 时发现
