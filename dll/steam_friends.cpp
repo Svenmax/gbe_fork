@@ -1036,18 +1036,27 @@ bool Steam_Friends::SetRichPresence( const char *pchKey, const char *pchValue )
 {
     PRINT_DEBUG("%s %s", pchKey, pchValue ? pchValue : "NULL");
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    bool changed = false;
+
     if (pchValue) {
         auto prev_value = (*us.mutable_rich_presence()).find(pchKey);
         if (prev_value == (*us.mutable_rich_presence()).end() || prev_value->second != pchValue) {
             (*us.mutable_rich_presence())[pchKey] = pchValue;
             resend_friend_data();
+            changed = true;
         }
     } else {
         auto to_remove = us.mutable_rich_presence()->find(pchKey);
         if (to_remove != us.mutable_rich_presence()->end()) {
             us.mutable_rich_presence()->erase(to_remove);
             resend_friend_data();
+            changed = true;
         }
+    }
+
+    if (changed) {
+        rich_presence_updated(settings->get_local_steam_id(), settings->get_local_game_id().AppID());
+        persona_change(settings->get_local_steam_id(), k_EPersonaChangeRichPresence);
     }
 
     return true;
@@ -1057,8 +1066,13 @@ void Steam_Friends::ClearRichPresence()
 {
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    if (us.rich_presence().empty())
+        return;
+
     us.mutable_rich_presence()->clear();
     resend_friend_data();
+    rich_presence_updated(settings->get_local_steam_id(), settings->get_local_game_id().AppID());
+    persona_change(settings->get_local_steam_id(), k_EPersonaChangeRichPresence);
     
 }
 

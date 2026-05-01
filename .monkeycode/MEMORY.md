@@ -38,6 +38,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 后续分析 Dota2 练习房间/返回面板相关抓包时，默认优先参考 `/workspace/steamhoststartlobbyandleave/` 中的数据。
   - 如需对比其他目录抓包，应以 `steamhoststartlobbyandleave` 为主真值来源，避免混用不同场景样本得出错误结论。
 
+[Dota2 本地 rich presence 变更后需要立即发本地刷新回调]
+- Date: 2026-05-01
+- Context: Agent 在继续排查 dashboard 仍显示 host loading，并对照 `steamhoststartlobbyandleave` 的 `7501/766/815` 刷新链与 `steam_friends.cpp` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当前 `Steam_Friends::SetRichPresence()` / `ClearRichPresence()` 如果只更新 `us.rich_presence` 并做网络广播，但不对本地自己触发 `FriendRichPresenceUpdate_t` 与 `k_EPersonaChangeRichPresence`，端侧 UI 可能拿不到即时刷新信号。
+  - 官方样本在 `7501/766` persona 切换后还会伴随额外的好友数据刷新请求，因此本地实现至少要保证 rich presence 改动时立即给本地派发 rich presence/persona 变更回调，避免 dashboard/profile 停留在旧文案。
+
 [Dota2 新 coordinator 客户端实例必须从 shared lobby 完整恢复并重放 rich presence]
 - Date: 2026-05-01
 - Context: Agent 在继续排查“日志已到 PRIVATE_LOBBY 但 dashboard 仍显示主机载入中”并对照 `steam_game_coordinator.cpp` 的 constructor、`GBE_RestoreSharedDotaLobbyState(...)` 与最新 `gbe_gc_debug.log` 时发现
