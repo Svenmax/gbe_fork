@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 同 lobby 的 runtime 恢复不能只重放 rich presence，还要补当前 private lobby snapshot]
+- Date: 2026-05-01
+- Context: Agent 在继续排查“dashboard 仍显示主机载入中”并顺序对照最新 `gbe_gc_debug.log` 与 `GBE_RestoreSharedDotaLobbyState(...)` 后发现
+- Category: 代码模式
+- Instructions:
+  - 新的 client coordinator 实例走 `restore_client_runtime` 增量恢复路径时，虽然会同步 `state/game_state/server_id/connect` 并重放 rich presence，但旧逻辑不会像 `initialize_gc` / `restore_client_full_adopt` 那样调用 `GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(...)`。
+  - 当 lobby 已进入 `state=2, game_state=4` 时，只重放 `#DOTA_RP_PRIVATE_LOBBY` 仍可能不足以让 dashboard 恢复当前 SO 视图，表现为 profile 正常但大厅仍停在主机载入中。
+  - 因此同 lobby 的 runtime 恢复完成后，也应补发当前 private lobby 的 `24/26` snapshot，而不是只补 rich presence。
+
 [Dota2 prelaunch direct 26 不能无条件复用 official 046 donor]
 - Date: 2026-05-01
 - Context: Agent 在顺序完整阅读本轮 `/workspace/console.log` 与 `/workspace/gbe_gc_debug.log`，并对照 `GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(...)` 后发现
