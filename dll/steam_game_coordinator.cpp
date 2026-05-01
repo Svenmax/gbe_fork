@@ -186,7 +186,6 @@ enum : uint32 {
 };
 
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...);
-static bool GBE_ShouldTrackDotaPracticeLobbyLateSteamChain();
 
 static const uint8 GBE_kDotaClientWelcomeTemplate[] = {
     0x4D, 0x15, 0x00, 0x80, 0x14, 0x00, 0x00, 0x00, 0x09, 0xF5, 0xB6, 0x21, 0x08, 0x01, 0x00, 0x10,
@@ -11318,7 +11317,7 @@ void Steam_Game_Coordinator::GBE_ResetDotaPracticeLobbyLaunchPeripheralState()
     GBE_dota_launch_peripheral_stage_mask = 0;
 }
 
-static bool GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()
+bool Steam_Game_Coordinator::GBE_ShouldTrackDotaPracticeLobbyLateSteamChain() const
 {
     return
         GBE_local_lobby.active &&

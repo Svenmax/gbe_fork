@@ -170,6 +170,7 @@ public ISteamGameCoordinator
     void handle_set_multiple_item_pos(const void *input, uint32 input_size);
     void GBE_PushDotaLoginSyncMessages();
     void GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+    bool GBE_ShouldTrackDotaPracticeLobbyLateSteamChain() const;
     bool GBE_FinalizeDotaPracticeLobbyLateSteamChain(const char *reason);
     bool GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(uint32 stage_bit, uint32 emsg, const char *template_hex, bool patch_server_id, const char *note);
     void GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *status, const char *lobby_state, bool include_party, bool include_lobby = true);
