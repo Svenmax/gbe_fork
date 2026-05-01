@@ -40,6 +40,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 该 prelude builder 目前只有定义，没有任何实际 launch 状态跃迁会调用它，因此日志里虽然已有 `032/8744/043/046`，但仍会完全缺失 `037/038` 这两条 `CacheSubscribed`。
   - 后续如果 dashboard 仍停在 host loading，应优先检查这段 prelude cache 是否已在 `032 -> 8744` 窗口按时入队，而不是只盯 `043/046` 或 rich presence。
 
+[Dota2 official late launch 还会重复发送 5501 与 5575 外围消息]
+- Date: 2026-05-01
+- Context: Agent 在继续对照 `/workspace/lobbystartgamedota2/032-048` 与 `steam_game_coordinator.cpp` 的 practice lobby startgame 后半段时发现
+- Category: 代码模式
+- Instructions:
+  - 官方样本除了早期已有的 `5501/5575` 之外，在 `032` 之后还会再出现一轮 `034_in_5501 -> 035_in_5429 -> 036_in_5575`，并且在 `8744/8745 -> 043/046` 附近还会再出现 `041_in_5501` 与 `048_in_5575`。
+  - 因此如果日志里已经有 `032 -> 5429 -> 24 -> 24 -> 8744 -> 8745 -> 043 -> 046`，但 dashboard 仍停在 host loading，不能只关注 `24/26`；还要核对这些重复的 `5501/5575` 是否也在相邻窗口按时重放。
+  - 现有 `5501` 模板大小与官方 `034/041` 一致，`5575` 的 stage1/stage2 模板大小也与官方 `036/048` 一致，后续优先复用这些外围模板补齐时序，而不是先发明新的 payload 结构。
+
 [分析上传日志时必须顺序逐行阅读]
 - Date: 2026-05-01
 - Context: 用户要求“上传了，不要跳着读，逐行读寻找问题”

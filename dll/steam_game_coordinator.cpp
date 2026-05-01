@@ -167,6 +167,10 @@ enum : uint32 {
     GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona = 1u << 12,
     GBE_kDotaLaunchPeripheralStageCacheSubscribedPrelude = 1u << 13,
     GBE_kDotaLaunchPeripheralStageCacheSubscribedRuntimePrelude = 1u << 14,
+    GBE_kDotaLaunchPeripheralStageServersAvailablePrelude = 1u << 15,
+    GBE_kDotaLaunchPeripheralStageAuthListAckPrelude = 1u << 16,
+    GBE_kDotaLaunchPeripheralStageServersAvailablePost8744 = 1u << 17,
+    GBE_kDotaLaunchPeripheralStageAuthListAckPost046 = 1u << 18,
 };
 
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...);
@@ -8629,11 +8633,25 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 3u) {
                 if (queue_official_26(GBE_kDotaOfficial032PracticeLobby26Hex, 2u, 10u, false, 0u, "official packet 032 after 7034")) {
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+                        GBE_kDotaLaunchPeripheralStageServersAvailablePrelude,
+                        GBE_kSteamServersAvailable,
+                        GBE_kDotaPracticeLobbyLaunchServersAvailableHex,
+                        false,
+                        "launch servers available before 8744 prelude"
+                    );
+                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageTicketAuthComplete,
                         GBE_kSteamTicketAuthComplete,
                         GBE_kDotaPracticeLobbyLaunchTicketAuthCompleteHex,
                         false,
                         "launch ticket auth complete before 8744 prelude"
+                    );
+                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+                        GBE_kDotaLaunchPeripheralStageAuthListAckPrelude,
+                        GBE_kSteamAuthListAck,
+                        GBE_kDotaPracticeLobbyLaunchAuthListAckStage1Hex,
+                        false,
+                        "launch auth list ack before 8744 prelude"
                     );
 
                     const uint64 steam_id = GBE_GetDotaLobbyOwnerSteamId();
@@ -8745,6 +8763,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 after disconnected-player 7034")) {
                     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+                        GBE_kDotaLaunchPeripheralStageAuthListAckPost046,
+                        GBE_kSteamAuthListAck,
+                        GBE_kDotaPracticeLobbyLaunchAuthListAckStage2Hex,
+                        false,
+                        "launch auth list ack after 046"
+                    );
+                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageTicketAuthComplete,
                         GBE_kSteamTicketAuthComplete,
                         GBE_kDotaPracticeLobbyLaunchTicketAuthCompleteHex,
@@ -8780,6 +8805,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && request_shape.has_send_reason && request_shape.send_reason == 5u) {
                 if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 for pregame 7034 launch poll")) {
                     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
+                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+                        GBE_kDotaLaunchPeripheralStageAuthListAckPost046,
+                        GBE_kSteamAuthListAck,
+                        GBE_kDotaPracticeLobbyLaunchAuthListAckStage2Hex,
+                        false,
+                        "launch auth list ack on repeated pregame 7034"
+                    );
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageTicketAuthComplete,
                         GBE_kSteamTicketAuthComplete,
@@ -8883,8 +8915,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == 8744u) {
-        if (GBE_local_lobby.active && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u)
+        if (GBE_local_lobby.active && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u) {
             GBE_dota_launch_pending_043 = true;
+            GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+                GBE_kDotaLaunchPeripheralStageServersAvailablePost8744,
+                GBE_kSteamServersAvailable,
+                GBE_kDotaPracticeLobbyLaunchServersAvailableHex,
+                false,
+                "launch servers available after 8744"
+            );
+        }
 
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
