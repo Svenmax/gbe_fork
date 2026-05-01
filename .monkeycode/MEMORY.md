@@ -1398,3 +1398,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当前这套 host start 流里，`7197/8673` 并不会在 `game_state=4` 时稳定出现；实际能稳定观察到的晚期 `RUN` 边沿是 `26` 把 lobby 从 `game_state=1 -> 2 -> 3` 推进到英雄选择/策略时间。
   - 因此如果要做最小实现来恢复 dashboard 的“Leave / Return to Game”，优先把 `PRIVATE_LOBBY` persona 闩锁挂在“`046` 已跑过且随后进入 `RUN` 的后续 game_state（当前日志里至少是 `>=2`）”上，而不是继续依赖 `7197/8673 && game_state==4`。
   - `7197/8673` 更适合保留为兜底补发时机；shared lobby rich presence 重放则只应依赖 `PrivateLobbyPersona` 闩锁位，而不是再次直接判断 `game_state==4`。
+
+[Dota2 PRE_GAME 的 rich presence 重放可依赖 PregameRunPersona 闩锁而不必等最终 PrivateLobbyPersona 位]
+- Date: 2026-05-01
+- Context: Agent 在顺序读完新一轮 `gbe_gc_debug.log` 后发现 `032 -> 5429 -> 24 -> 24 -> 8744 -> 8745 -> 043 -> 046` 已完整出现，但 `GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(...)` 仍在 `state=2, game_state=4` 时反复把状态刷回 `#DOTA_RP_FINDING_MATCH`
+- Category: 代码模式
+- Instructions:
+  - 不能只凭 `game_state=4` 就默认 `#DOTA_RP_PRIVATE_LOBBY`，但一旦 `046` 路径已经跑过并且 `GBE_kDotaLaunchPeripheralStagePregameRunPersona` 已经置位，shared-lobby restore/reapply 就可以把本地 rich presence 呈现为 `#DOTA_RP_PRIVATE_LOBBY + RUN`。
+  - 如果仍强制等到 `GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona` 最终置位才允许重放 private 状态，新的 coordinator 客户端实例会在 `PRE_GAME` 之后持续把 dashboard 刷回 host-loading/FINDING_MATCH，甚至可能抑制后续晚期 Steam 链的继续推进。
+  - 更精确的条件是：`state=2 && game_state=4 && PregameRunPersona 已置位` 时允许本地 rich presence 呈现为 private；而最终 `PrivateLobbyPersona` 位仍保留给真正补发的晚期 `766(private-lobby)` 作为完成标记。

@@ -9115,7 +9115,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
             if (GBE_dota_launch_pending_046 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && (!request_shape.has_send_reason || request_shape.send_reason == 5u)) {
                 if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 after disconnected-player 7034")) {
-                    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_FINDING_MATCH", "RUN", true);
+                    // Once the official 046 pregame donor lands, local rich presence must
+                    // already present as a private lobby so later restores do not bounce
+                    // dashboard state back to host-loading.
+                    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageTicketAuthComplete,
                         GBE_kSteamTicketAuthComplete,
@@ -9151,7 +9154,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && request_shape.has_send_reason && request_shape.send_reason == 5u) {
                 if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 for pregame 7034 launch poll")) {
-                    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_FINDING_MATCH", "RUN", true);
+                    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageTicketAuthComplete,
                         GBE_kSteamTicketAuthComplete,
@@ -11430,9 +11433,14 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
     const char *status = nullptr;
     const char *lobby_state = nullptr;
     bool include_party = false;
+    const bool should_present_private_lobby =
+        (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona) ||
+        (GBE_local_lobby.state == 2u &&
+         GBE_local_lobby.game_state == 4u &&
+         (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePregameRunPersona));
 
     if (GBE_local_lobby.state == 2u) {
-        if (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona) {
+        if (should_present_private_lobby) {
             status = "#DOTA_RP_PRIVATE_LOBBY";
         } else {
             status = "#DOTA_RP_FINDING_MATCH";
