@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 的 28->29 仅回 owner_soid 不足以恢复官方 8744 后半程]
+- Date: 2026-05-01
+- Context: Agent 在按顺序完整阅读用户新上传的 `gbe_gc_debug.log`，并确认 `2433f7ae` 已让 `28 / CacheSubscriptionRefresh -> 29 / CacheSubscribedUpToDate` 成功发生后发现
+- Category: 代码模式
+- Instructions:
+  - 当日志里已经出现 `replying req=28 resp=29`，但 `29` 仍是最小 `owner_soid only` 版本时，官方 `8744 -> 8745 -> 043 -> 046` 链依然可能完全不出现。
+  - 此时下一步不应再重复补“有没有 29”，而应优先让 `29` 镜像最近一次 lobby `24 / CacheSubscribed` 中的 `version`、`service_id`、`service_list`、`sync_version` 元数据。
+  - 这些字段应以最近一次实际发送给客户端的 lobby `24` 为准，尤其是 `032` 之后那组 launch prelude `24`，避免凭空猜测或跨阶段复用错误的缓存版本。
+
 [Dota2 official 032 之后到 8744 之前还有一段当前实现未接线的 cache prelude]
 - Date: 2026-05-01
 - Context: Agent 在按顺序对照 `/workspace/lobbystartgamedota2/` 与 `dll/steam_game_coordinator.cpp` 的 practice lobby host startgame 链路时发现

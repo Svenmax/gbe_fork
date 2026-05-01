@@ -116,6 +116,13 @@ public ISteamGameCoordinator
         std::string broadcast_description;
         std::string broadcast_language_code;
         std::string pass_key;
+        bool has_cache_version{};
+        uint64 cache_version{};
+        bool has_cache_service_id{};
+        uint32 cache_service_id{};
+        std::vector<uint32> cache_service_list;
+        bool has_cache_sync_version{};
+        uint64 cache_sync_version{};
     };
 
     GBE_LocalLobby GBE_local_lobby{};
@@ -170,6 +177,7 @@ public ISteamGameCoordinator
     void GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(const char *reason);
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &player_name, std::string &message);
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const std::string &player_name, std::string &message);
+    void GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason);
     void GBE_PublishSharedDotaLobbyState(const char *reason);
     void GBE_RestoreSharedDotaLobbyState(const char *reason);
     void GBE_LeaveGenericLobby();

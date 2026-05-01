@@ -146,6 +146,13 @@ struct GBE_SharedDotaLobbyState {
     std::string broadcast_description;
     std::string broadcast_language_code;
     std::string pass_key;
+    bool has_cache_version{};
+    uint64 cache_version{};
+    bool has_cache_service_id{};
+    uint32 cache_service_id{};
+    std::vector<uint32> cache_service_list;
+    bool has_cache_sync_version{};
+    uint64 cache_sync_version{};
 };
 
 static GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
@@ -5028,6 +5035,34 @@ static bool GBE_BuildDotaLobbyCacheSubscribedUpToDatePayload(uint64 lobby_id, st
     return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheSubscribedUpToDate, body, message);
 }
 
+static bool GBE_BuildDotaLobbyCacheSubscribedUpToDatePayload(
+    uint64 lobby_id,
+    bool has_version,
+    uint64 version,
+    bool has_service_id,
+    uint32 service_id,
+    const std::vector<uint32> &service_list,
+    bool has_sync_version,
+    uint64 sync_version,
+    std::string &message)
+{
+    std::string owner_soid;
+    GBE_AppendProtoVarIntField(owner_soid, 1u, 3u);
+    GBE_AppendProtoVarIntField(owner_soid, 2u, lobby_id);
+
+    std::string body;
+    if (has_version)
+        GBE_AppendProtoFixed64Field(body, 1u, version);
+    GBE_AppendProtoBytesField(body, 2u, owner_soid);
+    if (has_service_id)
+        GBE_AppendProtoVarIntField(body, 3u, service_id);
+    for (uint32 listed_service_id : service_list)
+        GBE_AppendProtoVarIntField(body, 4u, listed_service_id);
+    if (has_sync_version)
+        GBE_AppendProtoFixed64Field(body, 5u, sync_version);
+    return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheSubscribedUpToDate, body, message);
+}
+
 static bool GBE_BuildDotaDestroyLobbyResponsePayload(uint64 request_job_id, std::string &message)
 {
     std::string body;
@@ -7620,6 +7655,53 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPay
         message);
 }
 
+void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason)
+{
+    if (message.size() < sizeof(ProtoBufMsgHeader_t))
+        return;
+
+    ProtoBufMsgHeader_t hdr{};
+    std::memcpy(&hdr, message.data(), sizeof(hdr));
+    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
+    if (body_offset > message.size())
+        return;
+
+    CMsgSOCacheSubscribed protomsg;
+    if (!protomsg.ParseFromArray(message.data() + body_offset, static_cast<int>(message.size() - body_offset)))
+        return;
+
+    if (!protomsg.has_owner_soid() || protomsg.owner_soid().type() != 3u || protomsg.owner_soid().id() == 0)
+        return;
+
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && protomsg.owner_soid().id() != GBE_local_lobby.lobby_id)
+        return;
+
+    GBE_local_lobby.has_cache_version = protomsg.has_version();
+    GBE_local_lobby.cache_version = protomsg.has_version() ? protomsg.version() : 0ull;
+    GBE_local_lobby.has_cache_service_id = protomsg.has_service_id();
+    GBE_local_lobby.cache_service_id = protomsg.has_service_id() ? protomsg.service_id() : 0u;
+    GBE_local_lobby.cache_service_list.assign(protomsg.service_list().begin(), protomsg.service_list().end());
+    GBE_local_lobby.has_cache_sync_version = protomsg.has_sync_version();
+    GBE_local_lobby.cache_sync_version = protomsg.has_sync_version() ? protomsg.sync_version() : 0ull;
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_SYNC",
+        "recorded lobby CacheSubscribed metadata reason=%s owner_id=%llu version_present=%u version=%llu service_id_present=%u service_id=%u service_list_count=%zu sync_version_present=%u sync_version=%llu",
+        reason ? reason : "unknown",
+        static_cast<unsigned long long>(protomsg.owner_soid().id()),
+        GBE_local_lobby.has_cache_version ? 1u : 0u,
+        static_cast<unsigned long long>(GBE_local_lobby.cache_version),
+        GBE_local_lobby.has_cache_service_id ? 1u : 0u,
+        GBE_local_lobby.cache_service_id,
+        GBE_local_lobby.cache_service_list.size(),
+        GBE_local_lobby.has_cache_sync_version ? 1u : 0u,
+        static_cast<unsigned long long>(GBE_local_lobby.cache_sync_version)
+    );
+
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0)
+        GBE_PublishSharedDotaLobbyState(reason ? reason : "record_cache_subscribed_metadata");
+}
+
 void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
 {
     GBE_shared_dota_lobby_state.valid = true;
@@ -7661,6 +7743,13 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
     GBE_shared_dota_lobby_state.broadcast_description = GBE_local_lobby.broadcast_description;
     GBE_shared_dota_lobby_state.broadcast_language_code = GBE_local_lobby.broadcast_language_code;
     GBE_shared_dota_lobby_state.pass_key = GBE_local_lobby.pass_key;
+    GBE_shared_dota_lobby_state.has_cache_version = GBE_local_lobby.has_cache_version;
+    GBE_shared_dota_lobby_state.cache_version = GBE_local_lobby.cache_version;
+    GBE_shared_dota_lobby_state.has_cache_service_id = GBE_local_lobby.has_cache_service_id;
+    GBE_shared_dota_lobby_state.cache_service_id = GBE_local_lobby.cache_service_id;
+    GBE_shared_dota_lobby_state.cache_service_list = GBE_local_lobby.cache_service_list;
+    GBE_shared_dota_lobby_state.has_cache_sync_version = GBE_local_lobby.has_cache_sync_version;
+    GBE_shared_dota_lobby_state.cache_sync_version = GBE_local_lobby.cache_sync_version;
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
@@ -7740,6 +7829,13 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             GBE_local_lobby.broadcast_description = GBE_shared_dota_lobby_state.broadcast_description;
             GBE_local_lobby.broadcast_language_code = GBE_shared_dota_lobby_state.broadcast_language_code;
             GBE_local_lobby.pass_key = GBE_shared_dota_lobby_state.pass_key;
+            GBE_local_lobby.has_cache_version = GBE_shared_dota_lobby_state.has_cache_version;
+            GBE_local_lobby.cache_version = GBE_shared_dota_lobby_state.cache_version;
+            GBE_local_lobby.has_cache_service_id = GBE_shared_dota_lobby_state.has_cache_service_id;
+            GBE_local_lobby.cache_service_id = GBE_shared_dota_lobby_state.cache_service_id;
+            GBE_local_lobby.cache_service_list = GBE_shared_dota_lobby_state.cache_service_list;
+            GBE_local_lobby.has_cache_sync_version = GBE_shared_dota_lobby_state.has_cache_sync_version;
+            GBE_local_lobby.cache_sync_version = GBE_shared_dota_lobby_state.cache_sync_version;
 
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
@@ -7807,6 +7903,32 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
 
         if (GBE_shared_dota_lobby_state.owner_hero_id != 0 && GBE_local_lobby.owner_hero_id != GBE_shared_dota_lobby_state.owner_hero_id) {
             GBE_local_lobby.owner_hero_id = GBE_shared_dota_lobby_state.owner_hero_id;
+            changed = true;
+        }
+
+        if (GBE_local_lobby.has_cache_version != GBE_shared_dota_lobby_state.has_cache_version ||
+                GBE_local_lobby.cache_version != GBE_shared_dota_lobby_state.cache_version) {
+            GBE_local_lobby.has_cache_version = GBE_shared_dota_lobby_state.has_cache_version;
+            GBE_local_lobby.cache_version = GBE_shared_dota_lobby_state.cache_version;
+            changed = true;
+        }
+
+        if (GBE_local_lobby.has_cache_service_id != GBE_shared_dota_lobby_state.has_cache_service_id ||
+                GBE_local_lobby.cache_service_id != GBE_shared_dota_lobby_state.cache_service_id) {
+            GBE_local_lobby.has_cache_service_id = GBE_shared_dota_lobby_state.has_cache_service_id;
+            GBE_local_lobby.cache_service_id = GBE_shared_dota_lobby_state.cache_service_id;
+            changed = true;
+        }
+
+        if (GBE_local_lobby.cache_service_list != GBE_shared_dota_lobby_state.cache_service_list) {
+            GBE_local_lobby.cache_service_list = GBE_shared_dota_lobby_state.cache_service_list;
+            changed = true;
+        }
+
+        if (GBE_local_lobby.has_cache_sync_version != GBE_shared_dota_lobby_state.has_cache_sync_version ||
+                GBE_local_lobby.cache_sync_version != GBE_shared_dota_lobby_state.cache_sync_version) {
+            GBE_local_lobby.has_cache_sync_version = GBE_shared_dota_lobby_state.has_cache_sync_version;
+            GBE_local_lobby.cache_sync_version = GBE_shared_dota_lobby_state.cache_sync_version;
             changed = true;
         }
 
@@ -8001,6 +8123,7 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
         return;
     }
 
+    GBE_RecordDotaLobbyCacheSubscriptionState(response_24, reason ? reason : "replay_current_private_lobby_snapshot");
     push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, response_24);
     push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, response_26);
     GBE_dota_private_lobby_snapshot_replayed = true;
@@ -8198,6 +8321,7 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
                     GBE_local_lobby.pass_key,
                     account_id,
                     runtime_cache_message)) {
+                GBE_RecordDotaLobbyCacheSubscriptionState(runtime_cache_message, reason ? reason : "server_id_sync_official_template");
                 push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, runtime_cache_message);
                 GBE_GC_DebugLog(
                     "GC_DOTA_SYNC",
@@ -8858,6 +8982,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                                     GBE_local_lobby.lobby_id,
                                     prelude_cache_message)) {
                                 GBE_dota_launch_peripheral_stage_mask |= GBE_kDotaLaunchPeripheralStageCacheSubscribedPrelude;
+                                GBE_RecordDotaLobbyCacheSubscriptionState(prelude_cache_message, "official_032_prelude");
                                 push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, prelude_cache_message);
                                 GBE_GC_DebugLog(
                                     "GC_DOTA_SYNC",
@@ -8884,6 +9009,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                                     GBE_local_lobby.lobby_id,
                                     large_prelude_cache_message)) {
                                 GBE_dota_launch_peripheral_stage_mask |= GBE_kDotaLaunchPeripheralStageCacheSubscribedRuntimePrelude;
+                                GBE_RecordDotaLobbyCacheSubscriptionState(large_prelude_cache_message, "official_032_large_prelude");
                                 push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, large_prelude_cache_message);
                                 GBE_GC_DebugLog(
                                     "GC_DOTA_SYNC",
@@ -9140,7 +9266,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
         if (matches_lobby_owner) {
             std::string response_message;
-            if (!GBE_BuildDotaLobbyCacheSubscribedUpToDatePayload(GBE_local_lobby.lobby_id, response_message)) {
+            if (!GBE_BuildDotaLobbyCacheSubscribedUpToDatePayload(
+                    GBE_local_lobby.lobby_id,
+                    GBE_local_lobby.has_cache_version,
+                    GBE_local_lobby.cache_version,
+                    GBE_local_lobby.has_cache_service_id,
+                    GBE_local_lobby.cache_service_id,
+                    GBE_local_lobby.cache_service_list,
+                    GBE_local_lobby.has_cache_sync_version,
+                    GBE_local_lobby.cache_sync_version,
+                    response_message)) {
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
                     "failed building reply req=%u resp=%u lobby_id=%llu",
@@ -9153,13 +9288,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
-                "replying req=%u resp=%u source_job=%llu size=%zu note=cache subscription refresh acknowledged owner_type=%llu owner_id=%llu",
+                "replying req=%u resp=%u source_job=%llu size=%zu note=cache subscription refresh acknowledged owner_type=%llu owner_id=%llu version_present=%u service_id_present=%u service_list_count=%zu sync_version_present=%u",
                 request_emsg,
                 GBE_kDotaCacheSubscribedUpToDate,
                 static_cast<unsigned long long>(source_job),
                 response_message.size(),
                 static_cast<unsigned long long>(requested_owner_type),
-                static_cast<unsigned long long>(requested_owner_id)
+                static_cast<unsigned long long>(requested_owner_id),
+                GBE_local_lobby.has_cache_version ? 1u : 0u,
+                GBE_local_lobby.has_cache_service_id ? 1u : 0u,
+                GBE_local_lobby.cache_service_list.size(),
+                GBE_local_lobby.has_cache_sync_version ? 1u : 0u
             );
             push_incoming_now(GBE_kDotaCacheSubscribedUpToDate | GBE_kProtoMask, response_message);
             return true;
@@ -9659,6 +9798,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     GBE_local_lobby.broadcast_description.clear();
     GBE_local_lobby.broadcast_language_code.clear();
     GBE_local_lobby.pass_key.clear();
+    GBE_local_lobby.has_cache_version = false;
+    GBE_local_lobby.cache_version = 0;
+    GBE_local_lobby.has_cache_service_id = false;
+    GBE_local_lobby.cache_service_id = 0;
+    GBE_local_lobby.cache_service_list.clear();
+    GBE_local_lobby.has_cache_sync_version = false;
+    GBE_local_lobby.cache_sync_version = 0;
 
     GBE_DotaPracticeLobbyCreateRequest request{};
     if (GBE_ParseDotaPracticeLobbyCreateBody(reinterpret_cast<const uint8 *>(request_body.data()), request_body.size(), request)) {
@@ -9747,6 +9893,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
             return true;
         }
 
+        GBE_RecordDotaLobbyCacheSubscriptionState(response_24, "7038_create_wrapped");
         push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_24);
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
@@ -9775,6 +9922,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         );
 
     } else {
+        GBE_RecordDotaLobbyCacheSubscriptionState(response_24, "7038_create_direct");
         push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, response_24);
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
@@ -10051,6 +10199,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
     GBE_local_lobby.broadcast_description.clear();
     GBE_local_lobby.broadcast_language_code.clear();
     GBE_local_lobby.pass_key.clear();
+    GBE_local_lobby.has_cache_version = false;
+    GBE_local_lobby.cache_version = 0;
+    GBE_local_lobby.has_cache_service_id = false;
+    GBE_local_lobby.cache_service_id = 0;
+    GBE_local_lobby.cache_service_list.clear();
+    GBE_local_lobby.has_cache_sync_version = false;
+    GBE_local_lobby.cache_sync_version = 0;
     GBE_PublishSharedDotaLobbyState("7040_leave");
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
 
@@ -10721,6 +10876,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDestroyLobbyRequest(uint64 request_jo
     GBE_local_lobby.broadcast_description.clear();
     GBE_local_lobby.broadcast_language_code.clear();
     GBE_local_lobby.pass_key.clear();
+    GBE_local_lobby.has_cache_version = false;
+    GBE_local_lobby.cache_version = 0;
+    GBE_local_lobby.has_cache_service_id = false;
+    GBE_local_lobby.cache_service_id = 0;
+    GBE_local_lobby.cache_service_list.clear();
+    GBE_local_lobby.has_cache_sync_version = false;
+    GBE_local_lobby.cache_sync_version = 0;
     GBE_PublishSharedDotaLobbyState("8246_destroy");
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
 
