@@ -143,14 +143,29 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - practice lobby 的 `2004.field 120` 成员对象里，`field 2` 就是 member hero_id；donor 重写函数和 runtime `GBE_BuildDotaPracticeLobbySOObjectData(...)` 都必须同步写入当前 owner hero。
   - 运行态上应在收到 `7034` 的 connected player hero 后更新共享 lobby state，并在 create/leave/destroy 时显式清零该 hero，避免旧局 hero 残留到下一次 lobby 生命周期。
 
-[Dota2 official 8745 小回包应保持 donor 零 job header]
+[Dota2 official 8745 donor 本身是零 job header]
 - Date: 2026-05-01
 - Context: Agent 在继续对照 `/workspace/lobbystartgamedota2/039-046` 官方 startgame 样本并比对本地 `8744 -> 8745` 日志时发现
 - Category: 代码模式
 - Instructions:
   - 官方 `042_in_5453_k_EMsgClientFromGC.bin` 的总长度是 `56` bytes，字节前缀与当前 `GBE_kDotaOfficial8745TemplateHex` 一致，说明 `8745` 的 body 模板本身没问题。
-  - 当前本地 `replying req=8744 resp=8745 size=65` 的额外 `9` bytes 来自把请求 `source_job` 镜像进了 protobuf 扩展头的 `job_id_target`；但官方这条 `8745` donor 没有该 target job 字段。
-  - 因此 `8744 -> 8745` 这条 direct reply 应保持 donor 的零/空 job header，不要像常规 direct job reply 那样自动回填 `job_id_target`。
+  - 官方 `042` donor 的 protobuf 扩展头里没有 `job_id_target`，因此它只能证明“wrapped 官方样本的 donor 头长这样”，不能单独推出当前 direct 运行时回复也必须保持空 job 头。
+
+[Dota2 8744/8745 要区分 wrapped 官方样本与 direct 运行时路径]
+- Date: 2026-05-01
+- Context: Agent 在继续排查“客户端收到 8745 但 10 秒后仍报 reply timeout”并对照最新 `console.log`、`gbe_gc_debug.log` 与官方 `039/042` 样本时发现
+- Category: 代码模式
+- Instructions:
+  - `/workspace/lobbystartgamedota2/039_out_5452_k_EMsgClientToGC.bin` 与 `042_in_5453_k_EMsgClientFromGC.bin` 属于 wrapped `5452/5453` 路径；它们的内层 `8744/8745` donor 可没有 direct protobuf 扩展头里的 job 对应关系。
+  - 当前真实运行日志里的 `8744` 却是 direct 请求：`Send msg 8744, 17 bytes`，并且 `GBE_HandleDotaDirectPostLoginRequest(...)` 解析到 `source_job=28`。
+  - 因此在当前 direct 路径下，`8745` 不能简单照搬 wrapped donor 的“空 job 头”语义；若客户端明确带了 `source_job` 发起 direct 请求，回复必须像其他 direct replay 一样回填 `job_id_target`，否则客户端虽然会打印 `Recv msg 8745`，仍可能继续保留 pending reply 并在 10 秒后报超时。
+
+[Dota2 那次 ingame -> dashboard UI 切换是手动操作]
+- Date: 2026-05-01
+- Context: 用户澄清 `DOTA_GAME_UI_DOTA_INGAME -> DOTA_GAME_UI_STATE_DASHBOARD` 那次切换是手动切出，不应再当作自动回退现象分析
+- Instructions:
+  - 后续排查“主机载入中”时，不要再把该次 `console.log` 中的 `DOTA_GAME_UI_DOTA_INGAME -> DOTA_GAME_UI_STATE_DASHBOARD` 视为 GC/lobby 自动 bounce 证据。
+  - 仍应继续关注真正未解决的问题：大厅 UI 长期停留在“主机载入中”。
 
 [Dota2 game_state=10 后的 7034 不能先落到 runtime 26 fallback]
 - Date: 2026-05-01
@@ -548,6 +563,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当前 `7038 / PracticeLobbyCreate` 默认只生成 Dota-specific `lobby_id`，这不足以驱动旧 `steamapi` 依赖的 generic `ISteamMatchmaking` lobby 链路。
   - 如果没有同步创建 backing generic Steam lobby，后续 `SetLobbyGameServer(...)` 就没有真实目标可更新，也不会触发期望的 `LobbyGameCreated_t` / `LobbyDataUpdate_t` 联动。
   - 后续排查应优先确认日志里是否已经出现 `GenericLobbyID=` 和 `synced generic lobby gameserver ... generic_lobby_id=...`，再决定是否回到更底层的 networking/serialized 路径。
+
+[Dota2 invisible generic lobby 不会自动进入 settings->lobby]
+- Date: 2026-05-01
+- Context: Agent 在继续排查“大厅仍显示主机载入中”并对照 `steam_matchmaking.cpp`、`steam_friends.cpp` 与 `steam_game_coordinator.cpp` 时发现
+- Category: 代码模式
+- Instructions:
+  - `Steam_Matchmaking::on_self_enter_leave_lobby(...)` 对 `k_ELobbyTypeInvisible` 会直接 `return`，因此 `CreateLobbyImmediate(k_ELobbyTypeInvisible, 1)` 虽然能创建 backing generic lobby，但默认不会调用 `settings->set_lobby(...)`。
+  - `Steam_Friends::GetFriendGamePlayed(...)` 与 `RunCallbacks()` 对外广播的 `m_steamIDLobby` / `friend.lobby_id` 都读取 `settings->get_lobby()`；如果这里只保留旧值或空值，前台大厅与好友视图就可能继续停留在错误的 host loading 状态。
+  - 因此 Dota practice lobby 在 create、shared runtime restore、leave generic lobby 这三类生命周期路径上，都需要显式把当前 `generic_lobby_id` 同步到 `settings->lobby`，而不能只维护 `GBE_local_lobby.generic_lobby_id`。
 
 [Dota2 server coordinator 也必须能发布 shared lobby]
 - Date: 2026-04-30

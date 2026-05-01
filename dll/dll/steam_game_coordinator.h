@@ -181,6 +181,7 @@ public ISteamGameCoordinator
     void GBE_PublishSharedDotaLobbyState(const char *reason);
     void GBE_RestoreSharedDotaLobbyState(const char *reason);
     void GBE_LeaveGenericLobby();
+    void GBE_SyncSettingsLobbyFromGenericLobby(const char *reason);
     bool GBE_SyncGenericLobbyGameServer(const char *reason);
     bool GBE_TrySyncDotaLobbyServerIdFromGameServer(const char *reason);
     uint64 GBE_GetDotaLobbyOwnerSteamId() const;

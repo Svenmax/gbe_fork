@@ -7779,6 +7779,35 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
     );
 }
 
+void Steam_Game_Coordinator::GBE_SyncSettingsLobbyFromGenericLobby(const char *reason)
+{
+    if (!settings)
+        return;
+
+    CSteamID target_lobby_id = k_steamIDNil;
+    if (GBE_local_lobby.active && GBE_local_lobby.generic_lobby_id != 0) {
+        CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
+        if (generic_lobby_id.IsLobby())
+            target_lobby_id = generic_lobby_id;
+    }
+
+    const CSteamID previous_lobby_id = settings->get_lobby();
+    if (previous_lobby_id == target_lobby_id)
+        return;
+
+    settings->set_lobby(target_lobby_id);
+    GBE_GC_DebugLog(
+        "GC_DOTA_SYNC",
+        "synced settings lobby from generic reason=%s active=%u dota_lobby_id=%llu generic_lobby_id=%llu old_settings_lobby=%llu new_settings_lobby=%llu",
+        reason ? reason : "unknown",
+        GBE_local_lobby.active ? 1u : 0u,
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+        static_cast<unsigned long long>(previous_lobby_id.ConvertToUint64()),
+        static_cast<unsigned long long>(target_lobby_id.ConvertToUint64())
+    );
+}
+
 void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
 {
     if (!GBE_shared_dota_lobby_state.valid) {
@@ -7856,6 +7885,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 GBE_local_lobby.game_state,
                 static_cast<unsigned long long>(GBE_local_lobby.server_id)
             );
+            GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "restore_client_full_adopt");
             GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "restore_client_full_adopt");
             GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(reason ? reason : "restore_client_full_adopt");
             return;
@@ -7955,6 +7985,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 GBE_local_lobby.connect.c_str()
             );
         }
+        GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "restore_client_runtime");
         GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "restore_client_runtime");
         return;
     }
@@ -8016,6 +8047,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         GBE_local_lobby.owner_slot,
         GBE_local_lobby.connect.c_str()
     );
+    GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "restore_server_or_full");
     GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "restore_server_or_full");
 }
 
@@ -8176,8 +8208,10 @@ std::string Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerName() const
 void Steam_Game_Coordinator::GBE_LeaveGenericLobby()
 {
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-    if (GBE_local_lobby.generic_lobby_id == 0)
+    if (GBE_local_lobby.generic_lobby_id == 0) {
+        GBE_SyncSettingsLobbyFromGenericLobby("leave_generic_lobby_noop");
         return;
+    }
 
     Steam_Client *steam_client = get_steam_client();
     if (steam_client && steam_client->steam_matchmaking) {
@@ -8187,6 +8221,7 @@ void Steam_Game_Coordinator::GBE_LeaveGenericLobby()
     }
 
     GBE_local_lobby.generic_lobby_id = 0;
+    GBE_SyncSettingsLobbyFromGenericLobby("leave_generic_lobby");
 }
 
 bool Steam_Game_Coordinator::GBE_SyncGenericLobbyGameServer(const char *reason)
@@ -9687,9 +9722,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         template_size = decoded_template.size();
     }
 
-    bool mirror_source_job_to_target = has_source_job;
-    if (request_emsg == 8744u)
-        mirror_source_job_to_target = false;
+    const bool mirror_source_job_to_target = has_source_job;
 
     std::string response_message;
     if (!GBE_BuildDotaDirectReplayMessage(
@@ -9859,6 +9892,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
             GBE_local_lobby.generic_lobby_id = generic_lobby_id.ConvertToUint64();
     }
 
+    GBE_SyncSettingsLobbyFromGenericLobby("7038_create");
     GBE_PublishSharedDotaLobbyState("7038_create");
 
     GBE_GC_DebugLog(
