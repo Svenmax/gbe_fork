@@ -147,6 +147,7 @@ struct GBE_SharedDotaLobbyState {
 
 static GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 static bool GBE_dota_launch_pending_8870 = false;
+static bool GBE_dota_launch_pending_043 = false;
 static bool GBE_dota_launch_pending_046 = false;
 static uint32 GBE_dota_launch_peripheral_stage_mask = 0;
 
@@ -8628,14 +8629,23 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     return true;
             }
 
-            if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u && request_shape.has_send_reason && request_shape.send_reason == 2u) {
-                if (queue_official_26(GBE_kDotaOfficial043PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 043 after 8744/7034")) {
+            if (GBE_dota_launch_pending_043 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u) {
+                if (queue_official_26(GBE_kDotaOfficial043PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 043 after latched 8744/7034")) {
+                    GBE_dota_launch_pending_043 = false;
                     GBE_dota_launch_pending_046 = true;
                     return true;
                 }
             }
 
-            if (GBE_dota_launch_pending_046 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && request_shape.has_send_reason && request_shape.send_reason == 5u) {
+            if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u && request_shape.has_send_reason && request_shape.send_reason == 2u) {
+                if (queue_official_26(GBE_kDotaOfficial043PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 043 after 8744/7034")) {
+                    GBE_dota_launch_pending_043 = false;
+                    GBE_dota_launch_pending_046 = true;
+                    return true;
+                }
+            }
+
+            if (GBE_dota_launch_pending_046 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && (!request_shape.has_send_reason || request_shape.send_reason == 5u)) {
                 if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 after disconnected-player 7034")) {
                     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
@@ -8706,7 +8716,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 }
             }
 
-            if (!GBE_dota_launch_pending_8870) {
+            if (!GBE_dota_launch_pending_8870 && !GBE_dota_launch_pending_043 && !(GBE_dota_launch_pending_046 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u) && !(GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u)) {
                 if (GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "7034_launch_poll")) {
                     GBE_GC_DebugLog(
                         "GC_DOTA_DIRECT",
@@ -8777,6 +8787,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == 8744u) {
+        if (GBE_local_lobby.active && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u)
+            GBE_dota_launch_pending_043 = true;
+
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "observed req=%u source_job=%llu body_size=%zu fields=%s body_prefix=%s",
@@ -9527,6 +9540,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     }
 
     GBE_dota_launch_pending_8870 = false;
+    GBE_dota_launch_pending_043 = false;
     GBE_dota_launch_pending_046 = false;
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
 
@@ -9595,6 +9609,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
 
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
     GBE_dota_launch_pending_8870 = false;
+    GBE_dota_launch_pending_043 = false;
     GBE_dota_launch_pending_046 = false;
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
     std::string response_25;
@@ -9699,6 +9714,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
     const uint32 account_id = settings->get_local_steam_id().GetAccountID();
     GBE_dota_launch_pending_8870 = false;
+    GBE_dota_launch_pending_043 = false;
     GBE_dota_launch_pending_046 = false;
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
 
@@ -10298,6 +10314,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDestroyLobbyRequest(uint64 request_jo
         GBE_local_lobby.state == 2u &&
         GBE_local_lobby.game_state == 4u;
 
+    GBE_dota_launch_pending_8870 = false;
+    GBE_dota_launch_pending_043 = false;
     GBE_dota_launch_pending_046 = false;
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
     if (was_private_lobby_launch_state) {

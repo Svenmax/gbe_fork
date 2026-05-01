@@ -31,6 +31,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[分析上传日志时必须顺序逐行阅读]
+- Date: 2026-05-01
+- Context: 用户要求“上传了，不要跳着读，逐行读寻找问题”
+- Instructions:
+  - 后续当用户上传新的日志文件并要求排查问题时，必须按文件顺序分段逐行阅读，不要先用 grep 跳读后再下结论。
+  - 允许把大文件按连续区间分段读取，但每段都应保持原始顺序，直到读完整个相关日志范围。
+
 [Dota2 official 046 后的 766 persona 应立即切到 PRIVATE_LOBBY]
 - Date: 2026-05-01
 - Context: Agent 在继续对照 `/workspace/steamhoststartlobbyandleave/` 的官方 `766 / PersonaState` 序列时发现
@@ -108,6 +115,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 官方 `042_in_5453_k_EMsgClientFromGC.bin` 的总长度是 `56` bytes，字节前缀与当前 `GBE_kDotaOfficial8745TemplateHex` 一致，说明 `8745` 的 body 模板本身没问题。
   - 当前本地 `replying req=8744 resp=8745 size=65` 的额外 `9` bytes 来自把请求 `source_job` 镜像进了 protobuf 扩展头的 `job_id_target`；但官方这条 `8745` donor 没有该 target job 字段。
   - 因此 `8744 -> 8745` 这条 direct reply 应保持 donor 的零/空 job header，不要像常规 direct job reply 那样自动回填 `job_id_target`。
+
+[Dota2 game_state=10 后的 7034 不能先落到 runtime 26 fallback]
+- Date: 2026-05-01
+- Context: Agent 按顺序完整阅读用户上传的 `gbe_gc_debug.log` 后发现 `8744` 已修复但官方后半程仍被截断
+- Category: 代码模式
+- Instructions:
+  - 当日志已出现官方 `8744 -> 8745(size=56)`，且 lobby 已推进到 `state=2, game_state=10` 时，下一条或接下来几条 `7034` 仍属于官方 `043/046` donor 链的一部分，不能先掉进 `7034_launch_poll` 的通用 runtime `26` fallback。
+  - 如果 `send_reason` 解析不稳定，应该通过 `8744` 后的显式闩锁来保证下一条 `7034` 优先回放官方 `043`，随后再进入 `046`，而不是仅靠 `send_reason == 2/5` 的单点判断。
+  - 一旦处于 `pending_043` 或 `pending_046` 这类官方后续阶段，应先消费官方 donor 链，再考虑 runtime `26` 兜底。
 
 [Dota2 PRE_GAME 后不要用通用 runtime 26 覆盖 donor 046 建立的 lobby 视图]
 - Date: 2026-04-30
