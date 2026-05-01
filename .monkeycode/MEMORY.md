@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 official 046 后的 766 persona 应立即切到 PRIVATE_LOBBY]
+- Date: 2026-05-01
+- Context: Agent 在继续对照 `/workspace/steamhoststartlobbyandleave/` 的官方 `766 / PersonaState` 序列时发现
+- Category: 代码模式
+- Instructions:
+  - 官方序列里 `018_in_766_k_EMsgClientPersonaState.bin` 仍然是 `#DOTA_RP_FINDING_MATCH + SERVERSETUP`，但紧接着的 `021_in_766_k_EMsgClientPersonaState.bin` 与 `022_in_766_k_EMsgClientPersonaState.bin` 已经切成 `#DOTA_RP_PRIVATE_LOBBY + RUN`，而不是等到后面的 `7197/8673` 才切换。
+  - 因此 practice lobby launch 的 `046` 后半程不应继续发送 `FINDING_MATCH` persona；若需要复用 server 变体模板，也必须把其 rich presence/status 同步改成 `#DOTA_RP_PRIVATE_LOBBY`。
+  - 当前 `7197/8673` 更适合作为补发或兜底时机，不应作为第一次切到 `PRIVATE_LOBBY` 的主触发点。
+
 [Dota2 抓包分析默认以 steamhoststartlobbyandleave 为主]
 - Date: 2026-05-01
 - Context: 用户要求“以后抓包数据主要看 steamhoststartlobbyandleave 里的”

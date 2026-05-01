@@ -319,6 +319,8 @@ static constexpr const char *GBE_kDotaPracticeLobbyLaunchTicketAuthCompleteHex =
     "351500800f00000009f5b62108010010011086b0cfdc0309017c58ca8fc14001113a020000000000001802200030a0ffd1c10741f5b6210801001001";
 static constexpr const char *GBE_kDotaPracticeLobbyLaunchPersonaStateServerRunHex =
     "fe0200800f00000009f5b62108010010011086b0cfdc03080812e60309f5b6210801001001100118ba04300138017a075376656e6d6178c901017c58ca8fc14001fa0114b7a33b90cbbf208c93b197a18ba999e3110d5908e802ac98a3cf06f0029cb5a3cf06f80200ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f46494e44494e475f4d41544348ba04270a0d737465616d5f646973706c6179121623444f54415f52505f46494e44494e475f4d41544348ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba0491010a056c6f6262791287016c6f6262795f69643a203239383039393334313238393439313233206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a202231323322206c6f6262795f747970653a2031ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348c1040000000000000000c9040000000000000000f80400800500880500980501";
+static constexpr const char *GBE_kDotaPracticeLobbyLaunchPersonaStateServerPrivateLobbyHex =
+    "fe0200800f00000009f5b62108010010011086b0cfdc03080812e60309f5b6210801001001100118ba04300138017a075376656e6d6178c901017c58ca8fc14001fa0114b7a33b90cbbf208c93b197a18ba999e3110d5908e802ac98a3cf06f0029cb5a3cf06f80200ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f505249564154455f4c4f424259ba04270a0d737465616d5f646973706c6179121623444f54415f52505f505249564154455f4c4f424259ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba0491010a056c6f6262791287016c6f6262795f69643a203239383039393334313238393439313233206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a202231323322206c6f6262795f747970653a2031ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348c1040000000000000000c9040000000000000000f80400800500880500980501";
 static constexpr const char *GBE_kDota8730TemplateHex =
     "1a22008009000000594600000000000000080112100a0e088ea83d1206cfb9cfb9d48c18001200"
     "120f0a0d08e0d61f1205313773656318001200120d0a0b0884b0331203534b2b180012120a1008"
@@ -8542,18 +8544,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         "launch game connect tokens stage3 before pregame persona"
                     );
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStageServerRunPersona,
+                        GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
                         GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStateServerRunHex,
-                        true,
-                        "launch persona server-run before private lobby"
+                        GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
+                        false,
+                        "launch persona private lobby after 046"
                     );
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStagePregameRunPersona,
+                        GBE_kDotaLaunchPeripheralStageServerRunPersona,
                         GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex,
-                        false,
-                        "launch persona run on pregame 7034"
+                        GBE_kDotaPracticeLobbyLaunchPersonaStateServerPrivateLobbyHex,
+                        true,
+                        "launch persona server-private after 046"
                     );
                     GBE_dota_launch_pending_046 = false;
                     return true;
@@ -8578,18 +8580,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         "launch game connect tokens stage3 on repeated pregame 7034"
                     );
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStageServerRunPersona,
+                        GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
                         GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStateServerRunHex,
-                        true,
-                        "launch persona server-run on repeated pregame 7034"
+                        GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
+                        false,
+                        "launch persona private lobby on repeated pregame 7034"
                     );
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStagePregameRunPersona,
+                        GBE_kDotaLaunchPeripheralStageServerRunPersona,
                         GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex,
-                        false,
-                        "launch persona run on repeated pregame 7034"
+                        GBE_kDotaPracticeLobbyLaunchPersonaStateServerPrivateLobbyHex,
+                        true,
+                        "launch persona server-private on repeated pregame 7034"
                     );
                     return true;
                 }
