@@ -9094,7 +9094,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
             if (GBE_dota_launch_pending_046 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && (!request_shape.has_send_reason || request_shape.send_reason == 5u)) {
                 if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 after disconnected-player 7034")) {
-                    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
+                    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_FINDING_MATCH", "RUN", true);
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageAuthListAckPost046,
                         GBE_kSteamAuthListAck,
@@ -9117,18 +9117,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         "launch game connect tokens stage3 before pregame persona"
                     );
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
-                        GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
-                        false,
-                        "launch persona private lobby after 046"
-                    );
-                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageServerRunPersona,
                         GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStateServerPrivateLobbyHex,
+                        GBE_kDotaPracticeLobbyLaunchPersonaStateServerRunHex,
                         true,
-                        "launch persona server-private after 046"
+                        "launch persona server-run after 046"
+                    );
+                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+                        GBE_kDotaLaunchPeripheralStagePregameRunPersona,
+                        GBE_kSteamPersonaState,
+                        GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex,
+                        false,
+                        "launch persona run after 046"
                     );
                     GBE_dota_launch_pending_046 = false;
                     return true;
@@ -9137,7 +9137,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && request_shape.has_send_reason && request_shape.send_reason == 5u) {
                 if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 for pregame 7034 launch poll")) {
-                    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
+                    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_FINDING_MATCH", "RUN", true);
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageAuthListAckPost046,
                         GBE_kSteamAuthListAck,
@@ -9160,18 +9160,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         "launch game connect tokens stage3 on repeated pregame 7034"
                     );
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
-                        GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
-                        false,
-                        "launch persona private lobby on repeated pregame 7034"
-                    );
-                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageServerRunPersona,
                         GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStateServerPrivateLobbyHex,
+                        GBE_kDotaPracticeLobbyLaunchPersonaStateServerRunHex,
                         true,
-                        "launch persona server-private on repeated pregame 7034"
+                        "launch persona server-run on repeated pregame 7034"
+                    );
+                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+                        GBE_kDotaLaunchPeripheralStagePregameRunPersona,
+                        GBE_kSteamPersonaState,
+                        GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex,
+                        false,
+                        "launch persona run on repeated pregame 7034"
                     );
                     return true;
                 }
@@ -9570,6 +9570,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         GBE_local_lobby.active &&
         GBE_local_lobby.state == 2u &&
         GBE_local_lobby.game_state == 4u) {
+        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
         GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
             GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
             GBE_kSteamPersonaState,
@@ -11361,7 +11362,11 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
     bool include_party = false;
 
     if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u) {
-        status = "#DOTA_RP_PRIVATE_LOBBY";
+        if (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona) {
+            status = "#DOTA_RP_PRIVATE_LOBBY";
+        } else {
+            status = "#DOTA_RP_FINDING_MATCH";
+        }
         lobby_state = "RUN";
         include_party = true;
     } else if (GBE_local_lobby.state == 2u) {

@@ -1363,3 +1363,20 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - donor `2016.member[0].leaver_status` 在模板里对应 `field 16 / wire_type 5`，需要按 fixed32 重写，不能用 varint `field 16 / wire_type 0` 追加一个新字段冒充覆盖。
   - 如果误用 varint 追加 `field 16=0`，debug 看起来会出现额外字段，但客户端仍会继续读取原来的 fixed32 `3758096384`，导致 `CSODOTALobby.all_members[0].leaver_status` 继续显示 `DOTA_LEAVER_DISCONNECTED`。
+
+[Dota2 官方抓包对比必须先解压并逐个按顺序解析]
+- Date: 2026-05-01
+- Context: 用户要求分析 `steamhoststart-hero.zip` 时明确指定排查方法
+- Category: 代码模式
+- Instructions:
+  - 分析官方抓包压缩包时，先解压，再逐个文件解析，不能只挑个别消息或直接 grep 结论。
+  - 对照本地实现时，必须同时核对官方数据包的结构、对象内容和先后顺序，按时间链路逐段比较。
+  - 对于“大厅开始游戏到选择英雄”的问题，判断标准以官方抓包对应阶段的界面结果为准，例如进入选英雄后主界面应从“主机连接中”切到“离开/返回游戏”。
+
+[Dota2 进入 PRE_GAME 后不能只凭 game_state=4 就重放 PRIVATE_LOBBY]
+- Date: 2026-05-01
+- Context: Agent 在逐个顺序对照 `steamhoststart-hero.zip` 的 `016-029` 与 `steam_game_coordinator.cpp` 后发现官方 `PRIVATE_LOBBY` 切换晚于 `046/PRE_GAME`
+- Category: 代码模式
+- Instructions:
+  - 当 practice lobby 已进入 `state=2, game_state=4` 时，本地 rich presence/persona 仍不应立刻切到 `#DOTA_RP_PRIVATE_LOBBY`；官方在这之前还会经过 `5429`、后续 Steam 侧链路，再晚一拍才出现最终 `766(private-lobby)`。
+  - 因此恢复 shared lobby 或重放 rich presence 时，不能只看到 `game_state=4` 就默认 `PRIVATE_LOBBY`；应至少等到“private lobby persona 已实际发送”的闩锁成立后，再把状态从 `#DOTA_RP_FINDING_MATCH + RUN` 切到 `#DOTA_RP_PRIVATE_LOBBY + RUN`。
