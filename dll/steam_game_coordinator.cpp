@@ -3400,7 +3400,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
         }
 
         if (field_number == 16u && wire_type == 2u) {
-            GBE_AppendProtoBytesField(output, 16u, room_name);
+            output.append(input.data() + field_offset, field_end - field_offset);
             continue;
         }
 
