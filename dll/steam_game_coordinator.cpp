@@ -2906,12 +2906,15 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
     uint32 owner_team,
     uint32 owner_slot,
     uint32 owner_hero_id,
+    bool force_connected_leaver_state,
     std::string &output)
 {
     output.clear();
     bool saw_team = false;
     bool saw_slot = false;
     bool saw_hero_id = false;
+    bool saw_leaver_status = false;
+    bool saw_leaver_actions = false;
 
     size_t offset = 0;
     while (offset < input.size()) {
@@ -2969,6 +2972,22 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
             continue;
         }
 
+        if (field_number == 16u && wire_type == 0u) {
+            saw_leaver_status = true;
+            if (force_connected_leaver_state) {
+                GBE_AppendProtoVarIntField(output, 16u, 0u);
+                continue;
+            }
+        }
+
+        if (field_number == 28u && wire_type == 0u) {
+            saw_leaver_actions = true;
+            if (force_connected_leaver_state) {
+                GBE_AppendProtoVarIntField(output, 28u, 0u);
+                continue;
+            }
+        }
+
         output.append(input.data() + field_offset, field_end - field_offset);
     }
 
@@ -2980,6 +2999,12 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
 
     if (!saw_hero_id && owner_hero_id != 0u)
         GBE_AppendProtoVarIntField(output, 2u, owner_hero_id);
+
+    if (force_connected_leaver_state && !saw_leaver_status)
+        GBE_AppendProtoVarIntField(output, 16u, 0u);
+
+    if (force_connected_leaver_state && !saw_leaver_actions)
+        GBE_AppendProtoVarIntField(output, 28u, 0u);
 
     return true;
 }
@@ -3748,6 +3773,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
                         owner_team,
                         owner_slot,
                         owner_hero_id,
+                        false,
                         rewritten_member))
                     return false;
             GBE_AppendProtoBytesField(output, 120u, rewritten_member);
@@ -3912,6 +3938,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2016(
     uint32 owner_team,
     uint32 owner_slot,
     uint32 owner_hero_id,
+    bool force_connected_leaver_state,
     std::string &output)
 {
     output.clear();
@@ -3945,6 +3972,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2016(
                     owner_team,
                     owner_slot,
                     owner_hero_id,
+                    force_connected_leaver_state,
                     rewritten_member))
                 return false;
 
@@ -4115,7 +4143,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
                         ? GBE_RewriteDotaLobbyTemplateObject2014(object_data, player_name, rewritten_object)
                     : (type_id == 2015u)
                             ? GBE_RewriteDotaLobbyTemplateObject2015(object_data, rewrite_runtime_fields, extra_startup_account_id, rewritten_object)
-                            : GBE_RewriteDotaLobbyTemplateObject2016(object_data, account_id, steam_id, owner_team, owner_slot, owner_hero_id, rewritten_object);
+                            : GBE_RewriteDotaLobbyTemplateObject2016(object_data, account_id, steam_id, owner_team, owner_slot, owner_hero_id, lobby_state >= 2u, rewritten_object);
                 if (!ok)
                     return false;
                 GBE_AppendProtoBytesField(rewritten_subscribed, 2u, rewritten_object);

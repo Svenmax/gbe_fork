@@ -1346,3 +1346,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - donor `2016` 重写不应继续只改 `hero_id`；它至少要与 `2004.field 120 owner_state` 对齐 owner 的 `steam_id`、`hero_id`、`team`、`slot`，这样 `all_members[0]` 才不会长期停留在 donor 的错误队伍/槽位。
   - 但 donor 路径仍应保留官方样本自带的 `leaver_status/leaver_actions` 过渡，不要在 template rewrite 时无条件清零；这与 `4511 -> 24` 初始 `DISCONNECTED` 过渡有关。
   - runtime 自建 `2016` 则应显式补全 owner 的 `team`、`slot`、`leaver_status=0`、`leaver_actions=0`，避免在没有 donor 成员负载的 `24/26` 快照里再次退化成“只有 steam_id/hero_id”的精简 member 视图。
+
+[Dota2 donor 2016 的 leaver_status 需要在 RUN 后再修正]
+- Date: 2026-05-01
+- Context: Agent 在顺序读完新一轮 `console.log` 与 `gbe_gc_debug.log` 后发现 `team/slot/hero` 已修正，但 dashboard 仍停留 host loading
+- Category: 代码模式
+- Instructions:
+  - 初始 `4511 -> 24` 的 donor `2016.member[0].leaver_status` 仍应保持官方样本里的 `DOTA_LEAVER_DISCONNECTED`，不要过早在 `SERVERSETUP` 阶段改成 `NONE`。
+  - 但当 donor `26` 已进入 `lobby_state=RUN` 后，如果 `2016.member[0]` 还一直保留 `DISCONNECTED` 且客户端后续没有新的 member 修正包，dashboard 可能会持续显示“主机载入中”。
+  - 因此 donor `2016` 的最小修复策略是：`SERVERSETUP` 保留原始 leaver 过渡，`RUN` 及之后把 member 的 `leaver_status/leaver_actions` 改写为 `0`，同时继续保留 owner 的 `hero/team/slot` 同步。
