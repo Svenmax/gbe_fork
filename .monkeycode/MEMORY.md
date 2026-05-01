@@ -1355,3 +1355,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 初始 `4511 -> 24` 的 donor `2016.member[0].leaver_status` 仍应保持官方样本里的 `DOTA_LEAVER_DISCONNECTED`，不要过早在 `SERVERSETUP` 阶段改成 `NONE`。
   - 但当 donor `26` 已进入 `lobby_state=RUN` 后，如果 `2016.member[0]` 还一直保留 `DISCONNECTED` 且客户端后续没有新的 member 修正包，dashboard 可能会持续显示“主机载入中”。
   - 因此 donor `2016` 的最小修复策略是：`SERVERSETUP` 保留原始 leaver 过渡，`RUN` 及之后把 member 的 `leaver_status/leaver_actions` 改写为 `0`，同时继续保留 owner 的 `hero/team/slot` 同步。
+
+[Dota2 donor 2016 的 leaver_status 字段是 fixed32 不是 varint]
+- Date: 2026-05-01
+- Context: Agent 在复查“RUN 后仍然 host loading”的最新日志并对照 `2016.member[0]` donor 布局时发现前一次修复没有真正覆盖旧值
+- Category: 代码模式
+- Instructions:
+  - donor `2016.member[0].leaver_status` 在模板里对应 `field 16 / wire_type 5`，需要按 fixed32 重写，不能用 varint `field 16 / wire_type 0` 追加一个新字段冒充覆盖。
+  - 如果误用 varint 追加 `field 16=0`，debug 看起来会出现额外字段，但客户端仍会继续读取原来的 fixed32 `3758096384`，导致 `CSODOTALobby.all_members[0].leaver_status` 继续显示 `DOTA_LEAVER_DISCONNECTED`。

@@ -2972,10 +2972,10 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
             continue;
         }
 
-        if (field_number == 16u && wire_type == 0u) {
+        if (field_number == 16u && wire_type == 5u) {
             saw_leaver_status = true;
             if (force_connected_leaver_state) {
-                GBE_AppendProtoVarIntField(output, 16u, 0u);
+                GBE_AppendProtoFixed32Field(output, 16u, 0u);
                 continue;
             }
         }
@@ -3001,7 +3001,7 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
         GBE_AppendProtoVarIntField(output, 2u, owner_hero_id);
 
     if (force_connected_leaver_state && !saw_leaver_status)
-        GBE_AppendProtoVarIntField(output, 16u, 0u);
+        GBE_AppendProtoFixed32Field(output, 16u, 0u);
 
     if (force_connected_leaver_state && !saw_leaver_actions)
         GBE_AppendProtoVarIntField(output, 28u, 0u);
