@@ -163,6 +163,8 @@ public ISteamGameCoordinator
     void GBE_PushDotaLoginSyncMessages();
     void GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
     bool GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(uint32 stage_bit, uint32 emsg, const char *template_hex, bool patch_server_id, const char *note);
+    void GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *status, const char *lobby_state, bool include_party);
+    void GBE_ClearDotaPracticeLobbyLaunchRichPresence();
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &player_name, std::string &message);
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const std::string &player_name, std::string &message);
     void GBE_PublishSharedDotaLobbyState(const char *reason);

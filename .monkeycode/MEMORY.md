@@ -1152,3 +1152,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - official 样本里的 rich presence/persona 不是单条静态消息；它会沿 `#DOTA_RP_INIT -> #DOTA_RP_FINDING_MATCH(SERVERSETUP) -> #DOTA_RP_FINDING_MATCH(RUN) -> #DOTA_RP_PRIVATE_LOBBY(RUN)` 逐步推进，并夹着 `5501/5575/779/5429` 这类外围消息。
   - 这些外围消息不能在 `4511/server_id` 首次同步时一次性全量倾倒；更稳妥的做法是按 launch 阶段去重排队：`7041` 只发 init persona，`server_id` 同步后补 `5501/5575/779 + setup persona`，`4506` 后补 `5575/779 + run persona`，`PRE_GAME 046` 窗口再补 `5429/779 + server-run/private-lobby persona`。
   - 如果后续 dashboard 状态仍异常，优先先核对这些 persona/rich presence 阶段消息是否根本没发、发重了，或发到了错误阶段，而不是先怀疑 `CSODOTALobby.state/game_state` 顶层推进。
+
+[Dota2 host startgame 的 dashboard 状态还依赖客户端主动 rich presence 上传]
+- Date: 2026-05-01
+- Context: Agent 在对照 `/workspace/hoststartgame_unpacked/` 与新日志时发现官方序列里有 `003/009/017/025 out 7501`，但本地日志完全没有 `7501`
+- Category: 代码模式
+- Instructions:
+  - 官方 launch 后段不是单纯“服务端回几条 `766`”；每个 persona 阶段前，客户端还会先主动上传一条 `7501 k_EMsgClientRichPresenceUpload`。
+  - 这 4 条 `7501` 的阶段分别对应：`#DOTA_RP_INIT + SERVERSETUP`、`#DOTA_RP_FINDING_MATCH + SERVERSETUP + party_state: IN_MATCH`、`#DOTA_RP_FINDING_MATCH + RUN + party_state: IN_MATCH`、`#DOTA_RP_PRIVATE_LOBBY + RUN + party_state: IN_MATCH`。
+  - 如果日志里只有 synthetic `766` 而完全没有本地 rich presence 更新，dashboard 仍显示“主机载入中”时，应优先补齐本地 `SteamFriends` rich presence 阶段更新，而不是继续只追加更多 inbound `766`。

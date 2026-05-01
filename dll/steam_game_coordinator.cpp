@@ -7394,6 +7394,7 @@ std::string Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerName() const
 
 void Steam_Game_Coordinator::GBE_LeaveGenericLobby()
 {
+    GBE_ClearDotaPracticeLobbyLaunchRichPresence();
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
     if (GBE_local_lobby.generic_lobby_id == 0)
         return;
@@ -7603,6 +7604,7 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
             false,
             "launch persona setup after server_id sync"
         );
+        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_FINDING_MATCH", "SERVERSETUP", true);
     }
 
     return true;
@@ -8186,6 +8188,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
             if (GBE_dota_launch_pending_046 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && request_shape.has_send_reason && request_shape.send_reason == 5u) {
                 if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 after disconnected-player 7034")) {
+                    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageTicketAuthComplete,
                         GBE_kSteamTicketAuthComplete,
@@ -8221,6 +8224,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && request_shape.has_send_reason && request_shape.send_reason == 5u) {
                 if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 for pregame 7034 launch poll")) {
+                    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
                     GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                         GBE_kDotaLaunchPeripheralStageTicketAuthComplete,
                         GBE_kSteamTicketAuthComplete,
@@ -8390,6 +8394,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     static_cast<unsigned long long>(source_job),
                     stage_message.size()
                 );
+                GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_FINDING_MATCH", "RUN", true);
                 GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
                     GBE_kDotaLaunchPeripheralStageAuthListAck2,
                     GBE_kSteamAuthListAck,
@@ -8996,6 +9001,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
     GBE_dota_launch_pending_8870 = false;
     GBE_dota_launch_pending_046 = false;
+    GBE_ClearDotaPracticeLobbyLaunchRichPresence();
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
     std::string response_25;
     if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
@@ -9180,6 +9186,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
         false,
         "launch init persona after 7041"
     );
+    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false);
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -9689,6 +9696,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDestroyLobbyRequest(uint64 request_jo
     }
 
     GBE_dota_launch_pending_046 = false;
+    GBE_ClearDotaPracticeLobbyLaunchRichPresence();
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
     GBE_LeaveGenericLobby();
     GBE_local_lobby.active = false;
@@ -10069,6 +10077,64 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
 void Steam_Game_Coordinator::GBE_ResetDotaPracticeLobbyLaunchPeripheralState()
 {
     GBE_dota_launch_peripheral_stage_mask = 0;
+}
+
+void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *status, const char *lobby_state, bool include_party)
+{
+    Steam_Client *steam_client = get_steam_client();
+    if (!steam_client || !steam_client->steam_friends)
+        return;
+
+    char lobby_value[512] = {};
+    const char *room_name = GBE_local_lobby.room_name.empty() ? "" : GBE_local_lobby.room_name.c_str();
+    std::snprintf(
+        lobby_value,
+        sizeof(lobby_value),
+        "lobby_id: %llu lobby_state: %s game_mode: DOTA_GAMEMODE_AP member_count: 1 max_member_count: 10 name: \"%s\" lobby_type: 1",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        lobby_state ? lobby_state : "SERVERSETUP",
+        room_name
+    );
+
+    steam_client->steam_friends->SetRichPresence("status", status ? status : "");
+    steam_client->steam_friends->SetRichPresence("steam_display", status ? status : "");
+    steam_client->steam_friends->SetRichPresence("num_params", "0");
+    steam_client->steam_friends->SetRichPresence("EventLevel_26", "0");
+    steam_client->steam_friends->SetRichPresence("EventLevel_39", "0");
+    steam_client->steam_friends->SetRichPresence("EventLevel_56", "1");
+    steam_client->steam_friends->SetRichPresence("EventLevel_55", "1");
+    steam_client->steam_friends->SetRichPresence("lobby", lobby_value);
+    if (include_party) {
+        steam_client->steam_friends->SetRichPresence("party", "party_state: IN_MATCH");
+    } else {
+        steam_client->steam_friends->SetRichPresence("party", nullptr);
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_SYNC",
+        "updated local launch rich presence status=%s lobby_state=%s include_party=%u lobby_id=%llu",
+        status ? status : "",
+        lobby_state ? lobby_state : "",
+        include_party ? 1u : 0u,
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+    );
+}
+
+void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
+{
+    Steam_Client *steam_client = get_steam_client();
+    if (!steam_client || !steam_client->steam_friends)
+        return;
+
+    steam_client->steam_friends->SetRichPresence("status", nullptr);
+    steam_client->steam_friends->SetRichPresence("steam_display", nullptr);
+    steam_client->steam_friends->SetRichPresence("num_params", nullptr);
+    steam_client->steam_friends->SetRichPresence("EventLevel_26", nullptr);
+    steam_client->steam_friends->SetRichPresence("EventLevel_39", nullptr);
+    steam_client->steam_friends->SetRichPresence("EventLevel_56", nullptr);
+    steam_client->steam_friends->SetRichPresence("EventLevel_55", nullptr);
+    steam_client->steam_friends->SetRichPresence("lobby", nullptr);
+    steam_client->steam_friends->SetRichPresence("party", nullptr);
 }
 
 bool Steam_Game_Coordinator::GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(uint32 stage_bit, uint32 emsg, const char *template_hex, bool patch_server_id, const char *note)
