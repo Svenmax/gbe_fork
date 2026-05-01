@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 official 032 之后到 8744 之前还有一段当前实现未接线的 cache prelude]
+- Date: 2026-05-01
+- Context: Agent 在按顺序对照 `/workspace/lobbystartgamedota2/` 与 `dll/steam_game_coordinator.cpp` 的 practice lobby host startgame 链路时发现
+- Category: 代码模式
+- Instructions:
+  - 官方样本在 `032` 之后、`8744` 之前还有一段 `5429 + 24 + 24` 的 prelude，其中首条小 `24` 对应当前代码里的 `GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedPreludeTemplateReplay(...)`。
+  - 该 prelude builder 目前只有定义，没有任何实际 launch 状态跃迁会调用它，因此日志里虽然已有 `032/8744/043/046`，但仍会完全缺失 `037/038` 这两条 `CacheSubscribed`。
+  - 后续如果 dashboard 仍停在 host loading，应优先检查这段 prelude cache 是否已在 `032 -> 8744` 窗口按时入队，而不是只盯 `043/046` 或 rich presence。
+
 [分析上传日志时必须顺序逐行阅读]
 - Date: 2026-05-01
 - Context: 用户要求“上传了，不要跳着读，逐行读寻找问题”
