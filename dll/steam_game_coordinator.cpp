@@ -2335,6 +2335,52 @@ static std::string GBE_FormatDotaLobbyMemberStateSummary(const std::string &inpu
     return std::string(buffer);
 }
 
+static std::string GBE_FormatProtoRepeatedVarIntFieldSummary(const std::string &input, uint32 target_field)
+{
+    const uint8 *data = reinterpret_cast<const uint8 *>(input.data());
+    const size_t size = input.size();
+
+    std::ostringstream stream;
+    bool first = true;
+    size_t offset = 0;
+    while (offset < size) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(data, size, offset, field_number, wire_type, field_offset, value_offset, value_size, field_end))
+            break;
+
+        if (field_number == target_field && wire_type == 0u) {
+            uint64 value = 0;
+            if (GBE_ReadProtoVarInt(data + value_offset, value_size, value)) {
+                if (!first)
+                    stream << ',';
+                first = false;
+                stream << value;
+            }
+        }
+    }
+
+    if (first)
+        return "-";
+
+    return stream.str();
+}
+
+static std::string GBE_FormatDotaLobbyIndexFieldSummary(const std::string &input)
+{
+    std::ostringstream stream;
+    stream << "121=[" << GBE_FormatProtoRepeatedVarIntFieldSummary(input, 121u)
+           << "] 122=[" << GBE_FormatProtoRepeatedVarIntFieldSummary(input, 122u)
+           << "] 123=[" << GBE_FormatProtoRepeatedVarIntFieldSummary(input, 123u)
+           << "] 124=[" << GBE_FormatProtoRepeatedVarIntFieldSummary(input, 124u)
+           << ']';
+    return stream.str();
+}
+
 static std::string GBE_FormatProtoFieldLayoutSummary(const std::string &input)
 {
     std::ostringstream stream;
@@ -3540,6 +3586,13 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
         GBE_AppendProtoBytesField(output, 109u, lan_host_ping_location);
     if (rewrite_runtime_fields && !saw_game_start_time && game_start_time != 0)
         GBE_AppendProtoVarIntField(output, 87u, game_start_time);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_PATCH",
+        "2004 index field summary input={%s} output={%s}",
+        GBE_FormatDotaLobbyIndexFieldSummary(input).c_str(),
+        GBE_FormatDotaLobbyIndexFieldSummary(output).c_str()
+    );
 
     return true;
 }
