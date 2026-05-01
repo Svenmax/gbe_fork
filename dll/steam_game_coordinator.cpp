@@ -3024,6 +3024,7 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
     std::string &output)
 {
     output.clear();
+    bool saw_account_id = false;
     bool saw_team = false;
     bool saw_slot = false;
     bool saw_hero_id = false;
@@ -3063,6 +3064,7 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
         }
 
         if (field_number == 55u && wire_type == 0u) {
+            saw_account_id = true;
             GBE_AppendProtoVarIntField(output, 55u, account_id);
             continue;
         }
@@ -3110,6 +3112,9 @@ static bool GBE_RewriteDotaLobbyTemplateMemberObject(
 
     if (!saw_slot)
         GBE_AppendProtoVarIntField(output, 7u, owner_slot);
+
+    if (!saw_account_id)
+        GBE_AppendProtoVarIntField(output, 55u, account_id);
 
     if (!saw_hero_id && owner_hero_id != 0u)
         GBE_AppendProtoVarIntField(output, 2u, owner_hero_id);
@@ -3702,7 +3707,7 @@ static void GBE_LogDotaSOMultipleObjectsSummary(const char *tag, const char *lab
                     "%s object[%d] type=2016 member[0]{%s}",
                     label ? label : "dota_so_summary",
                     object_index,
-                    GBE_FormatDotaLobbyMemberStateSummary(first_member).c_str()
+                    GBE_FormatDotaServerStaticLobbyMemberSummary(first_member).c_str()
                 );
             }
         }
@@ -5254,6 +5259,7 @@ static bool GBE_BuildDotaDestroyLobbyResponsePayload(uint64 request_job_id, std:
 }
 
 static void GBE_BuildDotaPracticeLobbySOObjectData(
+    uint32 account_id,
     uint64 steam_id,
     uint64 lobby_id,
     uint32 lobby_state,
@@ -5382,6 +5388,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
             GBE_AppendProtoVarIntField(owner_state, 2, owner_hero_id);
         GBE_AppendProtoVarIntField(owner_state, 3, owner_team);
         GBE_AppendProtoVarIntField(owner_state, 7, owner_slot);
+        GBE_AppendProtoVarIntField(owner_state, 55u, account_id);
         GBE_AppendProtoFixed32Field(owner_state, 16u, 0u);
         GBE_AppendProtoVarIntField(owner_state, 28, 0u);
         GBE_AppendProtoBytesField(object_2004, 120, owner_state);
@@ -5440,6 +5447,7 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
     std::string object_2004;
     std::string object_2014;
     GBE_BuildDotaPracticeLobbySOObjectData(
+        static_cast<uint32>(steam_id & 0xFFFFFFFFu),
         steam_id,
         lobby_id,
         lobby_state,
@@ -5849,6 +5857,7 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
         std::string body;
 
         GBE_BuildDotaPracticeLobbySOObjectData(
+            account_id,
             steam_id,
             lobby_id,
             lobby_state,

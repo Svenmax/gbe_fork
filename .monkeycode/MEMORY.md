@@ -31,6 +31,23 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 hero selection 若 2004.owner_state 缺少 account_id，UI 可能按队伍首槽回退]
+- Date: 2026-05-01
+- Context: Agent 在继续排查“hero selection 暂时把 Dire 3 显示成 Dire 1”，顺序对照最新 `console.log`、`gbe_gc_debug.log` 与 `steam_game_coordinator.cpp` 的 `2004` rewrite/scratch builder 时发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里 `2004.owner_state.team/slot` 在 `7047`、launch donor `26`、`043/046` 与 runtime snapshot 中始终正确，但日志摘要持续显示 `account_id=0` 或缺失，说明 seat 真值并没有丢，而是本地玩家身份字段不完整。
+  - `GBE_RewriteDotaLobbyTemplateMemberObject(...)` 不能只在 donor 已带 `field 55 / account_id` 时重写；若缺失，也要主动补写当前 owner 的 `account_id`。
+  - `GBE_BuildDotaPracticeLobbySOObjectData(...)` 构造 scratch `2004.owner_state` 时也必须同时写入 `field 55 / account_id`，否则 prelaunch/local 直构路径与 donor rewrite 路径会再次产生身份字段不一致。
+
+[Dota2 2016 的 SO 摘要必须使用 server-static formatter]
+- Date: 2026-05-01
+- Context: Agent 在继续排查 Dota2 练习房英雄选择临时错位，并顺序核对 `gbe_gc_debug.log` 与 `dll/steam_game_coordinator.cpp` 的 SO summary 输出时发现
+- Category: 代码模式
+- Instructions:
+  - `2016` 对应 `CSODOTAServerStaticLobby`，其 `member[0]` 摘要必须走 `GBE_FormatDotaServerStaticLobbyMemberSummary(...)`，不能复用 `GBE_FormatDotaLobbyMemberStateSummary(...)`。
+  - 如果 `2016` 调试日志继续按 lobby member schema 打印，就会出现伪 `team=0 slot=0 leaver_status=...`，这类输出只能说明 formatter 用错，不能当成真实运行态证据。
+
 [Dota2 practice lobby 的 2016 实际是 CSODOTAServerStaticLobby，不能按 team/slot member 重写]
 - Date: 2026-05-01
 - Context: Agent 在继续排查“hero selection 暂时把 Dire 3 显示成 Dire 1”并重新核对 `dota_gcmessages_common_lobby.proto`、`console.log` 与 `steam_game_coordinator.cpp` 的 `2016` 重写逻辑时发现
