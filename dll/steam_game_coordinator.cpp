@@ -3872,10 +3872,17 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
             continue;
         }
 
-        if ((field_number == 122u || field_number == 123u || field_number == 124u) && wire_type == 0u) {
+        if ((field_number == 122u || field_number == 123u) && wire_type == 0u) {
             output.append(input.data() + field_offset, field_end - field_offset);
             continue;
         }
+
+        // The initial create-time donor can carry stale hero-request arrays that
+        // are never refreshed by later runtime 26s. Keep team/slot sources, but
+        // drop these auxiliary hero-select hints so the client doesn't reuse the
+        // cached donor layout during hero selection.
+        if ((field_number == 124u || field_number == 132u) && wire_type == 0u)
+            continue;
 
         output.append(input.data() + field_offset, field_end - field_offset);
     }

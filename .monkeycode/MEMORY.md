@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 hero selection 若只剩 create-time 的 2004 请求英雄数组，应在 donor rewrite 中主动清掉]
+- Date: 2026-05-01
+- Context: Agent 在按顺序读完整份新 `console.log` 与 `gbe_gc_debug.log`，确认 `owner_state`、`2016.member[0]` 与 server 内实际分配始终保持 `team=1 slot=3`，且后续 runtime `26` 再未维护 `2004.field124/132` 后发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里 `2004.requested_hero_ids (124)` 只在最初的 create/cache 模板中出现为一组全零数组，`requested_hero_teams (132)` 也只可能来自旧 donor 辅助字段；进入 `WAIT_FOR_PLAYERS_TO_LOAD/HERO_SELECTION/STRATEGY_TIME` 后的 runtime `26` 都不再更新这两组字段。
+  - 如果这些 create-time 辅助数组继续留在缓存里，客户端可能会在英雄选择阶段重新解释旧的 donor hero-select 布局，即使 `2004.owner_state`、`2004.all_members[0]`、`2016.member[0]` 和实际进游戏分配都仍然正确。
+  - 因此 donor `2004` 重写应保留真实的 team/slot 主字段，但主动清掉 `field124/132` 这类不再被 runtime 维护的英雄请求辅助数组。
+
 [Dota2 021 这类 launch donor 的 2015 必须规范化 server-lobby member cardinality]
 - Date: 2026-05-01
 - Context: Agent 在顺序读完最新 `console.log` 与 `gbe_gc_debug.log`，确认英雄选择阶段唯一显著异物是 `official packet 021 after 7034` 的 `type=2015 object_data_size=405`，且控制台同步打印 `CSODOTAServerLobby.extra_startup_messages[0]: id: 8869` 后发现
