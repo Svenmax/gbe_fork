@@ -3766,8 +3766,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
     uint32 owner_hero_id,
     bool rewrite_2015,
     uint32 extra_startup_account_id,
-    const std::string &pass_key,
-    const char *debug_label)
+    const std::string &pass_key)
 {
     if (message.size() < sizeof(ProtoBufMsgHeader_t))
         return false;
@@ -3887,28 +3886,6 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
                             : GBE_RewriteDotaLobbyTemplateObject2016(object_data, account_id, steam_id, owner_team, owner_slot, owner_hero_id, rewritten_object);
                 if (!ok)
                     return false;
-                if (debug_label && std::strncmp(debug_label, "official packet ", 16) == 0 && (type_id == 2004u || type_id == 2015u || type_id == 2016u)) {
-                    GBE_GC_DebugLog(
-                        "GC_DOTA_PATCH",
-                        "%s rewrite object type=%llu input_size=%zu output_size=%zu input_layout=%s output_layout=%s",
-                        debug_label,
-                        static_cast<unsigned long long>(type_id),
-                        object_data.size(),
-                        rewritten_object.size(),
-                        GBE_FormatProtoFieldLayoutSummary(object_data).c_str(),
-                        GBE_FormatProtoFieldLayoutSummary(rewritten_object).c_str()
-                    );
-                    if (std::strcmp(debug_label, "official packet 046 after disconnected-player 7034") == 0 && (type_id == 2004u || type_id == 2016u)) {
-                        GBE_GC_DebugLog(
-                            "GC_DOTA_PATCH",
-                            "%s rewrite object type=%llu input_hex=%s output_hex=%s",
-                            debug_label,
-                            static_cast<unsigned long long>(type_id),
-                            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(object_data.data()), object_data.size(), 256).c_str(),
-                            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(rewritten_object.data()), rewritten_object.size(), 256).c_str()
-                        );
-                    }
-                }
                 GBE_AppendProtoBytesField(rewritten_subscribed, 2u, rewritten_object);
                 continue;
             }
@@ -4259,8 +4236,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
             owner_hero_id,
             stage_index == 3,
             stage_index == 3 ? account_id : 0u,
-            pass_key,
-            nullptr))
+            pass_key))
         return false;
 
     message.swap(inner_payload);
@@ -4358,8 +4334,7 @@ static bool GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
             owner_hero_id,
             rewrite_2015,
             extra_startup_account_id,
-            pass_key,
-            stage_note))
+            pass_key))
         return false;
 
     message.swap(inner_payload);
@@ -5158,8 +5133,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWra
         owner_hero_id,
         rewrite_2015,
         extra_startup_account_id,
-        pass_key,
-        template_note)) {
+        pass_key)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "launch cache runtime state patch failed note=%s lobby_id=%llu state=%u game_state=%u server_id=%llu match_id=%llu body_size=%zu",
@@ -7174,8 +7148,7 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl(
         owner_hero_id,
         rewrite_2015,
         extra_startup_account_id,
-        pass_key,
-        nullptr);
+        pass_key);
 }
 
 bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &player_name, std::string &message)
@@ -9736,7 +9709,6 @@ bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_26.data()), response_26.size(), 32).c_str(),
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(wrapped_26.data()), wrapped_26.size(), 32).c_str()
         );
-        GBE_LogDotaSOMultipleObjectsSummary("GC_DOTA_LOBBY", reason ? reason : "runtime_wrapped_26", response_26);
     } else {
         push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, response_26);
         GBE_GC_DebugLog(
@@ -9747,7 +9719,6 @@ bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped
             response_26.size(),
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_26.data()), response_26.size(), 32).c_str()
         );
-        GBE_LogDotaSOMultipleObjectsSummary("GC_DOTA_LOBBY", reason ? reason : "runtime_direct_26", response_26);
     }
 
     return true;
@@ -10737,6 +10708,25 @@ bool Steam_Game_Coordinator::GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(uint
         static_cast<unsigned long long>(GBE_local_lobby.server_id),
         message.size()
     );
+    if (emsg == GBE_kSteamPersonaState && note && std::strstr(note, "persona")) {
+        const bool has_private_lobby = message.find("#DOTA_RP_PRIVATE_LOBBY") != std::string::npos;
+        const bool has_finding_match = message.find("#DOTA_RP_FINDING_MATCH") != std::string::npos;
+        const bool has_lobby_run = message.find("lobby_state: RUN") != std::string::npos;
+        const bool has_lobby_serversetup = message.find("lobby_state: SERVERSETUP") != std::string::npos;
+        const bool has_party_in_match = message.find("party_state: IN_MATCH") != std::string::npos;
+        GBE_GC_DebugLog(
+            "GC_DOTA_PATCH",
+            "persona peripheral note=%s size=%zu private_lobby=%u finding_match=%u lobby_run=%u lobby_serversetup=%u party_in_match=%u hex=%s",
+            note,
+            message.size(),
+            has_private_lobby ? 1u : 0u,
+            has_finding_match ? 1u : 0u,
+            has_lobby_run ? 1u : 0u,
+            has_lobby_serversetup ? 1u : 0u,
+            has_party_in_match ? 1u : 0u,
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(message.data()), message.size(), 256).c_str()
+        );
+    }
     return true;
 }
 
