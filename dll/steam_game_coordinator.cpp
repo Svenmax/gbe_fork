@@ -8599,7 +8599,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 if (GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "7034_launch_poll")) {
                     GBE_GC_DebugLog(
                         "GC_DOTA_DIRECT",
-                        "replying req=%u resp=%u source_job=%llu note=7034 direct poll uses runtime 26 state=%u game_state=%u",
+                        "replying req=%u resp=%u source_job=%llu note=7034 direct poll uses runtime 26 fallback state=%u game_state=%u",
                         request_emsg,
                         GBE_kDotaPracticeLobbyDetailsUpdate,
                         static_cast<unsigned long long>(source_job),
@@ -9709,6 +9709,7 @@ bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_26.data()), response_26.size(), 32).c_str(),
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(wrapped_26.data()), wrapped_26.size(), 32).c_str()
         );
+        GBE_LogDotaSOMultipleObjectsSummary("GC_DOTA_LOBBY", reason ? reason : "runtime_wrapped_26", response_26);
     } else {
         push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, response_26);
         GBE_GC_DebugLog(
@@ -9719,6 +9720,7 @@ bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped
             response_26.size(),
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_26.data()), response_26.size(), 32).c_str()
         );
+        GBE_LogDotaSOMultipleObjectsSummary("GC_DOTA_LOBBY", reason ? reason : "runtime_direct_26", response_26);
     }
 
     return true;
