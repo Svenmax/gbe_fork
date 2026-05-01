@@ -3630,6 +3630,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2016(
     uint64 steam_id,
     uint32 owner_team,
     uint32 owner_slot,
+    uint32 owner_hero_id,
     std::string &output)
 {
     (void)account_id;
@@ -3659,6 +3660,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2016(
 
         if (field_number == 1u && wire_type == 2u) {
             std::string rewritten_member;
+            bool saw_hero_id = false;
             size_t member_offset = 0;
             while (member_offset < value_size) {
                 uint32 member_field = 0;
@@ -3684,8 +3686,18 @@ static bool GBE_RewriteDotaLobbyTemplateObject2016(
                     continue;
                 }
 
+                if (member_field == 2u && member_wire == 0u) {
+                    saw_hero_id = true;
+                    if (owner_hero_id != 0u)
+                        GBE_AppendProtoVarIntField(rewritten_member, 2u, owner_hero_id);
+                    continue;
+                }
+
                 rewritten_member.append(input.data() + value_offset + member_field_offset, member_field_end - member_field_offset);
             }
+
+            if (!saw_hero_id && owner_hero_id != 0u)
+                GBE_AppendProtoVarIntField(rewritten_member, 2u, owner_hero_id);
 
             GBE_AppendProtoBytesField(output, 1u, rewritten_member);
             continue;
@@ -3845,7 +3857,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
                         ? GBE_RewriteDotaLobbyTemplateObject2014(object_data, player_name, rewritten_object)
                     : (type_id == 2015u)
                             ? GBE_RewriteDotaLobbyTemplateObject2015(object_data, rewrite_runtime_fields, extra_startup_account_id, rewritten_object)
-                            : GBE_RewriteDotaLobbyTemplateObject2016(object_data, account_id, steam_id, owner_team, owner_slot, rewritten_object);
+                            : GBE_RewriteDotaLobbyTemplateObject2016(object_data, account_id, steam_id, owner_team, owner_slot, owner_hero_id, rewritten_object);
                 if (!ok)
                     return false;
                 GBE_AppendProtoBytesField(rewritten_subscribed, 2u, rewritten_object);
@@ -4791,6 +4803,8 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     {
         std::string member_bytes;
         GBE_AppendProtoFixed64Field(member_bytes, 1, steam_id);
+        if (owner_hero_id != 0u)
+            GBE_AppendProtoVarIntField(member_bytes, 2, owner_hero_id);
 
         object_2016.clear();
         GBE_AppendProtoBytesField(object_2016, 1, member_bytes);

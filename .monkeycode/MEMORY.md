@@ -46,6 +46,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当前 `Steam_Friends::SetRichPresence()` / `ClearRichPresence()` 如果只更新 `us.rich_presence` 并做网络广播，但不对本地自己触发 `FriendRichPresenceUpdate_t` 与 `k_EPersonaChangeRichPresence`，端侧 UI 可能拿不到即时刷新信号。
   - 官方样本在 `7501/766` persona 切换后还会伴随额外的好友数据刷新请求，因此本地实现至少要保证 rich presence 改动时立即给本地派发 rich presence/persona 变更回调，避免 dashboard/profile 停留在旧文案。
 
+[Dota2 launch donor/runtime 的 2016 member 也必须同步 owner hero_id]
+- Date: 2026-05-01
+- Context: Agent 在分析“个人页面已显示私人房间，但大厅仍显示主机载入中”的新 `gbe_gc_debug.log` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当 `2004.state/game_state` 与本地 rich presence 都已经推进到 `state=2, game_state=4, #DOTA_RP_PRIVATE_LOBBY`，但 dashboard 仍卡在 loading，需继续核对 `2016.member[0]`。
+  - 当前 donor `2016` 重写和 runtime `2016` 构建如果只写 `steam_id`，会导致 `member[0].hero_id` 长期停留在 `0`；即使 `2004.owner_state.hero_id` 已经被 `7034` 更新为正确英雄，大厅仍可能按旧 member 视图判定为未完成加载。
+  - 修复时至少要把当前 `owner_hero_id` 同步写入 `2016.member[0].field 2`，并尽量保持 donor 原有的其他 member 字段不变。
+
 [Dota2 新 coordinator 客户端实例必须从 shared lobby 完整恢复并重放 rich presence]
 - Date: 2026-05-01
 - Context: Agent 在继续排查“日志已到 PRIVATE_LOBBY 但 dashboard 仍显示主机载入中”并对照 `steam_game_coordinator.cpp` 的 constructor、`GBE_RestoreSharedDotaLobbyState(...)` 与最新 `gbe_gc_debug.log` 时发现
