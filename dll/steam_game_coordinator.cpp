@@ -5810,6 +5810,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(
 }
 
 static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
+    uint32 account_id,
     uint64 steam_id,
     uint64 lobby_id,
     uint32 lobby_state,
@@ -7923,6 +7924,7 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPay
 bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message)
 {
     return GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
+        GBE_GetDotaLobbyOwnerAccountId(),
         GBE_GetDotaLobbyOwnerSteamId(),
         lobby.lobby_id,
         lobby.state,
