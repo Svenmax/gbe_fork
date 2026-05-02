@@ -31,6 +31,23 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 hero-selection 主界面若仍卡载入中，可先补当前 direct 26 再发 persona]
+- Date: 2026-05-02
+- Context: Agent 在顺序对照 `officialconsole.log` 第 `1112-1118` 行、`console.log` 第 `1122-1129` 行与 `gbe_gc_debug.log` 第 `796-863` 行时发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里，官方在 dashboard 切回前的 hero-selection 窗口可见连续 3 条 `26`，而 `gbe` 原先只有 `043/046` 两条 `26`，中间夹着成对 `766` persona，导致 dashboard 可能仍停在 host loading。
+  - 若 profile 已正常切到 `PRIVATE_LOBBY`，但主界面仍未切按钮，优先尝试在第一次进入 `state=2 && game_state=4` 时补发一次当前 runtime `26` details update，并让它排在额外 persona 之前，而不是先提前整组 `24/26` snapshot。
+  - 这个 hero-selection `26` 只应补发一次，避免与更晚的 `8673` 运行时恢复快照形成无限重复或过度刷屏。
+
+[Dota2 若个人页已切私人房间但主界面仍载入中，优先怀疑 dashboard 专属链路]
+- Date: 2026-05-02
+- Context: 用户在复测“进入英雄选择后个人信息界面正常变为私人房间，但主界面仍显示载入中”后反馈，并上传新日志要求继续排查
+- Category: 代码模式
+- Instructions:
+  - 当 profile/persona 视图已经在英雄选择时正确显示 `PRIVATE_LOBBY`，说明本地 rich presence 与至少一条 persona 链已经足够驱动个人信息界面刷新。
+  - 这时剩余问题应优先怀疑 dashboard/主界面专属的下游链路，例如 cache subscribed prelude、`24/26` snapshot、或其他只被大厅面板消费的 GC 时序，而不应再优先修改纯 persona/rich-presence 切换条件。
+
 [Dota2 英雄选择首次 RUN 边缘要提前补齐成对的 private-lobby 766]
 - Date: 2026-05-02
 - Context: Agent 在继续排查“GC 日志已切到 PRIVATE_LOBBY，但用户实测 UI 仍没变化”并顺序对照 `console.log`、`gbe_gc_debug.log` 与 `steam_game_coordinator.cpp` 的 persona 排队时发现

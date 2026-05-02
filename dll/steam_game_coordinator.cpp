@@ -184,6 +184,7 @@ enum : uint32 {
     GBE_kDotaLaunchPeripheralStageLateGamesPlayed = 1u << 19,
     GBE_kDotaLaunchPeripheralStageLateAuthList = 1u << 20,
     GBE_kDotaLaunchPeripheralStagePrivateLobbyServerPersona = 1u << 21,
+    GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26 = 1u << 22,
 };
 
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...);
@@ -6468,6 +6469,41 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         GBE_local_lobby.game_state,
         GBE_GC_MaskedEMsg(message.msg_type)
     );
+
+    // In the official hero-selection window, the dashboard consumes another
+    // lobby details update before the late persona messages arrive. Reuse the
+    // current runtime 26 once when we first reach hero selection so the main
+    // dashboard sees the same SO cadence instead of waiting for later runtime
+    // restore traffic like 8673.
+    if (GBE_local_lobby.active &&
+        GBE_local_lobby.lobby_id != 0 &&
+        GBE_local_lobby.match_id != 0 &&
+        GBE_local_lobby.server_id != 0 &&
+        GBE_local_lobby.state == 2u &&
+        GBE_local_lobby.game_state == 4u &&
+        !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26)) {
+        std::string current_26;
+        if (GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, GBE_GetDotaLobbyOwnerName(), current_26)) {
+            GBE_dota_launch_peripheral_stage_mask |= GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26;
+            push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, current_26);
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "queued hero-selection current 26 before persona lobby_id=%llu match_id=%llu server_id=%llu size=%zu",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                current_26.size()
+            );
+        } else {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "failed building hero-selection current 26 before persona lobby_id=%llu match_id=%llu server_id=%llu",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                static_cast<unsigned long long>(GBE_local_lobby.server_id)
+            );
+        }
+    }
 
     // In current practice-lobby samples, the dashboard/private-profile flip can
     // already happen by the first hero-selection run-state edge, before the
