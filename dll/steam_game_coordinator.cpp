@@ -6667,30 +6667,15 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
 
     // In current practice-lobby samples, the dashboard/private-profile flip can
     // already happen by the first hero-selection run-state edge, before the
-    // later pregame persona chain has fully appeared. Once run persona timing
-    // is active, latch private-lobby persona on the first run-state edge we see.
+    // later pregame persona chain has fully appeared. Latch private-lobby rich
+    // presence immediately, but leave the persona packets for a later Steam
+    // callback so the hero-selection window keeps a tighter 26/26/26 cadence.
     if (GBE_local_lobby.state == 2u &&
         GBE_local_lobby.game_state >= 2u &&
         !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona) &&
         ((GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePregameRunPersona) ||
          (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageRunPersona))) {
         GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
-        if (GBE_local_lobby.server_id != 0) {
-            GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                GBE_kDotaLaunchPeripheralStagePrivateLobbyServerPersona,
-                GBE_kSteamPersonaState,
-                GBE_kDotaPracticeLobbyLaunchPersonaStateServerPrivateLobbyHex,
-                true,
-                "launch persona server-private-lobby on hero-selection run-state edge"
-            );
-        }
-        GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-            GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
-            GBE_kSteamPersonaState,
-            GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
-            false,
-            "launch persona private lobby on hero-selection run-state edge"
-        );
     }
 
     GBE_PublishSharedDotaLobbyState("queued_state");
@@ -10075,6 +10060,31 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_FinalizeDotaPracticeLobbyLateSteamChain("launch persona private lobby after late 5410/5432 chain");
         }
         return true;
+    }
+
+    if (request_emsg == 8673u &&
+        GBE_local_lobby.active &&
+        GBE_local_lobby.state == 2u &&
+        GBE_local_lobby.game_state >= 2u &&
+        !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona) &&
+        (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26)) {
+        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
+        if (GBE_local_lobby.server_id != 0) {
+            GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+                GBE_kDotaLaunchPeripheralStagePrivateLobbyServerPersona,
+                GBE_kSteamPersonaState,
+                GBE_kDotaPracticeLobbyLaunchPersonaStateServerPrivateLobbyHex,
+                true,
+                "launch persona server-private-lobby after 8673 hero-selection chain"
+            );
+        }
+        GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+            GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
+            GBE_kSteamPersonaState,
+            GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
+            false,
+            "launch persona private lobby after 8673 hero-selection chain"
+        );
     }
 
     switch (request_emsg) {

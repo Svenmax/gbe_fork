@@ -31,6 +31,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 hero-selection 窗口里要避免让 766 persona 插到三条 26 中间]
+- Date: 2026-05-02
+- Context: Agent 在继续排查“个人主页正常但 dashboard 仍停在主机载入中”，并对照最新 `officialconsole.log`、`console.log` 与 `gbe_gc_debug.log` 后发现
+- Category: 代码模式
+- Instructions:
+  - 官方 hero-selection 窗口在切回 dashboard 前首先出现的是连续三条 `26`；当前若形成 `26, 26, 766, 766, 26` 或 `26, 766, 766, 26`，说明 persona 插队过早，仍可能让主界面停在 host loading。
+  - 在这种情况下，hero-selection 边缘应先保留 rich presence 与额外 `26`，把 `private-lobby` persona 延后到后续 Steam 回调（例如 `8673`）再补，优先保证 `26` 链路连续。
+
 [Dota2 hero-selection 额外 current 26 不能写死到 game_state==4]
 - Date: 2026-05-02
 - Context: Agent 在重新比对“个人主页已正常，但主界面仍停在主机载入中”的最新日志时发现
