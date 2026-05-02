@@ -5743,13 +5743,15 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(
     uint32 extra_startup_account_id,
     std::string &message)
 {
+    (void)extra_startup_account_id;
+
     return GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWrappedTemplate(
         GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex,
         "practice lobby launch official cache template",
         false,
         true,
         true,
-        true,
+        false,
         account_id,
         steam_id,
         lobby_id,

@@ -31,6 +31,23 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 4511 后的 official-template 24 不应重写 2015 为大 8869]
+- Date: 2026-05-02
+- Context: Agent 在继续顺序对照 `officialconsole.log`、`console.log` 与 `gbe_gc_debug.log` 的首个 launch `24` 窗口时发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里，`4511` 后 server_id 同步阶段发送的 `official-template CacheSubscribed` 是客户端第一次稳定看到 `CSODOTAServerLobby.extra_startup_messages[0]` 的地方。
+  - 官方该窗口中的 `8869` 是短 payload，而当前实现因为对这条 `24` 开启了 `rewrite_2015`，把 donor 的 `2015` 改写成了带完整账号数据的大 payload，导致首个可见缓存状态从一开始就偏离官方。
+  - 这个阶段更安全的最小对齐方式是保留 donor 的 `2015`，只继续重写 `2004/2014/2016` 等运行态字段，不要在 `4511` 后的 official-template `24` 上追加本地大 `8869`。
+
+[Dota2 hero-selection 仅补第三条 current 26 仍不足以修复 dashboard]
+- Date: 2026-05-02
+- Context: 用户在合入 `fix: queue hero-selection lobby update before personas` 后再次复测，反馈主界面状态仍然没有变化，并重新上传日志
+- Category: 代码模式
+- Instructions:
+  - 在当前样本里，单独把一条额外的 `current direct 26 details update` 提前到 hero-selection persona 之前，并不能单独驱动 dashboard 从 loading 切到“返回游戏 / 离开游戏”。
+  - 后续分析应继续顺序核对 hero-selection 窗口前后的 `24/26/766` 组合与 cache 元数据，而不是把“缺第三条 26”当成已确认根因。
+
 [Dota2 hero-selection 主界面若仍卡载入中，可先补当前 direct 26 再发 persona]
 - Date: 2026-05-02
 - Context: Agent 在顺序对照 `officialconsole.log` 第 `1112-1118` 行、`console.log` 第 `1122-1129` 行与 `gbe_gc_debug.log` 第 `796-863` 行时发现
