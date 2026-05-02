@@ -31,6 +31,16 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 4506 与 7034 早期 26 窗口应切回真正 official 018/021 donor 外壳并清空 donor 自带 startup payload]
+- Date: 2026-05-02
+- Context: Agent 在用户复测“`4506` 与 `021` 已从 `322` 收敛到 `514` 但 dashboard 仍停在 host loading”后，继续顺序对照 `officialconsole.log:865-875,930-932`、最新 `gbe_gc_debug.log` 与 `steam_game_coordinator.cpp` 的 donor 选择路径时发现
+- Category: 代码模式
+- Instructions:
+  - 当 `4506` 后两条 `26` 与 `7034 -> WAIT_FOR_PLAYERS_TO_LOAD` 首条 `26` 全部统一收敛成 `514-byte` 时，说明它们虽然已经摆脱了纯 runtime `322-byte` 薄结构，但仍在共用错误的 `024/025` donor 外壳，而不是真正对应窗口的官方 `018/021` 外壳。
+  - 这三个早期窗口需要尽量贴回官方抓包的 donor 形状：`4506` 两条 `26` 应优先使用真正的 `official_018` 外壳，`7034 -> 021` 应优先使用真正的 `official_021` 外壳，而不是继续拿 `024/025` 去冒充。
+  - 但 `official_018/021` donor 本体会自带较大的 `2015 extra_startup_messages`；因此最小安全修法不是直接原样回放，而是走 donor replay 时开启 `rewrite_2015=true` 并把 `extra_startup_account_id=0`，借由 `GBE_RewriteDotaLobbyTemplateObject2015(..., clear_existing_startup_data=true, extra_startup_account_id=0)` 清空 donor 自带 startup payload，同时不再追加本地账号 startup data。
+  - `owner_soid` 顶层修正仍然必须保留；即使目标是把 `511/514/517` 进一步收敛到真正官方窗口，也不能为了减包体或追尺寸而移除 `GBE_ForceDotaLobbyUpdateOwnerSOID(...)`。
+
 [Dota2 practice lobby 修复必须严格符合官方抓包数据结构]
 - Date: 2026-05-02
 - Context: 用户明确要求后续排查与修复必须以官方抓包数据结构为硬约束
