@@ -9430,10 +9430,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_PublishSharedDotaLobbyState("7034_connected_player_hero");
             }
 
+            const bool can_promote_prelaunch_7034 =
+                GBE_local_lobby.active &&
+                GBE_local_lobby.lobby_id != 0 &&
+                GBE_local_lobby.match_id != 0 &&
+                GBE_local_lobby.server_id != 0;
             if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u) {
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
-                    "consumed req=%u source_job=%llu note=prelaunch 7034 waits for official 4511/24/4506 progression active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu summary=%s",
+                    can_promote_prelaunch_7034
+                        ? "consumed req=%u source_job=%llu note=prelaunch 7034 has full launch context and may promote to official 021 active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu summary=%s"
+                        : "consumed req=%u source_job=%llu note=prelaunch 7034 waits for official 4511/24/4506 progression active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu summary=%s",
                     request_emsg,
                     static_cast<unsigned long long>(source_job),
                     GBE_local_lobby.active ? 1u : 0u,
@@ -9444,7 +9451,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     static_cast<unsigned long long>(GBE_local_lobby.server_id),
                     GBE_FormatDota7034Summary(body, body_size).c_str()
                 );
-                return true;
+                if (!can_promote_prelaunch_7034)
+                    return true;
             }
 
             GBE_GC_DebugLog(
@@ -9461,7 +9469,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_FormatDota7034Summary(body, body_size).c_str()
             );
 
-            if (GBE_dota_launch_pending_8870 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 1u) {
+            if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 1u) {
                 if (!queue_official_26(GBE_kDotaOfficial024PracticeLobby26Hex, 2u, 1u, false, 0u, "official packet 024 after 8870/7034"))
                     return true;
                 GBE_dota_launch_pending_8870 = false;
@@ -9470,11 +9478,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 return true;
             }
 
-            if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 0u) {
+            if ((GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 0u) ||
+                (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && can_promote_prelaunch_7034)) {
                 if (queue_official_26(GBE_kDotaOfficial021PracticeLobby26Hex, 2u, 1u, true, 0u, "official packet 021 after 7034"))
                     return true;
 
                 GBE_LocalLobby wait_for_players_lobby = GBE_local_lobby;
+                wait_for_players_lobby.state = 2u;
                 wait_for_players_lobby.game_state = 1u;
 
                 std::string wait_for_players_message;
@@ -9594,24 +9604,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 }
             }
 
-            if (GBE_dota_launch_pending_043 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u) {
-                if (queue_official_26(GBE_kDotaOfficial043PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 043 after latched 8744/7034")) {
+            if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u) {
+                if (queue_official_26(GBE_kDotaOfficial043PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 043 after 7034")) {
                     GBE_dota_launch_pending_043 = false;
                     GBE_dota_launch_pending_046 = true;
                     return true;
                 }
             }
 
-            if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u && request_shape.has_send_reason && request_shape.send_reason == 2u) {
-                if (queue_official_26(GBE_kDotaOfficial043PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 043 after 8744/7034")) {
-                    GBE_dota_launch_pending_043 = false;
-                    GBE_dota_launch_pending_046 = true;
-                    return true;
-                }
-            }
-
-            if (GBE_dota_launch_pending_046 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && (!request_shape.has_send_reason || request_shape.send_reason == 5u)) {
-                if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 after disconnected-player 7034")) {
+            if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u) {
+                if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 after 7034")) {
                     // Once the official 046 pregame donor lands, local rich presence must
                     // already present as a private lobby so later restores do not bounce
                     // dashboard state back to host-loading.
@@ -9645,41 +9647,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         "launch persona run after 046"
                     );
                     GBE_dota_launch_pending_046 = false;
-                    return true;
-                }
-            }
-
-            if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 4u && request_shape.has_send_reason && request_shape.send_reason == 5u) {
-                if (queue_official_26(GBE_kDotaOfficial046PracticeLobby26Hex, 2u, 4u, false, 0u, "official packet 046 for pregame 7034 launch poll")) {
-                    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
-                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStageTicketAuthComplete,
-                        GBE_kSteamTicketAuthComplete,
-                        GBE_kDotaPracticeLobbyLaunchTicketAuthCompleteHex,
-                        false,
-                        "launch ticket auth complete on repeated pregame 7034"
-                    );
-                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStageGameConnectTokens3,
-                        GBE_kSteamGameConnectTokens,
-                        GBE_kDotaPracticeLobbyLaunchGameConnectTokensStage3Hex,
-                        false,
-                        "launch game connect tokens stage3 on repeated pregame 7034"
-                    );
-                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStageServerRunPersona,
-                        GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStateServerPrivateLobbyHex,
-                        true,
-                        "launch persona server-run on repeated pregame 7034"
-                    );
-                    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                        GBE_kDotaLaunchPeripheralStagePregameRunPersona,
-                        GBE_kSteamPersonaState,
-                        GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
-                        false,
-                        "launch persona run on repeated pregame 7034"
-                    );
                     return true;
                 }
             }
@@ -10050,7 +10017,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_local_lobby.match_id != 0 &&
             GBE_local_lobby.server_id != 0 &&
             GBE_local_lobby.state == 2u &&
-            GBE_local_lobby.game_state == 1u;
+            GBE_local_lobby.game_state <= 1u;
 
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
