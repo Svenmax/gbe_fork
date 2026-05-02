@@ -31,6 +31,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 practice lobby 的 CMsgSOMultipleObjects builder 必须用 set_object_data]
+- Date: 2026-05-02
+- Context: Agent 在修复 `GBE_BuildDotaPracticeLobbyDetailsUpdatePurePayload(...)` 的 Windows 编译失败时发现
+- Category: 代码模式
+- Instructions:
+  - `CMsgSOMultipleObjects_SingleObject` 的 `object_data` 是单值字段；在 practice lobby 的 `26` runtime builder 里必须使用 `set_object_data(...)`，不能调用 `add_object_data(...)`。
+  - `CMsgSOCacheSubscribed` 路径下的 `SubscribedType` 仍可保留 `add_object_data(...)`，不要把两种顶层消息的 API 混为一谈。
+
 [Dota2 current direct 26 的 runtime 分支应先走纯构造，再以 046 donor 兜底]
 - Date: 2026-05-02
 - Context: Agent 在执行 practice lobby runtime 26 去 donor 化时，重构 `GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(...)` 后发现

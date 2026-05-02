@@ -5587,24 +5587,24 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePurePayload(
     if (include_server_lobby_placeholder) {
         auto object_2013_entry = protomsg.add_objects();
         object_2013_entry->set_type_id(2013);
-        object_2013_entry->add_object_data(std::string());
+        object_2013_entry->set_object_data(std::string());
     }
 
     auto object_2004_entry = protomsg.add_objects();
     object_2004_entry->set_type_id(2004);
-    object_2004_entry->add_object_data(object_2004);
+    object_2004_entry->set_object_data(object_2004);
 
     auto object_2014_entry = protomsg.add_objects();
     object_2014_entry->set_type_id(2014);
-    object_2014_entry->add_object_data(object_2014);
+    object_2014_entry->set_object_data(object_2014);
 
     auto object_2015_entry = protomsg.add_objects();
     object_2015_entry->set_type_id(2015);
-    object_2015_entry->add_object_data(object_2015);
+    object_2015_entry->set_object_data(object_2015);
 
     auto object_2016_entry = protomsg.add_objects();
     object_2016_entry->set_type_id(2016);
-    object_2016_entry->add_object_data(object_2016);
+    object_2016_entry->set_object_data(object_2016);
 
     protomsg.AppendToString(&message);
     return true;
