@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 7034 后首条 021 不应把 donor 2015 扩成大 startup payload]
+- Date: 2026-05-02
+- Context: 用户在合入 `fix: replay current launch snapshot on 4506` 后再次复测，问题依旧，我继续顺序对照 `officialconsole.log:930-932`、`console.log:906-910` 与 `gbe_gc_debug.log:540-560` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当 `4506` 窗口已经收敛为两条约 `514-byte` 的 `26` 后，新的首个强分歧会顺延到 `7034` 后第一条 `official packet 021`。
+  - 官方该窗口的首条 `26` 约为 `517 bytes`，只把 `CSODOTALobby.game_state` 推到 `WAIT_FOR_PLAYERS_TO_LOAD` 并补 `first_blood_happened=false`；当前实现若继续对 `021` 开启 `rewrite_2015`，会产出 `919-byte` 的 `26`，并把 `2015 object_data_size` 扩成 `405`，同时再次带出大 `8869` startup payload。
+  - 因此 `official packet 021 after 7034` 应与 `024/025/030/032` 一样默认保留 donor 的短 `2015`，不要在这个窗口注入本地 startup account data。
+
 [Dota2 4506 后应优先复用当前 runtime 26，而不是硬编码大号 official 018]
 - Date: 2026-05-02
 - Context: Agent 在继续顺序对照 `officialconsole.log:833-875`、`console.log:820-839` 与 `gbe_gc_debug.log:479-507` 时发现

@@ -9289,7 +9289,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 0u) {
-                if (queue_official_26(GBE_kDotaOfficial021PracticeLobby26Hex, 2u, 1u, true, GBE_GetDotaLobbyOwnerAccountId(), "official packet 021 after 7034"))
+                if (queue_official_26(GBE_kDotaOfficial021PracticeLobby26Hex, 2u, 1u, false, 0u, "official packet 021 after 7034"))
                     return true;
             }
 
