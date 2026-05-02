@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 hero-selection 已补齐三条 26 后，8673 路径不应再插入两条 766]
+- Date: 2026-05-02
+- Context: Agent 在继续排查“主界面仍停在主机载入中”并顺序核对最新 `officialconsole.log`、`console.log` 与 `gbe_gc_debug.log` 后发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里，hero-selection 窗口的三条 `26` 已经收敛到 `514/514/514`，并且额外那条确认来自 `official_025` donor 形状。
+  - 在这之后，官方从 `ChangeGameUIState ... -> DASHBOARD` 到 `8673 -> 8674` 之间没有再插入 `766 persona`；若当前仍在 `8673` 前后补 `514/520` 两条 `766`，这就是新的最早分歧。
+  - 当 `HeroSelectionCurrent26` 已建立时，`8673` 路径只应重放本地 `PRIVATE_LOBBY` rich presence，不应再立即注入 `private-lobby persona`；如仍需要 persona，应交给更晚的 Steam 链收尾。
+
 [Dota2 hero-selection 额外 26 应优先复用 official 025 donor 形状]
 - Date: 2026-05-02
 - Context: Agent 在继续排查“主界面仍停在主机载入中”并顺序核对最新 `console.log`、`officialconsole.log` 与 `gbe_gc_debug.log` 后发现

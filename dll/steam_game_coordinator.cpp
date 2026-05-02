@@ -10107,23 +10107,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         GBE_local_lobby.game_state >= 2u &&
         !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona) &&
         (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26)) {
+        // Once the hero-selection 26 chain is in place, official samples move
+        // straight from the dashboard transition into 8674. Keep reapplying
+        // local private-lobby presence here, but leave persona delivery to the
+        // later Steam chain so 8673 does not insert extra 766 packets ahead of
+        // the dashboard's first settled post-transition state.
         GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
-        if (GBE_local_lobby.server_id != 0) {
-            GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                GBE_kDotaLaunchPeripheralStagePrivateLobbyServerPersona,
-                GBE_kSteamPersonaState,
-                GBE_kDotaPracticeLobbyLaunchPersonaStateServerPrivateLobbyHex,
-                true,
-                "launch persona server-private-lobby after 8673 hero-selection chain"
-            );
-        }
-        GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-            GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
-            GBE_kSteamPersonaState,
-            GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
-            false,
-            "launch persona private lobby after 8673 hero-selection chain"
-        );
     }
 
     switch (request_emsg) {
