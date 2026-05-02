@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 hero-selection 额外 26 应优先复用 official 025 donor 形状]
+- Date: 2026-05-02
+- Context: Agent 在继续排查“主界面仍停在主机载入中”并顺序核对最新 `console.log`、`officialconsole.log` 与 `gbe_gc_debug.log` 后发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里，`8673` 前后的 rich presence 回刷已经稳定保持 `#DOTA_RP_PRIVATE_LOBBY`，因此 hero-selection 窗口里仍最早异常的是额外补发的那条 `26` 本身。
+  - 若这条额外 `26` 走 `GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(...)` 的纯 runtime 路径，会形成明显偏薄的 `322-byte` 包，并把 surrounding `024/025` donor 维持的 SO 外形打断。
+  - 在第一次进入 `state=2 && game_state>=2` 的 hero-selection 边缘，额外 `26` 应优先复用 `official packet 025 after 8870/7034` 的 donor 形状；只有 donor 构造失败时才回退到 runtime builder。
+
 [Dota2 hero-selection 之后的 rich presence 重放不能把 PRIVATE_LOBBY 回刷成 FINDING_MATCH]
 - Date: 2026-05-02
 - Context: Agent 在继续排查“dashboard 仍停在主机载入中”，并对照最新 `gbe_gc_debug.log` 中 `8673` 前后的 rich presence 重放时发现

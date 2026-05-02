@@ -6631,10 +6631,10 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
     );
 
     // In the official hero-selection window, the dashboard consumes another
-    // lobby details update before the late persona messages arrive. Reuse the
-    // current runtime 26 once when we first reach hero selection so the main
-    // dashboard sees the same SO cadence instead of waiting for later runtime
-    // restore traffic like 8673.
+    // lobby details update before the late persona messages arrive. Reuse an
+    // official-shaped 26 first so this edge keeps the same donor SO envelope
+    // as the surrounding 024/025 pair, and only fall back to the thinner
+    // runtime builder if the donor replay cannot be constructed.
     if (GBE_local_lobby.active &&
         GBE_local_lobby.lobby_id != 0 &&
         GBE_local_lobby.match_id != 0 &&
@@ -6643,16 +6643,55 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         GBE_local_lobby.game_state >= 2u &&
         !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26)) {
         std::string current_26;
-        if (GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, GBE_GetDotaLobbyOwnerName(), current_26)) {
+        const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
+        const uint32 owner_account_id = GBE_GetDotaLobbyOwnerAccountId();
+        const bool built_official_shaped_26 =
+            owner_steam_id != 0 &&
+            owner_account_id != 0 &&
+            GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
+                GBE_kDotaOfficial025PracticeLobby26Hex,
+                "hero-selection extra official packet 025 replay",
+                owner_account_id,
+                owner_steam_id,
+                GBE_local_lobby.lobby_id,
+                GBE_local_lobby.server_id,
+                GBE_local_lobby.match_id,
+                GBE_local_lobby.game_start_time,
+                GBE_local_lobby.connect,
+                GBE_GetDotaLobbyOwnerName(),
+                GBE_local_lobby.room_name,
+                GBE_local_lobby.game_mode,
+                GBE_local_lobby.server_region,
+                GBE_local_lobby.lan,
+                GBE_local_lobby.lan_host_ping_location,
+                GBE_local_lobby.allow_cheats,
+                GBE_local_lobby.fill_with_bots,
+                GBE_local_lobby.allow_spectating,
+                GBE_local_lobby.visibility,
+                GBE_local_lobby.bot_difficulty_radiant,
+                GBE_local_lobby.bot_difficulty_dire,
+                GBE_local_lobby.bot_radiant,
+                GBE_local_lobby.bot_dire,
+                GBE_local_lobby.owner_team,
+                GBE_local_lobby.owner_slot,
+                GBE_local_lobby.owner_hero_id,
+                GBE_local_lobby.pass_key,
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state,
+                false,
+                0u,
+                current_26);
+        if ((built_official_shaped_26 || GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, GBE_GetDotaLobbyOwnerName(), current_26))) {
             GBE_dota_launch_peripheral_stage_mask |= GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26;
             push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, current_26);
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
-                "queued hero-selection current 26 before persona lobby_id=%llu match_id=%llu server_id=%llu size=%zu",
+                "queued hero-selection current 26 before persona lobby_id=%llu match_id=%llu server_id=%llu size=%zu source=%s",
                 static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                 static_cast<unsigned long long>(GBE_local_lobby.match_id),
                 static_cast<unsigned long long>(GBE_local_lobby.server_id),
-                current_26.size()
+                current_26.size(),
+                built_official_shaped_26 ? "official_025" : "runtime"
             );
         } else {
             GBE_GC_DebugLog(
