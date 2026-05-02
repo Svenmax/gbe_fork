@@ -31,6 +31,24 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 current direct 26 的 runtime 分支应先走纯构造，再以 046 donor 兜底]
+- Date: 2026-05-02
+- Context: Agent 在执行 practice lobby runtime 26 去 donor 化时，重构 `GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(...)` 后发现
+- Category: 代码结构
+- Instructions:
+  - `GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(...)` 的 prelaunch 分支保留现有手工 body 组装，不要为了 runtime 去 donor 化而扩大 prelaunch 改动面。
+  - runtime 分支优先走纯构造 `CMsgSOMultipleObjects`，直接填入 `2004/2014/2015/2016`，必要时可带一个空的 `2013` placeholder，使 `4506/021/current direct 26` 不再默认依赖 `046` donor 外壳。
+  - `046` donor 应降级为 runtime details update 的 fallback；后续若日志再次出现 `current direct 26 details update` 的 `patch skipped`，优先检查是否误回到了 donor 路径。
+
+[Dota2 practice lobby 当前存在“模板字节补丁”和“对象级 protobuf 重写”两层修改面]
+- Date: 2026-05-02
+- Context: Agent 在梳理 `steam_game_coordinator.cpp` 中 practice lobby 的 donor/runtime 构造链路时发现
+- Category: 代码结构
+- Instructions:
+  - `GBE_PatchDotaPracticeLobbyLaunchTemplate(...)`、`GBE_PatchDotaLobbyTemplateIdentifiers(...)`、`GBE_PatchDotaLobbyTemplateIdentifiersIfPresent(...)` 主要依赖 `FindAndOverwriteBytes/String` 在 donor 模板上做字节级替换，适合窄范围标识修补，但对模板形状变化较脆弱。
+  - `GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(...)` 与 `GBE_RewriteDotaLobbyTemplateObject2004/2014/2015/2016(...)` 则是在解析 protobuf 字段后重写对象内容，结构安全性更高，后续如果要继续去补丁化，应优先把关键时序从前者迁到后者或直接迁到 runtime builder。
+  - 日志里出现 `donor does not expose expected template bytes`、`connect size changed`、`patch skipped` 时，应优先把该窗口判定为模板字节补丁脆弱区，而不是继续叠加更多固定字节覆盖。
+
 [Dota2 7034 后的 021 donor 自带大 2015，不能仅靠 rewrite_2015=false 收敛]
 - Date: 2026-05-02
 - Context: Agent 在重新对照用户最新上传的 `officialconsole.log`、`console.log` 与 `gbe_gc_debug.log`，并核对 `steam_game_coordinator.cpp` 的 `7034 -> 021` builder 后发现

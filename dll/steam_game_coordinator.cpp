@@ -5490,6 +5490,126 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
     return true;
 }
 
+static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePurePayload(
+    uint64 steam_id,
+    uint64 lobby_id,
+    uint32 lobby_state,
+    uint32 lobby_game_state,
+    uint64 server_id,
+    uint64 match_id,
+    uint32 game_start_time,
+    const std::string &connect,
+    const std::string &player_name,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
+    uint32 owner_hero_id,
+    bool has_broadcast_channel,
+    uint32 broadcast_channel_id,
+    const std::string &broadcast_country_code,
+    const std::string &broadcast_description,
+    const std::string &broadcast_language_code,
+    const std::string &pass_key,
+    uint32 extra_startup_account_id,
+    bool include_server_lobby_placeholder,
+    std::string &message)
+{
+    if (steam_id == 0 || lobby_id == 0)
+        return false;
+
+    std::string object_2015;
+    std::string object_2016;
+    std::string object_2004;
+    std::string object_2014;
+    GBE_BuildDotaPracticeLobbySOObjectData(
+        steam_id,
+        lobby_id,
+        lobby_state,
+        lobby_game_state,
+        server_id,
+        match_id,
+        game_start_time,
+        connect,
+        player_name,
+        room_name,
+        game_mode,
+        server_region,
+        lan,
+        lan_host_ping_location,
+        allow_cheats,
+        fill_with_bots,
+        allow_spectating,
+        visibility,
+        bot_difficulty_radiant,
+        bot_difficulty_dire,
+        bot_radiant,
+        bot_dire,
+        owner_team,
+        owner_slot,
+        owner_hero_id,
+        has_broadcast_channel,
+        broadcast_channel_id,
+        broadcast_country_code,
+        broadcast_description,
+        broadcast_language_code,
+        pass_key,
+        extra_startup_account_id,
+        object_2015,
+        object_2016,
+        object_2004,
+        object_2014);
+
+    message.clear();
+    {
+        ProtoBufMsgHeader_t hdr{};
+        hdr.m_EMsgFlagged = GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask;
+        hdr.m_cubProtoBufExtHdr = 0;
+        ser_var<ProtoBufMsgHeader_t>(message, hdr);
+    }
+
+    CMsgSOMultipleObjects protomsg;
+    auto *owner_soid = protomsg.mutable_owner_soid();
+    owner_soid->set_type(3u);
+    owner_soid->set_id(lobby_id);
+
+    if (include_server_lobby_placeholder) {
+        auto object_2013_entry = protomsg.add_objects();
+        object_2013_entry->set_type_id(2013);
+        object_2013_entry->add_object_data(std::string());
+    }
+
+    auto object_2004_entry = protomsg.add_objects();
+    object_2004_entry->set_type_id(2004);
+    object_2004_entry->add_object_data(object_2004);
+
+    auto object_2014_entry = protomsg.add_objects();
+    object_2014_entry->set_type_id(2014);
+    object_2014_entry->add_object_data(object_2014);
+
+    auto object_2015_entry = protomsg.add_objects();
+    object_2015_entry->set_type_id(2015);
+    object_2015_entry->add_object_data(object_2015);
+
+    auto object_2016_entry = protomsg.add_objects();
+    object_2016_entry->set_type_id(2016);
+    object_2016_entry->add_object_data(object_2016);
+
+    protomsg.AppendToString(&message);
+    return true;
+}
+
 static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWrappedTemplate(
     const char *wrapped_template_hex,
     const char *template_note,
@@ -5910,6 +6030,44 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
         GBE_AppendLittleEndian32(message, 0u);
         message.append(body);
         return GBE_ForceDotaLobbyUpdateOwnerSOID(message, lobby_id);
+    }
+
+    if (GBE_BuildDotaPracticeLobbyDetailsUpdatePurePayload(
+            steam_id,
+            lobby_id,
+            lobby_state,
+            lobby_game_state,
+            server_id,
+            match_id,
+            game_start_time,
+            connect,
+            player_name,
+            room_name,
+            game_mode,
+            server_region,
+            lan,
+            lan_host_ping_location,
+            allow_cheats,
+            fill_with_bots,
+            allow_spectating,
+            visibility,
+            bot_difficulty_radiant,
+            bot_difficulty_dire,
+            bot_radiant,
+            bot_dire,
+            owner_team,
+            owner_slot,
+            owner_hero_id,
+            has_broadcast_channel,
+            broadcast_channel_id,
+            broadcast_country_code,
+            broadcast_description,
+            broadcast_language_code,
+            pass_key,
+            0u,
+            true,
+            message)) {
+        return true;
     }
 
     return GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
