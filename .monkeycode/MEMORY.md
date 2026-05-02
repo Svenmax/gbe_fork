@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 单人本地练习房在英雄选择前后就应切到 PRIVATE_LOBBY，而不必等 pregame persona 全链]
+- Date: 2026-05-02
+- Context: Agent 在顺序对照 `officialconsole.log`、`console.log` 与 `gbe_gc_debug.log` 的“建房 -> 开始游戏 -> 英雄选择”窗口时发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里，`gbe` 在 `4506` 之后虽然已经进入 `CSODOTALobby.state=RUN`，但本地 rich presence 仍保持 `#DOTA_RP_FINDING_MATCH`，并一路持续到 `7034` 把 `game_state` 推进到 `1/2`；这正对应用户看到的“主机载入中 / 寻找比赛中”滞后。
+  - 这类面板切换不应再强依赖 `GBE_kDotaLaunchPeripheralStagePregameRunPersona` 或 `game_state==4`；只要 run persona 时序已建立，并且 lobby 已推进到 `state=2` 且 `game_state>=2` 的英雄选择边缘，就应立即切到 `#DOTA_RP_PRIVATE_LOBBY + RUN`。
+  - 即使 private-lobby persona 已提前补发，也不应阻断后续晚期 Steam 链的补消息；像 `5410/5432` 驱动的后续补发仍应允许继续完成。
+
 [Dota2 2016 的 SO 摘要必须使用 server-static formatter]
 - Date: 2026-05-01
 - Context: Agent 在继续排查 Dota2 练习房英雄选择临时错位，并顺序核对 `gbe_gc_debug.log` 与 `dll/steam_game_coordinator.cpp` 的 SO summary 输出时发现

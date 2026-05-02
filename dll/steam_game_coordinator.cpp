@@ -6468,20 +6468,22 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         GBE_GC_MaskedEMsg(message.msg_type)
     );
 
-    // The official persona flip happens after the run-phase lobby state has
-    // already advanced past the early 046 pregame donor chain. Latch the
-    // private-lobby persona on the first later run-state edge we actually see.
+    // In current practice-lobby samples, the dashboard/private-profile flip can
+    // already happen by the first hero-selection run-state edge, before the
+    // later pregame persona chain has fully appeared. Once run persona timing
+    // is active, latch private-lobby persona on the first run-state edge we see.
     if (GBE_local_lobby.state == 2u &&
         GBE_local_lobby.game_state >= 2u &&
         !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona) &&
-        (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePregameRunPersona)) {
+        ((GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePregameRunPersona) ||
+         (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageRunPersona))) {
         GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
         GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
             GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
             GBE_kSteamPersonaState,
             GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
             false,
-            "launch persona private lobby on late run-state edge"
+            "launch persona private lobby on hero-selection run-state edge"
         );
     }
 
@@ -11534,8 +11536,7 @@ bool Steam_Game_Coordinator::GBE_ShouldTrackDotaPracticeLobbyLateSteamChain() co
         GBE_local_lobby.lobby_id != 0 &&
         GBE_local_lobby.state == 2u &&
         GBE_local_lobby.game_state >= 2u &&
-        (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePregameRunPersona) &&
-        !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona);
+        (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePregameRunPersona);
 }
 
 bool Steam_Game_Coordinator::GBE_FinalizeDotaPracticeLobbyLateSteamChain(const char *reason)
