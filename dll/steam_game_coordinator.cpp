@@ -9289,7 +9289,32 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 0u) {
-                if (queue_official_26(GBE_kDotaOfficial021PracticeLobby26Hex, 2u, 1u, false, 0u, "official packet 021 after 7034"))
+                GBE_LocalLobby wait_for_players_lobby = GBE_local_lobby;
+                wait_for_players_lobby.game_state = 1u;
+
+                std::string wait_for_players_message;
+                if (GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(wait_for_players_lobby, GBE_local_lobby.owner_name, wait_for_players_message)) {
+                    push_incoming_now(
+                        GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
+                        wait_for_players_message,
+                        true,
+                        wait_for_players_lobby.state,
+                        wait_for_players_lobby.game_state);
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "replying req=%u resp=%u source_job=%llu size=%zu note=official packet 021 after 7034 apply_state=%u apply_game_state=%u",
+                        request_emsg,
+                        GBE_kDotaPracticeLobbyDetailsUpdate,
+                        static_cast<unsigned long long>(source_job),
+                        wait_for_players_message.size(),
+                        wait_for_players_lobby.state,
+                        wait_for_players_lobby.game_state
+                    );
+                    GBE_LogDotaSOMultipleObjectsSummary("GC_DOTA_DIRECT", "official packet 021 after 7034", wait_for_players_message);
+                    return true;
+                }
+
+                if (queue_official_26(GBE_kDotaOfficial021PracticeLobby26Hex, 2u, 1u, false, 0u, "official packet 021 after 7034 fallback donor"))
                     return true;
             }
 

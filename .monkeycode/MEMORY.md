@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 7034 后的 021 donor 自带大 2015，不能仅靠 rewrite_2015=false 收敛]
+- Date: 2026-05-02
+- Context: Agent 在重新对照用户最新上传的 `officialconsole.log`、`console.log` 与 `gbe_gc_debug.log`，并核对 `steam_game_coordinator.cpp` 的 `7034 -> 021` builder 后发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里，即使 `official packet 021 after 7034` 已把 `rewrite_2015` 关闭，运行日志仍会出现 `size=919` 与 `2015 object_data_size=405`，说明这份 `021` donor 模板本身就携带大号 startup payload，而不只是重写逻辑把它扩大。
+  - 因此 `7034` 后首条 `WAIT_FOR_PLAYERS_TO_LOAD` 更新不能继续依赖 `021` donor 模板本体；更安全的最小对齐方式是像 `4506` 一样直接复用当前 runtime `26` builder，只把 lobby 推到 `state=2, game_state=1`。
+  - 若 runtime builder 失败，可再回退 donor 作为兜底，但不要把 donor `021` 仍然视为默认正确路径。
+
 [Dota2 7034 后首条 021 不应把 donor 2015 扩成大 startup payload]
 - Date: 2026-05-02
 - Context: 用户在合入 `fix: replay current launch snapshot on 4506` 后再次复测，问题依旧，我继续顺序对照 `officialconsole.log:930-932`、`console.log:906-910` 与 `gbe_gc_debug.log:540-560` 时发现
