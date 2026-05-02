@@ -9669,40 +9669,32 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_local_lobby.server_id != 0 &&
                 GBE_local_lobby.state == 1u &&
                 GBE_local_lobby.game_state == 0u) {
-            std::string stage_message;
-            if (GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
-                    GBE_kDotaOfficial018PracticeLobby26Hex,
-                    "official packet 018 after 4506",
-                    GBE_GetDotaLobbyOwnerAccountId(),
-                    GBE_GetDotaLobbyOwnerSteamId(),
-                    GBE_local_lobby.lobby_id,
-                    GBE_local_lobby.server_id,
-                    GBE_local_lobby.match_id,
-                    GBE_local_lobby.game_start_time,
-                    GBE_local_lobby.connect,
-                    GBE_local_lobby.owner_name,
-                    GBE_local_lobby.room_name,
-                    GBE_local_lobby.game_mode,
-                    GBE_local_lobby.server_region,
-                    GBE_local_lobby.lan,
-                    GBE_local_lobby.lan_host_ping_location,
-                    GBE_local_lobby.allow_cheats,
-                    GBE_local_lobby.fill_with_bots,
-                    GBE_local_lobby.allow_spectating,
-                    GBE_local_lobby.visibility,
-                    GBE_local_lobby.bot_difficulty_radiant,
-                    GBE_local_lobby.bot_difficulty_dire,
-                    GBE_local_lobby.bot_radiant,
-                    GBE_local_lobby.bot_dire,
-                    GBE_local_lobby.owner_team,
-                    GBE_local_lobby.owner_slot,
-                    GBE_local_lobby.owner_hero_id,
-                    GBE_local_lobby.pass_key,
-                    2u,
-                    0u,
+            GBE_LocalLobby prelude_lobby = GBE_local_lobby;
+            std::string prelude_message;
+            if (GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(prelude_lobby, GBE_local_lobby.owner_name, prelude_message)) {
+                push_incoming_now(
+                    GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
+                    prelude_message,
                     true,
-                    GBE_GetDotaLobbyOwnerAccountId(),
-                    stage_message)) {
+                    prelude_lobby.state,
+                    prelude_lobby.game_state);
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "replying req=%u resp=%u source_job=%llu size=%zu note=official packet 018 prelude after 4506 apply_state=%u apply_game_state=%u",
+                    request_emsg,
+                    GBE_kDotaPracticeLobbyDetailsUpdate,
+                    static_cast<unsigned long long>(source_job),
+                    prelude_message.size(),
+                    prelude_lobby.state,
+                    prelude_lobby.game_state
+                );
+            }
+
+            GBE_LocalLobby run_lobby = GBE_local_lobby;
+            run_lobby.state = 2u;
+            run_lobby.game_state = 0u;
+            std::string stage_message;
+            if (GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(run_lobby, GBE_local_lobby.owner_name, stage_message)) {
                 push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, stage_message, true, 2u, 0u);
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",

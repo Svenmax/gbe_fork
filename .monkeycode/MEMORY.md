@@ -31,6 +31,23 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 4506 后应优先复用当前 runtime 26，而不是硬编码大号 official 018]
+- Date: 2026-05-02
+- Context: Agent 在继续顺序对照 `officialconsole.log:833-875`、`console.log:820-839` 与 `gbe_gc_debug.log:479-507` 时发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里，官方在 `4506 / k_EMsgGCServerAvailable` 之后首先出现的是两条约 `511-byte` 的 `26`，其中第二条才把 `CSODOTALobby.state` 从 `SERVERSETUP` 推到 `RUN`。
+  - 若这里继续回放硬编码的 `official packet 018 after 4506`，当前实现会产出一条约 `916-byte` 的 `26`，并顺带改动 `2015 extra_startup_messages` 与 `2016 lobby_event_points`，这比官方同窗口更早、更重地污染 dashboard 消费到的 lobby/SO 状态。
+  - 这个阶段更安全的最小对齐方式是复用当前 runtime `26` builder：先补一条保持 `state=1/game_state=0` 的 prelude，再补一条 `state=2/game_state=0` 的 `RUN` 更新，避免在 `4506` 边缘额外注入大 `2015` startup payload。
+
+[Dota2 保留 4511 后 donor 2015 仍不足以单独修复 dashboard]
+- Date: 2026-05-02
+- Context: 用户在合入 `fix: preserve launch cache donor startup payload` 后再次复测，反馈问题依旧并重新上传日志
+- Category: 代码模式
+- Instructions:
+  - 仅把 `4511` 后 official-template `24` 的 `2015` 改为保留 donor startup payload，并不能单独让主界面从 loading/host loading 切到官方的 return to game / leave game。
+  - 后续分析仍需继续顺序核对 `4511 -> 24 -> 021 -> 024/025 -> 030 -> 032 -> 043/046` 整条链，而不是把“首个大 8869”视为已确认唯一根因。
+
 [Dota2 4511 后的 official-template 24 不应重写 2015 为大 8869]
 - Date: 2026-05-02
 - Context: Agent 在继续顺序对照 `officialconsole.log`、`console.log` 与 `gbe_gc_debug.log` 的首个 launch `24` 窗口时发现
