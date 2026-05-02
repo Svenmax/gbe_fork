@@ -31,6 +31,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 hero-selection 额外 current 26 不能写死到 game_state==4]
+- Date: 2026-05-02
+- Context: Agent 在重新比对“个人主页已正常，但主界面仍停在主机载入中”的最新日志时发现
+- Category: 代码模式
+- Instructions:
+  - 当前 practice-lobby 样本里，hero-selection 窗口对应的首个稳定 run-state 至少会在 `state=2 && game_state=2` 时出现，而不是必须等到 `game_state==4`。
+  - 如果要在 hero-selection persona 之前补发额外的 current runtime `26` 供 dashboard 消费，触发条件不能写死为 `game_state==4`；更安全的最小条件是首次进入 `state=2 && game_state>=2`。
+
 [Dota2 practice lobby 的 CMsgSOMultipleObjects builder 必须用 set_object_data]
 - Date: 2026-05-02
 - Context: Agent 在修复 `GBE_BuildDotaPracticeLobbyDetailsUpdatePurePayload(...)` 的 Windows 编译失败时发现

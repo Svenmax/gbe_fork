@@ -6640,7 +6640,7 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         GBE_local_lobby.match_id != 0 &&
         GBE_local_lobby.server_id != 0 &&
         GBE_local_lobby.state == 2u &&
-        GBE_local_lobby.game_state == 4u &&
+        GBE_local_lobby.game_state >= 2u &&
         !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26)) {
         std::string current_26;
         if (GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, GBE_GetDotaLobbyOwnerName(), current_26)) {
