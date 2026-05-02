@@ -11876,8 +11876,9 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
     bool include_party = false;
     const bool should_present_private_lobby =
         (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona) ||
+        (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26) ||
         (GBE_local_lobby.state == 2u &&
-         GBE_local_lobby.game_state == 4u &&
+         GBE_local_lobby.game_state >= 2u &&
          (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePregameRunPersona));
 
     if (GBE_local_lobby.state == 2u) {

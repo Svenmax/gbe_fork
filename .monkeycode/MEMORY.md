@@ -31,6 +31,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 hero-selection 之后的 rich presence 重放不能把 PRIVATE_LOBBY 回刷成 FINDING_MATCH]
+- Date: 2026-05-02
+- Context: Agent 在继续排查“dashboard 仍停在主机载入中”，并对照最新 `gbe_gc_debug.log` 中 `8673` 前后的 rich presence 重放时发现
+- Category: 代码模式
+- Instructions:
+  - 当 hero-selection 已经补发过额外的 current `26`，或 lobby 已推进到 `state=2 && game_state>=2` 且 run persona 时序已建立时，后续 `GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(...)` 不应再把状态回刷成 `#DOTA_RP_FINDING_MATCH`。
+  - 否则像 `8673` 这类后续 Steam 回调会在 dashboard 切回边缘短暂覆盖掉 `PRIVATE_LOBBY`，即使后面又补回，也可能让主界面继续停在 host loading。
+
 [Dota2 hero-selection 窗口里要避免让 766 persona 插到三条 26 中间]
 - Date: 2026-05-02
 - Context: Agent 在继续排查“个人主页正常但 dashboard 仍停在主机载入中”，并对照最新 `officialconsole.log`、`console.log` 与 `gbe_gc_debug.log` 后发现
