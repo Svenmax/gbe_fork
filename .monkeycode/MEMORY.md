@@ -31,15 +31,6 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
-[Dota2 hero selection 若 2004.owner_state 缺少 account_id，UI 可能按队伍首槽回退]
-- Date: 2026-05-01
-- Context: Agent 在继续排查“hero selection 暂时把 Dire 3 显示成 Dire 1”，顺序对照最新 `console.log`、`gbe_gc_debug.log` 与 `steam_game_coordinator.cpp` 的 `2004` rewrite/scratch builder 时发现
-- Category: 代码模式
-- Instructions:
-  - 当前样本里 `2004.owner_state.team/slot` 在 `7047`、launch donor `26`、`043/046` 与 runtime snapshot 中始终正确，但日志摘要持续显示 `account_id=0` 或缺失，说明 seat 真值并没有丢，而是本地玩家身份字段不完整。
-  - `GBE_RewriteDotaLobbyTemplateMemberObject(...)` 不能只在 donor 已带 `field 55 / account_id` 时重写；若缺失，也要主动补写当前 owner 的 `account_id`。
-  - `GBE_BuildDotaPracticeLobbySOObjectData(...)` 构造 scratch `2004.owner_state` 时也必须同时写入 `field 55 / account_id`，否则 prelaunch/local 直构路径与 donor rewrite 路径会再次产生身份字段不一致。
-
 [Dota2 2016 的 SO 摘要必须使用 server-static formatter]
 - Date: 2026-05-01
 - Context: Agent 在继续排查 Dota2 练习房英雄选择临时错位，并顺序核对 `gbe_gc_debug.log` 与 `dll/steam_game_coordinator.cpp` 的 SO summary 输出时发现
@@ -57,23 +48,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 因此 donor/runtime `2016` 不能继续复用 `GBE_RewriteDotaLobbyTemplateMemberObject(...)` 去补 `field 3/7/2/16/28`；那会把错误 schema 的字段塞进 server-static 对象，污染英雄选择阶段读取到的 server static lobby 数据。
   - `2016` 的最小安全处理应只修正它真实存在的身份字段，例如 `all_members[].steam_id`，而本地 scratch 构造的 `2016` 也应至少保持为 server-static 的最小合法形态，而不是伪造出 lobby member 状态对象。
 
-[Dota2 hero selection 若只剩 create-time 的 2004 请求英雄数组，应在 donor rewrite 中主动清掉]
-- Date: 2026-05-01
-- Context: Agent 在按顺序读完整份新 `console.log` 与 `gbe_gc_debug.log`，确认 `owner_state`、`2016.member[0]` 与 server 内实际分配始终保持 `team=1 slot=3`，且后续 runtime `26` 再未维护 `2004.field124/132` 后发现
+[Dota2 单人本地练习房的英雄选择阶段会固定显示在 1 号位]
+- Date: 2026-05-02
+- Context: 用户在官方客户端复测单人、本地、练习房后补充说明，并要求回收此前围绕英雄选择临时 1 号位的推断性修复
 - Category: 代码模式
 - Instructions:
-  - 当前样本里 `2004.requested_hero_ids (124)` 只在最初的 create/cache 模板中出现为一组全零数组，`requested_hero_teams (132)` 也只可能来自旧 donor 辅助字段；进入 `WAIT_FOR_PLAYERS_TO_LOAD/HERO_SELECTION/STRATEGY_TIME` 后的 runtime `26` 都不再更新这两组字段。
-  - 如果这些 create-time 辅助数组继续留在缓存里，客户端可能会在英雄选择阶段重新解释旧的 donor hero-select 布局，即使 `2004.owner_state`、`2004.all_members[0]`、`2016.member[0]` 和实际进游戏分配都仍然正确。
-  - 因此 donor `2004` 重写应保留真实的 team/slot 主字段，但主动清掉 `field124/132` 这类不再被 runtime 维护的英雄请求辅助数组。
-
-[Dota2 021 这类 launch donor 的 2015 必须规范化 server-lobby member cardinality]
-- Date: 2026-05-01
-- Context: Agent 在顺序读完最新 `console.log` 与 `gbe_gc_debug.log`，确认英雄选择阶段唯一显著异物是 `official packet 021 after 7034` 的 `type=2015 object_data_size=405`，且控制台同步打印 `CSODOTAServerLobby.extra_startup_messages[0]: id: 8869` 后发现
-- Category: 代码模式
-- Instructions:
-  - `official 021` 这类 launch early-stage donor 的 `2015 / CSODOTAServerLobby` 除了 `8869` startup data 外，还会携带 donor 自带的 `all_members` 布局；由于 `CSODOTAServerLobbyMember` 在当前客户端 schema 里是空消息，这些 entries 只会泄漏 donor 的成员 cardinality/order。
-  - 如果英雄选择阶段 UI 恰好消费 `2015` 的 server-lobby member 顺序，而本地又把 donor 的 `all_members` 原样透传，就可能出现 lobby/building 显示槽位正确，但 hero selection 暂时落到该队伍第一个格子的现象。
-  - donor-based `2015` 重写时，应继续移除旧的 `8869` 并补当前 owner account 的 startup data，同时把 `field 1 / all_members` 规范成当前本地 lobby 的单个空 placeholder member，而不是继承 donor 里的成员布局。
+  - 当前已确认的现象仅限于“单人、本地、练习房”场景：进入英雄选择界面时，本地玩家会显示在 1 号位，这与官方行为一致，不应再作为 bug 继续修复。
+  - 基于该现象做出的推断性改动，例如规范化 `2015.all_members`、清理 donor `2004.field124/132`、在缺失时强行补 `2004.owner_state.account_id`，后续默认应视为无效假设并优先回收。
+  - 多人练习房是否也会表现为相同行为目前尚未测试；后续若继续分析座位显示问题，必须明确区分“单人本地练习房已知官方行为”和“多人场景未验证行为”。
 
 [Dota2 英雄选择前后的 donor 2004 并不会在切阶段时改 owner slot]
 - Date: 2026-05-01
