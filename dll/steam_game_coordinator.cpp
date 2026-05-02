@@ -183,6 +183,7 @@ enum : uint32 {
     GBE_kDotaLaunchPeripheralStageAuthListAckPost046 = 1u << 18,
     GBE_kDotaLaunchPeripheralStageLateGamesPlayed = 1u << 19,
     GBE_kDotaLaunchPeripheralStageLateAuthList = 1u << 20,
+    GBE_kDotaLaunchPeripheralStagePrivateLobbyServerPersona = 1u << 21,
 };
 
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...);
@@ -6478,6 +6479,15 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         ((GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePregameRunPersona) ||
          (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageRunPersona))) {
         GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
+        if (GBE_local_lobby.server_id != 0) {
+            GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+                GBE_kDotaLaunchPeripheralStagePrivateLobbyServerPersona,
+                GBE_kSteamPersonaState,
+                GBE_kDotaPracticeLobbyLaunchPersonaStateServerPrivateLobbyHex,
+                true,
+                "launch persona server-private-lobby on hero-selection run-state edge"
+            );
+        }
         GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
             GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
             GBE_kSteamPersonaState,

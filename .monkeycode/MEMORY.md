@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 英雄选择首次 RUN 边缘要提前补齐成对的 private-lobby 766]
+- Date: 2026-05-02
+- Context: Agent 在继续排查“GC 日志已切到 PRIVATE_LOBBY，但用户实测 UI 仍没变化”并顺序对照 `console.log`、`gbe_gc_debug.log` 与 `steam_game_coordinator.cpp` 的 persona 排队时发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里，`state=2` 且 `game_state` 第一次进入 `>=2` 时，`gbe` 只会先补一条 `766 size=520` 的本地 `private-lobby` persona；而官方在这个窗口更像是成对补发两条 `766`，分别覆盖带 `server_id` 的 persona 与本地 persona。
+  - 如果只提前补本地 `private-lobby` persona，而把带 `server_id` 的 `private-lobby` persona 继续拖到更晚 `046` 之后，主界面按钮和个人页状态可能不会在英雄选择时一起及时刷新。
+  - 因此英雄选择首次 `RUN` 边缘的最小对齐方式是：在现有本地 `private-lobby` persona 之外，再提前补一条 `...ServerPrivateLobbyHex`，同时不要阻断 `046` 后官方样式的重复 persona 链。
+
 [Dota2 单人本地练习房在英雄选择前后就应切到 PRIVATE_LOBBY，而不必等 pregame persona 全链]
 - Date: 2026-05-02
 - Context: Agent 在顺序对照 `officialconsole.log`、`console.log` 与 `gbe_gc_debug.log` 的“建房 -> 开始游戏 -> 英雄选择”窗口时发现
