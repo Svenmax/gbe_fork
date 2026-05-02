@@ -31,6 +31,23 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 practice lobby 修复必须严格符合官方抓包数据结构]
+- Date: 2026-05-02
+- Context: 用户明确要求后续排查与修复必须以官方抓包数据结构为硬约束
+- Instructions:
+  - 不管怎么改，practice lobby 各窗口的消息都必须尽量严格符合官方抓包的数据结构，不能只追求 UI 现象接近或功能上“看起来能用”。
+  - 当 runtime builder 与 donor/offical packet 结构不一致时，优先保留或复用官方抓包形状，并把 runtime 路径仅作为失败兜底，而不是默认主路径。
+  - 后续分析和修复应优先比较对象集合、对象顺序、`owner_soid`、各 `object_data_size` 与关键字段形状，不接受脱离官方结构的经验性修补。
+
+[Dota2 4506 与 7034 首条 WAIT_FOR_PLAYERS 更新应优先复用 024/025 donor 形状]
+- Date: 2026-05-02
+- Context: Agent 在继续顺序对照 `officialconsole.log:865-875,930-932`、`gbe_gc_debug.log:475-534` 与 `steam_game_coordinator.cpp` 的 `4506/7034` 路径后发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里，`4506` 后两条官方 `26` 约为 `511/511`，`7034 -> WAIT_FOR_PLAYERS_TO_LOAD` 首条官方 `26` 约为 `517`；它们都明显比纯 runtime builder 产出的 `322-byte` 更新更厚。
+  - `GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(...)` 这条纯 runtime 路径会把 `2015` 压成 `2 bytes`、把 `2016` 压成 `11 bytes`，导致 `4506` 和 `021` 窗口的 SO 形状过薄，即使后半段 `024/025/043/046` 已对齐，dashboard 也可能继续停在 host loading。
+  - 因此 `4506` 的 prelude/RUN 两条 `26` 与 `7034` 后首条 `WAIT_FOR_PLAYERS_TO_LOAD` 更新，应优先复用已经验证稳定的 `official_024/025` donor 形状；只有 donor 失败时才回退到纯 runtime builder 或更旧 donor。
+
 [Dota2 hero-selection 已补齐三条 26 后，8673 路径不应再插入两条 766]
 - Date: 2026-05-02
 - Context: Agent 在继续排查“主界面仍停在主机载入中”并顺序核对最新 `officialconsole.log`、`console.log` 与 `gbe_gc_debug.log` 后发现

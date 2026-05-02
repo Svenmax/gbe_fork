@@ -9471,6 +9471,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 0u) {
+                if (queue_official_26(GBE_kDotaOfficial024PracticeLobby26Hex, 2u, 1u, false, 0u, "official packet 021 after 7034"))
+                    return true;
+
                 GBE_LocalLobby wait_for_players_lobby = GBE_local_lobby;
                 wait_for_players_lobby.game_state = 1u;
 
@@ -9484,7 +9487,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         wait_for_players_lobby.game_state);
                     GBE_GC_DebugLog(
                         "GC_DOTA_DIRECT",
-                        "replying req=%u resp=%u source_job=%llu size=%zu note=official packet 021 after 7034 apply_state=%u apply_game_state=%u",
+                        "replying req=%u resp=%u source_job=%llu size=%zu note=official packet 021 after 7034 runtime fallback apply_state=%u apply_game_state=%u",
                         request_emsg,
                         GBE_kDotaPracticeLobbyDetailsUpdate,
                         static_cast<unsigned long long>(source_job),
@@ -9492,7 +9495,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         wait_for_players_lobby.state,
                         wait_for_players_lobby.game_state
                     );
-                    GBE_LogDotaSOMultipleObjectsSummary("GC_DOTA_DIRECT", "official packet 021 after 7034", wait_for_players_message);
+                    GBE_LogDotaSOMultipleObjectsSummary("GC_DOTA_DIRECT", "official packet 021 after 7034 runtime fallback", wait_for_players_message);
                     return true;
                 }
 
@@ -9876,25 +9879,113 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_local_lobby.server_id != 0 &&
                 GBE_local_lobby.state == 1u &&
                 GBE_local_lobby.game_state == 0u) {
-            GBE_LocalLobby prelude_lobby = GBE_local_lobby;
-            std::string prelude_message;
-            if (GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(prelude_lobby, GBE_local_lobby.owner_name, prelude_message)) {
+            auto queue_launch_26 = [&](const char *template_hex, uint32 next_state, uint32 next_game_state, const char *note) -> bool {
+                std::string response_message;
+                if (!GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
+                        template_hex,
+                        note,
+                        GBE_GetDotaLobbyOwnerAccountId(),
+                        GBE_GetDotaLobbyOwnerSteamId(),
+                        GBE_local_lobby.lobby_id,
+                        GBE_local_lobby.server_id,
+                        GBE_local_lobby.match_id,
+                        GBE_local_lobby.game_start_time,
+                        GBE_local_lobby.connect,
+                        GBE_local_lobby.owner_name,
+                        GBE_local_lobby.room_name,
+                        GBE_local_lobby.game_mode,
+                        GBE_local_lobby.server_region,
+                        GBE_local_lobby.lan,
+                        GBE_local_lobby.lan_host_ping_location,
+                        GBE_local_lobby.allow_cheats,
+                        GBE_local_lobby.fill_with_bots,
+                        GBE_local_lobby.allow_spectating,
+                        GBE_local_lobby.visibility,
+                        GBE_local_lobby.bot_difficulty_radiant,
+                        GBE_local_lobby.bot_difficulty_dire,
+                        GBE_local_lobby.bot_radiant,
+                        GBE_local_lobby.bot_dire,
+                        GBE_local_lobby.owner_team,
+                        GBE_local_lobby.owner_slot,
+                        GBE_local_lobby.owner_hero_id,
+                        GBE_local_lobby.pass_key,
+                        next_state,
+                        next_game_state,
+                        false,
+                        0u,
+                        response_message)) {
+                    return false;
+                }
+
                 push_incoming_now(
                     GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
-                    prelude_message,
+                    response_message,
                     true,
-                    prelude_lobby.state,
-                    prelude_lobby.game_state);
+                    next_state,
+                    next_game_state);
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
-                    "replying req=%u resp=%u source_job=%llu size=%zu note=official packet 018 prelude after 4506 apply_state=%u apply_game_state=%u",
+                    "replying req=%u resp=%u source_job=%llu size=%zu note=%s apply_state=%u apply_game_state=%u",
                     request_emsg,
                     GBE_kDotaPracticeLobbyDetailsUpdate,
                     static_cast<unsigned long long>(source_job),
-                    prelude_message.size(),
-                    prelude_lobby.state,
-                    prelude_lobby.game_state
+                    response_message.size(),
+                    note ? note : "unknown",
+                    next_state,
+                    next_game_state
                 );
+                if (note && std::strncmp(note, "official packet ", 16) == 0)
+                    GBE_LogDotaSOMultipleObjectsSummary("GC_DOTA_DIRECT", note, response_message);
+                return true;
+            };
+
+            if (!queue_launch_26(GBE_kDotaOfficial024PracticeLobby26Hex, 1u, 0u, "official packet 018 prelude after 4506")) {
+                GBE_LocalLobby prelude_lobby = GBE_local_lobby;
+                std::string prelude_message;
+                if (GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(prelude_lobby, GBE_local_lobby.owner_name, prelude_message)) {
+                    push_incoming_now(
+                        GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
+                        prelude_message,
+                        true,
+                        prelude_lobby.state,
+                        prelude_lobby.game_state);
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "replying req=%u resp=%u source_job=%llu size=%zu note=official packet 018 prelude after 4506 runtime fallback apply_state=%u apply_game_state=%u",
+                        request_emsg,
+                        GBE_kDotaPracticeLobbyDetailsUpdate,
+                        static_cast<unsigned long long>(source_job),
+                        prelude_message.size(),
+                        prelude_lobby.state,
+                        prelude_lobby.game_state
+                    );
+                }
+            }
+
+            if (queue_launch_26(GBE_kDotaOfficial025PracticeLobby26Hex, 2u, 0u, "official packet 018 after 4506")) {
+                GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_FINDING_MATCH", "RUN", true);
+                GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+                    GBE_kDotaLaunchPeripheralStageAuthListAck2,
+                    GBE_kSteamAuthListAck,
+                    GBE_kDotaPracticeLobbyLaunchAuthListAckStage2Hex,
+                    false,
+                    "launch auth list ack stage2 after 4506"
+                );
+                GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+                    GBE_kDotaLaunchPeripheralStageGameConnectTokens2,
+                    GBE_kSteamGameConnectTokens,
+                    GBE_kDotaPracticeLobbyLaunchGameConnectTokensStage2Hex,
+                    false,
+                    "launch game connect tokens stage2 after 4506"
+                );
+                GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
+                    GBE_kDotaLaunchPeripheralStageRunPersona,
+                    GBE_kSteamPersonaState,
+                    GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex,
+                    false,
+                    "launch persona run after 4506"
+                );
+                return true;
             }
 
             GBE_LocalLobby run_lobby = GBE_local_lobby;
@@ -9905,7 +9996,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, stage_message, true, 2u, 0u);
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
-                    "replying req=%u resp=%u source_job=%llu size=%zu note=official packet 018 after 4506 apply_state=2 apply_game_state=0",
+                    "replying req=%u resp=%u source_job=%llu size=%zu note=official packet 018 after 4506 runtime fallback apply_state=2 apply_game_state=0",
                     request_emsg,
                     GBE_kDotaPracticeLobbyDetailsUpdate,
                     static_cast<unsigned long long>(source_job),
