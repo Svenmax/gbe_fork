@@ -7507,6 +7507,16 @@ Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class N
 
     parse_gc_config();
 
+    if (gc_profile == GC_PROFILE_DOTA2) {
+        GBE_GC_DebugLog(
+            "GC_INIT",
+            "eagerly initializing Dota2 GC from constructor this=%p is_server=%u",
+            static_cast<void *>(this),
+            this->is_server ? 1u : 0u
+        );
+        initialize_gc();
+    }
+
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
         "coordinator init this=%p is_server=%u shared_lobby=%p shared_valid=%u active=%u lobby_id=%llu match_id=%llu state=%u game_state=%u",
