@@ -223,7 +223,10 @@ enum : uint32 {
     GBE_kDotaLaunchPeripheralStageLateGamesPlayed = 1u << 16,
     GBE_kDotaLaunchPeripheralStageLateAuthList = 1u << 17,
     GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26 = 1u << 18,
+    GBE_kDotaLaunchPeripheralStageBatchPlayerResources = 1u << 19,
 };
+
+static constexpr uint64 GBE_kDotaSyntheticBatchPlayerResourcesJobId = 4ull;
 
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...);
 
@@ -9571,6 +9574,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             response_message.size(),
             account_ids.size()
         );
+        GBE_dota_launch_peripheral_stage_mask |= GBE_kDotaLaunchPeripheralStageBatchPlayerResources;
         push_incoming_now(7451u | GBE_kProtoMask, response_message);
         return true;
     }
@@ -10147,6 +10151,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         if (matches_local_lobby)
             GBE_TrySyncDotaLobbyServerIdFromGameServer("4511_lan_server_available");
 
+        if (matches_local_lobby)
+            GBE_TryQueueSyntheticDotaBatchPlayerResources("4511_lan_server_available");
+
         if (matches_local_lobby && !incoming_messages.empty()) {
             GCMessageAvailable_t data{};
             data.m_nMessageSize = static_cast<uint32>(incoming_messages.front().msg_body.size());
@@ -10237,6 +10244,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         );
 
         GBE_TrySyncDotaLobbyServerIdFromGameServer("4508_game_server_info");
+        GBE_TryQueueSyntheticDotaBatchPlayerResources("4508_game_server_info");
         return true;
     }
 
@@ -10878,6 +10886,50 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
         "[LOBBY] Lobby left. unsubscribed LobbyID=%llu wrapped=%d",
         static_cast<unsigned long long>(lobby_id),
         wrapped ? 1 : 0
+    );
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_TryQueueSyntheticDotaBatchPlayerResources(const char *reason)
+{
+    if (gc_profile != GC_PROFILE_DOTA2 || !is_server)
+        return false;
+
+    if (!welcome_received || !GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)
+        return false;
+
+    if (GBE_local_lobby.state != 1u || GBE_local_lobby.game_state != 0u)
+        return false;
+
+    if (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageBatchPlayerResources)
+        return false;
+
+    std::vector<uint32> account_ids = { settings->get_local_steam_id().GetAccountID() };
+    std::string response_message;
+    if (!GBE_BuildDota7451BatchPlayerResourcesResponsePayload(account_ids, true, GBE_kDotaSyntheticBatchPlayerResourcesJobId, response_message)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "failed building synthetic 7451 reason=%s lobby_id=%llu state=%u game_state=%u",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state
+        );
+        return false;
+    }
+
+    GBE_dota_launch_peripheral_stage_mask |= GBE_kDotaLaunchPeripheralStageBatchPlayerResources;
+    push_incoming_now(7451u | GBE_kProtoMask, response_message);
+    GBE_GC_DebugLog(
+        "GC_DOTA_SYNC",
+        "queued synthetic 7451 reason=%s lobby_id=%llu match_id=%llu request_job=%llu accounts=%zu state=%u game_state=%u",
+        reason ? reason : "unknown",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        static_cast<unsigned long long>(GBE_kDotaSyntheticBatchPlayerResourcesJobId),
+        account_ids.size(),
+        GBE_local_lobby.state,
+        GBE_local_lobby.game_state
     );
     return true;
 }
