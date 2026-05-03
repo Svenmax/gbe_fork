@@ -31,6 +31,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 practice lobby 启动早期的 7035 不能直接走 PostGame teardown]
+- Date: 2026-05-03
+- Context: Agent 在继续排查二次建房停在 `wait_for_players`、随后错误进入 `PostGame_*` 频道时发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里，若 lobby 仍停在 `state=2 && game_state=1` 等启动早期阶段，`7035 / AbandonCurrentGame` 更像是启动回退信号，而不应立即当作真实 postgame abandon 处理。
+  - `GBE_HandleDotaAbandonCurrentGameRequest(...)` 只有在 practice lobby 已推进到更晚的 current-game 阶段后，才应进入 `25 + 7010 + 7010 + 7272 teardown` 这条 `PostGame_<lobby_id>` 链路；否则会过早清空当前 lobby，并让后续 `7034` fallback 错把 gameserver steamid 当 owner。
+
 [Dota2 GC 调试日志在排查期间应优先收敛到当前必要范围]
 - Date: 2026-05-03
 - Context: 用户反馈 `gbe_gc_debug.log` 体积越来越大，要求把当前暂时不用的日志先停掉，后期需要再恢复

@@ -10795,6 +10795,22 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     }
 
+    const bool ready_for_postgame_abandon =
+        GBE_local_lobby.state == 2u &&
+        GBE_local_lobby.game_state >= 10u;
+    if (!ready_for_postgame_abandon) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Ignoring early 7035 before launch reaches a current-game stage LobbyID=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            static_cast<unsigned long long>(GBE_local_lobby.match_id),
+            static_cast<unsigned long long>(GBE_local_lobby.server_id)
+        );
+        return true;
+    }
+
     if (wrapped && !outer_session_field_raw) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for 7035 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
