@@ -123,6 +123,7 @@ public ISteamGameCoordinator
         std::vector<uint32> cache_service_list;
         bool has_cache_sync_version{};
         uint64 cache_sync_version{};
+        bool abandon_postgame_active{};
     };
 
     GBE_LocalLobby GBE_local_lobby{};
