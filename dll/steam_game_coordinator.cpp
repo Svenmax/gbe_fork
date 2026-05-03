@@ -12692,6 +12692,26 @@ void Steam_Game_Coordinator::RunCallbacks()
         }
     }
 
+    if (is_server &&
+        gc_profile == GC_PROFILE_DOTA2 &&
+        !welcome_received &&
+        !incoming_messages.empty()) {
+        GC_Message &front_message = incoming_messages.front();
+        if (GBE_GC_MaskedEMsg(front_message.msg_type) == EGCBaseClientMsg::k_EMsgGCServerWelcome &&
+            check_timedout(front_message.created, 0.01)) {
+            GCMessageAvailable_t data{};
+            data.m_nMessageSize = static_cast<uint32>(front_message.msg_body.size());
+            callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
+            GBE_GC_DebugLog(
+                "GC_CALLBACK",
+                "reposted GCMessageAvailable_t for pending ServerWelcome queued_emsg=%u queue_size=%zu size=%u",
+                GBE_GC_MaskedEMsg(front_message.msg_type),
+                incoming_messages.size(),
+                data.m_nMessageSize
+            );
+        }
+    }
+
     for (auto it = pending_items_requests.begin(); it != pending_items_requests.end();) {
         if (check_timedout(it->created, 7.0)) {
             if (!it->is_gc) {

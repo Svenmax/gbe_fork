@@ -31,6 +31,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 二次启动的 server welcome 可能已入队但首个可用回调没有及时驱动服务端取走]
+- Date: 2026-05-03
+- Context: Agent 在对照第二次 launch 的 `console.log` 与 `gbe_gc_debug.log`，确认第二轮 `4005(ServerWelcome)` 已成功入队但 `7450` 仍早于 `Recv msg 4005` 时发现
+- Category: 代码模式
+- Instructions:
+  - 若日志显示第二次 `4007` 后 `gbe_gc_debug.log` 已出现 `queued msg=4005` / `returned_emsg=4005`，而 `console.log` 仍先报 `Trying to send message type 7450 ... before GC connection established`，优先怀疑的是 server-side `GCMessageAvailable_t` 通知在重连边缘没有及时驱动取走 `4005`，而不是先怀疑 `4005` 包体语义错误。
+  - 当前样本里，第一轮与第二轮的 direct `4005` 都是同样的 `28-byte` 最小 welcome，第一轮可以成功建连，因此第二轮更像是“welcome 投递时机/通知边缘问题”而不是“welcome 语义不足”。
+
 [Dota2 practice lobby 的排查应优先做完整根因分析，避免只对症状打补丁]
 - Date: 2026-05-03
 - Context: 用户对连续围绕 `7450/7451` 现象做局部补偿表示不满，要求回到完整代码链路找根因
