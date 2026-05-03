@@ -223,10 +223,7 @@ enum : uint32 {
     GBE_kDotaLaunchPeripheralStageLateGamesPlayed = 1u << 16,
     GBE_kDotaLaunchPeripheralStageLateAuthList = 1u << 17,
     GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26 = 1u << 18,
-    GBE_kDotaLaunchPeripheralStageBatchPlayerResources = 1u << 19,
 };
-
-static constexpr uint64 GBE_kDotaSyntheticBatchPlayerResourcesJobId = 4ull;
 
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...);
 
@@ -1471,6 +1468,16 @@ struct GBE_DotaServerHelloContext
     uint32 universe{};
     uint64 source_job_id{};
     bool has_source_job{};
+    uint64 client_steam_id{};
+    bool has_client_steam_id{};
+    int32 client_session_id{};
+    bool has_client_session_id{};
+    uint32 source_app_id{};
+    bool has_source_app_id{};
+    uint32 gc_msg_src{};
+    bool has_gc_msg_src{};
+    uint32 gc_dir_index_source{};
+    bool has_gc_dir_index_source{};
 };
 
 struct GBE_DotaWrappedDirectContext
@@ -6520,20 +6527,50 @@ static bool GBE_ExtractDirectDotaServerHelloContext(uint32 unMsgType, const void
     context.min_allowed_version = version;
     context.compatibility_value = 0;
     context.universe = 0;
+    if (protohdr.has_client_steam_id()) {
+        context.client_steam_id = protohdr.client_steam_id();
+        context.has_client_steam_id = true;
+    }
+    if (protohdr.has_client_session_id()) {
+        context.client_session_id = protohdr.client_session_id();
+        context.has_client_session_id = true;
+    }
+    if (protohdr.has_source_app_id()) {
+        context.source_app_id = protohdr.source_app_id();
+        context.has_source_app_id = true;
+    }
     if (protohdr.has_job_id_source()) {
         context.source_job_id = protohdr.job_id_source();
         context.has_source_job = true;
     }
+    if (protohdr.has_gc_msg_src()) {
+        context.gc_msg_src = static_cast<uint32>(protohdr.gc_msg_src());
+        context.has_gc_msg_src = true;
+    }
+    if (protohdr.has_gc_dir_index_source()) {
+        context.gc_dir_index_source = protohdr.gc_dir_index_source();
+        context.has_gc_dir_index_source = true;
+    }
 
     GBE_GC_DebugLog(
         "GC_DOTA_SERVER_HELLO",
-        "direct path parsed active_version=%u min_allowed=%u compat=%llu universe=%u source_job=%llu has_source_job=%d body_size=%zu",
+        "direct path parsed active_version=%u min_allowed=%u compat=%llu universe=%u source_job=%llu has_source_job=%d client_steam_id=%llu has_client_steam_id=%d client_session_id=%d has_client_session_id=%d source_app_id=%u has_source_app_id=%d gc_msg_src=%u has_gc_msg_src=%d gc_dir_index_source=%u has_gc_dir_index_source=%d body_size=%zu",
         context.active_version,
         context.min_allowed_version,
         static_cast<unsigned long long>(context.compatibility_value),
         context.universe,
         static_cast<unsigned long long>(context.source_job_id),
         context.has_source_job ? 1 : 0,
+        static_cast<unsigned long long>(context.client_steam_id),
+        context.has_client_steam_id ? 1 : 0,
+        context.client_session_id,
+        context.has_client_session_id ? 1 : 0,
+        context.source_app_id,
+        context.has_source_app_id ? 1 : 0,
+        context.gc_msg_src,
+        context.has_gc_msg_src ? 1 : 0,
+        context.gc_dir_index_source,
+        context.has_gc_dir_index_source ? 1 : 0,
         body_size
     );
     return true;
@@ -6624,11 +6661,19 @@ static bool GBE_BuildDirectDotaServerWelcome(uint64 steam_id, uint32 app_id, con
     hdr.m_EMsgFlagged = EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask;
 
     CMsgProtoBufHeader protohdr;
-    protohdr.set_client_steam_id(steam_id);
-    protohdr.set_client_session_id(1);
-    protohdr.set_source_app_id(app_id);
+    protohdr.set_client_steam_id(context.has_client_steam_id ? context.client_steam_id : steam_id);
+    if (context.has_client_session_id) {
+        protohdr.set_client_session_id(context.client_session_id);
+    } else {
+        protohdr.set_client_session_id(1);
+    }
+    protohdr.set_source_app_id(context.has_source_app_id ? context.source_app_id : app_id);
     if (context.has_source_job)
         protohdr.set_job_id_target(context.source_job_id);
+    if (context.has_gc_msg_src)
+        protohdr.set_gc_msg_src(static_cast<GCProtoBufMsgSrc>(context.gc_msg_src));
+    if (context.has_gc_dir_index_source)
+        protohdr.set_gc_dir_index_source(context.gc_dir_index_source);
 
     hdr.m_cubProtoBufExtHdr = static_cast<uint32>(protohdr.ByteSizeLong());
 
@@ -6643,10 +6688,15 @@ static bool GBE_BuildDirectDotaServerWelcome(uint64 steam_id, uint32 app_id, con
 
     GBE_GC_DebugLog(
         "GC_DOTA_SERVER_HELLO",
-        "built direct ServerWelcome active_version=%u min_allowed=%u target_job=%llu total=%zu",
+        "built direct ServerWelcome active_version=%u min_allowed=%u target_job=%llu client_steam_id=%llu client_session_id=%d source_app_id=%u gc_msg_src=%u gc_dir_index_source=%u total=%zu",
         context.active_version,
         context.min_allowed_version,
         static_cast<unsigned long long>(context.has_source_job ? context.source_job_id : 0ull),
+        static_cast<unsigned long long>(context.has_client_steam_id ? context.client_steam_id : steam_id),
+        context.has_client_session_id ? context.client_session_id : 1,
+        context.has_source_app_id ? context.source_app_id : app_id,
+        context.has_gc_msg_src ? context.gc_msg_src : 0u,
+        context.has_gc_dir_index_source ? context.gc_dir_index_source : 0u,
         message.size()
     );
     return true;
@@ -9574,7 +9624,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             response_message.size(),
             account_ids.size()
         );
-        GBE_dota_launch_peripheral_stage_mask |= GBE_kDotaLaunchPeripheralStageBatchPlayerResources;
         push_incoming_now(7451u | GBE_kProtoMask, response_message);
         return true;
     }
@@ -10151,9 +10200,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         if (matches_local_lobby)
             GBE_TrySyncDotaLobbyServerIdFromGameServer("4511_lan_server_available");
 
-        if (matches_local_lobby)
-            GBE_TryQueueSyntheticDotaBatchPlayerResources("4511_lan_server_available");
-
         if (matches_local_lobby && !incoming_messages.empty()) {
             GCMessageAvailable_t data{};
             data.m_nMessageSize = static_cast<uint32>(incoming_messages.front().msg_body.size());
@@ -10244,7 +10290,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         );
 
         GBE_TrySyncDotaLobbyServerIdFromGameServer("4508_game_server_info");
-        GBE_TryQueueSyntheticDotaBatchPlayerResources("4508_game_server_info");
         return true;
     }
 
@@ -10886,50 +10931,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
         "[LOBBY] Lobby left. unsubscribed LobbyID=%llu wrapped=%d",
         static_cast<unsigned long long>(lobby_id),
         wrapped ? 1 : 0
-    );
-    return true;
-}
-
-bool Steam_Game_Coordinator::GBE_TryQueueSyntheticDotaBatchPlayerResources(const char *reason)
-{
-    if (gc_profile != GC_PROFILE_DOTA2 || !is_server)
-        return false;
-
-    if (!welcome_received || !GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)
-        return false;
-
-    if (GBE_local_lobby.state != 1u || GBE_local_lobby.game_state != 0u)
-        return false;
-
-    if (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageBatchPlayerResources)
-        return false;
-
-    std::vector<uint32> account_ids = { settings->get_local_steam_id().GetAccountID() };
-    std::string response_message;
-    if (!GBE_BuildDota7451BatchPlayerResourcesResponsePayload(account_ids, true, GBE_kDotaSyntheticBatchPlayerResourcesJobId, response_message)) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "failed building synthetic 7451 reason=%s lobby_id=%llu state=%u game_state=%u",
-            reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state
-        );
-        return false;
-    }
-
-    GBE_dota_launch_peripheral_stage_mask |= GBE_kDotaLaunchPeripheralStageBatchPlayerResources;
-    push_incoming_now(7451u | GBE_kProtoMask, response_message);
-    GBE_GC_DebugLog(
-        "GC_DOTA_SYNC",
-        "queued synthetic 7451 reason=%s lobby_id=%llu match_id=%llu request_job=%llu accounts=%zu state=%u game_state=%u",
-        reason ? reason : "unknown",
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        static_cast<unsigned long long>(GBE_local_lobby.match_id),
-        static_cast<unsigned long long>(GBE_kDotaSyntheticBatchPlayerResourcesJobId),
-        account_ids.size(),
-        GBE_local_lobby.state,
-        GBE_local_lobby.game_state
     );
     return true;
 }
