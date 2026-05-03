@@ -31,6 +31,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 direct 7035 需要和启动抖动及 postgame abandon 分开建模]
+- Date: 2026-05-03
+- Context: Agent 在排查“第一局点击断开后主页仍残留游戏中状态”时，结合 `console.log` 与 `gbe_gc_debug.log` 发现 direct `7035` 在 `owner_connected=1` 的当前局阶段被误当成 early abandon 忽略
+- Category: 代码模式
+- Instructions:
+  - 对 Dota2 practice lobby 的 `7035 / AbandonCurrentGame`，不能只分成“启动早期误触发”与“postgame abandon”两种情况；还需要单独识别“owner 已真正进服后的 direct 7035”，这更像真实的当前局断开。
+  - 当前样本里，若 `wrapped=0`、`owner_connected=1`、`state=2` 且 `server_id!=0`，应优先把 `7035` 当作当前局 teardown 信号处理，至少完成 `25 (CacheUnsubscribed) + ResetGCMemory`，否则容易出现 lobby object 已销毁但 gamerules 仍停在 `HERO_SELECTION`，主页残留“仍在游戏中”状态。
+
 [Dota2 practice lobby 启动早期的 7035 不能直接走 PostGame teardown]
 - Date: 2026-05-03
 - Context: Agent 在继续排查二次建房停在 `wait_for_players`、随后错误进入 `PostGame_*` 频道时发现
