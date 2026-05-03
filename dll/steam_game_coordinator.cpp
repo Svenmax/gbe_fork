@@ -159,6 +159,7 @@ static GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 static bool GBE_dota_launch_pending_8870 = false;
 static bool GBE_dota_launch_pending_043 = false;
 static bool GBE_dota_launch_pending_046 = false;
+static bool GBE_dota_launch_seen_4511 = false;
 static uint32 GBE_dota_launch_peripheral_stage_mask = 0;
 
 enum : uint32 {
@@ -9439,17 +9440,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_PublishSharedDotaLobbyState("7034_connected_player_hero");
             }
 
-            const bool can_promote_prelaunch_7034 =
+            const bool has_full_launch_context =
                 GBE_local_lobby.active &&
                 GBE_local_lobby.lobby_id != 0 &&
                 GBE_local_lobby.match_id != 0 &&
                 GBE_local_lobby.server_id != 0;
+            const bool can_promote_prelaunch_7034 =
+                has_full_launch_context &&
+                GBE_dota_launch_seen_4511;
             if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u) {
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
                     can_promote_prelaunch_7034
-                        ? "consumed req=%u source_job=%llu note=prelaunch 7034 has full launch context and may promote to official 021 active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu summary=%s"
-                        : "consumed req=%u source_job=%llu note=prelaunch 7034 waits for official 4511/24/4506 progression active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu summary=%s",
+                        ? "consumed req=%u source_job=%llu note=prelaunch 7034 has full launch context plus matched 4511 and may promote to official 021 active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu launch_seen_4511=%u summary=%s"
+                        : "consumed req=%u source_job=%llu note=prelaunch 7034 waits for matched 4511 before official 021 progression active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu launch_seen_4511=%u full_launch_context=%u summary=%s",
                     request_emsg,
                     static_cast<unsigned long long>(source_job),
                     GBE_local_lobby.active ? 1u : 0u,
@@ -9458,6 +9462,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     GBE_local_lobby.game_state,
                     static_cast<unsigned long long>(GBE_local_lobby.match_id),
                     static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                    GBE_dota_launch_seen_4511 ? 1u : 0u,
+                    has_full_launch_context ? 1u : 0u,
                     GBE_FormatDota7034Summary(body, body_size).c_str()
                 );
                 if (!can_promote_prelaunch_7034)
@@ -10048,16 +10054,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
         const bool matches_local_lobby = (lobby_id != 0 && lobby_id == GBE_local_lobby.lobby_id);
         if (matches_local_lobby)
+            GBE_dota_launch_seen_4511 = true;
+        if (matches_local_lobby)
             GBE_TrySyncDotaLobbyServerIdFromGameServer("4511_lan_server_available");
 
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
-            "consumed req=%u source_job=%llu note=lan server available notification lobby_id=%llu local_lobby_id=%llu matches_local=%u",
+            "consumed req=%u source_job=%llu note=lan server available notification lobby_id=%llu local_lobby_id=%llu matches_local=%u launch_seen_4511=%u",
             request_emsg,
             static_cast<unsigned long long>(source_job),
             static_cast<unsigned long long>(lobby_id),
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            matches_local_lobby ? 1u : 0u
+            matches_local_lobby ? 1u : 0u,
+            GBE_dota_launch_seen_4511 ? 1u : 0u
         );
         return true;
     }
@@ -10685,6 +10694,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     GBE_dota_launch_pending_8870 = false;
     GBE_dota_launch_pending_043 = false;
     GBE_dota_launch_pending_046 = false;
+    GBE_dota_launch_seen_4511 = false;
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
 
     GBE_local_lobby.has_chat_channel = true;
@@ -10786,6 +10796,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
     GBE_dota_launch_pending_8870 = false;
     GBE_dota_launch_pending_043 = false;
     GBE_dota_launch_pending_046 = false;
+    GBE_dota_launch_seen_4511 = false;
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
     GBE_local_lobby.abandon_postgame_active = false;
     std::string response_25;
@@ -10899,6 +10910,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     GBE_dota_launch_pending_8870 = false;
     GBE_dota_launch_pending_043 = false;
     GBE_dota_launch_pending_046 = false;
+    GBE_dota_launch_seen_4511 = false;
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
 
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
@@ -11282,6 +11294,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         GBE_dota_launch_pending_8870 = false;
         GBE_dota_launch_pending_043 = false;
         GBE_dota_launch_pending_046 = false;
+        GBE_dota_launch_seen_4511 = false;
         GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
         GBE_LeaveGenericLobby();
         GBE_local_lobby.active = false;
@@ -11557,6 +11570,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDestroyLobbyRequest(uint64 request_jo
     GBE_dota_launch_pending_8870 = false;
     GBE_dota_launch_pending_043 = false;
     GBE_dota_launch_pending_046 = false;
+    GBE_dota_launch_seen_4511 = false;
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
     if (was_private_lobby_launch_state) {
         GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true, false);
