@@ -75,6 +75,44 @@ static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_de
 static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
 static constexpr uint32 GBE_kDotaLobbyField128Value = 1776809986u;
 
+static void GBE_BuildDotaPracticeLobbySOObjectData(
+    uint64 steam_id,
+    uint64 lobby_id,
+    uint32 lobby_state,
+    uint32 lobby_game_state,
+    uint64 server_id,
+    uint64 match_id,
+    uint32 game_start_time,
+    const std::string &connect,
+    const std::string &player_name,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
+    uint32 owner_hero_id,
+    bool has_broadcast_channel,
+    uint32 broadcast_channel_id,
+    const std::string &broadcast_country_code,
+    const std::string &broadcast_description,
+    const std::string &broadcast_language_code,
+    const std::string &pass_key,
+    uint32 extra_startup_account_id,
+    std::string &object_2015,
+    std::string &object_2016,
+    std::string &object_2004,
+    std::string &object_2014);
+
 static const char GBE_kDotaOfficialLobbyStartupAccountDataTemplate[] =
     "\010\365\355\206A\022\274\001\n\005\010\002\020\300\014\n\005\010\005\020\310\001"
     "\n\004\010\012\020d\n\004\010\013\020d\n\005\010\014\020\336\002"
@@ -8222,7 +8260,7 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(cons
         message);
 }
 
-static bool GBE_TryQueueDotaPrelaunch021(const char *note, uint32 trigger_emsg, uint64 source_job)
+bool Steam_Game_Coordinator::GBE_TryQueueDotaPrelaunch021(const char *note, uint32 trigger_emsg, uint64 source_job)
 {
     GBE_LocalLobby wait_for_players_lobby = GBE_local_lobby;
     wait_for_players_lobby.state = 2u;
@@ -8252,7 +8290,7 @@ static bool GBE_TryQueueDotaPrelaunch021(const char *note, uint32 trigger_emsg, 
     return true;
 }
 
-static bool GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state)
+bool Steam_Game_Coordinator::GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state)
 {
     GBE_LocalLobby next_lobby = GBE_local_lobby;
     next_lobby.state = next_state;
