@@ -31,6 +31,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 shared-lobby 二次启动时 server welcome 可能因 GC 实例重建而丢失]
+- Date: 2026-05-03
+- Context: Agent 在继续排查 shared-lobby 基线下“第二次 launch 黑屏，服务端 in-game GC 卡在 `4007` 之后、`4511/4508` 之前”时发现
+- Category: 代码模式
+- Instructions:
+  - shared-lobby 状态虽然已经能跨 GC 实例恢复，但服务端 `4005 (ServerWelcome)` 仍可能在旧 coordinator 上排队后，被后续新建的 `Steam_Client`/server GC 实例截断，导致活动实例始终收不到 welcome。
+  - 若日志表现为第二次 launch 已成功处理 `4007` 并构造 `4005`，但后续没有 `Recv msg 4005`，同时又出现新 `coordinator init`，应优先怀疑“未消费的 server welcome 跨实例丢失”，而不是继续优先怀疑 shared lobby 残留。
+
 [Dota2 4506 与 7034 早期 26 窗口应切回真正 official 018/021 donor 外壳并清空 donor 自带 startup payload]
 - Date: 2026-05-02
 - Context: Agent 在用户复测“`4506` 与 `021` 已从 `322` 收敛到 `514` 但 dashboard 仍停在 host loading”后，继续顺序对照 `officialconsole.log:865-875,930-932`、最新 `gbe_gc_debug.log` 与 `steam_game_coordinator.cpp` 的 donor 选择路径时发现
