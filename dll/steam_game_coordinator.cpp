@@ -6704,16 +6704,10 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         }
     }
 
-    // In current practice-lobby samples, the dashboard/private-profile flip can
-    // already happen by the first hero-selection run-state edge, before the
-    // later pregame persona chain has fully appeared. Latch private-lobby rich
-    // presence immediately, but leave the persona packets for a later Steam
-    // callback so the hero-selection window keeps a tighter 26/26/26 cadence.
-    if (GBE_local_lobby.state == 2u &&
-        GBE_local_lobby.game_state >= 2u &&
-        !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona) &&
-        ((GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePregameRunPersona) ||
-         (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageRunPersona))) {
+    // For the dashboard homepage, hero selection is the point where host-loading
+    // must flip into disconnect/return-to-game. Do not wait for later persona
+    // side messages just to expose that local state change.
+    if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 2u) {
         GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
     }
 
@@ -10159,20 +10153,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return true;
     }
 
-    if (request_emsg == 8673u &&
-        GBE_local_lobby.active &&
-        GBE_local_lobby.state == 2u &&
-        GBE_local_lobby.game_state >= 2u &&
-        !(GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona) &&
-        (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26)) {
-        // Once the hero-selection 26 chain is in place, official samples move
-        // straight from the dashboard transition into 8674. Keep reapplying
-        // local private-lobby presence here, but leave persona delivery to the
-        // later Steam chain so 8673 does not insert extra 766 packets ahead of
-        // the dashboard's first settled post-transition state.
-        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
-    }
-
     switch (request_emsg) {
         case 2536:
             template_bytes = GBE_kDota2538Template;
@@ -11961,11 +11941,8 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
     const char *lobby_state = nullptr;
     bool include_party = false;
     const bool should_present_private_lobby =
-        (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona) ||
-        (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26) ||
-        (GBE_local_lobby.state == 2u &&
-         GBE_local_lobby.game_state >= 2u &&
-         (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStagePregameRunPersona));
+        GBE_local_lobby.state == 2u &&
+        GBE_local_lobby.game_state >= 2u;
 
     if (GBE_local_lobby.state == 2u) {
         if (should_present_private_lobby) {
