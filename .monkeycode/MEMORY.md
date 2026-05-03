@@ -38,6 +38,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 继续排查 Dota2 practice lobby / GC 问题时，应优先保留与当前根因直接相关的日志，暂时关闭明显无关或重复的高频调试输出，避免 `gbe_gc_debug.log` 膨胀过快。
   - 如果后续某条次级链路需要重新观察，可以按需恢复对应 scope 的日志，而不是默认持续全量打印。
 
+[Dota2 服务端的 direct ServerWelcome 更适合绑定 owner 真正连入 server 的时点交付]
+- Date: 2026-05-03
+- Context: Agent 在对照新一轮失败日志时发现，第二次 launch 的 `4005(ServerWelcome)` 若在 `4007(ServerHello)` 处理栈内直接/延后排队，仍可能晚于 `7450` 被游戏消费
+- Category: 代码模式
+- Instructions:
+  - 当前样本里，`4007` 发送明显早于本地 owner 完成 `C2S_CONNECT -> Connected to 127.0.0.1:27015`，而服务端 `7450` 请求又发生在 owner 真正进服之后。
+  - 因此服务端 direct `4005(ServerWelcome)` 的更稳妥交付边界不是 `4007` 处理栈本身，而是 `on_client_connected()` 中 owner 账号真正连入 server 的生命周期事件；此时应优先先投递 pending `4005`，再继续 `7034` 等后续模拟消息。
+
 [Dota2 二次启动的 server welcome 可能已入队但首个可用回调没有及时驱动服务端取走]
 - Date: 2026-05-03
 - Context: Agent 在对照第二次 launch 的 `console.log` 与 `gbe_gc_debug.log`，确认第二轮 `4005(ServerWelcome)` 已成功入队但 `7450` 仍早于 `Recv msg 4005` 时发现
