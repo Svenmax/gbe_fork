@@ -31,6 +31,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 GC 调试日志在排查期间应优先收敛到当前必要范围]
+- Date: 2026-05-03
+- Context: 用户反馈 `gbe_gc_debug.log` 体积越来越大，要求把当前暂时不用的日志先停掉，后期需要再恢复
+- Instructions:
+  - 继续排查 Dota2 practice lobby / GC 问题时，应优先保留与当前根因直接相关的日志，暂时关闭明显无关或重复的高频调试输出，避免 `gbe_gc_debug.log` 膨胀过快。
+  - 如果后续某条次级链路需要重新观察，可以按需恢复对应 scope 的日志，而不是默认持续全量打印。
+
 [Dota2 二次启动的 server welcome 可能已入队但首个可用回调没有及时驱动服务端取走]
 - Date: 2026-05-03
 - Context: Agent 在对照第二次 launch 的 `console.log` 与 `gbe_gc_debug.log`，确认第二轮 `4005(ServerWelcome)` 已成功入队但 `7450` 仍早于 `Recv msg 4005` 时发现

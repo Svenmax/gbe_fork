@@ -1570,11 +1570,26 @@ struct GBE_DotaLeaveChatChannelRequest
 
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)
 {
+    const char *log_scope = scope ? scope : "GC";
+    if (std::strcmp(log_scope, "GC_SEND") == 0 ||
+        std::strcmp(log_scope, "GC_SEND_DOTA") == 0 ||
+        std::strcmp(log_scope, "GC_RETRIEVE") == 0 ||
+        std::strcmp(log_scope, "GC_CALLBACK") == 0 ||
+        std::strcmp(log_scope, "GC_DOTA_SYNC") == 0 ||
+        std::strcmp(log_scope, "GC_CONFIG") == 0 ||
+        std::strcmp(log_scope, "GC_INIT") == 0 ||
+        std::strcmp(log_scope, "CREATE_INTERFACE") == 0 ||
+        std::strcmp(log_scope, "GC_INTERFACE_REQUEST") == 0 ||
+        std::strcmp(log_scope, "GC_INTERFACE_RETURN") == 0 ||
+        std::strcmp(log_scope, "NETSOCK_CTOR") == 0) {
+        return;
+    }
+
     FILE *file = std::fopen(GBE_kGcDebugLogPath, "a");
     if (!file)
         return;
 
-    std::fprintf(file, "[%s] ", scope ? scope : "GC");
+    std::fprintf(file, "[%s] ", log_scope);
 
     va_list args;
     va_start(args, fmt);
@@ -7615,7 +7630,7 @@ void Steam_Game_Coordinator::initialize_gc()
                 static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                 GBE_shared_dota_server_welcome_replay.message.size()
             );
-            push_incoming_now(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, GBE_shared_dota_server_welcome_replay.message);
+            push_incoming(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, GBE_shared_dota_server_welcome_replay.message, 0.05);
         }
         GBE_GC_DebugLog("GC_INIT", "initialized Dota2 GC profile for app %u", settings->get_local_game_id().AppID());
         return;
@@ -11865,7 +11880,19 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
             static_cast<unsigned long long>(server_hello_context.has_source_job ? server_hello_context.source_job_id : 0ull)
         );
 
-        push_incoming_now(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, welcome_message);
+        const bool delayed_server_welcome = is_server;
+        if (delayed_server_welcome) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SERVER_HELLO",
+                "scheduling ServerWelcome for deferred callback delivery lobby_id=%llu delay=%.2f size=%zu",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                0.05,
+                welcome_message.size()
+            );
+            push_incoming(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, welcome_message, 0.05);
+        } else {
+            push_incoming_now(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, welcome_message);
+        }
         if (is_server && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
             GBE_shared_dota_server_welcome_replay.valid = true;
             GBE_shared_dota_server_welcome_replay.lobby_id = GBE_local_lobby.lobby_id;
@@ -12689,26 +12716,6 @@ void Steam_Game_Coordinator::RunCallbacks()
             it = pending_messages.erase(it);
         } else {
             it++;
-        }
-    }
-
-    if (is_server &&
-        gc_profile == GC_PROFILE_DOTA2 &&
-        !welcome_received &&
-        !incoming_messages.empty()) {
-        GC_Message &front_message = incoming_messages.front();
-        if (GBE_GC_MaskedEMsg(front_message.msg_type) == EGCBaseClientMsg::k_EMsgGCServerWelcome &&
-            check_timedout(front_message.created, 0.01)) {
-            GCMessageAvailable_t data{};
-            data.m_nMessageSize = static_cast<uint32>(front_message.msg_body.size());
-            callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
-            GBE_GC_DebugLog(
-                "GC_CALLBACK",
-                "reposted GCMessageAvailable_t for pending ServerWelcome queued_emsg=%u queue_size=%zu size=%u",
-                GBE_GC_MaskedEMsg(front_message.msg_type),
-                incoming_messages.size(),
-                data.m_nMessageSize
-            );
         }
     }
 
