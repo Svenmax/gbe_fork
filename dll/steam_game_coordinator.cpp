@@ -10095,6 +10095,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         if (matches_local_lobby)
             GBE_TrySyncDotaLobbyServerIdFromGameServer("4511_lan_server_available");
 
+        if (matches_local_lobby && !incoming_messages.empty()) {
+            GCMessageAvailable_t data{};
+            data.m_nMessageSize = static_cast<uint32>(incoming_messages.front().msg_body.size());
+            callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
+            GBE_GC_DebugLog(
+                "GC_CALLBACK",
+                "reposted GCMessageAvailable_t after 4511 lobby_id=%llu queued_emsg=%u queue_size=%zu size=%u",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_GC_MaskedEMsg(incoming_messages.front().msg_type),
+                incoming_messages.size(),
+                data.m_nMessageSize
+            );
+        }
+
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "consumed req=%u source_job=%llu note=lan server available notification without launch gating lobby_id=%llu local_lobby_id=%llu matches_local=%u",
