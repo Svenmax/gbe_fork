@@ -9449,23 +9449,39 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 has_full_launch_context &&
                 GBE_dota_launch_seen_4511;
             if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u) {
-                GBE_GC_DebugLog(
-                    "GC_DOTA_DIRECT",
-                    can_promote_prelaunch_7034
-                        ? "consumed req=%u source_job=%llu note=prelaunch 7034 has full launch context plus matched 4511 and may promote to official 021 active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu launch_seen_4511=%u summary=%s"
-                        : "consumed req=%u source_job=%llu note=prelaunch 7034 waits for matched 4511 before official 021 progression active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu launch_seen_4511=%u full_launch_context=%u summary=%s",
-                    request_emsg,
-                    static_cast<unsigned long long>(source_job),
-                    GBE_local_lobby.active ? 1u : 0u,
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state,
-                    static_cast<unsigned long long>(GBE_local_lobby.match_id),
-                    static_cast<unsigned long long>(GBE_local_lobby.server_id),
-                    GBE_dota_launch_seen_4511 ? 1u : 0u,
-                    has_full_launch_context ? 1u : 0u,
-                    GBE_FormatDota7034Summary(body, body_size).c_str()
-                );
+                const std::string request_summary = GBE_FormatDota7034Summary(body, body_size);
+                if (can_promote_prelaunch_7034) {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "consumed req=%u source_job=%llu note=prelaunch 7034 has full launch context plus matched 4511 and may promote to official 021 active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu launch_seen_4511=%u summary=%s",
+                        request_emsg,
+                        static_cast<unsigned long long>(source_job),
+                        GBE_local_lobby.active ? 1u : 0u,
+                        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                        GBE_local_lobby.state,
+                        GBE_local_lobby.game_state,
+                        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                        static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                        GBE_dota_launch_seen_4511 ? 1u : 0u,
+                        request_summary.c_str()
+                    );
+                } else {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "consumed req=%u source_job=%llu note=prelaunch 7034 waits for matched 4511 before official 021 progression active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu launch_seen_4511=%u full_launch_context=%u summary=%s",
+                        request_emsg,
+                        static_cast<unsigned long long>(source_job),
+                        GBE_local_lobby.active ? 1u : 0u,
+                        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                        GBE_local_lobby.state,
+                        GBE_local_lobby.game_state,
+                        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                        static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                        GBE_dota_launch_seen_4511 ? 1u : 0u,
+                        has_full_launch_context ? 1u : 0u,
+                        request_summary.c_str()
+                    );
+                }
                 if (!can_promote_prelaunch_7034)
                     return true;
             }
