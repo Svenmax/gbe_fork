@@ -46,6 +46,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 继续排查 Dota2 practice lobby / GC 问题时，应优先保留与当前根因直接相关的日志，暂时关闭明显无关或重复的高频调试输出，避免 `gbe_gc_debug.log` 膨胀过快。
   - 如果后续某条次级链路需要重新观察，可以按需恢复对应 scope 的日志，而不是默认持续全量打印。
 
+[Dota2 二次启动的 ServerWelcome 不能只依赖单次 GCMessageAvailable 通知]
+- Date: 2026-05-03
+- Context: Agent 在继续排查第二次 launch 中 `4005` 已入队但仍晚于首个 `7450` 被消费时，追到 `SteamCallBacks/SteamCallResults` 的 callback 生命周期后发现
+- Category: 代码模式
+- Instructions:
+  - `push_incoming_now(4005)` 虽然会立即追加 `GCMessageAvailable_t`，但这条 callback result 仍依赖后续 `runCallResults()` 才会真正交付；如果 server GC 实例在 owner connect 边缘重建，或 `GCMessageAvailable_t` 的注册晚于那一拍，单次通知可能在下一轮 `runCallBacks()` 清空后失效。
+  - 对于 Dota2 practice lobby 的 deferred `ServerWelcome`，在 owner 已真正连入且 shared pending welcome 仍未被 `RetrieveMessage()` 取走时，当前 server coordinator 需要具备“重挂 welcome 到当前实例并持续重发 GCMessageAvailable 通知”的自愈能力，不能假设 owner connect 那一次单发通知一定会被最终消费。
+
 [Dota2 服务端的 direct ServerWelcome 更适合绑定 owner 真正连入 server 的时点交付]
 - Date: 2026-05-03
 - Context: Agent 在对照新一轮失败日志时发现，第二次 launch 的 `4005(ServerWelcome)` 若在 `4007(ServerHello)` 处理栈内直接/延后排队，仍可能晚于 `7450` 被游戏消费

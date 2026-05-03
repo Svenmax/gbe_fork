@@ -110,6 +110,7 @@ public ISteamGameCoordinator
         uint32 owner_team{};
         uint32 owner_slot{};
         uint32 owner_hero_id{};
+        bool owner_connected{};
         bool has_broadcast_channel{};
         uint32 broadcast_channel_id{};
         std::string broadcast_country_code;
@@ -177,6 +178,8 @@ public ISteamGameCoordinator
     void GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *status, const char *lobby_state, bool include_party, bool include_lobby = true);
     void GBE_ClearDotaPracticeLobbyLaunchRichPresence();
     void GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(const char *reason);
+    bool GBE_HasIncomingMessage(uint32 masked_emsg) const;
+    void GBE_EnsurePendingDotaServerWelcomeVisible(const char *reason);
     bool GBE_CaptureCurrentDotaLobbyState(const char *reason, GBE_LocalLobby &snapshot, bool restore_shared = true);
     void GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(const char *reason);
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message);
