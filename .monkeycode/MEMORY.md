@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 二次启动若 7450 先于 4005，则服务端玩家资源初始化会直接失败]
+- Date: 2026-05-03
+- Context: Agent 在继续排查 shared-lobby 基线下“第二次 launch 黑屏且新日志显示 4511 重投递已生效”时发现
+- Category: 代码模式
+- Instructions:
+  - 若第二次 launch 的 `console.log` 出现 `Trying to send message type 7450 ... before GC connection established` 或 `BatchPlayerResources - Failed to get accounts`，说明服务端 `CDOTA_PlayerResource` 请求早于 `4005(ServerWelcome)` 建立 GC 连接。
+  - 这种情况下，即使后续 `24/26/5501/5575/779/766` 与 hero-selection/strategy-time 的合成队列已经恢复，真实服务端仍可能继续卡在 `WAIT_FOR_PLAYERS/INIT` 邻域，因为关键的 `7451` 玩家资源响应从未成功建立。
+  - 后续优先检查 Dota2 GC 是否初始化过晚、`4005` 是否在首个服务端资源请求之前就已可轮询，而不是只盯着 `4511/4508/7034` 的后半段队列消费。
+
 [Dota2 shared-lobby 二次启动时 server welcome 可能因 GC 实例重建而丢失]
 - Date: 2026-05-03
 - Context: Agent 在继续排查 shared-lobby 基线下“第二次 launch 黑屏，服务端 in-game GC 卡在 `4007` 之后、`4511/4508` 之前”时发现

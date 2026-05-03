@@ -12303,6 +12303,11 @@ bool Steam_Game_Coordinator::IsMessageAvailable( uint32 *pcubMsgSize )
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
+    if (!gc_initialized && gc_profile == GC_PROFILE_DOTA2) {
+        GBE_GC_DebugLog("GC_POLL", "initializing GC from IsMessageAvailable for Dota2 profile");
+        initialize_gc();
+    }
+
     if (!gc_initialized || incoming_messages.empty()) {
         *pcubMsgSize = 0;
         return false;
@@ -12690,6 +12695,11 @@ void Steam_Game_Coordinator::network_callback(Common_Message *msg)
 
 void Steam_Game_Coordinator::RunCallbacks()
 {
+    if (!gc_initialized && gc_profile == GC_PROFILE_DOTA2) {
+        GBE_GC_DebugLog("GC_POLL", "initializing GC from RunCallbacks for Dota2 profile");
+        initialize_gc();
+    }
+
     if (delay_init && welcome_received && check_timedout(welcome_time, 0.2)) {
         delay_init = false;
     }
