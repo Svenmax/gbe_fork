@@ -189,6 +189,7 @@ public ISteamGameCoordinator
     void GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason);
     void GBE_PublishSharedDotaLobbyState(const char *reason);
     void GBE_RestoreSharedDotaLobbyState(const char *reason);
+    void ResetGCMemory(const char *reason = nullptr, bool leave_generic_lobby = true, bool clear_queued_messages = true);
     void GBE_LeaveGenericLobby();
     void GBE_SyncSettingsLobbyFromGenericLobby(const char *reason);
     bool GBE_SyncGenericLobbyGameServer(const char *reason);
@@ -201,7 +202,7 @@ public ISteamGameCoordinator
     bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw, const char *reason);
     bool GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrapped, const std::string *outer_session_field_raw);
-    bool GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id);
     bool GBE_HandleDotaPracticeLobbySetDetailsRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaLeaveChatChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);

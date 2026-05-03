@@ -31,6 +31,16 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 模拟 GC 需要显式生命周期重置，避免第二次建房复用旧状态]
+- Date: 2026-05-03
+- Context: 用户要求把 practice lobby 模拟器从“一次性”改为可连续多次建房/开局
+- Instructions:
+  - 增加全局 `ResetGCMemory()`，至少清空 `LocalLobby`、将所有 `LobbyID/MatchID` 状态归零，并清除缓存的 `SourceJobID`。
+  - 拦截 `k_EMsgGCPracticeLobbyCreate` 时必须先执行重置，再生成新的 lobby 标识。
+  - 拦截 `k_EMsgGCPracticeLobbyLeave` 时也要主动清理内存，让模拟器回到初始状态。
+  - `LobbyID` 和 `MatchID` 不能在 DLL 加载时只生成一次，必须在每次建房/开始游戏时重新生成。
+  - 回复 `7041 (LobbyData)` 时，`TargetJobID` 必须取当前请求的 `SourceJobID`，不能复用全局旧值。
+
 [Dota2 二次启动若 7450 先于 4005，则服务端玩家资源初始化会直接失败]
 - Date: 2026-05-03
 - Context: Agent 在继续排查 shared-lobby 基线下“第二次 launch 黑屏且新日志显示 4511 重投递已生效”时发现
