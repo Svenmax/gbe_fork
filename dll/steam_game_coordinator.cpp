@@ -11226,13 +11226,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         return true;
     }
 
-    const uint64 channel_id = request.channel_id != 0 ? request.channel_id : GBE_local_lobby.chat_channel_id;
+    const uint64 local_channel_id = GBE_local_lobby.chat_channel_id;
+    const uint64 channel_id = request.channel_id != 0 ? request.channel_id : local_channel_id;
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
     const bool leaving_postgame_channel =
         GBE_local_lobby.abandon_postgame_active &&
-        channel_id != 0 &&
-        channel_id == GBE_local_lobby.chat_channel_id &&
+        GBE_local_lobby.has_chat_channel &&
+        local_channel_id != 0 &&
         GBE_local_lobby.chat_channel_type == 18u;
     if (channel_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7272 because no chat channel is active");
@@ -11268,6 +11269,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
     GBE_local_lobby.chat_channel_type = 0;
 
     if (leaving_postgame_channel) {
+        if (request.channel_id != 0 && request.channel_id != local_channel_id) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] 7272 request channel mismatch during abandon teardown. request_channel=%llu local_channel=%llu type=%u",
+                static_cast<unsigned long long>(request.channel_id),
+                static_cast<unsigned long long>(local_channel_id),
+                GBE_local_lobby.chat_channel_type
+            );
+        }
+
         GBE_dota_launch_pending_8870 = false;
         GBE_dota_launch_pending_043 = false;
         GBE_dota_launch_pending_046 = false;
