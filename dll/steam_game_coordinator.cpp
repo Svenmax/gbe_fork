@@ -11881,17 +11881,33 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
         }
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_SERVER_HELLO",
-                "skipping synthetic CacheSubscribed after ServerWelcome to match official launch timing lobby_id=%llu state=%u game_state=%u team=%u slot=%u",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_local_lobby.state,
-                GBE_local_lobby.game_state,
-                GBE_local_lobby.owner_team,
-                GBE_local_lobby.owner_slot
-            );
-
             if (is_server) {
+                std::string runtime_cache_message;
+                if (GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(GBE_local_lobby.owner_name, runtime_cache_message)) {
+                    GBE_RecordDotaLobbyCacheSubscriptionState(runtime_cache_message, "server_welcome_current_cache_subscribed");
+                    push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, runtime_cache_message);
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_SERVER_HELLO",
+                        "queued synthetic CacheSubscribed after ServerWelcome lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu size=%zu",
+                        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                        GBE_local_lobby.state,
+                        GBE_local_lobby.game_state,
+                        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                        static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                        runtime_cache_message.size()
+                    );
+                } else {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_SERVER_HELLO",
+                        "failed building synthetic CacheSubscribed after ServerWelcome lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
+                        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                        GBE_local_lobby.state,
+                        GBE_local_lobby.game_state,
+                        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                        static_cast<unsigned long long>(GBE_local_lobby.server_id)
+                    );
+                }
+
                 GBE_GC_DebugLog(
                     "GC_DOTA_SERVER_HELLO",
                     "skipping synthetic direct 7034 after ServerWelcome to match official launch timing lobby_id=%llu state=%u game_state=%u team=%u slot=%u",
