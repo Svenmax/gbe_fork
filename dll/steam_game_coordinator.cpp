@@ -8322,8 +8322,11 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPay
 
 bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message)
 {
+    const uint64 owner_steam_id = lobby.owner_steam_id != 0 ? lobby.owner_steam_id : GBE_GetDotaLobbyOwnerSteamId();
+    const uint32 owner_account_id = lobby.owner_account_id != 0 ? lobby.owner_account_id : GBE_GetDotaLobbyOwnerAccountId();
+
     return GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
-        GBE_GetDotaLobbyOwnerSteamId(),
+        owner_steam_id,
         lobby.lobby_id,
         lobby.state,
         lobby.game_state,
@@ -8354,15 +8357,18 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPay
         lobby.broadcast_description,
         lobby.broadcast_language_code,
         lobby.pass_key,
-        0,
+        owner_account_id,
         message);
 }
 
 bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message)
 {
+    const uint64 owner_steam_id = lobby.owner_steam_id != 0 ? lobby.owner_steam_id : GBE_GetDotaLobbyOwnerSteamId();
+    const uint32 owner_account_id = lobby.owner_account_id != 0 ? lobby.owner_account_id : GBE_GetDotaLobbyOwnerAccountId();
+
     return GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
-        GBE_GetDotaLobbyOwnerSteamId(),
-        GBE_GetDotaLobbyOwnerAccountId(),
+        owner_steam_id,
+        owner_account_id,
         lobby.lobby_id,
         lobby.state,
         lobby.game_state,
@@ -8976,6 +8982,9 @@ uint64 Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerSteamId() const
     if (GBE_local_lobby.owner_steam_id != 0)
         return GBE_local_lobby.owner_steam_id;
 
+    if (GBE_shared_dota_lobby_state.owner_steam_id != 0)
+        return GBE_shared_dota_lobby_state.owner_steam_id;
+
     return settings->get_local_steam_id().ConvertToUint64();
 }
 
@@ -8984,6 +8993,9 @@ uint32 Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerAccountId() const
     if (GBE_local_lobby.owner_account_id != 0)
         return GBE_local_lobby.owner_account_id;
 
+    if (GBE_shared_dota_lobby_state.owner_account_id != 0)
+        return GBE_shared_dota_lobby_state.owner_account_id;
+
     return settings->get_local_steam_id().GetAccountID();
 }
 
@@ -8991,6 +9003,9 @@ std::string Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerName() const
 {
     if (!GBE_local_lobby.owner_name.empty())
         return GBE_local_lobby.owner_name;
+
+    if (!GBE_shared_dota_lobby_state.owner_name.empty())
+        return GBE_shared_dota_lobby_state.owner_name;
 
     return std::string(settings->get_local_name());
 }
