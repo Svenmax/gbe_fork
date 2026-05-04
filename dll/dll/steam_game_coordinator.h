@@ -242,6 +242,7 @@ public:
 
     void initialize_gc();
     void shutdown_gc();
+    void GBE_MaybePrimeDotaServerWelcomeFromCache(const char *reason);
 
     const std::vector<Econ_Item> &get_items() { return items; }
     const std::map<CSteamID, std::vector<Econ_Item>> &get_all_user_items() { return all_user_items; }

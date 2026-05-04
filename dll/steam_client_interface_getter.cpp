@@ -492,6 +492,9 @@ void *Steam_Client::GetISteamGenericInterface( HSteamUser hSteamUser, HSteamPipe
         }
 
         GBE_LogGenericInterfaceRequest("GC_INTERFACE_REQUEST", pchVersion, hSteamUser, hSteamPipe, steam_game_coordinator_temp, server);
+        if (server && steam_game_coordinator_temp) {
+            steam_game_coordinator_temp->GBE_MaybePrimeDotaServerWelcomeFromCache("gc_interface_request");
+        }
 
         if (strcmp(pchVersion, STEAMGAMECOORDINATOR_INTERFACE_VERSION) == 0) {
             void *result = reinterpret_cast<void *>(static_cast<ISteamGameCoordinator *>(steam_game_coordinator_temp));

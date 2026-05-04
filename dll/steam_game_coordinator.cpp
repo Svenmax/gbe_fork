@@ -1474,6 +1474,8 @@ struct GBE_DotaServerHelloContext
     bool has_gc_dir_index_source{};
 };
 
+static GBE_DotaServerHelloContext GBE_last_dota_server_hello_context;
+
 struct GBE_DotaWrappedDirectContext
 {
     bool valid{};
@@ -7383,6 +7385,52 @@ void Steam_Game_Coordinator::callback_server_welcome()
     push_incoming(msg_type, message);
 }
 
+void Steam_Game_Coordinator::GBE_MaybePrimeDotaServerWelcomeFromCache(const char *reason)
+{
+    if (!is_server || gc_profile != GC_PROFILE_DOTA2 || !GBE_last_dota_server_hello_context.valid)
+        return;
+
+    if (!gc_initialized)
+        initialize_gc();
+
+    GBE_RestoreSharedDotaLobbyState("prime_server_welcome");
+
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || welcome_received)
+        return;
+
+    std::queue<GC_Message> queued_messages = incoming_messages;
+    while (!queued_messages.empty()) {
+        if (GBE_GC_MaskedEMsg(queued_messages.front().msg_type) == EGCBaseClientMsg::k_EMsgGCServerWelcome)
+            return;
+        queued_messages.pop();
+    }
+
+    std::string welcome_message;
+    if (!GBE_BuildDirectDotaServerWelcome(
+            settings->get_local_steam_id().ConvertToUint64(),
+            settings->get_local_game_id().AppID(),
+            GBE_last_dota_server_hello_context,
+            welcome_message)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SERVER_HELLO",
+            "failed priming cached ServerWelcome reason=%s lobby_id=%llu",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+        );
+        return;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_SERVER_HELLO",
+        "priming cached ServerWelcome reason=%s lobby_id=%llu size=%zu active_version=%u",
+        reason ? reason : "unknown",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        welcome_message.size(),
+        GBE_last_dota_server_hello_context.active_version
+    );
+    push_incoming_now(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, welcome_message);
+}
+
 void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const std::vector<Econ_Item> &items)
 {
     if (!gc_initialized)
@@ -11877,6 +11925,32 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
         if (!GBE_ExtractDirectDotaServerHelloContext(unMsgType, pubData, cubData, server_hello_context)) {
             GBE_GC_DebugLog("GC_SEND_DOTA", "ignored direct ServerHello payload because parsing failed");
             return false;
+        }
+
+        GBE_last_dota_server_hello_context = server_hello_context;
+
+        if (is_server && welcome_received) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SERVER_HELLO",
+                "skipping ServerWelcome replay because server GC is already connected active_version=%u",
+                server_hello_context.active_version
+            );
+            return true;
+        }
+
+        if (is_server) {
+            std::queue<GC_Message> queued_messages = incoming_messages;
+            while (!queued_messages.empty()) {
+                if (GBE_GC_MaskedEMsg(queued_messages.front().msg_type) == EGCBaseClientMsg::k_EMsgGCServerWelcome) {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_SERVER_HELLO",
+                        "skipping ServerWelcome replay because one is already queued active_version=%u",
+                        server_hello_context.active_version
+                    );
+                    return true;
+                }
+                queued_messages.pop();
+            }
         }
 
         std::string welcome_message;
