@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 practice lobby 的 owner_connected 是统一 lifecycle 边界]
+- Date: 2026-05-04
+- Context: Agent 在回退到 `d0873b10` 基线后，重新串联 `7038/24/26/7035/25/on_client_connected/on_client_disconnected/ResetGCMemory` 整体生命周期时发现
+- Category: 代码模式
+- Instructions:
+  - `owner_connected` 不应只是保留字段；它是 practice lobby lifecycle 的关键边界，用来区分“启动期 stray 7035”与“owner 已真正进入当前局后的真实断开”。
+  - 如果 server 侧没有在 `on_client_connected/on_client_disconnected` 维护并发布 `owner_connected`，后续对 `7035` 的处理就只能退化成按第几次 launch/退出打补丁。
+  - 对 current-game disconnect 分支，统一语义应是：owner 已进入当前局后收到 server 侧 `7035`，先下发 `25 (CacheUnsubscribed)`，等 `25` 被真正取走后再 `ResetGCMemory`；不要在投递 `25` 之前先清 local/shared lobby。
+
 [Dota2 practice lobby 启动早期的 7035 不能直接走 PostGame teardown]
 - Date: 2026-05-03
 - Context: Agent 在继续排查二次建房停在 `wait_for_players`、随后错误进入 `PostGame_*` 频道时发现

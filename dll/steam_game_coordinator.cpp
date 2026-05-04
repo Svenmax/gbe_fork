@@ -7955,6 +7955,11 @@ void Steam_Game_Coordinator::on_client_connected(CSteamID steam_id)
         const uint64 connected_steam_id = steam_id.ConvertToUint64();
         const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
         if (gc_initialized && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && connected_steam_id != 0 && connected_steam_id == owner_steam_id) {
+            if (!GBE_local_lobby.owner_connected) {
+                GBE_local_lobby.owner_connected = true;
+                GBE_PublishSharedDotaLobbyState("owner_connected");
+            }
+
             if (GBE_shared_dota_server_welcome_replay.valid &&
                 GBE_shared_dota_server_welcome_replay.lobby_id == GBE_local_lobby.lobby_id &&
                 !GBE_shared_dota_server_welcome_replay.message.empty()) {
@@ -8019,6 +8024,15 @@ void Steam_Game_Coordinator::on_client_disconnected(CSteamID steam_id)
 {
     if (!steam_id.BIndividualAccount())
         return;
+
+    if (is_server && gc_profile == GC_PROFILE_DOTA2) {
+        const uint64 disconnected_steam_id = steam_id.ConvertToUint64();
+        const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && disconnected_steam_id != 0 && disconnected_steam_id == owner_steam_id) {
+            GBE_local_lobby.owner_connected = false;
+            GBE_PublishSharedDotaLobbyState("owner_disconnected");
+        }
+    }
 
     remove_user_items(steam_id);
 }
@@ -8584,6 +8598,8 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
     GBE_shared_dota_server_welcome_replay = GBE_SharedDotaServerWelcomeReplay{};
     GBE_dota_private_lobby_snapshot_replayed = false;
+    GBE_pending_reset_after_cache_unsubscribed = false;
+    GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
     GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "reset_gc_memory");
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
 
@@ -10795,16 +10811,46 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     }
 
+    const uint64 lobby_id = GBE_local_lobby.lobby_id;
+    const uint32 lobby_state = GBE_local_lobby.state;
+    const uint32 lobby_game_state = GBE_local_lobby.game_state;
+    const bool treat_as_current_game_disconnect =
+        is_server &&
+        GBE_local_lobby.owner_connected &&
+        lobby_state == 2u &&
+        GBE_local_lobby.server_id != 0;
     const bool ready_for_postgame_abandon =
-        GBE_local_lobby.state == 2u &&
-        GBE_local_lobby.game_state >= 10u;
+        lobby_state == 2u &&
+        lobby_game_state >= 10u;
     if (!ready_for_postgame_abandon) {
+        if (treat_as_current_game_disconnect) {
+            std::string response_25;
+            if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
+                GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for current-game 7035 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
+                return true;
+            }
+
+            GBE_pending_reset_after_cache_unsubscribed = true;
+            GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
+            push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
+
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Treated 7035 as current-game disconnect. queued 25 and deferred reset until retrieval LobbyID=%llu state=%u game_state=%u owner_connected=%u",
+                static_cast<unsigned long long>(lobby_id),
+                lobby_state,
+                lobby_game_state,
+                GBE_local_lobby.owner_connected ? 1u : 0u
+            );
+            return true;
+        }
+
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Ignoring early 7035 before launch reaches a current-game stage LobbyID=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
+            static_cast<unsigned long long>(lobby_id),
+            lobby_state,
+            lobby_game_state,
             static_cast<unsigned long long>(GBE_local_lobby.match_id),
             static_cast<unsigned long long>(GBE_local_lobby.server_id)
         );
@@ -10816,7 +10862,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     }
 
-    const uint64 lobby_id = GBE_local_lobby.lobby_id;
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
     const std::string player_name = std::string(settings->get_local_name());
     const std::string postgame_channel_name = std::string("PostGame_") + std::to_string(lobby_id);
@@ -12361,6 +12406,20 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
     *pcubMsgSize = outsize;
     message.msg_body.copy(reinterpret_cast<char *>(pubDest), cubDest);
     incoming_messages.pop();
+
+    if (gc_profile == GC_PROFILE_DOTA2 &&
+        GBE_pending_reset_after_cache_unsubscribed &&
+        GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaCacheUnsubscribed) {
+        const uint64 pending_lobby_id = GBE_pending_reset_after_cache_unsubscribed_lobby_id;
+        GBE_pending_reset_after_cache_unsubscribed = false;
+        GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Consumed pending 25; applying deferred current-game reset for LobbyID=%llu",
+            static_cast<unsigned long long>(pending_lobby_id)
+        );
+        ResetGCMemory("7035_disconnect_current_game_after_25", true, false);
+    }
 
     GBE_GC_DebugLog("GC_RETRIEVE", "returned_emsg=%u size=%u", GBE_GC_MaskedEMsg(*punMsgType), outsize);
 
