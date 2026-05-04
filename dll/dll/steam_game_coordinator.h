@@ -127,6 +127,7 @@ public ISteamGameCoordinator
         bool has_cache_sync_version{};
         uint64 cache_sync_version{};
         bool abandon_postgame_active{};
+        uint64 abandon_pre_postgame_chat_channel_id{};
     };
 
     GBE_LocalLobby GBE_local_lobby{};
