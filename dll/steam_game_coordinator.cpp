@@ -7091,6 +7091,19 @@ void Steam_Game_Coordinator::push_incoming(uint32 msg_type, const std::string &m
     new_item.lobby_state = lobby_state;
     new_item.lobby_game_state = lobby_game_state;
     pending_messages.push_back(new_item);
+
+    GBE_GC_DebugLog(
+        "GC_CALLBACK",
+        "queued delayed msg=%u this=%p delay=%.3f pending_size=%zu incoming_size=%zu apply_state=%u lobby_state=%u game_state=%u",
+        GBE_GC_MaskedEMsg(msg_type),
+        static_cast<void *>(this),
+        delay,
+        pending_messages.size(),
+        incoming_messages.size(),
+        apply_lobby_state ? 1u : 0u,
+        lobby_state,
+        lobby_game_state
+    );
 }
 
 bool Steam_Game_Coordinator::GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(uint32 masked_emsg) const
@@ -7163,7 +7176,18 @@ void Steam_Game_Coordinator::push_incoming_now(uint32 msg_type, const std::strin
     data.m_nMessageSize = static_cast<uint32>(message.size());
     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
 
-    GBE_GC_DebugLog("GC_CALLBACK", "queued msg=%u size=%u and posted GCMessageAvailable_t", GBE_GC_MaskedEMsg(msg_type), static_cast<uint32>(message.size()));
+    GBE_GC_DebugLog(
+        "GC_CALLBACK",
+        "queued msg=%u this=%p size=%u queue_size=%zu pending_size=%zu apply_state=%u lobby_state=%u game_state=%u and posted GCMessageAvailable_t",
+        GBE_GC_MaskedEMsg(msg_type),
+        static_cast<void *>(this),
+        static_cast<uint32>(message.size()),
+        incoming_messages.size(),
+        pending_messages.size(),
+        apply_lobby_state ? 1u : 0u,
+        lobby_state,
+        lobby_game_state
+    );
 }
 
 std::string Steam_Game_Coordinator::build_msg_header(JobID_t target_job, JobID_t source_job)
@@ -12673,12 +12697,29 @@ bool Steam_Game_Coordinator::IsMessageAvailable( uint32 *pcubMsgSize )
     }
 
     if (!gc_initialized || incoming_messages.empty()) {
+        GBE_GC_DebugLog(
+            "GC_CALLBACK",
+            "IsMessageAvailable this=%p gc_initialized=%u queue_size=%zu returning=0",
+            static_cast<void *>(this),
+            gc_initialized ? 1u : 0u,
+            incoming_messages.size()
+        );
         *pcubMsgSize = 0;
         return false;
     }
 
     GC_Message &message = incoming_messages.front();
     *pcubMsgSize = static_cast<uint32>(message.msg_body.size());
+
+    GBE_GC_DebugLog(
+        "GC_CALLBACK",
+        "IsMessageAvailable this=%p gc_initialized=%u queue_size=%zu front_emsg=%u size=%u returning=1",
+        static_cast<void *>(this),
+        gc_initialized ? 1u : 0u,
+        incoming_messages.size(),
+        GBE_GC_MaskedEMsg(message.msg_type),
+        *pcubMsgSize
+    );
 
     return true;
 }
@@ -12693,7 +12734,15 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     const uint32 queued_emsg = incoming_messages.empty() ? 0u : GBE_GC_MaskedEMsg(incoming_messages.front().msg_type);
-    GBE_GC_DebugLog("GC_RETRIEVE", "queued_emsg=%u queue_size=%zu cubDest=%u", queued_emsg, incoming_messages.size(), cubDest);
+    GBE_GC_DebugLog(
+        "GC_RETRIEVE",
+        "queued_emsg=%u this=%p queue_size=%zu pending_size=%zu cubDest=%u",
+        queued_emsg,
+        static_cast<void *>(this),
+        incoming_messages.size(),
+        pending_messages.size(),
+        cubDest
+    );
 
     if (!gc_initialized || incoming_messages.empty()) {
         *pcubMsgSize = 0;
@@ -12723,10 +12772,12 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
         callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
         GBE_GC_DebugLog(
             "GC_CALLBACK",
-            "reposted GCMessageAvailable_t after retrieving msg=%u next_emsg=%u remaining_queue=%zu size=%u",
+            "reposted GCMessageAvailable_t after retrieving msg=%u this=%p next_emsg=%u remaining_queue=%zu pending_size=%zu size=%u",
             GBE_GC_MaskedEMsg(*punMsgType),
+            static_cast<void *>(this),
             GBE_GC_MaskedEMsg(incoming_messages.front().msg_type),
             incoming_messages.size(),
+            pending_messages.size(),
             data.m_nMessageSize
         );
     }
@@ -12745,7 +12796,15 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
         ResetGCMemory("7035_disconnect_current_game_after_25", true, false);
     }
 
-    GBE_GC_DebugLog("GC_RETRIEVE", "returned_emsg=%u size=%u", GBE_GC_MaskedEMsg(*punMsgType), outsize);
+    GBE_GC_DebugLog(
+        "GC_RETRIEVE",
+        "returned_emsg=%u this=%p size=%u remaining_queue=%zu pending_size=%zu",
+        GBE_GC_MaskedEMsg(*punMsgType),
+        static_cast<void *>(this),
+        outsize,
+        incoming_messages.size(),
+        pending_messages.size()
+    );
 
     return k_EGCResultOK;
 }
@@ -13107,6 +13166,16 @@ void Steam_Game_Coordinator::RunCallbacks()
             GCMessageAvailable_t data{};
             data.m_nMessageSize = static_cast<uint32>(it->msg_body.size());
             callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
+
+            GBE_GC_DebugLog(
+                "GC_CALLBACK",
+                "moved pending msg=%u this=%p to incoming queue_size=%zu pending_size_before_erase=%zu size=%u and posted GCMessageAvailable_t",
+                GBE_GC_MaskedEMsg(it->msg_type),
+                static_cast<void *>(this),
+                incoming_messages.size(),
+                pending_messages.size(),
+                data.m_nMessageSize
+            );
 
             it = pending_messages.erase(it);
         } else {
