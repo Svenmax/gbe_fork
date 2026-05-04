@@ -3856,6 +3856,173 @@ static void GBE_LogDotaSOMultipleObjectsSummary(const char *tag, const char *lab
     }
 }
 
+static void GBE_LogDotaSOCacheSubscribedSummary(const char *tag, const char *label, const std::string &message)
+{
+    if (message.size() < sizeof(ProtoBufMsgHeader_t))
+        return;
+
+    ProtoBufMsgHeader_t hdr{};
+    std::memcpy(&hdr, message.data(), sizeof(hdr));
+    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
+    if (body_offset > message.size())
+        return;
+
+    CMsgSOCacheSubscribed protomsg;
+    if (!protomsg.ParseFromArray(message.data() + body_offset, static_cast<int>(message.size() - body_offset)))
+        return;
+
+    GBE_GC_DebugLog(
+        tag,
+        "%s owner_type=%u owner_id=%llu objects=%d version_present=%u version=%llu service_id_present=%u service_id=%u service_list_count=%d sync_version_present=%u sync_version=%llu",
+        label ? label : "dota_cache_subscribed_summary",
+        protomsg.has_owner_soid() ? protomsg.owner_soid().type() : 0u,
+        static_cast<unsigned long long>(protomsg.has_owner_soid() ? protomsg.owner_soid().id() : 0ull),
+        protomsg.objects_size(),
+        protomsg.has_version() ? 1u : 0u,
+        static_cast<unsigned long long>(protomsg.has_version() ? protomsg.version() : 0ull),
+        protomsg.has_service_id() ? 1u : 0u,
+        protomsg.has_service_id() ? protomsg.service_id() : 0u,
+        protomsg.service_list_size(),
+        protomsg.has_sync_version() ? 1u : 0u,
+        static_cast<unsigned long long>(protomsg.has_sync_version() ? protomsg.sync_version() : 0ull)
+    );
+
+    for (int object_index = 0; object_index < protomsg.objects_size(); ++object_index) {
+        const auto &object = protomsg.objects(object_index);
+        GBE_GC_DebugLog(
+            tag,
+            "%s object[%d] type=%d object_data_count=%d",
+            label ? label : "dota_cache_subscribed_summary",
+            object_index,
+            object.type_id(),
+            object.object_data_size()
+        );
+
+        for (int data_index = 0; data_index < object.object_data_size(); ++data_index) {
+            const std::string &object_data = object.object_data(data_index);
+            GBE_GC_DebugLog(
+                tag,
+                "%s object[%d] data[%d] size=%zu",
+                label ? label : "dota_cache_subscribed_summary",
+                object_index,
+                data_index,
+                object_data.size()
+            );
+
+            if (object.type_id() == 2004) {
+                const uint8 *object_bytes = reinterpret_cast<const uint8 *>(object_data.data());
+                const size_t object_size = object_data.size();
+                uint64 lobby_id = 0;
+                uint32 lobby_state = 0;
+                std::string connect;
+                uint64 server_id = 0;
+                uint32 game_state = 0;
+                uint64 match_id = 0;
+                uint32 game_start_time = 0;
+                const uint32 team_details_count = GBE_CountProtoRepeatedBytesField(object_data, 17u);
+                const bool has_connect = GBE_ExtractProtoFieldBytes(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 5u), connect);
+                GBE_ExtractProtoFieldUint64(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 1u), lobby_id);
+                GBE_ExtractProtoFieldUint32(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 4u), lobby_state);
+                GBE_ExtractProtoFieldUint64(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 6u), server_id);
+                GBE_ExtractProtoFieldUint32(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 22u), game_state);
+                GBE_ExtractProtoFieldUint64(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 30u), match_id);
+                GBE_ExtractProtoFieldUint32(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 87u), game_start_time);
+                GBE_GC_DebugLog(
+                    tag,
+                    "%s object[%d] data[%d] type=2004 lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu game_start_time=%u connect=%s team_details=%u",
+                    label ? label : "dota_cache_subscribed_summary",
+                    object_index,
+                    data_index,
+                    static_cast<unsigned long long>(lobby_id),
+                    lobby_state,
+                    game_state,
+                    static_cast<unsigned long long>(match_id),
+                    static_cast<unsigned long long>(server_id),
+                    game_start_time,
+                    has_connect ? connect.c_str() : "",
+                    team_details_count
+                );
+                continue;
+            }
+
+            if (object.type_id() == 2014) {
+                const uint32 member_count = GBE_CountProtoRepeatedBytesField(object_data, 1u);
+                std::string first_member;
+                if (!GBE_ExtractProtoFieldBytes(
+                        reinterpret_cast<const uint8 *>(object_data.data()),
+                        object_data.size(),
+                        GBE_FindProtoField(reinterpret_cast<const uint8 *>(object_data.data()), object_data.size(), 1u),
+                        first_member)) {
+                    first_member.clear();
+                }
+
+                GBE_GC_DebugLog(
+                    tag,
+                    "%s object[%d] data[%d] type=2014 member_count=%u",
+                    label ? label : "dota_cache_subscribed_summary",
+                    object_index,
+                    data_index,
+                    member_count
+                );
+                if (!first_member.empty()) {
+                    GBE_GC_DebugLog(
+                        tag,
+                        "%s object[%d] data[%d] type=2014 member[0]{%s}",
+                        label ? label : "dota_cache_subscribed_summary",
+                        object_index,
+                        data_index,
+                        GBE_FormatDotaStaticLobbyMemberSummary(first_member).c_str()
+                    );
+                }
+                continue;
+            }
+
+            if (object.type_id() == 2016) {
+                const uint8 *object_bytes = reinterpret_cast<const uint8 *>(object_data.data());
+                const size_t object_size = object_data.size();
+                uint32 member_count = 0;
+                std::string first_member;
+                size_t offset = 0;
+                while (offset < object_size) {
+                    uint32 field_number = 0;
+                    uint32 wire_type = 0;
+                    size_t field_offset = 0;
+                    size_t value_offset = 0;
+                    size_t value_size = 0;
+                    size_t field_end = 0;
+                    if (!GBE_ReadNextProtoField(object_bytes, object_size, offset, field_number, wire_type, field_offset, value_offset, value_size, field_end))
+                        break;
+                    if (field_number == 1u && wire_type == 2u) {
+                        ++member_count;
+                        if (first_member.empty())
+                            first_member.assign(object_data.data() + value_offset, value_size);
+                    }
+                    offset = field_end;
+                }
+
+                GBE_GC_DebugLog(
+                    tag,
+                    "%s object[%d] data[%d] type=2016 member_count=%u",
+                    label ? label : "dota_cache_subscribed_summary",
+                    object_index,
+                    data_index,
+                    member_count
+                );
+                if (!first_member.empty()) {
+                    GBE_GC_DebugLog(
+                        tag,
+                        "%s object[%d] data[%d] type=2016 member[0]{%s}",
+                        label ? label : "dota_cache_subscribed_summary",
+                        object_index,
+                        data_index,
+                        GBE_FormatDotaServerStaticLobbyMemberSummary(first_member).c_str()
+                    );
+                }
+            }
+        }
+    }
+}
+
 static bool GBE_RewriteDotaLobbyTemplateObject2004(
     const std::string &input,
     uint32 account_id,
@@ -8558,6 +8725,8 @@ void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std
         GBE_local_lobby.has_cache_sync_version ? 1u : 0u,
         static_cast<unsigned long long>(GBE_local_lobby.cache_sync_version)
     );
+
+    GBE_LogDotaSOCacheSubscribedSummary("GC_DOTA_SYNC", reason ? reason : "record_cache_subscribed_metadata", message);
 
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0)
         GBE_PublishSharedDotaLobbyState(reason ? reason : "record_cache_subscribed_metadata");
