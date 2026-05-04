@@ -10871,36 +10871,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         lobby_game_state >= 10u;
     if (!ready_for_postgame_abandon) {
         if (treat_as_current_game_disconnect) {
-            if (GBE_local_lobby.has_chat_channel &&
-                GBE_local_lobby.chat_channel_id != 0 &&
-                GBE_local_lobby.chat_channel_type != 18u) {
-                std::string response_7014;
-                if (GBE_BuildDotaOtherLeftChannelPayload(
-                        GBE_local_lobby.chat_channel_id,
-                        settings->get_local_steam_id().ConvertToUint64(),
-                        response_7014)) {
-                    push_incoming_now(GBE_kDotaOtherLeftChannel | GBE_kProtoMask, response_7014);
-                    GBE_GC_DebugLog(
-                        "GC_DOTA_LOBBY",
-                        "[LOBBY] Injected pre-abandon 7014 for current lobby channel=%llu type=%u before direct 7035 teardown",
-                        static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
-                        GBE_local_lobby.chat_channel_type
-                    );
-                } else {
-                    GBE_GC_DebugLog(
-                        "GC_DOTA_LOBBY",
-                        "[LOBBY] Failed building pre-abandon 7014 for current lobby channel=%llu before direct 7035 teardown",
-                        static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id)
-                    );
-                }
-
-                GBE_local_lobby.has_chat_channel = false;
-                GBE_local_lobby.chat_channel_id = 0;
-                GBE_local_lobby.chat_channel_name.clear();
-                GBE_local_lobby.chat_channel_type = 0;
-                GBE_PublishSharedDotaLobbyState("7035_pre_leave_current_channel");
-            }
-
             std::string response_25;
             if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
                 GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for direct 7035 disconnect LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
