@@ -9670,6 +9670,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     if (request_emsg == 7034) {
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.match_id != 0 && GBE_local_lobby.server_id != 0) {
             const GBE_Dota7034RequestShape request_shape = GBE_ParseDota7034RequestShape(body, body_size);
+            bool queued_runtime_lobby_update = false;
 
             bool updated_owner_team_or_slot_from_7034 = false;
             if (request_shape.has_draft_steam_id && request_shape.draft_steam_id == GBE_GetDotaLobbyOwnerSteamId()) {
@@ -9745,9 +9746,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 1u) {
                 if (!GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8870/7034 wait_for_players", request_emsg, source_job, 2u, 1u))
                     return true;
+                queued_runtime_lobby_update = true;
                 if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8870/7034 hero_selection", request_emsg, source_job, 2u, 2u))
-                    return true;
-                return true;
+                    queued_runtime_lobby_update = true;
             }
 
             if ((GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 0u) ||
@@ -9758,7 +9759,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 2u) {
                 if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8330/7034 strategy_time", request_emsg, source_job, 2u, 3u))
-                    return true;
+                    queued_runtime_lobby_update = true;
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 3u) {
@@ -9770,6 +9771,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     GBE_local_lobby.state,
                     GBE_local_lobby.game_state
                 );
+                queued_runtime_lobby_update = true;
             }
 
             if (!(GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u)) {
@@ -9783,8 +9785,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         GBE_local_lobby.state,
                         GBE_local_lobby.game_state
                     );
-                    return true;
+                    queued_runtime_lobby_update = true;
                 }
+            }
+
+            if (queued_runtime_lobby_update) {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "continuing req=%u source_job=%llu with connected players reply after runtime 26 updates state=%u game_state=%u",
+                    request_emsg,
+                    static_cast<unsigned long long>(source_job),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state
+                );
             }
         }
 
