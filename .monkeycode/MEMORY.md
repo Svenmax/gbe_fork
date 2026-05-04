@@ -31,22 +31,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
-[Dota2 官方 abandon 抓包里没有 7040 或 8246，主链是 7272 与 7035 分段收尾]
+[Dota2 direct 7035 需要和启动抖动及 postgame abandon 分开建模]
 - Date: 2026-05-03
-- Context: Agent 在对照 `/workspace/steamhoststart-abandon` 与 `/workspace/dota2hoststart-abandon` 官方抓包时发现
+- Context: Agent 在排查“第一局点击断开后主页仍残留游戏中状态”时，结合 `console.log` 与 `gbe_gc_debug.log` 发现 direct `7035` 在 `owner_connected=1` 的当前局阶段被误当成 early abandon 忽略
 - Category: 代码模式
 - Instructions:
-  - 当前官方样本的 abandon/断开链路里，没有出现 `7040 (PracticeLobbyLeave)` 或 `8246 (DestroyLobby)`；不要默认把“点击断开”建模成 `7040/8246` 主导的清房流程。
-  - `steamhoststart-abandon` 里，官方主链表现为：先 `7272 -> 7014` 离开当前聊天频道，随后仍有一条 `26` 更新；更后面才出现 `7035 -> 25 -> 7010 -> 7010`，最后再来一次 `7272 -> 7014` 离开 `PostGame_<lobby_id>` 频道。
-  - `dota2hoststart-abandon` 里，in-game 侧最终只清楚出现 `7035 -> 25`，没有同批次 `7010`；因此后续分析 `7035` 时要区分不同进程/生命周期阶段，不要强行把所有 `7035` 都折叠成同一种 postgame teardown。
-
-[Dota2 in-game/server 侧的 7035 需要和启动抖动及 steamhost postgame abandon 分开建模]
-- Date: 2026-05-03
-- Context: Agent 在排查“第一局点击断开后主页仍残留游戏中状态”并对照官方 `/workspace/dota2hoststart-abandon`、`/workspace/steamhoststart-abandon` 抓包后发现，in-game/server 侧与 steamhost/client 侧的 `7035` 语义并不相同
-- Category: 代码模式
-- Instructions:
-  - 对 Dota2 practice lobby 的 `7035 / AbandonCurrentGame`，不能只分成“启动早期误触发”与“postgame abandon”两种情况；还需要单独识别 in-game/server 侧的真实当前局断开。
-  - 当前样本里，若处于 server/in-game 侧且 `owner_connected=1`、`state=2`、`server_id!=0`，应优先把 `7035` 当作当前局 teardown 信号处理，至少完成 `25 (CacheUnsubscribed) + ResetGCMemory`；官方 `dota2hoststart-abandon` 里，in-game 侧最终也只清楚出现 `7035 -> 25`，而 `7010` 留在 steamhost 侧。
+  - 对 Dota2 practice lobby 的 `7035 / AbandonCurrentGame`，不能只分成“启动早期误触发”与“postgame abandon”两种情况；还需要单独识别“owner 已真正进服后的 direct 7035”，这更像真实的当前局断开。
+  - 当前样本里，若 `wrapped=0`、`owner_connected=1`、`state=2` 且 `server_id!=0`，应优先把 `7035` 当作当前局 teardown 信号处理，至少完成 `25 (CacheUnsubscribed) + ResetGCMemory`，否则容易出现 lobby object 已销毁但 gamerules 仍停在 `HERO_SELECTION`，主页残留“仍在游戏中”状态。
 
 [Dota2 practice lobby 启动早期的 7035 不能直接走 PostGame teardown]
 - Date: 2026-05-03

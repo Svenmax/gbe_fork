@@ -10862,7 +10862,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     const uint32 lobby_state = GBE_local_lobby.state;
     const uint32 lobby_game_state = GBE_local_lobby.game_state;
     const bool treat_as_current_game_disconnect =
-        is_server &&
+        !wrapped &&
         GBE_local_lobby.owner_connected &&
         lobby_state == 2u &&
         GBE_local_lobby.server_id != 0;
