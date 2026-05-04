@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 GC 队列消费需要在取走一条后继续补发可用通知]
+- Date: 2026-05-04
+- Context: Agent 在继续排查 practice lobby 第二局 `7450 -> 7451` 已构造但 server 侧未收到时发现
+- Category: 代码模式
+- Instructions:
+  - `push_incoming_now(...)` 只保证消息入队时发一次 `GCMessageAvailable_t`，这不足以保证重连后的活动实例持续把同一队列里的后续消息全部取完。
+  - 如果 `RetrieveMessage(...)` 取走一条消息后 `incoming_messages` 仍非空，应继续为新的队首补发 `GCMessageAvailable_t`，否则后续 reply 可能已经在队列里但没有新的可用通知驱动游戏端继续消费。
+  - 这种问题更像是队列消费/唤醒边界丢失，而不是 reply 包体本身构造错误。
+
 [Dota2 practice lobby 的 owner_connected 是统一 lifecycle 边界]
 - Date: 2026-05-04
 - Context: Agent 在回退到 `d0873b10` 基线后，重新串联 `7038/24/26/7035/25/on_client_connected/on_client_disconnected/ResetGCMemory` 整体生命周期时发现

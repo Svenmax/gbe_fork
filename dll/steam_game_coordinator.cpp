@@ -12663,6 +12663,20 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
     message.msg_body.copy(reinterpret_cast<char *>(pubDest), cubDest);
     incoming_messages.pop();
 
+    if (!incoming_messages.empty()) {
+        GCMessageAvailable_t data{};
+        data.m_nMessageSize = static_cast<uint32>(incoming_messages.front().msg_body.size());
+        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
+        GBE_GC_DebugLog(
+            "GC_CALLBACK",
+            "reposted GCMessageAvailable_t after retrieving msg=%u next_emsg=%u remaining_queue=%zu size=%u",
+            GBE_GC_MaskedEMsg(*punMsgType),
+            GBE_GC_MaskedEMsg(incoming_messages.front().msg_type),
+            incoming_messages.size(),
+            data.m_nMessageSize
+        );
+    }
+
     if (gc_profile == GC_PROFILE_DOTA2 &&
         GBE_pending_reset_after_cache_unsubscribed &&
         GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaCacheUnsubscribed) {
