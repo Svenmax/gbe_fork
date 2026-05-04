@@ -10858,44 +10858,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     }
 
-    const uint64 lobby_id = GBE_local_lobby.lobby_id;
-    const uint32 lobby_state = GBE_local_lobby.state;
-    const uint32 lobby_game_state = GBE_local_lobby.game_state;
-    const bool treat_as_current_game_disconnect =
-        !wrapped &&
-        GBE_local_lobby.owner_connected &&
-        lobby_state == 2u &&
-        GBE_local_lobby.server_id != 0;
     const bool ready_for_postgame_abandon =
-        lobby_state == 2u &&
-        lobby_game_state >= 10u;
+        GBE_local_lobby.state == 2u &&
+        GBE_local_lobby.game_state >= 10u;
     if (!ready_for_postgame_abandon) {
-        if (treat_as_current_game_disconnect) {
-            std::string response_25;
-            if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
-                GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for direct 7035 disconnect LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
-                return true;
-            }
-
-            ResetGCMemory("7035_disconnect_current_game", true, true);
-            push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
-
-            GBE_GC_DebugLog(
-                "GC_DOTA_LOBBY",
-                "[LOBBY] Treated direct 7035 as current-game disconnect. sent 25 + reset LobbyID=%llu state=%u game_state=%u",
-                static_cast<unsigned long long>(lobby_id),
-                lobby_state,
-                lobby_game_state
-            );
-            return true;
-        }
-
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Ignoring early 7035 before launch reaches a current-game stage LobbyID=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
-            static_cast<unsigned long long>(lobby_id),
-            lobby_state,
-            lobby_game_state,
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
             static_cast<unsigned long long>(GBE_local_lobby.match_id),
             static_cast<unsigned long long>(GBE_local_lobby.server_id)
         );
@@ -10907,6 +10879,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     }
 
+    const uint64 lobby_id = GBE_local_lobby.lobby_id;
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
     const std::string player_name = std::string(settings->get_local_name());
     const std::string postgame_channel_name = std::string("PostGame_") + std::to_string(lobby_id);
