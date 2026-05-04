@@ -2637,6 +2637,29 @@ static std::string GBE_FormatDotaLobbyMemberStateSummary(const std::string &inpu
     return std::string(buffer);
 }
 
+static std::string GBE_FormatDotaStaticLobbyMemberSummary(const std::string &input)
+{
+    const uint8 *data = reinterpret_cast<const uint8 *>(input.data());
+    const size_t size = input.size();
+
+    std::string name;
+    uint64 party_id = 0;
+
+    const bool has_name = GBE_ExtractProtoFieldBytes(data, size, GBE_FindProtoField(data, size, 1u), name);
+    const bool has_party_id = GBE_ExtractProtoFieldUint64(data, size, GBE_FindProtoField(data, size, 2u), party_id);
+
+    char buffer[320];
+    std::snprintf(
+        buffer,
+        sizeof(buffer),
+        "name=%s party_id=%llu flags[name=%u party_id=%u]",
+        has_name ? name.c_str() : "",
+        static_cast<unsigned long long>(party_id),
+        has_name ? 1u : 0u,
+        has_party_id ? 1u : 0u);
+    return std::string(buffer);
+}
+
 static std::string GBE_FormatDotaServerStaticLobbyMemberSummary(const std::string &input)
 {
     const uint8 *data = reinterpret_cast<const uint8 *>(input.data());
