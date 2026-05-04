@@ -195,13 +195,6 @@ struct GBE_SharedDotaLobbyState {
 };
 
 static GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
-struct GBE_SharedDotaServerWelcomeReplay {
-    bool valid{};
-    uint64 lobby_id{};
-    std::string message;
-};
-
-static GBE_SharedDotaServerWelcomeReplay GBE_shared_dota_server_welcome_replay;
 static uint32 GBE_dota_launch_peripheral_stage_mask = 0;
 
 enum : uint32 {
@@ -7961,19 +7954,6 @@ void Steam_Game_Coordinator::on_client_connected(CSteamID steam_id)
                 GBE_PublishSharedDotaLobbyState("owner_connected");
             }
 
-            if (GBE_shared_dota_server_welcome_replay.valid &&
-                GBE_shared_dota_server_welcome_replay.lobby_id == GBE_local_lobby.lobby_id &&
-                !GBE_shared_dota_server_welcome_replay.message.empty()) {
-                GBE_GC_DebugLog(
-                    "GC_DOTA_SERVER_HELLO",
-                    "delivering pending ServerWelcome on owner connect steam_id=%llu lobby_id=%llu size=%zu",
-                    static_cast<unsigned long long>(connected_steam_id),
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    GBE_shared_dota_server_welcome_replay.message.size()
-                );
-                push_incoming_now(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, GBE_shared_dota_server_welcome_replay.message);
-            }
-
             GBE_Dota7034RequestShape synthetic_connected_players_request{};
             synthetic_connected_players_request.has_send_reason = true;
             synthetic_connected_players_request.send_reason = 4u;
@@ -8489,24 +8469,6 @@ void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std
 
 void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
 {
-    if (GBE_shared_dota_server_welcome_replay.valid &&
-        (!GBE_local_lobby.active ||
-         GBE_local_lobby.lobby_id == 0 ||
-         GBE_shared_dota_server_welcome_replay.lobby_id != GBE_local_lobby.lobby_id)) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SERVER_HELLO",
-            "clearing shared pending ServerWelcome before publish this=%p reason=%s active=%u current_lobby_id=%llu replay_lobby_id=%llu",
-            static_cast<void *>(this),
-            reason ? reason : "unknown",
-            GBE_local_lobby.active ? 1u : 0u,
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(GBE_shared_dota_server_welcome_replay.lobby_id)
-        );
-        GBE_shared_dota_server_welcome_replay.valid = false;
-        GBE_shared_dota_server_welcome_replay.lobby_id = 0;
-        GBE_shared_dota_server_welcome_replay.message.clear();
-    }
-
     GBE_shared_dota_lobby_state.valid = true;
     GBE_shared_dota_lobby_state.active = GBE_local_lobby.active;
     GBE_shared_dota_lobby_state.lobby_id = GBE_local_lobby.lobby_id;
@@ -8597,7 +8559,6 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
 
     GBE_local_lobby = GBE_LocalLobby{};
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-    GBE_shared_dota_server_welcome_replay = GBE_SharedDotaServerWelcomeReplay{};
     GBE_dota_private_lobby_snapshot_replayed = false;
     GBE_pending_reset_after_cache_unsubscribed = false;
     GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
@@ -11940,24 +11901,11 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
             static_cast<unsigned long long>(server_hello_context.has_source_job ? server_hello_context.source_job_id : 0ull)
         );
 
-        const bool defer_server_welcome_until_owner_connect = is_server && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0;
-        if (defer_server_welcome_until_owner_connect) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_SERVER_HELLO",
-                "deferring ServerWelcome until owner connect lobby_id=%llu size=%zu",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                welcome_message.size()
-            );
-        } else {
-            push_incoming_now(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, welcome_message);
-        }
+        push_incoming_now(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, welcome_message);
         if (is_server && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
-            GBE_shared_dota_server_welcome_replay.valid = true;
-            GBE_shared_dota_server_welcome_replay.lobby_id = GBE_local_lobby.lobby_id;
-            GBE_shared_dota_server_welcome_replay.message = welcome_message;
             GBE_GC_DebugLog(
                 "GC_DOTA_SERVER_HELLO",
-                "recorded shared pending ServerWelcome this=%p lobby_id=%llu size=%zu",
+                "queued immediate ServerWelcome for active lobby this=%p lobby_id=%llu size=%zu",
                 static_cast<void *>(this),
                 static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                 welcome_message.size()
@@ -12383,24 +12331,6 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
     if (is_welcome_message(message)) {
         welcome_received = true;
         welcome_time = std::chrono::high_resolution_clock::now();
-
-        if (is_server &&
-            gc_profile == GC_PROFILE_DOTA2 &&
-            GBE_GC_MaskedEMsg(message.msg_type) == EGCBaseClientMsg::k_EMsgGCServerWelcome &&
-            GBE_shared_dota_server_welcome_replay.valid &&
-            GBE_local_lobby.active &&
-            GBE_local_lobby.lobby_id != 0 &&
-            GBE_shared_dota_server_welcome_replay.lobby_id == GBE_local_lobby.lobby_id) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_SERVER_HELLO",
-                "clearing shared pending ServerWelcome after retrieval this=%p lobby_id=%llu",
-                static_cast<void *>(this),
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
-            );
-            GBE_shared_dota_server_welcome_replay.valid = false;
-            GBE_shared_dota_server_welcome_replay.lobby_id = 0;
-            GBE_shared_dota_server_welcome_replay.message.clear();
-        }
     }
 
     *punMsgType = message.msg_type;
