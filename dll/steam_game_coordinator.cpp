@@ -10829,10 +10829,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         GBE_local_lobby.owner_connected &&
         lobby_state == 2u &&
         GBE_local_lobby.server_id != 0;
-    const bool ready_for_postgame_abandon =
+    const bool ready_for_abandon_teardown =
         lobby_state == 2u &&
-        lobby_game_state >= 10u;
-    if (!ready_for_postgame_abandon) {
+        lobby_game_state >= 2u;
+    if (!ready_for_abandon_teardown) {
         if (treat_as_current_game_disconnect) {
             std::string response_25;
             if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
