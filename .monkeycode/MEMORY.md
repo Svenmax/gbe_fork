@@ -39,6 +39,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当前官方样本的 abandon/断开链路里，没有出现 `7040 (PracticeLobbyLeave)` 或 `8246 (DestroyLobby)`；不要默认把“点击断开”建模成 `7040/8246` 主导的清房流程。
   - `steamhoststart-abandon` 里，官方主链表现为：先 `7272 -> 7014` 离开当前聊天频道，随后仍有一条 `26` 更新；更后面才出现 `7035 -> 25 -> 7010 -> 7010`，最后再来一次 `7272 -> 7014` 离开 `PostGame_<lobby_id>` 频道。
   - `dota2hoststart-abandon` 里，in-game 侧最终只清楚出现 `7035 -> 25`，没有同批次 `7010`；因此后续分析 `7035` 时要区分不同进程/生命周期阶段，不要强行把所有 `7035` 都折叠成同一种 postgame teardown。
+  - 如果当前失败日志在断开前后完全没有 `7272/7014`，却直接进入 `7035`，优先怀疑“当前 lobby chat channel 没有在 abandon 前被正确清掉”；这会让 homepage/rich presence 残留在旧房间上下文。
 
 [Dota2 in-game/server 侧的 7035 需要和启动抖动及 steamhost postgame abandon 分开建模]
 - Date: 2026-05-03
