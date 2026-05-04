@@ -8640,8 +8640,6 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
     GBE_shared_dota_server_welcome_replay = GBE_SharedDotaServerWelcomeReplay{};
     GBE_dota_private_lobby_snapshot_replayed = false;
-    GBE_pending_reset_after_cache_unsubscribed = false;
-    GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
     GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "reset_gc_memory");
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
 
@@ -10873,19 +10871,48 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         lobby_game_state >= 10u;
     if (!ready_for_postgame_abandon) {
         if (treat_as_current_game_disconnect) {
+            if (GBE_local_lobby.has_chat_channel &&
+                GBE_local_lobby.chat_channel_id != 0 &&
+                GBE_local_lobby.chat_channel_type != 18u) {
+                std::string response_7014;
+                if (GBE_BuildDotaOtherLeftChannelPayload(
+                        GBE_local_lobby.chat_channel_id,
+                        settings->get_local_steam_id().ConvertToUint64(),
+                        response_7014)) {
+                    push_incoming_now(GBE_kDotaOtherLeftChannel | GBE_kProtoMask, response_7014);
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_LOBBY",
+                        "[LOBBY] Injected pre-abandon 7014 for current lobby channel=%llu type=%u before direct 7035 teardown",
+                        static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
+                        GBE_local_lobby.chat_channel_type
+                    );
+                } else {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_LOBBY",
+                        "[LOBBY] Failed building pre-abandon 7014 for current lobby channel=%llu before direct 7035 teardown",
+                        static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id)
+                    );
+                }
+
+                GBE_local_lobby.has_chat_channel = false;
+                GBE_local_lobby.chat_channel_id = 0;
+                GBE_local_lobby.chat_channel_name.clear();
+                GBE_local_lobby.chat_channel_type = 0;
+                GBE_PublishSharedDotaLobbyState("7035_pre_leave_current_channel");
+            }
+
             std::string response_25;
             if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
                 GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for direct 7035 disconnect LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
                 return true;
             }
 
-            GBE_pending_reset_after_cache_unsubscribed = true;
-            GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
+            ResetGCMemory("7035_disconnect_current_game", true, true);
             push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
 
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
-                "[LOBBY] Treated direct 7035 as current-game disconnect. queued 25 and deferred reset until retrieval LobbyID=%llu state=%u game_state=%u",
+                "[LOBBY] Treated direct 7035 as current-game disconnect. sent 25 + reset LobbyID=%llu state=%u game_state=%u",
                 static_cast<unsigned long long>(lobby_id),
                 lobby_state,
                 lobby_game_state
@@ -12454,20 +12481,6 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
     *pcubMsgSize = outsize;
     message.msg_body.copy(reinterpret_cast<char *>(pubDest), cubDest);
     incoming_messages.pop();
-
-    if (gc_profile == GC_PROFILE_DOTA2 &&
-        GBE_pending_reset_after_cache_unsubscribed &&
-        GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaCacheUnsubscribed) {
-        const uint64 pending_lobby_id = GBE_pending_reset_after_cache_unsubscribed_lobby_id;
-        GBE_pending_reset_after_cache_unsubscribed = false;
-        GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Consumed pending 25; applying deferred reset for LobbyID=%llu",
-            static_cast<unsigned long long>(pending_lobby_id)
-        );
-        ResetGCMemory("7035_disconnect_current_game_after_25", true, false);
-    }
 
     GBE_GC_DebugLog("GC_RETRIEVE", "returned_emsg=%u size=%u", GBE_GC_MaskedEMsg(*punMsgType), outsize);
 

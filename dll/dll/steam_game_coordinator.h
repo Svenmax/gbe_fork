@@ -75,8 +75,6 @@ public ISteamGameCoordinator
     std::chrono::high_resolution_clock::time_point welcome_time{};
     bool GBE_dota_login_sync_sent{};
     bool GBE_dota_private_lobby_snapshot_replayed{};
-    bool GBE_pending_reset_after_cache_unsubscribed{};
-    uint64 GBE_pending_reset_after_cache_unsubscribed_lobby_id{};
 
     struct GBE_LocalLobby
     {
