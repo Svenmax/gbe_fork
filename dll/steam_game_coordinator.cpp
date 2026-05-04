@@ -7093,6 +7093,58 @@ void Steam_Game_Coordinator::push_incoming(uint32 msg_type, const std::string &m
     pending_messages.push_back(new_item);
 }
 
+bool Steam_Game_Coordinator::GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(uint32 masked_emsg) const
+{
+    switch (masked_emsg) {
+        case GBE_kDotaCacheSubscribed:
+        case GBE_kDotaPracticeLobbyDetailsUpdate:
+        case 7034u:
+        case 5501u:
+        case 5575u:
+        case 779u:
+        case 766u:
+            return true;
+        default:
+            return false;
+    }
+}
+
+void Steam_Game_Coordinator::GBE_DiscardQueuedDotaLaunchMessagesForAbandon(const char *reason)
+{
+    size_t removed_pending = 0;
+    for (auto it = pending_messages.begin(); it != pending_messages.end();) {
+        if (GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(GBE_GC_MaskedEMsg(it->msg_type))) {
+            it = pending_messages.erase(it);
+            ++removed_pending;
+        } else {
+            ++it;
+        }
+    }
+
+    size_t removed_incoming = 0;
+    std::queue<GC_Message> filtered_incoming;
+    while (!incoming_messages.empty()) {
+        GC_Message queued = incoming_messages.front();
+        incoming_messages.pop();
+        if (GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(GBE_GC_MaskedEMsg(queued.msg_type))) {
+            ++removed_incoming;
+            continue;
+        }
+        filtered_incoming.push(std::move(queued));
+    }
+    incoming_messages.swap(filtered_incoming);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Discarded queued launch messages for abandon reason=%s removed_pending=%zu removed_incoming=%zu remaining_pending=%zu remaining_incoming=%zu",
+        reason ? reason : "unknown",
+        removed_pending,
+        removed_incoming,
+        pending_messages.size(),
+        incoming_messages.size()
+    );
+}
+
 void Steam_Game_Coordinator::push_incoming_now(uint32 msg_type, const std::string &message, bool apply_lobby_state, uint32 lobby_state, uint32 lobby_game_state)
 {
     GC_Message new_item;
@@ -11087,6 +11139,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     const std::string player_name = std::string(settings->get_local_name());
     const std::string postgame_channel_name = std::string("PostGame_") + std::to_string(lobby_id);
     const uint64 postgame_channel_id = GBE_GenerateDotaPostGameChatChannelId();
+
+    GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_ready_for_abandon_teardown");
 
     std::string response_25;
     if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {

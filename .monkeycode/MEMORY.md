@@ -40,6 +40,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 如果 `RetrieveMessage(...)` 取走一条消息后 `incoming_messages` 仍非空，应继续为新的队首补发 `GCMessageAvailable_t`，否则后续 reply 可能已经在队列里但没有新的可用通知驱动游戏端继续消费。
   - 这种问题更像是队列消费/唤醒边界丢失，而不是 reply 包体本身构造错误。
 
+[Dota2 abandon 前必须丢弃残留的 launch 24/26/7034 队列]
+- Date: 2026-05-04
+- Context: Agent 在复查新测试日志时发现，第二局 `7451` 已成功后，真正的最早异常出现在 `7035` 收尾阶段
+- Category: 代码模式
+- Instructions:
+  - 如果 `7035` 到来时 `incoming_messages` 或 `pending_messages` 里还残留 launch 阶段的 `24/26/7034`，这些旧消息会在 `25 + 7010 + 7010` teardown 之后继续投递，把已 teardown 的 lobby 又推进回 `HERO_SELECTION/STRATEGY_TIME`。
+  - 处理 ready-for-abandon 的 `7035` 前，应先定向丢弃这类 launch 残留消息，以及同窗口的外围 launch persona/peripheral（如 `5501/5575/779/766`），避免 postgame teardown 被旧启动队列反向污染。
+
 [Dota2 practice lobby 的 owner_connected 是统一 lifecycle 边界]
 - Date: 2026-05-04
 - Context: Agent 在回退到 `d0873b10` 基线后，重新串联 `7038/24/26/7035/25/on_client_connected/on_client_disconnected/ResetGCMemory` 整体生命周期时发现
