@@ -11918,57 +11918,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             return true;
         }
 
+        // During host disconnect from hero selection, the real client can still be unwinding
+        // server/game-rules state after postgame chat leaves. Clearing the entire local/generic
+        // lobby snapshot here is too early and can race later disconnect teardown.
         GBE_local_lobby.has_chat_channel = false;
         GBE_local_lobby.chat_channel_id = 0;
         GBE_local_lobby.chat_channel_name.clear();
         GBE_local_lobby.chat_channel_type = 0;
-
-        GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-        GBE_LeaveGenericLobby();
-        GBE_local_lobby.active = false;
-        GBE_local_lobby.lobby_id = 0;
-        GBE_local_lobby.generic_lobby_id = 0;
-        GBE_local_lobby.room_name.clear();
-        GBE_local_lobby.game_mode = 0;
-        GBE_local_lobby.server_region = 0;
-        GBE_local_lobby.lan = true;
-        GBE_local_lobby.lan_host_ping_location.clear();
-        GBE_local_lobby.allow_cheats = false;
-        GBE_local_lobby.fill_with_bots = true;
-        GBE_local_lobby.allow_spectating = false;
-        GBE_local_lobby.visibility = 0;
-        GBE_local_lobby.bot_difficulty_radiant = 0;
-        GBE_local_lobby.bot_difficulty_dire = 4;
-        GBE_local_lobby.bot_radiant = 0;
-        GBE_local_lobby.bot_dire = 0;
-        GBE_local_lobby.state = 0;
-        GBE_local_lobby.game_state = 0;
-        GBE_local_lobby.match_id = 0;
-        GBE_local_lobby.server_id = 0;
-        GBE_local_lobby.owner_steam_id = 0;
-        GBE_local_lobby.owner_account_id = 0;
-        GBE_local_lobby.owner_name.clear();
-        GBE_local_lobby.connect.clear();
-        GBE_local_lobby.game_start_time = 0;
-        GBE_local_lobby.owner_team = 0;
-        GBE_local_lobby.owner_slot = 1;
-        GBE_local_lobby.owner_hero_id = 0;
-        GBE_local_lobby.has_broadcast_channel = false;
-        GBE_local_lobby.broadcast_channel_id = 0;
-        GBE_local_lobby.broadcast_country_code.clear();
-        GBE_local_lobby.broadcast_description.clear();
-        GBE_local_lobby.broadcast_language_code.clear();
-        GBE_local_lobby.pass_key.clear();
-        GBE_local_lobby.has_cache_version = false;
-        GBE_local_lobby.cache_version = 0;
-        GBE_local_lobby.has_cache_service_id = false;
-        GBE_local_lobby.cache_service_id = 0;
-        GBE_local_lobby.cache_service_list.clear();
-        GBE_local_lobby.has_cache_sync_version = false;
-        GBE_local_lobby.cache_sync_version = 0;
-        GBE_local_lobby.abandon_postgame_active = false;
         GBE_local_lobby.abandon_pre_postgame_chat_channel_id = 0;
-        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
 
         std::string persona_message;
         if (!GBE_BuildDotaPersonaStatePeripheralMessage(GBE_kDotaAbandonPersonaStateInitHex, steam_id, lobby_id, persona_message)) {
@@ -11986,6 +11943,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
                 persona_message.size()
             );
         }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Deferred full lobby reset after postgame 7272 to avoid racing disconnect teardown LobbyID=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            static_cast<unsigned long long>(GBE_local_lobby.match_id),
+            static_cast<unsigned long long>(GBE_local_lobby.server_id)
+        );
     } else {
         GBE_local_lobby.has_chat_channel = false;
         GBE_local_lobby.chat_channel_id = 0;
