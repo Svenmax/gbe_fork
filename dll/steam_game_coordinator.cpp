@@ -7448,6 +7448,27 @@ void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const st
     if (!gc_initialized)
         return;
 
+    if (is_server && gc_profile == GC_PROFILE_DOTA2) {
+        GBE_RestoreSharedDotaLobbyState("callback_items_received");
+
+        if (GBE_local_lobby.active &&
+            GBE_local_lobby.lobby_id != 0 &&
+            steam_id.BIndividualAccount() &&
+            steam_id.ConvertToUint64() == GBE_GetDotaLobbyOwnerSteamId()) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "skipping generic CacheSubscribed for active dota owner steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s items=%zu",
+                static_cast<unsigned long long>(steam_id.ConvertToUint64()),
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state,
+                GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
+                items.size()
+            );
+            return;
+        }
+    }
+
     if (gc_version < 20110414) {
         uint32 msg_type = ESOMsg::k_ESOMsg_CacheSubscribed;
         std::string message = build_msg_header();
