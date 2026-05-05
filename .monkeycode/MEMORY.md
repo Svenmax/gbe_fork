@@ -1812,3 +1812,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `CSODOTALobby.field 124` 是 `requested_hero_ids`，`field 132` 是 `requested_hero_teams`；它们属于 hero-select 语义，不应继续和 `121/122/123` 这些成员索引字段混在同一含义里理解。
   - 后续如果 hero-select 槽位仍异常，要优先核对 donor `2004` 在 `124/132` 上是否残留旧请求数组，再决定是否清理或重建，而不是只盯 `all_members.team/slot`。
+
+[第二局 7451 边界要优先看 protobuf header 而不是只看 console 截止点]
+- Date: 2026-05-05
+- Context: Agent 在继续对照第二局 `console.log` 与 `gbe_gc_debug.log` 时发现，`console.log` 停在 `Send msg 7450/7034` 附近，但 `gbe_gc_debug.log` 仍继续到了服务端实例取回 `7451 -> 24 -> 26 -> 7034 -> 7272`
+- Category: 代码模式
+- Instructions:
+  - 当 `gbe_gc_debug.log` 已经显示 server GC 实例成功 `returned_emsg=7451`，不要仅凭同轮 `console.log` 没出现 `Recv msg 7451` 就立刻下结论说 reply 没送达。
+  - 这类不一致优先继续核对 GC protobuf header 的 `job_id_source/job_id_target` 与服务端实例边界，再判断是日志截断、游戏侧上层未消费，还是 reply header 语义不对。

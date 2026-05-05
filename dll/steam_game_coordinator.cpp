@@ -3571,6 +3571,63 @@ static bool GBE_ParseDirectProtoContext(const void *pubData, uint32 cubData, Pro
     return true;
 }
 
+static bool GBE_ShouldTraceGCProtoBoundary(uint32 emsg)
+{
+    switch (emsg) {
+        case 24u:
+        case 4005u:
+        case 4511u:
+        case 7034u:
+        case 7450u:
+        case 7451u:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void GBE_LogGCProtoBoundary(const char *scope, const char *direction, void *self, bool is_server, uint32 emsg, const void *data, uint32 size)
+{
+    if (!scope || !direction || !data || size < sizeof(ProtoBufMsgHeader_t) || !GBE_ShouldTraceGCProtoBoundary(emsg))
+        return;
+
+    ProtoBufMsgHeader_t hdr{};
+    CMsgProtoBufHeader protohdr;
+    const uint8 *body = nullptr;
+    size_t body_size = 0;
+    if (!GBE_ParseDirectProtoContext(data, size, hdr, protohdr, body, body_size)) {
+        GBE_GC_DebugLog(
+            scope,
+            "%s this=%p is_server=%u emsg=%u size=%u parse=0",
+            direction,
+            self,
+            is_server ? 1u : 0u,
+            emsg,
+            size
+        );
+        return;
+    }
+
+    GBE_GC_DebugLog(
+        scope,
+        "%s this=%p is_server=%u emsg=%u size=%u ext=%u body=%zu has_job_src=%u job_src=%llu has_job_tgt=%u job_tgt=%llu client_steam_id=%llu session=%d app_id=%u",
+        direction,
+        self,
+        is_server ? 1u : 0u,
+        emsg,
+        size,
+        hdr.m_cubProtoBufExtHdr,
+        body_size,
+        protohdr.has_job_id_source() ? 1u : 0u,
+        static_cast<unsigned long long>(protohdr.has_job_id_source() ? protohdr.job_id_source() : 0ull),
+        protohdr.has_job_id_target() ? 1u : 0u,
+        static_cast<unsigned long long>(protohdr.has_job_id_target() ? protohdr.job_id_target() : 0ull),
+        static_cast<unsigned long long>(protohdr.has_client_steam_id() ? protohdr.client_steam_id() : 0ull),
+        protohdr.has_client_session_id() ? protohdr.client_session_id() : 0,
+        protohdr.has_source_app_id() ? protohdr.source_app_id() : 0u
+    );
+}
+
 static bool GBE_PatchDotaTemplateIdentifiers(
     std::string &message,
     uint32 account_id,
@@ -12630,6 +12687,18 @@ EGCResults Steam_Game_Coordinator::SendMessage_( uint32 unMsgType, const void *p
     GBE_GC_DebugLog("GC_SEND", "outer_emsg=%u len=%u", GBE_GC_MaskedEMsg(unMsgType), cubData);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
+    if ((unMsgType & protobuf_mask) != 0) {
+        GBE_LogGCProtoBoundary(
+            "GC_SEND_HEADER",
+            "send",
+            static_cast<void *>(this),
+            is_server,
+            GBE_GC_MaskedEMsg(unMsgType),
+            pubData,
+            cubData
+        );
+    }
+
     if (!gc_initialized && gc_profile == GC_PROFILE_DOTA2) {
         GBE_GC_DebugLog("GC_SEND", "initializing GC lazily for Dota2 profile");
         initialize_gc();
@@ -12761,6 +12830,18 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
     *pcubMsgSize = outsize;
     message.msg_body.copy(reinterpret_cast<char *>(pubDest), cubDest);
     incoming_messages.pop();
+
+    if ((message.msg_type & protobuf_mask) != 0) {
+        GBE_LogGCProtoBoundary(
+            "GC_RETRIEVE_HEADER",
+            "recv",
+            static_cast<void *>(this),
+            is_server,
+            GBE_GC_MaskedEMsg(message.msg_type),
+            message.msg_body.data(),
+            outsize
+        );
+    }
 
     if (!incoming_messages.empty()) {
         GCMessageAvailable_t data{};
