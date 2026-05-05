@@ -31,6 +31,152 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 abandon postgame 的 7272 不能抢跑清空整个 lobby]
+- Date: 2026-05-05
+- Context: Agent 在分析 `dota2_2026_0505_124929_0_accessviolation.mdmp` 时发现，第一局在 Hero Selection 点击断开连接后客户端直接访问违规崩溃
+- Category: 代码模式
+- Instructions:
+  - `7035` 后客户端会进入 postgame chat leave 流程，但在 `7272 leave chat` 到来时，真实 Dota 客户端往往仍在继续完成 server shutdown、lobby destroy、UI/dashboard 切换等收尾。
+  - 如果在 `GBE_HandleDotaLeaveChatChannelRequest()` 的 `abandon_postgame_active` 分支里立刻执行 `GBE_LeaveGenericLobby()`、清空 `GBE_local_lobby` 主要字段、把 `active/lobby_id/match_id/server_id` 直接归零，就会与后续断线 teardown 抢跑，增加访问违规风险。
+  - `7035` 后收到的 `7272` 可能仍然针对旧的 pre-postgame 频道，而不是刚切换出来的 postgame 频道；这类 stale leave request 不应再回 `7014`，否则会把旧频道的 leave 误当成当前 postgame teardown 的一部分继续推进。
+  - 更稳妥的语义是：`7272` 这里只清理 chat channel 级状态并保留当前 lobby 快照，把完整 reset 延后到更晚的显式 teardown/reset 边界处理。
+
+[Dota2 服务端房主重连期间不能下发通用库存 CacheUnsubscribed]
+- Date: 2026-05-05
+- Context: Agent 在分析“第一局正常、第二局 hero select 卡住且 7451 超时”的新日志时发现
+- Category: 代码模式
+- Instructions:
+  - Dota2 服务端 `on_client_disconnected()` 遇到 practice lobby 房主短暂断开时，不应立刻继续走 `remove_user_items() -> callback_items_removed() -> ESOMsg 25` 这条通用库存 SO 退订链。
+  - 这条延迟 `25` 会在第二局启动期晚到并撤掉房主的 SO cache，干扰 `7450 -> 7451` 的玩家资源初始化，表现为 `BatchPlayerResources - Failed to get accounts` 或 `7451` 过晚送达。
+  - 对官方对齐更稳妥的语义是：当前局/重连边界只更新 `owner_connected`，房主库存缓存保留到真正的 lobby teardown/reset，再由更晚的 lifecycle 统一清理。
+
+[Dota2 prelaunch 的 7034 connected players 不能提前携带 draft 列表]
+- Date: 2026-05-05
+- Context: Agent 在分析“第一次建房停在英雄选择界面但没有英雄可选”的新日志时发现
+- Category: 代码模式
+- Instructions:
+  - `7034 connected players` 回复里的 `draft` 段会直接影响客户端是否进入选人 UI，不能在 `state=1, game_state=0` 或 `WAIT_FOR_PLAYERS` 之前就无条件返回。
+  - 只有当本地 lifecycle 已真正进入 hero selection（至少 `state=2 && game_state>=2`）后，`GBE_BuildDota7034ConnectedPlayersResponsePayload(...)` 才应附带 `draft` 列表。
+  - 否则客户端会表现为提前停在英雄选择界面，但英雄池/后续选人链尚未就绪。
+
+[Dota2 launch 的 7034 推进必须跟随请求自身阶段]
+- Date: 2026-05-05
+- Context: Agent 在分析“第一局点击开始游戏后直接跳进英雄选择”的新日志时发现
+- Category: 代码模式
+- Instructions:
+  - 当本地 lobby 已在 `state=2, game_state=1` 时，不能仅因收到一条 `7034` 就继续自动排入 `HERO_SELECTION/STRATEGY_TIME`。
+  - `7034` 只能在请求自身已经体现更晚阶段时再推进，例如 `request_shape.game_state >= 2` 才能进 hero selection，`request_shape.send_reason == 10` 或更晚 game state 才能进 strategy time。
+  - 否则会把官方 `WAIT_FOR_PLAYERS_TO_LOAD` 的停顿窗口压掉，表现为点击开始游戏后几乎直接进入英雄选择。
+
+[Dota2 Start Game 主线里 4506 不应直接推进到 RUN]
+- Date: 2026-05-05
+- Context: Agent 在重新展开 `/workspace/steamhoststartgame` 与 `/workspace/second_zip` 官方抓包并对照当前实现时发现
+- Category: 代码模式
+- Instructions:
+  - 官方 `Start Game` 主线中，`7041` 后先是 `SERVERSETUP(match_id)`，再经过 `server_id/game_start_time/connect` 同步和 setup 外围链，随后才进入 `RUN(connect)`。
+  - `5429(TicketAuthComplete)` 是官方常见信号，但不能作为进入 `RUN` 的唯一硬门；如果 `server_id/game_start_time/connect` 已经同步完成，`4506` 也可以触发同一条 `SERVERSETUP -> RUN` 阶段推进。
+  - 更稳妥的实现不是把推进逻辑散在 `4506/5429/7034` 各自分支里，而是维护一个显式 launch phase：`requested -> serversetup_synced -> run_queued`，由 `4506/5429` 共享同一条 `RUN` gate。
+  - `7034` 的 prelaunch 推进不应再接受 `state=1, game_state=0` 作为进入 `WAIT_FOR_PLAYERS` 的条件；至少要等到 `RUN(connect)` 已建立或已排入队列。
+
+[Dota2 GC 队列消费需要在取走一条后继续补发可用通知]
+- Date: 2026-05-04
+- Context: Agent 在继续排查 practice lobby 第二局 `7450 -> 7451` 已构造但 server 侧未收到时发现
+- Category: 代码模式
+- Instructions:
+  - `push_incoming_now(...)` 只保证消息入队时发一次 `GCMessageAvailable_t`，这不足以保证重连后的活动实例持续把同一队列里的后续消息全部取完。
+  - 如果 `RetrieveMessage(...)` 取走一条消息后 `incoming_messages` 仍非空，应继续为新的队首补发 `GCMessageAvailable_t`，否则后续 reply 可能已经在队列里但没有新的可用通知驱动游戏端继续消费。
+  - 这种问题更像是队列消费/唤醒边界丢失，而不是 reply 包体本身构造错误。
+
+[Dota2 abandon 前必须丢弃残留的 launch 24/26/7034 队列]
+- Date: 2026-05-04
+- Context: Agent 在复查新测试日志时发现，第二局 `7451` 已成功后，真正的最早异常出现在 `7035` 收尾阶段
+- Category: 代码模式
+- Instructions:
+  - 如果 `7035` 到来时 `incoming_messages` 或 `pending_messages` 里还残留 launch 阶段的 `24/26/7034`，这些旧消息会在 `25 + 7010 + 7010` teardown 之后继续投递，把已 teardown 的 lobby 又推进回 `HERO_SELECTION/STRATEGY_TIME`。
+  - 处理 ready-for-abandon 的 `7035` 前，应先定向丢弃这类 launch 残留消息，以及同窗口的外围 launch persona/peripheral（如 `5501/5575/779/766`），避免 postgame teardown 被旧启动队列反向污染。
+
+[GC 调试日志过滤名单会吞掉实例级队列证据]
+- Date: 2026-05-05
+- Context: Agent 在排查第二局 `7451/24/26/7034` 已生成但未送达时发现新增的 `GC_CALLBACK/GC_RETRIEVE/GC_INTERFACE_*` 日志没有落到 `gbe_gc_debug.log`
+- Category: 代码模式
+- Instructions:
+  - `GBE_GC_DebugLog(...)` 的前置过滤名单如果包含 `GC_CALLBACK`、`GC_RETRIEVE`、`GC_INTERFACE_REQUEST`、`GC_INTERFACE_RETURN`，这些实例级队列归属日志会被直接丢弃，导致无法判断消息是未入队还是未消费。
+  - 需要定位 GC 队列归属问题时，应先确保这些 scope 不在过滤名单里，再依赖测试日志做实例级对齐。
+
+[Dota2 practice lobby 的 owner_connected 是统一 lifecycle 边界]
+- Date: 2026-05-04
+- Context: Agent 在回退到 `d0873b10` 基线后，重新串联 `7038/24/26/7035/25/on_client_connected/on_client_disconnected/ResetGCMemory` 整体生命周期时发现
+- Category: 代码模式
+- Instructions:
+  - `owner_connected` 不应只是保留字段；它是 practice lobby lifecycle 的关键边界，用来区分“启动期 stray 7035”与“owner 已真正进入当前局后的真实断开”。
+  - 如果 server 侧没有在 `on_client_connected/on_client_disconnected` 维护并发布 `owner_connected`，后续对 `7035` 的处理就只能退化成按第几次 launch/退出打补丁。
+  - 对 current-game disconnect 分支，统一语义应是：owner 已进入当前局后收到 server 侧 `7035`，先下发 `25 (CacheUnsubscribed)`，等 `25` 被真正取走后再 `ResetGCMemory`；不要在投递 `25` 之前先清 local/shared lobby。
+
+[Dota2 practice lobby 启动早期的 7035 不能直接走 PostGame teardown]
+- Date: 2026-05-03
+- Context: Agent 在继续排查二次建房停在 `wait_for_players`、随后错误进入 `PostGame_*` 频道时发现
+- Category: 代码模式
+- Instructions:
+  - 当前样本里，若 lobby 仍停在 `state=2 && game_state=1` 等启动早期阶段，`7035 / AbandonCurrentGame` 更像是启动回退信号，而不应立即当作真实 postgame abandon 处理。
+  - `GBE_HandleDotaAbandonCurrentGameRequest(...)` 只有在 practice lobby 已推进到更晚的 current-game 阶段后，才应进入 `25 + 7010 + 7010 + 7272 teardown` 这条 `PostGame_<lobby_id>` 链路；否则会过早清空当前 lobby，并让后续 `7034` fallback 错把 gameserver steamid 当 owner。
+
+[Dota2 GC 调试日志在排查期间应优先收敛到当前必要范围]
+- Date: 2026-05-03
+- Context: 用户反馈 `gbe_gc_debug.log` 体积越来越大，要求把当前暂时不用的日志先停掉，后期需要再恢复
+- Instructions:
+  - 继续排查 Dota2 practice lobby / GC 问题时，应优先保留与当前根因直接相关的日志，暂时关闭明显无关或重复的高频调试输出，避免 `gbe_gc_debug.log` 膨胀过快。
+  - 如果后续某条次级链路需要重新观察，可以按需恢复对应 scope 的日志，而不是默认持续全量打印。
+
+[Dota2 服务端的 direct ServerWelcome 更适合绑定 owner 真正连入 server 的时点交付]
+- Date: 2026-05-03
+- Context: Agent 在对照新一轮失败日志时发现，第二次 launch 的 `4005(ServerWelcome)` 若在 `4007(ServerHello)` 处理栈内直接/延后排队，仍可能晚于 `7450` 被游戏消费
+- Category: 代码模式
+- Instructions:
+  - 当前样本里，`4007` 发送明显早于本地 owner 完成 `C2S_CONNECT -> Connected to 127.0.0.1:27015`，而服务端 `7450` 请求又发生在 owner 真正进服之后。
+  - 因此服务端 direct `4005(ServerWelcome)` 的更稳妥交付边界不是 `4007` 处理栈本身，而是 `on_client_connected()` 中 owner 账号真正连入 server 的生命周期事件；此时应优先先投递 pending `4005`，再继续 `7034` 等后续模拟消息。
+
+[Dota2 二次启动的 server welcome 可能已入队但首个可用回调没有及时驱动服务端取走]
+- Date: 2026-05-03
+- Context: Agent 在对照第二次 launch 的 `console.log` 与 `gbe_gc_debug.log`，确认第二轮 `4005(ServerWelcome)` 已成功入队但 `7450` 仍早于 `Recv msg 4005` 时发现
+- Category: 代码模式
+- Instructions:
+  - 若日志显示第二次 `4007` 后 `gbe_gc_debug.log` 已出现 `queued msg=4005` / `returned_emsg=4005`，而 `console.log` 仍先报 `Trying to send message type 7450 ... before GC connection established`，优先怀疑的是 server-side `GCMessageAvailable_t` 通知在重连边缘没有及时驱动取走 `4005`，而不是先怀疑 `4005` 包体语义错误。
+  - 当前样本里，第一轮与第二轮的 direct `4005` 都是同样的 `28-byte` 最小 welcome，第一轮可以成功建连，因此第二轮更像是“welcome 投递时机/通知边缘问题”而不是“welcome 语义不足”。
+
+[Dota2 practice lobby 的排查应优先做完整根因分析，避免只对症状打补丁]
+- Date: 2026-05-03
+- Context: 用户对连续围绕 `7450/7451` 现象做局部补偿表示不满，要求回到完整代码链路找根因
+- Instructions:
+  - 处理这条 Dota2 practice lobby 二次启动问题时，应先完整梳理当前代码路径与消息时序，再决定是否需要最小修补。
+  - 不要仅根据单个日志症状持续叠加补偿逻辑；每个修复前都要明确它对应的根因、前置条件和为何前面的代码路径没有自然满足该条件。
+
+[Dota2 模拟 GC 需要显式生命周期重置，避免第二次建房复用旧状态]
+- Date: 2026-05-03
+- Context: 用户要求把 practice lobby 模拟器从“一次性”改为可连续多次建房/开局
+- Instructions:
+  - 增加全局 `ResetGCMemory()`，至少清空 `LocalLobby`、将所有 `LobbyID/MatchID` 状态归零，并清除缓存的 `SourceJobID`。
+  - 拦截 `k_EMsgGCPracticeLobbyCreate` 时必须先执行重置，再生成新的 lobby 标识。
+  - 拦截 `k_EMsgGCPracticeLobbyLeave` 时也要主动清理内存，让模拟器回到初始状态。
+  - `LobbyID` 和 `MatchID` 不能在 DLL 加载时只生成一次，必须在每次建房/开始游戏时重新生成。
+  - 回复 `7041 (LobbyData)` 时，`TargetJobID` 必须取当前请求的 `SourceJobID`，不能复用全局旧值。
+
+[Dota2 二次启动若 7450 先于 4005，则服务端玩家资源初始化会直接失败]
+- Date: 2026-05-03
+- Context: Agent 在继续排查 shared-lobby 基线下“第二次 launch 黑屏且新日志显示 4511 重投递已生效”时发现
+- Category: 代码模式
+- Instructions:
+  - 若第二次 launch 的 `console.log` 出现 `Trying to send message type 7450 ... before GC connection established` 或 `BatchPlayerResources - Failed to get accounts`，说明服务端 `CDOTA_PlayerResource` 请求早于 `4005(ServerWelcome)` 建立 GC 连接。
+  - 这种情况下，即使后续 `24/26/5501/5575/779/766` 与 hero-selection/strategy-time 的合成队列已经恢复，真实服务端仍可能继续卡在 `WAIT_FOR_PLAYERS/INIT` 邻域，因为关键的 `7451` 玩家资源响应从未成功建立。
+  - 后续优先检查 Dota2 GC 是否初始化过晚、`4005` 是否在首个服务端资源请求之前就已可轮询，而不是只盯着 `4511/4508/7034` 的后半段队列消费。
+
+[Dota2 shared-lobby 二次启动时 server welcome 可能因 GC 实例重建而丢失]
+- Date: 2026-05-03
+- Context: Agent 在继续排查 shared-lobby 基线下“第二次 launch 黑屏，服务端 in-game GC 卡在 `4007` 之后、`4511/4508` 之前”时发现
+- Category: 代码模式
+- Instructions:
+  - shared-lobby 状态虽然已经能跨 GC 实例恢复，但服务端 `4005 (ServerWelcome)` 仍可能在旧 coordinator 上排队后，被后续新建的 `Steam_Client`/server GC 实例截断，导致活动实例始终收不到 welcome。
+  - 若日志表现为第二次 launch 已成功处理 `4007` 并构造 `4005`，但后续没有 `Recv msg 4005`，同时又出现新 `coordinator init`，应优先怀疑“未消费的 server welcome 跨实例丢失”，而不是继续优先怀疑 shared lobby 残留。
+
 [Dota2 4506 与 7034 早期 26 窗口应切回真正 official 018/021 donor 外壳并清空 donor 自带 startup payload]
 - Date: 2026-05-02
 - Context: Agent 在用户复测“`4506` 与 `021` 已从 `322` 收敛到 `514` 但 dashboard 仍停在 host loading”后，继续顺序对照 `officialconsole.log:865-875,930-932`、最新 `gbe_gc_debug.log` 与 `steam_game_coordinator.cpp` 的 donor 选择路径时发现
@@ -1713,3 +1859,19 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `CSODOTALobby.field 124` 是 `requested_hero_ids`，`field 132` 是 `requested_hero_teams`；它们属于 hero-select 语义，不应继续和 `121/122/123` 这些成员索引字段混在同一含义里理解。
   - 后续如果 hero-select 槽位仍异常，要优先核对 donor `2004` 在 `124/132` 上是否残留旧请求数组，再决定是否清理或重建，而不是只盯 `all_members.team/slot`。
+
+[第二局 7451 边界要优先看 protobuf header 而不是只看 console 截止点]
+- Date: 2026-05-05
+- Context: Agent 在继续对照第二局 `console.log` 与 `gbe_gc_debug.log` 时发现，`console.log` 停在 `Send msg 7450/7034` 附近，但 `gbe_gc_debug.log` 仍继续到了服务端实例取回 `7451 -> 24 -> 26 -> 7034 -> 7272`
+- Category: 代码模式
+- Instructions:
+  - 当 `gbe_gc_debug.log` 已经显示 server GC 实例成功 `returned_emsg=7451`，不要仅凭同轮 `console.log` 没出现 `Recv msg 7451` 就立刻下结论说 reply 没送达。
+  - 这类不一致优先继续核对 GC protobuf header 的 `job_id_source/job_id_target` 与服务端实例边界，再判断是日志截断、游戏侧上层未消费，还是 reply header 语义不对。
+
+[7035 abandon 清理必须覆盖 client/server 两侧 GC 队列]
+- Date: 2026-05-05
+- Context: Agent 在继续对照第二局 `7035/7272` 收尾时发现，client 侧已丢弃 2 条残留，但 server GC 实例队列里仍继续取出 `26/26/26/26/26/26/7034`，把 lobby 又推进回 `HERO_SELECTION/STRATEGY_TIME`
+- Category: 代码模式
+- Instructions:
+  - `GBE_DiscardQueuedDotaLaunchMessagesForAbandon(...)` 不能只清理当前处理 `7035` 的那个 coordinator 实例。
+  - abandon teardown 时必须同时清理 client GC 与 server GC 两侧队列中的 launch 残留消息，否则另一侧实例里的旧 `26/7034` 仍会在 `25 + 7010 + 7010 + 7014` 之后继续投递，反向污染 teardown。
