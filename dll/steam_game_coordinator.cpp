@@ -8460,16 +8460,30 @@ void Steam_Game_Coordinator::on_client_disconnected(CSteamID steam_id)
     if (!steam_id.BIndividualAccount())
         return;
 
+    bool suppress_user_item_unsubscribe = false;
     if (is_server && gc_profile == GC_PROFILE_DOTA2) {
         const uint64 disconnected_steam_id = steam_id.ConvertToUint64();
         const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && disconnected_steam_id != 0 && disconnected_steam_id == owner_steam_id) {
             GBE_local_lobby.owner_connected = false;
             GBE_PublishSharedDotaLobbyState("owner_disconnected");
+
+            suppress_user_item_unsubscribe = true;
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "preserving owner inventory cache across dota reconnect steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s abandon_postgame=%u",
+                static_cast<unsigned long long>(disconnected_steam_id),
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state,
+                GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
+                GBE_local_lobby.abandon_postgame_active ? 1u : 0u
+            );
         }
     }
 
-    remove_user_items(steam_id);
+    if (!suppress_user_item_unsubscribe)
+        remove_user_items(steam_id);
 }
 
 void Steam_Game_Coordinator::GBE_PushDotaLoginSyncMessages()

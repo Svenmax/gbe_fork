@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 服务端房主重连期间不能下发通用库存 CacheUnsubscribed]
+- Date: 2026-05-05
+- Context: Agent 在分析“第一局正常、第二局 hero select 卡住且 7451 超时”的新日志时发现
+- Category: 代码模式
+- Instructions:
+  - Dota2 服务端 `on_client_disconnected()` 遇到 practice lobby 房主短暂断开时，不应立刻继续走 `remove_user_items() -> callback_items_removed() -> ESOMsg 25` 这条通用库存 SO 退订链。
+  - 这条延迟 `25` 会在第二局启动期晚到并撤掉房主的 SO cache，干扰 `7450 -> 7451` 的玩家资源初始化，表现为 `BatchPlayerResources - Failed to get accounts` 或 `7451` 过晚送达。
+  - 对官方对齐更稳妥的语义是：当前局/重连边界只更新 `owner_connected`，房主库存缓存保留到真正的 lobby teardown/reset，再由更晚的 lifecycle 统一清理。
+
 [Dota2 prelaunch 的 7034 connected players 不能提前携带 draft 列表]
 - Date: 2026-05-05
 - Context: Agent 在分析“第一次建房停在英雄选择界面但没有英雄可选”的新日志时发现
