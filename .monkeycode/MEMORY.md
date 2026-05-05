@@ -31,6 +31,24 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 launch 的 7034 推进必须跟随请求自身阶段]
+- Date: 2026-05-05
+- Context: Agent 在分析“第一局点击开始游戏后直接跳进英雄选择”的新日志时发现
+- Category: 代码模式
+- Instructions:
+  - 当本地 lobby 已在 `state=2, game_state=1` 时，不能仅因收到一条 `7034` 就继续自动排入 `HERO_SELECTION/STRATEGY_TIME`。
+  - `7034` 只能在请求自身已经体现更晚阶段时再推进，例如 `request_shape.game_state >= 2` 才能进 hero selection，`request_shape.send_reason == 10` 或更晚 game state 才能进 strategy time。
+  - 否则会把官方 `WAIT_FOR_PLAYERS_TO_LOAD` 的停顿窗口压掉，表现为点击开始游戏后几乎直接进入英雄选择。
+
+[Dota2 Start Game 主线里 4506 不应直接推进到 RUN]
+- Date: 2026-05-05
+- Context: Agent 在重新展开 `/workspace/steamhoststartgame` 与 `/workspace/second_zip` 官方抓包并对照当前实现时发现
+- Category: 代码模式
+- Instructions:
+  - 官方 `Start Game` 主线中，`7041` 后先是 `SERVERSETUP(match_id)`，再经过 `server_id sync` 和 setup 外围链，`5429(TicketAuthComplete)` 之后才进入 `RUN(connect)`。
+  - `4506` 不应直接把 lobby 从 `SERVERSETUP` 推到 `RUN`，否则会把 `5429` 前的官方停顿窗口压掉，并让后续 `7034` 过早推进 `WAIT_FOR_PLAYERS/HERO_SELECTION`。
+  - `7034` 的 prelaunch 推进不应再接受 `state=1, game_state=0` 作为进入 `WAIT_FOR_PLAYERS` 的条件；至少要等到 `RUN(connect)` 已建立。
+
 [Dota2 GC 队列消费需要在取走一条后继续补发可用通知]
 - Date: 2026-05-04
 - Context: Agent 在继续排查 practice lobby 第二局 `7450 -> 7451` 已构造但 server 侧未收到时发现
