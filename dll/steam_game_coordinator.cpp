@@ -10265,6 +10265,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         );
 
         GBE_TrySyncDotaLobbyServerIdFromGameServer("4508_game_server_info");
+
+        if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
+            if (GBE_TryAdvanceDotaLaunchToRun("runtime packet after 4508", request_emsg, source_job, "4508_launch_run"))
+                return true;
+        }
+
         return true;
     }
 
