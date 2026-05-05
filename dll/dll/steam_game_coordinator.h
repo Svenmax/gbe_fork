@@ -115,6 +115,7 @@ public ISteamGameCoordinator
         uint32 owner_hero_id{};
         bool owner_connected{};
         uint32 launch_phase{};
+        bool launch_4511_seen{};
         bool has_broadcast_channel{};
         uint32 broadcast_channel_id{};
         std::string broadcast_country_code;

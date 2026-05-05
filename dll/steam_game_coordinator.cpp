@@ -180,6 +180,7 @@ struct GBE_SharedDotaLobbyState {
     uint32 owner_hero_id{};
     bool owner_connected{};
     uint32 launch_phase{};
+    bool launch_4511_seen{};
     bool has_broadcast_channel{};
     uint32 broadcast_channel_id{};
     std::string broadcast_country_code;
@@ -8637,6 +8638,7 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
     GBE_shared_dota_lobby_state.owner_hero_id = GBE_local_lobby.owner_hero_id;
     GBE_shared_dota_lobby_state.owner_connected = GBE_local_lobby.owner_connected;
     GBE_shared_dota_lobby_state.launch_phase = GBE_local_lobby.launch_phase;
+    GBE_shared_dota_lobby_state.launch_4511_seen = GBE_local_lobby.launch_4511_seen;
     GBE_shared_dota_lobby_state.has_broadcast_channel = GBE_local_lobby.has_broadcast_channel;
     GBE_shared_dota_lobby_state.broadcast_channel_id = GBE_local_lobby.broadcast_channel_id;
     GBE_shared_dota_lobby_state.broadcast_country_code = GBE_local_lobby.broadcast_country_code;
@@ -8798,6 +8800,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             GBE_local_lobby.owner_hero_id = GBE_shared_dota_lobby_state.owner_hero_id;
             GBE_local_lobby.owner_connected = GBE_shared_dota_lobby_state.owner_connected;
             GBE_local_lobby.launch_phase = GBE_shared_dota_lobby_state.launch_phase;
+            GBE_local_lobby.launch_4511_seen = GBE_shared_dota_lobby_state.launch_4511_seen;
             GBE_local_lobby.has_broadcast_channel = GBE_shared_dota_lobby_state.has_broadcast_channel;
             GBE_local_lobby.broadcast_channel_id = GBE_shared_dota_lobby_state.broadcast_channel_id;
             GBE_local_lobby.broadcast_country_code = GBE_shared_dota_lobby_state.broadcast_country_code;
@@ -8874,6 +8877,11 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
 
         if (GBE_local_lobby.launch_phase != GBE_shared_dota_lobby_state.launch_phase) {
             GBE_local_lobby.launch_phase = GBE_shared_dota_lobby_state.launch_phase;
+            changed = true;
+        }
+
+        if (GBE_local_lobby.launch_4511_seen != GBE_shared_dota_lobby_state.launch_4511_seen) {
+            GBE_local_lobby.launch_4511_seen = GBE_shared_dota_lobby_state.launch_4511_seen;
             changed = true;
         }
 
@@ -9878,6 +9886,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_PublishSharedDotaLobbyState("7034_connected_player_hero");
             }
 
+            if (GBE_local_lobby.state == 1u &&
+                GBE_local_lobby.game_state == 0u &&
+                GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced &&
+                GBE_local_lobby.launch_4511_seen) {
+                if (GBE_TryAdvanceDotaLaunchToRun("runtime packet after matched 4511/7034", request_emsg, source_job, "7034_launch_run_after_4511"))
+                    queued_runtime_lobby_update = true;
+            }
+
             if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u) {
                 const std::string request_summary = GBE_FormatDota7034Summary(body, body_size);
                 GBE_GC_DebugLog(
@@ -9927,7 +9943,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 0u &&
                     GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
                 if (GBE_TryQueueDotaPrelaunch021("runtime wait_for_players after 7034", request_emsg, source_job))
-                    return true;
+                    queued_runtime_lobby_update = true;
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 2u && request_advances_to_strategy_time) {
@@ -10193,8 +10209,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), lobby_id);
 
         const bool matches_local_lobby = (lobby_id != 0 && lobby_id == GBE_local_lobby.lobby_id);
-        if (matches_local_lobby)
+        if (matches_local_lobby) {
+            if (!GBE_local_lobby.launch_4511_seen) {
+                GBE_local_lobby.launch_4511_seen = true;
+                GBE_PublishSharedDotaLobbyState("4511_lan_server_available_seen");
+            }
             GBE_TrySyncDotaLobbyServerIdFromGameServer("4511_lan_server_available");
+        }
 
         if (matches_local_lobby && !incoming_messages.empty()) {
             GCMessageAvailable_t data{};
