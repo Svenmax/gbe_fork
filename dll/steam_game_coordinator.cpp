@@ -5499,6 +5499,7 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     std::string &message)
 {
     const std::string leaver_state = GBE_BuildDota7034LeaverStatePayload(lobby_state, game_state);
+    const bool include_draft = (lobby_state >= 2u && game_state >= 2u);
 
     std::string player;
     GBE_AppendProtoFixed64Field(player, 1u, steam_id);
@@ -5506,11 +5507,6 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
         GBE_AppendProtoVarIntField(player, 2u, request_shape.connected_hero_id);
     GBE_AppendProtoBytesField(player, 3u, leaver_state);
     GBE_AppendProtoVarIntField(player, 4u, 0u);
-
-    std::string draft;
-    GBE_AppendProtoFixed64Field(draft, 1u, steam_id);
-    GBE_AppendProtoVarIntField(draft, 2u, owner_team);
-    GBE_AppendProtoVarIntField(draft, 3u, owner_slot > 0u ? (owner_slot - 1u) : 0u);
 
     std::string body;
     GBE_AppendProtoBytesField(body, 1u, player);
@@ -5526,7 +5522,13 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
         GBE_AppendProtoVarIntField(body, 14u, request_shape.radiant_lead);
     if (request_shape.has_building_state)
         GBE_AppendProtoVarIntField(body, 15u, request_shape.building_state);
-    GBE_AppendProtoBytesField(body, 16u, draft);
+    if (include_draft) {
+        std::string draft;
+        GBE_AppendProtoFixed64Field(draft, 1u, steam_id);
+        GBE_AppendProtoVarIntField(draft, 2u, owner_team);
+        GBE_AppendProtoVarIntField(draft, 3u, owner_slot > 0u ? (owner_slot - 1u) : 0u);
+        GBE_AppendProtoBytesField(body, 16u, draft);
+    }
 
     if (request_shape.has_disconnected_player && (!request_shape.has_disconnected_steam_id || request_shape.disconnected_steam_id == steam_id)) {
         uint32 disconnected_lobby_state = request_shape.has_disconnected_lobby_state ? request_shape.disconnected_lobby_state : lobby_state;

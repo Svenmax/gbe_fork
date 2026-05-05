@@ -31,6 +31,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 ## 条目
 
+[Dota2 prelaunch 的 7034 connected players 不能提前携带 draft 列表]
+- Date: 2026-05-05
+- Context: Agent 在分析“第一次建房停在英雄选择界面但没有英雄可选”的新日志时发现
+- Category: 代码模式
+- Instructions:
+  - `7034 connected players` 回复里的 `draft` 段会直接影响客户端是否进入选人 UI，不能在 `state=1, game_state=0` 或 `WAIT_FOR_PLAYERS` 之前就无条件返回。
+  - 只有当本地 lifecycle 已真正进入 hero selection（至少 `state=2 && game_state>=2`）后，`GBE_BuildDota7034ConnectedPlayersResponsePayload(...)` 才应附带 `draft` 列表。
+  - 否则客户端会表现为提前停在英雄选择界面，但英雄池/后续选人链尚未就绪。
+
 [Dota2 launch 的 7034 推进必须跟随请求自身阶段]
 - Date: 2026-05-05
 - Context: Agent 在分析“第一局点击开始游戏后直接跳进英雄选择”的新日志时发现
