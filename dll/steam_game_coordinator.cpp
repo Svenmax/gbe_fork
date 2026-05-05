@@ -11875,11 +11875,21 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         GBE_local_lobby.has_chat_channel &&
         local_channel_id != 0 &&
         GBE_local_lobby.chat_channel_type == 18u;
-    const bool matches_abandon_teardown_channel =
-        channel_id == local_channel_id ||
-        (pre_postgame_channel_id != 0 && channel_id == pre_postgame_channel_id);
+    const bool matches_current_postgame_channel = channel_id == local_channel_id;
+    const bool matches_pre_postgame_channel = pre_postgame_channel_id != 0 && channel_id == pre_postgame_channel_id;
     if (channel_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7272 because no chat channel is active");
+        return true;
+    }
+
+    if (leaving_postgame_channel && matches_pre_postgame_channel && !matches_current_postgame_channel) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Ignoring stale pre-postgame 7272 during abandon teardown. request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu",
+            static_cast<unsigned long long>(channel_id),
+            static_cast<unsigned long long>(local_channel_id),
+            static_cast<unsigned long long>(pre_postgame_channel_id)
+        );
         return true;
     }
 
@@ -11907,10 +11917,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
     }
 
     if (leaving_postgame_channel) {
-        if (!matches_abandon_teardown_channel) {
+        if (!matches_current_postgame_channel) {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
-                "[LOBBY] Ignoring stale 7272 during abandon teardown. request_channel=%llu local_channel=%llu pre_postgame_channel=%llu",
+                "[LOBBY] Ignoring non-postgame 7272 during abandon teardown. request_channel=%llu local_channel=%llu pre_postgame_channel=%llu",
                 static_cast<unsigned long long>(request.channel_id),
                 static_cast<unsigned long long>(local_channel_id),
                 static_cast<unsigned long long>(pre_postgame_channel_id)

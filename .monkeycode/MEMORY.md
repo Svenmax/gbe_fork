@@ -38,6 +38,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `7035` 后客户端会进入 postgame chat leave 流程，但在 `7272 leave chat` 到来时，真实 Dota 客户端往往仍在继续完成 server shutdown、lobby destroy、UI/dashboard 切换等收尾。
   - 如果在 `GBE_HandleDotaLeaveChatChannelRequest()` 的 `abandon_postgame_active` 分支里立刻执行 `GBE_LeaveGenericLobby()`、清空 `GBE_local_lobby` 主要字段、把 `active/lobby_id/match_id/server_id` 直接归零，就会与后续断线 teardown 抢跑，增加访问违规风险。
+  - `7035` 后收到的 `7272` 可能仍然针对旧的 pre-postgame 频道，而不是刚切换出来的 postgame 频道；这类 stale leave request 不应再回 `7014`，否则会把旧频道的 leave 误当成当前 postgame teardown 的一部分继续推进。
   - 更稳妥的语义是：`7272` 这里只清理 chat channel 级状态并保留当前 lobby 快照，把完整 reset 延后到更晚的显式 teardown/reset 边界处理。
 
 [Dota2 服务端房主重连期间不能下发通用库存 CacheUnsubscribed]
