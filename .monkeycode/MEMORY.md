@@ -1820,3 +1820,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 当 `gbe_gc_debug.log` 已经显示 server GC 实例成功 `returned_emsg=7451`，不要仅凭同轮 `console.log` 没出现 `Recv msg 7451` 就立刻下结论说 reply 没送达。
   - 这类不一致优先继续核对 GC protobuf header 的 `job_id_source/job_id_target` 与服务端实例边界，再判断是日志截断、游戏侧上层未消费，还是 reply header 语义不对。
+
+[7035 abandon 清理必须覆盖 client/server 两侧 GC 队列]
+- Date: 2026-05-05
+- Context: Agent 在继续对照第二局 `7035/7272` 收尾时发现，client 侧已丢弃 2 条残留，但 server GC 实例队列里仍继续取出 `26/26/26/26/26/26/7034`，把 lobby 又推进回 `HERO_SELECTION/STRATEGY_TIME`
+- Category: 代码模式
+- Instructions:
+  - `GBE_DiscardQueuedDotaLaunchMessagesForAbandon(...)` 不能只清理当前处理 `7035` 的那个 coordinator 实例。
+  - abandon teardown 时必须同时清理 client GC 与 server GC 两侧队列中的 launch 残留消息，否则另一侧实例里的旧 `26/7034` 仍会在 `25 + 7010 + 7010 + 7014` 之后继续投递，反向污染 teardown。

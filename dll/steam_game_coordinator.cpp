@@ -7177,38 +7177,55 @@ bool Steam_Game_Coordinator::GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(
 
 void Steam_Game_Coordinator::GBE_DiscardQueuedDotaLaunchMessagesForAbandon(const char *reason)
 {
-    size_t removed_pending = 0;
-    for (auto it = pending_messages.begin(); it != pending_messages.end();) {
-        if (GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(GBE_GC_MaskedEMsg(it->msg_type))) {
-            it = pending_messages.erase(it);
-            ++removed_pending;
-        } else {
-            ++it;
-        }
-    }
+    auto discard_for_instance = [reason](Steam_Game_Coordinator *coordinator) {
+        if (!coordinator)
+            return;
 
-    size_t removed_incoming = 0;
-    std::queue<GC_Message> filtered_incoming;
-    while (!incoming_messages.empty()) {
-        GC_Message queued = incoming_messages.front();
-        incoming_messages.pop();
-        if (GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(GBE_GC_MaskedEMsg(queued.msg_type))) {
-            ++removed_incoming;
-            continue;
+        size_t removed_pending = 0;
+        for (auto it = coordinator->pending_messages.begin(); it != coordinator->pending_messages.end();) {
+            if (coordinator->GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(GBE_GC_MaskedEMsg(it->msg_type))) {
+                it = coordinator->pending_messages.erase(it);
+                ++removed_pending;
+            } else {
+                ++it;
+            }
         }
-        filtered_incoming.push(std::move(queued));
-    }
-    incoming_messages.swap(filtered_incoming);
 
-    GBE_GC_DebugLog(
-        "GC_DOTA_LOBBY",
-        "[LOBBY] Discarded queued launch messages for abandon reason=%s removed_pending=%zu removed_incoming=%zu remaining_pending=%zu remaining_incoming=%zu",
-        reason ? reason : "unknown",
-        removed_pending,
-        removed_incoming,
-        pending_messages.size(),
-        incoming_messages.size()
-    );
+        size_t removed_incoming = 0;
+        std::queue<GC_Message> filtered_incoming;
+        while (!coordinator->incoming_messages.empty()) {
+            GC_Message queued = coordinator->incoming_messages.front();
+            coordinator->incoming_messages.pop();
+            if (coordinator->GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(GBE_GC_MaskedEMsg(queued.msg_type))) {
+                ++removed_incoming;
+                continue;
+            }
+            filtered_incoming.push(std::move(queued));
+        }
+        coordinator->incoming_messages.swap(filtered_incoming);
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Discarded queued launch messages for abandon reason=%s this=%p is_server=%u removed_pending=%zu removed_incoming=%zu remaining_pending=%zu remaining_incoming=%zu",
+            reason ? reason : "unknown",
+            static_cast<void *>(coordinator),
+            coordinator->is_server ? 1u : 0u,
+            removed_pending,
+            removed_incoming,
+            coordinator->pending_messages.size(),
+            coordinator->incoming_messages.size()
+        );
+    };
+
+    discard_for_instance(this);
+
+    Steam_Client *steam_client = get_steam_client();
+    if (!steam_client)
+        return;
+
+    Steam_Game_Coordinator *peer = is_server ? steam_client->steam_game_coordinator : steam_client->steam_gameserver_game_coordinator;
+    if (peer && peer != this)
+        discard_for_instance(peer);
 }
 
 void Steam_Game_Coordinator::push_incoming_now(uint32 msg_type, const std::string &message, bool apply_lobby_state, uint32 lobby_state, uint32 lobby_game_state)
