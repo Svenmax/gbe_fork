@@ -77,6 +77,7 @@ public ISteamGameCoordinator
     bool GBE_dota_private_lobby_snapshot_replayed{};
     bool GBE_pending_reset_after_cache_unsubscribed{};
     uint64 GBE_pending_reset_after_cache_unsubscribed_lobby_id{};
+    std::string GBE_last_dota_launch_persona_signature;
 
     struct GBE_LocalLobby
     {
@@ -179,10 +180,9 @@ public ISteamGameCoordinator
     void GBE_PushDotaLoginSyncMessages();
     void GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
     bool GBE_ShouldTrackDotaPracticeLobbyLateSteamChain() const;
-    bool GBE_FinalizeDotaPracticeLobbyLateSteamChain(const char *reason);
-    bool GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(uint32 stage_bit, uint32 emsg, const char *template_hex, bool patch_server_id, const char *note);
     void GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *status, const char *lobby_state, bool include_party, bool include_lobby = true);
     void GBE_ClearDotaPracticeLobbyLaunchRichPresence();
+    void GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(const char *status, const char *lobby_state, bool include_party, bool include_lobby, const char *reason);
     void GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(const char *reason);
     bool GBE_CaptureCurrentDotaLobbyState(const char *reason, GBE_LocalLobby &snapshot, bool restore_shared = true);
     void GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(const char *reason);

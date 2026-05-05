@@ -196,33 +196,12 @@ struct GBE_SharedDotaLobbyState {
 };
 
 static GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
-static uint32 GBE_dota_launch_peripheral_stage_mask = 0;
 
 enum : uint32 {
     GBE_kDotaLaunchPhaseNone = 0u,
     GBE_kDotaLaunchPhaseRequested = 1u,
     GBE_kDotaLaunchPhaseSetupSynced = 2u,
     GBE_kDotaLaunchPhaseRunQueued = 3u,
-
-    GBE_kDotaLaunchPeripheralStageInitPersona = 1u << 0,
-    GBE_kDotaLaunchPeripheralStageServersAvailable = 1u << 1,
-    GBE_kDotaLaunchPeripheralStageAuthListAck1 = 1u << 2,
-    GBE_kDotaLaunchPeripheralStageGameConnectTokens1 = 1u << 3,
-    GBE_kDotaLaunchPeripheralStageSetupPersona = 1u << 4,
-    GBE_kDotaLaunchPeripheralStageAuthListAck2 = 1u << 5,
-    GBE_kDotaLaunchPeripheralStageGameConnectTokens2 = 1u << 6,
-    GBE_kDotaLaunchPeripheralStageRunPersona = 1u << 7,
-    GBE_kDotaLaunchPeripheralStageTicketAuthComplete = 1u << 8,
-    GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona = 1u << 9,
-    GBE_kDotaLaunchPeripheralStageCacheSubscribedPrelude = 1u << 10,
-    GBE_kDotaLaunchPeripheralStageCacheSubscribedRuntimePrelude = 1u << 11,
-    GBE_kDotaLaunchPeripheralStageServersAvailablePrelude = 1u << 12,
-    GBE_kDotaLaunchPeripheralStageAuthListAckPrelude = 1u << 13,
-    GBE_kDotaLaunchPeripheralStageServersAvailablePost8744 = 1u << 14,
-    GBE_kDotaLaunchPeripheralStageAuthListAckLateSteamChain = 1u << 15,
-    GBE_kDotaLaunchPeripheralStageLateGamesPlayed = 1u << 16,
-    GBE_kDotaLaunchPeripheralStageLateAuthList = 1u << 17,
-    GBE_kDotaLaunchPeripheralStageHeroSelectionCurrent26 = 1u << 18,
 };
 
 static const char *GBE_DescribeDotaLaunchPhase(uint32 phase)
@@ -312,6 +291,7 @@ static const std::array<uint8, 8> GBE_kOldDotaPracticeLobbyServerIdFixed64 = { 0
 static const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyGameStartTimeVarint = { 0xAE, 0xBB, 0xA3, 0xCF, 0x06 };
 static constexpr const char *GBE_kOldDotaPracticeLobbyConnect = "117.157.79.194:27015 10.110.4.21:27015";
 static constexpr const char *GBE_kOldDotaPracticeLobbyLobbyIdText = "29809934128949123";
+static constexpr const char *GBE_kOldDotaPracticeLobbyLobbyIdTextAlt = "29822498642855090";
 static constexpr const char *GBE_kLocalDotaPracticeLobbyLoopbackEndpoint = "127.0.0.1:27015";
 
 static std::string GBE_BuildDotaPracticeLobbyConnectPair(const std::string &endpoint)
@@ -362,40 +342,25 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
     return GBE_FormatDotaPracticeLobbyConnectFromEndpoint(endpoint);
 }
 
-static constexpr uint32 GBE_kSteamServersAvailable = 5501u;
 static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
-static constexpr uint32 GBE_kSteamAuthListAck = 5575u;
 static constexpr uint32 GBE_kSteamAuthList = 5432u;
-static constexpr uint32 GBE_kSteamGameConnectTokens = 779u;
 static constexpr uint32 GBE_kSteamPersonaState = 766u;
 static constexpr uint32 GBE_kSteamTicketAuthComplete = 5429u;
 
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchServersAvailableHex =
-    "7d1500800f00000009f5b62108010010011086b0cfdc030a0208030a04082910000a04082a10000a04082210000a04082d10000a04083510000a04083b10000a04087710000a04081110000a04083a10010a04080e10000a04082f10000a0408661000103a";
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchPersonaStateInitHex =
-    "fe0200800f00000009f5b62108010010011086b0cfdc0308dfe60112bf0309f5b6210801001001100118ba04300138017a075376656e6d6178c9010000000000000000fa0114b7a33b90cbbf208c93b197a18ba999e3110d5908e802ac98a3cf06f0029cb5a3cf06f802ac98a3cf06ba0300c1033a02000000000000e20300ba04170a06737461747573120d23444f54415f52505f494e4954ba041e0a0d737465616d5f646973706c6179120d23444f54415f52505f494e4954ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba0499010a056c6f626279128f016c6f6262795f69643a203239383039393334313238393439313233206c6f6262795f73746174653a2053455256455253455455502067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a202231323322206c6f6262795f747970653a2031c1040000000000000000c9040000000000000000f80400800500880500980501";
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchAuthListAckStage1Hex =
-    "c71500801800000009f5b62108010010011086b0cfdc0359ffffffffffffffff08a0ffd1c1071801";
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchGameConnectTokensStage1Hex =
-    "0b0300800f00000009f5b62108010010011086b0cfdc03080a1214a054405a60f87d81f5b621080100100198dde869";
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchPersonaStateSetupHex =
-    "fe0200800f00000009f5b62108010010011086b0cfdc0308dfe60112f20309f5b6210801001001100118ba04300138017a075376656e6d6178c9010000000000000000fa0114b7a33b90cbbf208c93b197a18ba999e3110d5908e802ac98a3cf06f0029cb5a3cf06f802ac98a3cf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f46494e44494e475f4d41544348ba04270a0d737465616d5f646973706c6179121623444f54415f52505f46494e44494e475f4d41544348ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba0499010a056c6f626279128f016c6f6262795f69643a203239383039393334313238393439313233206c6f6262795f73746174653a2053455256455253455455502067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a202231323322206c6f6262795f747970653a2031ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348c1040000000000000000c9040000000000000000f80400800500880500980501";
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchAuthListAckStage2Hex =
-    "c71500801800000009f5b62108010010011086b0cfdc0359ffffffffffffffff08a0ffd1c1071802";
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchGameConnectTokensStage2Hex =
-    "0b0300800f00000009f5b62108010010011086b0cfdc03080a";
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex =
-    "fe0200800f00000009f5b62108010010011086b0cfdc0308dfe60112ea0309f5b6210801001001100118ba04300138017a075376656e6d6178c9010000000000000000fa0114b7a33b90cbbf208c93b197a18ba999e3110d5908e802ac98a3cf06f0029cb5a3cf06f802ac98a3cf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f46494e44494e475f4d41544348ba04270a0d737465616d5f646973706c6179121623444f54415f52505f46494e44494e475f4d41544348ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba0491010a056c6f6262791287016c6f6262795f69643a203239383039393334313238393439313233206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a202231323322206c6f6262795f747970653a2031ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348c1040000000000000000c9040000000000000000f80400800500880500980501";
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex =
-    "fe0200800f00000009f5b62108010010011086b0cfdc0308dfe60112ea0309f5b6210801001001100118ba04300138017a075376656e6d6178c9010000000000000000fa0114b7a33b90cbbf208c93b197a18ba999e3110d5908e802ac98a3cf06f0029cb5a3cf06f802ac98a3cf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f505249564154455f4c4f424259ba04270a0d737465616d5f646973706c6179121623444f54415f52505f505249564154455f4c4f424259ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba0491010a056c6f6262791287016c6f6262795f69643a203239383039393334313238393439313233206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a202231323322206c6f6262795f747970653a2031ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348c1040000000000000000c9040000000000000000f80400800500880500980501";
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchTicketAuthCompleteHex =
-    "351500800f00000009f5b62108010010011086b0cfdc0309017c58ca8fc14001113a020000000000001802200030a0ffd1c10741f5b6210801001001";
 static constexpr const char *GBE_kDotaAbandonPersonaStatePrivateLobbyPostgameHex =
     "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112ee0309911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f505249564154455f4c4f424259ba04270a0d737465616d5f646973706c6179121623444f54415f52505f505249564154455f4c4f424259ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348ba0492010a056c6f6262791288016c6f6262795f69643a203239383232343938363432383535303930206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a20226565656522206c6f6262795f747970653a2031c1040000000000000000c9040000000000000000f80400800500880500980501";
 static constexpr const char *GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex =
     "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112d80209911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f505249564154455f4c4f424259ba04270a0d737465616d5f646973706c6179121623444f54415f52505f505249564154455f4c4f424259ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348c1040000000000000000c9040000000000000000f80400800500880500980501";
 static constexpr const char *GBE_kDotaAbandonPersonaStateInitHex =
     "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112a50209911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04170a06737461747573120d23444f54415f52505f494e4954ba041e0a0d737465616d5f646973706c6179120d23444f54415f52505f494e4954ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131c1040000000000000000c9040000000000000000f80400800500880500980501";
+static constexpr const char *GBE_kDotaLaunchPersonaStateInitServerSetupHex =
+    "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112c30309911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04170a06737461747573120d23444f54415f52505f494e4954ba041e0a0d737465616d5f646973706c6179120d23444f54415f52505f494e4954ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba049a010a056c6f6262791290016c6f6262795f69643a203239383232343938363432383535303930206c6f6262795f73746174653a2053455256455253455455502067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a20226565656522206c6f6262795f747970653a2031c1040000000000000000c9040000000000000000f80400800500880500980501";
+static constexpr const char *GBE_kDotaLaunchPersonaStateFindingMatchServerSetupHex =
+    "fe0200800f00000009911ddf050100100110c9dbfdd204080812f20309911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010e14ce4bfcc14001fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f80200ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f46494e44494e475f4d41544348ba04270a0d737465616d5f646973706c6179121623444f54415f52505f46494e44494e475f4d41544348ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348ba049a010a056c6f6262791290016c6f6262795f69643a203239383232343938363432383535303930206c6f6262795f73746174653a2053455256455253455455502067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a20226565656522206c6f6262795f747970653a2031c1040000000000000000c9040000000000000000f80400800500880500980501";
+static constexpr const char *GBE_kDotaLaunchPersonaStateFindingMatchRunHex =
+    "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112ee0309911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f46494e44494e475f4d41544348ba04270a0d737465616d5f646973706c6179121623444f54415f52505f46494e44494e475f4d41544348ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348ba0492010a056c6f6262791288016c6f6262795f69643a203239383232343938363432383535303930206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a20226565656522206c6f6262795f747970653a2031c1040000000000000000c9040000000000000000f80400800500880500980501";
+static constexpr const char *GBE_kDotaLaunchPersonaStatePrivateLobbyRunHex =
+    "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112ee0309911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f505249564154455f4c4f424259ba04270a0d737465616d5f646973706c6179121623444f54415f52505f505249564154455f4c4f424259ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348ba0492010a056c6f6262791288016c6f6262795f69643a203239383232343938363432383535303930206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a20226565656522206c6f6262795f747970653a2031c1040000000000000000c9040000000000000000f80400800500880500980501";
 static constexpr const char *GBE_kDota8730TemplateHex =
     "1a22008009000000594600000000000000080112100a0e088ea83d1206cfb9cfb9d48c18001200"
     "120f0a0d08e0d61f1205313773656318001200120d0a0b0884b0331203534b2b180012120a1008"
@@ -418,228 +383,6 @@ static constexpr const char *GBE_kDotaOfficial032PracticeLobby26Hex =
     "4d15008014000000090eac2b7cdec1400110dbc3fdeafdffffffff0108ba04109a808080081a80041a00008000000000120508dd0f120012e90108d40f12e30108d6f9ac9f95a6fc34180120022a273138322e34322e3232342e31333a3237303135203139322e3136382e342e3136383a3237303135310eac2b7cdec1400159f5b621080100100160016800700082010531313131318a010240008a01024000a80100b0010ae00100f001bbca9fe020f80100a00203d00200d80200e00200f00200f80200800300980300a80300c80301f2030708f54412020800880400d80400900500b805f7e6cbcf06c00500e80503f00500f80500880600b80600c00637f00600880700c2070d09f5b621080100100118003801c80700f807008008d5e6cbcf06121208de0f120d0a090a075376656e6d61781000120708df0f12020a0012cf0108e00f12c9010a3509f5b62108010010014800580060e1ac8b84d0854068008501000000e085014128d9f585015706000098010098010098010098010015000000001a300813122c08f5ed864110001800200038006000d00100d80100e00100fa0106080f100a180afa0108081c10e80718e8071a1c081a121808f5ed864110001800200138006000d00100d80100e001001a1c0827121808f5ed864110001800200138006000d00100d80100e001001a1d0838121908f5ed864110e8071800200138016000d00100d80100e00100190439f15331f16900320b080310d6f9ac9f95a6fc34";
 static constexpr const char *GBE_kDotaOfficial8745TemplateHex =
     "4d15008014000000090eac2b7cdec1400110dbc3fdeafdffffffff0108ba0410a9c48080081a112922008009000000592100000000000000";
-
-struct GBE_DotaPracticeLobbyLaunchPeripheralTemplate
-{
-    uint32 emsg{};
-    const char *hex{};
-    double delay{};
-    bool patch_server_id{};
-};
-
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchStage1Hex =
-    "4d 15 00 80 0f 00 00 00 09 f5 b6 21 08 01 00 10\n"
-    "01 10 86 b0 cf dc 03 08 ba 04 10 9a 80 80 80 08\n"
-    "1a d7 06 1a 00 00 80 00 00 00 00 12 12 08 de 0f\n"
-    "12 0d 0a 09 0a 07 53 76 65 6e 6d 61 78 10 00 12\n"
-    "cf 01 08 e0 0f 12 c9 01 0a 35 09 f5 b6 21 08 01\n"
-    "00 10 01 48 00 58 00 60 e1 ac 8b 84 d0 85 40 68\n"
-    "00 85 01 00 00 00 e0 85 01 41 28 d9 f5 85 01 57\n"
-    "06 00 00 98 01 00 98 01 00 98 01 00 98 01 00 15\n"
-    "00 00 00 00 1a 30 08 13 12 2c 08 f5 ed 86 41 10\n"
-    "00 18 00 20 00 38 00 60 00 d0 01 00 d8 01 00 e0\n"
-    "01 00 fa 01 06 08 0f 10 0a 18 0a fa 01 08 08 1c\n"
-    "10 e8 07 18 e8 07 1a 1c 08 1a 12 18 08 f5 ed 86\n"
-    "41 10 00 18 00 20 01 38 00 60 00 d0 01 00 d8 01\n"
-    "00 e0 01 00 1a 1c 08 27 12 18 08 f5 ed 86 41 10\n"
-    "00 18 00 20 01 38 00 60 00 d0 01 00 d8 01 00 e0\n"
-    "01 00 1a 1d 08 38 12 19 08 f5 ed 86 41 10 e8 07\n"
-    "18 00 20 01 38 01 60 00 d0 01 00 d8 01 00 e0 01\n"
-    "00 12 ab 01 08 d4 0f 12 a5 01 08 83 cf a2 b4 a2\n"
-    "ff f9 34 18 01 20 01 59 f5 b6 21 08 01 00 10 01\n"
-    "60 01 68 01 70 01 82 01 03 31 32 33 8a 01 02 40\n"
-    "00 8a 01 02 40 00 a8 01 00 e0 01 00 f0 01 df f8\n"
-    "bb db 20 f8 01 00 a0 02 03 d0 02 00 d8 02 00 e0\n"
-    "02 00 f0 02 00 f8 02 00 80 03 00 98 03 00 a8 03\n"
-    "00 c8 03 01 f2 03 07 08 f5 44 12 02 08 00 d8 04\n"
-    "00 90 05 00 c0 05 00 e8 05 03 f0 05 00 f8 05 00\n"
-    "88 06 00 b8 06 00 c0 06 37 f0 06 00 88 07 00 c2\n"
-    "07 10 09 f5 b6 21 08 01 00 10 01 18 00 38 01 80\n"
-    "01 01 c8 07 00 f8 07 00 80 08 f3 ba a3 cf 06 12\n"
-    "9b 03 08 df 0f 12 95 03 0a 00 12 90 03 08 a5 45\n"
-    "12 8a 03 08 f5 ed 86 41 12 bc 01 0a 05 08 02 10\n"
-    "c0 0c 0a 05 08 05 10 c8 01 0a 04 08 0a 10 64 0a\n"
-    "04 08 0b 10 64 0a 05 08 0c 10 de 02 0a 04 08 22\n"
-    "10 64 0a 04 08 23 10 32 0a 05 08 25 10 ee 05 0a\n"
-    "05 08 28 10 c0 0c 0a 04 08 2a 10 32 0a 05 08 2c\n"
-    "10 db 03 0a 05 08 2f 10 ac 02 0a 05 08 35 10 de\n"
-    "02 0a 04 08 45 10 64 0a 04 08 4b 10 64 0a 05 08\n"
-    "51 10 d8 04 0a 05 08 53 10 db 03 0a 05 08 54 10\n"
-    "bd 15 0a 05 08 55 10 96 01 0a 04 08 68 10 32 0a\n"
-    "05 08 c3 02 10 01 0a 05 08 90 03 10 01 0a 05 08\n"
-    "91 03 10 01 0a 05 08 92 03 10 01 0a 05 08 9a 03\n"
-    "10 06 0a 05 08 cd 03 10 03 0a 05 08 ce 03 10 08\n"
-    "0a 05 08 cf 03 10 16 1a 06 08 86 01 10 86 01 1a\n"
-    "06 08 d1 0f 10 d2 0f 1a 06 08 89 27 10 8a 27 1a\n"
-    "06 08 91 4e 10 92 4e 1a 06 08 f9 55 10 fa 55 1a\n"
-    "06 08 e1 5d 10 e2 5d 1a 08 08 d1 89 02 10 d2 89\n"
-    "02 1a 08 08 b9 91 02 10 ba 91 02 1a 08 08 89 a1\n"
-    "02 10 8a a1 02 1a 08 08 c1 b8 02 10 c2 b8 02 1a\n"
-    "08 08 91 c8 02 10 92 c8 02 1a 08 08 e1 d7 02 10\n"
-    "e2 d7 02 1a 08 08 99 ef 02 10 9a ef 02 1a 08 08\n"
-    "89 9e 03 10 8a 9e 03 1a 08 08 89 9b 04 10 8a 9b\n"
-    "04 1a 08 08 f9 c9 04 10 fa c9 04 1a 08 08 e9 f8\n"
-    "04 10 ea f8 04 1a 08 08 b9 88 05 10 ba 88 05 1a\n"
-    "08 08 a1 90 05 10 a2 90 05 1a 08 08 89 98 05 10\n"
-    "8a 98 05 1a 08 08 c1 ac 06 10 c2 ac 06 12 05 08\n"
-    "dd 0f 12 00 19 9e ed 8f 26 fa e7 69 00 32 0b 08\n"
-    "03 10 83 cf a2 b4 a2 ff f9 34";
-
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchStage2Hex =
-    "4d 15 00 80 0f 00 00 00 09 f5 b6 21 08 01 00 10\n"
-    "01 10 86 b0 cf dc 03 08 ba 04 10 9a 80 80 80 08\n"
-    "1a e7 06 1a 00 00 80 00 00 00 00 12 12 08 de 0f\n"
-    "12 0d 0a 09 0a 07 53 76 65 6e 6d 61 78 10 00 12\n"
-    "cf 01 08 e0 0f 12 c9 01 0a 35 09 f5 b6 21 08 01\n"
-    "00 10 01 48 00 58 00 60 e1 ac 8b 84 d0 85 40 68\n"
-    "00 85 01 00 00 00 e0 85 01 41 28 d9 f5 85 01 57\n"
-    "06 00 00 98 01 00 98 01 00 98 01 00 98 01 00 15\n"
-    "00 00 00 00 1a 30 08 13 12 2c 08 f5 ed 86 41 10\n"
-    "00 18 00 20 00 38 00 60 00 d0 01 00 d8 01 00 e0\n"
-    "01 00 fa 01 06 08 0f 10 0a 18 0a fa 01 08 08 1c\n"
-    "10 e8 07 18 e8 07 1a 1c 08 1a 12 18 08 f5 ed 86\n"
-    "41 10 00 18 00 20 01 38 00 60 00 d0 01 00 d8 01\n"
-    "00 e0 01 00 1a 1c 08 27 12 18 08 f5 ed 86 41 10\n"
-    "00 18 00 20 01 38 00 60 00 d0 01 00 d8 01 00 e0\n"
-    "01 00 1a 1d 08 38 12 19 08 f5 ed 86 41 10 e8 07\n"
-    "18 00 20 01 38 01 60 00 d0 01 00 d8 01 00 e0 01\n"
-    "00 12 bb 01 08 d4 0f 12 b5 01 08 83 cf a2 b4 a2\n"
-    "ff f9 34 18 01 20 01 31 01 7c 58 ca 8f c1 40 01\n"
-    "59 f5 b6 21 08 01 00 10 01 60 01 68 01 70 01 82\n"
-    "01 03 31 32 33 8a 01 02 40 00 8a 01 02 40 00 a8\n"
-    "01 00 e0 01 00 f0 01 df f8 bb db 20 f8 01 00 a0\n"
-    "02 03 d0 02 00 d8 02 00 e0 02 00 f0 02 00 f8 02\n"
-    "00 80 03 00 98 03 00 a8 03 00 c8 03 01 f2 03 07\n"
-    "08 f5 44 12 02 08 00 d8 04 00 90 05 00 b8 05 ae\n"
-    "bb a3 cf 06 c0 05 00 e8 05 03 f0 05 00 f8 05 00\n"
-    "88 06 00 b8 06 00 c0 06 37 f0 06 00 88 07 00 c2\n"
-    "07 10 09 f5 b6 21 08 01 00 10 01 18 00 38 01 80\n"
-    "01 01 c8 07 00 f8 07 00 80 08 f3 ba a3 cf 06 12\n"
-    "9b 03 08 df 0f 12 95 03 0a 00 12 90 03 08 a5 45\n"
-    "12 8a 03 08 f5 ed 86 41 12 bc 01 0a 05 08 02 10\n"
-    "c0 0c 0a 05 08 05 10 c8 01 0a 04 08 0a 10 64 0a\n"
-    "04 08 0b 10 64 0a 05 08 0c 10 de 02 0a 04 08 22\n"
-    "10 64 0a 04 08 23 10 32 0a 05 08 25 10 ee 05 0a\n"
-    "05 08 28 10 c0 0c 0a 04 08 2a 10 32 0a 05 08 2c\n"
-    "10 db 03 0a 05 08 2f 10 ac 02 0a 05 08 35 10 de\n"
-    "02 0a 04 08 45 10 64 0a 04 08 4b 10 64 0a 05 08\n"
-    "51 10 d8 04 0a 05 08 53 10 db 03 0a 05 08 54 10\n"
-    "bd 15 0a 05 08 55 10 96 01 0a 04 08 68 10 32 0a\n"
-    "05 08 c3 02 10 01 0a 05 08 90 03 10 01 0a 05 08\n"
-    "91 03 10 01 0a 05 08 92 03 10 01 0a 05 08 9a 03\n"
-    "10 06 0a 05 08 cd 03 10 03 0a 05 08 ce 03 10 08\n"
-    "0a 05 08 cf 03 10 16 1a 06 08 86 01 10 86 01 1a\n"
-    "06 08 d1 0f 10 d2 0f 1a 06 08 89 27 10 8a 27 1a\n"
-    "06 08 91 4e 10 92 4e 1a 06 08 f9 55 10 fa 55 1a\n"
-    "06 08 e1 5d 10 e2 5d 1a 08 08 d1 89 02 10 d2 89\n"
-    "02 1a 08 08 b9 91 02 10 ba 91 02 1a 08 08 89 a1\n"
-    "02 10 8a a1 02 1a 08 08 c1 b8 02 10 c2 b8 02 1a\n"
-    "08 08 91 c8 02 10 92 c8 02 1a 08 08 e1 d7 02 10\n"
-    "e2 d7 02 1a 08 08 99 ef 02 10 9a ef 02 1a 08 08\n"
-    "89 9e 03 10 8a 9e 03 1a 08 08 89 9b 04 10 8a 9b\n"
-    "04 1a 08 08 f9 c9 04 10 fa c9 04 1a 08 08 e9 f8\n"
-    "04 10 ea f8 04 1a 08 08 b9 88 05 10 ba 88 05 1a\n"
-    "08 08 a1 90 05 10 a2 90 05 1a 08 08 89 98 05 10\n"
-    "8a 98 05 1a 08 08 c1 ac 06 10 c2 ac 06 12 05 08\n"
-    "dd 0f 12 00 19 00 a4 95 26 fa e7 69 00 32 0b 08\n"
-    "03 10 83 cf a2 b4 a2 ff f9 34";
-
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchStage3Hex =
-    "4d 15 00 80 0f 00 00 00 09 f5 b6 21 08 01 00 10\n"
-    "01 10 86 b0 cf dc 03 08 ba 04 10 9a 80 80 80 08\n"
-    "1a 8c 07 1a 00 00 80 00 00 00 00 12 12 08 de 0f\n"
-    "12 0d 0a 09 0a 07 53 76 65 6e 6d 61 78 10 00 12\n"
-    "cf 01 08 e0 0f 12 c9 01 0a 35 09 f5 b6 21 08 01\n"
-    "00 10 01 48 00 58 00 60 e1 ac 8b 84 d0 85 40 68\n"
-    "00 85 01 00 00 00 e0 85 01 41 28 d9 f5 85 01 57\n"
-    "06 00 00 98 01 00 98 01 00 98 01 00 98 01 00 15\n"
-    "00 00 00 00 1a 30 08 13 12 2c 08 f5 ed 86 41 10\n"
-    "00 18 00 20 00 38 00 60 00 d0 01 00 d8 01 00 e0\n"
-    "01 00 fa 01 06 08 0f 10 0a 18 0a fa 01 08 08 1c\n"
-    "10 e8 07 18 e8 07 1a 1c 08 1a 12 18 08 f5 ed 86\n"
-    "41 10 00 18 00 20 01 38 00 60 00 d0 01 00 d8 01\n"
-    "00 e0 01 00 1a 1c 08 27 12 18 08 f5 ed 86 41 10\n"
-    "00 18 00 20 01 38 00 60 00 d0 01 00 d8 01 00 e0\n"
-    "01 00 1a 1d 08 38 12 19 08 f5 ed 86 41 10 e8 07\n"
-    "18 00 20 01 38 01 60 00 d0 01 00 d8 01 00 e0 01\n"
-    "00 12 e0 01 08 d4 0f 12 da 01 08 83 cf a2 b4 a2\n"
-    "ff f9 34 18 01 20 02 2a 26 31 31 37 2e 31 35 37\n"
-    "2e 37 39 2e 31 39 34 3a 32 37 30 31 35 20 31 30\n"
-    "2e 31 31 30 2e 34 2e 32 31 3a 32 37 30 31 35 31\n"
-    "01 7c 58 ca 8f c1 40 01 59 f5 b6 21 08 01 00 10\n"
-    "01 60 01 68 01 70 01 82 01 03 31 32 33 8a 01 02\n"
-    "40 00 8a 01 02 40 00 a8 01 00 e0 01 00 f0 01 df\n"
-    "f8 bb db 20 f8 01 00 a0 02 03 d0 02 00 d8 02 00\n"
-    "e0 02 00 f0 02 00 f8 02 00 80 03 00 98 03 00 a8\n"
-    "03 00 c8 03 01 f2 03 07 08 f5 44 12 02 08 00 d8\n"
-    "04 00 90 05 00 b8 05 ae bb a3 cf 06 c0 05 00 e8\n"
-    "05 03 f0 05 00 f8 05 00 88 06 00 b8 06 00 c0 06\n"
-    "37 f0 06 00 88 07 00 c2 07 0d 09 f5 b6 21 08 01\n"
-    "00 10 01 18 00 38 01 c8 07 00 f8 07 00 80 08 f3\n"
-    "ba a3 cf 06 12 9b 03 08 df 0f 12 95 03 0a 00 12\n"
-    "90 03 08 a5 45 12 8a 03 08 f5 ed 86 41 12 bc 01\n"
-    "0a 05 08 02 10 c0 0c 0a 05 08 05 10 c8 01 0a 04\n"
-    "08 0a 10 64 0a 04 08 0b 10 64 0a 05 08 0c 10 de\n"
-    "02 0a 04 08 22 10 64 0a 04 08 23 10 32 0a 05 08\n"
-    "25 10 ee 05 0a 05 08 28 10 c0 0c 0a 04 08 2a 10\n"
-    "32 0a 05 08 2c 10 db 03 0a 05 08 2f 10 ac 02 0a\n"
-    "05 08 35 10 de 02 0a 04 08 45 10 64 0a 04 08 4b\n"
-    "10 64 0a 05 08 51 10 d8 04 0a 05 08 53 10 db 03\n"
-    "0a 05 08 54 10 bd 15 0a 05 08 55 10 96 01 0a 04\n"
-    "08 68 10 32 0a 05 08 c3 02 10 01 0a 05 08 90 03\n"
-    "10 01 0a 05 08 91 03 10 01 0a 05 08 92 03 10 01\n"
-    "0a 05 08 9a 03 10 06 0a 05 08 cd 03 10 03 0a 05\n"
-    "08 ce 03 10 08 0a 05 08 cf 03 10 16 1a 06 08 86\n"
-    "01 10 86 01 1a 06 08 d1 0f 10 d2 0f 1a 06 08 89\n"
-    "27 10 8a 27 1a 06 08 91 4e 10 92 4e 1a 06 08 f9\n"
-    "55 10 fa 55 1a 06 08 e1 5d 10 e2 5d 1a 08 08 d1\n"
-    "89 02 10 d2 89 02 1a 08 08 b9 91 02 10 ba 91 02\n"
-    "1a 08 08 89 a1 02 10 8a a1 02 1a 08 08 c1 b8 02\n"
-    "10 c2 b8 02 1a 08 08 91 c8 02 10 92 c8 02 1a 08\n"
-    "08 e1 d7 02 10 e2 d7 02 1a 08 08 99 ef 02 10 9a\n"
-    "ef 02 1a 08 08 89 9e 03 10 8a 9e 03 1a 08 08 89\n"
-    "9b 04 10 8a 9b 04 1a 08 08 f9 c9 04 10 fa c9 04\n"
-    "1a 08 08 e9 f8 04 10 ea f8 04 1a 08 08 b9 88 05\n"
-    "10 ba 88 05 1a 08 08 a1 90 05 10 a2 90 05 1a 08\n"
-    "08 89 98 05 10 8a 98 05 1a 08 08 c1 ac 06 10 c2\n"
-    "ac 06 12 05 08 dd 0f 12 00 19 46 b8 95 26 fa e7\n"
-    "69 00 32 0b 08 03 10 83 cf a2 b4 a2 ff f9 34";
-
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchStage4Hex =
-    "4d 15 00 80 0f 00 00 00 09 f5 b6 21 08 01 00 10\n"
-    "01 10 86 b0 cf dc 03 08 ba 04 10 9a 80 80 80 08\n"
-    "1a fd 03 1a 00 00 80 00 00 00 00 12 12 08 de 0f\n"
-    "12 0d 0a 09 0a 07 53 76 65 6e 6d 61 78 10 00 12\n"
-    "cf 01 08 e0 0f 12 c9 01 0a 35 09 f5 b6 21 08 01\n"
-    "00 10 01 48 00 58 00 60 e1 ac 8b 84 d0 85 40 68\n"
-    "00 85 01 00 00 00 e0 85 01 41 28 d9 f5 85 01 57\n"
-    "06 00 00 98 01 00 98 01 00 98 01 00 98 01 00 15\n"
-    "00 00 00 00 1a 30 08 13 12 2c 08 f5 ed 86 41 10\n"
-    "00 18 00 20 00 38 00 60 00 d0 01 00 d8 01 00 e0\n"
-    "01 00 fa 01 06 08 0f 10 0a 18 0a fa 01 08 08 1c\n"
-    "10 e8 07 18 e8 07 1a 1c 08 1a 12 18 08 f5 ed 86\n"
-    "41 10 00 18 00 20 01 38 00 60 00 d0 01 00 d8 01\n"
-    "00 e0 01 00 1a 1c 08 27 12 18 08 f5 ed 86 41 10\n"
-    "00 18 00 20 01 38 00 60 00 d0 01 00 d8 01 00 e0\n"
-    "01 00 1a 1d 08 38 12 19 08 f5 ed 86 41 10 e8 07\n"
-    "18 00 20 01 38 01 60 00 d0 01 00 d8 01 00 e0 01\n"
-    "00 12 e6 01 08 d4 0f 12 e0 01 08 83 cf a2 b4 a2\n"
-    "ff f9 34 18 01 20 02 2a 26 31 31 37 2e 31 35 37\n"
-    "2e 37 39 2e 31 39 34 3a 32 37 30 31 35 20 31 30\n"
-    "2e 31 31 30 2e 34 2e 32 31 3a 32 37 30 31 35 31\n"
-    "01 7c 58 ca 8f c1 40 01 59 f5 b6 21 08 01 00 10\n"
-    "01 60 01 68 01 70 01 82 01 03 31 32 33 8a 01 02\n"
-    "40 00 8a 01 02 40 00 a8 01 00 b0 01 01 e0 01 00\n"
-    "f0 01 df f8 bb db 20 f8 01 00 a0 02 03 d0 02 00\n"
-    "d8 02 00 e0 02 00 f0 02 00 f8 02 00 80 03 00 98\n"
-    "03 00 a8 03 00 c8 03 01 f2 03 07 08 f5 44 12 02\n"
-    "08 00 88 04 00 d8 04 00 90 05 00 b8 05 ae bb a3\n"
-    "cf 06 c0 05 00 e8 05 03 f0 05 00 f8 05 00 88 06\n"
-    "00 b8 06 00 c0 06 37 f0 06 00 88 07 00 c2 07 0d\n"
-    "09 f5 b6 21 08 01 00 10 01 18 00 38 01 c8 07 00\n"
-    "f8 07 00 80 08 f3 ba a3 cf 06 12 07 08 df 0f 12\n"
-    "02 0a 00 12 05 08 dd 0f 12 00 19 62 01 96 26 fa\n"
-    "e7 69 00 32 0b 08 03 10 83 cf a2 b4 a2 ff f9 34";
 
 static constexpr const char *GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex =
     "4d15008014000000090eac2b7cdec1400110dbc3fdeafdffffffff0108ba041098808080081ae9061800008000000000\n"
@@ -4833,17 +4576,6 @@ static uint64 GBE_GenerateDotaMatchId()
     return 8781757536ull;
 }
 
-static const char *GBE_GetDotaPracticeLobbyLaunchStageHex(size_t stage_index)
-{
-    switch (stage_index) {
-        case 0: return GBE_kDotaPracticeLobbyLaunchStage1Hex;
-        case 1: return GBE_kDotaPracticeLobbyLaunchStage2Hex;
-        case 2: return GBE_kDotaPracticeLobbyLaunchStage3Hex;
-        case 3: return GBE_kDotaPracticeLobbyLaunchStage4Hex;
-        default: return nullptr;
-    }
-}
-
 static bool GBE_ExtractWrappedClientFromGCPayload(
     const std::string &wrapped_message,
     uint32 expected_inner_emsg,
@@ -5020,101 +4752,6 @@ static bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
     return true;
 }
 
-static bool GBE_BuildDotaPracticeLobbyLaunchStagePayload(
-    size_t stage_index,
-    uint32 account_id,
-    uint64 steam_id,
-    uint64 lobby_id,
-    uint64 server_id,
-    uint64 match_id,
-    uint32 game_start_time,
-    const std::string &connect,
-    const std::string &player_name,
-    const std::string &room_name,
-    uint32 game_mode,
-    uint32 server_region,
-    bool lan,
-    const std::string &lan_host_ping_location,
-    bool allow_cheats,
-    bool fill_with_bots,
-    bool allow_spectating,
-    uint32 visibility,
-    uint32 bot_difficulty_radiant,
-    uint32 bot_difficulty_dire,
-    uint64 bot_radiant,
-    uint64 bot_dire,
-    uint32 owner_team,
-    uint32 owner_slot,
-    uint32 owner_hero_id,
-    const std::string &pass_key,
-    std::string &message)
-{
-    const char *template_hex = GBE_GetDotaPracticeLobbyLaunchStageHex(stage_index);
-    if (!template_hex)
-        return false;
-    std::string wrapped_message;
-    if (!GBE_DecodeHexString(template_hex, wrapped_message))
-        return false;
-    std::string inner_payload;
-    if (!GBE_ExtractWrappedClientFromGCPayload(wrapped_message, GBE_kDotaPracticeLobbyDetailsUpdate, inner_payload))
-        return false;
-
-    if (!GBE_PatchDotaPracticeLobbyLaunchTemplate(
-        inner_payload,
-        account_id,
-        steam_id,
-        lobby_id,
-        server_id,
-        match_id,
-        game_start_time,
-        connect,
-        stage_index >= 1,
-        stage_index >= 1,
-        stage_index >= 2,
-        stage_index == 0 ? "7041 stage1" :
-        stage_index == 1 ? "7041 stage2" :
-        stage_index == 2 ? "7041 stage3" : "7041 stage4"
-    ))
-        return false;
-
-    if (!GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
-            inner_payload,
-            account_id,
-            steam_id,
-            lobby_id,
-            true,
-            stage_index <= 1 ? 1u : 2u,
-            stage_index == 3 ? 1u : 0u,
-            server_id,
-            match_id,
-            game_start_time,
-            connect,
-            player_name,
-            room_name,
-            game_mode,
-            server_region,
-            lan,
-            lan_host_ping_location,
-            allow_cheats,
-            fill_with_bots,
-            allow_spectating,
-            visibility,
-            bot_difficulty_radiant,
-            bot_difficulty_dire,
-            bot_radiant,
-            bot_dire,
-            owner_team,
-            owner_slot,
-            owner_hero_id,
-            stage_index == 3,
-            stage_index == 3 ? account_id : 0u,
-            pass_key))
-        return false;
-
-    message.swap(inner_payload);
-    return GBE_ForceDotaLobbyUpdateOwnerSOID(message, lobby_id);
-}
-
 static bool GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
     const char *wrapped_template_hex,
     const char *stage_note,
@@ -5242,10 +4879,15 @@ static bool GBE_BuildDotaPracticeLobbyLaunchPeripheralMessage(
             return false;
     }
 
-    const std::string old_lobby_id_text = GBE_kOldDotaPracticeLobbyLobbyIdText;
     const std::string new_lobby_id_text = std::to_string(lobby_id);
-    if (old_lobby_id_text.size() == new_lobby_id_text.size())
-        GBE_FindAndOverwriteString(message, old_lobby_id_text, new_lobby_id_text);
+    const std::array<std::string, 2> old_lobby_id_texts = {
+        GBE_kOldDotaPracticeLobbyLobbyIdText,
+        GBE_kOldDotaPracticeLobbyLobbyIdTextAlt,
+    };
+    for (const std::string &old_lobby_id_text : old_lobby_id_texts) {
+        if (old_lobby_id_text.size() == new_lobby_id_text.size())
+            GBE_FindAndOverwriteString(message, old_lobby_id_text, new_lobby_id_text);
+    }
 
     return true;
 }
@@ -7120,43 +6762,7 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         GBE_GC_MaskedEMsg(message.msg_type)
     );
 
-    // In the hero-selection window, queue another Steam-side runtime 26 before
-    // the late persona messages arrive. Do not reuse Dota-process donor packets
-    // here because their 24/26 timing diverges from the Steam-side session.
-    if (GBE_local_lobby.active &&
-        GBE_local_lobby.lobby_id != 0 &&
-        GBE_local_lobby.match_id != 0 &&
-        GBE_local_lobby.server_id != 0 &&
-        GBE_local_lobby.state == 2u &&
-        GBE_local_lobby.game_state >= 2u) {
-        std::string current_26;
-        if (GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, GBE_GetDotaLobbyOwnerName(), current_26)) {
-            push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, current_26);
-            GBE_GC_DebugLog(
-                "GC_DOTA_SYNC",
-                "queued hero-selection current 26 before persona lobby_id=%llu match_id=%llu server_id=%llu size=%zu source=runtime",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                static_cast<unsigned long long>(GBE_local_lobby.match_id),
-                static_cast<unsigned long long>(GBE_local_lobby.server_id),
-                current_26.size()
-            );
-        } else {
-            GBE_GC_DebugLog(
-                "GC_DOTA_SYNC",
-                "failed building hero-selection current 26 before persona lobby_id=%llu match_id=%llu server_id=%llu",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                static_cast<unsigned long long>(GBE_local_lobby.match_id),
-                static_cast<unsigned long long>(GBE_local_lobby.server_id)
-            );
-        }
-    }
-
-    // For the dashboard homepage, hero selection is the point where host-loading
-    // must flip into disconnect/return-to-game. Do not wait for later persona
-    // side messages just to expose that local state change.
-    if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 2u) {
-        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
-    }
+    GBE_ReapplyDotaPracticeLobbyLaunchRichPresence("queued_state");
 
     GBE_PublishSharedDotaLobbyState("queued_state");
 }
@@ -8425,46 +8031,6 @@ void Steam_Game_Coordinator::on_client_connected(CSteamID steam_id)
                 GBE_local_lobby.owner_connected = true;
                 GBE_PublishSharedDotaLobbyState("owner_connected");
             }
-
-            GBE_Dota7034RequestShape synthetic_connected_players_request{};
-            synthetic_connected_players_request.has_send_reason = true;
-            synthetic_connected_players_request.send_reason = 4u;
-
-            std::string connected_players_message;
-            if (GBE_BuildDota7034ConnectedPlayersResponsePayload(
-                    owner_steam_id,
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state,
-                    GBE_local_lobby.owner_team,
-                    GBE_local_lobby.owner_slot,
-                    synthetic_connected_players_request,
-                    false,
-                    0ull,
-                    connected_players_message)) {
-                GBE_GC_DebugLog(
-                    "GC_DOTA_SYNC",
-                    "queueing synthetic direct 7034 on client connect steam_id=%llu lobby_id=%llu state=%u game_state=%u team=%u slot=%u size=%zu",
-                    static_cast<unsigned long long>(connected_steam_id),
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state,
-                    GBE_local_lobby.owner_team,
-                    GBE_local_lobby.owner_slot,
-                    connected_players_message.size()
-                );
-                push_incoming_now(7034u | GBE_kProtoMask, connected_players_message);
-            } else {
-                GBE_GC_DebugLog(
-                    "GC_DOTA_SYNC",
-                    "failed building synthetic direct 7034 on client connect steam_id=%llu lobby_id=%llu state=%u game_state=%u team=%u slot=%u",
-                    static_cast<unsigned long long>(connected_steam_id),
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state,
-                    GBE_local_lobby.owner_team,
-                    GBE_local_lobby.owner_slot
-                );
-            }
         }
     }
 
@@ -8944,59 +8510,12 @@ bool Steam_Game_Coordinator::GBE_TryAdvanceDotaLaunchToRun(const char *note, uin
 
     GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseRunQueued, reason ? reason : "launch_run_queued");
 
-    bool queued_run = GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(
+    return GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(
         note ? note : "runtime packet after launch run gate",
         trigger_emsg,
         source_job,
         2u,
         0u);
-
-    if (!queued_run) {
-        GBE_LocalLobby run_lobby = GBE_local_lobby;
-        run_lobby.state = 2u;
-        run_lobby.game_state = 0u;
-        std::string stage_message;
-        if (GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(run_lobby, GBE_local_lobby.owner_name, stage_message)) {
-            push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, stage_message, true, 2u, 0u);
-            GBE_GC_DebugLog(
-                "GC_DOTA_DIRECT",
-                "replying req=%u resp=%u source_job=%llu size=%zu note=%s fallback apply_state=2 apply_game_state=0",
-                trigger_emsg,
-                GBE_kDotaPracticeLobbyDetailsUpdate,
-                static_cast<unsigned long long>(source_job),
-                stage_message.size(),
-                note ? note : "runtime packet after launch run gate"
-            );
-            queued_run = true;
-        }
-    }
-
-    if (!queued_run)
-        return false;
-
-    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_FINDING_MATCH", "RUN", true);
-    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-        GBE_kDotaLaunchPeripheralStageAuthListAck2,
-        GBE_kSteamAuthListAck,
-        GBE_kDotaPracticeLobbyLaunchAuthListAckStage2Hex,
-        false,
-        "launch auth list ack stage2 after RUN"
-    );
-    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-        GBE_kDotaLaunchPeripheralStageGameConnectTokens2,
-        GBE_kSteamGameConnectTokens,
-        GBE_kDotaPracticeLobbyLaunchGameConnectTokensStage2Hex,
-        false,
-        "launch game connect tokens stage2 after RUN"
-    );
-    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-        GBE_kDotaLaunchPeripheralStageRunPersona,
-        GBE_kSteamPersonaState,
-        GBE_kDotaPracticeLobbyLaunchPersonaStateRunHex,
-        false,
-        "launch persona run after RUN"
-    );
-    return true;
 }
 
 bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason, GBE_LocalLobby &snapshot, bool restore_shared)
@@ -9836,35 +9355,7 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
             }
         }
 
-        GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-            GBE_kDotaLaunchPeripheralStageServersAvailable,
-            GBE_kSteamServersAvailable,
-            GBE_kDotaPracticeLobbyLaunchServersAvailableHex,
-            false,
-            "launch servers available after server_id sync"
-        );
-        GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-            GBE_kDotaLaunchPeripheralStageAuthListAck1,
-            GBE_kSteamAuthListAck,
-            GBE_kDotaPracticeLobbyLaunchAuthListAckStage1Hex,
-            false,
-            "launch auth list ack stage1 after server_id sync"
-        );
-        GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-            GBE_kDotaLaunchPeripheralStageGameConnectTokens1,
-            GBE_kSteamGameConnectTokens,
-            GBE_kDotaPracticeLobbyLaunchGameConnectTokensStage1Hex,
-            false,
-            "launch game connect tokens stage1 after server_id sync"
-        );
-        GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-            GBE_kDotaLaunchPeripheralStageSetupPersona,
-            GBE_kSteamPersonaState,
-            GBE_kDotaPracticeLobbyLaunchPersonaStateSetupHex,
-            false,
-            "launch persona setup after server_id sync"
-        );
-        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_FINDING_MATCH", "SERVERSETUP", true);
+        GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "server_id_sync");
     }
 
     return true;
@@ -10517,16 +10008,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == 8744u) {
-        if (GBE_local_lobby.active && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u) {
-            GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-                GBE_kDotaLaunchPeripheralStageServersAvailablePost8744,
-                GBE_kSteamServersAvailable,
-                GBE_kDotaPracticeLobbyLaunchServersAvailableHex,
-                false,
-                "launch servers available after 8744"
-            );
-        }
-
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "observed req=%u source_job=%llu body_size=%zu fields=%s body_prefix=%s",
@@ -10634,49 +10115,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == 4506) {
-        if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
-            if (!GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet prelude after 4506", request_emsg, source_job, 1u, 0u)) {
-                GBE_LocalLobby prelude_lobby = GBE_local_lobby;
-                std::string prelude_message;
-                if (GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(prelude_lobby, GBE_local_lobby.owner_name, prelude_message)) {
-                    push_incoming_now(
-                        GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
-                        prelude_message,
-                        true,
-                        prelude_lobby.state,
-                        prelude_lobby.game_state);
-                    GBE_GC_DebugLog(
-                        "GC_DOTA_DIRECT",
-                        "replying req=%u resp=%u source_job=%llu size=%zu note=runtime packet prelude after 4506 fallback apply_state=%u apply_game_state=%u",
-                        request_emsg,
-                        GBE_kDotaPracticeLobbyDetailsUpdate,
-                        static_cast<unsigned long long>(source_job),
-                        prelude_message.size(),
-                        prelude_lobby.state,
-                        prelude_lobby.game_state
-                    );
-                }
-            }
-
-            if (GBE_TryAdvanceDotaLaunchToRun("runtime packet after 4506", request_emsg, source_job, "4506_launch_run"))
-                return true;
-
-            GBE_GC_DebugLog(
-                "GC_DOTA_DIRECT",
-                "consumed req=%u source_job=%llu note=4506 preserved serversetup but failed to queue RUN active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu launch_phase=%s",
-                request_emsg,
-                static_cast<unsigned long long>(source_job),
-                GBE_local_lobby.active ? 1u : 0u,
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_local_lobby.state,
-                GBE_local_lobby.game_state,
-                static_cast<unsigned long long>(GBE_local_lobby.match_id),
-                static_cast<unsigned long long>(GBE_local_lobby.server_id),
-                GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
-            );
-            return true;
-        }
-
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "consumed req=%u source_job=%llu note=server available acknowledgement body_size=%zu active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
@@ -10831,10 +10269,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == GBE_kSteamGamesPlayedWithDataBlob && GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()) {
-        GBE_dota_launch_peripheral_stage_mask |= GBE_kDotaLaunchPeripheralStageLateGamesPlayed;
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
-            "consumed req=%u source_job=%llu note=late steam chain games played observed active=%u lobby_id=%llu state=%u game_state=%u body_size=%zu body_prefix=%s",
+            "consumed req=%u source_job=%llu note=late steam chain games played observed without synthetic followup active=%u lobby_id=%llu state=%u game_state=%u body_size=%zu body_prefix=%s",
             request_emsg,
             static_cast<unsigned long long>(source_job),
             GBE_local_lobby.active ? 1u : 0u,
@@ -10848,13 +10285,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == GBE_kSteamAuthList && GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()) {
-        GBE_dota_launch_peripheral_stage_mask |= GBE_kDotaLaunchPeripheralStageLateAuthList;
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
-            "consumed req=%u source_job=%llu note=late steam chain auth list observed late_games_played=%u active=%u lobby_id=%llu state=%u game_state=%u body_size=%zu body_prefix=%s",
+            "consumed req=%u source_job=%llu note=late steam chain auth list observed without synthetic followup active=%u lobby_id=%llu state=%u game_state=%u body_size=%zu body_prefix=%s",
             request_emsg,
             static_cast<unsigned long long>(source_job),
-            (GBE_dota_launch_peripheral_stage_mask & GBE_kDotaLaunchPeripheralStageLateGamesPlayed) ? 1u : 0u,
             GBE_local_lobby.active ? 1u : 0u,
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
             GBE_local_lobby.state,
@@ -10862,8 +10297,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             body_size,
             GBE_FormatHexPrefix(body, body_size, 48).c_str()
         );
-
-        GBE_FinalizeDotaPracticeLobbyLateSteamChain("launch persona private lobby after late 5410/5432 chain");
         return true;
     }
 
@@ -11533,8 +10966,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
         return true;
     }
 
-    const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
-    const uint32 account_id = settings->get_local_steam_id().GetAccountID();
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
 
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
@@ -11545,37 +10976,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     GBE_PublishSharedDotaLobbyState("7041_launch_init");
 
     std::string stage1_message;
-    if (!GBE_BuildDotaPracticeLobbyLaunchStagePayload(
-            0,
-            account_id,
-            steam_id,
-            GBE_local_lobby.lobby_id,
-            GBE_local_lobby.server_id,
-            GBE_local_lobby.match_id,
-            GBE_local_lobby.game_start_time,
-            GBE_local_lobby.connect,
-            GBE_local_lobby.owner_name,
-            GBE_local_lobby.room_name,
-            GBE_local_lobby.game_mode,
-            GBE_local_lobby.server_region,
-            GBE_local_lobby.lan,
-            GBE_local_lobby.lan_host_ping_location,
-            GBE_local_lobby.allow_cheats,
-            GBE_local_lobby.fill_with_bots,
-            GBE_local_lobby.allow_spectating,
-            GBE_local_lobby.visibility,
-            GBE_local_lobby.bot_difficulty_radiant,
-            GBE_local_lobby.bot_difficulty_dire,
-            GBE_local_lobby.bot_radiant,
-            GBE_local_lobby.bot_dire,
-            GBE_local_lobby.owner_team,
-            GBE_local_lobby.owner_slot,
-            GBE_local_lobby.owner_hero_id,
-            GBE_local_lobby.pass_key,
-            stage1_message)) {
+    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, GBE_local_lobby.owner_name, stage1_message)) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Failed building 7041 launch stage=1 LobbyID=%llu match_id=%llu server_id=%llu connect=%s",
+            "[LOBBY] Failed building initial 26 after 7041 LobbyID=%llu match_id=%llu server_id=%llu connect=%s",
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
             static_cast<unsigned long long>(GBE_local_lobby.match_id),
             static_cast<unsigned long long>(GBE_local_lobby.server_id),
@@ -11586,8 +10990,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
 
     if (wrapped) {
         std::string wrapped_message;
-        if (!GBE_BuildWrappedDotaReplayMessage(stage1_message, *outer_session_field_raw, steam_id, wrapped_message)) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 7041 launch stage=1 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        if (!GBE_BuildWrappedDotaReplayMessage(stage1_message, *outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_message)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping initial 26 after 7041 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
             return true;
         }
         stage1_message.swap(wrapped_message);
@@ -11603,7 +11007,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Sent 7041 launch stage=1 path=%s has_request_job=%d request_job=%llu LobbyID=%llu match_id=%llu server_id=%llu game_start=%u connect=%s size=%zu body_prefix=%s",
+        "[LOBBY] Sent initial 26 after 7041 path=%s has_request_job=%d request_job=%llu LobbyID=%llu match_id=%llu server_id=%llu game_start=%u connect=%s size=%zu body_prefix=%s",
         wrapped ? "wrapped" : "direct",
         has_request_job ? 1 : 0,
         static_cast<unsigned long long>(request_job_id),
@@ -11616,14 +11020,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
         GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(stage1_message.data()), stage1_message.size(), 32).c_str()
     );
 
-    GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-        GBE_kDotaLaunchPeripheralStageInitPersona,
-        GBE_kSteamPersonaState,
-        GBE_kDotaPracticeLobbyLaunchPersonaStateInitHex,
-        false,
-        "launch init persona after 7041"
-    );
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false);
+    GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState("#DOTA_RP_INIT", "SERVERSETUP", false, true, "7041_launch_init");
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -12593,7 +11991,6 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
 
 void Steam_Game_Coordinator::GBE_ResetDotaPracticeLobbyLaunchPeripheralState()
 {
-    GBE_dota_launch_peripheral_stage_mask = 0;
 }
 
 bool Steam_Game_Coordinator::GBE_ShouldTrackDotaPracticeLobbyLateSteamChain() const
@@ -12601,30 +11998,6 @@ bool Steam_Game_Coordinator::GBE_ShouldTrackDotaPracticeLobbyLateSteamChain() co
     return
         GBE_local_lobby.active &&
         GBE_local_lobby.lobby_id != 0;
-}
-
-bool Steam_Game_Coordinator::GBE_FinalizeDotaPracticeLobbyLateSteamChain(const char *reason)
-{
-    if (!GBE_ShouldTrackDotaPracticeLobbyLateSteamChain())
-        return false;
-
-    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true);
-    if (!GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-            GBE_kDotaLaunchPeripheralStageAuthListAckLateSteamChain,
-            GBE_kSteamAuthListAck,
-            GBE_kDotaPracticeLobbyLaunchAuthListAckStage2Hex,
-            false,
-            reason ? reason : "launch auth list ack after late steam chain")) {
-        return false;
-    }
-
-    return GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(
-        GBE_kDotaLaunchPeripheralStagePrivateLobbyPersona,
-        GBE_kSteamPersonaState,
-        GBE_kDotaPracticeLobbyLaunchPersonaStatePrivateLobbyHex,
-        false,
-        reason ? reason : "launch persona private lobby after late steam chain"
-    );
 }
 
 void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *status, const char *lobby_state, bool include_party, bool include_lobby)
@@ -12677,6 +12050,8 @@ void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const
 
 void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
 {
+    GBE_last_dota_launch_persona_signature.clear();
+
     Steam_Client *steam_client = get_steam_client();
     if (!steam_client || !steam_client->steam_friends)
         return;
@@ -12692,6 +12067,78 @@ void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
     steam_client->steam_friends->SetRichPresence("party", nullptr);
 }
 
+void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(const char *status, const char *lobby_state, bool include_party, bool include_lobby, const char *reason)
+{
+    if (is_server || gc_profile != GC_PROFILE_DOTA2 || !status || !lobby_state || !include_lobby || GBE_local_lobby.lobby_id == 0) {
+        if (!include_lobby)
+            GBE_last_dota_launch_persona_signature.clear();
+        return;
+    }
+
+    const char *template_hex = nullptr;
+    if (std::strcmp(status, "#DOTA_RP_INIT") == 0 && std::strcmp(lobby_state, "SERVERSETUP") == 0 && !include_party) {
+        template_hex = GBE_kDotaLaunchPersonaStateInitServerSetupHex;
+    } else if (std::strcmp(status, "#DOTA_RP_FINDING_MATCH") == 0 && std::strcmp(lobby_state, "SERVERSETUP") == 0 && include_party) {
+        template_hex = GBE_kDotaLaunchPersonaStateFindingMatchServerSetupHex;
+    } else if (std::strcmp(status, "#DOTA_RP_FINDING_MATCH") == 0 && std::strcmp(lobby_state, "RUN") == 0 && include_party) {
+        template_hex = GBE_kDotaLaunchPersonaStateFindingMatchRunHex;
+    } else if (std::strcmp(status, "#DOTA_RP_PRIVATE_LOBBY") == 0 && std::strcmp(lobby_state, "RUN") == 0 && include_party) {
+        template_hex = GBE_kDotaLaunchPersonaStatePrivateLobbyRunHex;
+    }
+
+    if (!template_hex) {
+        GBE_last_dota_launch_persona_signature.clear();
+        return;
+    }
+
+    std::string signature;
+    signature.reserve(96);
+    signature.append(status);
+    signature.push_back('|');
+    signature.append(lobby_state);
+    signature.push_back('|');
+    signature.push_back(include_party ? '1' : '0');
+    signature.push_back('|');
+    signature.append(std::to_string(GBE_local_lobby.lobby_id));
+
+    if (signature == GBE_last_dota_launch_persona_signature) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipping duplicate launch persona reason=%s lobby_id=%llu signature=%s",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            signature.c_str()
+        );
+        return;
+    }
+
+    std::string persona_message;
+    const uint64 steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
+    if (steam_id == 0 || !GBE_BuildDotaPersonaStatePeripheralMessage(template_hex, steam_id, GBE_local_lobby.lobby_id, persona_message)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "failed building launch persona reason=%s lobby_id=%llu status=%s lobby_state=%s",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            status,
+            lobby_state
+        );
+        return;
+    }
+
+    push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
+    GBE_last_dota_launch_persona_signature = signature;
+    GBE_GC_DebugLog(
+        "GC_DOTA_SYNC",
+        "queued launch persona reason=%s lobby_id=%llu status=%s lobby_state=%s size=%zu",
+        reason ? reason : "unknown",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        status,
+        lobby_state,
+        persona_message.size()
+    );
+}
+
 void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(const char *reason)
 {
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)
@@ -12703,7 +12150,7 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
     const bool should_present_private_lobby =
         !GBE_local_lobby.abandon_postgame_active &&
         GBE_local_lobby.state == 2u &&
-        GBE_local_lobby.game_state >= 2u;
+        GBE_local_lobby.game_state >= 1u;
 
     if (GBE_local_lobby.abandon_postgame_active) {
         status = "#DOTA_RP_PRIVATE_LOBBY";
@@ -12746,74 +12193,7 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
     );
 
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence(status, lobby_state, include_party, !GBE_local_lobby.abandon_postgame_active);
-}
-
-bool Steam_Game_Coordinator::GBE_QueueDotaPracticeLobbyLaunchPeripheralOnce(uint32 stage_bit, uint32 emsg, const char *template_hex, bool patch_server_id, const char *note)
-{
-    const uint64 steam_id = GBE_GetDotaLobbyOwnerSteamId();
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || steam_id == 0) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "skipping launch peripheral msg=%u note=%s active=%u lobby_id=%llu owner_steam_id=%llu",
-            emsg,
-            note ? note : "unknown",
-            GBE_local_lobby.active ? 1u : 0u,
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(steam_id)
-        );
-        return true;
-    }
-
-    std::string message;
-    if (!GBE_BuildDotaPracticeLobbyLaunchPeripheralMessage(
-            template_hex,
-            steam_id,
-            GBE_local_lobby.lobby_id,
-            GBE_local_lobby.server_id,
-            patch_server_id,
-            message)) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "failed building launch peripheral msg=%u note=%s lobby_id=%llu server_id=%llu",
-            emsg,
-            note ? note : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.server_id)
-        );
-        return false;
-    }
-
-    GBE_dota_launch_peripheral_stage_mask |= stage_bit;
-    push_incoming_now(emsg | GBE_kProtoMask, message);
-    GBE_GC_DebugLog(
-        "GC_DOTA_SYNC",
-        "queued launch peripheral msg=%u note=%s lobby_id=%llu server_id=%llu size=%zu",
-        emsg,
-        note ? note : "unknown",
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        static_cast<unsigned long long>(GBE_local_lobby.server_id),
-        message.size()
-    );
-    if (emsg == GBE_kSteamPersonaState && note && std::strstr(note, "persona")) {
-        const bool has_private_lobby = message.find("#DOTA_RP_PRIVATE_LOBBY") != std::string::npos;
-        const bool has_finding_match = message.find("#DOTA_RP_FINDING_MATCH") != std::string::npos;
-        const bool has_lobby_run = message.find("lobby_state: RUN") != std::string::npos;
-        const bool has_lobby_serversetup = message.find("lobby_state: SERVERSETUP") != std::string::npos;
-        const bool has_party_in_match = message.find("party_state: IN_MATCH") != std::string::npos;
-        GBE_GC_DebugLog(
-            "GC_DOTA_PATCH",
-            "persona peripheral note=%s size=%zu private_lobby=%u finding_match=%u lobby_run=%u lobby_serversetup=%u party_in_match=%u hex=%s",
-            note,
-            message.size(),
-            has_private_lobby ? 1u : 0u,
-            has_finding_match ? 1u : 0u,
-            has_lobby_run ? 1u : 0u,
-            has_lobby_serversetup ? 1u : 0u,
-            has_party_in_match ? 1u : 0u,
-            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(message.data()), message.size(), 256).c_str()
-        );
-    }
-    return true;
+    GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(status, lobby_state, include_party, !GBE_local_lobby.abandon_postgame_active, reason);
 }
 
 // sends a message to the Game Coordinator
