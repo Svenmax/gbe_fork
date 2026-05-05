@@ -8695,6 +8695,12 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
         pending_message_sequence = 0;
     }
 
+    // A practice-lobby teardown is also the boundary for the server GC handshake.
+    // If we keep the previous welcome state, the next real 4007/ServerHello can be
+    // misclassified as an already-connected session and skip the fresh 4005 replay.
+    welcome_received = false;
+    welcome_time = {};
+
     GBE_local_lobby = GBE_LocalLobby{};
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
     GBE_dota_private_lobby_snapshot_replayed = false;
