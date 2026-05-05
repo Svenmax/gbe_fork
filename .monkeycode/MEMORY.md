@@ -54,9 +54,10 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Context: Agent 在重新展开 `/workspace/steamhoststartgame` 与 `/workspace/second_zip` 官方抓包并对照当前实现时发现
 - Category: 代码模式
 - Instructions:
-  - 官方 `Start Game` 主线中，`7041` 后先是 `SERVERSETUP(match_id)`，再经过 `server_id sync` 和 setup 外围链，`5429(TicketAuthComplete)` 之后才进入 `RUN(connect)`。
-  - `4506` 不应直接把 lobby 从 `SERVERSETUP` 推到 `RUN`，否则会把 `5429` 前的官方停顿窗口压掉，并让后续 `7034` 过早推进 `WAIT_FOR_PLAYERS/HERO_SELECTION`。
-  - `7034` 的 prelaunch 推进不应再接受 `state=1, game_state=0` 作为进入 `WAIT_FOR_PLAYERS` 的条件；至少要等到 `RUN(connect)` 已建立。
+  - 官方 `Start Game` 主线中，`7041` 后先是 `SERVERSETUP(match_id)`，再经过 `server_id/game_start_time/connect` 同步和 setup 外围链，随后才进入 `RUN(connect)`。
+  - `5429(TicketAuthComplete)` 是官方常见信号，但不能作为进入 `RUN` 的唯一硬门；如果 `server_id/game_start_time/connect` 已经同步完成，`4506` 也可以触发同一条 `SERVERSETUP -> RUN` 阶段推进。
+  - 更稳妥的实现不是把推进逻辑散在 `4506/5429/7034` 各自分支里，而是维护一个显式 launch phase：`requested -> serversetup_synced -> run_queued`，由 `4506/5429` 共享同一条 `RUN` gate。
+  - `7034` 的 prelaunch 推进不应再接受 `state=1, game_state=0` 作为进入 `WAIT_FOR_PLAYERS` 的条件；至少要等到 `RUN(connect)` 已建立或已排入队列。
 
 [Dota2 GC 队列消费需要在取走一条后继续补发可用通知]
 - Date: 2026-05-04

@@ -113,6 +113,7 @@ public ISteamGameCoordinator
         uint32 owner_slot{};
         uint32 owner_hero_id{};
         bool owner_connected{};
+        uint32 launch_phase{};
         bool has_broadcast_channel{};
         uint32 broadcast_channel_id{};
         std::string broadcast_country_code;
@@ -194,6 +195,9 @@ public ISteamGameCoordinator
     bool GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message);
     bool GBE_TryQueueDotaPrelaunch021(const char *note, uint32 trigger_emsg, uint64 source_job);
     bool GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state);
+    bool GBE_HasDotaLaunchServerSetupSync() const;
+    void GBE_MarkDotaLaunchPhase(uint32 phase, const char *reason);
+    bool GBE_TryAdvanceDotaLaunchToRun(const char *note, uint32 trigger_emsg, uint64 source_job, const char *reason);
     void GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason);
     void GBE_PublishSharedDotaLobbyState(const char *reason);
     void GBE_RestoreSharedDotaLobbyState(const char *reason);
