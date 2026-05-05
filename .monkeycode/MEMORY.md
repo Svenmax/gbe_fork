@@ -48,6 +48,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 如果 `7035` 到来时 `incoming_messages` 或 `pending_messages` 里还残留 launch 阶段的 `24/26/7034`，这些旧消息会在 `25 + 7010 + 7010` teardown 之后继续投递，把已 teardown 的 lobby 又推进回 `HERO_SELECTION/STRATEGY_TIME`。
   - 处理 ready-for-abandon 的 `7035` 前，应先定向丢弃这类 launch 残留消息，以及同窗口的外围 launch persona/peripheral（如 `5501/5575/779/766`），避免 postgame teardown 被旧启动队列反向污染。
 
+[GC 调试日志过滤名单会吞掉实例级队列证据]
+- Date: 2026-05-05
+- Context: Agent 在排查第二局 `7451/24/26/7034` 已生成但未送达时发现新增的 `GC_CALLBACK/GC_RETRIEVE/GC_INTERFACE_*` 日志没有落到 `gbe_gc_debug.log`
+- Category: 代码模式
+- Instructions:
+  - `GBE_GC_DebugLog(...)` 的前置过滤名单如果包含 `GC_CALLBACK`、`GC_RETRIEVE`、`GC_INTERFACE_REQUEST`、`GC_INTERFACE_RETURN`，这些实例级队列归属日志会被直接丢弃，导致无法判断消息是未入队还是未消费。
+  - 需要定位 GC 队列归属问题时，应先确保这些 scope 不在过滤名单里，再依赖测试日志做实例级对齐。
+
 [Dota2 practice lobby 的 owner_connected 是统一 lifecycle 边界]
 - Date: 2026-05-04
 - Context: Agent 在回退到 `d0873b10` 基线后，重新串联 `7038/24/26/7035/25/on_client_connected/on_client_disconnected/ResetGCMemory` 整体生命周期时发现

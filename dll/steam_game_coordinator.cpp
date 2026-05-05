@@ -1569,14 +1569,10 @@ static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)
     const char *log_scope = scope ? scope : "GC";
     if (std::strcmp(log_scope, "GC_SEND") == 0 ||
         std::strcmp(log_scope, "GC_SEND_DOTA") == 0 ||
-        std::strcmp(log_scope, "GC_RETRIEVE") == 0 ||
-        std::strcmp(log_scope, "GC_CALLBACK") == 0 ||
         std::strcmp(log_scope, "GC_DOTA_SYNC") == 0 ||
         std::strcmp(log_scope, "GC_CONFIG") == 0 ||
         std::strcmp(log_scope, "GC_INIT") == 0 ||
         std::strcmp(log_scope, "CREATE_INTERFACE") == 0 ||
-        std::strcmp(log_scope, "GC_INTERFACE_REQUEST") == 0 ||
-        std::strcmp(log_scope, "GC_INTERFACE_RETURN") == 0 ||
         std::strcmp(log_scope, "NETSOCK_CTOR") == 0) {
         return;
     }
