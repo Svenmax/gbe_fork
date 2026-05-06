@@ -8700,8 +8700,6 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
     GBE_dota_private_lobby_snapshot_replayed = false;
     GBE_pending_reset_after_cache_unsubscribed = false;
     GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
-    GBE_pending_reset_after_abandon_7014 = false;
-    GBE_pending_reset_after_abandon_7014_lobby_id = 0;
     GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "reset_gc_memory");
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
 
@@ -10812,7 +10810,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         GBE_local_lobby.server_id != 0;
     const bool ready_for_abandon_teardown =
         lobby_state == 2u &&
-        GBE_local_lobby.server_id != 0;
+        lobby_game_state >= 2u;
     if (!ready_for_abandon_teardown) {
         if (treat_as_current_game_disconnect) {
             std::string response_25;
@@ -11325,11 +11323,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         GBE_local_lobby.chat_channel_type == 18u;
     const bool matches_current_postgame_channel = channel_id == local_channel_id;
     const bool matches_pre_postgame_channel = pre_postgame_channel_id != 0 && channel_id == pre_postgame_channel_id;
-    const bool completes_abandon_teardown =
-        leaving_postgame_channel &&
-        (matches_current_postgame_channel || matches_pre_postgame_channel);
     if (channel_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7272 because no chat channel is active");
+        return true;
+    }
+
+    if (leaving_postgame_channel && matches_pre_postgame_channel && !matches_current_postgame_channel) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Ignoring stale pre-postgame 7272 during abandon teardown. request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu",
+            static_cast<unsigned long long>(channel_id),
+            static_cast<unsigned long long>(local_channel_id),
+            static_cast<unsigned long long>(pre_postgame_channel_id)
+        );
         return true;
     }
 
@@ -11357,7 +11363,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
     }
 
     if (leaving_postgame_channel) {
-        if (!completes_abandon_teardown) {
+        if (!matches_current_postgame_channel) {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Ignoring non-postgame 7272 during abandon teardown. request_channel=%llu local_channel=%llu pre_postgame_channel=%llu",
@@ -11368,6 +11374,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             return true;
         }
 
+        // During host disconnect from hero selection, the real client can still be unwinding
+        // server/game-rules state after postgame chat leaves. Clearing the entire local/generic
+        // lobby snapshot here is too early and can race later disconnect teardown.
         GBE_local_lobby.has_chat_channel = false;
         GBE_local_lobby.chat_channel_id = 0;
         GBE_local_lobby.chat_channel_name.clear();
@@ -11393,18 +11402,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
 
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Completed abandon chat teardown after 7272. deferring lobby reset until 7014 is retrieved LobbyID=%llu state=%u game_state=%u match_id=%llu server_id=%llu request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu",
+            "[LOBBY] Deferred full lobby reset after postgame 7272 to avoid racing disconnect teardown LobbyID=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
             GBE_local_lobby.state,
             GBE_local_lobby.game_state,
             static_cast<unsigned long long>(GBE_local_lobby.match_id),
-            static_cast<unsigned long long>(GBE_local_lobby.server_id),
-            static_cast<unsigned long long>(channel_id),
-            static_cast<unsigned long long>(local_channel_id),
-            static_cast<unsigned long long>(pre_postgame_channel_id)
+            static_cast<unsigned long long>(GBE_local_lobby.server_id)
         );
-        GBE_pending_reset_after_abandon_7014 = true;
-        GBE_pending_reset_after_abandon_7014_lobby_id = lobby_id;
     } else {
         GBE_local_lobby.has_chat_channel = false;
         GBE_local_lobby.chat_channel_id = 0;
@@ -12431,20 +12435,6 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
             static_cast<unsigned long long>(pending_lobby_id)
         );
         ResetGCMemory("7035_disconnect_current_game_after_25", true, false);
-    }
-
-    if (gc_profile == GC_PROFILE_DOTA2 &&
-        GBE_pending_reset_after_abandon_7014 &&
-        GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaOtherLeftChannel) {
-        const uint64 pending_lobby_id = GBE_pending_reset_after_abandon_7014_lobby_id;
-        GBE_pending_reset_after_abandon_7014 = false;
-        GBE_pending_reset_after_abandon_7014_lobby_id = 0;
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Consumed pending 7014; applying deferred abandon reset for LobbyID=%llu",
-            static_cast<unsigned long long>(pending_lobby_id)
-        );
-        ResetGCMemory("7272_abandon_teardown_after_7014", true, false);
     }
 
     GBE_GC_DebugLog(

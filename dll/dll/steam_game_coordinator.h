@@ -77,8 +77,6 @@ public ISteamGameCoordinator
     bool GBE_dota_private_lobby_snapshot_replayed{};
     bool GBE_pending_reset_after_cache_unsubscribed{};
     uint64 GBE_pending_reset_after_cache_unsubscribed_lobby_id{};
-    bool GBE_pending_reset_after_abandon_7014{};
-    uint64 GBE_pending_reset_after_abandon_7014_lobby_id{};
     std::string GBE_last_dota_launch_persona_signature;
 
     struct GBE_LocalLobby
