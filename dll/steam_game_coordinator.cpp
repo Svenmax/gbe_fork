@@ -8700,6 +8700,8 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
     GBE_dota_private_lobby_snapshot_replayed = false;
     GBE_pending_reset_after_cache_unsubscribed = false;
     GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
+    GBE_pending_reset_after_abandon_7014 = false;
+    GBE_pending_reset_after_abandon_7014_lobby_id = 0;
     GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "reset_gc_memory");
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
 
@@ -11391,7 +11393,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
 
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Completed abandon chat teardown after 7272. resetting lobby state LobbyID=%llu state=%u game_state=%u match_id=%llu server_id=%llu request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu",
+            "[LOBBY] Completed abandon chat teardown after 7272. deferring lobby reset until 7014 is retrieved LobbyID=%llu state=%u game_state=%u match_id=%llu server_id=%llu request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu",
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
             GBE_local_lobby.state,
             GBE_local_lobby.game_state,
@@ -11401,7 +11403,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             static_cast<unsigned long long>(local_channel_id),
             static_cast<unsigned long long>(pre_postgame_channel_id)
         );
-        ResetGCMemory("7272_abandon_teardown_complete", true, false);
+        GBE_pending_reset_after_abandon_7014 = true;
+        GBE_pending_reset_after_abandon_7014_lobby_id = lobby_id;
     } else {
         GBE_local_lobby.has_chat_channel = false;
         GBE_local_lobby.chat_channel_id = 0;
@@ -12428,6 +12431,20 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
             static_cast<unsigned long long>(pending_lobby_id)
         );
         ResetGCMemory("7035_disconnect_current_game_after_25", true, false);
+    }
+
+    if (gc_profile == GC_PROFILE_DOTA2 &&
+        GBE_pending_reset_after_abandon_7014 &&
+        GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaOtherLeftChannel) {
+        const uint64 pending_lobby_id = GBE_pending_reset_after_abandon_7014_lobby_id;
+        GBE_pending_reset_after_abandon_7014 = false;
+        GBE_pending_reset_after_abandon_7014_lobby_id = 0;
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Consumed pending 7014; applying deferred abandon reset for LobbyID=%llu",
+            static_cast<unsigned long long>(pending_lobby_id)
+        );
+        ResetGCMemory("7272_abandon_teardown_after_7014", true, false);
     }
 
     GBE_GC_DebugLog(
