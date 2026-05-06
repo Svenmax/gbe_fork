@@ -10863,6 +10863,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     const std::string postgame_channel_name = std::string("PostGame_") + std::to_string(lobby_id);
     const uint64 postgame_channel_id = GBE_GenerateDotaPostGameChatChannelId();
 
+    // Postgame abandon teardown owns the rest of the lifecycle. Any pending
+    // reset that was armed for a current-game disconnect must not survive into
+    // the 7035 -> 25 -> 7010 -> 7010 -> 7272 -> 7014 path.
+    GBE_pending_reset_after_cache_unsubscribed = false;
+    GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
+
     GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_ready_for_abandon_teardown");
 
     std::string response_25;
@@ -12432,6 +12438,7 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
 
     if (gc_profile == GC_PROFILE_DOTA2 &&
         GBE_pending_reset_after_cache_unsubscribed &&
+        !GBE_local_lobby.abandon_postgame_active &&
         GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaCacheUnsubscribed) {
         const uint64 pending_lobby_id = GBE_pending_reset_after_cache_unsubscribed_lobby_id;
         GBE_pending_reset_after_cache_unsubscribed = false;
