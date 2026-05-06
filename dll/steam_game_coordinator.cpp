@@ -9997,11 +9997,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 (request_shape.has_game_state && request_shape.game_state >= 2u) ||
                 (request_shape.has_send_reason && request_shape.send_reason == 10u);
             const bool request_advances_to_strategy_time =
-                (request_shape.has_game_state && request_shape.game_state >= 3u) ||
-                (runtime_lobby_state_before_7034 == 2u &&
-                    runtime_game_state_before_7034 == 2u &&
-                    request_shape.has_send_reason &&
-                    request_shape.send_reason == 10u);
+                request_shape.has_game_state && request_shape.game_state >= 3u;
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 1u) {
                 if (!GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8870/7034 wait_for_players", request_emsg, source_job, 2u, 1u))

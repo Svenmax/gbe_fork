@@ -272,3 +272,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当前测试日志里 `7041 -> 26 SERVERSETUP -> 4511/server_id sync -> 26 SERVERSETUP(server_id)` 后没有出现 `5429 TicketAuthComplete`，但 server-side 会继续发送 `7034 GAME_STATE` 和 `4506 ServerAvailable`。
   - `5429` 仍是官方优先锚点，但不能作为唯一 `RUN(connect)` 推进条件；server_id 已同步且 connect/game_start_time 完整时，可用真实 server-side `7034` 或 `4506` 作为受限 fallback。
   - fallback 不应恢复旧的 `4511/4508` 无条件旁路，也不能跳过 `7034` connected players 回复。
+
+[7034 GAMESTATE_TIMEOUT 不能推进 strategy time]
+- Date: 2026-05-06
+- Context: Agent 在分析用户上传的“第一局可选英雄，第二局开始后无英雄”日志时发现
+- Category: 代码模式
+- Instructions:
+  - 第二局进入 hero selection 后，server-side `7034` 可能继续发送 `send_reason=GAMESTATE_TIMEOUT(10)`，但请求里的 `game_state` 仍是 `DOTA_GAMERULES_STATE_INIT`。
+  - `send_reason=10` 可以作为 `WAIT_FOR_PLAYERS_TO_LOAD -> HERO_SELECTION` 的超时兜底信号，但不能单独作为 `HERO_SELECTION -> STRATEGY_TIME` 的推进条件。
+  - 推进到 strategy time 必须要求请求明确携带 `game_state >= 3`，否则会过早跳过英雄选择窗口，表现为第二局没有英雄可选。
