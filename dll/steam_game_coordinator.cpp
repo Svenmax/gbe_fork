@@ -11422,6 +11422,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         push_incoming_now(GBE_kDotaOtherLeftChannel | GBE_kProtoMask, response_7014);
     }
 
+    if (!leaving_postgame_channel && local_channel_id != 0 && channel_id != local_channel_id) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Acknowledged stale 7272 for non-current channel. request_channel=%llu local_channel=%llu channel_type=%u wrapped=%d",
+            static_cast<unsigned long long>(channel_id),
+            static_cast<unsigned long long>(local_channel_id),
+            GBE_local_lobby.chat_channel_type,
+            wrapped ? 1 : 0
+        );
+        return true;
+    }
+
     if (leaving_postgame_channel) {
         if (!matches_current_postgame_channel) {
             GBE_GC_DebugLog(
