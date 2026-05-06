@@ -9133,41 +9133,10 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscri
                     lobby.lobby_id,
                     message))
                 return true;
-        } else if (GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplay(
-                       owner_account_id,
-                       owner_steam_id,
-                       lobby.lobby_id,
-                       lobby.state,
-                       lobby.game_state,
-                       lobby.server_id,
-                       lobby.match_id,
-                       lobby.game_start_time,
-                       lobby.connect,
-                       effective_player_name,
-                       lobby.room_name,
-                       lobby.game_mode,
-                       lobby.server_region,
-                       lobby.lan,
-                       lobby.lan_host_ping_location,
-                       lobby.allow_cheats,
-                       lobby.fill_with_bots,
-                       lobby.allow_spectating,
-                       lobby.visibility,
-                       lobby.bot_difficulty_radiant,
-                       lobby.bot_difficulty_dire,
-                       lobby.bot_radiant,
-                       lobby.bot_dire,
-                       lobby.owner_team,
-                       lobby.owner_slot,
-                       lobby.owner_hero_id,
-                       lobby.pass_key,
-                       owner_account_id,
-                       message)) {
-            return true;
         }
     }
 
-    return GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(lobby, effective_player_name, message);
+    return GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(lobby, effective_player_name, message);
 }
 
 bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message)
