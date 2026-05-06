@@ -10080,6 +10080,37 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             ? (response_message.size() - response_body_offset)
             : 0u;
 
+        const bool coalescible_hero_timeout_poll =
+            GBE_local_lobby.state == 2u &&
+            GBE_local_lobby.game_state == 2u &&
+            request_shape.has_send_reason &&
+            request_shape.send_reason == 10u &&
+            (!request_shape.has_game_state || request_shape.game_state < 2u);
+        if (coalescible_hero_timeout_poll) {
+            bool queued_7034_reply = false;
+            std::queue<GC_Message> queued_messages = incoming_messages;
+            while (!queued_messages.empty()) {
+                if (GBE_GC_MaskedEMsg(queued_messages.front().msg_type) == 7034u) {
+                    queued_7034_reply = true;
+                    break;
+                }
+                queued_messages.pop();
+            }
+
+            if (queued_7034_reply) {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "coalesced duplicate req=%u source_job=%llu note=hero_selection timeout 7034 already queued state=%u game_state=%u queue_size=%zu",
+                    request_emsg,
+                    static_cast<unsigned long long>(source_job),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    incoming_messages.size()
+                );
+                return true;
+            }
+        }
+
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "replying req=%u resp=%u source_job=%llu size=%zu note=7034 connected players game_state=%u team=%u slot=%u summary=%s",
