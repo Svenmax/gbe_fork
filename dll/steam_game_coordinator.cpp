@@ -9066,7 +9066,7 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
         return;
 
     std::string response_24;
-    if (!GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(lobby, GBE_GetDotaLobbyOwnerName(), response_24)) {
+    if (!GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(lobby, GBE_GetDotaLobbyOwnerName(), response_24)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "failed building current private lobby snapshot 24 reason=%s lobby_id=%llu state=%u game_state=%u server_id=%llu",
