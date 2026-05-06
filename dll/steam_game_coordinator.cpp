@@ -6760,9 +6760,8 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         GBE_GC_MaskedEMsg(message.msg_type)
     );
 
-    GBE_ReapplyDotaPracticeLobbyLaunchRichPresence("queued_state");
-
     GBE_PublishSharedDotaLobbyState("queued_state");
+    GBE_ReapplyDotaPracticeLobbyLaunchRichPresence("queued_state");
 }
 
 void Steam_Game_Coordinator::push_incoming(uint32 msg_type, const std::string &message, double delay, bool apply_lobby_state, uint32 lobby_state, uint32 lobby_game_state)
@@ -12303,6 +12302,24 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
 
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence(status, lobby_state, include_party, !GBE_local_lobby.abandon_postgame_active);
     GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(status, lobby_state, include_party, !GBE_local_lobby.abandon_postgame_active, reason);
+
+    if (is_server) {
+        Steam_Client *steam_client = get_steam_client();
+        Steam_Game_Coordinator *client_coordinator = steam_client ? steam_client->steam_game_coordinator : nullptr;
+        if (client_coordinator && client_coordinator != this) {
+            client_coordinator->GBE_RestoreSharedDotaLobbyState(reason ? reason : "server_runtime_presence_sync");
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "forwarded launch rich presence to client coordinator reason=%s lobby_id=%llu state=%u game_state=%u status=%s lobby_state=%s",
+                reason ? reason : "unknown",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state,
+                status,
+                lobby_state
+            );
+        }
+    }
 }
 
 // sends a message to the Game Coordinator
