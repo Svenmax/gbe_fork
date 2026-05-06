@@ -1859,8 +1859,6 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(uint32 account_id, uint64 s
     GBE_AppendProtoFixed64Field(member_bytes, 12u, 0ull);
     GBE_AppendProtoVarIntField(member_bytes, 13u, 0u);
     GBE_AppendProtoFixed32Field(member_bytes, 16u, 0u);
-    for (size_t i = 0; i < 4; ++i)
-        GBE_AppendProtoVarIntField(member_bytes, 19u, 0u);
     GBE_AppendProtoBytesField(object_2016, 1u, member_bytes);
 
     GBE_AppendProtoFixed32Field(object_2016, 2u, 0u);

@@ -254,3 +254,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `Steam_Friends::SetRichPresence()` 只会更新本地 rich presence 数据并触发 `FriendRichPresenceUpdate_t` / `PersonaStateChange_t` callback，不会自动向 Dota 的 GC 消息队列注入 `766` persona 回显。
   - 如果要对齐官方 Start Game 的 `7501 -> 766` 外显链，需要在状态主线切换点显式排入匹配官方形状的 `766`，不能只依赖本地 `SetRichPresence()`。
+
+[SteamKit 确认 ServerStaticLobbyMember 英雄限制字段]
+- Date: 2026-05-06
+- Context: Agent 在执行 GitHub SteamKit 搜索以修复第二局 hero selection 无英雄时发现
+- Category: 代码模式
+- Instructions:
+  - SteamKit `MsgGCCommonLobby.cs` 确认 `CSODOTAServerStaticLobbyMember.disabled_random_hero_bits` 是 field `16`，wire type 为 fixed32 repeated。
+  - `disabled_hero_id` 是 field `17`，`enabled_hero_id` 是 field `18`，`banned_hero_ids` 是 field `19`。
+  - 不要用 `banned_hero_ids=0` 伪造空禁用列表；空列表应直接不写 field `19`，否则可能污染 hero selection 英雄池。
