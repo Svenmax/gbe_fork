@@ -263,3 +263,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - SteamKit `MsgGCCommonLobby.cs` 确认 `CSODOTAServerStaticLobbyMember.disabled_random_hero_bits` 是 field `16`，wire type 为 fixed32 repeated。
   - `disabled_hero_id` 是 field `17`，`enabled_hero_id` 是 field `18`，`banned_hero_ids` 是 field `19`。
   - 不要用 `banned_hero_ids=0` 伪造空禁用列表；空列表应直接不写 field `19`，否则可能污染 hero selection 英雄池。
+
+[嵌入式 LAN server 可能不发送 5429]
+- Date: 2026-05-06
+- Context: Agent 在分析用户上传的“开始游戏后主机一直载入中、没有英雄选择”日志时发现
+- Category: 代码模式
+- Instructions:
+  - 当前测试日志里 `7041 -> 26 SERVERSETUP -> 4511/server_id sync -> 26 SERVERSETUP(server_id)` 后没有出现 `5429 TicketAuthComplete`，但 server-side 会继续发送 `7034 GAME_STATE` 和 `4506 ServerAvailable`。
+  - `5429` 仍是官方优先锚点，但不能作为唯一 `RUN(connect)` 推进条件；server_id 已同步且 connect/game_start_time 完整时，可用真实 server-side `7034` 或 `4506` 作为受限 fallback。
+  - fallback 不应恢复旧的 `4511/4508` 无条件旁路，也不能跳过 `7034` connected players 回复。

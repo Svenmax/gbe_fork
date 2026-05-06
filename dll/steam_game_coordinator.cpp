@@ -9973,6 +9973,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
                     request_summary.c_str()
                 );
+                if (GBE_HasDotaLaunchServerSetupSync() &&
+                    GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced &&
+                    GBE_TryAdvanceDotaLaunchToRun("server-side 7034 after server_id sync", request_emsg, source_job, "7034_server_synced_launch_run"))
+                    queued_runtime_lobby_update = true;
             }
 
             GBE_GC_DebugLog(
@@ -10218,6 +10222,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             static_cast<unsigned long long>(GBE_local_lobby.match_id),
             static_cast<unsigned long long>(GBE_local_lobby.server_id)
         );
+
+        if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
+            GBE_TryAdvanceDotaLaunchToRun("server available acknowledgement after server_id sync", request_emsg, source_job, "4506_server_synced_launch_run");
+            return true;
+        }
+
+        if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 0u &&
+                GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
+            GBE_TryQueueDotaPrelaunch021("server available acknowledgement wait_for_players", request_emsg, source_job);
+            return true;
+        }
+
         return true;
     }
 
