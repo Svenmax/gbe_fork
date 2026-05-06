@@ -9845,6 +9845,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.match_id != 0 && GBE_local_lobby.server_id != 0) {
             const GBE_Dota7034RequestShape request_shape = GBE_ParseDota7034RequestShape(body, body_size);
             bool queued_runtime_lobby_update = false;
+            const uint32 runtime_lobby_state_before_7034 = GBE_local_lobby.state;
+            const uint32 runtime_game_state_before_7034 = GBE_local_lobby.game_state;
 
             bool updated_owner_team_or_slot_from_7034 = false;
             if (request_shape.has_draft_steam_id && request_shape.draft_steam_id == GBE_GetDotaLobbyOwnerSteamId()) {
@@ -9926,10 +9928,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_FormatDota7034Summary(body, body_size).c_str()
             );
 
-            const bool request_advances_to_hero_selection = request_shape.has_game_state && request_shape.game_state >= 2u;
+            const bool request_advances_to_hero_selection =
+                (request_shape.has_game_state && request_shape.game_state >= 2u) ||
+                (request_shape.has_send_reason && request_shape.send_reason == 10u);
             const bool request_advances_to_strategy_time =
                 (request_shape.has_game_state && request_shape.game_state >= 3u) ||
-                (request_shape.has_send_reason && request_shape.send_reason == 10u);
+                (runtime_lobby_state_before_7034 == 2u &&
+                    runtime_game_state_before_7034 == 2u &&
+                    request_shape.has_send_reason &&
+                    request_shape.send_reason == 10u);
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 1u) {
                 if (!GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8870/7034 wait_for_players", request_emsg, source_job, 2u, 1u))
