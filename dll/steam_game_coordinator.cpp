@@ -196,7 +196,6 @@ struct GBE_SharedDotaLobbyState {
 };
 
 static GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
-static uint64 GBE_dota_recently_abandoned_lobby_id;
 
 enum : uint32 {
     GBE_kDotaLaunchPhaseNone = 0u,
@@ -8608,16 +8607,6 @@ void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std
     if (!protomsg.has_owner_soid() || protomsg.owner_soid().type() != 3u || protomsg.owner_soid().id() == 0)
         return;
 
-    if (GBE_dota_recently_abandoned_lobby_id != 0 && protomsg.owner_soid().id() == GBE_dota_recently_abandoned_lobby_id) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "ignored tombstoned lobby CacheSubscribed metadata reason=%s owner_id=%llu",
-            reason ? reason : "unknown",
-            static_cast<unsigned long long>(protomsg.owner_soid().id())
-        );
-        return;
-    }
-
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && protomsg.owner_soid().id() != GBE_local_lobby.lobby_id)
         return;
 
@@ -8651,16 +8640,6 @@ void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std
 
 void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
 {
-    if (GBE_dota_recently_abandoned_lobby_id != 0 && GBE_local_lobby.lobby_id == GBE_dota_recently_abandoned_lobby_id) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "skipped publishing tombstoned shared lobby reason=%s lobby_id=%llu",
-            reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
-        );
-        return;
-    }
-
     GBE_shared_dota_lobby_state.valid = true;
     GBE_shared_dota_lobby_state.active = GBE_local_lobby.active;
     GBE_shared_dota_lobby_state.lobby_id = GBE_local_lobby.lobby_id;
@@ -8813,20 +8792,6 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             static_cast<void *>(&GBE_shared_dota_lobby_state),
             reason ? reason : "unknown"
         );
-        return;
-    }
-
-    if (GBE_dota_recently_abandoned_lobby_id != 0 && GBE_shared_dota_lobby_state.lobby_id == GBE_dota_recently_abandoned_lobby_id) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "dropped tombstoned shared lobby restore this=%p shared_lobby=%p reason=%s lobby_id=%llu",
-            static_cast<void *>(this),
-            static_cast<void *>(&GBE_shared_dota_lobby_state),
-            reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_shared_dota_lobby_state.lobby_id)
-        );
-        GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-        GBE_dota_private_lobby_snapshot_replayed = false;
         return;
     }
 
@@ -9082,31 +9047,9 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
         return;
     }
 
-    if (!GBE_shared_dota_lobby_state.valid || !GBE_shared_dota_lobby_state.active) {
-        GBE_dota_private_lobby_snapshot_replayed = false;
-        return;
-    }
-
     GBE_LocalLobby lobby{};
     if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "replay_current_private_lobby_snapshot", lobby, false)) {
         GBE_dota_private_lobby_snapshot_replayed = false;
-        return;
-    }
-
-    if (GBE_dota_recently_abandoned_lobby_id != 0 && lobby.lobby_id == GBE_dota_recently_abandoned_lobby_id) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "blocked tombstoned private lobby snapshot replay reason=%s lobby_id=%llu state=%u game_state=%u",
-            reason ? reason : "unknown",
-            static_cast<unsigned long long>(lobby.lobby_id),
-            lobby.state,
-            lobby.game_state
-        );
-        GBE_local_lobby = GBE_LocalLobby{};
-        GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-        GBE_dota_private_lobby_snapshot_replayed = false;
-        GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "tombstoned_private_lobby_snapshot");
-        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
         return;
     }
 
@@ -10770,15 +10713,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     }
 
     GBE_SyncSettingsLobbyFromGenericLobby("7038_create");
-    if (GBE_dota_recently_abandoned_lobby_id != 0 && GBE_dota_recently_abandoned_lobby_id != GBE_local_lobby.lobby_id) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "cleared abandon lobby tombstone on new lobby create old_lobby_id=%llu new_lobby_id=%llu",
-            static_cast<unsigned long long>(GBE_dota_recently_abandoned_lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
-        );
-        GBE_dota_recently_abandoned_lobby_id = 0;
-    }
     GBE_PublishSharedDotaLobbyState("7038_create");
 
     GBE_GC_DebugLog(
@@ -11499,15 +11433,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
     if (leaving_postgame_channel && matches_pre_postgame_channel && !matches_current_postgame_channel) {
         const uint64 previous_lobby_id = GBE_local_lobby.lobby_id;
         const uint64 previous_postgame_channel_id = local_channel_id;
-        if (previous_lobby_id != 0)
-            GBE_dota_recently_abandoned_lobby_id = previous_lobby_id;
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Completing abandon teardown after pre-postgame 7272 without 7014. request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu tombstone_lobby_id=%llu",
+            "[LOBBY] Completing abandon teardown after pre-postgame 7272 without 7014. request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu",
             static_cast<unsigned long long>(channel_id),
             static_cast<unsigned long long>(previous_postgame_channel_id),
-            static_cast<unsigned long long>(pre_postgame_channel_id),
-            static_cast<unsigned long long>(GBE_dota_recently_abandoned_lobby_id)
+            static_cast<unsigned long long>(pre_postgame_channel_id)
         );
         if (GBE_local_lobby.generic_lobby_id != 0)
             GBE_LeaveGenericLobby();
@@ -11516,8 +11447,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
         GBE_dota_private_lobby_snapshot_replayed = false;
         GBE_last_dota_launch_persona_signature.clear();
-        GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
 
         Steam_Client *steam_client = get_steam_client();
         Steam_Game_Coordinator *peer_coordinator = steam_client ? steam_client->steam_game_coordinator : nullptr;
@@ -11529,8 +11458,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             peer_coordinator->GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
             peer_coordinator->GBE_dota_private_lobby_snapshot_replayed = false;
             peer_coordinator->GBE_last_dota_launch_persona_signature.clear();
-            peer_coordinator->GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-            peer_coordinator->GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Cleared peer abandon postgame state after pre-postgame 7272 peer=%p previous_lobby_id=%llu",
