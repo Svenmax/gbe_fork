@@ -104,14 +104,6 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 如果我已经有明确的下一步，应直接继续执行，不要停在征求许可。
   - 只有在存在关键不确定性或缺少必要信息时，才停下来向用户请求澄清。
 
-[Dota GC 按官方抓包重构]
-- Date: 2026-05-06
-- Context: 用户要求放弃现有补丁式代码，直接按官方抓包数据重构 Dota Start Game 与 abandon lifecycle
-- Instructions:
-  - 处理 Dota GC lifecycle 问题时，不要继续围绕现有补丁局部修补，应优先按官方抓包数据重构状态机。
-  - 重构时必须严格核对消息时序、字段形状、对象要素、对象顺序和本地化账号字段。
-  - 在已有官方抓包和日志足够支撑时，不要停下来反复询问用户，直接改到逻辑自洽后再汇报。
-
 ### 官方抓包与稳定机制
 
 [官方 abandon 收尾链]
@@ -254,30 +246,3 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `Steam_Friends::SetRichPresence()` 只会更新本地 rich presence 数据并触发 `FriendRichPresenceUpdate_t` / `PersonaStateChange_t` callback，不会自动向 Dota 的 GC 消息队列注入 `766` persona 回显。
   - 如果要对齐官方 Start Game 的 `7501 -> 766` 外显链，需要在状态主线切换点显式排入匹配官方形状的 `766`，不能只依赖本地 `SetRichPresence()`。
-
-[SteamKit 确认 ServerStaticLobbyMember 英雄限制字段]
-- Date: 2026-05-06
-- Context: Agent 在执行 GitHub SteamKit 搜索以修复第二局 hero selection 无英雄时发现
-- Category: 代码模式
-- Instructions:
-  - SteamKit `MsgGCCommonLobby.cs` 确认 `CSODOTAServerStaticLobbyMember.disabled_random_hero_bits` 是 field `16`，wire type 为 fixed32 repeated。
-  - `disabled_hero_id` 是 field `17`，`enabled_hero_id` 是 field `18`，`banned_hero_ids` 是 field `19`。
-  - 不要用 `banned_hero_ids=0` 伪造空禁用列表；空列表应直接不写 field `19`，否则可能污染 hero selection 英雄池。
-
-[嵌入式 LAN server 可能不发送 5429]
-- Date: 2026-05-06
-- Context: Agent 在分析用户上传的“开始游戏后主机一直载入中、没有英雄选择”日志时发现
-- Category: 代码模式
-- Instructions:
-  - 当前测试日志里 `7041 -> 26 SERVERSETUP -> 4511/server_id sync -> 26 SERVERSETUP(server_id)` 后没有出现 `5429 TicketAuthComplete`，但 server-side 会继续发送 `7034 GAME_STATE` 和 `4506 ServerAvailable`。
-  - `5429` 仍是官方优先锚点，但不能作为唯一 `RUN(connect)` 推进条件；server_id 已同步且 connect/game_start_time 完整时，可用真实 server-side `7034` 或 `4506` 作为受限 fallback。
-  - fallback 不应恢复旧的 `4511/4508` 无条件旁路，也不能跳过 `7034` connected players 回复。
-
-[7034 GAMESTATE_TIMEOUT 不能推进 strategy time]
-- Date: 2026-05-06
-- Context: Agent 在分析用户上传的“第一局可选英雄，第二局开始后无英雄”日志时发现
-- Category: 代码模式
-- Instructions:
-  - 第二局进入 hero selection 后，server-side `7034` 可能继续发送 `send_reason=GAMESTATE_TIMEOUT(10)`，但请求里的 `game_state` 仍是 `DOTA_GAMERULES_STATE_INIT`。
-  - `send_reason=10` 可以作为 `WAIT_FOR_PLAYERS_TO_LOAD -> HERO_SELECTION` 的超时兜底信号，但不能单独作为 `HERO_SELECTION -> STRATEGY_TIME` 的推进条件。
-  - 推进到 strategy time 必须要求请求明确携带 `game_state >= 3`，否则会过早跳过英雄选择窗口，表现为第二局没有英雄可选。
