@@ -5141,6 +5141,19 @@ static bool GBE_BuildDota7451BatchPlayerResourcesResponsePayload(const std::vect
     for (uint32 account_id : account_ids) {
         std::string result;
         GBE_AppendProtoVarIntField(result, 1u, account_id);
+        GBE_AppendProtoVarIntField(result, 4u, 0u);
+        GBE_AppendProtoVarIntField(result, 5u, 0u);
+        GBE_AppendProtoVarIntField(result, 6u, 0u);
+        GBE_AppendProtoVarIntField(result, 7u, 0u);
+        GBE_AppendProtoVarIntField(result, 8u, 0u);
+        GBE_AppendProtoVarIntField(result, 9u, 0u);
+        GBE_AppendProtoVarIntField(result, 10u, 0u);
+        GBE_AppendProtoVarIntField(result, 11u, 0u);
+        GBE_AppendProtoVarIntField(result, 12u, 0u);
+        GBE_AppendProtoVarIntField(result, 13u, 0u);
+        GBE_AppendProtoVarIntField(result, 14u, 0u);
+        GBE_AppendProtoVarIntField(result, 15u, 0u);
+        GBE_AppendProtoVarIntField(result, 16u, 0u);
         GBE_AppendProtoBytesField(body, 6u, result);
     }
 
@@ -9895,6 +9908,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         if (!GBE_ExtractProtoPackedUint32Field(body, body_size, GBE_FindProtoField(body, body_size, 1), account_ids) || account_ids.empty())
             account_ids.push_back(settings->get_local_steam_id().GetAccountID());
 
+        std::vector<uint32> rank_types;
+        GBE_ExtractProtoPackedUint32Field(body, body_size, GBE_FindProtoField(body, body_size, 4), rank_types);
+
+        uint32 lobby_type = 0;
+        const bool has_lobby_type = GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 5), lobby_type);
+
         std::string response_message;
         if (!GBE_BuildDota7451BatchPlayerResourcesResponsePayload(account_ids, has_source_job, source_job, response_message)) {
             GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 7451u);
@@ -9903,12 +9922,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=7450->7451 minimal batch player resources accounts=%zu",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=7450->7451 batch player resources accounts=%zu rank_types=%zu has_lobby_type=%u lobby_type=%u",
             request_emsg,
             7451u,
             static_cast<unsigned long long>(source_job),
             response_message.size(),
-            account_ids.size()
+            account_ids.size(),
+            rank_types.size(),
+            has_lobby_type ? 1u : 0u,
+            lobby_type
         );
         push_incoming_now(7451u | GBE_kProtoMask, response_message);
         return true;
