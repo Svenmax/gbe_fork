@@ -9047,6 +9047,11 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
         return;
     }
 
+    if (!GBE_shared_dota_lobby_state.valid || !GBE_shared_dota_lobby_state.active) {
+        GBE_dota_private_lobby_snapshot_replayed = false;
+        return;
+    }
+
     GBE_LocalLobby lobby{};
     if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "replay_current_private_lobby_snapshot", lobby, false)) {
         GBE_dota_private_lobby_snapshot_replayed = false;
@@ -11447,6 +11452,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
         GBE_dota_private_lobby_snapshot_replayed = false;
         GBE_last_dota_launch_persona_signature.clear();
+        GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
 
         Steam_Client *steam_client = get_steam_client();
         Steam_Game_Coordinator *peer_coordinator = steam_client ? steam_client->steam_game_coordinator : nullptr;
@@ -11458,6 +11465,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             peer_coordinator->GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
             peer_coordinator->GBE_dota_private_lobby_snapshot_replayed = false;
             peer_coordinator->GBE_last_dota_launch_persona_signature.clear();
+            peer_coordinator->GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+            peer_coordinator->GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Cleared peer abandon postgame state after pre-postgame 7272 peer=%p previous_lobby_id=%llu",
