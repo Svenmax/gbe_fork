@@ -9065,7 +9065,13 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
 
     GBE_RecordDotaLobbyCacheSubscriptionState(response_24, reason ? reason : "replay_current_private_lobby_snapshot");
     push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, response_24);
-    push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, response_26);
+    push_incoming_now(
+        GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
+        response_26,
+        true,
+        lobby.state,
+        lobby.game_state
+    );
     GBE_dota_private_lobby_snapshot_replayed = true;
 
     GBE_GC_DebugLog(
