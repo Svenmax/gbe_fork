@@ -11430,6 +11430,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         return true;
     }
 
+    if (leaving_postgame_channel && matches_pre_postgame_channel && !matches_current_postgame_channel) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Deferred pre-postgame 7272 during abandon teardown. request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu",
+            static_cast<unsigned long long>(channel_id),
+            static_cast<unsigned long long>(local_channel_id),
+            static_cast<unsigned long long>(pre_postgame_channel_id)
+        );
+        return true;
+    }
+
     std::string response_7014;
     if (!GBE_BuildDotaOtherLeftChannelPayload(channel_id, settings->get_local_steam_id().ConvertToUint64(), response_7014)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7014 payload for channel=%llu", static_cast<unsigned long long>(channel_id));
