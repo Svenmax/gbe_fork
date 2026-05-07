@@ -9024,10 +9024,21 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
     }
 
     const bool ready_for_private_lobby_snapshot =
-        lobby.state >= 2u;
+        lobby.state == 2u &&
+        lobby.game_state < 2u &&
+        !lobby.abandon_postgame_active;
 
     if (!ready_for_private_lobby_snapshot) {
-        GBE_dota_private_lobby_snapshot_replayed = false;
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipping current private lobby snapshot reason=%s lobby_id=%llu state=%u game_state=%u abandon_postgame=%u already_replayed=%u",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(lobby.lobby_id),
+            lobby.state,
+            lobby.game_state,
+            lobby.abandon_postgame_active ? 1u : 0u,
+            GBE_dota_private_lobby_snapshot_replayed ? 1u : 0u
+        );
         return;
     }
 
