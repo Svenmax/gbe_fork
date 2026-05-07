@@ -9926,7 +9926,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_FormatDota7034Summary(body, body_size).c_str()
             );
 
-            const bool request_advances_to_hero_selection = request_shape.has_game_state && request_shape.game_state >= 2u;
+            const bool request_advances_to_hero_selection =
+                (request_shape.has_game_state && request_shape.game_state >= 2u) ||
+                (request_shape.has_send_reason && request_shape.send_reason == 10u);
             const bool request_advances_to_strategy_time =
                 (request_shape.has_game_state && request_shape.game_state >= 3u) ||
                 (request_shape.has_send_reason && request_shape.send_reason == 10u);
