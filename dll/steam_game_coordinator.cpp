@@ -11431,12 +11431,29 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
     }
 
     if (leaving_postgame_channel && matches_pre_postgame_channel && !matches_current_postgame_channel) {
+        const uint64 previous_lobby_id = GBE_local_lobby.lobby_id;
+        const uint64 previous_postgame_channel_id = local_channel_id;
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Deferred pre-postgame 7272 during abandon teardown. request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu",
+            "[LOBBY] Completing abandon teardown after pre-postgame 7272 without 7014. request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu",
             static_cast<unsigned long long>(channel_id),
-            static_cast<unsigned long long>(local_channel_id),
+            static_cast<unsigned long long>(previous_postgame_channel_id),
             static_cast<unsigned long long>(pre_postgame_channel_id)
+        );
+        if (GBE_local_lobby.generic_lobby_id != 0)
+            GBE_LeaveGenericLobby();
+        GBE_local_lobby = GBE_LocalLobby{};
+        GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+        GBE_pending_reset_after_cache_unsubscribed = false;
+        GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
+        GBE_dota_private_lobby_snapshot_replayed = false;
+        GBE_last_dota_launch_persona_signature.clear();
+        GBE_SyncSettingsLobbyFromGenericLobby("7272_pre_postgame_abandon_complete");
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Cleared abandon postgame state after pre-postgame 7272 previous_lobby_id=%llu previous_postgame_channel=%llu",
+            static_cast<unsigned long long>(previous_lobby_id),
+            static_cast<unsigned long long>(previous_postgame_channel_id)
         );
         return true;
     }
