@@ -246,3 +246,21 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `Steam_Friends::SetRichPresence()` 只会更新本地 rich presence 数据并触发 `FriendRichPresenceUpdate_t` / `PersonaStateChange_t` callback，不会自动向 Dota 的 GC 消息队列注入 `766` persona 回显。
   - 如果要对齐官方 Start Game 的 `7501 -> 766` 外显链，需要在状态主线切换点显式排入匹配官方形状的 `766`，不能只依赖本地 `SetRichPresence()`。
+
+[完整 abandon teardown 不能在 25 后立即 reset]
+- Date: 2026-05-07
+- Context: Agent 在排查 dashboard 主页点击“断开连接”后游戏闪退时发现
+- Category: 代码模式
+- Instructions:
+  - 完整 `7035` abandon teardown 路径已经排入 `25 + 7010 + 7010` 并切换到 postgame chat 后，不能设置 `GBE_pending_reset_after_cache_unsubscribed` 在客户端取走 `25` 后立刻 `ResetGCMemory`。
+  - 过早 reset 会在客户端继续发送 `7272` 前清掉 postgame/pre-postgame chat 状态，导致无法稳定完成官方 `7272 -> 7014` 收尾链，可能引发点击断开后的客户端闪退。
+  - `GBE_pending_reset_after_cache_unsubscribed` 仅适合保留给未进入完整 postgame teardown 的 current-game disconnect 兜底路径。
+
+[第二局 GAMESTATE_TIMEOUT 需窄条件推进英雄选择]
+- Date: 2026-05-07
+- Context: Agent 在排查第一局断开后第二次开始游戏无英雄可选、dashboard 仍显示建房设置时发现
+- Category: 代码模式
+- Instructions:
+  - 第二局 Dota server 可能发送 `7034`，其中 `send_reason=10(GAMESTATE_TIMEOUT)` 但 `game_state=0`，此时本地 lobby 仍停在 `RUN / WAIT_FOR_PLAYERS_TO_LOAD`。
+  - 若 launch server setup 已完整同步且本地正处于 `state=RUN, game_state=WAIT_FOR_PLAYERS_TO_LOAD`，应把该 timeout 当作进入 `HERO_SELECTION` 的信号，回发带 `drafts=1` 的 connected players 视图。
+  - 该推进必须保持窄条件，不能把 prelaunch 或非 wait-for-players 阶段的 `send_reason=10` 直接当作 hero selection，且同一个 timeout 包不应从 wait-for-players 连跳到 strategy time。
