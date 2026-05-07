@@ -11333,12 +11333,45 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
     }
 
     if (leaving_postgame_channel && matches_pre_postgame_channel && !matches_current_postgame_channel) {
+        // The client is leaving the original lobby chat channel (pre-postgame) while
+        // the postgame channel is already active.  We must still reply with 7014 so
+        // the client can complete the official abandon teardown chain
+        // (7035 -> 25 -> 7010 -> 7010 -> 7272 -> 7014).  Silently dropping this
+        // request previously left the client state-machine hanging and caused an
+        // Access-Violation crash on the next GC re-init cycle.
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Ignoring stale pre-postgame 7272 during abandon teardown. request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu",
+            "[LOBBY] Handling stale pre-postgame 7272 during abandon teardown (replying 7014). request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu",
             static_cast<unsigned long long>(channel_id),
             static_cast<unsigned long long>(local_channel_id),
             static_cast<unsigned long long>(pre_postgame_channel_id)
+        );
+
+        // Build and send the 7014 response for the pre-postgame channel so the
+        // client receives the expected leave-channel acknowledgement.
+        std::string pre_postgame_response_7014;
+        if (GBE_BuildDotaOtherLeftChannelPayload(channel_id, steam_id, pre_postgame_response_7014)) {
+            if (wrapped) {
+                if (outer_session_field_raw) {
+                    std::string wrapped_7014;
+                    if (GBE_BuildWrappedDotaReplayMessage(pre_postgame_response_7014, *outer_session_field_raw, steam_id, wrapped_7014)) {
+                        push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_7014);
+                    }
+                }
+            } else {
+                push_incoming_now(GBE_kDotaOtherLeftChannel | GBE_kProtoMask, pre_postgame_response_7014);
+            }
+        }
+
+        // Clear the stale pre-postgame channel reference now that we have
+        // acknowledged the leave request.
+        GBE_local_lobby.abandon_pre_postgame_chat_channel_id = 0;
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Chat channel left (pre-postgame). channel=%llu wrapped=%d",
+            static_cast<unsigned long long>(channel_id),
+            wrapped ? 1 : 0
         );
         return true;
     }
