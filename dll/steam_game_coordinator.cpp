@@ -9024,7 +9024,8 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
     }
 
     const bool ready_for_private_lobby_snapshot =
-        lobby.state >= 2u;
+        lobby.state == 2u &&
+        lobby.game_state >= 2u;
 
     if (!ready_for_private_lobby_snapshot) {
         GBE_dota_private_lobby_snapshot_replayed = false;
