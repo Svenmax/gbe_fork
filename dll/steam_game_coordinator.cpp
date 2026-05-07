@@ -11443,11 +11443,30 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         if (GBE_local_lobby.generic_lobby_id != 0)
             GBE_LeaveGenericLobby();
         GBE_local_lobby = GBE_LocalLobby{};
-        GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
         GBE_pending_reset_after_cache_unsubscribed = false;
         GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
         GBE_dota_private_lobby_snapshot_replayed = false;
         GBE_last_dota_launch_persona_signature.clear();
+
+        Steam_Client *steam_client = get_steam_client();
+        Steam_Game_Coordinator *peer_coordinator = steam_client ? steam_client->steam_game_coordinator : nullptr;
+        if (peer_coordinator && peer_coordinator != this) {
+            if (peer_coordinator->GBE_local_lobby.generic_lobby_id != 0)
+                peer_coordinator->GBE_LeaveGenericLobby();
+            peer_coordinator->GBE_local_lobby = GBE_LocalLobby{};
+            peer_coordinator->GBE_pending_reset_after_cache_unsubscribed = false;
+            peer_coordinator->GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
+            peer_coordinator->GBE_dota_private_lobby_snapshot_replayed = false;
+            peer_coordinator->GBE_last_dota_launch_persona_signature.clear();
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Cleared peer abandon postgame state after pre-postgame 7272 peer=%p previous_lobby_id=%llu",
+                static_cast<void *>(peer_coordinator),
+                static_cast<unsigned long long>(previous_lobby_id)
+            );
+        }
+
+        GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
         GBE_SyncSettingsLobbyFromGenericLobby("7272_pre_postgame_abandon_complete");
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
