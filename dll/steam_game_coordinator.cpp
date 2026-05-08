@@ -11395,18 +11395,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             }
         }
 
-        GBE_local_lobby.has_chat_channel = false;
-        GBE_local_lobby.chat_channel_id = 0;
-        GBE_local_lobby.chat_channel_name.clear();
-        GBE_local_lobby.chat_channel_type = 0;
-        GBE_local_lobby.abandon_pre_postgame_chat_channel_id = 0;
-        GBE_local_lobby.abandon_postgame_active = false;
-
-        ResetGCMemory("7272_pre_postgame_abandon_finalized", false, false);
-
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Chat channel left (pre-postgame). channel=%llu wrapped=%d finalized=1 reset_applied=1",
+            "[LOBBY] Chat channel left (pre-postgame). channel=%llu wrapped=%d finalized=1 reset_applied=0",
             static_cast<unsigned long long>(channel_id),
             wrapped ? 1 : 0
         );
