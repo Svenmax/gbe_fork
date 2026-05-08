@@ -7739,6 +7739,20 @@ void Steam_Game_Coordinator::shutdown_gc()
     if (!gc_initialized)
         return;
 
+    GBE_GC_DebugLog(
+        "GC_INIT",
+        "shutdown GC this=%p is_server=%u profile=%u pending_size=%zu incoming_size=%zu active=%u lobby_id=%llu state=%u game_state=%u",
+        static_cast<void *>(this),
+        is_server ? 1u : 0u,
+        static_cast<uint32>(gc_profile),
+        pending_messages.size(),
+        incoming_messages.size(),
+        GBE_local_lobby.active ? 1u : 0u,
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        GBE_local_lobby.state,
+        GBE_local_lobby.game_state
+    );
+
     items_loaded = false;
     items.clear();
     all_user_items.clear();
@@ -11373,17 +11387,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         }
 
         // Clear the stale pre-postgame channel reference now that we have
-        // acknowledged the leave request.
+        // acknowledged the leave request.  Do not reset here: the game can
+        // still shut down the server GC immediately after consuming 7014.
         GBE_local_lobby.abandon_pre_postgame_chat_channel_id = 0;
-        GBE_pending_reset_after_cache_unsubscribed = true;
-        GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
 
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Chat channel left (pre-postgame). channel=%llu wrapped=%d deferred_reset_lobby_id=%llu",
+            "[LOBBY] Chat channel left (pre-postgame). channel=%llu wrapped=%d reset_deferred=0",
             static_cast<unsigned long long>(channel_id),
-            wrapped ? 1 : 0,
-            static_cast<unsigned long long>(lobby_id)
+            wrapped ? 1 : 0
         );
         return true;
     }
@@ -12369,11 +12381,6 @@ bool Steam_Game_Coordinator::IsMessageAvailable( uint32 *pcubMsgSize )
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    if (!gc_initialized && gc_profile == GC_PROFILE_DOTA2) {
-        GBE_GC_DebugLog("GC_POLL", "initializing GC from IsMessageAvailable for Dota2 profile");
-        initialize_gc();
-    }
-
     if (!gc_initialized || incoming_messages.empty()) {
         GBE_GC_DebugLog(
             "GC_CALLBACK",
@@ -12474,8 +12481,7 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
 
     if (gc_profile == GC_PROFILE_DOTA2 &&
         GBE_pending_reset_after_cache_unsubscribed &&
-        (GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaCacheUnsubscribed ||
-         GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaOtherLeftChannel)) {
+        GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaCacheUnsubscribed) {
         const uint64 pending_lobby_id = GBE_pending_reset_after_cache_unsubscribed_lobby_id;
         const uint32 consumed_emsg = GBE_GC_MaskedEMsg(*punMsgType);
         GBE_pending_reset_after_cache_unsubscribed = false;
@@ -12487,9 +12493,7 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
             static_cast<unsigned long long>(pending_lobby_id)
         );
         ResetGCMemory(
-            consumed_emsg == GBE_kDotaCacheUnsubscribed
-                ? "7035_disconnect_current_game_after_25"
-                : "7035_abandon_after_7014",
+            "7035_disconnect_current_game_after_25",
             true,
             false);
     }
@@ -12826,10 +12830,8 @@ void Steam_Game_Coordinator::network_callback(Common_Message *msg)
 
 void Steam_Game_Coordinator::RunCallbacks()
 {
-    if (!gc_initialized && gc_profile == GC_PROFILE_DOTA2) {
-        GBE_GC_DebugLog("GC_POLL", "initializing GC from RunCallbacks for Dota2 profile");
-        initialize_gc();
-    }
+    if (!gc_initialized)
+        return;
 
     if (delay_init && welcome_received && check_timedout(welcome_time, 0.2)) {
         delay_init = false;
