@@ -11375,12 +11375,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         // Clear the stale pre-postgame channel reference now that we have
         // acknowledged the leave request.
         GBE_local_lobby.abandon_pre_postgame_chat_channel_id = 0;
+        GBE_pending_reset_after_cache_unsubscribed = true;
+        GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
 
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Chat channel left (pre-postgame). channel=%llu wrapped=%d",
+            "[LOBBY] Chat channel left (pre-postgame). channel=%llu wrapped=%d deferred_reset_lobby_id=%llu",
             static_cast<unsigned long long>(channel_id),
-            wrapped ? 1 : 0
+            wrapped ? 1 : 0,
+            static_cast<unsigned long long>(lobby_id)
         );
         return true;
     }
@@ -12471,16 +12474,24 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
 
     if (gc_profile == GC_PROFILE_DOTA2 &&
         GBE_pending_reset_after_cache_unsubscribed &&
-        GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaCacheUnsubscribed) {
+        (GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaCacheUnsubscribed ||
+         GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaOtherLeftChannel)) {
         const uint64 pending_lobby_id = GBE_pending_reset_after_cache_unsubscribed_lobby_id;
+        const uint32 consumed_emsg = GBE_GC_MaskedEMsg(*punMsgType);
         GBE_pending_reset_after_cache_unsubscribed = false;
         GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Consumed pending 25; applying deferred current-game reset for LobbyID=%llu",
+            "[LOBBY] Consumed pending teardown ack %u; applying deferred reset for LobbyID=%llu",
+            consumed_emsg,
             static_cast<unsigned long long>(pending_lobby_id)
         );
-        ResetGCMemory("7035_disconnect_current_game_after_25", true, false);
+        ResetGCMemory(
+            consumed_emsg == GBE_kDotaCacheUnsubscribed
+                ? "7035_disconnect_current_game_after_25"
+                : "7035_abandon_after_7014",
+            true,
+            false);
     }
 
     GBE_GC_DebugLog(

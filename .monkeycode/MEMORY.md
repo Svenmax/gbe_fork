@@ -256,6 +256,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 过早 reset 会在客户端继续发送 `7272` 前清掉 postgame/pre-postgame chat 状态，导致无法稳定完成官方 `7272 -> 7014` 收尾链，可能引发点击断开后的客户端闪退。
   - `GBE_pending_reset_after_cache_unsubscribed` 仅适合保留给未进入完整 postgame teardown 的 current-game disconnect 兜底路径。
 
+[完整 abandon teardown 应在 7014 后 reset]
+- Date: 2026-05-08
+- Context: Agent 在排查第一局断开连接后 `7272 -> 7014` 已返回但随后 GC re-init 闪退时发现
+- Category: 代码模式
+- Instructions:
+  - 完整 `7035` abandon teardown 不能在 `25` 后 reset，但也不能在 pre-postgame `7272 -> 7014` 被取走后继续长期保留 active/postgame lobby 状态。
+  - 正确兜底点是：pre-postgame `7272` 到来时先排入 `7014`，等客户端实际 retrieve `7014` 后再执行 `ResetGCMemory("7035_abandon_after_7014", true, false)`。
+  - 这样保留官方 `7035 -> 25 -> 7010 -> 7010 -> 7272 -> 7014` 收尾链，同时避免 `7014` 后残留 lobby 状态触发下一轮 GC re-init 崩溃。
+
 [第二局 GAMESTATE_TIMEOUT 需窄条件推进英雄选择]
 - Date: 2026-05-07
 - Context: Agent 在排查第一局断开后第二次开始游戏无英雄可选、dashboard 仍显示建房设置时发现
