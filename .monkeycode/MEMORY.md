@@ -264,6 +264,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `Steam_Friends::SetRichPresence()` 只会更新本地 rich presence 数据并触发 `FriendRichPresenceUpdate_t` / `PersonaStateChange_t` callback，不会自动向 Dota 的 GC 消息队列注入 `766` persona 回显。
   - 如果要对齐官方 Start Game 的 `7501 -> 766` 外显链，需要在状态主线切换点显式排入匹配官方形状的 `766`，不能只依赖本地 `SetRichPresence()`。
 
+[Start Game dashboard 回显需要 7501/766 配对]
+- Date: 2026-05-08
+- Context: Agent 在分析用户反馈“开始游戏后返回主界面仍显示房间设置”的新日志时发现
+- Category: 代码模式
+- Instructions:
+  - 新日志中客户端 coordinator 在 `7041` 后只看到 `queued msg=766` 和初始 `SERVERSETUP 26`，没有看到 `queued msg=7501`，这会导致 dashboard rich presence 外显链缺少官方 `7501 -> 766` 配对。
+  - 官方 `7501` 是 Steam `k_EMsgClientRichPresenceUpload` 外围消息，不是 Dota GC proto 枚举里的 `k_EMsgGCToGCEmoticonUnlock = 7501`；构造时应使用 `RP` rich presence 键值 blob。
+  - 运行期 `RUN 26` 可能只排在 gameserver coordinator 队列中；若 dashboard 仍显示房间设置，除 `7501/766` 外还要继续核对客户端 SO cache 是否实际收到 `RUN` 状态推进。
+
 [完整 abandon teardown 不能在 25 后立即 reset]
 - Date: 2026-05-07
 - Context: Agent 在排查 dashboard 主页点击“断开连接”后游戏闪退时发现

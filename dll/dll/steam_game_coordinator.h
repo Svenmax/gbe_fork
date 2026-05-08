@@ -183,6 +183,8 @@ public ISteamGameCoordinator
     bool GBE_ShouldTrackDotaPracticeLobbyLateSteamChain() const;
     void GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *status, const char *lobby_state, bool include_party, bool include_lobby = true);
     void GBE_ClearDotaPracticeLobbyLaunchRichPresence();
+    bool GBE_BuildDotaPracticeLobbyLaunchRichPresenceUpload(const char *status, const char *lobby_state, bool include_party, bool include_lobby, std::string &message);
+    void GBE_QueueDotaPracticeLobbyLaunchRichPresenceUpload(const char *status, const char *lobby_state, bool include_party, bool include_lobby, const char *reason);
     void GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(const char *status, const char *lobby_state, bool include_party, bool include_lobby, const char *reason);
     void GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(const char *reason);
     bool GBE_CaptureCurrentDotaLobbyState(const char *reason, GBE_LocalLobby &snapshot, bool restore_shared = true);
