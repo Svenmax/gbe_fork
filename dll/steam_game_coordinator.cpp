@@ -8692,10 +8692,19 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
     GBE_shared_dota_lobby_state.bot_difficulty_dire = GBE_local_lobby.bot_difficulty_dire;
     GBE_shared_dota_lobby_state.bot_radiant = GBE_local_lobby.bot_radiant;
     GBE_shared_dota_lobby_state.bot_dire = GBE_local_lobby.bot_dire;
-    GBE_shared_dota_lobby_state.state = GBE_local_lobby.state;
-    GBE_shared_dota_lobby_state.game_state = GBE_local_lobby.game_state;
+    if (is_server) {
+        GBE_shared_dota_lobby_state.state = GBE_local_lobby.state;
+        GBE_shared_dota_lobby_state.game_state = GBE_local_lobby.game_state;
+        GBE_shared_dota_lobby_state.server_id = GBE_local_lobby.server_id;
+    } else {
+        if (GBE_local_lobby.state > GBE_shared_dota_lobby_state.state)
+            GBE_shared_dota_lobby_state.state = GBE_local_lobby.state;
+        if (GBE_local_lobby.game_state > GBE_shared_dota_lobby_state.game_state)
+            GBE_shared_dota_lobby_state.game_state = GBE_local_lobby.game_state;
+        if (GBE_local_lobby.server_id != 0)
+            GBE_shared_dota_lobby_state.server_id = GBE_local_lobby.server_id;
+    }
     GBE_shared_dota_lobby_state.match_id = GBE_local_lobby.match_id;
-    GBE_shared_dota_lobby_state.server_id = GBE_local_lobby.server_id;
     GBE_shared_dota_lobby_state.owner_steam_id = GBE_local_lobby.owner_steam_id;
     GBE_shared_dota_lobby_state.owner_account_id = GBE_local_lobby.owner_account_id;
     GBE_shared_dota_lobby_state.owner_name = GBE_local_lobby.owner_name;
@@ -10899,7 +10908,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         is_server &&
         GBE_local_lobby.owner_connected &&
         lobby_state == 2u &&
-        GBE_local_lobby.server_id != 0;
+        (GBE_local_lobby.server_id != 0 || lobby_game_state >= 1u);
     const bool ready_for_abandon_teardown =
         lobby_state == 2u &&
         lobby_game_state >= 2u;
