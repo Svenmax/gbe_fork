@@ -11419,7 +11419,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             );
         }
 
-        ResetGCMemory("7272_pre_postgame_abandon_finalized", true, false);
+        ResetGCMemory("7272_pre_postgame_abandon_finalized", false, false);
 
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
