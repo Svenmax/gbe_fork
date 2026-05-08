@@ -347,7 +347,6 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
 static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
 static constexpr uint32 GBE_kSteamAuthList = 5432u;
 static constexpr uint32 GBE_kSteamPersonaState = 766u;
-static constexpr uint32 GBE_kSteamClientRichPresenceUpload = 7501u;
 static constexpr uint32 GBE_kSteamTicketAuthComplete = 5429u;
 
 static constexpr const char *GBE_kDotaAbandonPersonaStatePrivateLobbyPostgameHex =
