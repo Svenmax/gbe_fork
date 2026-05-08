@@ -5237,7 +5237,7 @@ static bool GBE_BuildDotaJoinChatChannelResponsePayload(
     GBE_AppendProtoFixed64Field(member, 1u, steam_id);
     GBE_AppendProtoBytesField(member, 2u, player_name);
     GBE_AppendProtoVarIntField(member, 3u, 0u);
-    GBE_AppendProtoVarIntField(member, 4u, 0u);
+    // NOTE: No field 4 - official captures show member only has fields 1-3
     GBE_AppendProtoBytesField(body, 5u, member);
 
     GBE_AppendProtoVarIntField(body, 6u, channel_type);
@@ -5264,7 +5264,7 @@ static bool GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
     GBE_AppendProtoFixed64Field(member, 1u, steam_id);
     GBE_AppendProtoBytesField(member, 2u, player_name);
     GBE_AppendProtoVarIntField(member, 3u, 0u);
-    GBE_AppendProtoVarIntField(member, 4u, 0u);
+    // NOTE: No field 4 - official captures show member only has fields 1-3
     GBE_AppendProtoBytesField(body, 5u, member);
 
     GBE_AppendProtoVarIntField(body, 6u, 18u);
@@ -10893,6 +10893,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
 
     GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_ready_for_abandon_teardown");
 
+    std::string response_25;
+    if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for 7035 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
+        return true;
+    }
+
     std::string response_7010;
     if (!GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
             steam_id,
@@ -10943,50 +10949,25 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     };
 
+    // Official sequence: 25 (CacheUnsubscribed) first, then 7010 x2
+    if (!push_reply(response_25, GBE_kDotaCacheUnsubscribed, "25"))
+        return true;
     if (!push_reply(response_7010, GBE_kDotaJoinChatChannelResponse, "7010(first)"))
         return true;
     if (!push_reply(response_7010, GBE_kDotaJoinChatChannelResponse, "7010(second)"))
         return true;
 
-    auto push_persona = [&](const char *template_hex, const char *label) {
-        std::string persona_message;
-        if (!GBE_BuildDotaPersonaStatePeripheralMessage(template_hex, steam_id, lobby_id, persona_message)) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_SYNC",
-                "failed building abandon persona label=%s lobby_id=%llu",
-                label,
-                static_cast<unsigned long long>(lobby_id)
-            );
-            return;
-        }
-
-        push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "queued abandon persona label=%s lobby_id=%llu size=%zu",
-            label,
-            static_cast<unsigned long long>(lobby_id),
-            persona_message.size()
-        );
-    };
+    // NOTE: Do NOT send 766 (PersonaState) through the GC queue.
+    // Official captures show 766 is a Steam-layer message (k_EMsgClientPersonaState),
+    // delivered through the CMClient channel, NOT through ISteamGameCoordinator.
+    // Injecting 766 into the GC queue causes the GC message handler to parse it
+    // as a GC message, leading to memory access violations.
 
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true, false);
-    push_persona(GBE_kDotaAbandonPersonaStatePrivateLobbyPostgameHex, "7035_postgame_lobby");
-    push_persona(GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex, "7035_postgame_no_lobby");
-
-    // NOTE: Do NOT send 25 (CacheUnsubscribed) here.
-    // Testing proved that 25 triggers the engine to release lobby cache resources
-    // while server.dll is still accessing them, causing a race condition crash:
-    //   - Only 25:           100% crash (5/5)
-    //   - 25 first + others:  66% crash (2/3)
-    //   - Others + 25 last:   80% crash (4/5)
-    //   - No 25:              to be tested
-    // The lobby state reset is deferred to the next 7038 (create lobby) which
-    // already calls ResetGCMemory("7038_create", true, true).
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Processed 7035. sent 7010 + 7010 + 766 + 766 (no 25) wrapped=%d LobbyID=%llu postgame_channel_id=%llu postgame_channel_name=%s",
+        "[LOBBY] Processed 7035. sent 25 + 7010 + 7010 (official sequence) wrapped=%d LobbyID=%llu postgame_channel_id=%llu postgame_channel_name=%s",
         wrapped ? 1 : 0,
         static_cast<unsigned long long>(lobby_id),
         static_cast<unsigned long long>(postgame_channel_id),
