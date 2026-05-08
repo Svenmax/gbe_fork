@@ -11402,23 +11402,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         GBE_local_lobby.abandon_pre_postgame_chat_channel_id = 0;
         GBE_local_lobby.abandon_postgame_active = false;
 
-        std::string persona_message;
-        if (!GBE_BuildDotaPersonaStatePeripheralMessage(GBE_kDotaAbandonPersonaStateInitHex, steam_id, lobby_id, persona_message)) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_LOBBY",
-                "[LOBBY] Failed building abandon persona label=7272_pre_postgame_init lobby_id=%llu",
-                static_cast<unsigned long long>(lobby_id)
-            );
-        } else {
-            push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
-            GBE_GC_DebugLog(
-                "GC_DOTA_LOBBY",
-                "[LOBBY] queued abandon persona label=7272_pre_postgame_init lobby_id=%llu size=%zu",
-                static_cast<unsigned long long>(lobby_id),
-                persona_message.size()
-            );
-        }
-
         ResetGCMemory("7272_pre_postgame_abandon_finalized", false, false);
 
         GBE_GC_DebugLog(
