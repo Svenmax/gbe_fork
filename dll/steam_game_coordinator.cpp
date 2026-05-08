@@ -12207,90 +12207,6 @@ void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
     steam_client->steam_friends->SetRichPresence("party", nullptr);
 }
 
-bool Steam_Game_Coordinator::GBE_BuildDotaPracticeLobbyLaunchRichPresenceUpload(const char *status, const char *lobby_state, bool include_party, bool include_lobby, std::string &message)
-{
-    if (!status || !lobby_state)
-        return false;
-
-    std::string rp_blob;
-    rp_blob.push_back('\0');
-    rp_blob.append("RP");
-    rp_blob.push_back('\0');
-
-    auto append_entry = [&rp_blob](const char *key, const std::string &value) {
-        rp_blob.push_back('\1');
-        rp_blob.append(key ? key : "");
-        rp_blob.push_back('\0');
-        rp_blob.append(value);
-        rp_blob.push_back('\0');
-    };
-
-    append_entry("status", status);
-    append_entry("steam_display", status);
-    append_entry("num_params", "0");
-    append_entry("EventLevel_26", "0");
-    append_entry("EventLevel_39", "0");
-    append_entry("EventLevel_56", "1");
-    append_entry("EventLevel_55", "1");
-
-    if (include_party)
-        append_entry("party", "party_state: IN_MATCH");
-
-    if (include_lobby) {
-        char lobby_value[512] = {};
-        const char *room_name = GBE_local_lobby.room_name.empty() ? "" : GBE_local_lobby.room_name.c_str();
-        std::snprintf(
-            lobby_value,
-            sizeof(lobby_value),
-            "lobby_id: %llu lobby_state: %s game_mode: DOTA_GAMEMODE_AP member_count: 1 max_member_count: 10 name: \"%s\" lobby_type: 1",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            lobby_state,
-            room_name
-        );
-        append_entry("lobby", lobby_value);
-    }
-
-    std::string body;
-    body.push_back('\1');
-    GBE_AppendProtoBytesField(body, 1u, rp_blob);
-    body.push_back('\x08');
-    body.push_back('\x08');
-
-    message = build_protomsg_header(GBE_kSteamClientRichPresenceUpload | GBE_kProtoMask);
-    message.append(body);
-    return true;
-}
-
-void Steam_Game_Coordinator::GBE_QueueDotaPracticeLobbyLaunchRichPresenceUpload(const char *status, const char *lobby_state, bool include_party, bool include_lobby, const char *reason)
-{
-    if (is_server || gc_profile != GC_PROFILE_DOTA2 || !include_lobby || GBE_local_lobby.lobby_id == 0)
-        return;
-
-    std::string message;
-    if (!GBE_BuildDotaPracticeLobbyLaunchRichPresenceUpload(status, lobby_state, include_party, include_lobby, message)) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "failed building launch rich presence upload reason=%s lobby_id=%llu status=%s lobby_state=%s",
-            reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            status ? status : "",
-            lobby_state ? lobby_state : ""
-        );
-        return;
-    }
-
-    push_incoming_now(GBE_kSteamClientRichPresenceUpload | GBE_kProtoMask, message);
-    GBE_GC_DebugLog(
-        "GC_DOTA_SYNC",
-        "queued launch rich presence upload reason=%s lobby_id=%llu status=%s lobby_state=%s size=%zu",
-        reason ? reason : "unknown",
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        status ? status : "",
-        lobby_state ? lobby_state : "",
-        message.size()
-    );
-}
-
 void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(const char *status, const char *lobby_state, bool include_party, bool include_lobby, const char *reason)
 {
     if (is_server || gc_profile != GC_PROFILE_DOTA2 || !status || !lobby_state || !include_lobby || GBE_local_lobby.lobby_id == 0) {
@@ -12335,8 +12251,6 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(c
         );
         return;
     }
-
-    GBE_QueueDotaPracticeLobbyLaunchRichPresenceUpload(status, lobby_state, include_party, include_lobby, reason);
 
     std::string persona_message;
     const uint64 steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
