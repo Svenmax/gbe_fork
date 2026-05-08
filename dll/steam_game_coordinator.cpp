@@ -10893,12 +10893,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
 
     GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_ready_for_abandon_teardown");
 
-    std::string response_25;
-    if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for 7035 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
-        return true;
-    }
-
     std::string response_7010;
     if (!GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
             steam_id,
@@ -10980,12 +10974,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     push_persona(GBE_kDotaAbandonPersonaStatePrivateLobbyPostgameHex, "7035_postgame_lobby");
     push_persona(GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex, "7035_postgame_no_lobby");
 
-    if (!push_reply(response_25, GBE_kDotaCacheUnsubscribed, "25"))
-        return true;
+    // NOTE: Do NOT send 25 (CacheUnsubscribed) here.
+    // Testing proved that 25 triggers the engine to release lobby cache resources
+    // while server.dll is still accessing them, causing a race condition crash:
+    //   - Only 25:           100% crash (5/5)
+    //   - 25 first + others:  66% crash (2/3)
+    //   - Others + 25 last:   80% crash (4/5)
+    //   - No 25:              to be tested
+    // The lobby state reset is deferred to the next 7038 (create lobby) which
+    // already calls ResetGCMemory("7038_create", true, true).
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Processed 7035. sent 7010 + 7010 + 766 + 766 + 25 wrapped=%d LobbyID=%llu postgame_channel_id=%llu postgame_channel_name=%s",
+        "[LOBBY] Processed 7035. sent 7010 + 7010 + 766 + 766 (no 25) wrapped=%d LobbyID=%llu postgame_channel_id=%llu postgame_channel_name=%s",
         wrapped ? 1 : 0,
         static_cast<unsigned long long>(lobby_id),
         static_cast<unsigned long long>(postgame_channel_id),
