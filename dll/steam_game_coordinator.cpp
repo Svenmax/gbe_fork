@@ -8480,6 +8480,29 @@ bool Steam_Game_Coordinator::GBE_TryQueueDotaPrelaunch021(const char *note, uint
         wait_for_players_lobby.state,
         wait_for_players_lobby.game_state
     );
+
+    if (is_server) {
+        Steam_Client *steam_client = get_steam_client();
+        if (steam_client && steam_client->steam_game_coordinator && steam_client->steam_game_coordinator != this) {
+            steam_client->steam_game_coordinator->push_incoming_now(
+                GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
+                wait_for_players_message,
+                true,
+                wait_for_players_lobby.state,
+                wait_for_players_lobby.game_state);
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "forwarded req=%u resp=%u to client peer note=%s apply_state=%u apply_game_state=%u size=%zu",
+                trigger_emsg,
+                GBE_kDotaPracticeLobbyDetailsUpdate,
+                note ? note : "unknown",
+                wait_for_players_lobby.state,
+                wait_for_players_lobby.game_state,
+                wait_for_players_message.size()
+            );
+        }
+    }
+
     return true;
 }
 
@@ -8510,6 +8533,29 @@ bool Steam_Game_Coordinator::GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const cha
         next_lobby.state,
         next_lobby.game_state
     );
+
+    if (is_server) {
+        Steam_Client *steam_client = get_steam_client();
+        if (steam_client && steam_client->steam_game_coordinator && steam_client->steam_game_coordinator != this) {
+            steam_client->steam_game_coordinator->push_incoming_now(
+                GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
+                response_message,
+                true,
+                next_lobby.state,
+                next_lobby.game_state);
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "forwarded req=%u resp=%u to client peer note=%s apply_state=%u apply_game_state=%u size=%zu",
+                trigger_emsg,
+                GBE_kDotaPracticeLobbyDetailsUpdate,
+                note ? note : "unknown",
+                next_lobby.state,
+                next_lobby.game_state,
+                response_message.size()
+            );
+        }
+    }
+
     return true;
 }
 
@@ -9397,6 +9443,18 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
                     GBE_local_lobby.game_state,
                     runtime_cache_message.size()
                 );
+
+                if (is_server && steam_client->steam_game_coordinator && steam_client->steam_game_coordinator != this) {
+                    steam_client->steam_game_coordinator->push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, runtime_cache_message);
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_SYNC",
+                        "forwarded official-template CacheSubscribed to client peer reason=%s lobby_id=%llu server_id=%llu size=%zu",
+                        reason ? reason : "unknown",
+                        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                        static_cast<unsigned long long>(server_id),
+                        runtime_cache_message.size()
+                    );
+                }
             } else {
                 GBE_GC_DebugLog(
                     "GC_DOTA_SYNC",
