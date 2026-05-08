@@ -8453,58 +8453,7 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(cons
         message);
 }
 
-bool Steam_Game_Coordinator::GBE_TryQueueDotaPrelaunch021(const char *note, uint32 trigger_emsg, uint64 source_job)
-{
-    GBE_LocalLobby wait_for_players_lobby = GBE_local_lobby;
-    wait_for_players_lobby.state = 2u;
-    wait_for_players_lobby.game_state = 1u;
 
-    std::string wait_for_players_message;
-    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(wait_for_players_lobby, GBE_local_lobby.owner_name, wait_for_players_message))
-        return false;
-
-    push_incoming_now(
-        GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
-        wait_for_players_message,
-        true,
-        wait_for_players_lobby.state,
-        wait_for_players_lobby.game_state);
-    GBE_GC_DebugLog(
-        "GC_DOTA_DIRECT",
-        "replying req=%u resp=%u source_job=%llu size=%zu note=%s apply_state=%u apply_game_state=%u source=runtime",
-        trigger_emsg,
-        GBE_kDotaPracticeLobbyDetailsUpdate,
-        static_cast<unsigned long long>(source_job),
-        wait_for_players_message.size(),
-        note ? note : "unknown",
-        wait_for_players_lobby.state,
-        wait_for_players_lobby.game_state
-    );
-
-    if (is_server) {
-        Steam_Client *steam_client = get_steam_client();
-        if (steam_client && steam_client->steam_game_coordinator && steam_client->steam_game_coordinator != this) {
-            steam_client->steam_game_coordinator->push_incoming_now(
-                GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
-                wait_for_players_message,
-                true,
-                wait_for_players_lobby.state,
-                wait_for_players_lobby.game_state);
-            GBE_GC_DebugLog(
-                "GC_DOTA_DIRECT",
-                "forwarded req=%u resp=%u to client peer note=%s apply_state=%u apply_game_state=%u size=%zu",
-                trigger_emsg,
-                GBE_kDotaPracticeLobbyDetailsUpdate,
-                note ? note : "unknown",
-                wait_for_players_lobby.state,
-                wait_for_players_lobby.game_state,
-                wait_for_players_message.size()
-            );
-        }
-    }
-
-    return true;
-}
 
 bool Steam_Game_Coordinator::GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state)
 {
@@ -9989,27 +9938,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     queued_runtime_lobby_update = true;
             }
 
-            if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u) {
-                const std::string request_summary = GBE_FormatDota7034Summary(body, body_size);
-                GBE_GC_DebugLog(
-                    "GC_DOTA_DIRECT",
-                    "consumed req=%u source_job=%llu note=prelaunch 7034 observed before RUN apply active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu launch_phase=%s summary=%s",
-                    request_emsg,
-                    static_cast<unsigned long long>(source_job),
-                    GBE_local_lobby.active ? 1u : 0u,
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state,
-                    static_cast<unsigned long long>(GBE_local_lobby.match_id),
-                    static_cast<unsigned long long>(GBE_local_lobby.server_id),
-                    GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
-                    request_summary.c_str()
-                );
-            }
-
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
-                "consumed req=%u source_job=%llu note=runtime 7034 active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu summary=%s",
+                "consumed req=%u source_job=%llu note=runtime 7034 active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu launch_phase=%s summary=%s",
                 request_emsg,
                 static_cast<unsigned long long>(source_job),
                 GBE_local_lobby.active ? 1u : 0u,
@@ -10018,57 +9949,60 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_local_lobby.game_state,
                 static_cast<unsigned long long>(GBE_local_lobby.match_id),
                 static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
                 GBE_FormatDota7034Summary(body, body_size).c_str()
             );
 
-            const bool was_waiting_for_players =
-                GBE_local_lobby.state == 2u &&
-                GBE_local_lobby.game_state == 1u;
             const bool request_is_gamestate_timeout = request_shape.has_send_reason && request_shape.send_reason == 10u;
-            const bool request_advances_to_hero_selection =
-                (request_shape.has_game_state && request_shape.game_state >= 2u) ||
-                (request_is_gamestate_timeout && was_waiting_for_players && GBE_HasDotaLaunchServerSetupSync());
-            const bool request_advances_to_strategy_time =
-                (request_shape.has_game_state && request_shape.game_state >= 3u) ||
-                (request_is_gamestate_timeout && !was_waiting_for_players);
 
-            if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 1u) {
-                if (!GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8870/7034 wait_for_players", request_emsg, source_job, 2u, 1u))
-                    return true;
-                queued_runtime_lobby_update = true;
-                if (request_advances_to_hero_selection &&
-                    GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8870/7034 hero_selection", request_emsg, source_job, 2u, 2u))
+            // State-driven lobby update logic for RUN phase (state==2)
+            if (GBE_local_lobby.state == 2u) {
+                switch (GBE_local_lobby.game_state) {
+                case 0u:
+                    // RUN queued but not yet WAIT_FOR_PLAYERS - push (2,1)
+                    if (GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
+                        if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime wait_for_players after 7034", request_emsg, source_job, 2u, 1u))
+                            queued_runtime_lobby_update = true;
+                    }
+                    break;
+                case 1u: {
+                    // WAIT_FOR_PLAYERS - confirm (2,1) then maybe advance to HERO_SELECTION (2,2)
+                    if (!GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime 7034 confirm wait_for_players", request_emsg, source_job, 2u, 1u))
+                        return true;
                     queued_runtime_lobby_update = true;
-            }
-
-            if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 0u &&
-                    GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
-                if (GBE_TryQueueDotaPrelaunch021("runtime wait_for_players after 7034", request_emsg, source_job))
+                    const bool advances_to_hero_selection =
+                        (request_shape.has_game_state && request_shape.game_state >= 2u) ||
+                        (request_is_gamestate_timeout && GBE_HasDotaLaunchServerSetupSync());
+                    if (advances_to_hero_selection)
+                        GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime 7034 hero_selection", request_emsg, source_job, 2u, 2u);
+                    break;
+                }
+                case 2u: {
+                    // HERO_SELECTION - maybe advance to STRATEGY_TIME (2,3)
+                    const bool advances_to_strategy_time =
+                        (request_shape.has_game_state && request_shape.game_state >= 3u) ||
+                        request_is_gamestate_timeout;
+                    if (advances_to_strategy_time) {
+                        if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime 7034 strategy_time", request_emsg, source_job, 2u, 3u))
+                            queued_runtime_lobby_update = true;
+                    }
+                    break;
+                }
+                case 3u:
+                    // STRATEGY_TIME - hold state, no further synthetic advances
                     queued_runtime_lobby_update = true;
+                    break;
+                default:
+                    break;
+                }
             }
 
-            if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 2u && request_advances_to_strategy_time) {
-                if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8330/7034 strategy_time", request_emsg, source_job, 2u, 3u))
-                    queued_runtime_lobby_update = true;
-            }
-
-            if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 3u) {
-                GBE_GC_DebugLog(
-                    "GC_DOTA_DIRECT",
-                    "consumed req=%u source_job=%llu note=skip synthetic official 032 follow-up and preserve strategy_time state=%u game_state=%u",
-                    request_emsg,
-                    static_cast<unsigned long long>(source_job),
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state
-                );
-                queued_runtime_lobby_update = true;
-            }
-
+            // Fallback: send current lobby state as 26 unless post-game
             if (!(GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u)) {
                 if (GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "7034_launch_poll")) {
                     GBE_GC_DebugLog(
                         "GC_DOTA_DIRECT",
-                        "replying req=%u resp=%u source_job=%llu note=7034 direct poll uses runtime 26 fallback state=%u game_state=%u",
+                        "replying req=%u resp=%u source_job=%llu note=7034 poll fallback state=%u game_state=%u",
                         request_emsg,
                         GBE_kDotaPracticeLobbyDetailsUpdate,
                         static_cast<unsigned long long>(source_job),
