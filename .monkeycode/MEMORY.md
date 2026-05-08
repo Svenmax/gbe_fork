@@ -104,6 +104,23 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 如果我已经有明确的下一步，应直接继续执行，不要停在征求许可。
   - 只有在存在关键不确定性或缺少必要信息时，才停下来向用户请求澄清。
 
+[Dota2 闪退修复必须全面审计]
+- Date: 2026-05-08
+- Context: 用户反馈多次单点补丁后仍闪退，要求全面审计代码
+- Instructions:
+  - 排查 Dota2 practice lobby 闪退时，不要继续只根据日志末端打一处补丁。
+  - 必须先系统审计 GC 生命周期、client/server coordinator 初始化释放顺序、abandon teardown 状态机、shared/local lobby 写点和历史提交差异，再做成组修改。
+  - 输出或提交前要明确说明审计覆盖面、证据和仍存在的风险。
+
+[Dota2 abandon persona 构建与最终收束]
+- Date: 2026-05-08
+- Context: Agent 在修复 `bf2c89a0` 后第一局断开仍闪退时发现
+- Category: 代码模式
+- Instructions:
+  - `bf2c89a0` 后日志已不再出现 `GC_POLL` re-init，但 `7035 -> 25 -> 7010 -> 7010 -> 7272 -> 7014` 后仍缺少 final persona/rich presence/state teardown。
+  - abandon persona 模板使用的 donor fixed64 SteamID 与 launch persona 不同；若只 patch `GBE_kOldDotaSteamIdFixed64`，`766` persona 构建会失败且不会入队。
+  - stale pre-postgame `7272` 分支不能只回复 `7014` 后直接 return；它还必须执行最终 INIT/no-lobby persona、rich presence 和 shared/local lobby 收束。
+
 ### 官方抓包与稳定机制
 
 [官方 abandon 收尾链]

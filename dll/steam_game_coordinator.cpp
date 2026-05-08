@@ -285,6 +285,7 @@ static const std::array<uint8, 4> GBE_kOldDotaAccountIdVarint = { 0xF5, 0xED, 0x
 static const std::array<uint8, 9> GBE_kOldDotaSteamIdVarint = { 0xF5, 0xED, 0x86, 0xC1, 0x90, 0x80, 0x80, 0x88, 0x01 };
 static const std::array<uint8, 8> GBE_kOldDotaLobbyIdVarint = { 0x9D, 0x97, 0xF8, 0x9E, 0x95, 0xD7, 0xF7, 0x34 };
 static const std::array<uint8, 8> GBE_kOldDotaSteamIdFixed64 = { 0xF5, 0xB6, 0x21, 0x08, 0x01, 0x00, 0x10, 0x01 };
+static const std::array<uint8, 8> GBE_kOldDotaPersonaSteamIdFixed64 = { 0x91, 0x1D, 0xDF, 0x05, 0x01, 0x00, 0x10, 0x01 };
 static const std::array<uint8, 4> GBE_kOldDotaAccountIdFixed32 = { 0xF5, 0xB6, 0x21, 0x08 };
 static const std::array<uint8, 8> GBE_kOldDotaPracticeLobbyLobbyIdVarint = { 0x83, 0xCF, 0xA2, 0xB4, 0xA2, 0xFF, 0xF9, 0x34 };
 static const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyMatchIdVarint = { 0xDF, 0xF8, 0xBB, 0xDB, 0x20 };
@@ -4864,10 +4865,17 @@ static bool GBE_BuildDotaPracticeLobbyLaunchPeripheralMessage(
 
     std::string steam_id_fixed64_raw;
     GBE_AppendLittleEndian64(steam_id_fixed64_raw, steam_id);
-    if (!GBE_FindAndOverwriteBytes(
+    const std::vector<uint8> steam_id_fixed64_replacement = GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(steam_id_fixed64_raw.data()), steam_id_fixed64_raw.size());
+    const bool patched_steam_id =
+        GBE_FindAndOverwriteBytes(
             message,
             GBE_VectorFromBytes(GBE_kOldDotaSteamIdFixed64.data(), GBE_kOldDotaSteamIdFixed64.size()),
-            GBE_VectorFromBytes(reinterpret_cast<const uint8 *>(steam_id_fixed64_raw.data()), steam_id_fixed64_raw.size())))
+            steam_id_fixed64_replacement) ||
+        GBE_FindAndOverwriteBytes(
+            message,
+            GBE_VectorFromBytes(GBE_kOldDotaPersonaSteamIdFixed64.data(), GBE_kOldDotaPersonaSteamIdFixed64.size()),
+            steam_id_fixed64_replacement);
+    if (!patched_steam_id)
         return false;
 
     if (patch_server_id) {
@@ -11386,14 +11394,37 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             }
         }
 
-        // Clear the stale pre-postgame channel reference now that we have
-        // acknowledged the leave request.  Do not reset here: the game can
-        // still shut down the server GC immediately after consuming 7014.
+        GBE_local_lobby.has_chat_channel = false;
+        GBE_local_lobby.chat_channel_id = 0;
+        GBE_local_lobby.chat_channel_name.clear();
+        GBE_local_lobby.chat_channel_type = 0;
         GBE_local_lobby.abandon_pre_postgame_chat_channel_id = 0;
+        GBE_local_lobby.abandon_postgame_active = false;
+
+        std::string persona_message;
+        if (!GBE_BuildDotaPersonaStatePeripheralMessage(GBE_kDotaAbandonPersonaStateInitHex, steam_id, lobby_id, persona_message)) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Failed building abandon persona label=7272_pre_postgame_init lobby_id=%llu",
+                static_cast<unsigned long long>(lobby_id)
+            );
+        } else {
+            push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] queued abandon persona label=7272_pre_postgame_init lobby_id=%llu size=%zu",
+                static_cast<unsigned long long>(lobby_id),
+                persona_message.size()
+            );
+        }
+
+        GBE_ClearDotaPracticeLobbyLaunchRichPresence();
+        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
+        GBE_PublishSharedDotaLobbyState("7272_pre_postgame_leave_finalized");
 
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Chat channel left (pre-postgame). channel=%llu wrapped=%d reset_deferred=0",
+            "[LOBBY] Chat channel left (pre-postgame). channel=%llu wrapped=%d finalized=1 reset_deferred=0",
             static_cast<unsigned long long>(channel_id),
             wrapped ? 1 : 0
         );
