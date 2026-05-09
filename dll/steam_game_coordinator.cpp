@@ -11472,12 +11472,41 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
     if (!GBE_local_lobby.active || !GBE_local_lobby.has_chat_channel) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Ignoring stale 7272 after lobby reset. request_channel=%llu active=%u has_chat=%u local_channel=%llu",
+            "[LOBBY] Replying 7014 for stale 7272 after lobby reset without restoring lobby state. request_channel=%llu active=%u has_chat=%u local_channel=%llu",
             static_cast<unsigned long long>(channel_id),
             GBE_local_lobby.active ? 1u : 0u,
             GBE_local_lobby.has_chat_channel ? 1u : 0u,
             static_cast<unsigned long long>(local_channel_id)
         );
+
+        if (channel_id == 0) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring stale 7272 after lobby reset because no request channel is available");
+            return true;
+        }
+
+        std::string stale_response_7014;
+        if (!GBE_BuildDotaOtherLeftChannelPayload(channel_id, settings->get_local_steam_id().ConvertToUint64(), stale_response_7014)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building stale 7014 payload for channel=%llu", static_cast<unsigned long long>(channel_id));
+            return true;
+        }
+
+        if (wrapped) {
+            if (!outer_session_field_raw) {
+                GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for stale 7272 channel=%llu", static_cast<unsigned long long>(channel_id));
+                return true;
+            }
+
+            std::string wrapped_stale_7014;
+            if (!GBE_BuildWrappedDotaReplayMessage(stale_response_7014, *outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_stale_7014)) {
+                GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping stale 7014 payload for channel=%llu", static_cast<unsigned long long>(channel_id));
+                return true;
+            }
+
+            push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_stale_7014);
+        } else {
+            push_incoming_now(GBE_kDotaOtherLeftChannel | GBE_kProtoMask, stale_response_7014);
+        }
+
         return true;
     }
     if (channel_id == 0) {
