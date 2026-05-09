@@ -8509,37 +8509,67 @@ bool Steam_Game_Coordinator::GBE_TryQueueDotaPrelaunch021(const char *note, uint
     return true;
 }
 
-bool Steam_Game_Coordinator::GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state)
+bool Steam_Game_Coordinator::GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state, double delay)
 {
     GBE_LocalLobby next_lobby = GBE_local_lobby;
     next_lobby.state = next_state;
     next_lobby.game_state = next_game_state;
 
-    std::string response_message;
-    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(next_lobby, GBE_local_lobby.owner_name, response_message))
+    auto queue_details_update = [&](Steam_Game_Coordinator *target) -> bool {
+        if (!target || target->gc_profile != GC_PROFILE_DOTA2)
+            return false;
+
+        std::string response_message;
+        if (!target->GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(next_lobby, target->GBE_GetDotaLobbyOwnerName(), response_message))
+            return false;
+
+        if (delay > 0.0) {
+            target->push_incoming(
+                GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
+                response_message,
+                delay,
+                true,
+                next_lobby.state,
+                next_lobby.game_state);
+        } else {
+            target->push_incoming_now(
+                GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
+                response_message,
+                true,
+                next_lobby.state,
+                next_lobby.game_state);
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=%s apply_state=%u apply_game_state=%u delay=%.3f source=runtime target=%p",
+            trigger_emsg,
+            GBE_kDotaPracticeLobbyDetailsUpdate,
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            note ? note : "unknown",
+            next_lobby.state,
+            next_lobby.game_state,
+            delay,
+            static_cast<void *>(target)
+        );
+
+        return true;
+    };
+
+    if (!queue_details_update(this))
         return false;
 
-    push_incoming_now(
-        GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
-        response_message,
-        true,
-        next_lobby.state,
-        next_lobby.game_state);
-
-    if (is_server && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 1u)
-        GBE_PushDotaLaunchStateToClientPeer(note ? note : "runtime_lobby_update");
-
-    GBE_GC_DebugLog(
-        "GC_DOTA_DIRECT",
-        "replying req=%u resp=%u source_job=%llu size=%zu note=%s apply_state=%u apply_game_state=%u source=runtime",
-        trigger_emsg,
-        GBE_kDotaPracticeLobbyDetailsUpdate,
-        static_cast<unsigned long long>(source_job),
-        response_message.size(),
-        note ? note : "unknown",
-        next_lobby.state,
-        next_lobby.game_state
-    );
+    if (is_server && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 1u) {
+        if (delay > 0.0) {
+            Steam_Client *steam_client = get_steam_client();
+            Steam_Game_Coordinator *client_target = steam_client ? steam_client->steam_game_coordinator : nullptr;
+            if (client_target && client_target != this)
+                queue_details_update(client_target);
+        } else {
+            GBE_PushDotaLaunchStateToClientPeer(note ? note : "runtime_lobby_update");
+        }
+    }
 
     return true;
 }
@@ -10131,6 +10161,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 2u && request_advances_to_strategy_time) {
                 if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8330/7034 strategy_time", request_emsg, source_job, 2u, 3u))
+                    queued_runtime_lobby_update = true;
+            }
+
+            if (GBE_local_lobby.state == 2u &&
+                GBE_local_lobby.game_state == 2u &&
+                request_shape.has_game_state && request_shape.game_state == 2u &&
+                request_shape.has_send_reason && request_shape.send_reason == 2u &&
+                GBE_local_lobby.game_mode == 1u) {
+                if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime AP hero_selection fallback strategy_time", request_emsg, source_job, 2u, 3u, 1.0))
                     queued_runtime_lobby_update = true;
             }
 

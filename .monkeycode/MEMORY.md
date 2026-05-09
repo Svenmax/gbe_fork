@@ -157,6 +157,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `5429 TicketAuthComplete` 位于 `RUN/connect` 之前，而不是只在更晚的 pregame/private-lobby 阶段出现。
   - `7501/766` 是跟随 `24/26` 状态骨架变化的外围回显，核心对齐对象仍应是 `24/26` 的 lobby state、server_id、connect、game_state 链。
 
+[AP Start Game HERO_SELECTION 后续推进]
+- Date: 2026-05-09
+- Context: Agent 在修复 Dota2 AP Start Game 第二局英雄选择 UI 卡住时发现
+- Category: 代码模式
+- Instructions:
+  - AP practice lobby 在 `RUN/HERO_SELECTION(game_state=2)` 后，不能只等待后续 `7034 game_state=3` 或 `send_reason=10` 才推进 `STRATEGY_TIME(game_state=3)`。
+  - 当前日志显示客户端可在 `game_state=2` 后长时间停留于 `WAIT_FOR_PLAYERS_TO_LOAD`，直到后续交互或延迟请求才收到 `game_state=3`。
+  - 修正这类问题时应优先保持 `7034` connected players 正常回复，同时主动排官方后续 `26` 状态链，避免改 game mode 或 UI 层。
+
 [按官方抓包一次性收敛]
 - Date: 2026-05-04
 - Context: 用户对继续依赖“补发”或“门控”修窗口表示不满，要求直接按官方抓包主线与数据结构修正
