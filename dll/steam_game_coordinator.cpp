@@ -6777,11 +6777,22 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
     if (!message.apply_lobby_state)
         return;
 
-    if (gc_profile == GC_PROFILE_DOTA2 &&
-        (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) &&
-        GBE_shared_dota_lobby_state.valid &&
-        GBE_shared_dota_lobby_state.lobby_id != 0) {
-        GBE_RestoreSharedDotaLobbyState("queued_state_preapply");
+    if (gc_profile == GC_PROFILE_DOTA2 && (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)) {
+        if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.active && GBE_shared_dota_lobby_state.lobby_id != 0) {
+            GBE_RestoreSharedDotaLobbyState("queued_state_preapply");
+        } else {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "queued lobby state has no full local/shared lobby context this=%p shared_valid=%u shared_active=%u shared_lobby_id=%llu msg=%u state=%u game_state=%u",
+                static_cast<void *>(this),
+                GBE_shared_dota_lobby_state.valid ? 1u : 0u,
+                GBE_shared_dota_lobby_state.active ? 1u : 0u,
+                static_cast<unsigned long long>(GBE_shared_dota_lobby_state.lobby_id),
+                GBE_GC_MaskedEMsg(message.msg_type),
+                message.lobby_state,
+                message.lobby_game_state
+            );
+        }
     }
 
     GBE_local_lobby.state = message.lobby_state;
@@ -6797,14 +6808,24 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Applied queued state=%u game_state=%u launch_phase=%s msg=%u",
+        "[LOBBY] Applied queued state=%u game_state=%u launch_phase=%s msg=%u active=%u lobby_id=%llu server_id=%llu",
         GBE_local_lobby.state,
         GBE_local_lobby.game_state,
         GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
-        GBE_GC_MaskedEMsg(message.msg_type)
+        GBE_GC_MaskedEMsg(message.msg_type),
+        GBE_local_lobby.active ? 1u : 0u,
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.server_id)
     );
 
     GBE_ReapplyDotaPracticeLobbyLaunchRichPresence("queued_state");
+
+    if (gc_profile == GC_PROFILE_DOTA2 &&
+        is_server &&
+        GBE_local_lobby.state == 2u &&
+        GBE_local_lobby.game_state >= 1u) {
+        GBE_PushDotaLaunchStateToClientPeer("queued_state");
+    }
 
     GBE_PublishSharedDotaLobbyState("queued_state");
 }
@@ -11331,7 +11352,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id)
     );
 
-    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
+    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true, false);
+
+    std::string no_lobby_persona;
+    if (GBE_BuildDotaPersonaStatePeripheralMessage(GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex, steam_id, lobby_id, no_lobby_persona)) {
+        push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, no_lobby_persona);
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "queued abandon persona label=7035_private_lobby_no_lobby lobby_id=%llu size=%zu",
+            static_cast<unsigned long long>(lobby_id),
+            no_lobby_persona.size()
+        );
+    } else {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "failed building abandon persona label=7035_private_lobby_no_lobby lobby_id=%llu",
+            static_cast<unsigned long long>(lobby_id)
+        );
+    }
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -11817,6 +11855,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             );
             return true;
         }
+
+        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
 
         // During host disconnect from hero selection, the real client can still be unwinding
         // server/game-rules state after postgame chat leaves. Clearing the entire local/generic
