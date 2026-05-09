@@ -12425,8 +12425,6 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaAbandonAfterOtherLeftChannel(uint64
         return;
 
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
-    const uint64 steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
-
     GBE_local_lobby.has_chat_channel = false;
     GBE_local_lobby.chat_channel_id = 0;
     GBE_local_lobby.chat_channel_name.clear();
@@ -12436,29 +12434,10 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaAbandonAfterOtherLeftChannel(uint64
 
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
 
-    std::string persona_message;
-    if (steam_id == 0 || !GBE_BuildDotaPersonaStatePeripheralMessage(GBE_kDotaAbandonPersonaStateInitHex, steam_id, lobby_id, persona_message)) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "failed building abandon persona after 7014 lobby_id=%llu reason=%s",
-            static_cast<unsigned long long>(lobby_id),
-            reason ? reason : "unknown"
-        );
-    } else {
-        push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "queued abandon persona after 7014 lobby_id=%llu size=%zu reason=%s",
-            static_cast<unsigned long long>(lobby_id),
-            persona_message.size(),
-            reason ? reason : "unknown"
-        );
-    }
-
     GBE_PublishSharedDotaLobbyState(reason ? reason : "7014_abandon_finalize");
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Finalized abandon teardown after 7014 retrieval LobbyID=%llu reason=%s",
+        "[LOBBY] Finalized abandon teardown after 7014 retrieval without queuing persona LobbyID=%llu reason=%s",
         static_cast<unsigned long long>(lobby_id),
         reason ? reason : "unknown"
     );
