@@ -78,6 +78,8 @@ public ISteamGameCoordinator
     uint32 GBE_last_dota_launch_state_pushed_game_state{};
     bool GBE_pending_reset_after_cache_unsubscribed{};
     uint64 GBE_pending_reset_after_cache_unsubscribed_lobby_id{};
+    bool GBE_pending_dota_abandon_finalize_after_7014{};
+    uint64 GBE_pending_dota_abandon_finalize_lobby_id{};
     std::string GBE_last_dota_launch_persona_signature;
 
     struct GBE_LocalLobby
@@ -186,6 +188,7 @@ public ISteamGameCoordinator
     void GBE_ClearDotaPracticeLobbyLaunchRichPresence();
     void GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(const char *status, const char *lobby_state, bool include_party, bool include_lobby, const char *reason);
     void GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(const char *reason);
+    void GBE_FinalizeDotaAbandonAfterOtherLeftChannel(uint64 consumed_lobby_id, const char *reason);
     bool GBE_CaptureCurrentDotaLobbyState(const char *reason, GBE_LocalLobby &snapshot, bool restore_shared = true);
     void GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(const char *reason);
     bool GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message);
