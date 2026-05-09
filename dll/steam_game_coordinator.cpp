@@ -11035,9 +11035,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     }
 
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
-    const std::string player_name = std::string(settings->get_local_name());
-    const std::string postgame_channel_name = std::string("PostGame_") + std::to_string(lobby_id);
-    const uint64 postgame_channel_id = GBE_GenerateDotaPostGameChatChannelId();
 
     GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_ready_for_abandon_teardown");
 
@@ -11047,25 +11044,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     }
 
-    std::string response_7010;
-    if (!GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
-            steam_id,
-            postgame_channel_id,
-            postgame_channel_name,
-            player_name,
-            response_7010)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building postgame 7010 payload for 7035 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
-        return true;
-    }
-
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
 
-    GBE_local_lobby.abandon_pre_postgame_chat_channel_id = GBE_local_lobby.chat_channel_id;
-
-    GBE_local_lobby.has_chat_channel = true;
-    GBE_local_lobby.chat_channel_id = postgame_channel_id;
-    GBE_local_lobby.chat_channel_name = postgame_channel_name;
-    GBE_local_lobby.chat_channel_type = 18u;
+    GBE_local_lobby.has_chat_channel = false;
+    GBE_local_lobby.chat_channel_id = 0;
+    GBE_local_lobby.chat_channel_name.clear();
+    GBE_local_lobby.chat_channel_type = 0;
+    GBE_local_lobby.abandon_pre_postgame_chat_channel_id = 0;
     GBE_local_lobby.has_cache_version = false;
     GBE_local_lobby.cache_version = 0;
     GBE_local_lobby.has_cache_service_id = false;
@@ -11073,7 +11058,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     GBE_local_lobby.cache_service_list.clear();
     GBE_local_lobby.has_cache_sync_version = false;
     GBE_local_lobby.cache_sync_version = 0;
-    GBE_local_lobby.abandon_postgame_active = true;
+    GBE_local_lobby.abandon_postgame_active = false;
     GBE_PublishSharedDotaLobbyState("7035_abandon_current_game");
 
     auto push_reply = [&](const std::string &payload, uint32 direct_emsg, const char *label) -> bool {
@@ -11100,29 +11085,21 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     if (!push_reply(response_25, GBE_kDotaCacheUnsubscribed, "25"))
         return true;
 
+    GBE_pending_reset_after_cache_unsubscribed = true;
+    GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Full 7035 teardown queued 25 without deferred reset; waiting for postgame 7272/7014 LobbyID=%llu",
+        "[LOBBY] Full 7035 teardown queued only 25 and deferred reset until retrieval LobbyID=%llu",
         static_cast<unsigned long long>(lobby_id)
     );
 
-    if (!push_reply(response_7010, GBE_kDotaJoinChatChannelResponse, "7010(first)"))
-        return true;
-
-    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true, false);
-    GBE_GC_DebugLog(
-        "GC_DOTA_SYNC",
-        "updated abandon rich presence without queuing persona GC messages label=7035_postgame_no_lobby lobby_id=%llu",
-        static_cast<unsigned long long>(lobby_id)
-    );
+    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Processed 7035. sent 25 + 7010 wrapped=%d LobbyID=%llu postgame_channel_id=%llu postgame_channel_name=%s",
+        "[LOBBY] Processed 7035. sent only 25 wrapped=%d LobbyID=%llu",
         wrapped ? 1 : 0,
-        static_cast<unsigned long long>(lobby_id),
-        static_cast<unsigned long long>(postgame_channel_id),
-        postgame_channel_name.c_str()
+        static_cast<unsigned long long>(lobby_id)
     );
     return true;
 }
