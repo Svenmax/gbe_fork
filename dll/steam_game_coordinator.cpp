@@ -5237,7 +5237,7 @@ static bool GBE_BuildDotaJoinChatChannelResponsePayload(
     GBE_AppendProtoFixed64Field(member, 1u, steam_id);
     GBE_AppendProtoBytesField(member, 2u, player_name);
     GBE_AppendProtoVarIntField(member, 3u, 0u);
-    // NOTE: No field 4 - official captures show member only has fields 1-3
+    GBE_AppendProtoVarIntField(member, 4u, 0u);
     GBE_AppendProtoBytesField(body, 5u, member);
 
     GBE_AppendProtoVarIntField(body, 6u, channel_type);
@@ -5264,7 +5264,7 @@ static bool GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
     GBE_AppendProtoFixed64Field(member, 1u, steam_id);
     GBE_AppendProtoBytesField(member, 2u, player_name);
     GBE_AppendProtoVarIntField(member, 3u, 0u);
-    // NOTE: No field 4 - official captures show member only has fields 1-3
+    GBE_AppendProtoVarIntField(member, 4u, 0u);
     GBE_AppendProtoBytesField(body, 5u, member);
 
     GBE_AppendProtoVarIntField(body, 6u, 18u);
@@ -6837,15 +6837,29 @@ void Steam_Game_Coordinator::GBE_DiscardQueuedDotaLaunchMessagesForAbandon(const
             }
         }
 
+        size_t removed_incoming = 0;
+        std::queue<GC_Message> filtered_incoming;
+        while (!coordinator->incoming_messages.empty()) {
+            GC_Message queued = coordinator->incoming_messages.front();
+            coordinator->incoming_messages.pop();
+            if (coordinator->GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(GBE_GC_MaskedEMsg(queued.msg_type))) {
+                ++removed_incoming;
+                continue;
+            }
+            filtered_incoming.push(std::move(queued));
+        }
+        coordinator->incoming_messages.swap(filtered_incoming);
+
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Discarded pending launch messages for abandon reason=%s this=%p is_server=%u removed_pending=%zu preserved_incoming=%zu remaining_pending=%zu",
+            "[LOBBY] Discarded queued launch messages for abandon reason=%s this=%p is_server=%u removed_pending=%zu removed_incoming=%zu remaining_pending=%zu remaining_incoming=%zu",
             reason ? reason : "unknown",
             static_cast<void *>(coordinator),
             coordinator->is_server ? 1u : 0u,
             removed_pending,
-            coordinator->incoming_messages.size(),
-            coordinator->pending_messages.size()
+            removed_incoming,
+            coordinator->pending_messages.size(),
+            coordinator->incoming_messages.size()
         );
     };
 
@@ -10935,42 +10949,46 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     };
 
-    // Official sequence: 25 (CacheUnsubscribed) first, then 7010 x2
     if (!push_reply(response_25, GBE_kDotaCacheUnsubscribed, "25"))
         return true;
+
+    GBE_pending_reset_after_cache_unsubscribed = true;
+    GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
+
     if (!push_reply(response_7010, GBE_kDotaJoinChatChannelResponse, "7010(first)"))
         return true;
     if (!push_reply(response_7010, GBE_kDotaJoinChatChannelResponse, "7010(second)"))
         return true;
 
-    // Also send 25 to the server GC instance.
-    // Official captures (dota2hoststart-abandon) show the game server also receives
-    // msg 25 (CacheUnsubscribed) from the GC. Without this, server.dll may still
-    // hold references to lobby cache data that the client side has already released.
-    {
-        Steam_Client *steam_client = get_steam_client();
-        Steam_Game_Coordinator *server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
-        if (server_gc && server_gc != this) {
-            server_gc->push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
+    auto push_persona = [&](const char *template_hex, const char *label) {
+        std::string persona_message;
+        if (!GBE_BuildDotaPersonaStatePeripheralMessage(template_hex, steam_id, lobby_id, persona_message)) {
             GBE_GC_DebugLog(
-                "GC_DOTA_LOBBY",
-                "[LOBBY] Also sent 25 to server GC instance for 7035 LobbyID=%llu",
+                "GC_DOTA_SYNC",
+                "failed building abandon persona label=%s lobby_id=%llu",
+                label,
                 static_cast<unsigned long long>(lobby_id)
             );
+            return;
         }
-    }
 
-    // NOTE: Do NOT send 766 (PersonaState) through the GC queue.
-    // Official captures show 766 is a Steam-layer message (k_EMsgClientPersonaState),
-    // delivered through the CMClient channel, NOT through ISteamGameCoordinator.
-    // Injecting 766 into the GC queue causes the GC message handler to parse it
-    // as a GC message, leading to memory access violations.
+        push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "queued abandon persona label=%s lobby_id=%llu size=%zu",
+            label,
+            static_cast<unsigned long long>(lobby_id),
+            persona_message.size()
+        );
+    };
 
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true, false);
+    push_persona(GBE_kDotaAbandonPersonaStatePrivateLobbyPostgameHex, "7035_postgame_lobby");
+    push_persona(GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex, "7035_postgame_no_lobby");
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Processed 7035. sent 25 + 7010 + 7010 (official sequence) wrapped=%d LobbyID=%llu postgame_channel_id=%llu postgame_channel_name=%s",
+        "[LOBBY] Processed 7035. sent 25 + 7010 + 7010 wrapped=%d LobbyID=%llu postgame_channel_id=%llu postgame_channel_name=%s",
         wrapped ? 1 : 0,
         static_cast<unsigned long long>(lobby_id),
         static_cast<unsigned long long>(postgame_channel_id),
@@ -11380,9 +11398,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             }
         }
 
+        // Clear the stale pre-postgame channel reference now that we have
+        // acknowledged the leave request.
+        GBE_local_lobby.abandon_pre_postgame_chat_channel_id = 0;
+
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Chat channel left (pre-postgame). channel=%llu wrapped=%d finalized=1 reset_applied=0",
+            "[LOBBY] Chat channel left (pre-postgame). channel=%llu wrapped=%d",
             static_cast<unsigned long long>(channel_id),
             wrapped ? 1 : 0
         );
@@ -12472,19 +12494,14 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
         GBE_pending_reset_after_cache_unsubscribed &&
         GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaCacheUnsubscribed) {
         const uint64 pending_lobby_id = GBE_pending_reset_after_cache_unsubscribed_lobby_id;
-        const uint32 consumed_emsg = GBE_GC_MaskedEMsg(*punMsgType);
         GBE_pending_reset_after_cache_unsubscribed = false;
         GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Consumed pending teardown ack %u; applying deferred reset for LobbyID=%llu",
-            consumed_emsg,
+            "[LOBBY] Consumed pending 25; applying deferred current-game reset for LobbyID=%llu",
             static_cast<unsigned long long>(pending_lobby_id)
         );
-        ResetGCMemory(
-            "7035_disconnect_current_game_after_25",
-            false,
-            false);
+        ResetGCMemory("7035_disconnect_current_game_after_25", true, false);
     }
 
     GBE_GC_DebugLog(
