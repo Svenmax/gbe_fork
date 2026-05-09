@@ -11108,8 +11108,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
 
     if (!push_reply(response_7010, GBE_kDotaJoinChatChannelResponse, "7010(first)"))
         return true;
-    if (!push_reply(response_7010, GBE_kDotaJoinChatChannelResponse, "7010(second)"))
-        return true;
 
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true, false);
     GBE_GC_DebugLog(
@@ -11120,7 +11118,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Processed 7035. sent 25 + 7010 + 7010 wrapped=%d LobbyID=%llu postgame_channel_id=%llu postgame_channel_name=%s",
+        "[LOBBY] Processed 7035. sent 25 + 7010 wrapped=%d LobbyID=%llu postgame_channel_id=%llu postgame_channel_name=%s",
         wrapped ? 1 : 0,
         static_cast<unsigned long long>(lobby_id),
         static_cast<unsigned long long>(postgame_channel_id),
