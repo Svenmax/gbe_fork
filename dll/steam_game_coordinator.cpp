@@ -11083,31 +11083,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     if (!push_reply(response_7010, GBE_kDotaJoinChatChannelResponse, "7010(second)"))
         return true;
 
-    auto push_persona = [&](const char *template_hex, const char *label) {
-        std::string persona_message;
-        if (!GBE_BuildDotaPersonaStatePeripheralMessage(template_hex, steam_id, lobby_id, persona_message)) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_SYNC",
-                "failed building abandon persona label=%s lobby_id=%llu",
-                label,
-                static_cast<unsigned long long>(lobby_id)
-            );
-            return;
-        }
-
-        push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "queued abandon persona label=%s lobby_id=%llu size=%zu",
-            label,
-            static_cast<unsigned long long>(lobby_id),
-            persona_message.size()
-        );
-    };
-
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true, false);
-    push_persona(GBE_kDotaAbandonPersonaStatePrivateLobbyPostgameHex, "7035_postgame_lobby");
-    push_persona(GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex, "7035_postgame_no_lobby");
+    GBE_GC_DebugLog(
+        "GC_DOTA_SYNC",
+        "updated abandon rich presence without queuing persona GC messages label=7035_postgame_no_lobby lobby_id=%llu",
+        static_cast<unsigned long long>(lobby_id)
+    );
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
