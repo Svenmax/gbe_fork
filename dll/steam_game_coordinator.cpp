@@ -11472,18 +11472,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
     }
 
     if (leaving_postgame_channel && matches_pre_postgame_channel && !matches_current_postgame_channel) {
-        // The client is leaving the original lobby chat channel while the
-        // postgame channel is already active. Treat this as stale: replying 7014
-        // here acknowledges the wrong channel and repeatedly lands in the crash
-        // window immediately after RetrieveMessage(7014).
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Ignoring stale pre-postgame 7272 during abandon teardown. request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu",
+            "[LOBBY] Handling pre-postgame 7272 during abandon teardown (replying 7014). request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu",
             static_cast<unsigned long long>(channel_id),
             static_cast<unsigned long long>(local_channel_id),
             static_cast<unsigned long long>(pre_postgame_channel_id)
         );
-        return true;
     }
 
     std::string response_7014;
