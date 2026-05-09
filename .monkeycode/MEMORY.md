@@ -309,3 +309,21 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 官方 abandon 抓包中普通 lobby chat leave 使用的 channel id 位于 `0x62e000` 附近，例如 `6481464` 和 `6481871`。
   - 官方 postgame `7010` 使用的 channel id 位于 `0x62f000` 附近，例如 `6487736`。
   - 本地构造 Dota lobby/postgame chat channel 时应保持该区间形状，避免生成过低的 `0x1xxxx` 或 `0x10xxxx` channel id。
+
+[Dota2 CM 断开稳定字段对齐]
+- Date: 2026-05-09
+- Context: 用户反馈 `fc95ea2a fix(gc): align Dota CM lobby object fields` 后 CM 模式断开连接不会闪退，并上传实测日志
+- Category: 代码模式
+- Instructions:
+  - CM practice lobby 的稳定修复点包括：`CSODOTAServerStaticLobbyMember` 在 `game_mode=2` 时不写 `disabled_random_hero_bits` field `16`，仍保留四个 `banned_hero_ids=0` field `19`。
+  - `CSODOTALobby` 需要补齐官方 AP/CM 都存在的 field `103=0`、`104=0`，并在 `RUN` 且 `WAIT_FOR_PLAYERS_TO_LOAD` 之后补 field `65=0`。
+  - 最新 CM 实测日志显示断开链路完成 `7035 -> 25 -> 7010 -> 7272 -> 7014`，并在 `7014_pre_postgame_retrieved` 后 reset，未再出现断开闪退。
+
+[Dota2 玩家交换英雄界面账号名查询]
+- Date: 2026-05-09
+- Context: Agent 在解析用户上传的 `steamplayerswaphero.zip` 英雄选择界面玩家交换英雄抓包时发现
+- Category: 代码模式
+- Instructions:
+  - 玩家交换英雄界面会触发资料/公会/账号查询链，已知包含 `8729 -> 8730`、`8886 -> 8887`、`7534 -> 7535`、`8673 -> 8674`、`7197 -> 7198`。
+  - 抓包新增确认 `2581 k_EMsgClientToGCLookupAccountName -> 2582 k_EMsgClientToGCLookupAccountNameResponse`，请求 field `1` 是 account_id，响应 body 包含 field `1` account_id 与 field `2` account_name。
+  - 当前实现应对 `2581` 返回本地账号名，避免交换英雄界面查询其他玩家名称时缺响应。

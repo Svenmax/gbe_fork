@@ -5110,6 +5110,14 @@ static bool GBE_BuildDota7535ResponsePayload(uint32 account_id, bool has_request
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7535u, has_request_job, request_job_id, body, message);
 }
 
+static bool GBE_BuildDota2582LookupAccountNameResponsePayload(uint32 account_id, const std::string &account_name, bool has_request_job, uint64 request_job_id, std::string &message)
+{
+    std::string body;
+    GBE_AppendProtoVarIntField(body, 1u, account_id);
+    GBE_AppendProtoBytesField(body, 2u, account_name);
+    return GBE_BuildDotaJobReplyPayload(2582u, has_request_job ? request_job_id : UINT64_MAX, body, message);
+}
+
 static bool GBE_BuildDota7504ResponsePayload(uint32 account_id, bool has_request_job, uint64 request_job_id, std::string &message)
 {
     std::string emoticon_access;
@@ -10134,6 +10142,34 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             static_cast<unsigned>(account_id_field)
         );
         push_incoming_now(7535u | GBE_kProtoMask, response_message);
+        return true;
+    }
+
+    if (request_emsg == 2581) {
+        uint64 account_id_field = settings->get_local_steam_id().GetAccountID();
+        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1), account_id_field);
+
+        std::string response_message;
+        if (!GBE_BuildDota2582LookupAccountNameResponsePayload(
+                static_cast<uint32>(account_id_field),
+                std::string(settings->get_local_name()),
+                has_source_job,
+                source_job,
+                response_message)) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 2582u);
+            return true;
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=2581->2582 lookup account name account_id=%u",
+            request_emsg,
+            2582u,
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            static_cast<unsigned>(account_id_field)
+        );
+        push_incoming_now(2582u | GBE_kProtoMask, response_message);
         return true;
     }
 
