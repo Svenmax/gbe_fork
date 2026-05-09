@@ -9234,6 +9234,32 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
     );
 }
 
+void Steam_Game_Coordinator::GBE_RepostDotaClientPeerAvailable(const char *reason)
+{
+    Steam_Game_Coordinator *target = this;
+    if (is_server) {
+        Steam_Client *steam_client = get_steam_client();
+        if (steam_client && steam_client->steam_game_coordinator)
+            target = steam_client->steam_game_coordinator;
+    }
+
+    if (!target || target->is_server || target->gc_profile != GC_PROFILE_DOTA2 || target->incoming_messages.empty())
+        return;
+
+    GCMessageAvailable_t data{};
+    data.m_nMessageSize = static_cast<uint32>(target->incoming_messages.front().msg_body.size());
+    target->callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
+    GBE_GC_DebugLog(
+        "GC_CALLBACK",
+        "reposted client peer GCMessageAvailable_t reason=%s target=%p queued_emsg=%u queue_size=%zu size=%u",
+        reason ? reason : "unknown",
+        static_cast<void *>(target),
+        GBE_GC_MaskedEMsg(target->incoming_messages.front().msg_type),
+        target->incoming_messages.size(),
+        data.m_nMessageSize
+    );
+}
+
 bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message)
 {
     const uint64 owner_steam_id = lobby.owner_steam_id != 0 ? lobby.owner_steam_id : GBE_GetDotaLobbyOwnerSteamId();
@@ -10095,6 +10121,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     queued_runtime_lobby_update = true;
             }
 
+            if (request_advances_to_hero_selection && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 2u)
+                GBE_RepostDotaClientPeerAvailable("7034_hero_selection_peer_wakeup");
+
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 0u &&
                     GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
                 if (GBE_TryQueueDotaPrelaunch021("runtime wait_for_players after 7034", request_emsg, source_job))
@@ -10356,6 +10385,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_local_lobby.state,
             GBE_local_lobby.game_state
         );
+        if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 1u)
+            GBE_RepostDotaClientPeerAvailable("8870_lobby_initialized_peer_wakeup");
         return true;
     }
 
@@ -10372,19 +10403,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_TrySyncDotaLobbyServerIdFromGameServer("4511_lan_server_available");
         }
 
-        if (matches_local_lobby && !incoming_messages.empty()) {
-            GCMessageAvailable_t data{};
-            data.m_nMessageSize = static_cast<uint32>(incoming_messages.front().msg_body.size());
-            callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
-            GBE_GC_DebugLog(
-                "GC_CALLBACK",
-                "reposted GCMessageAvailable_t after 4511 lobby_id=%llu queued_emsg=%u queue_size=%zu size=%u",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_GC_MaskedEMsg(incoming_messages.front().msg_type),
-                incoming_messages.size(),
-                data.m_nMessageSize
-            );
-        }
+        if (matches_local_lobby)
+            GBE_RepostDotaClientPeerAvailable("4511_lan_server_available_peer_wakeup");
 
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
@@ -10462,6 +10482,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         );
 
         GBE_TrySyncDotaLobbyServerIdFromGameServer("4508_game_server_info");
+
+        if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 1u)
+            GBE_RepostDotaClientPeerAvailable("4508_game_server_info_peer_wakeup");
 
         if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
             if (GBE_TryAdvanceDotaLaunchToRun("runtime packet after 4508", request_emsg, source_job, "4508_launch_run"))
