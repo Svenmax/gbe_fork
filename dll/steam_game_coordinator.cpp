@@ -11469,6 +11469,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         GBE_local_lobby.chat_channel_type == 18u;
     const bool matches_current_postgame_channel = channel_id == local_channel_id;
     const bool matches_pre_postgame_channel = pre_postgame_channel_id != 0 && channel_id == pre_postgame_channel_id;
+    if (!GBE_local_lobby.active || !GBE_local_lobby.has_chat_channel) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Ignoring stale 7272 after lobby reset. request_channel=%llu active=%u has_chat=%u local_channel=%llu",
+            static_cast<unsigned long long>(channel_id),
+            GBE_local_lobby.active ? 1u : 0u,
+            GBE_local_lobby.has_chat_channel ? 1u : 0u,
+            static_cast<unsigned long long>(local_channel_id)
+        );
+        return true;
+    }
     if (channel_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7272 because no chat channel is active");
         return true;
