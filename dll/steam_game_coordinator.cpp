@@ -11499,12 +11499,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         return true;
     }
 
-    if (leaving_postgame_channel && matches_pre_postgame_channel && !matches_current_postgame_channel) {
-        GBE_pending_dota_abandon_finalize_after_7014 = true;
-        GBE_pending_dota_abandon_finalize_lobby_id = lobby_id;
+    const bool leaving_pre_postgame_during_abandon =
+        leaving_postgame_channel &&
+        matches_pre_postgame_channel &&
+        !matches_current_postgame_channel;
+    if (leaving_pre_postgame_during_abandon) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Handling pre-postgame 7272 during abandon teardown (replying 7014, finalize after retrieval). request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu lobby_id=%llu",
+            "[LOBBY] Handling pre-postgame 7272 during abandon teardown (replying 7014 only). request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu lobby_id=%llu",
             static_cast<unsigned long long>(channel_id),
             static_cast<unsigned long long>(local_channel_id),
             static_cast<unsigned long long>(pre_postgame_channel_id),
