@@ -1850,7 +1850,7 @@ static void GBE_AppendDotaLobbyEventPoints(
     GBE_AppendProtoBytesField(object_2016, 3u, event_points);
 }
 
-static void GBE_BuildDotaServerStaticLobbyObject2016(uint32 account_id, uint64 steam_id, std::string &object_2016)
+static void GBE_BuildDotaServerStaticLobbyObject2016(uint32 account_id, uint64 steam_id, uint32 game_mode, std::string &object_2016)
 {
     object_2016.clear();
 
@@ -1860,7 +1860,8 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(uint32 account_id, uint64 s
     GBE_AppendProtoVarIntField(member_bytes, 11u, 0u);
     GBE_AppendProtoFixed64Field(member_bytes, 12u, 0ull);
     GBE_AppendProtoVarIntField(member_bytes, 13u, 0u);
-    GBE_AppendProtoFixed32Field(member_bytes, 16u, 0u);
+    if (game_mode != 2u)
+        GBE_AppendProtoFixed32Field(member_bytes, 16u, 0u);
     for (size_t i = 0; i < 4; ++i)
         GBE_AppendProtoVarIntField(member_bytes, 19u, 0u);
     GBE_AppendProtoBytesField(object_2016, 1u, member_bytes);
@@ -5409,7 +5410,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     if (!GBE_BuildDotaServerLobbyObject2015(extra_startup_account_id, object_2015))
         object_2015.clear();
 
-    GBE_BuildDotaServerStaticLobbyObject2016(extra_startup_account_id, steam_id, object_2016);
+    GBE_BuildDotaServerStaticLobbyObject2016(extra_startup_account_id, steam_id, game_mode, object_2016);
 
     object_2004.clear();
     GBE_AppendProtoVarIntField(object_2004, 1, lobby_id);
@@ -5452,6 +5453,8 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
         GBE_AppendProtoBytesField(object_2004, 58, broadcast_info);
     }
     GBE_AppendProtoBytesField(object_2004, 62, std::string(reinterpret_cast<const char *>(GBE_kDotaLobbyField62Value), sizeof(GBE_kDotaLobbyField62Value)));
+    if (lobby_state == 2u && lobby_game_state >= 1u)
+        GBE_AppendProtoVarIntField(object_2004, 65, 0u);
     GBE_AppendProtoVarIntField(object_2004, 75, visibility);
     GBE_AppendProtoVarIntField(object_2004, 82, 0u);
     if (game_start_time != 0)
@@ -5461,6 +5464,8 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     GBE_AppendProtoVarIntField(object_2004, 94, bot_radiant);
     GBE_AppendProtoVarIntField(object_2004, 95, bot_dire);
     GBE_AppendProtoVarIntField(object_2004, 97, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 103, 0u);
+    GBE_AppendProtoVarIntField(object_2004, 104, 0u);
     if (!lan_host_ping_location.empty())
         GBE_AppendProtoBytesField(object_2004, 109, lan_host_ping_location);
     GBE_AppendProtoVarIntField(object_2004, 110, 0u);
