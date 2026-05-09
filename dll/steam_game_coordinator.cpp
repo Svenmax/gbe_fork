@@ -4544,8 +4544,8 @@ static uint64 GBE_GenerateDotaChatChannelId()
         static_cast<uint64>(std::chrono::high_resolution_clock::now().time_since_epoch().count())
     );
 
-    const uint64 candidate = 0x10000ull + (generator() & 0x00000000000FFFFFull);
-    return candidate != 0 ? candidate : 0x1664Eull;
+    const uint64 candidate = 0x62E000ull + (generator() & 0x0000000000000FFFull);
+    return candidate != 0 ? candidate : 0x62E638ull;
 }
 
 static uint64 GBE_GenerateDotaPostGameChatChannelId()
@@ -4556,8 +4556,8 @@ static uint64 GBE_GenerateDotaPostGameChatChannelId()
         static_cast<uint64>(std::chrono::high_resolution_clock::now().time_since_epoch().count())
     );
 
-    const uint64 candidate = 0x100000ull + (generator() & 0x00000000000FFFFFull);
-    return candidate != 0 ? candidate : 0x13F425ull;
+    const uint64 candidate = 0x62F000ull + (generator() & 0x0000000000000FFFull);
+    return candidate != 0 ? candidate : 0x62FEB8ull;
 }
 
 static uint64 GBE_GenerateDotaMatchId()

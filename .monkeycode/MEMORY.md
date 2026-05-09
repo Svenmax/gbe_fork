@@ -291,3 +291,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 第二局 Dota server 可能发送 `7034`，其中 `send_reason=10(GAMESTATE_TIMEOUT)` 但 `game_state=0`，此时本地 lobby 仍停在 `RUN / WAIT_FOR_PLAYERS_TO_LOAD`。
   - 若 launch server setup 已完整同步且本地正处于 `state=RUN, game_state=WAIT_FOR_PLAYERS_TO_LOAD`，应把该 timeout 当作进入 `HERO_SELECTION` 的信号，回发带 `drafts=1` 的 connected players 视图。
   - 该推进必须保持窄条件，不能把 prelaunch 或非 wait-for-players 阶段的 `send_reason=10` 直接当作 hero selection，且同一个 timeout 包不应从 wait-for-players 连跳到 strategy time。
+
+[官方 Dota chat channel id 区间]
+- Date: 2026-05-09
+- Context: Agent 在排查 `43c8f8b7` 仍在 `7014` 后闪退时对比官方 `steamhoststart-abandon` 抓包发现
+- Category: 代码模式
+- Instructions:
+  - 官方 abandon 抓包中普通 lobby chat leave 使用的 channel id 位于 `0x62e000` 附近，例如 `6481464` 和 `6481871`。
+  - 官方 postgame `7010` 使用的 channel id 位于 `0x62f000` 附近，例如 `6487736`。
+  - 本地构造 Dota lobby/postgame chat channel 时应保持该区间形状，避免生成过低的 `0x1xxxx` 或 `0x10xxxx` channel id。
