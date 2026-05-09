@@ -6837,29 +6837,15 @@ void Steam_Game_Coordinator::GBE_DiscardQueuedDotaLaunchMessagesForAbandon(const
             }
         }
 
-        size_t removed_incoming = 0;
-        std::queue<GC_Message> filtered_incoming;
-        while (!coordinator->incoming_messages.empty()) {
-            GC_Message queued = coordinator->incoming_messages.front();
-            coordinator->incoming_messages.pop();
-            if (coordinator->GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(GBE_GC_MaskedEMsg(queued.msg_type))) {
-                ++removed_incoming;
-                continue;
-            }
-            filtered_incoming.push(std::move(queued));
-        }
-        coordinator->incoming_messages.swap(filtered_incoming);
-
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Discarded queued launch messages for abandon reason=%s this=%p is_server=%u removed_pending=%zu removed_incoming=%zu remaining_pending=%zu remaining_incoming=%zu",
+            "[LOBBY] Discarded pending launch messages for abandon reason=%s this=%p is_server=%u removed_pending=%zu preserved_incoming=%zu remaining_pending=%zu",
             reason ? reason : "unknown",
             static_cast<void *>(coordinator),
             coordinator->is_server ? 1u : 0u,
             removed_pending,
-            removed_incoming,
-            coordinator->pending_messages.size(),
-            coordinator->incoming_messages.size()
+            coordinator->incoming_messages.size(),
+            coordinator->pending_messages.size()
         );
     };
 
