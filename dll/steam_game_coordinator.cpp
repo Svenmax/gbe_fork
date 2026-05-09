@@ -10957,6 +10957,23 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     if (!push_reply(response_7010, GBE_kDotaJoinChatChannelResponse, "7010(second)"))
         return true;
 
+    // Also send 25 to the server GC instance.
+    // Official captures (dota2hoststart-abandon) show the game server also receives
+    // msg 25 (CacheUnsubscribed) from the GC. Without this, server.dll may still
+    // hold references to lobby cache data that the client side has already released.
+    {
+        Steam_Client *steam_client = get_steam_client();
+        Steam_Game_Coordinator *server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
+        if (server_gc && server_gc != this) {
+            server_gc->push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Also sent 25 to server GC instance for 7035 LobbyID=%llu",
+                static_cast<unsigned long long>(lobby_id)
+            );
+        }
+    }
+
     // NOTE: Do NOT send 766 (PersonaState) through the GC queue.
     // Official captures show 766 is a Steam-layer message (k_EMsgClientPersonaState),
     // delivered through the CMClient channel, NOT through ISteamGameCoordinator.
