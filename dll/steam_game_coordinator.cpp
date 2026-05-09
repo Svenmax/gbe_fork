@@ -6777,6 +6777,13 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
     if (!message.apply_lobby_state)
         return;
 
+    if (gc_profile == GC_PROFILE_DOTA2 &&
+        (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) &&
+        GBE_shared_dota_lobby_state.valid &&
+        GBE_shared_dota_lobby_state.lobby_id != 0) {
+        GBE_RestoreSharedDotaLobbyState("queued_state_preapply");
+    }
+
     GBE_local_lobby.state = message.lobby_state;
     GBE_local_lobby.game_state = message.lobby_game_state;
 
