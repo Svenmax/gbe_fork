@@ -78,6 +78,7 @@ public ISteamGameCoordinator
     uint32 GBE_last_dota_launch_state_pushed_game_state{};
     bool GBE_pending_reset_after_cache_unsubscribed{};
     uint64 GBE_pending_reset_after_cache_unsubscribed_lobby_id{};
+    uint64 GBE_suppressed_dota_abandon_lobby_id{};
     bool GBE_pending_dota_abandon_finalize_after_7014{};
     uint64 GBE_pending_dota_abandon_finalize_lobby_id{};
     std::string GBE_last_dota_launch_persona_signature;
@@ -158,6 +159,9 @@ public ISteamGameCoordinator
     void parse_gc_config();
     bool is_welcome_message(const GC_Message &message);
     void GBE_ApplyQueuedLobbyState(const GC_Message &message);
+    bool GBE_ShouldSuppressDotaAbandonedLobby(uint64 lobby_id) const;
+    void GBE_MarkDotaAbandonedLobbySuppressed(uint64 lobby_id, const char *reason);
+    void GBE_ClearDotaAbandonedLobbySuppression(uint64 lobby_id, const char *reason);
     bool GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(uint32 masked_emsg) const;
     void GBE_DiscardQueuedDotaLaunchMessagesForAbandon(const char *reason);
     void push_incoming(uint32 msg_type, const std::string &message, double delay = 0.1, bool apply_lobby_state = false, uint32 lobby_state = 0, uint32 lobby_game_state = 0);

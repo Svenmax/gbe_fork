@@ -6900,6 +6900,58 @@ void Steam_Game_Coordinator::GBE_DiscardQueuedDotaLaunchMessagesForAbandon(const
         discard_for_instance(peer);
 }
 
+bool Steam_Game_Coordinator::GBE_ShouldSuppressDotaAbandonedLobby(uint64 lobby_id) const
+{
+    return gc_profile == GC_PROFILE_DOTA2 && lobby_id != 0 && GBE_suppressed_dota_abandon_lobby_id == lobby_id;
+}
+
+void Steam_Game_Coordinator::GBE_MarkDotaAbandonedLobbySuppressed(uint64 lobby_id, const char *reason)
+{
+    if (gc_profile != GC_PROFILE_DOTA2 || lobby_id == 0)
+        return;
+
+    auto mark_for_instance = [lobby_id, reason](Steam_Game_Coordinator *coordinator) {
+        if (!coordinator || coordinator->gc_profile != GC_PROFILE_DOTA2)
+            return;
+
+        coordinator->GBE_suppressed_dota_abandon_lobby_id = lobby_id;
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Suppressing stale abandoned lobby updates reason=%s this=%p is_server=%u lobby_id=%llu",
+            reason ? reason : "unknown",
+            static_cast<void *>(coordinator),
+            coordinator->is_server ? 1u : 0u,
+            static_cast<unsigned long long>(lobby_id)
+        );
+    };
+
+    mark_for_instance(this);
+
+    Steam_Client *steam_client = get_steam_client();
+    if (!steam_client)
+        return;
+
+    Steam_Game_Coordinator *peer = is_server ? steam_client->steam_game_coordinator : steam_client->steam_gameserver_game_coordinator;
+    if (peer && peer != this)
+        mark_for_instance(peer);
+}
+
+void Steam_Game_Coordinator::GBE_ClearDotaAbandonedLobbySuppression(uint64 lobby_id, const char *reason)
+{
+    if (gc_profile != GC_PROFILE_DOTA2 || lobby_id == 0 || GBE_suppressed_dota_abandon_lobby_id != lobby_id)
+        return;
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Clearing abandoned lobby suppression reason=%s this=%p is_server=%u lobby_id=%llu",
+        reason ? reason : "unknown",
+        static_cast<void *>(this),
+        is_server ? 1u : 0u,
+        static_cast<unsigned long long>(lobby_id)
+    );
+    GBE_suppressed_dota_abandon_lobby_id = 0;
+}
+
 void Steam_Game_Coordinator::push_incoming_now(uint32 msg_type, const std::string &message, bool apply_lobby_state, uint32 lobby_state, uint32 lobby_game_state)
 {
     GC_Message new_item;
@@ -7406,6 +7458,16 @@ void Steam_Game_Coordinator::GBE_MaybePrimeDotaServerWelcomeFromCache(const char
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || welcome_received)
         return;
 
+    if (GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SERVER_HELLO",
+            "skipping cached ServerWelcome for suppressed abandoned lobby reason=%s lobby_id=%llu",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+        );
+        return;
+    }
+
     std::queue<GC_Message> queued_messages = incoming_messages;
     while (!queued_messages.empty()) {
         if (GBE_GC_MaskedEMsg(queued_messages.front().msg_type) == EGCBaseClientMsg::k_EMsgGCServerWelcome)
@@ -7447,7 +7509,7 @@ void Steam_Game_Coordinator::GBE_MaybePrimeDotaServerWelcomeFromCache(const char
         GBE_local_lobby.owner_name,
         runtime_cache_message);
 
-    if (built_runtime_cache) {
+    if (built_runtime_cache && !GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
         GBE_RecordDotaLobbyCacheSubscriptionState(runtime_cache_message, "prime_server_welcome_current_cache_subscribed");
         push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, runtime_cache_message);
         GBE_GC_DebugLog(
@@ -7464,10 +7526,21 @@ void Steam_Game_Coordinator::GBE_MaybePrimeDotaServerWelcomeFromCache(const char
             owner_account_id,
             runtime_cache_message.size()
         );
-    } else {
+    } else if (!built_runtime_cache) {
         GBE_GC_DebugLog(
             "GC_DOTA_SERVER_HELLO",
             "failed building synthetic CacheSubscribed after cached ServerWelcome reason=%s lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            static_cast<unsigned long long>(GBE_local_lobby.match_id),
+            static_cast<unsigned long long>(GBE_local_lobby.server_id)
+        );
+    } else {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SERVER_HELLO",
+            "skipped synthetic CacheSubscribed after cached ServerWelcome for suppressed abandoned lobby reason=%s lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
             reason ? reason : "unknown",
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
             GBE_local_lobby.state,
@@ -8098,6 +8171,17 @@ void Steam_Game_Coordinator::on_client_connected(CSteamID steam_id)
         const uint64 connected_steam_id = steam_id.ConvertToUint64();
         const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
         if (gc_initialized && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && connected_steam_id != 0 && connected_steam_id == owner_steam_id) {
+            if (GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "ignoring owner reconnect for suppressed abandoned lobby steam_id=%llu lobby_id=%llu state=%u game_state=%u",
+                    static_cast<unsigned long long>(connected_steam_id),
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state
+                );
+                return;
+            }
             if (!GBE_local_lobby.owner_connected) {
                 GBE_local_lobby.owner_connected = true;
                 GBE_PublishSharedDotaLobbyState("owner_connected");
@@ -8511,6 +8595,22 @@ bool Steam_Game_Coordinator::GBE_TryQueueDotaPrelaunch021(const char *note, uint
 
 bool Steam_Game_Coordinator::GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state, double delay)
 {
+    if (GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "skipping runtime lobby update for suppressed abandoned lobby req=%u source_job=%llu note=%s lobby_id=%llu state=%u game_state=%u next_state=%u next_game_state=%u",
+            trigger_emsg,
+            static_cast<unsigned long long>(source_job),
+            note ? note : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            next_state,
+            next_game_state
+        );
+        return false;
+    }
+
     GBE_LocalLobby next_lobby = GBE_local_lobby;
     next_lobby.state = next_state;
     next_lobby.game_state = next_game_state;
@@ -8686,6 +8786,21 @@ void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std
 
 void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
 {
+    if (GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "publish skipped for suppressed abandoned lobby reason=%s this=%p is_server=%u lobby_id=%llu active=%u state=%u game_state=%u",
+            reason ? reason : "unknown",
+            static_cast<void *>(this),
+            is_server ? 1u : 0u,
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.active ? 1u : 0u,
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state
+        );
+        return;
+    }
+
     GBE_shared_dota_lobby_state.valid = true;
     GBE_shared_dota_lobby_state.active = GBE_local_lobby.active;
     GBE_shared_dota_lobby_state.lobby_id = GBE_local_lobby.lobby_id;
@@ -8793,6 +8908,8 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
     GBE_last_dota_launch_state_pushed_game_state = 0;
     GBE_pending_reset_after_cache_unsubscribed = false;
     GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
+    if (previous_lobby_id != 0 && GBE_suppressed_dota_abandon_lobby_id != previous_lobby_id)
+        GBE_ClearDotaAbandonedLobbySuppression(previous_lobby_id, reason ? reason : "reset_gc_memory");
     GBE_pending_dota_abandon_finalize_after_7014 = false;
     GBE_pending_dota_abandon_finalize_lobby_id = 0;
     GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "reset_gc_memory");
@@ -8850,6 +8967,21 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             static_cast<void *>(this),
             static_cast<void *>(&GBE_shared_dota_lobby_state),
             reason ? reason : "unknown"
+        );
+        return;
+    }
+
+    if (GBE_ShouldSuppressDotaAbandonedLobby(GBE_shared_dota_lobby_state.lobby_id)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "restore skipped for suppressed abandoned lobby this=%p shared_lobby=%p reason=%s lobby_id=%llu active=%u state=%u game_state=%u",
+            static_cast<void *>(this),
+            static_cast<void *>(&GBE_shared_dota_lobby_state),
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_shared_dota_lobby_state.lobby_id),
+            GBE_shared_dota_lobby_state.active ? 1u : 0u,
+            GBE_shared_dota_lobby_state.state,
+            GBE_shared_dota_lobby_state.game_state
         );
         return;
     }
@@ -9118,6 +9250,19 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
         return;
     }
 
+    if (GBE_ShouldSuppressDotaAbandonedLobby(lobby.lobby_id)) {
+        GBE_dota_private_lobby_snapshot_replayed = false;
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipped replaying current private lobby snapshot for suppressed abandoned lobby reason=%s lobby_id=%llu state=%u game_state=%u",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(lobby.lobby_id),
+            lobby.state,
+            lobby.game_state
+        );
+        return;
+    }
+
     const bool ready_for_private_lobby_snapshot =
         lobby.state == 2u &&
         lobby.game_state >= 2u;
@@ -9184,6 +9329,18 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
 
 void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *reason)
 {
+    if (GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipped pushing launch state from suppressed abandoned lobby reason=%s source=%p is_server=%u lobby_id=%llu",
+            reason ? reason : "unknown",
+            static_cast<void *>(this),
+            is_server ? 1u : 0u,
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+        );
+        return;
+    }
+
     Steam_Game_Coordinator *target = this;
     if (is_server) {
         Steam_Client *steam_client = get_steam_client();
@@ -9195,6 +9352,17 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
         return;
 
     target->GBE_RestoreSharedDotaLobbyState(reason ? reason : "push_launch_state_to_client");
+
+    if (target->GBE_ShouldSuppressDotaAbandonedLobby(GBE_shared_dota_lobby_state.lobby_id)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipped pushing launch state to client for suppressed abandoned lobby reason=%s target=%p lobby_id=%llu",
+            reason ? reason : "unknown",
+            static_cast<void *>(target),
+            static_cast<unsigned long long>(GBE_shared_dota_lobby_state.lobby_id)
+        );
+        return;
+    }
 
     GBE_LocalLobby lobby{};
     if (!target->GBE_CaptureCurrentDotaLobbyState(reason ? reason : "push_launch_state_to_client", lobby, false)) {
@@ -11043,6 +11211,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
 
             GBE_pending_reset_after_cache_unsubscribed = true;
             GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
+            GBE_MarkDotaAbandonedLobbySuppressed(lobby_id, "7035_current_game_disconnect");
             push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
 
             GBE_GC_DebugLog(
@@ -11076,6 +11245,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
 
     GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_ready_for_abandon_teardown");
+    GBE_MarkDotaAbandonedLobbySuppressed(lobby_id, "7035_ready_for_abandon_teardown");
 
     std::string response_25;
     if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
@@ -12436,6 +12606,18 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
 {
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)
         return;
+
+    if (GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipped reapplying launch rich presence for suppressed abandoned lobby reason=%s lobby_id=%llu state=%u game_state=%u",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state
+        );
+        return;
+    }
 
     const char *status = nullptr;
     const char *lobby_state = nullptr;
