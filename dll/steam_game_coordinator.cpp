@@ -11499,17 +11499,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         return true;
     }
 
-    const bool leaving_pre_postgame_during_abandon =
-        leaving_postgame_channel &&
-        matches_pre_postgame_channel &&
-        !matches_current_postgame_channel;
-    if (leaving_pre_postgame_during_abandon) {
+    const bool leaving_non_current_channel_during_abandon = leaving_postgame_channel && !matches_current_postgame_channel;
+    if (leaving_non_current_channel_during_abandon) {
+        if (!matches_pre_postgame_channel)
+            GBE_local_lobby.abandon_pre_postgame_chat_channel_id = channel_id;
+        GBE_pending_dota_abandon_finalize_after_7014 = true;
+        GBE_pending_dota_abandon_finalize_lobby_id = lobby_id;
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Handling pre-postgame 7272 during abandon teardown (replying 7014 only). request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu lobby_id=%llu",
+            "[LOBBY] Handling pre-postgame 7272 during abandon teardown (replying 7014, reset after retrieval). request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu matched_pre=%u lobby_id=%llu",
             static_cast<unsigned long long>(channel_id),
             static_cast<unsigned long long>(local_channel_id),
-            static_cast<unsigned long long>(pre_postgame_channel_id),
+            static_cast<unsigned long long>(GBE_local_lobby.abandon_pre_postgame_chat_channel_id),
+            matches_pre_postgame_channel ? 1u : 0u,
             static_cast<unsigned long long>(lobby_id)
         );
     }
@@ -12427,22 +12429,13 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaAbandonAfterOtherLeftChannel(uint64
         return;
 
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
-    GBE_local_lobby.has_chat_channel = false;
-    GBE_local_lobby.chat_channel_id = 0;
-    GBE_local_lobby.chat_channel_name.clear();
-    GBE_local_lobby.chat_channel_type = 0;
-    GBE_local_lobby.abandon_pre_postgame_chat_channel_id = 0;
-    GBE_local_lobby.abandon_postgame_active = false;
-
-    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
-
-    GBE_PublishSharedDotaLobbyState(reason ? reason : "7014_abandon_finalize");
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Finalized abandon teardown after 7014 retrieval without queuing persona LobbyID=%llu reason=%s",
+        "[LOBBY] Resetting abandon teardown state after 7014 retrieval LobbyID=%llu reason=%s",
         static_cast<unsigned long long>(lobby_id),
         reason ? reason : "unknown"
     );
+    ResetGCMemory(reason ? reason : "7014_abandon_finalize", true, false);
 }
 
 // sends a message to the Game Coordinator
