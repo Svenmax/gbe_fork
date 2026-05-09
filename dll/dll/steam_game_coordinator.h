@@ -75,6 +75,7 @@ public ISteamGameCoordinator
     std::chrono::high_resolution_clock::time_point welcome_time{};
     bool GBE_dota_login_sync_sent{};
     bool GBE_dota_private_lobby_snapshot_replayed{};
+    uint32 GBE_last_dota_launch_state_pushed_game_state{};
     bool GBE_pending_reset_after_cache_unsubscribed{};
     uint64 GBE_pending_reset_after_cache_unsubscribed_lobby_id{};
     std::string GBE_last_dota_launch_persona_signature;
@@ -194,6 +195,7 @@ public ISteamGameCoordinator
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message);
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const std::string &player_name, std::string &message);
     bool GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message);
+    void GBE_PushDotaLaunchStateToClientPeer(const char *reason);
     bool GBE_TryQueueDotaPrelaunch021(const char *note, uint32 trigger_emsg, uint64 source_job);
     bool GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state);
     bool GBE_HasDotaLaunchServerSetupSync() const;
