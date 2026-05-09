@@ -12629,7 +12629,7 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
             "[LOBBY] Consumed pending 25; applying deferred current-game reset for LobbyID=%llu",
             static_cast<unsigned long long>(pending_lobby_id)
         );
-        ResetGCMemory("7035_disconnect_current_game_after_25", true, false);
+        ResetGCMemory("7035_disconnect_current_game_after_25", true, true);
     }
 
     GBE_GC_DebugLog(
