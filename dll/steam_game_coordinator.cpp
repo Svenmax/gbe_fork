@@ -10955,8 +10955,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     if (!push_reply(response_25, GBE_kDotaCacheUnsubscribed, "25"))
         return true;
 
-    GBE_pending_reset_after_cache_unsubscribed = true;
-    GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Full 7035 teardown queued 25 without deferred reset; waiting for postgame 7272/7014 LobbyID=%llu",
+        static_cast<unsigned long long>(lobby_id)
+    );
 
     if (!push_reply(response_7010, GBE_kDotaJoinChatChannelResponse, "7010(first)"))
         return true;
