@@ -349,3 +349,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 正常结束的 `7272` 会落在 Steam/client coordinator 上，而 postgame channel 是 Dota2/server coordinator 在 `7004` 后生成的；finalizer 需要把 server 侧 postgame lobby snapshot 同步给 client 侧，否则 client 只知道旧普通频道，只会回 `7014` 而不会补 `7010`。
   - postgame chat channel 应使用 `GBE_GenerateDotaPostGameChatChannelId()` 的 `0x62f...` 区间；普通 lobby chat 才使用 `GBE_GenerateDotaChatChannelId()` 的 `0x62e...` 区间。
   - abandon 路径仍应保持等待 `7272 -> 7014` 的收束方式，避免破坏已稳定的断开链路。
+
+[Dota2 practice lobby 搜索加入离开链]
+- Date: 2026-05-10
+- Context: Agent 在解析用户上传的 `searchlobby.zip`、`joinlobby.zip`、`playerleavelobby.zip` 官方抓包时发现
+- Category: 代码模式
+- Instructions:
+  - 搜索 practice lobby 的主线是 `8011 k_EMsgGCLobbyList -> 8012 k_EMsgGCLobbyListResponse`，同时客户端会发送 `7111 k_EMsgGCFriendPracticeLobbyListRequest`，官方可回空 body 的 `7112`。
+  - `8012` 顶层包含 field `11` fixed64 `UINT64_MAX`，lobby entries 位于 repeated field `1`；friend practice lobby list 的 `7112` response 可为空。
+  - 加入 practice lobby 的主线是 `7044 k_EMsgGCPracticeLobbyJoin -> 24 k_ESOMsg_CacheSubscribed -> 7113 k_EMsgGCPracticeLobbyJoinResponse`，`7113` 成功结果 field `1=0`，并镜像请求 job 到 target job。
+  - 离开 lobby 的主线不是立即 `25`；官方在 `7040` 后先推一次 `26`，客户端随后发送 `8011/7111` 刷新列表，GC 再回 `25 + 8012 + 7112`，之后才处理旧 chat channel 的 `7272 -> 7014`。
