@@ -327,3 +327,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 玩家交换英雄界面会触发资料/公会/账号查询链，已知包含 `8729 -> 8730`、`8886 -> 8887`、`7534 -> 7535`、`8673 -> 8674`、`7197 -> 7198`。
   - 抓包新增确认 `2581 k_EMsgClientToGCLookupAccountName -> 2582 k_EMsgClientToGCLookupAccountNameResponse`，请求 field `1` 是 account_id，响应 body 包含 field `1` account_id 与 field `2` account_name。
   - 当前实现应对 `2581` 返回本地账号名，避免交换英雄界面查询其他玩家名称时缺响应。
+
+[Dota2 正常结束比赛 GC 收尾链]
+- Date: 2026-05-10
+- Context: Agent 在解析用户上传的 `dota2hostfinishgame.zip` 与 `steamplayerfinishgame.zip` 正常结束抓包时发现
+- Category: 代码模式
+- Instructions:
+  - 正常结束比赛会出现 `7381 k_EMsgGCGameMatchSignOutPermissionRequest -> 7382 k_EMsgGCGameMatchSignOutPermissionResponse`，响应至少需要 `permission_granted=1`。
+  - Dota2 server 侧随后发送 `7004 k_EMsgGCGameMatchSignOut`，官方链路会回 `7005`，并推进 `2004` 到 `RUN/POST_GAME` 后再到 `POSTGAME/POST_GAME`，其中 POSTGAME 形状包含 field `70=2` 与 field `111=duration`。
+  - 正常结束不应完全复用 abandon 的立即 postgame `7010` 行为；应先完成 `7005`、POSTGAME `26`、`25`，后续离开旧 chat channel 的 `7272` 再补 postgame `7010` 并回 `7014`。
+  - Steam 侧正常结束后可能发送 `7082 k_EMsgGCSubmitPlayerReportV2`，应回 `7083` 且 `enum_result=1` 表示成功。

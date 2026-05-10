@@ -52,10 +52,16 @@ static constexpr uint32 GBE_kDotaPracticeLobbyDetailsUpdate = 26u;
 static constexpr uint32 GBE_kDotaCacheSubscriptionCheck = 27u;
 static constexpr uint32 GBE_kDotaCacheSubscriptionRefresh = 28u;
 static constexpr uint32 GBE_kDotaCacheSubscribedUpToDate = 29u;
+static constexpr uint32 GBE_kDotaGameMatchSignOut = 7004u;
+static constexpr uint32 GBE_kDotaGameMatchSignOutResponse = 7005u;
 static constexpr uint32 GBE_kDotaJoinChatChannel = 7009u;
 static constexpr uint32 GBE_kDotaJoinChatChannelResponse = 7010u;
 static constexpr uint32 GBE_kDotaOtherLeftChannel = 7014u;
 static constexpr uint32 GBE_kDotaAbandonCurrentGame = 7035u;
+static constexpr uint32 GBE_kDotaSubmitPlayerReportV2 = 7082u;
+static constexpr uint32 GBE_kDotaSubmitPlayerReportResponseV2 = 7083u;
+static constexpr uint32 GBE_kDotaGameMatchSignOutPermissionRequest = 7381u;
+static constexpr uint32 GBE_kDotaGameMatchSignOutPermissionResponse = 7382u;
 static constexpr uint32 GBE_kDotaLobbyAdditionalAccountData = 8869u;
 static constexpr uint32 GBE_kDotaPracticeLobbyCreate = 7038u;
 static constexpr uint32 GBE_kDotaPracticeLobbyLeave = 7040u;
@@ -5090,6 +5096,72 @@ static bool GBE_BuildDota4524ResponsePayload(bool has_request_job, uint64 reques
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(4524u, has_request_job, request_job_id, body, message);
 }
 
+static bool GBE_BuildDotaGameMatchSignOutPermissionResponsePayload(bool has_request_job, uint64 request_job_id, std::string &message)
+{
+    std::string body;
+    GBE_AppendProtoVarIntField(body, 1u, 1u);
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(GBE_kDotaGameMatchSignOutPermissionResponse, has_request_job, request_job_id, body, message);
+}
+
+static bool GBE_BuildDotaGameMatchSignOutResponsePayload(uint64 match_id, uint32 duration, bool has_request_job, uint64 request_job_id, std::string &message)
+{
+    std::string body;
+    if (match_id != 0)
+        GBE_AppendProtoVarIntField(body, 1u, match_id);
+    GBE_AppendProtoFixed32Field(body, 2u, static_cast<uint32>(std::time(nullptr)));
+    GBE_AppendProtoVarIntField(body, 5u, 0u);
+    GBE_AppendProtoFixed32Field(body, 7u, 0u);
+
+    std::string signout_summary;
+    GBE_AppendProtoVarIntField(signout_summary, 1u, duration);
+    GBE_AppendProtoBytesField(body, 8u, signout_summary);
+
+    std::string zero_summary;
+    GBE_AppendProtoVarIntField(zero_summary, 1u, 0u);
+    GBE_AppendProtoBytesField(body, 9u, zero_summary);
+    GBE_AppendProtoBytesField(body, 10u, zero_summary);
+    GBE_AppendProtoBytesField(body, 14u, zero_summary);
+    GBE_AppendProtoBytesField(body, 15u, zero_summary);
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(GBE_kDotaGameMatchSignOutResponse, has_request_job, request_job_id, body, message);
+}
+
+static bool GBE_BuildDotaSubmitPlayerReportResponseV2Payload(const uint8 *request_body, size_t request_body_size, bool has_request_job, uint64 request_job_id, std::string &message)
+{
+    uint64 target_account_id = 0;
+    GBE_ExtractProtoFieldUint64(request_body, request_body_size, GBE_FindProtoField(request_body, request_body_size, 1u), target_account_id);
+
+    std::string body;
+    if (target_account_id != 0)
+        GBE_AppendProtoVarIntField(body, 1u, target_account_id);
+
+    size_t offset = 0;
+    while (offset < request_body_size) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(request_body, request_body_size, offset, field_number, wire_type, field_offset, value_offset, value_size, field_end))
+            break;
+        if (field_number == 2u && wire_type == 0) {
+            GBE_ProtoFieldView reason_field{};
+            reason_field.found = true;
+            reason_field.field_number = field_number;
+            reason_field.wire_type = wire_type;
+            reason_field.value_offset = value_offset;
+            reason_field.value_size = value_size;
+            uint64 reason = 0;
+            if (GBE_ExtractProtoFieldUint64(request_body, request_body_size, reason_field, reason))
+                GBE_AppendProtoVarIntField(body, 2u, reason);
+        }
+        offset = field_end;
+    }
+
+    GBE_AppendProtoVarIntField(body, 5u, 1u);
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(GBE_kDotaSubmitPlayerReportResponseV2, has_request_job, request_job_id, body, message);
+}
+
 static bool GBE_BuildDota7388MinimalResponsePayload(uint32 event_id, uint32 account_id, bool has_request_job, uint64 request_job_id, std::string &message)
 {
     std::string body;
@@ -5463,6 +5535,8 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     GBE_AppendProtoBytesField(object_2004, 62, std::string(reinterpret_cast<const char *>(GBE_kDotaLobbyField62Value), sizeof(GBE_kDotaLobbyField62Value)));
     if (lobby_state == 2u && lobby_game_state >= 1u)
         GBE_AppendProtoVarIntField(object_2004, 65, 0u);
+    if (lobby_state == 3u && lobby_game_state == 6u)
+        GBE_AppendProtoVarIntField(object_2004, 70, 2u);
     GBE_AppendProtoVarIntField(object_2004, 75, visibility);
     GBE_AppendProtoVarIntField(object_2004, 82, 0u);
     if (game_start_time != 0)
@@ -5477,6 +5551,10 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     if (!lan_host_ping_location.empty())
         GBE_AppendProtoBytesField(object_2004, 109, lan_host_ping_location);
     GBE_AppendProtoVarIntField(object_2004, 110, 0u);
+    if (lobby_state == 3u && lobby_game_state == 6u && game_start_time != 0) {
+        const uint32 now = static_cast<uint32>(std::time(nullptr));
+        GBE_AppendProtoVarIntField(object_2004, 111, now > game_start_time ? (now - game_start_time) : 0u);
+    }
     GBE_AppendProtoVarIntField(object_2004, 113, 0u);
 
     {
@@ -10610,6 +10688,61 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return GBE_HandleDotaAbandonCurrentGameRequest(false, nullptr);
     }
 
+    if (request_emsg == GBE_kDotaGameMatchSignOutPermissionRequest) {
+        std::string response_message;
+        if (!GBE_BuildDotaGameMatchSignOutPermissionResponsePayload(has_source_job, source_job, response_message)) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, GBE_kDotaGameMatchSignOutPermissionResponse);
+            return true;
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=signout permission granted",
+            request_emsg,
+            GBE_kDotaGameMatchSignOutPermissionResponse,
+            static_cast<unsigned long long>(source_job),
+            response_message.size()
+        );
+        push_incoming_now(GBE_kDotaGameMatchSignOutPermissionResponse | GBE_kProtoMask, response_message);
+        return true;
+    }
+
+    if (request_emsg == GBE_kDotaGameMatchSignOut) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "handling req=%u source_job=%llu note=GameMatchSignOut body_size=%zu active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
+            request_emsg,
+            static_cast<unsigned long long>(source_job),
+            body_size,
+            GBE_local_lobby.active ? 1u : 0u,
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            static_cast<unsigned long long>(GBE_local_lobby.match_id),
+            static_cast<unsigned long long>(GBE_local_lobby.server_id)
+        );
+        return GBE_HandleDotaGameMatchSignOutRequest(false, nullptr, has_source_job, source_job);
+    }
+
+    if (request_emsg == GBE_kDotaSubmitPlayerReportV2) {
+        std::string response_message;
+        if (!GBE_BuildDotaSubmitPlayerReportResponseV2Payload(body, body_size, has_source_job, source_job, response_message)) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, GBE_kDotaSubmitPlayerReportResponseV2);
+            return true;
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=%u resp=%u source_job=%llu size=%zu note=submit player report v2 success",
+            request_emsg,
+            GBE_kDotaSubmitPlayerReportResponseV2,
+            static_cast<unsigned long long>(source_job),
+            response_message.size()
+        );
+        push_incoming_now(GBE_kDotaSubmitPlayerReportResponseV2 | GBE_kProtoMask, response_message);
+        return true;
+    }
+
     if (request_emsg == 4506) {
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
@@ -11311,20 +11444,47 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     }
 
-    const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
-    const uint64 pre_postgame_chat_channel_id = GBE_local_lobby.chat_channel_id;
-
     GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_ready_for_abandon_teardown");
     GBE_MarkDotaAbandonedLobbySuppressed(lobby_id, "7035_ready_for_abandon_teardown");
 
+    if (!GBE_QueueDotaPostGameTeardown("7035_abandon_current_game", wrapped, outer_session_field_raw, true, true, true))
+        return true;
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Processed 7035. sent 25 and postgame 7010 wrapped=%d LobbyID=%llu",
+        wrapped ? 1 : 0,
+        static_cast<unsigned long long>(lobby_id)
+    );
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_QueueDotaPostGameTeardown(const char *reason, bool wrapped, const std::string *outer_session_field_raw, bool suppress_previous_chat_channel, bool push_cache_unsubscribed, bool push_postgame_join)
+{
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring postgame teardown because no local lobby is active reason=%s", reason ? reason : "unknown");
+        return true;
+    }
+
+    if (wrapped && !outer_session_field_raw) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for postgame teardown reason=%s LobbyID=%llu", reason ? reason : "unknown", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        return false;
+    }
+
+    const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
+    const uint64 lobby_id = GBE_local_lobby.lobby_id;
+    const uint64 pre_postgame_chat_channel_id = suppress_previous_chat_channel ? GBE_local_lobby.chat_channel_id : 0u;
+
     std::string response_25;
     if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for 7035 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
-        return true;
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for postgame teardown LobbyID=%llu reason=%s", static_cast<unsigned long long>(lobby_id), reason ? reason : "unknown");
+        return false;
     }
 
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
 
+    GBE_local_lobby.state = 3u;
+    GBE_local_lobby.game_state = 6u;
     GBE_local_lobby.has_chat_channel = true;
     GBE_local_lobby.chat_channel_id = GBE_GenerateDotaChatChannelId();
     GBE_local_lobby.chat_channel_name = "PostGame_" + std::to_string(lobby_id);
@@ -11338,7 +11498,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     GBE_local_lobby.has_cache_sync_version = false;
     GBE_local_lobby.cache_sync_version = 0;
     GBE_local_lobby.abandon_postgame_active = true;
-    GBE_PublishSharedDotaLobbyState("7035_abandon_current_game");
+    GBE_PublishSharedDotaLobbyState(reason ? reason : "postgame_teardown");
 
     std::string response_7010_postgame;
     if (!GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
@@ -11349,11 +11509,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
             response_7010_postgame)) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Failed building postgame 7010 payload for 7035 LobbyID=%llu channel=%llu",
+            "[LOBBY] Failed building postgame 7010 payload LobbyID=%llu channel=%llu reason=%s",
             static_cast<unsigned long long>(lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id)
+            static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
+            reason ? reason : "unknown"
         );
-        return true;
+        return false;
     }
 
     auto push_reply = [&](const std::string &payload, uint32 direct_emsg, const char *label) -> bool {
@@ -11362,9 +11523,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
             if (!GBE_BuildWrappedDotaReplayMessage(payload, *outer_session_field_raw, steam_id, wrapped_message)) {
                 GBE_GC_DebugLog(
                     "GC_DOTA_LOBBY",
-                    "[LOBBY] Failed wrapping %s payload for 7035 LobbyID=%llu",
+                    "[LOBBY] Failed wrapping %s payload for postgame teardown LobbyID=%llu reason=%s",
                     label,
-                    static_cast<unsigned long long>(lobby_id)
+                    static_cast<unsigned long long>(lobby_id),
+                    reason ? reason : "unknown"
                 );
                 return false;
             }
@@ -11377,20 +11539,23 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     };
 
-    if (!push_reply(response_25, GBE_kDotaCacheUnsubscribed, "25"))
-        return true;
+    if (push_cache_unsubscribed && !push_reply(response_25, GBE_kDotaCacheUnsubscribed, "25"))
+        return false;
 
-    if (!push_reply(response_7010_postgame, GBE_kDotaJoinChatChannelResponse, "7010_postgame"))
-        return true;
+    if (push_postgame_join && !push_reply(response_7010_postgame, GBE_kDotaJoinChatChannelResponse, "7010_postgame"))
+        return false;
 
     GBE_pending_reset_after_cache_unsubscribed = false;
     GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Full 7035 teardown queued 25 and postgame 7010; deferring reset until 7272/7014 LobbyID=%llu pre_channel=%llu post_channel=%llu",
+        "[LOBBY] Queued postgame teardown cache_unsub=%u postgame_join=%u; deferring reset until 7272/7014 LobbyID=%llu pre_channel=%llu post_channel=%llu reason=%s",
+        push_cache_unsubscribed ? 1u : 0u,
+        push_postgame_join ? 1u : 0u,
         static_cast<unsigned long long>(lobby_id),
         static_cast<unsigned long long>(pre_postgame_chat_channel_id),
-        static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id)
+        static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
+        reason ? reason : "unknown"
     );
 
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true, false);
@@ -11400,23 +11565,95 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, no_lobby_persona);
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
-            "queued abandon persona label=7035_private_lobby_no_lobby lobby_id=%llu size=%zu",
+            "queued postgame persona label=private_lobby_no_lobby lobby_id=%llu size=%zu reason=%s",
             static_cast<unsigned long long>(lobby_id),
-            no_lobby_persona.size()
+            no_lobby_persona.size(),
+            reason ? reason : "unknown"
         );
     } else {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
-            "failed building abandon persona label=7035_private_lobby_no_lobby lobby_id=%llu",
-            static_cast<unsigned long long>(lobby_id)
+            "failed building postgame persona label=private_lobby_no_lobby lobby_id=%llu reason=%s",
+            static_cast<unsigned long long>(lobby_id),
+            reason ? reason : "unknown"
         );
+    }
+
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaGameMatchSignOutRequest(bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id)
+{
+    const uint64 lobby_id = GBE_local_lobby.lobby_id;
+    const uint64 match_id = GBE_local_lobby.match_id;
+    const uint32 game_start_time = GBE_local_lobby.game_start_time;
+    const uint32 duration = game_start_time != 0u ? static_cast<uint32>(std::time(nullptr)) - game_start_time : 0u;
+
+    std::string response_7005;
+    if (!GBE_BuildDotaGameMatchSignOutResponsePayload(match_id, duration, has_request_job, request_job_id, response_7005)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7005 signout response request_job=%llu has_job=%d", static_cast<unsigned long long>(request_job_id), has_request_job ? 1 : 0);
+        return true;
+    }
+
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+        if (GBE_local_lobby.game_state < 6u)
+            GBE_local_lobby.game_state = 6u;
+        if (GBE_local_lobby.state < 2u)
+            GBE_local_lobby.state = 2u;
+        GBE_PublishSharedDotaLobbyState("7004_signout_post_game");
+        GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7004_signout_run_post_game");
+    }
+
+    if (wrapped) {
+        if (!outer_session_field_raw) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for 7004 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
+            return true;
+        }
+
+        std::string wrapped_7005;
+        if (!GBE_BuildWrappedDotaReplayMessage(response_7005, *outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_7005)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 7005 signout response LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
+            return true;
+        }
+
+        push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_7005);
+    } else {
+        push_incoming_now(GBE_kDotaGameMatchSignOutResponse | GBE_kProtoMask, response_7005);
+    }
+
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+        GBE_QueueDotaPostGameTeardown("7004_signout_postgame", wrapped, outer_session_field_raw, false, false, false);
+        GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7004_signout_postgame_state");
+
+        std::string response_25;
+        if (GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
+            if (wrapped) {
+                if (!outer_session_field_raw) {
+                    GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for 25 after 7004 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
+                } else {
+                    std::string wrapped_25;
+                    if (GBE_BuildWrappedDotaReplayMessage(response_25, *outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_25)) {
+                        push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_25);
+                    } else {
+                        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 25 after 7004 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
+                    }
+                }
+            } else {
+                push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
+            }
+        } else {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 after 7004 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
+        }
     }
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Processed 7035. sent 25 and postgame 7010 wrapped=%d LobbyID=%llu",
+        "[LOBBY] Processed 7004 signout. replied 7005 and queued postgame teardown wrapped=%d LobbyID=%llu match_id=%llu request_job=%llu has_job=%d",
         wrapped ? 1 : 0,
-        static_cast<unsigned long long>(lobby_id)
+        static_cast<unsigned long long>(lobby_id),
+        static_cast<unsigned long long>(match_id),
+        static_cast<unsigned long long>(request_job_id),
+        has_request_job ? 1 : 0
     );
     return true;
 }
@@ -11845,10 +12082,49 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         return true;
     }
 
-    const bool leaving_non_current_channel_during_abandon = leaving_postgame_channel && !matches_current_postgame_channel;
+    const bool leaving_non_current_channel_during_abandon =
+        leaving_postgame_channel &&
+        !matches_current_postgame_channel &&
+        matches_pre_postgame_channel;
+    const bool leaving_legacy_channel_after_signout =
+        leaving_postgame_channel &&
+        !matches_current_postgame_channel &&
+        pre_postgame_channel_id == 0;
+    if (leaving_legacy_channel_after_signout) {
+        std::string response_7010_postgame;
+        if (GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
+                steam_id,
+                local_channel_id,
+                GBE_local_lobby.chat_channel_name,
+                std::string(settings->get_local_name()),
+                response_7010_postgame)) {
+            if (wrapped) {
+                if (!outer_session_field_raw) {
+                    GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for postgame 7010 after signout channel=%llu", static_cast<unsigned long long>(channel_id));
+                    return true;
+                }
+
+                std::string wrapped_7010_postgame;
+                if (GBE_BuildWrappedDotaReplayMessage(response_7010_postgame, *outer_session_field_raw, steam_id, wrapped_7010_postgame)) {
+                    push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_7010_postgame);
+                } else {
+                    GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping postgame 7010 after signout channel=%llu", static_cast<unsigned long long>(channel_id));
+                }
+            } else {
+                push_incoming_now(GBE_kDotaJoinChatChannelResponse | GBE_kProtoMask, response_7010_postgame);
+            }
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Queued postgame 7010 after normal signout legacy 7272 request_channel=%llu post_channel=%llu lobby_id=%llu",
+                static_cast<unsigned long long>(channel_id),
+                static_cast<unsigned long long>(local_channel_id),
+                static_cast<unsigned long long>(lobby_id)
+            );
+        } else {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building postgame 7010 after signout channel=%llu", static_cast<unsigned long long>(channel_id));
+        }
+    }
     if (leaving_non_current_channel_during_abandon) {
-        if (!matches_pre_postgame_channel)
-            GBE_local_lobby.abandon_pre_postgame_chat_channel_id = channel_id;
         GBE_pending_dota_abandon_finalize_after_7014 = true;
         GBE_pending_dota_abandon_finalize_lobby_id = lobby_id;
         GBE_GC_DebugLog(
@@ -11889,7 +12165,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         if (!matches_current_postgame_channel) {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
-                "[LOBBY] Ignoring non-postgame 7272 during abandon teardown. request_channel=%llu local_channel=%llu pre_postgame_channel=%llu",
+                "[LOBBY] Handled non-current 7272 during postgame teardown. request_channel=%llu local_channel=%llu pre_postgame_channel=%llu",
                 static_cast<unsigned long long>(request.channel_id),
                 static_cast<unsigned long long>(local_channel_id),
                 static_cast<unsigned long long>(pre_postgame_channel_id)
@@ -12167,6 +12443,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
 
     if (context.inner_emsg != GBE_kDotaJoinChatChannel)
         if (context.inner_emsg != GBE_kDotaAbandonCurrentGame)
+        if (context.inner_emsg != GBE_kDotaGameMatchSignOut)
         if (context.inner_emsg != GBE_kDotaPracticeLobbyCreate)
             if (context.inner_emsg != GBE_kDotaPracticeLobbyLeave)
                 if (context.inner_emsg != GBE_kDotaPracticeLobbyLaunch)
@@ -12203,6 +12480,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         );
 
         return GBE_HandleDotaAbandonCurrentGameRequest(true, &context.outer_session_field_raw);
+    }
+
+    if (context.inner_emsg == GBE_kDotaGameMatchSignOut) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Received wrapped 7004 has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
+            context.has_request_job ? 1 : 0,
+            static_cast<unsigned long long>(context.request_job_id),
+            context.outer_session_field_raw.size(),
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
+        );
+
+        return GBE_HandleDotaGameMatchSignOutRequest(true, &context.outer_session_field_raw, context.has_request_job, context.request_job_id);
     }
 
     if (context.inner_emsg == GBE_kDotaPracticeLobbyCreate) {
