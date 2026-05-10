@@ -346,4 +346,6 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 正常结束成功进入总结页后，日志显示 `7004 -> 7005 -> POSTGAME 26 -> 25` 完成，但 Dota server 不一定会继续发送 `7272`，因此不能只依赖 `7272/7014` 来恢复主页 INIT 状态。
   - 正常结束路径应在 `25 k_ESOMsg_CacheUnsubscribed` 被取走后执行最终收束：清理 shared/local lobby、清空 settings lobby，并向 Steam/client GC 侧推 INIT persona/rich presence。
   - Steam/client GC 侧必须保留 postgame chat channel 状态，直到后续旧频道 `7272` 到来后才能按官方链路补 `7010` 并回 `7014`；不能在 normal signout finalizer 中直接清空 client 侧 `GBE_local_lobby`。
+  - 正常结束的 `7272` 会落在 Steam/client coordinator 上，而 postgame channel 是 Dota2/server coordinator 在 `7004` 后生成的；finalizer 需要把 server 侧 postgame lobby snapshot 同步给 client 侧，否则 client 只知道旧普通频道，只会回 `7014` 而不会补 `7010`。
+  - postgame chat channel 应使用 `GBE_GenerateDotaPostGameChatChannelId()` 的 `0x62f...` 区间；普通 lobby chat 才使用 `GBE_GenerateDotaChatChannelId()` 的 `0x62e...` 区间。
   - abandon 路径仍应保持等待 `7272 -> 7014` 的收束方式，避免破坏已稳定的断开链路。

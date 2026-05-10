@@ -11490,7 +11490,7 @@ bool Steam_Game_Coordinator::GBE_QueueDotaPostGameTeardown(const char *reason, b
     GBE_local_lobby.state = 3u;
     GBE_local_lobby.game_state = 6u;
     GBE_local_lobby.has_chat_channel = true;
-    GBE_local_lobby.chat_channel_id = GBE_GenerateDotaChatChannelId();
+    GBE_local_lobby.chat_channel_id = GBE_GenerateDotaPostGameChatChannelId();
     GBE_local_lobby.chat_channel_name = "PostGame_" + std::to_string(lobby_id);
     GBE_local_lobby.chat_channel_type = 18u;
     GBE_local_lobby.abandon_pre_postgame_chat_channel_id = pre_postgame_chat_channel_id;
@@ -13105,6 +13105,7 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
     const uint64 shared_lobby_id = GBE_shared_dota_lobby_state.lobby_id;
     const uint64 lobby_id = consumed_lobby_id != 0 ? consumed_lobby_id : shared_lobby_id;
+    const GBE_LocalLobby postgame_lobby = GBE_local_lobby;
     Steam_Game_Coordinator *client_target = this;
     if (is_server) {
         Steam_Client *steam_client = get_steam_client();
@@ -13125,6 +13126,8 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
 
     if (client_target && !client_target->is_server && client_target != this) {
         client_target->GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+        if (postgame_lobby.active && postgame_lobby.lobby_id != 0)
+            client_target->GBE_local_lobby = postgame_lobby;
         client_target->GBE_last_dota_launch_state_pushed_game_state = 0;
     }
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
