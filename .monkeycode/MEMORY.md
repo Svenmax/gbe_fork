@@ -345,4 +345,5 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 正常结束成功进入总结页后，日志显示 `7004 -> 7005 -> POSTGAME 26 -> 25` 完成，但 Dota server 不一定会继续发送 `7272`，因此不能只依赖 `7272/7014` 来恢复主页 INIT 状态。
   - 正常结束路径应在 `25 k_ESOMsg_CacheUnsubscribed` 被取走后执行最终收束：清理 shared/local lobby、清空 settings lobby，并向 Steam/client GC 侧推 INIT persona/rich presence。
+  - Steam/client GC 侧必须保留 postgame chat channel 状态，直到后续旧频道 `7272` 到来后才能按官方链路补 `7010` 并回 `7014`；不能在 normal signout finalizer 中直接清空 client 侧 `GBE_local_lobby`。
   - abandon 路径仍应保持等待 `7272 -> 7014` 的收束方式，避免破坏已稳定的断开链路。

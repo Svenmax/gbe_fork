@@ -13125,7 +13125,6 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
 
     if (client_target && !client_target->is_server && client_target != this) {
         client_target->GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-        client_target->GBE_local_lobby = GBE_LocalLobby{};
         client_target->GBE_last_dota_launch_state_pushed_game_state = 0;
     }
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
