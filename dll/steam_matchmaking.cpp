@@ -327,6 +327,19 @@ std::vector<CSteamID> Steam_Matchmaking::GetLobbyListSnapshot()
     return result;
 }
 
+std::vector<CSteamID> Steam_Matchmaking::GetLobbyMemberListSnapshot(CSteamID steamIDLobby)
+{
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    std::vector<CSteamID> result;
+    Lobby *lobby = get_lobby(steamIDLobby);
+    if (!lobby || lobby->deleted())
+        return result;
+
+    for (const auto &member : lobby->members())
+        result.push_back(CSteamID((uint64)member.id()));
+    return result;
+}
+
 
 // game server favorites storage
 // saves basic details about a multiplayer game server locally

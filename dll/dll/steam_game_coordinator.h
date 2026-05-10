@@ -28,6 +28,16 @@ struct GCMsgHdrEx_t;
 struct ProtoBufMsgHeader_t;
 class CMsgProtoBufHeader;
 
+struct GBE_DotaLobbyMemberState
+{
+    uint64 steam_id{};
+    uint32 account_id{};
+    uint32 team{};
+    uint32 slot{};
+    uint32 hero_id{};
+    bool connected{};
+};
+
 class Steam_Game_Coordinator :
 public ISteamGameCoordinator
 {
@@ -118,6 +128,7 @@ public ISteamGameCoordinator
         uint32 owner_slot{};
         uint32 owner_hero_id{};
         bool owner_connected{};
+        std::vector<GBE_DotaLobbyMemberState> members;
         uint32 launch_phase{};
         bool launch_4511_seen{};
         bool has_broadcast_channel{};
@@ -230,6 +241,7 @@ public ISteamGameCoordinator
     bool GBE_HandleDotaAbandonCurrentGameRequest(bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaGameMatchSignOutRequest(bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id);
     bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw, const char *reason);
+    void GBE_MaybeSyncDotaPracticeLobbyMembersFromGenericLobby(const char *reason);
     bool GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaLobbyListRequest(bool has_request_job, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaFriendPracticeLobbyListRequest(bool wrapped, const std::string *outer_session_field_raw);

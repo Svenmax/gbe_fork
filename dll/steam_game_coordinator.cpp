@@ -95,6 +95,7 @@ static constexpr const char *GBE_kDotaGenericLobbyGameModeKey = "gbe_dota_game_m
 static constexpr const char *GBE_kDotaGenericLobbyServerRegionKey = "gbe_dota_server_region";
 static constexpr const char *GBE_kDotaGenericLobbyLanPingKey = "gbe_dota_lan_ping";
 static constexpr const char *GBE_kDotaGenericLobbyPassKeyKey = "gbe_dota_pass_key";
+static constexpr const char *GBE_kDotaGenericLobbyOwnerSteamIdKey = "gbe_dota_owner_steam_id";
 static constexpr const char *GBE_kDotaGenericLobbyOwnerAccountIdKey = "gbe_dota_owner_account_id";
 static constexpr const char *GBE_kDotaGenericLobbyOwnerNameKey = "gbe_dota_owner_name";
 
@@ -124,6 +125,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     uint32 owner_team,
     uint32 owner_slot,
     uint32 owner_hero_id,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
     bool has_broadcast_channel,
     uint32 broadcast_channel_id,
     const std::string &broadcast_country_code,
@@ -135,6 +137,13 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     std::string &object_2016,
     std::string &object_2004,
     std::string &object_2014);
+
+static void GBE_BuildDotaServerStaticLobbyObject2016(
+    uint32 account_id,
+    uint64 steam_id,
+    uint32 game_mode,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
+    std::string &object_2016);
 
 static const char GBE_kDotaOfficialLobbyStartupAccountDataTemplate[] =
     "\010\365\355\206A\022\274\001\n\005\010\002\020\300\014\n\005\010\005\020\310\001"
@@ -202,6 +211,7 @@ struct GBE_SharedDotaLobbyState {
     uint32 owner_slot{};
     uint32 owner_hero_id{};
     bool owner_connected{};
+    std::vector<GBE_DotaLobbyMemberState> members;
     uint32 launch_phase{};
     bool launch_4511_seen{};
     bool has_broadcast_channel{};
@@ -1899,28 +1909,179 @@ static void GBE_AppendDotaLobbyEventPoints(
 
 static void GBE_BuildDotaServerStaticLobbyObject2016(uint32 account_id, uint64 steam_id, uint32 game_mode, std::string &object_2016)
 {
+    std::vector<GBE_DotaLobbyMemberState> members;
+    GBE_DotaLobbyMemberState owner{};
+    owner.steam_id = steam_id;
+    owner.account_id = account_id;
+    members.push_back(owner);
+    GBE_BuildDotaServerStaticLobbyObject2016(account_id, steam_id, game_mode, members, object_2016);
+}
+
+static void GBE_BuildDotaServerStaticLobbyObject2016(
+    uint32 account_id,
+    uint64 steam_id,
+    uint32 game_mode,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
+    std::string &object_2016)
+{
     object_2016.clear();
 
-    std::string member_bytes;
-    GBE_AppendProtoFixed64Field(member_bytes, 1u, steam_id);
-    GBE_AppendProtoVarIntField(member_bytes, 9u, 0u);
-    GBE_AppendProtoVarIntField(member_bytes, 11u, 0u);
-    GBE_AppendProtoFixed64Field(member_bytes, 12u, 0ull);
-    GBE_AppendProtoVarIntField(member_bytes, 13u, 0u);
-    if (game_mode != 2u)
-        GBE_AppendProtoFixed32Field(member_bytes, 16u, 0u);
-    for (size_t i = 0; i < 4; ++i)
-        GBE_AppendProtoVarIntField(member_bytes, 19u, 0u);
-    GBE_AppendProtoBytesField(object_2016, 1u, member_bytes);
+    std::vector<GBE_DotaLobbyMemberState> effective_members = members;
+    if (effective_members.empty()) {
+        GBE_DotaLobbyMemberState owner{};
+        owner.steam_id = steam_id;
+        owner.account_id = account_id;
+        effective_members.push_back(owner);
+    }
+
+    bool wrote_owner_event_points = false;
+    for (const GBE_DotaLobbyMemberState &member : effective_members) {
+        const uint64 member_steam_id = member.steam_id != 0ull ? member.steam_id : steam_id;
+        if (member_steam_id == 0ull)
+            continue;
+
+        const uint32 member_account_id = member.account_id != 0u ? member.account_id : CSteamID((uint64)member_steam_id).GetAccountID();
+
+        std::string member_bytes;
+        GBE_AppendProtoFixed64Field(member_bytes, 1u, member_steam_id);
+        GBE_AppendProtoVarIntField(member_bytes, 9u, 0u);
+        GBE_AppendProtoVarIntField(member_bytes, 11u, 0u);
+        GBE_AppendProtoFixed64Field(member_bytes, 12u, 0ull);
+        GBE_AppendProtoVarIntField(member_bytes, 13u, 0u);
+        if (game_mode != 2u)
+            GBE_AppendProtoFixed32Field(member_bytes, 16u, 0u);
+        for (size_t i = 0; i < 4; ++i)
+            GBE_AppendProtoVarIntField(member_bytes, 19u, 0u);
+        GBE_AppendProtoBytesField(object_2016, 1u, member_bytes);
+
+        if (!wrote_owner_event_points && member_account_id == account_id)
+            wrote_owner_event_points = true;
+    }
+
+    if (account_id != 0u)
+        wrote_owner_event_points = true;
 
     GBE_AppendProtoFixed32Field(object_2016, 2u, 0u);
 
-    if (account_id != 0u) {
+    if (account_id != 0u && wrote_owner_event_points) {
         GBE_AppendDotaLobbyEventPoints(object_2016, 19u, account_id, 0u, 0u, 0u, 0u, true);
         GBE_AppendDotaLobbyEventPoints(object_2016, 26u, account_id, 0u, 0u, 0u, 0u, false);
         GBE_AppendDotaLobbyEventPoints(object_2016, 39u, account_id, 0u, 0u, 0u, 0u, false);
         GBE_AppendDotaLobbyEventPoints(object_2016, 56u, account_id, 0u, 0u, 0u, 0u, false);
     }
+}
+
+static void GBE_BuildDotaLobbyMemberObject2004(const GBE_DotaLobbyMemberState &member, std::string &member_state)
+{
+    member_state.clear();
+    GBE_AppendProtoFixed64Field(member_state, 1u, member.steam_id);
+    if (member.hero_id != 0u)
+        GBE_AppendProtoVarIntField(member_state, 2u, member.hero_id);
+    GBE_AppendProtoVarIntField(member_state, 3u, member.team);
+    if (member.slot != 0u)
+        GBE_AppendProtoVarIntField(member_state, 7u, member.slot);
+    GBE_AppendProtoFixed32Field(member_state, 16u, member.connected ? 0u : 1u);
+    if (member.connected)
+        GBE_AppendProtoVarIntField(member_state, 28u, 0u);
+}
+
+static std::vector<GBE_DotaLobbyMemberState> GBE_BuildDotaLobbyMembers(
+    uint64 owner_steam_id,
+    uint32 owner_account_id,
+    uint32 owner_team,
+    uint32 owner_slot,
+    uint32 owner_hero_id,
+    bool owner_connected,
+    const std::vector<GBE_DotaLobbyMemberState> &members)
+{
+    std::vector<GBE_DotaLobbyMemberState> result;
+
+    auto append_or_update = [&result](GBE_DotaLobbyMemberState member) {
+        if (member.steam_id == 0ull)
+            return;
+        if (member.account_id == 0u)
+            member.account_id = CSteamID((uint64)member.steam_id).GetAccountID();
+        for (GBE_DotaLobbyMemberState &existing : result) {
+            if (existing.steam_id == member.steam_id) {
+                existing = member;
+                return;
+            }
+        }
+        result.push_back(member);
+    };
+
+    GBE_DotaLobbyMemberState owner{};
+    owner.steam_id = owner_steam_id;
+    owner.account_id = owner_account_id;
+    owner.team = owner_team;
+    owner.slot = owner_slot;
+    owner.hero_id = owner_hero_id;
+    owner.connected = owner_connected;
+    append_or_update(owner);
+
+    for (GBE_DotaLobbyMemberState member : members) {
+        if (member.steam_id == owner_steam_id) {
+            member.account_id = owner_account_id;
+            member.team = owner_team;
+            member.slot = owner_slot;
+            member.hero_id = owner_hero_id;
+            member.connected = owner_connected;
+        } else {
+            if (member.team == 0u)
+                member.slot = 0u;
+        }
+        append_or_update(member);
+    }
+
+    return result;
+}
+
+static bool GBE_DotaLobbyMembersEqual(
+    const std::vector<GBE_DotaLobbyMemberState> &left,
+    const std::vector<GBE_DotaLobbyMemberState> &right)
+{
+    if (left.size() != right.size())
+        return false;
+
+    for (size_t i = 0; i < left.size(); ++i) {
+        if (left[i].steam_id != right[i].steam_id ||
+                left[i].account_id != right[i].account_id ||
+                left[i].team != right[i].team ||
+                left[i].slot != right[i].slot ||
+                left[i].hero_id != right[i].hero_id ||
+                left[i].connected != right[i].connected)
+            return false;
+    }
+
+    return true;
+}
+
+static bool GBE_DotaLobbyMembersContainSteamId(const std::vector<GBE_DotaLobbyMemberState> &members, uint64 steam_id)
+{
+    if (steam_id == 0ull)
+        return false;
+
+    for (const GBE_DotaLobbyMemberState &member : members) {
+        if (member.steam_id == steam_id)
+            return true;
+    }
+
+    return false;
+}
+
+static void GBE_UpsertDotaLobbyMember(std::vector<GBE_DotaLobbyMemberState> &members, const GBE_DotaLobbyMemberState &member)
+{
+    if (member.steam_id == 0ull)
+        return;
+
+    for (GBE_DotaLobbyMemberState &existing : members) {
+        if (existing.steam_id == member.steam_id) {
+            existing = member;
+            return;
+        }
+    }
+
+    members.push_back(member);
 }
 
 static bool GBE_IsDotaPracticeLobbyPrelaunchState(uint64 server_id, uint64 match_id, uint32 game_start_time, const std::string &connect)
@@ -4474,6 +4635,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
         owner_team,
         owner_slot,
         owner_hero_id,
+        std::vector<GBE_DotaLobbyMemberState>(),
         false,
         0u,
         std::string(),
@@ -5628,6 +5790,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     uint32 owner_team,
     uint32 owner_slot,
     uint32 owner_hero_id,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
     bool has_broadcast_channel,
     uint32 broadcast_channel_id,
     const std::string &broadcast_country_code,
@@ -5645,7 +5808,16 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     if (!GBE_BuildDotaServerLobbyObject2015(extra_startup_account_id, object_2015))
         object_2015.clear();
 
-    GBE_BuildDotaServerStaticLobbyObject2016(extra_startup_account_id, steam_id, game_mode, object_2016);
+    const std::vector<GBE_DotaLobbyMemberState> effective_members = GBE_BuildDotaLobbyMembers(
+        steam_id,
+        extra_startup_account_id,
+        owner_team,
+        owner_slot,
+        owner_hero_id,
+        lobby_state == 3u,
+        members);
+
+    GBE_BuildDotaServerStaticLobbyObject2016(extra_startup_account_id, steam_id, game_mode, effective_members, object_2016);
 
     object_2004.clear();
     GBE_AppendProtoVarIntField(object_2004, 1, lobby_id);
@@ -5712,19 +5884,15 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     }
     GBE_AppendProtoVarIntField(object_2004, 113, 0u);
 
-    {
-        std::string owner_state;
-        GBE_AppendProtoFixed64Field(owner_state, 1, steam_id);
-        if (owner_hero_id != 0u)
-            GBE_AppendProtoVarIntField(owner_state, 2, owner_hero_id);
-        GBE_AppendProtoVarIntField(owner_state, 3, owner_team);
-        GBE_AppendProtoVarIntField(owner_state, 7, owner_slot);
-        GBE_AppendProtoFixed32Field(owner_state, 16u, 0u);
-        GBE_AppendProtoVarIntField(owner_state, 28, 0u);
-        GBE_AppendProtoBytesField(object_2004, 120, owner_state);
+    for (const GBE_DotaLobbyMemberState &member : effective_members) {
+        std::string member_state;
+        GBE_BuildDotaLobbyMemberObject2004(member, member_state);
+        if (!member_state.empty())
+            GBE_AppendProtoBytesField(object_2004, 120, member_state);
     }
 
-    GBE_AppendProtoVarIntField(object_2004, 121, 0u);
+    for (size_t i = 0; i < effective_members.size(); ++i)
+        GBE_AppendProtoVarIntField(object_2004, 121, static_cast<uint64>(i));
     GBE_AppendProtoVarIntField(object_2004, 127, 0u);
     GBE_AppendProtoVarIntField(object_2004, 128, GBE_kDotaLobbyField128Value);
 
@@ -5757,6 +5925,7 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
     uint32 owner_team,
     uint32 owner_slot,
     uint32 owner_hero_id,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
     bool has_broadcast_channel,
     uint32 broadcast_channel_id,
     const std::string &broadcast_country_code,
@@ -5796,6 +5965,7 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
         owner_team,
         owner_slot,
         owner_hero_id,
+        members,
         has_broadcast_channel,
         broadcast_channel_id,
         broadcast_country_code,
@@ -5867,6 +6037,7 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePurePayload(
     uint32 owner_team,
     uint32 owner_slot,
     uint32 owner_hero_id,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
     bool has_broadcast_channel,
     uint32 broadcast_channel_id,
     const std::string &broadcast_country_code,
@@ -5910,6 +6081,7 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePurePayload(
         owner_team,
         owner_slot,
         owner_hero_id,
+        members,
         has_broadcast_channel,
         broadcast_channel_id,
         broadcast_country_code,
@@ -6281,6 +6453,7 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
     uint32 owner_team,
     uint32 owner_slot,
     uint32 owner_hero_id,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
     bool has_broadcast_channel,
     uint32 broadcast_channel_id,
     const std::string &broadcast_country_code,
@@ -6330,6 +6503,7 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
             owner_team,
             owner_slot,
             owner_hero_id,
+            members,
             has_broadcast_channel,
             broadcast_channel_id,
             broadcast_country_code,
@@ -6419,6 +6593,7 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
             owner_team,
             owner_slot,
             owner_hero_id,
+            members,
             has_broadcast_channel,
             broadcast_channel_id,
             broadcast_country_code,
@@ -8699,6 +8874,7 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
     uint32 owner_team,
     uint32 owner_slot,
     uint32 owner_hero_id,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
     bool has_broadcast_channel,
     uint32 broadcast_channel_id,
     const std::string &broadcast_country_code,
@@ -8737,6 +8913,7 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
         owner_team,
         owner_slot,
         owner_hero_id,
+        members,
         has_broadcast_channel,
         broadcast_channel_id,
         broadcast_country_code,
@@ -8787,6 +8964,7 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPay
         lobby.owner_team,
         lobby.owner_slot,
         lobby.owner_hero_id,
+        lobby.members,
         lobby.has_broadcast_channel,
         lobby.broadcast_channel_id,
         lobby.broadcast_country_code,
@@ -8829,6 +9007,7 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(cons
         lobby.owner_team,
         lobby.owner_slot,
         lobby.owner_hero_id,
+        lobby.members,
         lobby.has_broadcast_channel,
         lobby.broadcast_channel_id,
         lobby.broadcast_country_code,
@@ -9005,6 +9184,54 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)
         return false;
 
+    if (GBE_local_lobby.generic_lobby_id != 0) {
+        Steam_Client *steam_client = get_steam_client();
+        if (steam_client && steam_client->steam_matchmaking) {
+            CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
+            if (generic_lobby_id.IsLobby()) {
+                std::vector<GBE_DotaLobbyMemberState> members;
+                const std::vector<CSteamID> generic_members = steam_client->steam_matchmaking->GetLobbyMemberListSnapshot(generic_lobby_id);
+                for (const CSteamID &member_id : generic_members) {
+                    if (!member_id.IsValid())
+                        continue;
+
+                    GBE_DotaLobbyMemberState member{};
+                    member.steam_id = member_id.ConvertToUint64();
+                    member.account_id = member_id.GetAccountID();
+                    member.connected = GBE_local_lobby.state == 3u;
+                    if (member.steam_id == GBE_local_lobby.owner_steam_id) {
+                        member.account_id = GBE_local_lobby.owner_account_id;
+                        member.team = GBE_local_lobby.owner_team;
+                        member.slot = GBE_local_lobby.owner_slot;
+                        member.hero_id = GBE_local_lobby.owner_hero_id;
+                        member.connected = GBE_local_lobby.owner_connected || GBE_local_lobby.state == 3u;
+                    } else {
+                        member.team = 0u;
+                        member.slot = 0u;
+                    }
+                    GBE_UpsertDotaLobbyMember(members, member);
+                }
+
+                const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
+                for (const GBE_DotaLobbyMemberState &existing : GBE_local_lobby.members) {
+                    if (generic_members.empty() || existing.steam_id == local_steam_id || GBE_DotaLobbyMembersContainSteamId(members, existing.steam_id))
+                        GBE_UpsertDotaLobbyMember(members, existing);
+                }
+
+                GBE_DotaLobbyMemberState owner{};
+                owner.steam_id = GBE_local_lobby.owner_steam_id;
+                owner.account_id = GBE_local_lobby.owner_account_id;
+                owner.team = GBE_local_lobby.owner_team;
+                owner.slot = GBE_local_lobby.owner_slot;
+                owner.hero_id = GBE_local_lobby.owner_hero_id;
+                owner.connected = GBE_local_lobby.owner_connected || GBE_local_lobby.state == 3u;
+                GBE_UpsertDotaLobbyMember(members, owner);
+
+                GBE_local_lobby.members = members;
+            }
+        }
+    }
+
     snapshot = GBE_local_lobby;
     return true;
 }
@@ -9118,6 +9345,7 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
     GBE_shared_dota_lobby_state.owner_slot = GBE_local_lobby.owner_slot;
     GBE_shared_dota_lobby_state.owner_hero_id = GBE_local_lobby.owner_hero_id;
     GBE_shared_dota_lobby_state.owner_connected = GBE_local_lobby.owner_connected;
+    GBE_shared_dota_lobby_state.members = GBE_local_lobby.members;
     GBE_shared_dota_lobby_state.launch_phase = GBE_local_lobby.launch_phase;
     GBE_shared_dota_lobby_state.launch_4511_seen = GBE_local_lobby.launch_4511_seen;
     GBE_shared_dota_lobby_state.has_broadcast_channel = GBE_local_lobby.has_broadcast_channel;
@@ -9175,6 +9403,7 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerRegionKey, std::to_string(GBE_local_lobby.server_region).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyLanPingKey, GBE_local_lobby.lan_host_ping_location.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyPassKeyKey, GBE_local_lobby.pass_key.c_str());
+    steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerSteamIdKey, std::to_string(GBE_local_lobby.owner_steam_id).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerAccountIdKey, std::to_string(GBE_local_lobby.owner_account_id).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerNameKey, (GBE_local_lobby.owner_name.empty() ? std::string(settings->get_local_name()) : GBE_local_lobby.owner_name).c_str());
 
@@ -9212,10 +9441,15 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
         if (dota_lobby_id == 0)
             continue;
 
+        CSteamID generic_owner_id = steam_client->steam_matchmaking->GetLobbyOwner(generic_lobby_id);
+
         GBE_LocalLobby snapshot{};
         snapshot.active = true;
         snapshot.lobby_id = dota_lobby_id;
         snapshot.generic_lobby_id = generic_lobby_id.ConvertToUint64();
+        snapshot.owner_steam_id = GBE_ParseUint64OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerSteamIdKey));
+        if (snapshot.owner_steam_id == 0ull && generic_owner_id.IsValid())
+            snapshot.owner_steam_id = generic_owner_id.ConvertToUint64();
         snapshot.owner_account_id = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerAccountIdKey));
         snapshot.owner_name = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerNameKey);
         snapshot.room_name = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyRoomNameKey);
@@ -9227,13 +9461,45 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
         snapshot.fill_with_bots = true;
         snapshot.allow_spectating = true;
         snapshot.bot_difficulty_dire = 4u;
+        snapshot.owner_team = 2u;
         snapshot.owner_slot = 1u;
+        snapshot.owner_connected = false;
+        const std::vector<CSteamID> generic_members = steam_client->steam_matchmaking->GetLobbyMemberListSnapshot(generic_lobby_id);
+        for (const CSteamID &member_id : generic_members) {
+            if (!member_id.IsValid())
+                continue;
+
+            GBE_DotaLobbyMemberState member{};
+            member.steam_id = member_id.ConvertToUint64();
+            member.account_id = member_id.GetAccountID();
+            member.connected = false;
+            if (snapshot.owner_steam_id != 0ull && member.steam_id == snapshot.owner_steam_id) {
+                member.account_id = snapshot.owner_account_id != 0u ? snapshot.owner_account_id : member.account_id;
+                member.team = snapshot.owner_team;
+                member.slot = snapshot.owner_slot;
+                member.hero_id = snapshot.owner_hero_id;
+            } else {
+                member.team = 0u;
+                member.slot = 0u;
+            }
+            GBE_UpsertDotaLobbyMember(snapshot.members, member);
+        }
         if (snapshot.owner_account_id == 0)
             snapshot.owner_account_id = settings->get_local_steam_id().GetAccountID();
         if (snapshot.owner_name.empty())
             snapshot.owner_name = "Lobby Host";
         if (snapshot.room_name.empty())
             snapshot.room_name = "Lobby";
+
+        GBE_DotaLobbyMemberState owner{};
+        owner.steam_id = snapshot.owner_steam_id;
+        owner.account_id = snapshot.owner_account_id;
+        owner.team = snapshot.owner_team;
+        owner.slot = snapshot.owner_slot;
+        owner.hero_id = snapshot.owner_hero_id;
+        owner.connected = snapshot.owner_connected;
+        GBE_UpsertDotaLobbyMember(snapshot.members, owner);
+
         snapshots.push_back(snapshot);
     }
 
@@ -9402,6 +9668,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             GBE_local_lobby.owner_slot = GBE_shared_dota_lobby_state.owner_slot;
             GBE_local_lobby.owner_hero_id = GBE_shared_dota_lobby_state.owner_hero_id;
             GBE_local_lobby.owner_connected = GBE_shared_dota_lobby_state.owner_connected;
+            GBE_local_lobby.members = GBE_shared_dota_lobby_state.members;
             GBE_local_lobby.launch_phase = GBE_shared_dota_lobby_state.launch_phase;
             GBE_local_lobby.launch_4511_seen = GBE_shared_dota_lobby_state.launch_4511_seen;
             GBE_local_lobby.has_broadcast_channel = GBE_shared_dota_lobby_state.has_broadcast_channel;
@@ -9503,6 +9770,11 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             changed = true;
         }
 
+        if (!GBE_DotaLobbyMembersEqual(GBE_local_lobby.members, GBE_shared_dota_lobby_state.members)) {
+            GBE_local_lobby.members = GBE_shared_dota_lobby_state.members;
+            changed = true;
+        }
+
         if (GBE_local_lobby.has_cache_version != GBE_shared_dota_lobby_state.has_cache_version ||
                 GBE_local_lobby.cache_version != GBE_shared_dota_lobby_state.cache_version) {
             GBE_local_lobby.has_cache_version = GBE_shared_dota_lobby_state.has_cache_version;
@@ -9583,6 +9855,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
     GBE_local_lobby.owner_slot = GBE_shared_dota_lobby_state.owner_slot;
     GBE_local_lobby.owner_hero_id = GBE_shared_dota_lobby_state.owner_hero_id;
     GBE_local_lobby.owner_connected = GBE_shared_dota_lobby_state.owner_connected;
+    GBE_local_lobby.members = GBE_shared_dota_lobby_state.members;
     GBE_local_lobby.launch_phase = GBE_shared_dota_lobby_state.launch_phase;
     GBE_local_lobby.has_broadcast_channel = GBE_shared_dota_lobby_state.has_broadcast_channel;
     GBE_local_lobby.broadcast_channel_id = GBE_shared_dota_lobby_state.broadcast_channel_id;
@@ -9843,6 +10116,9 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscri
     const bool launch_started = lobby.match_id != 0;
     const std::string effective_player_name = player_name.empty() ? GBE_GetDotaLobbyOwnerName() : player_name;
 
+    if (!launch_started && lobby.members.size() > 1)
+        return GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(lobby, effective_player_name, message);
+
     if (launch_started && owner_steam_id != 0 && owner_account_id != 0) {
         if (lobby.server_id == 0) {
             if (GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedPreludeTemplateReplay(
@@ -9901,6 +10177,9 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
     const uint32 owner_account_id = lobby.owner_account_id != 0 ? lobby.owner_account_id : GBE_GetDotaLobbyOwnerAccountId();
     const std::string effective_player_name = player_name.empty() ? GBE_GetDotaLobbyOwnerName() : player_name;
     const uint32 startup_account_id = GBE_GetDotaPracticeLobbyStartupAccountIdForState(owner_account_id, lobby.state, lobby.game_state);
+
+    if (lobby.match_id == 0 && lobby.members.size() > 1)
+        return GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(lobby, effective_player_name, message);
 
     if (owner_steam_id != 0 && owner_account_id != 0) {
         if (GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
@@ -11470,7 +11749,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     GBE_local_lobby.owner_steam_id = settings->get_local_steam_id().ConvertToUint64();
     GBE_local_lobby.owner_account_id = settings->get_local_steam_id().GetAccountID();
     GBE_local_lobby.owner_name = std::string(settings->get_local_name());
+    GBE_local_lobby.owner_team = 2u;
     GBE_local_lobby.owner_slot = 1;
+    GBE_DotaLobbyMemberState owner_member{};
+    owner_member.steam_id = GBE_local_lobby.owner_steam_id;
+    owner_member.account_id = GBE_local_lobby.owner_account_id;
+    owner_member.team = GBE_local_lobby.owner_team;
+    owner_member.slot = GBE_local_lobby.owner_slot;
+    owner_member.connected = false;
+    GBE_UpsertDotaLobbyMember(GBE_local_lobby.members, owner_member);
 
     GBE_DotaPracticeLobbyCreateRequest request{};
     if (GBE_ParseDotaPracticeLobbyCreateBody(reinterpret_cast<const uint8 *>(request_body.data()), request_body.size(), request)) {
@@ -11770,6 +12057,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
         GBE_local_lobby.owner_steam_id = settings->get_local_steam_id().ConvertToUint64();
         GBE_local_lobby.owner_account_id = settings->get_local_steam_id().GetAccountID();
         GBE_local_lobby.owner_name = std::string(settings->get_local_name());
+        GBE_local_lobby.owner_team = 2u;
         GBE_local_lobby.owner_slot = 1u;
         GBE_local_lobby.game_mode = 2u;
         GBE_local_lobby.server_region = 15u;
@@ -11790,11 +12078,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
         GBE_local_lobby.pass_key = matched_lobby.pass_key;
         GBE_local_lobby.owner_account_id = matched_lobby.owner_account_id;
         GBE_local_lobby.owner_name = matched_lobby.owner_name;
+        if (matched_lobby.owner_steam_id != 0ull)
+            GBE_local_lobby.owner_steam_id = matched_lobby.owner_steam_id;
+        GBE_local_lobby.owner_team = matched_lobby.owner_team;
+        GBE_local_lobby.owner_slot = matched_lobby.owner_slot;
+        GBE_local_lobby.members = matched_lobby.members;
         Steam_Client *steam_client = get_steam_client();
         if (steam_client && steam_client->steam_matchmaking)
             steam_client->steam_matchmaking->JoinLobby(matched_generic_lobby_id);
         GBE_SyncSettingsLobbyFromGenericLobby("7044_join_generic");
     }
+
+    GBE_DotaLobbyMemberState local_member{};
+    local_member.steam_id = settings->get_local_steam_id().ConvertToUint64();
+    local_member.account_id = settings->get_local_steam_id().GetAccountID();
+    local_member.team = 0u;
+    local_member.slot = 0u;
+    local_member.connected = false;
+    GBE_UpsertDotaLobbyMember(GBE_local_lobby.members, local_member);
 
     if (request.has_pass_key)
         GBE_local_lobby.pass_key = request.pass_key;
@@ -12376,6 +12677,23 @@ bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped
     return true;
 }
 
+void Steam_Game_Coordinator::GBE_MaybeSyncDotaPracticeLobbyMembersFromGenericLobby(const char *reason)
+{
+    if (gc_profile != GC_PROFILE_DOTA2 || !GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.match_id != 0)
+        return;
+
+    const std::vector<GBE_DotaLobbyMemberState> previous_members = GBE_local_lobby.members;
+    GBE_LocalLobby lobby{};
+    if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "generic_lobby_member_sync", lobby, false))
+        return;
+
+    if (GBE_DotaLobbyMembersEqual(previous_members, lobby.members))
+        return;
+
+    GBE_PublishSharedDotaLobbyState(reason ? reason : "generic_lobby_member_sync");
+    GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, reason ? reason : "generic_lobby_member_sync");
+}
+
 bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw)
 {
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
@@ -12476,12 +12794,37 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
         return true;
     }
 
-    if (request.has_team)
-        GBE_local_lobby.owner_team = request.team;
-    if (request.has_slot)
-        GBE_local_lobby.owner_slot = request.slot;
+    const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
+    const bool local_is_owner = local_steam_id != 0ull && local_steam_id == GBE_local_lobby.owner_steam_id;
+    if (local_is_owner) {
+        if (request.has_team)
+            GBE_local_lobby.owner_team = request.team;
+        if (request.has_slot)
+            GBE_local_lobby.owner_slot = request.slot;
+    }
+    bool updated_local_member = false;
+    for (GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+        if (member.steam_id != local_steam_id)
+            continue;
+        if (request.has_team)
+            member.team = request.team;
+        if (request.has_slot)
+            member.slot = request.slot;
+        updated_local_member = true;
+        break;
+    }
+    if (!updated_local_member) {
+        GBE_DotaLobbyMemberState member{};
+        member.steam_id = local_steam_id;
+        member.account_id = settings->get_local_steam_id().GetAccountID();
+        member.team = request.has_team ? request.team : 0u;
+        member.slot = request.has_slot ? request.slot : 0u;
+        member.connected = GBE_local_lobby.state == 3u;
+        GBE_UpsertDotaLobbyMember(GBE_local_lobby.members, member);
+    }
     if (request.has_bot_difficulty) {
-        if (GBE_IsDotaDireTeam(GBE_local_lobby.owner_team))
+        const uint32 bot_team = request.has_team ? request.team : GBE_local_lobby.owner_team;
+        if (GBE_IsDotaDireTeam(bot_team))
             GBE_local_lobby.bot_difficulty_dire = request.bot_difficulty;
         else
             GBE_local_lobby.bot_difficulty_radiant = request.bot_difficulty;
@@ -14309,6 +14652,8 @@ void Steam_Game_Coordinator::RunCallbacks()
 {
     if (!gc_initialized)
         return;
+
+    GBE_MaybeSyncDotaPracticeLobbyMembersFromGenericLobby("run_callbacks_generic_lobby_members");
 
     if (delay_init && welcome_received && check_timedout(welcome_time, 0.2)) {
         delay_init = false;
