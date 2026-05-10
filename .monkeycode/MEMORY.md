@@ -337,3 +337,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - Dota2 server 侧随后发送 `7004 k_EMsgGCGameMatchSignOut`，官方链路会回 `7005`，并推进 `2004` 到 `RUN/POST_GAME` 后再到 `POSTGAME/POST_GAME`，其中 POSTGAME 形状包含 field `70=2` 与 field `111=duration`。
   - 正常结束不应完全复用 abandon 的立即 postgame `7010` 行为；应先完成 `7005`、POSTGAME `26`、`25`，后续离开旧 chat channel 的 `7272` 再补 postgame `7010` 并回 `7014`。
   - Steam 侧正常结束后可能发送 `7082 k_EMsgGCSubmitPlayerReportV2`，应回 `7083` 且 `enum_result=1` 表示成功。
+
+[Dota2 正常结束后主页状态收束]
+- Date: 2026-05-10
+- Context: Agent 在分析用户上传的正常结束后主页仍显示游戏中的 `gbe_gc_debug.log` 与 `console.log` 时发现
+- Category: 代码模式
+- Instructions:
+  - 正常结束成功进入总结页后，日志显示 `7004 -> 7005 -> POSTGAME 26 -> 25` 完成，但 Dota server 不一定会继续发送 `7272`，因此不能只依赖 `7272/7014` 来恢复主页 INIT 状态。
+  - 正常结束路径应在 `25 k_ESOMsg_CacheUnsubscribed` 被取走后执行最终收束：清理 shared/local lobby、清空 settings lobby，并向 Steam/client GC 侧推 INIT persona/rich presence。
+  - abandon 路径仍应保持等待 `7272 -> 7014` 的收束方式，避免破坏已稳定的断开链路。

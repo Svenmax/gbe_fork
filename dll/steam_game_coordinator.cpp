@@ -203,6 +203,8 @@ struct GBE_SharedDotaLobbyState {
 };
 
 static GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
+static bool GBE_pending_dota_normal_signout_finalize_after_25 = false;
+static uint64 GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
 
 enum : uint32 {
     GBE_kDotaLaunchPhaseNone = 0u,
@@ -9027,6 +9029,8 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
     GBE_last_dota_launch_state_pushed_game_state = 0;
     GBE_pending_reset_after_cache_unsubscribed = false;
     GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
+    GBE_pending_dota_normal_signout_finalize_after_25 = false;
+    GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
     if (previous_lobby_id != 0 && GBE_suppressed_dota_abandon_lobby_id != previous_lobby_id)
         GBE_ClearDotaAbandonedLobbySuppression(previous_lobby_id, reason ? reason : "reset_gc_memory");
     GBE_pending_dota_abandon_finalize_after_7014 = false;
@@ -11641,6 +11645,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaGameMatchSignOutRequest(bool wrapped,
             } else {
                 push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
             }
+            GBE_pending_dota_normal_signout_finalize_after_25 = true;
+            GBE_pending_dota_normal_signout_finalize_lobby_id = lobby_id;
         } else {
             GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 after 7004 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
         }
@@ -13088,6 +13094,67 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaAbandonAfterOtherLeftChannel(uint64
     ResetGCMemory(reason ? reason : "7014_abandon_finalize", true, false);
 }
 
+void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed(uint64 consumed_lobby_id, const char *reason)
+{
+    if (gc_profile != GC_PROFILE_DOTA2)
+        return;
+
+    if (!settings)
+        return;
+
+    const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
+    const uint64 shared_lobby_id = GBE_shared_dota_lobby_state.lobby_id;
+    const uint64 lobby_id = consumed_lobby_id != 0 ? consumed_lobby_id : shared_lobby_id;
+    Steam_Game_Coordinator *client_target = this;
+    if (is_server) {
+        Steam_Client *steam_client = get_steam_client();
+        if (steam_client && steam_client->steam_game_coordinator)
+            client_target = steam_client->steam_game_coordinator;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Finalizing normal signout after 25 retrieval LobbyID=%llu shared_lobby=%llu reason=%s",
+        static_cast<unsigned long long>(lobby_id),
+        static_cast<unsigned long long>(shared_lobby_id),
+        reason ? reason : "unknown"
+    );
+
+    if (settings->get_lobby().ConvertToUint64() != 0)
+        settings->set_lobby(k_steamIDNil);
+
+    if (client_target && !client_target->is_server && client_target != this) {
+        client_target->GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+        client_target->GBE_local_lobby = GBE_LocalLobby{};
+        client_target->GBE_last_dota_launch_state_pushed_game_state = 0;
+    }
+    GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+    GBE_local_lobby = GBE_LocalLobby{};
+    GBE_last_dota_launch_state_pushed_game_state = 0;
+    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+
+    if (client_target && client_target->gc_profile == GC_PROFILE_DOTA2)
+        client_target->GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
+
+    std::string persona_message;
+    if (GBE_BuildDotaPersonaStatePeripheralMessage(GBE_kDotaAbandonPersonaStateInitHex, steam_id, lobby_id, persona_message)) {
+        if (client_target && client_target->gc_profile == GC_PROFILE_DOTA2)
+            client_target->push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "queued normal signout persona label=25_init lobby_id=%llu size=%zu",
+            static_cast<unsigned long long>(lobby_id),
+            persona_message.size()
+        );
+    } else {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "failed building normal signout persona label=25_init lobby_id=%llu",
+            static_cast<unsigned long long>(lobby_id)
+        );
+    }
+}
+
 // sends a message to the Game Coordinator
 EGCResults Steam_Game_Coordinator::SendMessage_( uint32 unMsgType, const void *pubData, uint32 cubData )
 {
@@ -13238,6 +13305,10 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
         GBE_pending_dota_abandon_finalize_after_7014 &&
         GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaOtherLeftChannel &&
         GBE_IsDotaOtherLeftChannelPayloadForChannel(message.msg_body, GBE_local_lobby.abandon_pre_postgame_chat_channel_id);
+    const bool should_finalize_dota_normal_signout_after_25 =
+        gc_profile == GC_PROFILE_DOTA2 &&
+        GBE_pending_dota_normal_signout_finalize_after_25 &&
+        GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaCacheUnsubscribed;
 
     incoming_messages.pop();
 
@@ -13280,6 +13351,18 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
             static_cast<unsigned long long>(GBE_local_lobby.abandon_pre_postgame_chat_channel_id)
         );
         GBE_FinalizeDotaAbandonAfterOtherLeftChannel(finalize_lobby_id, "7014_pre_postgame_retrieved");
+    }
+
+    if (should_finalize_dota_normal_signout_after_25) {
+        const uint64 finalize_lobby_id = GBE_pending_dota_normal_signout_finalize_lobby_id;
+        GBE_pending_dota_normal_signout_finalize_after_25 = false;
+        GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Consumed normal signout 25; finalizing postgame teardown LobbyID=%llu",
+            static_cast<unsigned long long>(finalize_lobby_id)
+        );
+        GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed(finalize_lobby_id, "7004_signout_after_25_retrieved");
     }
 
     if (gc_profile == GC_PROFILE_DOTA2 &&
