@@ -128,6 +128,7 @@ public:
     ~Steam_Matchmaking();
 
     CSteamID CreateLobbyImmediate(ELobbyType eLobbyType, int cMaxMembers);
+    std::vector<CSteamID> GetLobbyListSnapshot();
 
     // game server favorites storage
     // saves basic details about a multiplayer game server locally

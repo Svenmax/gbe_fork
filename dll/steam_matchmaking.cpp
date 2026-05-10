@@ -313,6 +313,20 @@ CSteamID Steam_Matchmaking::CreateLobbyImmediate(ELobbyType eLobbyType, int cMax
     return lobby_id;
 }
 
+std::vector<CSteamID> Steam_Matchmaking::GetLobbyListSnapshot()
+{
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    std::vector<CSteamID> result;
+    for (const auto &lobby : lobbies) {
+        const bool visible = lobby.joinable() &&
+            (lobby.type() == k_ELobbyTypePublic || lobby.type() == k_ELobbyTypeInvisible || lobby.type() == k_ELobbyTypeFriendsOnly) &&
+            !lobby.deleted();
+        if (visible)
+            result.push_back(CSteamID((uint64)lobby.room_id()));
+    }
+    return result;
+}
+
 
 // game server favorites storage
 // saves basic details about a multiplayer game server locally
