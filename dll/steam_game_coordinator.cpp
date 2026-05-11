@@ -12439,6 +12439,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
         GBE_local_lobby.chat_channel_id = GBE_GenerateDotaChatChannelId();
     GBE_local_lobby.chat_channel_name = request.channel_name;
     GBE_local_lobby.chat_channel_type = request.has_channel_type ? request.channel_type : 3u;
+
+    if (GBE_local_lobby.generic_lobby_id != 0) {
+        Steam_Client *steam_client = get_steam_client();
+        if (steam_client && steam_client->steam_matchmaking)
+            steam_client->steam_matchmaking->RunCallbacks();
+    }
+
     GBE_PublishSharedDotaLobbyState("7009_join_chat");
 
     GBE_LocalLobby lobby_snapshot{};
