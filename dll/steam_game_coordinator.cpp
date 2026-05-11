@@ -4693,7 +4693,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
 
         const bool should_rewrite_type = rewrite_runtime_fields
             ? (type_id == 2004u || type_id == 2014u || type_id == 2015u || type_id == 2016u)
-            : (type_id == 2004u || type_id == 2014u || type_id == 2016u);
+            : (type_id == 2004u || type_id == 2014u);
         if (!should_rewrite_type) {
             rewritten_body.append(body.data() + field_offset, field_end - field_offset);
             continue;
@@ -12141,7 +12141,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
     );
 
     std::string response_24;
-    if (!GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(GBE_local_lobby, GBE_GetDotaLobbyOwnerName(), response_24)) {
+    GBE_LocalLobby response_lobby = GBE_local_lobby;
+    response_lobby.members.clear();
+    if (!GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(response_lobby, GBE_GetDotaLobbyOwnerName(), response_24)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 24 cache update for 7044 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
     }
