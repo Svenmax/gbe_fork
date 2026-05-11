@@ -9648,7 +9648,45 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
         reason ? reason : "generic_lobby_members_changed"
     );
 
-    return GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, reason ? reason : "generic_lobby_members_changed");
+    const bool sent_details_update = GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, reason ? reason : "generic_lobby_members_changed");
+
+    if (GBE_local_lobby.has_chat_channel && GBE_local_lobby.chat_channel_id != 0) {
+        GBE_LocalLobby chat_snapshot{};
+        if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "generic_lobby_members_changed_chat_refresh", chat_snapshot, false))
+            chat_snapshot = GBE_local_lobby;
+
+        std::string response_7010;
+        if (GBE_BuildDotaJoinChatChannelResponsePayload(
+                settings->get_local_steam_id().ConvertToUint64(),
+                chat_snapshot.chat_channel_id,
+                chat_snapshot.chat_channel_name,
+                std::string(settings->get_local_name()),
+                chat_snapshot.members,
+                chat_snapshot.owner_steam_id,
+                chat_snapshot.owner_name,
+                chat_snapshot.chat_channel_type,
+                response_7010)) {
+            push_incoming_now(GBE_kDotaJoinChatChannelResponse | GBE_kProtoMask, response_7010);
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Refreshed chat channel members after lobby member change LobbyID=%llu channel_id=%llu members=%zu reason=%s",
+                static_cast<unsigned long long>(chat_snapshot.lobby_id),
+                static_cast<unsigned long long>(chat_snapshot.chat_channel_id),
+                chat_snapshot.members.size(),
+                reason ? reason : "generic_lobby_members_changed"
+            );
+        } else {
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Failed refreshing chat channel members after lobby member change LobbyID=%llu channel_id=%llu reason=%s",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
+                reason ? reason : "generic_lobby_members_changed"
+            );
+        }
+    }
+
+    return sent_details_update;
 }
 
 bool Steam_Game_Coordinator::GBE_AdoptDotaGenericLobbyOwnerIfNeeded(const char *reason)
