@@ -9407,6 +9407,36 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
     );
 }
 
+bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(const char *reason)
+{
+    if (is_server || gc_profile != GC_PROFILE_DOTA2)
+        return false;
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.generic_lobby_id == 0)
+        return false;
+    if (GBE_local_lobby.state > 1u)
+        return false;
+
+    const std::vector<GBE_DotaLobbyMemberState> previous_members = GBE_local_lobby.members;
+    GBE_LocalLobby lobby{};
+    if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "generic_lobby_members_changed", lobby))
+        return false;
+    if (GBE_DotaLobbyMembersEqual(previous_members, GBE_local_lobby.members))
+        return false;
+
+    GBE_PublishSharedDotaLobbyState(reason ? reason : "generic_lobby_members_changed");
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Detected generic lobby member change LobbyID=%llu generic_lobby_id=%llu old_members=%zu new_members=%zu reason=%s",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+        previous_members.size(),
+        GBE_local_lobby.members.size(),
+        reason ? reason : "generic_lobby_members_changed"
+    );
+
+    return GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, reason ? reason : "generic_lobby_members_changed");
+}
+
 void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *reason)
 {
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.generic_lobby_id == 0)
@@ -14683,6 +14713,8 @@ void Steam_Game_Coordinator::RunCallbacks()
     if (delay_init && welcome_received && check_timedout(welcome_time, 0.2)) {
         delay_init = false;
     }
+
+    GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("run_callbacks_generic_lobby_members_changed");
 
     auto due_time = [](const GC_Message &message) {
         return message.created + std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(std::chrono::duration<double>(message.post_in));

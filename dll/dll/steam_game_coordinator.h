@@ -225,6 +225,7 @@ public ISteamGameCoordinator
     bool GBE_TryAdvanceDotaLaunchToRun(const char *note, uint32 trigger_emsg, uint64 source_job, const char *reason);
     void GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason);
     void GBE_PublishSharedDotaLobbyState(const char *reason);
+    bool GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(const char *reason);
     void GBE_PublishDotaPracticeLobbyMetadata(const char *reason);
     bool GBE_FindDotaGenericLobbyByDotaLobbyId(uint64 dota_lobby_id, CSteamID &generic_lobby_id, GBE_LocalLobby *lobby_snapshot, const char *reason);
     std::vector<GBE_LocalLobby> GBE_GetDotaGenericLobbySnapshots(const char *reason);
