@@ -12677,23 +12677,6 @@ bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped
     return true;
 }
 
-void Steam_Game_Coordinator::GBE_MaybeSyncDotaPracticeLobbyMembersFromGenericLobby(const char *reason)
-{
-    if (gc_profile != GC_PROFILE_DOTA2 || !GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.match_id != 0)
-        return;
-
-    const std::vector<GBE_DotaLobbyMemberState> previous_members = GBE_local_lobby.members;
-    GBE_LocalLobby lobby{};
-    if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "generic_lobby_member_sync", lobby, false))
-        return;
-
-    if (GBE_DotaLobbyMembersEqual(previous_members, lobby.members))
-        return;
-
-    GBE_PublishSharedDotaLobbyState(reason ? reason : "generic_lobby_member_sync");
-    GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, reason ? reason : "generic_lobby_member_sync");
-}
-
 bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw)
 {
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
@@ -14652,8 +14635,6 @@ void Steam_Game_Coordinator::RunCallbacks()
 {
     if (!gc_initialized)
         return;
-
-    GBE_MaybeSyncDotaPracticeLobbyMembersFromGenericLobby("run_callbacks_generic_lobby_members");
 
     if (delay_init && welcome_received && check_timedout(welcome_time, 0.2)) {
         delay_init = false;
