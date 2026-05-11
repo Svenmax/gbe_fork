@@ -1797,8 +1797,17 @@ void Steam_Matchmaking::Callback(Common_Message *msg)
 
         if (msg->low_level().type() == Low_Level::DISCONNECT) {
             for (auto & l: lobbies) {
-                if (leave_lobby(&(l), (uint64)msg->source_id()))
+                const bool disconnected_was_owner = l.owner() == msg->source_id();
+                if (leave_lobby(&(l), (uint64)msg->source_id())) {
+                    if (disconnected_was_owner && !l.deleted() && l.members_size() > 0) {
+                        uint64 owner_seed = l.room_id() ^ msg->source_id();
+                        for (const auto &member : l.members())
+                            owner_seed ^= member.id() + 0x9e3779b97f4a7c15ull + (owner_seed << 6) + (owner_seed >> 2);
+                        const int new_owner_index = static_cast<int>(owner_seed % static_cast<uint64>(l.members_size()));
+                        change_owner(&(l), (uint64)l.members(new_owner_index).id());
+                    }
                     trigger_lobby_member_join_leave((uint64)l.room_id(), (uint64)msg->source_id(), true, true, 0.0);
+                }
             }
         }
     }
