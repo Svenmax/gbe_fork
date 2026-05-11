@@ -41,6 +41,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 加入者初始状态应为 `DOTA_GC_TEAM_PLAYER_POOL slot=0`，不能默认复用房主的天辉 slot。
   - generic Steam lobby 成员列表是跨实例同步 Dota practice lobby 成员的来源，成员变化后需要推送新的 `26`。
   - 成员换槽位的 `team/slot/hero/connected` 不能只写进本进程 shared state；跨机器同步必须通过 generic lobby member data 传播，并且读取 generic 快照时不能用本地旧远端成员状态覆盖 member data。
+  - owner 自己换槽位时也要读取 owner 的 generic lobby member data 并同步到 `owner_team/owner_slot`，否则非房主客户端会继续用默认 owner 天辉一号位覆盖房主的实际槽位。
   - 官方 `7044 -> 24` 加入首包的 SO 顺序是 `2004, 2015, 2013, 2014, 2016`；不能只按双人样本写死 `2`，应按实际成员数 `N` 同步生成 `2004.field120`、`2004.field121`、`2015.field1`、`2014.field1`、`2016.field1`。
   - 多成员 join 首包必须保持各 SO 对象成员基数一致；只 patch `2004/2016` 而不更新 `2015/2014` 会造成客户端在读取 `24` 时闪退风险。
 
