@@ -61,6 +61,9 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - practice lobby 的 `7273` 不应额外注入 `field3 persona_name` 或合成 timestamp；显示名依赖 `7010` 成员表中的 SteamID/persona 映射，额外 persona 字段会导致对端 UI 回退显示为频道名 `lobby`。
   - 如果 generic lobby 成员变化发生在本机已加入聊天频道之后，需要补发刷新后的 `7010` 聊天频道成员表；否则接收端虽然能显示远端 `7273` 内容，但因频道成员表缺少远端 SteamID/persona，会回退显示为 `lobby: 内容`。
   - 初次 Dota ClientWelcome 的 SO type `2002 CSODOTAGameAccountClient` 中 `field72 player_behavior_score_last_report` 是行为分；交流分字段不在当前 go-dota2/SteamKit 公开 `CSODOTAGameAccountClient` 定义中，不能把无关字段误当交流分。
+  - 官方 `playerbehostafterhostshutdown` 抓包中，房主直接关闭后的玩家侧 `26` 不压缩成员数组；旧房主 index 保留为空槽 `steam_id=0`。
+  - 同一官方样本中 `2004.field121` 只包含剩余真实成员 index，`2004.field123` 包含旧房主空槽 index，例如 `member_indices=[1]`、`free=[0]`。
+  - 构建 owner-transfer `26` 时必须保留旧成员槽位，不能让 `GBE_BuildDotaLobbyMembers` 把新房主重新插到 index 0 或丢弃空槽。
 
 ### 用户指令与执行约束
 

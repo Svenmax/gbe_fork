@@ -2005,9 +2005,11 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
     bool wrote_owner_event_points = false;
     bool include_event_points = false;
     for (const GBE_DotaLobbyMemberState &member : effective_members) {
-        const uint64 member_steam_id = member.steam_id != 0ull ? member.steam_id : steam_id;
-        if (member_steam_id == 0ull)
+        const uint64 member_steam_id = member.steam_id;
+        if (member_steam_id == 0ull) {
+            GBE_AppendProtoBytesField(object_2016, 1u, std::string(1u, '\0'));
             continue;
+        }
 
         if (member.connected)
             include_event_points = true;
@@ -2046,6 +2048,11 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
 static void GBE_BuildDotaLobbyMemberObject2004(const GBE_DotaLobbyMemberState &member, std::string &member_state)
 {
     member_state.clear();
+    if (member.steam_id == 0ull) {
+        member_state.assign(1u, '\0');
+        return;
+    }
+
     GBE_AppendProtoFixed64Field(member_state, 1u, member.steam_id);
     if (member.hero_id != 0u)
         GBE_AppendProtoVarIntField(member_state, 2u, member.hero_id);
@@ -2069,8 +2076,10 @@ static std::vector<GBE_DotaLobbyMemberState> GBE_BuildDotaLobbyMembers(
     std::vector<GBE_DotaLobbyMemberState> result;
 
     auto append_or_update = [&result](GBE_DotaLobbyMemberState member) {
-        if (member.steam_id == 0ull)
+        if (member.steam_id == 0ull) {
+            result.push_back(member);
             return;
+        }
         if (member.account_id == 0u)
             member.account_id = CSteamID((uint64)member.steam_id).GetAccountID();
         for (GBE_DotaLobbyMemberState &existing : result) {
@@ -2082,14 +2091,24 @@ static std::vector<GBE_DotaLobbyMemberState> GBE_BuildDotaLobbyMembers(
         result.push_back(member);
     };
 
-    GBE_DotaLobbyMemberState owner{};
-    owner.steam_id = owner_steam_id;
-    owner.account_id = owner_account_id;
-    owner.team = owner_team;
-    owner.slot = owner_slot;
-    owner.hero_id = owner_hero_id;
-    owner.connected = owner_connected;
-    append_or_update(owner);
+    bool has_owner = false;
+    for (const GBE_DotaLobbyMemberState &member : members) {
+        if (member.steam_id == owner_steam_id) {
+            has_owner = true;
+            break;
+        }
+    }
+
+    if (!has_owner) {
+        GBE_DotaLobbyMemberState owner{};
+        owner.steam_id = owner_steam_id;
+        owner.account_id = owner_account_id;
+        owner.team = owner_team;
+        owner.slot = owner_slot;
+        owner.hero_id = owner_hero_id;
+        owner.connected = owner_connected;
+        append_or_update(owner);
+    }
 
     for (GBE_DotaLobbyMemberState member : members) {
         if (member.steam_id == owner_steam_id) {
@@ -2138,6 +2157,79 @@ static bool GBE_DotaLobbyMembersContainSteamId(const std::vector<GBE_DotaLobbyMe
     }
 
     return false;
+}
+
+static bool GBE_FindDotaLobbyMemberIndex(const std::vector<GBE_DotaLobbyMemberState> &members, uint64 steam_id, size_t &index)
+{
+    if (steam_id == 0ull)
+        return false;
+
+    for (size_t i = 0; i < members.size(); ++i) {
+        if (members[i].steam_id == steam_id) {
+            index = i;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void GBE_PreserveDotaLobbyOwnerTransferSlots(
+    std::vector<GBE_DotaLobbyMemberState> &members,
+    const std::vector<GBE_DotaLobbyMemberState> &previous_members,
+    uint64 previous_owner_steam_id,
+    uint64 new_owner_steam_id)
+{
+    if (previous_owner_steam_id == 0ull || new_owner_steam_id == 0ull || previous_owner_steam_id == new_owner_steam_id)
+        return;
+
+    size_t previous_owner_index = 0;
+    size_t previous_new_owner_index = 0;
+    if (!GBE_FindDotaLobbyMemberIndex(previous_members, previous_owner_steam_id, previous_owner_index) ||
+            !GBE_FindDotaLobbyMemberIndex(previous_members, new_owner_steam_id, previous_new_owner_index))
+        return;
+
+    size_t current_new_owner_index = 0;
+    if (!GBE_FindDotaLobbyMemberIndex(members, new_owner_steam_id, current_new_owner_index))
+        return;
+
+    const GBE_DotaLobbyMemberState new_owner = members[current_new_owner_index];
+    std::vector<GBE_DotaLobbyMemberState> reordered(std::max(previous_members.size(), previous_new_owner_index + 1));
+    std::vector<bool> occupied(reordered.size(), false);
+
+    if (previous_owner_index < reordered.size()) {
+        reordered[previous_owner_index] = GBE_DotaLobbyMemberState{};
+        occupied[previous_owner_index] = true;
+    }
+
+    reordered[previous_new_owner_index] = new_owner;
+    occupied[previous_new_owner_index] = true;
+
+    for (const GBE_DotaLobbyMemberState &member : members) {
+        if (member.steam_id == 0ull || member.steam_id == new_owner_steam_id || member.steam_id == previous_owner_steam_id)
+            continue;
+
+        size_t previous_index = 0;
+        if (GBE_FindDotaLobbyMemberIndex(previous_members, member.steam_id, previous_index)) {
+            if (previous_index >= reordered.size()) {
+                reordered.resize(previous_index + 1);
+                occupied.resize(previous_index + 1, false);
+            }
+            if (!occupied[previous_index]) {
+                reordered[previous_index] = member;
+                occupied[previous_index] = true;
+                continue;
+            }
+        }
+
+        reordered.push_back(member);
+        occupied.push_back(true);
+    }
+
+    while (!reordered.empty() && reordered.back().steam_id == 0ull)
+        reordered.pop_back();
+
+    members = reordered;
 }
 
 static void GBE_UpsertDotaLobbyMember(std::vector<GBE_DotaLobbyMemberState> &members, const GBE_DotaLobbyMemberState &member)
@@ -6089,8 +6181,13 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
             GBE_AppendProtoBytesField(object_2004, 120, member_state);
     }
 
-    for (size_t i = 0; i < effective_members.size(); ++i)
-        GBE_AppendProtoVarIntField(object_2004, 121, static_cast<uint64>(i));
+    for (size_t i = 0; i < effective_members.size(); ++i) {
+        if (effective_members[i].steam_id != 0ull) {
+            GBE_AppendProtoVarIntField(object_2004, 121, static_cast<uint64>(i));
+        } else {
+            GBE_AppendProtoVarIntField(object_2004, 123, static_cast<uint64>(i));
+        }
+    }
     GBE_AppendProtoVarIntField(object_2004, 127, 0u);
     GBE_AppendProtoVarIntField(object_2004, 128, GBE_kDotaLobbyField128Value);
 
@@ -9479,6 +9576,43 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
     return true;
 }
 
+bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyStateWithPreviousSlots(
+    const char *reason,
+    const std::vector<GBE_DotaLobbyMemberState> &previous_members,
+    uint64 previous_owner_steam_id,
+    GBE_LocalLobby &snapshot)
+{
+    if (!GBE_CaptureCurrentDotaLobbyState(reason, snapshot, false))
+        return false;
+
+    const uint64 new_owner_steam_id = GBE_local_lobby.owner_steam_id;
+    const size_t before_count = GBE_local_lobby.members.size();
+    GBE_PreserveDotaLobbyOwnerTransferSlots(GBE_local_lobby.members, previous_members, previous_owner_steam_id, new_owner_steam_id);
+    if (!GBE_DotaLobbyMembersEqual(snapshot.members, GBE_local_lobby.members)) {
+        snapshot.members = GBE_local_lobby.members;
+        GBE_PublishSharedDotaLobbyState(reason ? reason : "owner_transfer_preserve_slots");
+
+        size_t previous_owner_index = 0;
+        size_t new_owner_index = 0;
+        const bool has_previous_owner_index = GBE_FindDotaLobbyMemberIndex(previous_members, previous_owner_steam_id, previous_owner_index);
+        const bool has_new_owner_index = GBE_FindDotaLobbyMemberIndex(GBE_local_lobby.members, new_owner_steam_id, new_owner_index);
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Preserved owner transfer member slots reason=%s lobby_id=%llu old_owner=%llu new_owner=%llu old_owner_index=%lld new_owner_index=%lld before_members=%zu after_members=%zu",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(previous_owner_steam_id),
+            static_cast<unsigned long long>(new_owner_steam_id),
+            has_previous_owner_index ? static_cast<long long>(previous_owner_index) : -1ll,
+            has_new_owner_index ? static_cast<long long>(new_owner_index) : -1ll,
+            before_count,
+            GBE_local_lobby.members.size()
+        );
+    }
+
+    return true;
+}
+
 void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason)
 {
     if (message.size() < sizeof(ProtoBufMsgHeader_t))
@@ -9640,7 +9774,7 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
     const uint32 previous_owner_account_id = GBE_local_lobby.owner_account_id;
     const std::string previous_owner_name = GBE_local_lobby.owner_name;
     GBE_LocalLobby lobby{};
-    if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "generic_lobby_members_changed", lobby, false))
+    if (!GBE_CaptureCurrentDotaLobbyStateWithPreviousSlots(reason ? reason : "generic_lobby_members_changed", previous_members, previous_owner_steam_id, lobby))
         return false;
     const bool owner_changed =
         previous_owner_steam_id != GBE_local_lobby.owner_steam_id ||
@@ -9662,12 +9796,34 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
         reason ? reason : "generic_lobby_members_changed"
     );
 
-    const bool sent_details_update = GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, reason ? reason : "generic_lobby_members_changed");
+    std::string response_26;
+    const bool sent_details_update = GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26);
+    if (sent_details_update) {
+        push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, response_26);
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Sent direct 26 details update from preserved member snapshot LobbyID=%llu reason=%s size=%zu body_prefix=%s",
+            static_cast<unsigned long long>(lobby.lobby_id),
+            reason ? reason : "generic_lobby_members_changed",
+            response_26.size(),
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_26.data()), response_26.size(), 32).c_str()
+        );
+    } else {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Failed building preserved member snapshot 26 details update for LobbyID=%llu reason=%s",
+            static_cast<unsigned long long>(lobby.lobby_id),
+            reason ? reason : "generic_lobby_members_changed"
+        );
+    }
 
     if (GBE_local_lobby.has_chat_channel && GBE_local_lobby.chat_channel_id != 0) {
-        GBE_LocalLobby chat_snapshot{};
-        if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "generic_lobby_members_changed_chat_refresh", chat_snapshot, false))
-            chat_snapshot = GBE_local_lobby;
+        GBE_LocalLobby chat_snapshot = lobby;
+        chat_snapshot.members.clear();
+        for (const GBE_DotaLobbyMemberState &member : lobby.members) {
+            if (member.steam_id != 0ull)
+                chat_snapshot.members.push_back(member);
+        }
 
         std::string response_7010;
         if (GBE_BuildDotaJoinChatChannelResponsePayload(
