@@ -87,6 +87,9 @@ static constexpr size_t GBE_kDotaWelcomeInnerBodyOffset = 48u;
 static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
 static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
 static constexpr uint32 GBE_kDotaLobbyField128Value = 1776809986u;
+static constexpr uint32 GBE_kDotaTeamGoodGuys = 0u;
+static constexpr uint32 GBE_kDotaTeamBadGuys = 1u;
+static constexpr uint32 GBE_kDotaTeamPlayerPool = 4u;
 static constexpr const char *GBE_kDotaGenericLobbyMarkerKey = "gbe_dota_practice_lobby";
 static constexpr const char *GBE_kDotaGenericLobbyMarkerValue = "1";
 static constexpr const char *GBE_kDotaGenericLobbyDotaLobbyIdKey = "gbe_dota_lobby_id";
@@ -2026,9 +2029,8 @@ static std::vector<GBE_DotaLobbyMemberState> GBE_BuildDotaLobbyMembers(
             member.slot = owner_slot;
             member.hero_id = owner_hero_id;
             member.connected = owner_connected;
-        } else {
-            if (member.team == 0u)
-                member.slot = 0u;
+        } else if (member.team == GBE_kDotaTeamPlayerPool) {
+            member.slot = 0u;
         }
         append_or_update(member);
     }
@@ -3133,7 +3135,7 @@ static bool GBE_IsDotaRankTypeSupported(uint32 rank_type)
 
 static bool GBE_IsDotaDireTeam(uint32 team)
 {
-    return team == 1u || team == 3u;
+    return team == GBE_kDotaTeamBadGuys || team == 3u;
 }
 
 static bool GBE_RewriteDotaLobbyTemplateMemberObject(
@@ -9206,7 +9208,7 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                         member.hero_id = GBE_local_lobby.owner_hero_id;
                         member.connected = GBE_local_lobby.owner_connected || GBE_local_lobby.state == 3u;
                     } else {
-                        member.team = 0u;
+                        member.team = GBE_kDotaTeamPlayerPool;
                         member.slot = 0u;
                     }
                     GBE_UpsertDotaLobbyMember(members, member);
@@ -9461,7 +9463,7 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
         snapshot.fill_with_bots = true;
         snapshot.allow_spectating = true;
         snapshot.bot_difficulty_dire = 4u;
-        snapshot.owner_team = 2u;
+        snapshot.owner_team = GBE_kDotaTeamGoodGuys;
         snapshot.owner_slot = 1u;
         snapshot.owner_connected = false;
         const std::vector<CSteamID> generic_members = steam_client->steam_matchmaking->GetLobbyMemberListSnapshot(generic_lobby_id);
@@ -9479,7 +9481,7 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
                 member.slot = snapshot.owner_slot;
                 member.hero_id = snapshot.owner_hero_id;
             } else {
-                member.team = 0u;
+                member.team = GBE_kDotaTeamPlayerPool;
                 member.slot = 0u;
             }
             GBE_UpsertDotaLobbyMember(snapshot.members, member);
@@ -11749,7 +11751,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     GBE_local_lobby.owner_steam_id = settings->get_local_steam_id().ConvertToUint64();
     GBE_local_lobby.owner_account_id = settings->get_local_steam_id().GetAccountID();
     GBE_local_lobby.owner_name = std::string(settings->get_local_name());
-    GBE_local_lobby.owner_team = 2u;
+    GBE_local_lobby.owner_team = GBE_kDotaTeamGoodGuys;
     GBE_local_lobby.owner_slot = 1;
     GBE_DotaLobbyMemberState owner_member{};
     owner_member.steam_id = GBE_local_lobby.owner_steam_id;
@@ -12057,7 +12059,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
         GBE_local_lobby.owner_steam_id = settings->get_local_steam_id().ConvertToUint64();
         GBE_local_lobby.owner_account_id = settings->get_local_steam_id().GetAccountID();
         GBE_local_lobby.owner_name = std::string(settings->get_local_name());
-        GBE_local_lobby.owner_team = 2u;
+        GBE_local_lobby.owner_team = GBE_kDotaTeamGoodGuys;
         GBE_local_lobby.owner_slot = 1u;
         GBE_local_lobby.game_mode = 2u;
         GBE_local_lobby.server_region = 15u;
@@ -12092,7 +12094,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
     GBE_DotaLobbyMemberState local_member{};
     local_member.steam_id = settings->get_local_steam_id().ConvertToUint64();
     local_member.account_id = settings->get_local_steam_id().GetAccountID();
-    local_member.team = 0u;
+    local_member.team = GBE_kDotaTeamPlayerPool;
     local_member.slot = 0u;
     local_member.connected = false;
     GBE_UpsertDotaLobbyMember(GBE_local_lobby.members, local_member);
@@ -12800,7 +12802,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
         GBE_DotaLobbyMemberState member{};
         member.steam_id = local_steam_id;
         member.account_id = settings->get_local_steam_id().GetAccountID();
-        member.team = request.has_team ? request.team : 0u;
+        member.team = request.has_team ? request.team : GBE_kDotaTeamPlayerPool;
         member.slot = request.has_slot ? request.slot : 0u;
         member.connected = GBE_local_lobby.state == 3u;
         GBE_UpsertDotaLobbyMember(GBE_local_lobby.members, member);
@@ -12861,7 +12863,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Team slot updated. team=%u slot=%u bot_diff_req=%u has_bot_diff=%d",
+        "[LOBBY] Team slot updated. local_team=%u local_slot=%u owner_team=%u owner_slot=%u bot_diff_req=%u has_bot_diff=%d",
+        request.has_team ? request.team : 0u,
+        request.has_slot ? request.slot : 0u,
         GBE_local_lobby.owner_team,
         GBE_local_lobby.owner_slot,
         request.bot_difficulty,
