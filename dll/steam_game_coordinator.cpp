@@ -9217,6 +9217,8 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
         if (steam_client && steam_client->steam_matchmaking) {
             CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
             if (generic_lobby_id.IsLobby()) {
+                GBE_AdoptDotaGenericLobbyOwnerIfNeeded(reason ? reason : "capture_current_lobby_state");
+
                 std::vector<GBE_DotaLobbyMemberState> members;
                 const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
                 const std::vector<CSteamID> generic_members = steam_client->steam_matchmaking->GetLobbyMemberListSnapshot(generic_lobby_id);
@@ -9440,24 +9442,104 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
         return false;
 
     const std::vector<GBE_DotaLobbyMemberState> previous_members = GBE_local_lobby.members;
+    const uint64 previous_owner_steam_id = GBE_local_lobby.owner_steam_id;
+    const uint32 previous_owner_account_id = GBE_local_lobby.owner_account_id;
+    const std::string previous_owner_name = GBE_local_lobby.owner_name;
     GBE_LocalLobby lobby{};
     if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "generic_lobby_members_changed", lobby, false))
         return false;
-    if (GBE_DotaLobbyMembersEqual(previous_members, GBE_local_lobby.members))
+    const bool owner_changed =
+        previous_owner_steam_id != GBE_local_lobby.owner_steam_id ||
+        previous_owner_account_id != GBE_local_lobby.owner_account_id ||
+        previous_owner_name != GBE_local_lobby.owner_name;
+    if (!owner_changed && GBE_DotaLobbyMembersEqual(previous_members, GBE_local_lobby.members))
         return false;
 
     GBE_PublishSharedDotaLobbyState(reason ? reason : "generic_lobby_members_changed");
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Detected generic lobby member change LobbyID=%llu generic_lobby_id=%llu old_members=%zu new_members=%zu reason=%s",
+        "[LOBBY] Detected generic lobby member/owner change LobbyID=%llu generic_lobby_id=%llu old_members=%zu new_members=%zu old_owner=%llu new_owner=%llu reason=%s",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
         previous_members.size(),
         GBE_local_lobby.members.size(),
+        static_cast<unsigned long long>(previous_owner_steam_id),
+        static_cast<unsigned long long>(GBE_local_lobby.owner_steam_id),
         reason ? reason : "generic_lobby_members_changed"
     );
 
     return GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, reason ? reason : "generic_lobby_members_changed");
+}
+
+bool Steam_Game_Coordinator::GBE_AdoptDotaGenericLobbyOwnerIfNeeded(const char *reason)
+{
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.generic_lobby_id == 0)
+        return false;
+
+    Steam_Client *steam_client = get_steam_client();
+    if (!steam_client || !steam_client->steam_matchmaking)
+        return false;
+
+    CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
+    if (!generic_lobby_id.IsLobby())
+        return false;
+
+    CSteamID generic_owner = steam_client->steam_matchmaking->GetLobbyOwner(generic_lobby_id);
+    if (!generic_owner.IsValid() || generic_owner.ConvertToUint64() == 0 || generic_owner.ConvertToUint64() == GBE_local_lobby.owner_steam_id)
+        return false;
+
+    const uint64 previous_owner_steam_id = GBE_local_lobby.owner_steam_id;
+    const uint64 new_owner_steam_id = generic_owner.ConvertToUint64();
+    const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
+
+    GBE_DotaLobbyMemberState new_owner{};
+    new_owner.steam_id = new_owner_steam_id;
+    new_owner.account_id = generic_owner.GetAccountID();
+    new_owner.team = GBE_kDotaTeamGoodGuys;
+    new_owner.slot = 0u;
+    new_owner.connected = GBE_local_lobby.state == 3u;
+
+    for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+        if (member.steam_id != new_owner_steam_id)
+            continue;
+        new_owner = member;
+        break;
+    }
+
+    GBE_local_lobby.owner_steam_id = new_owner_steam_id;
+    GBE_local_lobby.owner_account_id = new_owner.account_id;
+    GBE_local_lobby.owner_team = new_owner.team;
+    GBE_local_lobby.owner_slot = new_owner.slot;
+    GBE_local_lobby.owner_hero_id = new_owner.hero_id;
+    GBE_local_lobby.owner_connected = new_owner.connected;
+    if (new_owner_steam_id == local_steam_id) {
+        GBE_local_lobby.owner_name = std::string(settings->get_local_name());
+    } else {
+        const char *owner_name = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerNameKey);
+        GBE_local_lobby.owner_name = std::string(owner_name ? owner_name : "Lobby Host");
+    }
+
+    GBE_UpsertDotaLobbyMember(GBE_local_lobby.members, new_owner);
+
+    if (new_owner_steam_id == local_steam_id) {
+        GBE_PublishDotaPracticeLobbyLocalMemberData(reason ? reason : "adopt_generic_owner");
+        GBE_PublishDotaPracticeLobbyMetadata(reason ? reason : "adopt_generic_owner");
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Adopted generic lobby owner reason=%s dota_lobby_id=%llu generic_lobby_id=%llu old_owner=%llu new_owner=%llu local_is_owner=%u owner_name=%s team=%u slot=%u",
+        reason ? reason : "unknown",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+        static_cast<unsigned long long>(previous_owner_steam_id),
+        static_cast<unsigned long long>(new_owner_steam_id),
+        new_owner_steam_id == local_steam_id ? 1u : 0u,
+        GBE_local_lobby.owner_name.c_str(),
+        GBE_local_lobby.owner_team,
+        GBE_local_lobby.owner_slot
+    );
+    return true;
 }
 
 void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyLocalMemberData(const char *reason)
@@ -9568,10 +9650,18 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
         snapshot.lobby_id = dota_lobby_id;
         snapshot.generic_lobby_id = generic_lobby_id.ConvertToUint64();
         snapshot.owner_steam_id = GBE_ParseUint64OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerSteamIdKey));
-        if (snapshot.owner_steam_id == 0ull && generic_owner_id.IsValid())
+        if (generic_owner_id.IsValid() && generic_owner_id.ConvertToUint64() != 0ull)
             snapshot.owner_steam_id = generic_owner_id.ConvertToUint64();
         snapshot.owner_account_id = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerAccountIdKey));
+        if (generic_owner_id.IsValid() && generic_owner_id.ConvertToUint64() == snapshot.owner_steam_id)
+            snapshot.owner_account_id = generic_owner_id.GetAccountID();
         snapshot.owner_name = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerNameKey);
+        if (generic_owner_id.IsValid() && generic_owner_id.ConvertToUint64() == settings->get_local_steam_id().ConvertToUint64()) {
+            snapshot.owner_name = std::string(settings->get_local_name());
+            steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerSteamIdKey, std::to_string(snapshot.owner_steam_id).c_str());
+            steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerAccountIdKey, std::to_string(snapshot.owner_account_id).c_str());
+            steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerNameKey, snapshot.owner_name.c_str());
+        }
         snapshot.room_name = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyRoomNameKey);
         snapshot.game_mode = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameModeKey));
         snapshot.server_region = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerRegionKey));
@@ -12665,14 +12755,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
     }
 
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
-    std::string response_26;
-    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, GBE_GetDotaLobbyOwnerName(), response_26)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building delayed 26 payload for 7040 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
+    std::string response_25;
+    if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for 7040 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
         return true;
     }
 
     std::string outbound_message;
-    uint32 outbound_emsg = GBE_kDotaPracticeLobbyDetailsUpdate;
+    uint32 outbound_emsg = GBE_kDotaCacheUnsubscribed;
 
     if (wrapped) {
         if (!outer_session_field_raw) {
@@ -12680,23 +12770,21 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
             return true;
         }
 
-        if (!GBE_BuildWrappedDotaReplayMessage(response_26, *outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), outbound_message)) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 26 payload for 7040 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
+        if (!GBE_BuildWrappedDotaReplayMessage(response_25, *outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), outbound_message)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 25 payload for 7040 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
             return true;
         }
         outbound_emsg = GBE_kEMsgClientFromGC;
     } else {
-        outbound_message = response_26;
+        outbound_message = response_25;
     }
 
-    GBE_local_lobby.pending_leave_after_7040 = true;
-    GBE_local_lobby.pending_leave_lobby_id = lobby_id;
-    GBE_PublishSharedDotaLobbyState("7040_leave_pending_25");
     push_incoming_now(outbound_emsg | GBE_kProtoMask, outbound_message);
+    ResetGCMemory("7040_leave", true, false);
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Lobby leave requested. sent 26 and delayed 25 until lobby list refresh LobbyID=%llu wrapped=%d",
+        "[LOBBY] Lobby leave requested. sent 25 and left generic lobby LobbyID=%llu wrapped=%d",
         static_cast<unsigned long long>(lobby_id),
         wrapped ? 1 : 0
     );
