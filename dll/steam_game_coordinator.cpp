@@ -9397,14 +9397,27 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
         if (steam_client && steam_client->steam_matchmaking) {
             CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
             if (generic_lobby_id.IsLobby()) {
+                const bool repaired_owner = steam_client->steam_matchmaking->RepairLobbyOwnerIfMissing(generic_lobby_id, reason ? reason : "capture_current_lobby_state");
+                if (repaired_owner) {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_LOBBY",
+                        "[LOBBY] Repaired missing generic lobby owner before Dota snapshot reason=%s dota_lobby_id=%llu generic_lobby_id=%llu",
+                        reason ? reason : "capture_current_lobby_state",
+                        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                        static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id)
+                    );
+                }
                 GBE_AdoptDotaGenericLobbyOwnerIfNeeded(reason ? reason : "capture_current_lobby_state");
 
                 std::vector<GBE_DotaLobbyMemberState> members;
                 const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
                 const std::vector<CSteamID> generic_members = steam_client->steam_matchmaking->GetLobbyMemberListSnapshot(generic_lobby_id);
+                bool owner_in_generic_members = false;
                 for (const CSteamID &member_id : generic_members) {
                     if (!member_id.IsValid())
                         continue;
+                    if (member_id.ConvertToUint64() == GBE_local_lobby.owner_steam_id)
+                        owner_in_generic_members = true;
 
                     GBE_DotaLobbyMemberState member{};
                     member.steam_id = member_id.ConvertToUint64();
@@ -9454,7 +9467,8 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                 owner.slot = GBE_local_lobby.owner_slot;
                 owner.hero_id = GBE_local_lobby.owner_hero_id;
                 owner.connected = GBE_local_lobby.owner_connected || GBE_local_lobby.state == 3u;
-                GBE_UpsertDotaLobbyMember(members, owner);
+                if (owner_in_generic_members || generic_members.empty())
+                    GBE_UpsertDotaLobbyMember(members, owner);
 
                 GBE_local_lobby.members = members;
             }

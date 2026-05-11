@@ -342,6 +342,31 @@ std::vector<CSteamID> Steam_Matchmaking::GetLobbyMemberListSnapshot(CSteamID ste
     return result;
 }
 
+bool Steam_Matchmaking::RepairLobbyOwnerIfMissing(CSteamID steamIDLobby, const char *reason)
+{
+    PRINT_DEBUG("%llu reason=%s", steamIDLobby.ConvertToUint64(), reason ? reason : "unknown");
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    Lobby *lobby = get_lobby(steamIDLobby);
+    if (!lobby || lobby->deleted() || lobby->members_size() <= 0)
+        return false;
+
+    const uint64 current_owner = lobby->owner();
+    for (const auto &member : lobby->members()) {
+        if (member.id() == current_owner)
+            return false;
+    }
+
+    uint64 owner_seed = lobby->room_id() ^ current_owner;
+    for (const auto &member : lobby->members())
+        owner_seed ^= member.id() + 0x9e3779b97f4a7c15ull + (owner_seed << 6) + (owner_seed >> 2);
+    const int new_owner_index = static_cast<int>(owner_seed % static_cast<uint64>(lobby->members_size()));
+    const uint64 new_owner = lobby->members(new_owner_index).id();
+
+    PRINT_DEBUG("repairing lobby owner lobby=%llu old_owner=%llu new_owner=%llu reason=%s", lobby->room_id(), current_owner, new_owner, reason ? reason : "unknown");
+    change_owner(lobby, CSteamID((uint64)new_owner));
+    return true;
+}
+
 void Steam_Matchmaking::RefreshLobbyCallbacksForDota()
 {
     std::lock_guard<std::recursive_mutex> lock(global_mutex);

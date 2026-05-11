@@ -130,6 +130,7 @@ public:
     CSteamID CreateLobbyImmediate(ELobbyType eLobbyType, int cMaxMembers);
     std::vector<CSteamID> GetLobbyListSnapshot();
     std::vector<CSteamID> GetLobbyMemberListSnapshot(CSteamID steamIDLobby);
+    bool RepairLobbyOwnerIfMissing(CSteamID steamIDLobby, const char *reason);
     void RefreshLobbyCallbacksForDota();
 
     // game server favorites storage
