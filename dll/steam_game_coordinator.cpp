@@ -1938,10 +1938,14 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
     }
 
     bool wrote_owner_event_points = false;
+    bool include_event_points = false;
     for (const GBE_DotaLobbyMemberState &member : effective_members) {
         const uint64 member_steam_id = member.steam_id != 0ull ? member.steam_id : steam_id;
         if (member_steam_id == 0ull)
             continue;
+
+        if (member.connected)
+            include_event_points = true;
 
         const uint32 member_account_id = member.account_id != 0u ? member.account_id : CSteamID((uint64)member_steam_id).GetAccountID();
 
@@ -1951,7 +1955,7 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
         GBE_AppendProtoVarIntField(member_bytes, 11u, 0u);
         GBE_AppendProtoFixed64Field(member_bytes, 12u, 0ull);
         GBE_AppendProtoVarIntField(member_bytes, 13u, 0u);
-        if (game_mode != 2u)
+        if (game_mode != 2u && member.connected)
             GBE_AppendProtoFixed32Field(member_bytes, 16u, 0u);
         for (size_t i = 0; i < 4; ++i)
             GBE_AppendProtoVarIntField(member_bytes, 19u, 0u);
@@ -1966,7 +1970,7 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
 
     GBE_AppendProtoFixed32Field(object_2016, 2u, 0u);
 
-    if (account_id != 0u && wrote_owner_event_points) {
+    if (include_event_points && account_id != 0u && wrote_owner_event_points) {
         GBE_AppendDotaLobbyEventPoints(object_2016, 19u, account_id, 0u, 0u, 0u, 0u, true);
         GBE_AppendDotaLobbyEventPoints(object_2016, 26u, account_id, 0u, 0u, 0u, 0u, false);
         GBE_AppendDotaLobbyEventPoints(object_2016, 39u, account_id, 0u, 0u, 0u, 0u, false);
@@ -4588,6 +4592,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
     uint32 owner_team,
     uint32 owner_slot,
     uint32 owner_hero_id,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
     bool rewrite_2015,
     uint32 extra_startup_account_id,
     const std::string &pass_key)
@@ -4637,7 +4642,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
         owner_team,
         owner_slot,
         owner_hero_id,
-        std::vector<GBE_DotaLobbyMemberState>(),
+        members,
         false,
         0u,
         std::string(),
@@ -5094,6 +5099,7 @@ static bool GBE_BuildDotaPracticeLobbyOfficial26ReplayPayload(
             owner_team,
             owner_slot,
             owner_hero_id,
+            std::vector<GBE_DotaLobbyMemberState>(),
             rewrite_2015,
             extra_startup_account_id,
             pass_key))
@@ -6254,6 +6260,7 @@ static bool GBE_BuildDotaPracticeLobbyLaunchCacheSubscribedTemplateReplayFromWra
         owner_team,
         owner_slot,
         owner_hero_id,
+        std::vector<GBE_DotaLobbyMemberState>(),
         rewrite_2015,
         extra_startup_account_id,
         pass_key)) {
@@ -8749,6 +8756,7 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl(
     uint32 owner_slot,
     uint32 owner_hero_id,
     const std::string &pass_key,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
     bool rewrite_runtime_fields,
     bool rewrite_2015,
     uint32 extra_startup_account_id,
@@ -8806,6 +8814,7 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl(
         owner_team,
         owner_slot,
         owner_hero_id,
+        members,
         rewrite_2015,
         extra_startup_account_id,
         pass_key);
@@ -8853,6 +8862,7 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTem
         lobby.owner_slot,
         lobby.owner_hero_id,
         lobby.pass_key,
+        lobby.members,
         false,
         false,
         owner_account_id,
@@ -12131,7 +12141,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
     );
 
     std::string response_24;
-    if (!GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(GBE_local_lobby, GBE_GetDotaLobbyOwnerName(), response_24)) {
+    if (!GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(GBE_local_lobby, GBE_GetDotaLobbyOwnerName(), response_24)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 24 cache update for 7044 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
     }
