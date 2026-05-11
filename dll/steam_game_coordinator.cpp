@@ -5637,6 +5637,9 @@ static bool GBE_BuildDotaJoinChatChannelResponsePayload(
     uint64 channel_id,
     const std::string &channel_name,
     const std::string &player_name,
+    const std::vector<GBE_DotaLobbyMemberState> &channel_members,
+    uint64 owner_steam_id,
+    const std::string &owner_name,
     uint32 channel_type,
     std::string &message)
 {
@@ -5646,12 +5649,32 @@ static bool GBE_BuildDotaJoinChatChannelResponsePayload(
     GBE_AppendProtoFixed64Field(body, 3u, channel_id);
     GBE_AppendProtoVarIntField(body, 4u, 200u);
 
-    std::string member;
-    GBE_AppendProtoFixed64Field(member, 1u, steam_id);
-    GBE_AppendProtoBytesField(member, 2u, player_name);
-    GBE_AppendProtoVarIntField(member, 3u, 0u);
-    GBE_AppendProtoVarIntField(member, 4u, 0u);
-    GBE_AppendProtoBytesField(body, 5u, member);
+    std::vector<uint64> written_members;
+    auto append_channel_member = [&](uint64 member_steam_id, const std::string &member_name) {
+        if (member_steam_id == 0 || std::find(written_members.begin(), written_members.end(), member_steam_id) != written_members.end())
+            return;
+
+        std::string member;
+        GBE_AppendProtoFixed64Field(member, 1u, member_steam_id);
+        GBE_AppendProtoBytesField(member, 2u, member_name);
+        GBE_AppendProtoVarIntField(member, 3u, 0u);
+        GBE_AppendProtoVarIntField(member, 4u, 0u);
+        GBE_AppendProtoBytesField(body, 5u, member);
+        written_members.push_back(member_steam_id);
+    };
+
+    for (const GBE_DotaLobbyMemberState &channel_member : channel_members) {
+        std::string member_name;
+        if (channel_member.steam_id == steam_id) {
+            member_name = player_name;
+        } else if (channel_member.steam_id == owner_steam_id) {
+            member_name = owner_name;
+        } else {
+            member_name = "Player";
+        }
+        append_channel_member(channel_member.steam_id, member_name);
+    }
+    append_channel_member(steam_id, player_name);
 
     GBE_AppendProtoVarIntField(body, 6u, channel_type);
     GBE_AppendProtoVarIntField(body, 7u, 0u);
@@ -12418,13 +12441,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
     GBE_local_lobby.chat_channel_type = request.has_channel_type ? request.channel_type : 3u;
     GBE_PublishSharedDotaLobbyState("7009_join_chat");
 
+    GBE_LocalLobby lobby_snapshot{};
+    if (!GBE_CaptureCurrentDotaLobbyState("7009_join_chat", lobby_snapshot))
+        lobby_snapshot = GBE_local_lobby;
+
     std::string response_7010;
     if (!GBE_BuildDotaJoinChatChannelResponsePayload(
             settings->get_local_steam_id().ConvertToUint64(),
-            GBE_local_lobby.chat_channel_id,
-            GBE_local_lobby.chat_channel_name,
+            lobby_snapshot.chat_channel_id,
+            lobby_snapshot.chat_channel_name,
             std::string(settings->get_local_name()),
-            GBE_local_lobby.chat_channel_type,
+            lobby_snapshot.members,
+            lobby_snapshot.owner_steam_id,
+            lobby_snapshot.owner_name,
+            lobby_snapshot.chat_channel_type,
             response_7010)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7010 payload for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
@@ -12449,10 +12479,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Chat channel joined. name=%s channel_id=%llu channel_type=%u wrapped=%d",
+        "[LOBBY] Chat channel joined. name=%s channel_id=%llu channel_type=%u members=%zu wrapped=%d",
         GBE_local_lobby.chat_channel_name.c_str(),
         static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
         GBE_local_lobby.chat_channel_type,
+        lobby_snapshot.members.size(),
         wrapped ? 1 : 0
     );
     return true;
