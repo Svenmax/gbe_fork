@@ -9441,7 +9441,7 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
 
     const std::vector<GBE_DotaLobbyMemberState> previous_members = GBE_local_lobby.members;
     GBE_LocalLobby lobby{};
-    if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "generic_lobby_members_changed", lobby))
+    if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "generic_lobby_members_changed", lobby, false))
         return false;
     if (GBE_DotaLobbyMembersEqual(previous_members, GBE_local_lobby.members))
         return false;
