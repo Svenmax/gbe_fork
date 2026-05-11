@@ -342,6 +342,12 @@ std::vector<CSteamID> Steam_Matchmaking::GetLobbyMemberListSnapshot(CSteamID ste
     return result;
 }
 
+void Steam_Matchmaking::RefreshLobbyCallbacksForDota()
+{
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    RunCallbacks();
+}
+
 
 // game server favorites storage
 // saves basic details about a multiplayer game server locally

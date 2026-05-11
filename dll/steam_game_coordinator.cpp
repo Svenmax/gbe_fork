@@ -12443,7 +12443,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
     if (GBE_local_lobby.generic_lobby_id != 0) {
         Steam_Client *steam_client = get_steam_client();
         if (steam_client && steam_client->steam_matchmaking)
-            steam_client->steam_matchmaking->RunCallbacks();
+            steam_client->steam_matchmaking->RefreshLobbyCallbacksForDota();
     }
 
     GBE_PublishSharedDotaLobbyState("7009_join_chat");
