@@ -12094,6 +12094,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
         GBE_local_lobby.owner_team = matched_lobby.owner_team;
         GBE_local_lobby.owner_slot = matched_lobby.owner_slot;
         GBE_local_lobby.members = matched_lobby.members;
+        GBE_DotaLobbyMemberState owner_member{};
+        owner_member.steam_id = GBE_local_lobby.owner_steam_id;
+        owner_member.account_id = GBE_local_lobby.owner_account_id;
+        owner_member.team = GBE_local_lobby.owner_team;
+        owner_member.slot = GBE_local_lobby.owner_slot;
+        owner_member.hero_id = GBE_local_lobby.owner_hero_id;
+        owner_member.connected = GBE_local_lobby.owner_connected || GBE_local_lobby.state == 3u;
+        GBE_UpsertDotaLobbyMember(GBE_local_lobby.members, owner_member);
         Steam_Client *steam_client = get_steam_client();
         if (steam_client && steam_client->steam_matchmaking)
             steam_client->steam_matchmaking->JoinLobby(matched_generic_lobby_id);
@@ -12111,6 +12119,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
     if (request.has_pass_key)
         GBE_local_lobby.pass_key = request.pass_key;
     GBE_PublishSharedDotaLobbyState("7044_join");
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Preparing 7044 cache update LobbyID=%llu owner_steam=%llu local_steam=%llu members=%zu matched_generic_members=%zu",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.owner_steam_id),
+        static_cast<unsigned long long>(local_member.steam_id),
+        GBE_local_lobby.members.size(),
+        matched_lobby.members.size()
+    );
 
     std::string response_24;
     if (!GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(GBE_local_lobby, GBE_GetDotaLobbyOwnerName(), response_24)) {
