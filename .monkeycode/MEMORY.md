@@ -52,6 +52,8 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 房主侧 `7009 -> 7010` 可能早于 generic lobby 成员变更回调执行；构建 `7010` 前需要先驱动 matchmaking callbacks/刷新 generic 成员快照，否则房主频道响应可能仍只有 1 个成员。
   - practice lobby 聊天发言使用 Dota GC `7273`，官方字段形状包含 `field 1 fixed64 steam_id`、`field 2 channel_id`、`field 4 text`、`field 5 timestamp` 等；不能把 `7273` 落到 no replay template，否则频道内发言不会显示。
   - Dota `7273` 需要本地回显并跨实例广播给同一 generic lobby 的其它客户端；接收端应把完整 `7273` GC 消息体排入 Dota incoming 队列。
+  - practice lobby 的 `7273.field2 channel_id` 是每个客户端本地频道 id；跨实例转发远端 `7273` 时必须重写成本机 `GBE_local_lobby.chat_channel_id`，否则日志显示已入队但 UI 不显示发言。
+  - 初次 Dota ClientWelcome 的 SO type `2002 CSODOTAGameAccountClient` 中 `field72 player_behavior_score_last_report` 是行为分；交流分字段不在当前 go-dota2/SteamKit 公开 `CSODOTAGameAccountClient` 定义中，不能把无关字段误当交流分。
 
 ### 用户指令与执行约束
 

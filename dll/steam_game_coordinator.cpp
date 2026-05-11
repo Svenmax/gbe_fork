@@ -405,6 +405,7 @@ static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
 static constexpr uint32 GBE_kSteamAuthList = 5432u;
 static constexpr uint32 GBE_kSteamPersonaState = 766u;
 static constexpr uint32 GBE_kSteamTicketAuthComplete = 5429u;
+static constexpr uint32 GBE_kDotaConductScore = 12000u;
 
 static constexpr const char *GBE_kDotaAbandonPersonaStatePrivateLobbyPostgameHex =
     "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112ee0309911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f505249564154455f4c4f424259ba04270a0d737465616d5f646973706c6179121623444f54415f52505f505249564154455f4c4f424259ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348ba0492010a056c6f6262791288016c6f6262795f69643a203239383232343938363432383535303930206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a20226565656522206c6f6262795f747970653a2031c1040000000000000000c9040000000000000000f80400800500880500980501";
@@ -1652,6 +1653,50 @@ static void GBE_AppendProtoFixed32Field(std::string &buffer, uint32 field_number
     ser_var<uint32>(buffer, value);
 }
 
+static bool GBE_RewriteProtoVarIntFields(
+    const std::string &input,
+    const std::vector<uint32> &field_numbers,
+    uint64 value,
+    std::string &output,
+    bool *rewrote = nullptr)
+{
+    output.clear();
+    if (rewrote)
+        *rewrote = false;
+
+    size_t offset = 0;
+    while (offset < input.size()) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(
+                reinterpret_cast<const uint8 *>(input.data()),
+                input.size(),
+                offset,
+                field_number,
+                wire_type,
+                field_offset,
+                value_offset,
+                value_size,
+                field_end))
+            return false;
+
+        if (wire_type == 0u && std::find(field_numbers.begin(), field_numbers.end(), field_number) != field_numbers.end()) {
+            GBE_AppendProtoVarIntField(output, field_number, value);
+            if (rewrote)
+                *rewrote = true;
+            continue;
+        }
+
+        output.append(input.data() + field_offset, field_end - field_offset);
+    }
+
+    return true;
+}
+
 static std::vector<uint8> GBE_VectorFromBytes(const uint8 *data, size_t size)
 {
     return std::vector<uint8>(data, data + size);
@@ -2330,7 +2375,8 @@ static bool GBE_TryPatchDotaAccountIdFixed32(std::string &message, uint32 accoun
 
 static bool GBE_RewriteDotaAccountBoundObjectData(const std::string &input, uint32 account_id, std::string &output)
 {
-    output.clear();
+    std::string account_output;
+    account_output.clear();
     bool saw_account_id = false;
 
     size_t offset = 0;
@@ -2355,15 +2401,21 @@ static bool GBE_RewriteDotaAccountBoundObjectData(const std::string &input, uint
 
         if (field_number == 1u && wire_type == 0u) {
             saw_account_id = true;
-            GBE_AppendProtoVarIntField(output, 1u, account_id);
+            GBE_AppendProtoVarIntField(account_output, 1u, account_id);
             continue;
         }
 
-        output.append(input.data() + field_offset, field_end - field_offset);
+        account_output.append(input.data() + field_offset, field_end - field_offset);
     }
 
     if (!saw_account_id)
-        GBE_AppendProtoVarIntField(output, 1u, account_id);
+        GBE_AppendProtoVarIntField(account_output, 1u, account_id);
+
+    bool rewrote_conduct_score = false;
+    if (!GBE_RewriteProtoVarIntFields(account_output, { 72u }, GBE_kDotaConductScore, output, &rewrote_conduct_score))
+        return false;
+    if (!rewrote_conduct_score)
+        GBE_AppendProtoVarIntField(output, 72u, GBE_kDotaConductScore);
 
     return true;
 }
@@ -12711,12 +12763,45 @@ bool Steam_Game_Coordinator::GBE_HandleDotaNetworkChatMessage(Common_Message *ms
     if (GBE_GC_MaskedEMsg(inner_emsg) != GBE_kDotaChatMessage)
         return false;
 
-    push_incoming_now(GBE_kDotaChatMessage | GBE_kProtoMask, message);
+    const size_t body_offset = 8u;
+    if (message.size() <= body_offset)
+        return false;
+
+    GBE_DotaChatMessageRequest request{};
+    if (!GBE_ParseDotaChatMessageBody(
+            reinterpret_cast<const uint8 *>(message.data() + body_offset),
+            message.size() - body_offset,
+            request)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Ignoring malformed network 7273 chat source=%llu size=%zu",
+            static_cast<unsigned long long>(msg->source_id()),
+            message.size()
+        );
+        return true;
+    }
+
+    std::string local_channel_body;
+    if (!GBE_RewriteProtoVarIntFields(
+            message.substr(body_offset),
+            { 2u },
+            GBE_local_lobby.chat_channel_id,
+            local_channel_body))
+        return false;
+
+    std::string local_channel_message;
+    if (!GBE_BuildDotaZeroHeaderPayload(GBE_kDotaChatMessage, local_channel_body, local_channel_message))
+        return false;
+
+    push_incoming_now(GBE_kDotaChatMessage | GBE_kProtoMask, local_channel_message);
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Received network 7273 chat source=%llu size=%zu",
+        "[LOBBY] Received network 7273 chat source=%llu size=%zu remote_channel=%llu local_channel=%llu text_size=%zu",
         static_cast<unsigned long long>(msg->source_id()),
-        message.size()
+        message.size(),
+        static_cast<unsigned long long>(request.channel_id),
+        static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
+        request.text.size()
     );
     return true;
 }
