@@ -50,6 +50,8 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 官方 `7044 -> 24` 加入首包的 SO 顺序是 `2004, 2015, 2013, 2014, 2016`；不能只按双人样本写死 `2`，应按实际成员数 `N` 同步生成 `2004.field120`、`2004.field121`、`2015.field1`、`2014.field1`、`2016.field1`。
   - 多成员 join 首包必须保持各 SO 对象成员基数一致；只 patch `2004/2016` 而不更新 `2015/2014` 会造成客户端在读取 `24` 时闪退风险。
   - 房主侧 `7009 -> 7010` 可能早于 generic lobby 成员变更回调执行；构建 `7010` 前需要先驱动 matchmaking callbacks/刷新 generic 成员快照，否则房主频道响应可能仍只有 1 个成员。
+  - practice lobby 聊天发言使用 Dota GC `7273`，官方字段形状包含 `field 1 fixed64 steam_id`、`field 2 channel_id`、`field 4 text`、`field 5 timestamp` 等；不能把 `7273` 落到 no replay template，否则频道内发言不会显示。
+  - Dota `7273` 需要本地回显并跨实例广播给同一 generic lobby 的其它客户端；接收端应把完整 `7273` GC 消息体排入 Dota incoming 队列。
 
 ### 用户指令与执行约束
 
