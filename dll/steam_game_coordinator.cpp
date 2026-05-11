@@ -5834,10 +5834,13 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     GBE_AppendProtoVarIntField(object_2004, 13, allow_cheats ? 1u : 0u);
     GBE_AppendProtoVarIntField(object_2004, 14, fill_with_bots ? 1u : 0u);
     GBE_AppendProtoBytesField(object_2004, 16, room_name);
-    GBE_AppendProtoBytesField(object_2004, 17, GBE_BuildDotaLobbyTeamDetailsPayload(true));
-    GBE_AppendProtoBytesField(object_2004, 17, GBE_BuildDotaLobbyTeamDetailsPayload(false));
+    if (lobby_state != 0u) {
+        GBE_AppendProtoBytesField(object_2004, 17, GBE_BuildDotaLobbyTeamDetailsPayload(true));
+        GBE_AppendProtoBytesField(object_2004, 17, GBE_BuildDotaLobbyTeamDetailsPayload(false));
+    }
     GBE_AppendProtoVarIntField(object_2004, 21, server_region);
-    GBE_AppendProtoVarIntField(object_2004, 22, lobby_game_state);
+    if (lobby_state != 0u || lobby_game_state != 0u)
+        GBE_AppendProtoVarIntField(object_2004, 22, lobby_game_state);
     GBE_AppendProtoVarIntField(object_2004, 28, 0u);
     if (match_id != 0)
         GBE_AppendProtoVarIntField(object_2004, 30, match_id);
@@ -5875,8 +5878,10 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     GBE_AppendProtoVarIntField(object_2004, 94, bot_radiant);
     GBE_AppendProtoVarIntField(object_2004, 95, bot_dire);
     GBE_AppendProtoVarIntField(object_2004, 97, 0u);
-    GBE_AppendProtoVarIntField(object_2004, 103, 0u);
-    GBE_AppendProtoVarIntField(object_2004, 104, 0u);
+    if (lobby_state != 0u) {
+        GBE_AppendProtoVarIntField(object_2004, 103, 0u);
+        GBE_AppendProtoVarIntField(object_2004, 104, 0u);
+    }
     if (!lan_host_ping_location.empty())
         GBE_AppendProtoBytesField(object_2004, 109, lan_host_ping_location);
     GBE_AppendProtoVarIntField(object_2004, 110, 0u);
@@ -5997,13 +6002,17 @@ static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
     object_2004_entry->set_type_id(2004);
     object_2004_entry->add_object_data(object_2004);
 
-    auto object_2014_entry = protomsg.add_objects();
-    object_2014_entry->set_type_id(2014);
-    object_2014_entry->add_object_data(object_2014);
-
     auto object_2015_entry = protomsg.add_objects();
     object_2015_entry->set_type_id(2015);
     object_2015_entry->add_object_data(object_2015);
+
+    auto object_2013_entry = protomsg.add_objects();
+    object_2013_entry->set_type_id(2013);
+    object_2013_entry->add_object_data(std::string());
+
+    auto object_2014_entry = protomsg.add_objects();
+    object_2014_entry->set_type_id(2014);
+    object_2014_entry->add_object_data(object_2014);
 
     auto object_2016_entry = protomsg.add_objects();
     object_2016_entry->set_type_id(2016);
@@ -6527,8 +6536,8 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
 
         {
             std::string update;
-            GBE_AppendProtoVarIntField(update, 1, 2013u);
-            GBE_AppendProtoBytesField(update, 2, std::string());
+            GBE_AppendProtoVarIntField(update, 1, 2016u);
+            GBE_AppendProtoBytesField(update, 2, object_2016);
             GBE_AppendProtoBytesField(body, 2, update);
         }
 
@@ -6541,15 +6550,15 @@ static bool GBE_BuildDotaPracticeLobbyDetailsUpdatePayload(
 
         {
             std::string update;
-            GBE_AppendProtoVarIntField(update, 1, 2004u);
-            GBE_AppendProtoBytesField(update, 2, object_2004);
+            GBE_AppendProtoVarIntField(update, 1, 2013u);
+            GBE_AppendProtoBytesField(update, 2, std::string());
             GBE_AppendProtoBytesField(body, 2, update);
         }
 
         {
             std::string update;
-            GBE_AppendProtoVarIntField(update, 1, 2016u);
-            GBE_AppendProtoBytesField(update, 2, object_2016);
+            GBE_AppendProtoVarIntField(update, 1, 2004u);
+            GBE_AppendProtoBytesField(update, 2, object_2004);
             GBE_AppendProtoBytesField(body, 2, update);
         }
 
@@ -12104,7 +12113,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
     GBE_PublishSharedDotaLobbyState("7044_join");
 
     std::string response_24;
-    if (!GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(GBE_GetDotaLobbyOwnerName(), response_24)) {
+    if (!GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(GBE_local_lobby, GBE_GetDotaLobbyOwnerName(), response_24)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 24 cache update for 7044 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
     }
