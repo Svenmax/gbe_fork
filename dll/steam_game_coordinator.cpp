@@ -1844,25 +1844,28 @@ static std::string GBE_BuildDotaLobbyTeamDetailsPayload(bool is_home_team)
     return team_details;
 }
 
-static void GBE_BuildDotaStaticLobbyObject2014(const std::string &player_name, std::string &object_2014)
+static void GBE_BuildDotaStaticLobbyObject2014(const std::string &player_name, const std::vector<GBE_DotaLobbyMemberState> &members, std::string &object_2014)
 {
     object_2014.clear();
 
-    std::string name_entry;
-    GBE_AppendProtoBytesField(name_entry, 1u, player_name);
-    GBE_AppendProtoVarIntField(name_entry, 2u, 0u);
-    GBE_AppendProtoBytesField(object_2014, 1u, name_entry);
+    const size_t member_count = std::max<size_t>(members.size(), 1u);
+    for (size_t i = 0; i < member_count; ++i) {
+        std::string name_entry;
+        GBE_AppendProtoBytesField(name_entry, 1u, i == 0 ? player_name : std::string());
+        GBE_AppendProtoVarIntField(name_entry, 2u, 0u);
+        GBE_AppendProtoBytesField(object_2014, 1u, name_entry);
+    }
 }
 
-static bool GBE_BuildDotaServerLobbyObject2015(uint32 extra_startup_account_id, std::string &object_2015)
+static bool GBE_BuildDotaServerLobbyObject2015(size_t member_count, uint32 extra_startup_account_id, std::string &object_2015)
 {
     object_2015.clear();
 
-    // Keep server-lobby member cardinality aligned with 2004/2014/2016.
-    // CSODOTAServerLobbyMember is currently empty, so the minimal legal
-    // representation for one member is a repeated field-1 entry with an
-    // empty embedded message.
-    GBE_AppendProtoBytesField(object_2015, 1u, std::string());
+    // CSODOTAServerLobbyMember is empty, but official SO payloads keep this
+    // repeated field aligned with the visible lobby member count.
+    const size_t effective_member_count = std::max<size_t>(member_count, 1u);
+    for (size_t i = 0; i < effective_member_count; ++i)
+        GBE_AppendProtoBytesField(object_2015, 1u, std::string());
     return GBE_AppendDotaLobbyAdditionalStartupAccountMessage(object_2015, extra_startup_account_id);
 }
 
@@ -5813,9 +5816,6 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
 {
     static const uint8 GBE_kDotaLobbyField62Value[] = { 0x08, 0xF5, 0x44, 0x12, 0x02, 0x08, 0x00 };
 
-    if (!GBE_BuildDotaServerLobbyObject2015(extra_startup_account_id, object_2015))
-        object_2015.clear();
-
     const std::vector<GBE_DotaLobbyMemberState> effective_members = GBE_BuildDotaLobbyMembers(
         steam_id,
         extra_startup_account_id,
@@ -5824,6 +5824,9 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
         owner_hero_id,
         lobby_state == 3u,
         members);
+
+    if (!GBE_BuildDotaServerLobbyObject2015(effective_members.size(), extra_startup_account_id, object_2015))
+        object_2015.clear();
 
     GBE_BuildDotaServerStaticLobbyObject2016(extra_startup_account_id, steam_id, game_mode, effective_members, object_2016);
 
@@ -5909,7 +5912,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     GBE_AppendProtoVarIntField(object_2004, 127, 0u);
     GBE_AppendProtoVarIntField(object_2004, 128, GBE_kDotaLobbyField128Value);
 
-    GBE_BuildDotaStaticLobbyObject2014(player_name, object_2014);
+    GBE_BuildDotaStaticLobbyObject2014(player_name, effective_members, object_2014);
 }
 
 static bool GBE_BuildDotaPracticeLobbyCacheSubscribedPayload(
@@ -12141,9 +12144,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
     );
 
     std::string response_24;
-    GBE_LocalLobby response_lobby = GBE_local_lobby;
-    response_lobby.members.clear();
-    if (!GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(response_lobby, GBE_GetDotaLobbyOwnerName(), response_24)) {
+    if (!GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(GBE_local_lobby, GBE_GetDotaLobbyOwnerName(), response_24)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 24 cache update for 7044 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
     }

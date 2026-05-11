@@ -33,13 +33,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 [Dota practice lobby 成员同步规则]
 - Date: 2026-05-10
-- Context: Agent 在修复 Dota2 LAN practice lobby 加入后成员互相不可见、加入者默认占位时发现
+- Context: Agent 在修复 Dota2 LAN practice lobby 加入后成员互相不可见、加入者默认占位和加入首包闪退时发现
 - Category: 代码模式
 - Instructions:
   - practice lobby 的 `24/26` 中 `2004 CSODOTALobby` 必须包含所有房间成员，并同步 `member_indices`。
   - `2016 CSODOTAServerStaticLobby` 必须为房主和加入者都写入 static member，否则 UI 可能看不到对方。
   - 加入者初始状态应为 `DOTA_GC_TEAM_PLAYER_POOL slot=0`，不能默认复用房主的天辉 slot。
   - generic Steam lobby 成员列表是跨实例同步 Dota practice lobby 成员的来源，成员变化后需要推送新的 `26`。
+  - 官方 `7044 -> 24` 加入首包的 SO 顺序是 `2004, 2015, 2013, 2014, 2016`；不能只按双人样本写死 `2`，应按实际成员数 `N` 同步生成 `2004.field120`、`2004.field121`、`2015.field1`、`2014.field1`、`2016.field1`。
+  - 多成员 join 首包必须保持各 SO 对象成员基数一致；只 patch `2004/2016` 而不更新 `2015/2014` 会造成客户端在读取 `24` 时闪退风险。
 
 ### 用户指令与执行约束
 
