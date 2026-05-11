@@ -48,6 +48,8 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 房主直接关闭 Dota2 时其它客户端只会走 generic lobby 的低层 `DISCONNECT` 路径；该路径也必须在移除旧 owner 后把 generic lobby owner 转给剩余成员，否则 Dota 层不会采纳新房主。
   - 房主直接关闭 Dota2 时不能只依赖低层 `DISCONNECT` 一定触发；Dota lobby 快照刷新路径也必须检查 generic owner 是否仍在 generic 成员列表中，缺失时从剩余成员修复 owner。
   - Dota lobby 快照从 generic 成员列表重建成员时，不能无条件把 `GBE_local_lobby.owner_steam_id` 回灌进成员列表；否则旧 owner 已离开时会形成幽灵房主并阻止 UI 采纳新 owner。
+  - `7044` 加入首包使用 `GBE_GetDotaGenericLobbySnapshots()` 读取 generic lobby，而不是只走 `GBE_CaptureCurrentDotaLobbyState()`；owner 缺失修复和旧 owner 防回灌必须同时覆盖 snapshot 读取路径。
+  - 玩家在英雄池/slot 阶段时仍处于 practice lobby，可接收房主关闭后的 owner 移交；generic 成员/owner 变化通知不能在 `state=2` 时被跳过。
   - 超过两个真实成员在房间里时，房主离开后的 generic owner 应从剩余真实成员里随机选择，不能固定转给索引 0 或任何空槽位。
   - practice lobby 的 `7009 -> 7010` 房间频道响应必须按当前 lobby snapshot 写入所有真实成员的 SteamID；只写本机成员会导致频道显示人数正确但远端玩家 ID 缺失。
   - 官方 `7044 -> 24` 加入首包的 SO 顺序是 `2004, 2015, 2013, 2014, 2016`；不能只按双人样本写死 `2`，应按实际成员数 `N` 同步生成 `2004.field120`、`2004.field121`、`2015.field1`、`2014.field1`、`2016.field1`。

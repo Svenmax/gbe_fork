@@ -9632,7 +9632,7 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
         return false;
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.generic_lobby_id == 0)
         return false;
-    if (GBE_local_lobby.state > 1u)
+    if (GBE_local_lobby.state > 2u)
         return false;
 
     const std::vector<GBE_DotaLobbyMemberState> previous_members = GBE_local_lobby.members;
@@ -9862,6 +9862,8 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
     if (!steam_client || !steam_client->steam_matchmaking)
         return snapshots;
 
+    steam_client->steam_matchmaking->RefreshLobbyCallbacksForDota();
+
     const std::vector<CSteamID> generic_lobbies = steam_client->steam_matchmaking->GetLobbyListSnapshot();
     for (const CSteamID &generic_lobby_id : generic_lobbies) {
         if (!generic_lobby_id.IsLobby())
@@ -9874,6 +9876,17 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
         const uint64 dota_lobby_id = GBE_ParseUint64OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyDotaLobbyIdKey));
         if (dota_lobby_id == 0)
             continue;
+
+        const bool repaired_owner = steam_client->steam_matchmaking->RepairLobbyOwnerIfMissing(generic_lobby_id, reason ? reason : "generic_lobby_snapshot");
+        if (repaired_owner) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Repaired missing generic lobby owner while reading snapshot reason=%s dota_lobby_id=%llu generic_lobby_id=%llu",
+                reason ? reason : "generic_lobby_snapshot",
+                static_cast<unsigned long long>(dota_lobby_id),
+                static_cast<unsigned long long>(generic_lobby_id.ConvertToUint64())
+            );
+        }
 
         CSteamID generic_owner_id = steam_client->steam_matchmaking->GetLobbyOwner(generic_lobby_id);
 
@@ -9907,9 +9920,12 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
         snapshot.owner_slot = 1u;
         snapshot.owner_connected = false;
         const std::vector<CSteamID> generic_members = steam_client->steam_matchmaking->GetLobbyMemberListSnapshot(generic_lobby_id);
+        bool owner_in_generic_members = false;
         for (const CSteamID &member_id : generic_members) {
             if (!member_id.IsValid())
                 continue;
+            if (member_id.ConvertToUint64() == snapshot.owner_steam_id)
+                owner_in_generic_members = true;
 
             GBE_DotaLobbyMemberState member{};
             member.steam_id = member_id.ConvertToUint64();
@@ -9957,7 +9973,8 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
         owner.slot = snapshot.owner_slot;
         owner.hero_id = snapshot.owner_hero_id;
         owner.connected = snapshot.owner_connected;
-        GBE_UpsertDotaLobbyMember(snapshot.members, owner);
+        if (owner_in_generic_members || generic_members.empty())
+            GBE_UpsertDotaLobbyMember(snapshot.members, owner);
 
         snapshots.push_back(snapshot);
     }
@@ -15265,6 +15282,12 @@ void Steam_Game_Coordinator::network_callback(Common_Message *msg)
 
                 case Low_Level::DISCONNECT:
                     remove_user_items(user_steamid);
+                    if (gc_profile == GC_PROFILE_DOTA2) {
+                        Steam_Client *steam_client = get_steam_client();
+                        if (steam_client && steam_client->steam_matchmaking)
+                            steam_client->steam_matchmaking->RefreshLobbyCallbacksForDota();
+                        GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("network_low_level_disconnect");
+                    }
                 break;
                 }
             }
