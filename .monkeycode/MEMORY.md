@@ -45,6 +45,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 用 run-callback 轮询 generic lobby member data 时不要先 restore shared state；否则 shared state 的旧成员状态可能与 generic member data 来回覆盖，造成重复 `26`。
   - 房主离开多人 practice lobby 时，官方房主侧链路是 `7040 -> 25 -> 7272 -> 7014`；不能先发 `26` 并等待 lobby list 才退房，否则 UI 可能无反应。
   - 房主离开后 generic lobby owner 会转给其他成员；新 owner 客户端必须把 Dota owner metadata 更新为自己的 SteamID/account/name，保持原 Dota lobby id 和房间名不变，并向成员推送新的 `26`。
+  - 超过两个真实成员在房间里时，房主离开后的 generic owner 应从剩余真实成员里随机选择，不能固定转给索引 0 或任何空槽位。
   - 官方 `7044 -> 24` 加入首包的 SO 顺序是 `2004, 2015, 2013, 2014, 2016`；不能只按双人样本写死 `2`，应按实际成员数 `N` 同步生成 `2004.field120`、`2004.field121`、`2015.field1`、`2014.field1`、`2016.field1`。
   - 多成员 join 首包必须保持各 SO 对象成员基数一致；只 patch `2004/2016` 而不更新 `2015/2014` 会造成客户端在读取 `24` 时闪退风险。
 

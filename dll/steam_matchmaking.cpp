@@ -17,6 +17,8 @@
 
 #include "dll/steam_matchmaking.h"
 
+#include <random>
+
 #define SEND_LOBBY_RATE 5.0
 
 #define PENDING_JOIN_TIMEOUT 10.0
@@ -762,7 +764,16 @@ void Steam_Matchmaking::LeaveLobby( CSteamID steamIDLobby )
 
                 if (lobby->members().size() > 1) {
                     leave_lobby(&(*lobby), settings->get_local_steam_id());
-                    change_owner(&(*lobby), (uint64)lobby->members(0).id());
+                    const int remaining_members = lobby->members_size();
+                    if (remaining_members > 0) {
+                        int new_owner_index = 0;
+                        if (remaining_members > 1) {
+                            static thread_local std::mt19937 generator(std::random_device{}());
+                            std::uniform_int_distribution<int> distribution(0, remaining_members - 1);
+                            new_owner_index = distribution(generator);
+                        }
+                        change_owner(&(*lobby), (uint64)lobby->members(new_owner_index).id());
+                    }
                     send_owner_packet(steamIDLobby, message);
                 } else {
                     send_clients_packet(steamIDLobby, message);
