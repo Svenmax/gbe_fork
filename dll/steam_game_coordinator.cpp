@@ -4693,7 +4693,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
 
         const bool should_rewrite_type = rewrite_runtime_fields
             ? (type_id == 2004u || type_id == 2014u || type_id == 2015u || type_id == 2016u)
-            : (type_id == 2004u || type_id == 2014u);
+            : (type_id == 2004u || type_id == 2014u || type_id == 2016u);
         if (!should_rewrite_type) {
             rewritten_body.append(body.data() + field_offset, field_end - field_offset);
             continue;
