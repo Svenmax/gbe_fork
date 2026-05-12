@@ -131,6 +131,7 @@ public:
     std::vector<CSteamID> GetLobbyListSnapshot();
     std::vector<CSteamID> GetLobbyMemberListSnapshot(CSteamID steamIDLobby);
     bool RepairLobbyOwnerIfMissing(CSteamID steamIDLobby, const char *reason);
+    bool KickLobbyMemberForDota(CSteamID steamIDLobby, CSteamID steamIDMember);
     void RefreshLobbyCallbacksForDota();
 
     // game server favorites storage

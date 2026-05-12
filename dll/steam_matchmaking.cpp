@@ -367,6 +367,37 @@ bool Steam_Matchmaking::RepairLobbyOwnerIfMissing(CSteamID steamIDLobby, const c
     return true;
 }
 
+bool Steam_Matchmaking::KickLobbyMemberForDota(CSteamID steamIDLobby, CSteamID steamIDMember)
+{
+    PRINT_DEBUG("lobby=%llu member=%llu", steamIDLobby.ConvertToUint64(), steamIDMember.ConvertToUint64());
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    Lobby *lobby = get_lobby(steamIDLobby);
+    if (!lobby || lobby->deleted())
+        return false;
+    if (lobby->owner() != settings->get_local_steam_id().ConvertToUint64())
+        return false;
+    if (steamIDMember == settings->get_local_steam_id())
+        return false;
+    if (!leave_lobby(lobby, steamIDMember))
+        return false;
+
+    Lobby_Messages *message = new Lobby_Messages();
+    message->set_type(Lobby_Messages::LEAVE);
+    message->set_idata(steamIDMember.ConvertToUint64());
+    message->set_id(steamIDLobby.ConvertToUint64());
+
+    Common_Message msg{};
+    msg.set_allocated_lobby_messages(message);
+    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+    msg.set_dest_id(steamIDMember.ConvertToUint64());
+    network->sendTo(&msg, true);
+
+    trigger_lobby_member_join_leave(steamIDLobby, steamIDMember, true, true, 0.01);
+    trigger_lobby_dataupdate(steamIDLobby, steamIDLobby, true, 0.01, true);
+    return true;
+}
+
 void Steam_Matchmaking::RefreshLobbyCallbacksForDota()
 {
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
@@ -1778,8 +1809,11 @@ void Steam_Matchmaking::Callback(Common_Message *msg)
 
             if (msg->lobby_messages().type() == Lobby_Messages::LEAVE) {
                 PRINT_DEBUG("LOBBY MESSAGE: LEAVE " "%" PRIu64 "", msg->source_id());
-                leave_lobby(lobby, (uint64)msg->source_id());
-                if (we_are_in_lobby) trigger_lobby_member_join_leave((uint64)lobby->room_id(), (uint64)msg->source_id(), true, true, 0.2);
+                CSteamID leaving_member((uint64)(msg->lobby_messages().idata() != 0 ? msg->lobby_messages().idata() : msg->source_id()));
+                const bool member_removed = leave_lobby(lobby, leaving_member);
+                if (leaving_member == settings->get_local_steam_id())
+                    on_self_enter_leave_lobby((uint64)lobby->room_id(), lobby->type(), true);
+                if (member_removed && we_are_in_lobby) trigger_lobby_member_join_leave((uint64)lobby->room_id(), leaving_member, true, true, 0.2);
             }
 
             if (msg->lobby_messages().type() == Lobby_Messages::CHANGE_OWNER) {
