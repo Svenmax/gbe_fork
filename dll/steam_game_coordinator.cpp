@@ -407,6 +407,7 @@ static constexpr uint32 GBE_kSteamAuthList = 5432u;
 static constexpr uint32 GBE_kSteamPersonaState = 766u;
 static constexpr uint32 GBE_kSteamTicketAuthComplete = 5429u;
 static constexpr uint32 GBE_kDotaConductScore = 12000u;
+static constexpr uint32 GBE_kDotaBehaviorLevel = 4u;
 
 static constexpr const char *GBE_kDotaAbandonPersonaStatePrivateLobbyPostgameHex =
     "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112ee0309911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f505249564154455f4c4f424259ba04270a0d737465616d5f646973706c6179121623444f54415f52505f505249564154455f4c4f424259ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348ba0492010a056c6f6262791288016c6f6262795f69643a203239383232343938363432383535303930206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a20226565656522206c6f6262795f747970653a2031c1040000000000000000c9040000000000000000f80400800500880500980501";
@@ -2466,7 +2467,7 @@ static bool GBE_TryPatchDotaAccountIdFixed32(std::string &message, uint32 accoun
     return true;
 }
 
-static bool GBE_RewriteDotaAccountBoundObjectData(const std::string &input, uint32 account_id, std::string &output)
+static bool GBE_RewriteDotaAccountBoundObjectData(const std::string &input, int type_id, uint32 account_id, std::string &output)
 {
     std::string account_output;
     account_output.clear();
@@ -2504,13 +2505,20 @@ static bool GBE_RewriteDotaAccountBoundObjectData(const std::string &input, uint
     if (!saw_account_id)
         GBE_AppendProtoVarIntField(account_output, 1u, account_id);
 
+    if (type_id != 2002) {
+        output.swap(account_output);
+        return true;
+    }
+
     bool rewrote_conduct_score = false;
-    if (!GBE_RewriteProtoVarIntFields(account_output, { 72u }, GBE_kDotaConductScore, output, &rewrote_conduct_score))
+    std::string conduct_output;
+    if (!GBE_RewriteProtoVarIntFields(account_output, { 72u }, GBE_kDotaConductScore, conduct_output, &rewrote_conduct_score))
         return false;
     if (!rewrote_conduct_score)
-        GBE_AppendProtoVarIntField(output, 72u, GBE_kDotaConductScore);
+        GBE_AppendProtoVarIntField(conduct_output, 72u, GBE_kDotaConductScore);
 
-    return true;
+    // Clear account chat restrictions from the welcome account SO; stale donor timestamps make Dota treat chat as restricted.
+    return GBE_RewriteProtoVarIntFields(conduct_output, { 20u, 21u, 86u, 122u }, 0u, output, nullptr);
 }
 
 static bool GBE_PatchDotaWelcomeAccountObjects(std::string &inner_body, uint32 account_id)
@@ -2555,7 +2563,7 @@ static bool GBE_PatchDotaWelcomeAccountObjects(std::string &inner_body, uint32 a
 
             for (int data_index = 0; data_index < object->object_data_size(); ++data_index) {
                 std::string rewritten_object;
-                if (!GBE_RewriteDotaAccountBoundObjectData(object->object_data(data_index), account_id, rewritten_object))
+                if (!GBE_RewriteDotaAccountBoundObjectData(object->object_data(data_index), type_id, account_id, rewritten_object))
                     return false;
 
                 object->set_object_data(data_index, rewritten_object);
@@ -5721,6 +5729,8 @@ static bool GBE_BuildDota8096ResponsePayload(uint32 account_id, bool has_request
 {
     std::string body;
     GBE_AppendProtoVarIntField(body, 1u, account_id);
+    GBE_AppendProtoVarIntField(body, 17u, GBE_kDotaConductScore);
+    GBE_AppendProtoVarIntField(body, 18u, GBE_kDotaConductScore);
     GBE_AppendProtoVarIntField(body, 21u, 0u);
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(8096u, has_request_job, request_job_id, body, message);
 }
@@ -5750,6 +5760,11 @@ static bool GBE_BuildDota7451BatchPlayerResourcesResponsePayload(const std::vect
     for (uint32 account_id : account_ids) {
         std::string result;
         GBE_AppendProtoVarIntField(result, 1u, account_id);
+        GBE_AppendProtoVarIntField(result, 6u, 0u);
+        GBE_AppendProtoVarIntField(result, 9u, GBE_kDotaBehaviorLevel);
+        GBE_AppendProtoVarIntField(result, 10u, GBE_kDotaBehaviorLevel);
+        GBE_AppendProtoVarIntField(result, 14u, GBE_kDotaConductScore);
+        GBE_AppendProtoVarIntField(result, 15u, GBE_kDotaConductScore);
         GBE_AppendProtoBytesField(body, 6u, result);
     }
 

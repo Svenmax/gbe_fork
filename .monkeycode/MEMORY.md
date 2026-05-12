@@ -65,6 +65,9 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 官方 practice lobby `7010 CMsgDOTAJoinChatChannelResponse` 的成员项只需要 `field1 fixed64 steam_id`、`field2 persona_name`、`field3 channel_user_id=0`、`field4 status=0`，且本机成员排在前面。
   - practice lobby 的远端 persona 需要通过 generic lobby member data 同步；只依赖 `Steam_Friends::GetFriendPersonaName()` 可能返回 `Unknown User`，导致频道成员列表和发言名退化为 account id 或 `lobby`。
   - 初次 Dota ClientWelcome 的 SO type `2002 CSODOTAGameAccountClient` 中 `field72 player_behavior_score_last_report` 是行为分；交流分字段不在当前 go-dota2/SteamKit 公开 `CSODOTAGameAccountClient` 定义中，不能把无关字段误当交流分。
+  - `8096 CMsgPlayerConductScorecard` 中 `field17 raw_behavior_score` 和 `field18 old_raw_behavior_score` 需要返回高行为分；只返回 `field21 behavior_rating=Good` 会让客户端按默认 `0` 处理原始行为分。
+  - `7451 CMsgServerToGCRequestBatchPlayerResourcesResponse.Result` 中 `field14 comm_score` 是交流分、`field15 behavior_score` 是行为分，房间内聊天/暂停限制可能读取这里，不能只返回 `account_id`。
+  - `2002 CSODOTAGameAccountClient` 的 `field20/21/86/122` 是文字/语音/公开/新玩家聊天封禁时间，构造登录 SO 时应归零以避免模板残留导致聊天受限。
   - 官方 `playerbehostafterhostshutdown` 抓包中，房主直接关闭后的玩家侧 `26` 不压缩成员数组；旧房主 index 保留为空槽 `steam_id=0`。
   - 同一官方样本中 `2004.field121` 只包含剩余真实成员 index，`2004.field123` 包含旧房主空槽 index，例如 `member_indices=[1]`、`free=[0]`。
   - 构建 owner-transfer `26` 时必须保留旧成员槽位，不能让 `GBE_BuildDotaLobbyMembers` 把新房主重新插到 index 0 或丢弃空槽。
