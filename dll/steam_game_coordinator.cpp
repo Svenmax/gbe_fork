@@ -1398,8 +1398,8 @@ struct GBE_DotaLeaveChatChannelRequest
 
 struct GBE_DotaChatMessageRequest
 {
-    bool has_steam_id{};
-    uint64 steam_id{};
+    bool has_account_id{};
+    uint32 account_id{};
     bool has_channel_id{};
     uint64 channel_id{};
     bool has_persona_name{};
@@ -3719,8 +3719,8 @@ static bool GBE_ParseDotaChatMessageBody(const uint8 *body, size_t body_size, GB
 
     uint64 value = 0;
     if (GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1), value)) {
-        request.has_steam_id = true;
-        request.steam_id = value;
+        request.has_account_id = true;
+        request.account_id = static_cast<uint32>(value);
     }
 
     if (GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2), value)) {
@@ -5944,7 +5944,7 @@ static bool GBE_BuildDotaChatMessagePayload(
     const std::string &request_body,
     const GBE_DotaChatMessageRequest &request,
     uint64 channel_id,
-    uint64 steam_id,
+    uint32 account_id,
     const std::string &persona_name,
     std::string &message)
 {
@@ -5953,7 +5953,7 @@ static bool GBE_BuildDotaChatMessagePayload(
     bool saw_channel_id = false;
     bool saw_persona_name = false;
 
-    GBE_AppendProtoFixed64Field(body, 1u, steam_id);
+    GBE_AppendProtoVarIntField(body, 1u, account_id);
 
     size_t offset = 0;
     while (offset < request_body.size()) {
@@ -12957,11 +12957,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaChatMessageRequest(const std::string 
     }
 
     const uint64 channel_id = request.has_channel_id ? request.channel_id : GBE_local_lobby.chat_channel_id;
-    const uint64 steam_id = request.has_steam_id ? request.steam_id : settings->get_local_steam_id().ConvertToUint64();
+    const uint32 account_id = request.has_account_id ? request.account_id : settings->get_local_steam_id().GetAccountID();
     const std::string persona_name = request.has_persona_name ? request.persona_name : std::string(settings->get_local_name());
 
     std::string chat_7273;
-    if (!GBE_BuildDotaChatMessagePayload(request_body, request, channel_id, steam_id, persona_name, chat_7273)) {
+    if (!GBE_BuildDotaChatMessagePayload(request_body, request, channel_id, account_id, persona_name, chat_7273)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7273 chat payload channel_id=%llu", static_cast<unsigned long long>(channel_id));
         return true;
     }
@@ -12981,9 +12981,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaChatMessageRequest(const std::string 
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Chat message relayed. channel_id=%llu steam_id=%llu persona=%s text_size=%zu wrapped=%d local_echo=0",
+        "[LOBBY] Chat message relayed. channel_id=%llu account_id=%u persona=%s text_size=%zu wrapped=%d local_echo=0",
         static_cast<unsigned long long>(channel_id),
-        static_cast<unsigned long long>(steam_id),
+        account_id,
         persona_name.c_str(),
         request.text.size(),
         wrapped ? 1 : 0
@@ -13038,14 +13038,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaNetworkChatMessage(Common_Message *ms
         return false;
 
     std::string sender_name;
+    const uint64 sender_steam_id = msg->source_id();
+    uint32 sender_account_id = request.has_account_id ? request.account_id : 0u;
+    if (sender_account_id == 0u && sender_steam_id != 0ull)
+        sender_account_id = CSteamID((uint64)sender_steam_id).GetAccountID();
     if (!request.has_persona_name) {
-        if (request.steam_id == settings->get_local_steam_id().ConvertToUint64()) {
+        if (sender_steam_id == settings->get_local_steam_id().ConvertToUint64()) {
             sender_name = std::string(settings->get_local_name());
         } else {
             Steam_Client *steam_client = get_steam_client();
             if (steam_client && steam_client->steam_matchmaking && GBE_local_lobby.generic_lobby_id != 0ull) {
                 CSteamID generic_lobby((uint64)GBE_local_lobby.generic_lobby_id);
-                CSteamID sender_id((uint64)request.steam_id);
+                CSteamID sender_id((uint64)sender_steam_id);
                 if (generic_lobby.IsLobby() && sender_id.IsValid()) {
                     const char *generic_name = steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby, sender_id, GBE_kDotaGenericLobbyMemberNameKey);
                     if (generic_name && generic_name[0] != '\0')
@@ -13056,10 +13060,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaNetworkChatMessage(Common_Message *ms
             for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
                 if (!sender_name.empty())
                     break;
-                if (member.steam_id != request.steam_id)
+                if (member.steam_id != sender_steam_id && member.account_id != sender_account_id)
                     continue;
 
-                CSteamID sender_id((uint64)member.steam_id);
+                CSteamID sender_id((uint64)(member.steam_id != 0ull ? member.steam_id : sender_steam_id));
                 if (steam_client && steam_client->steam_friends) {
                     const char *friend_name = steam_client->steam_friends->GetFriendPersonaName(sender_id);
                     if (friend_name && friend_name[0] != '\0' && std::string(friend_name) != "Unknown User")
@@ -13080,10 +13084,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaNetworkChatMessage(Common_Message *ms
     push_incoming_now(GBE_kDotaChatMessage | GBE_kProtoMask, local_channel_message);
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Received network 7273 chat source=%llu size=%zu remote_steam_id=%llu remote_channel=%llu local_channel=%llu text_size=%zu persona=%s",
+        "[LOBBY] Received network 7273 chat source=%llu size=%zu account_id=%u remote_channel=%llu local_channel=%llu text_size=%zu persona=%s",
         static_cast<unsigned long long>(msg->source_id()),
         message.size(),
-        static_cast<unsigned long long>(request.steam_id),
+        sender_account_id,
         static_cast<unsigned long long>(request.channel_id),
         static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
         request.text.size(),
