@@ -106,6 +106,7 @@ static constexpr const char *GBE_kDotaGenericLobbyMemberTeamKey = "gbe_dota_memb
 static constexpr const char *GBE_kDotaGenericLobbyMemberSlotKey = "gbe_dota_member_slot";
 static constexpr const char *GBE_kDotaGenericLobbyMemberHeroKey = "gbe_dota_member_hero";
 static constexpr const char *GBE_kDotaGenericLobbyMemberConnectedKey = "gbe_dota_member_connected";
+static constexpr const char *GBE_kDotaGenericLobbyMemberNameKey = "gbe_dota_member_name";
 
 static void GBE_BuildDotaPracticeLobbySOObjectData(
     uint64 steam_id,
@@ -5818,6 +5819,7 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
 
 static bool GBE_BuildDotaJoinChatChannelResponsePayload(
     uint64 steam_id,
+    uint64 generic_lobby_id,
     uint64 channel_id,
     const std::string &channel_name,
     const std::string &player_name,
@@ -5838,34 +5840,62 @@ static bool GBE_BuildDotaJoinChatChannelResponsePayload(
         if (member_steam_id == 0 || std::find(written_members.begin(), written_members.end(), member_steam_id) != written_members.end())
             return;
 
+        const std::string effective_member_name = member_name.empty() ? std::to_string(member_steam_id) : member_name;
         std::string member;
         GBE_AppendProtoFixed64Field(member, 1u, member_steam_id);
-        GBE_AppendProtoBytesField(member, 2u, member_name);
+        GBE_AppendProtoBytesField(member, 2u, effective_member_name);
         GBE_AppendProtoVarIntField(member, 3u, 0u);
         GBE_AppendProtoVarIntField(member, 4u, 0u);
         GBE_AppendProtoBytesField(body, 5u, member);
         written_members.push_back(member_steam_id);
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Added 7010 chat member channel_id=%llu steam_id=%llu persona=%s",
+            static_cast<unsigned long long>(channel_id),
+            static_cast<unsigned long long>(member_steam_id),
+            effective_member_name.c_str()
+        );
+    };
+
+    auto resolve_member_name = [&](const GBE_DotaLobbyMemberState &channel_member) -> std::string {
+        if (channel_member.steam_id == steam_id)
+            return player_name;
+        if (channel_member.steam_id == owner_steam_id && !owner_name.empty())
+            return owner_name;
+
+        Steam_Client *steam_client = get_steam_client();
+        if (steam_client && steam_client->steam_matchmaking && generic_lobby_id != 0ull) {
+            CSteamID generic_lobby((uint64)generic_lobby_id);
+            CSteamID member_id((uint64)channel_member.steam_id);
+            if (generic_lobby.IsLobby() && member_id.IsValid()) {
+                const char *generic_name = steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby, member_id, GBE_kDotaGenericLobbyMemberNameKey);
+                if (generic_name && generic_name[0] != '\0')
+                    return std::string(generic_name);
+            }
+        }
+
+        if (steam_client && steam_client->steam_friends) {
+            const char *friend_name = steam_client->steam_friends->GetFriendPersonaName(CSteamID((uint64)channel_member.steam_id));
+            if (friend_name && friend_name[0] != '\0' && std::string(friend_name) != "Unknown User")
+                return std::string(friend_name);
+        }
+
+        return std::to_string(channel_member.steam_id);
     };
 
     for (const GBE_DotaLobbyMemberState &channel_member : channel_members) {
-        std::string member_name;
         if (channel_member.steam_id == steam_id) {
-            member_name = player_name;
-        } else if (channel_member.steam_id == owner_steam_id) {
-            member_name = owner_name;
-        } else {
-            Steam_Client *steam_client = get_steam_client();
-            if (steam_client && steam_client->steam_friends) {
-                const char *friend_name = steam_client->steam_friends->GetFriendPersonaName(CSteamID((uint64)channel_member.steam_id));
-                if (friend_name)
-                    member_name = friend_name;
-            }
-            if (member_name.empty() || member_name == "Unknown User")
-                member_name = std::to_string(channel_member.steam_id);
+            append_channel_member(channel_member.steam_id, player_name);
+            break;
         }
-        append_channel_member(channel_member.steam_id, member_name);
     }
     append_channel_member(steam_id, player_name);
+
+    for (const GBE_DotaLobbyMemberState &channel_member : channel_members) {
+        if (channel_member.steam_id == steam_id)
+            continue;
+        append_channel_member(channel_member.steam_id, resolve_member_name(channel_member));
+    }
 
     GBE_AppendProtoVarIntField(body, 6u, channel_type);
     GBE_AppendProtoVarIntField(body, 7u, 0u);
@@ -9837,6 +9867,7 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
         std::string response_7010;
         if (GBE_BuildDotaJoinChatChannelResponsePayload(
                 settings->get_local_steam_id().ConvertToUint64(),
+                chat_snapshot.generic_lobby_id,
                 chat_snapshot.chat_channel_id,
                 chat_snapshot.chat_channel_name,
                 std::string(settings->get_local_name()),
@@ -9967,10 +9998,11 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyLocalMemberData(const c
     steam_client->steam_matchmaking->SetLobbyMemberData(generic_lobby_id, GBE_kDotaGenericLobbyMemberSlotKey, std::to_string(local_member->slot).c_str());
     steam_client->steam_matchmaking->SetLobbyMemberData(generic_lobby_id, GBE_kDotaGenericLobbyMemberHeroKey, std::to_string(local_member->hero_id).c_str());
     steam_client->steam_matchmaking->SetLobbyMemberData(generic_lobby_id, GBE_kDotaGenericLobbyMemberConnectedKey, local_member->connected ? "1" : "0");
+    steam_client->steam_matchmaking->SetLobbyMemberData(generic_lobby_id, GBE_kDotaGenericLobbyMemberNameKey, std::string(settings->get_local_name()).c_str());
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Published generic lobby member data reason=%s dota_lobby_id=%llu generic_lobby_id=%llu steam_id=%llu team=%u slot=%u hero=%u connected=%u",
+        "[LOBBY] Published generic lobby member data reason=%s dota_lobby_id=%llu generic_lobby_id=%llu steam_id=%llu team=%u slot=%u hero=%u connected=%u name=%s",
         reason ? reason : "unknown",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
@@ -9978,7 +10010,8 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyLocalMemberData(const c
         local_member->team,
         local_member->slot,
         local_member->hero_id,
-        local_member->connected ? 1u : 0u
+        local_member->connected ? 1u : 0u,
+        settings->get_local_name()
     );
 }
 
@@ -12764,6 +12797,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
 
     if (request.has_pass_key)
         GBE_local_lobby.pass_key = request.pass_key;
+    GBE_PublishDotaPracticeLobbyLocalMemberData("7044_join");
     GBE_PublishSharedDotaLobbyState("7044_join");
 
     GBE_GC_DebugLog(
@@ -12862,6 +12896,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
     std::string response_7010;
     if (!GBE_BuildDotaJoinChatChannelResponsePayload(
             settings->get_local_steam_id().ConvertToUint64(),
+            lobby_snapshot.generic_lobby_id,
             lobby_snapshot.chat_channel_id,
             lobby_snapshot.chat_channel_name,
             std::string(settings->get_local_name()),
@@ -13002,19 +13037,34 @@ bool Steam_Game_Coordinator::GBE_HandleDotaNetworkChatMessage(Common_Message *ms
             local_channel_body))
         return false;
 
+    std::string sender_name;
     if (!request.has_persona_name) {
-        std::string sender_name;
         if (request.steam_id == settings->get_local_steam_id().ConvertToUint64()) {
             sender_name = std::string(settings->get_local_name());
         } else {
+            Steam_Client *steam_client = get_steam_client();
+            if (steam_client && steam_client->steam_matchmaking && GBE_local_lobby.generic_lobby_id != 0ull) {
+                CSteamID generic_lobby((uint64)GBE_local_lobby.generic_lobby_id);
+                CSteamID sender_id((uint64)request.steam_id);
+                if (generic_lobby.IsLobby() && sender_id.IsValid()) {
+                    const char *generic_name = steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby, sender_id, GBE_kDotaGenericLobbyMemberNameKey);
+                    if (generic_name && generic_name[0] != '\0')
+                        sender_name = std::string(generic_name);
+                }
+            }
+
             for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+                if (!sender_name.empty())
+                    break;
                 if (member.steam_id != request.steam_id)
                     continue;
 
                 CSteamID sender_id((uint64)member.steam_id);
-                Steam_Client *steam_client = get_steam_client();
-                if (steam_client && steam_client->steam_friends)
-                    sender_name = std::string(steam_client->steam_friends->GetFriendPersonaName(sender_id));
+                if (steam_client && steam_client->steam_friends) {
+                    const char *friend_name = steam_client->steam_friends->GetFriendPersonaName(sender_id);
+                    if (friend_name && friend_name[0] != '\0' && std::string(friend_name) != "Unknown User")
+                        sender_name = std::string(friend_name);
+                }
                 break;
             }
         }
@@ -13030,13 +13080,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaNetworkChatMessage(Common_Message *ms
     push_incoming_now(GBE_kDotaChatMessage | GBE_kProtoMask, local_channel_message);
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Received network 7273 chat source=%llu size=%zu remote_steam_id=%llu remote_channel=%llu local_channel=%llu text_size=%zu",
+        "[LOBBY] Received network 7273 chat source=%llu size=%zu remote_steam_id=%llu remote_channel=%llu local_channel=%llu text_size=%zu persona=%s",
         static_cast<unsigned long long>(msg->source_id()),
         message.size(),
         static_cast<unsigned long long>(request.steam_id),
         static_cast<unsigned long long>(request.channel_id),
         static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
-        request.text.size()
+        request.text.size(),
+        (request.has_persona_name ? request.persona_name : sender_name).c_str()
     );
     return true;
 }

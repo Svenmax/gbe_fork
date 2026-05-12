@@ -61,6 +61,8 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 客户端自己发出的 `7273` 请求没有 sender 字段时，Dota 本地 UI 会自行显示本机消息；不要 synthetic 本地回显，否则会额外出现 `{Lobby}: 内容`。
   - 跨实例转发远端 `7273` 时，仅靠 `field1 account_id` 与 `7010` 成员表仍可能让 UI 回退显示 `{Lobby}`；转发给对端的 GC `7273` 需要补 `field3 persona_name`。
   - 如果 generic lobby 成员变化发生在本机已加入聊天频道之后，需要补发刷新后的 `7010` 聊天频道成员表；否则接收端虽然能显示远端 `7273` 内容，但因频道成员表缺少远端 SteamID/persona，会回退显示为 `lobby: 内容`。
+  - 官方 practice lobby `7010 CMsgDOTAJoinChatChannelResponse` 的成员项只需要 `field1 fixed64 steam_id`、`field2 persona_name`、`field3 channel_user_id=0`、`field4 status=0`，且本机成员排在前面。
+  - practice lobby 的远端 persona 需要通过 generic lobby member data 同步；只依赖 `Steam_Friends::GetFriendPersonaName()` 可能返回 `Unknown User`，导致频道成员列表和发言名退化为 account id 或 `lobby`。
   - 初次 Dota ClientWelcome 的 SO type `2002 CSODOTAGameAccountClient` 中 `field72 player_behavior_score_last_report` 是行为分；交流分字段不在当前 go-dota2/SteamKit 公开 `CSODOTAGameAccountClient` 定义中，不能把无关字段误当交流分。
   - 官方 `playerbehostafterhostshutdown` 抓包中，房主直接关闭后的玩家侧 `26` 不压缩成员数组；旧房主 index 保留为空槽 `steam_id=0`。
   - 同一官方样本中 `2004.field121` 只包含剩余真实成员 index，`2004.field123` 包含旧房主空槽 index，例如 `member_indices=[1]`、`free=[0]`。
