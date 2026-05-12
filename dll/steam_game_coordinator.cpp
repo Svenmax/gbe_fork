@@ -5915,11 +5915,13 @@ static bool GBE_BuildDotaChatMessagePayload(
     const GBE_DotaChatMessageRequest &request,
     uint64 channel_id,
     uint64 steam_id,
+    const std::string &persona_name,
     std::string &message)
 {
     (void)request;
     std::string body;
     bool saw_channel_id = false;
+    bool saw_persona_name = false;
 
     GBE_AppendProtoFixed64Field(body, 1u, steam_id);
 
@@ -5954,6 +5956,11 @@ static bool GBE_BuildDotaChatMessagePayload(
         }
 
         if (field_number == 3u) {
+            saw_persona_name = true;
+            if (!persona_name.empty())
+                GBE_AppendProtoBytesField(body, 3u, persona_name);
+            else
+                body.append(request_body.data() + field_offset, field_end - field_offset);
             continue;
         }
 
@@ -5962,6 +5969,8 @@ static bool GBE_BuildDotaChatMessagePayload(
 
     if (!saw_channel_id)
         GBE_AppendProtoVarIntField(body, 2u, channel_id);
+    if (!saw_persona_name && !persona_name.empty())
+        GBE_AppendProtoBytesField(body, 3u, persona_name);
 
     return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaChatMessage, body, message);
 }
@@ -12914,28 +12923,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaChatMessageRequest(const std::string 
 
     const uint64 channel_id = request.has_channel_id ? request.channel_id : GBE_local_lobby.chat_channel_id;
     const uint64 steam_id = request.has_steam_id ? request.steam_id : settings->get_local_steam_id().ConvertToUint64();
+    const std::string persona_name = request.has_persona_name ? request.persona_name : std::string(settings->get_local_name());
 
     std::string chat_7273;
-    if (!GBE_BuildDotaChatMessagePayload(request_body, request, channel_id, steam_id, chat_7273)) {
+    if (!GBE_BuildDotaChatMessagePayload(request_body, request, channel_id, steam_id, persona_name, chat_7273)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7273 chat payload channel_id=%llu", static_cast<unsigned long long>(channel_id));
         return true;
     }
-
-    if (wrapped) {
-        if (!outer_session_field_raw) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for 7273 channel_id=%llu", static_cast<unsigned long long>(channel_id));
-            return true;
-        }
-
-        std::string wrapped_7273;
-        if (!GBE_BuildWrappedDotaReplayMessage(chat_7273, *outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_7273)) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 7273 channel_id=%llu", static_cast<unsigned long long>(channel_id));
-            return true;
-        }
-        push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_7273);
-    } else {
-        push_incoming_now(GBE_kDotaChatMessage | GBE_kProtoMask, chat_7273);
-    }
+    (void)wrapped;
+    (void)outer_session_field_raw;
 
     if (network && GBE_local_lobby.generic_lobby_id != 0) {
         auto steam_message = new Steam_Messages();
@@ -12950,9 +12946,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaChatMessageRequest(const std::string 
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Chat message queued. channel_id=%llu steam_id=%llu text_size=%zu wrapped=%d",
+        "[LOBBY] Chat message relayed. channel_id=%llu steam_id=%llu persona=%s text_size=%zu wrapped=%d local_echo=0",
         static_cast<unsigned long long>(channel_id),
         static_cast<unsigned long long>(steam_id),
+        persona_name.c_str(),
         request.text.size(),
         wrapped ? 1 : 0
     );
@@ -13004,6 +13001,27 @@ bool Steam_Game_Coordinator::GBE_HandleDotaNetworkChatMessage(Common_Message *ms
             GBE_local_lobby.chat_channel_id,
             local_channel_body))
         return false;
+
+    if (!request.has_persona_name) {
+        std::string sender_name;
+        if (request.steam_id == settings->get_local_steam_id().ConvertToUint64()) {
+            sender_name = std::string(settings->get_local_name());
+        } else {
+            for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+                if (member.steam_id != request.steam_id)
+                    continue;
+
+                CSteamID sender_id((uint64)member.steam_id);
+                Steam_Client *steam_client = get_steam_client();
+                if (steam_client && steam_client->steam_friends)
+                    sender_name = std::string(steam_client->steam_friends->GetFriendPersonaName(sender_id));
+                break;
+            }
+        }
+
+        if (!sender_name.empty())
+            GBE_AppendProtoBytesField(local_channel_body, 3u, sender_name);
+    }
 
     std::string local_channel_message;
     if (!GBE_BuildDotaZeroHeaderPayload(GBE_kDotaChatMessage, local_channel_body, local_channel_message))

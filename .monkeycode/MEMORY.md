@@ -58,7 +58,8 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - practice lobby 聊天发言使用 Dota GC `7273`，官方字段形状包含 `field 1 fixed64 steam_id`、`field 2 channel_id`、`field 4 text`、`field 5 timestamp` 等；不能把 `7273` 落到 no replay template，否则频道内发言不会显示。
   - Dota `7273` 需要本地回显并跨实例广播给同一 generic lobby 的其它客户端；接收端应把完整 `7273` GC 消息体排入 Dota incoming 队列。
   - practice lobby 的 `7273.field2 channel_id` 是每个客户端本地频道 id；跨实例转发远端 `7273` 时必须重写成本机 `GBE_local_lobby.chat_channel_id`，否则日志显示已入队但 UI 不显示发言。
-  - practice lobby 的 `7273` 不应额外注入 `field3 persona_name` 或合成 timestamp；显示名依赖 `7010` 成员表中的 SteamID/persona 映射，额外 persona 字段会导致对端 UI 回退显示为频道名 `lobby`。
+  - 客户端自己发出的 `7273` 请求没有 sender 字段时，Dota 本地 UI 会自行显示本机消息；不要 synthetic 本地回显，否则会额外出现 `{Lobby}: 内容`。
+  - 跨实例转发远端 `7273` 时，仅靠 `field1 account_id` 与 `7010` 成员表仍可能让 UI 回退显示 `{Lobby}`；转发给对端的 GC `7273` 需要补 `field3 persona_name`。
   - 如果 generic lobby 成员变化发生在本机已加入聊天频道之后，需要补发刷新后的 `7010` 聊天频道成员表；否则接收端虽然能显示远端 `7273` 内容，但因频道成员表缺少远端 SteamID/persona，会回退显示为 `lobby: 内容`。
   - 初次 Dota ClientWelcome 的 SO type `2002 CSODOTAGameAccountClient` 中 `field72 player_behavior_score_last_report` 是行为分；交流分字段不在当前 go-dota2/SteamKit 公开 `CSODOTAGameAccountClient` 定义中，不能把无关字段误当交流分。
   - 官方 `playerbehostafterhostshutdown` 抓包中，房主直接关闭后的玩家侧 `26` 不压缩成员数组；旧房主 index 保留为空槽 `steam_id=0`。
