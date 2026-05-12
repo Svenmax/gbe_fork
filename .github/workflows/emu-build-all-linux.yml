@@ -46,6 +46,8 @@ jobs:
             # tools
             "tool_lobby_connect",
             "tool_generate_interfaces",
+            # tests
+            "test_gamepad_linux",
           ]
         arch: ["x64", "x32"]
         cfg: ["debug", "release"]

@@ -1674,6 +1674,46 @@ project "test_crash_printer_sa_sigaction"
     }
 -- End test_crash_printer_sa_sigaction
 
+
+-- Project test_gamepad_linux
+---------
+project "test_gamepad_linux"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tests/gamepad"))
+    targetname "test_gamepad_linux_%{cfg.platform}"
+
+
+    -- defines
+    ---------
+    filter {} -- reset the filter and remove all active keywords
+    defines {
+        "GAMEPAD_TESTING",
+    }
+
+
+    -- common source & header files
+    ---------
+    filter {} -- reset the filter and remove all active keywords
+    files {
+        'libs/gamepad/gamepad.c',
+        'libs/gamepad/gamepad.h',
+        'tests/gamepad/test_gamepad_linux.cpp',
+    }
+    removefiles {
+        'post_build/**',
+        'build/deps/**',
+    }
+
+
+    -- post build
+    ---------
+    filter {} -- reset the filter and remove all active keywords
+    postbuildcommands {
+        '%[%{!cfg.buildtarget.abspath}]',
+    }
+-- End test_gamepad_linux
+
 end
 -- End LINUX ONLY TARGETS
 
