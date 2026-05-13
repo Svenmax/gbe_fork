@@ -130,6 +130,7 @@ public:
     CSteamID CreateLobbyImmediate(ELobbyType eLobbyType, int cMaxMembers);
     std::vector<CSteamID> GetLobbyListSnapshot();
     std::vector<CSteamID> GetLobbyMemberListSnapshot(CSteamID steamIDLobby);
+    CSteamID FindLobbyByDotaLobbyIdForInvite(uint64 dotaLobbyId, const char *markerKey, const char *markerValue, const char *dotaLobbyIdKey);
     bool RepairLobbyOwnerIfMissing(CSteamID steamIDLobby, const char *reason);
     bool KickLobbyMemberForDota(CSteamID steamIDLobby, CSteamID steamIDMember);
     void RefreshLobbyCallbacksForDota();

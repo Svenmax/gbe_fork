@@ -412,3 +412,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `8012` 顶层包含 field `11` fixed64 `UINT64_MAX`，lobby entries 位于 repeated field `1`；friend practice lobby list 的 `7112` response 可为空。
   - 加入 practice lobby 的主线是 `7044 k_EMsgGCPracticeLobbyJoin -> 24 k_ESOMsg_CacheSubscribed -> 7113 k_EMsgGCPracticeLobbyJoinResponse`，`7113` 成功结果 field `1=0`，并镜像请求 job 到 target job。
   - 离开 lobby 的主线不是立即 `25`；官方在 `7040` 后先推一次 `26`，客户端随后发送 `8011/7111` 刷新列表，GC 再回 `25 + 8012 + 7112`，之后才处理旧 chat channel 的 `7272 -> 7014`。
+
+[Dota2 practice lobby 邀请链]
+- Date: 2026-05-13
+- Context: Agent 在解析用户上传的 `hostinviteplayerlobby.zip` 与 `playerbeinvitedlobby.zip` 官方抓包时发现
+- Category: 代码模式
+- Instructions:
+  - 房主邀请 practice lobby 成员的官方主线是 `4512 k_EMsgGCInviteToLobby -> 4502 k_EMsgGCInvitationCreated -> 26 -> 7013 k_EMsgGCOtherJoinedChannel`。
+  - `4512` 请求体 field `1` 是被邀请玩家 fixed64 SteamID，field `2` 是 client version；`4502` 响应 field `1` 是 group/lobby id，field `2` 是被邀请玩家 fixed64 SteamID，field `3` 是 user_offline。
+  - 被邀请方接受邀请主线是 `24(2011 CSODOTALobbyInvite) -> 4513 k_EMsgGCLobbyInviteResponse -> 24(full lobby) -> 26(remove 2011) -> 25(owner_soid type=4/id=本机 SteamID) -> 7009/7010`。
+  - `4513` 接受邀请时应复用 practice lobby join 的 `24` 初始化路径，但不能回 `7113`，因为官方接受邀请链路没有 `7113`。
+  - 邀请对象 `2011 CSODOTALobbyInvite` 归属于 owner soid `type=4/id=被邀请玩家 SteamID`，移除邀请后发送的 `25` 也必须使用 `type=4`，不能误用 practice lobby 的 `type=3/lobby_id`。

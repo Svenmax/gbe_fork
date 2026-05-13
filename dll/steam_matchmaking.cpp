@@ -17,6 +17,7 @@
 
 #include "dll/steam_matchmaking.h"
 
+#include <cstdlib>
 #include <random>
 
 #define SEND_LOBBY_RATE 5.0
@@ -340,6 +341,35 @@ std::vector<CSteamID> Steam_Matchmaking::GetLobbyMemberListSnapshot(CSteamID ste
     for (const auto &member : lobby->members())
         result.push_back(CSteamID((uint64)member.id()));
     return result;
+}
+
+CSteamID Steam_Matchmaking::FindLobbyByDotaLobbyIdForInvite(uint64 dotaLobbyId, const char *markerKey, const char *markerValue, const char *dotaLobbyIdKey)
+{
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    if (dotaLobbyId == 0 || !markerKey || !markerValue || !dotaLobbyIdKey)
+        return k_steamIDNil;
+
+    for (const auto &lobby : lobbies) {
+        if (lobby.deleted())
+            continue;
+        if (lobby.appid() != settings->get_local_game_id().AppID())
+            continue;
+
+        auto marker = caseinsensitive_find(lobby.values(), markerKey);
+        if (marker == lobby.values().end() || marker->second != markerValue)
+            continue;
+
+        auto lobby_id = caseinsensitive_find(lobby.values(), dotaLobbyIdKey);
+        if (lobby_id == lobby.values().end())
+            continue;
+
+        char *end = nullptr;
+        const uint64 parsed_lobby_id = std::strtoull(lobby_id->second.c_str(), &end, 10);
+        if (end && *end == '\0' && parsed_lobby_id == dotaLobbyId)
+            return CSteamID((uint64)lobby.room_id());
+    }
+
+    return k_steamIDNil;
 }
 
 bool Steam_Matchmaking::RepairLobbyOwnerIfMissing(CSteamID steamIDLobby, const char *reason)
