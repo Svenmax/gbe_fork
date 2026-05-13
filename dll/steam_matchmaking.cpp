@@ -372,6 +372,21 @@ CSteamID Steam_Matchmaking::FindLobbyByDotaLobbyIdForInvite(uint64 dotaLobbyId, 
     return k_steamIDNil;
 }
 
+bool Steam_Matchmaking::SendLobbySnapshotToUserForDotaInvite(CSteamID steamIDLobby, CSteamID steamIDInvitee)
+{
+    PRINT_DEBUG("lobby=%llu invitee=%llu", steamIDLobby.ConvertToUint64(), steamIDInvitee.ConvertToUint64());
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    Lobby *lobby = get_lobby(steamIDLobby);
+    if (!lobby || lobby->deleted() || !steamIDInvitee.IsValid())
+        return false;
+
+    Common_Message msg{};
+    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+    msg.set_dest_id(steamIDInvitee.ConvertToUint64());
+    msg.set_allocated_lobby(new Lobby(*lobby));
+    return network->sendTo(&msg, true);
+}
+
 bool Steam_Matchmaking::RepairLobbyOwnerIfMissing(CSteamID steamIDLobby, const char *reason)
 {
     PRINT_DEBUG("%llu reason=%s", steamIDLobby.ConvertToUint64(), reason ? reason : "unknown");

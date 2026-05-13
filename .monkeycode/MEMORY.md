@@ -415,7 +415,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 
 [Dota2 practice lobby 邀请链]
 - Date: 2026-05-13
-- Context: Agent 在解析用户上传的 `hostinviteplayerlobby.zip` 与 `playerbeinvitedlobby.zip` 官方抓包时发现
+- Context: Agent 在解析用户上传的 `hostinviteplayerlobby.zip`、`playerbeinvitedlobby.zip` 官方抓包以及好友列表邀请无反应实测日志时发现
 - Category: 代码模式
 - Instructions:
   - 房主邀请 practice lobby 成员的官方主线是 `4512 k_EMsgGCInviteToLobby -> 4502 k_EMsgGCInvitationCreated -> 26 -> 7013 k_EMsgGCOtherJoinedChannel`。
@@ -423,3 +423,5 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 被邀请方接受邀请主线是 `24(2011 CSODOTALobbyInvite) -> 4513 k_EMsgGCLobbyInviteResponse -> 24(full lobby) -> 26(remove 2011) -> 25(owner_soid type=4/id=本机 SteamID) -> 7009/7010`。
   - `4513` 接受邀请时应复用 practice lobby join 的 `24` 初始化路径，但不能回 `7113`，因为官方接受邀请链路没有 `7113`。
   - 邀请对象 `2011 CSODOTALobbyInvite` 归属于 owner soid `type=4/id=被邀请玩家 SteamID`，移除邀请后发送的 `25` 也必须使用 `type=4`，不能误用 practice lobby 的 `type=3/lobby_id`。
+  - 普通 `Steam_Matchmaking::InviteUserToLobby()` 只会发送 Steam 侧 lobby invite；Dota 客户端的好友列表邀请还需要被邀请方收到 GC `24` 中的 `2011 CSODOTALobbyInvite`，否则 UI 没有 Dota 邀请反应。
+  - 发送 Dota 2011 邀请时还应定向同步 generic lobby snapshot 给被邀请方，否则其接受 `4513` 时可能只能看到 2011 invite object，但无法按 Dota lobby id 找到并加入底层 generic lobby。

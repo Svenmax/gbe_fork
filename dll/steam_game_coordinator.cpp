@@ -5141,6 +5141,20 @@ static uint64 GBE_GenerateDotaMatchId()
     return 8781757536ull;
 }
 
+static uint64 GBE_GenerateDotaLobbyInviteGid(uint64 lobby_id, uint64 invitee_steam_id)
+{
+    std::random_device device;
+    std::mt19937_64 generator(
+        lobby_id ^
+        (invitee_steam_id << 7) ^
+        (static_cast<uint64>(device()) << 32) ^
+        static_cast<uint64>(std::chrono::high_resolution_clock::now().time_since_epoch().count())
+    );
+
+    const uint64 candidate = (generator() & 0x00FFFFFFFFFFFFFFull) | 0x0002000000000000ull;
+    return candidate != 0 ? candidate : (lobby_id + 2705515ull);
+}
+
 static bool GBE_ExtractWrappedClientFromGCPayload(
     const std::string &wrapped_message,
     uint32 expected_inner_emsg,
@@ -5695,6 +5709,75 @@ static bool GBE_BuildDotaInvitationCreatedPayload(uint64 group_id, uint64 steam_
         GBE_AppendProtoFixed64Field(body, 2u, steam_id);
     GBE_AppendProtoVarIntField(body, 3u, user_offline ? 1u : 0u);
     return GBE_BuildDotaZeroHeaderPayload(GBE_kGCInvitationCreated, body, message);
+}
+
+static bool GBE_BuildDotaLobbyInviteCacheSubscribedPayload(
+    uint64 lobby_id,
+    uint64 inviter_steam_id,
+    uint64 invitee_steam_id,
+    const std::string &inviter_name,
+    const std::string &room_name,
+    std::string &message)
+{
+    if (lobby_id == 0 || inviter_steam_id == 0 || invitee_steam_id == 0)
+        return false;
+
+    std::string invite_object;
+    GBE_AppendProtoVarIntField(invite_object, 1u, lobby_id);
+    GBE_AppendProtoFixed64Field(invite_object, 2u, inviter_steam_id);
+    GBE_AppendProtoBytesField(invite_object, 3u, inviter_name.empty() ? std::string("Lobby Host") : inviter_name);
+    GBE_AppendProtoBytesField(invite_object, 4u, room_name.empty() ? std::string("Lobby") : room_name);
+    GBE_AppendProtoVarIntField(invite_object, 5u, 0u);
+    GBE_AppendProtoFixed64Field(invite_object, 6u, GBE_GenerateDotaLobbyInviteGid(lobby_id, invitee_steam_id));
+    GBE_AppendProtoFixed64Field(invite_object, 7u, 0u);
+    GBE_AppendProtoFixed32Field(invite_object, 8u, 0u);
+
+    message.clear();
+    {
+        ProtoBufMsgHeader_t hdr{};
+        hdr.m_EMsgFlagged = GBE_kDotaCacheSubscribed | GBE_kProtoMask;
+        hdr.m_cubProtoBufExtHdr = 0;
+        ser_var<ProtoBufMsgHeader_t>(message, hdr);
+    }
+
+    CMsgSOCacheSubscribed protomsg;
+    auto *owner_soid = protomsg.mutable_owner_soid();
+    owner_soid->set_type(4u);
+    owner_soid->set_id(invitee_steam_id);
+
+    auto *invite_entry = protomsg.add_objects();
+    invite_entry->set_type_id(2011);
+    invite_entry->add_object_data(invite_object);
+
+    protomsg.AppendToString(&message);
+    return true;
+}
+
+static bool GBE_IsDotaLobbyInviteCacheSubscribedPayload(const std::string &message)
+{
+    if (message.size() < sizeof(ProtoBufMsgHeader_t))
+        return false;
+
+    ProtoBufMsgHeader_t hdr{};
+    std::memcpy(&hdr, message.data(), sizeof(hdr));
+    if (GBE_GC_MaskedEMsg(hdr.m_EMsgFlagged) != GBE_kDotaCacheSubscribed)
+        return false;
+
+    const size_t body_offset = sizeof(ProtoBufMsgHeader_t) + hdr.m_cubProtoBufExtHdr;
+    if (body_offset > message.size())
+        return false;
+
+    CMsgSOCacheSubscribed protomsg;
+    if (!protomsg.ParseFromArray(message.data() + body_offset, static_cast<int>(message.size() - body_offset)))
+        return false;
+
+    for (int object_index = 0; object_index < protomsg.objects_size(); ++object_index) {
+        const auto &object = protomsg.objects(object_index);
+        if (object.type_id() == 2011 && object.object_data_size() > 0)
+            return true;
+    }
+
+    return false;
 }
 
 static bool GBE_BuildDotaOtherJoinedChannelPayload(uint64 channel_id, const std::string &persona_name, uint64 steam_id, std::string &message)
@@ -13231,8 +13314,33 @@ bool Steam_Game_Coordinator::GBE_HandleDotaInviteToLobbyRequest(const std::strin
 
     Steam_Client *steam_client = get_steam_client();
     bool sent_invite = false;
-    if (steam_client && steam_client->steam_matchmaking && generic_lobby_id.IsLobby() && request.steam_id != 0)
+    bool sent_lobby_snapshot = false;
+    if (steam_client && steam_client->steam_matchmaking && generic_lobby_id.IsLobby() && request.steam_id != 0) {
         sent_invite = steam_client->steam_matchmaking->InviteUserToLobby(generic_lobby_id, CSteamID((uint64)request.steam_id));
+        sent_lobby_snapshot = steam_client->steam_matchmaking->SendLobbySnapshotToUserForDotaInvite(generic_lobby_id, CSteamID((uint64)request.steam_id));
+    }
+
+    bool sent_dota_invite = false;
+    if (network && request.steam_id != 0 && dota_lobby_id != 0) {
+        std::string invite_24;
+        if (GBE_BuildDotaLobbyInviteCacheSubscribedPayload(
+                dota_lobby_id,
+                settings->get_local_steam_id().ConvertToUint64(),
+                request.steam_id,
+                GBE_GetDotaLobbyOwnerName(),
+                GBE_local_lobby.room_name,
+                invite_24)) {
+            auto steam_message = new Steam_Messages();
+            steam_message->set_type(Steam_Messages::FRIEND_CHAT);
+            steam_message->set_message(invite_24);
+
+            Common_Message msg{};
+            msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+            msg.set_dest_id(request.steam_id);
+            msg.set_allocated_steam_messages(steam_message);
+            sent_dota_invite = network->sendTo(&msg, true);
+        }
+    }
 
     std::string response_4502;
     if (!GBE_BuildDotaInvitationCreatedPayload(dota_lobby_id, request.steam_id, false, response_4502)) {
@@ -13258,12 +13366,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaInviteToLobbyRequest(const std::strin
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Processed 4512 invite dota_lobby_id=%llu generic_lobby_id=%llu invitee=%llu client_version=%u sent_invite=%u wrapped=%d",
+        "[LOBBY] Processed 4512 invite dota_lobby_id=%llu generic_lobby_id=%llu invitee=%llu client_version=%u sent_invite=%u sent_lobby_snapshot=%u sent_dota_invite=%u wrapped=%d",
         static_cast<unsigned long long>(dota_lobby_id),
         static_cast<unsigned long long>(generic_lobby_id.ConvertToUint64()),
         static_cast<unsigned long long>(request.steam_id),
         request.has_client_version ? request.client_version : 0u,
         sent_invite ? 1u : 0u,
+        sent_lobby_snapshot ? 1u : 0u,
+        sent_dota_invite ? 1u : 0u,
         wrapped ? 1 : 0);
     return true;
 }
@@ -13479,6 +13589,28 @@ bool Steam_Game_Coordinator::GBE_HandleDotaChatMessageRequest(const std::string 
         persona_name.c_str(),
         request.text.size(),
         wrapped ? 1 : 0
+    );
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaNetworkLobbyInviteMessage(Common_Message *msg)
+{
+    if (!msg || !msg->has_steam_messages() || !gc_initialized || gc_profile != GC_PROFILE_DOTA2)
+        return false;
+
+    if (msg->steam_messages().type() != Steam_Messages::FRIEND_CHAT)
+        return false;
+
+    const std::string &message = msg->steam_messages().message();
+    if (!GBE_IsDotaLobbyInviteCacheSubscribedPayload(message))
+        return false;
+
+    push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, message);
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Received network 2011 lobby invite source=%llu size=%zu",
+        static_cast<unsigned long long>(msg->source_id()),
+        message.size()
     );
     return true;
 }
@@ -16129,6 +16261,8 @@ void Steam_Game_Coordinator::network_callback(Common_Message *msg)
         break;
         }
     } else if (msg->has_steam_messages()) {
+        if (GBE_HandleDotaNetworkLobbyInviteMessage(msg))
+            return;
         if (GBE_HandleDotaNetworkChatMessage(msg))
             return;
     } else if (msg->has_low_level()) {
