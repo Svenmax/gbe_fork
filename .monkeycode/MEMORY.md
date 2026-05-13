@@ -430,6 +430,16 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 官方 `CSODOTALobbyInvite.field4` 是 repeated `LobbyMember`，不是 room name；成员子消息至少包含 `name` 和 `steam_id`，当前样本里先展示的是邀请发起者而不是被邀请者。
   - 官方拒绝邀请链路是 `24(2011) -> 4513 accept=false -> 26(remove 2011) -> 25(owner_soid type=4/id=本机 SteamID)`，没有 full lobby、没有 `7009/7010`；`4513 accept=false` 必须走邀请 SO 清理，不应强行加入。
   - 官方接受邀请 `4513 accept=true` 会带 `custom_game_crc=0` 和 `custom_game_timestamp=0`；官方拒绝邀请 `4513 accept=false` 只带 `lobby_id`、`accept=false`、`client_version`。
+
+[Dota2 邀请同意前的 SteamNetworkingSockets 认证]
+- Date: 2026-05-13
+- Context: Agent 在排查 Dota2 practice lobby 邀请 UI 已弹出但点击同意仍弹 VAC 并发送 `4513 accept=false` 时发现
+- Category: 代码模式
+- Instructions:
+  - 如果 `console.log` 出现 `SteamNetSockets` 的 `Cert failure 2: Goldberg serialized cert is unavailable` 和 `AuthStatus Failed`，问题不在 GC 接受链路，而是客户端本地 SteamNetworkingSockets 认证已失败。
+  - `dll/steam_networking_socketsserialized.cpp` 的 `Steam_Networking_Sockets_Serialized::GetCertAsync()` 不能返回 `k_EResultFail` 和失败文案；Dota 会在点击同意前本地判定不可加入，并把用户同意转成 `4513 accept=false`。
+  - 这类问题应先修 serialized cert/auth status，再观察客户端是否发出官方接受包 `4513 accept=true`；不要把 `accept=false` 强行当作加入处理。
+
 [抓包解析必须完整展开]
 - Date: 2026-05-13
 - Context: 用户纠正 Dota2 invite 构造失败是因为抓包解析遗漏结构和内容
