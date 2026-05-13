@@ -8818,6 +8818,7 @@ Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class N
     this->is_server = is_server;
 
     this->network->setCallback(CALLBACK_ID_GAMESERVER_ITEMS, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
+    this->network->setCallback(CALLBACK_ID_FRIEND_MESSAGES, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->network->setCallback(CALLBACK_ID_STEAM_MESSAGES, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->network->setCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->run_every_runcb->add(&Steam_Game_Coordinator::steam_run_every_runcb, this);
@@ -8852,6 +8853,7 @@ Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class N
 Steam_Game_Coordinator::~Steam_Game_Coordinator()
 {
     this->network->rmCallback(CALLBACK_ID_GAMESERVER_ITEMS, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
+    this->network->rmCallback(CALLBACK_ID_FRIEND_MESSAGES, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->network->rmCallback(CALLBACK_ID_STEAM_MESSAGES, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->network->rmCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->run_every_runcb->remove(&Steam_Game_Coordinator::steam_run_every_runcb, this);
@@ -13316,31 +13318,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaInviteToLobbyRequest(const std::strin
     bool sent_invite = false;
     bool sent_lobby_snapshot = false;
     if (steam_client && steam_client->steam_matchmaking && generic_lobby_id.IsLobby() && request.steam_id != 0) {
-        sent_invite = steam_client->steam_matchmaking->InviteUserToLobby(generic_lobby_id, CSteamID((uint64)request.steam_id));
         sent_lobby_snapshot = steam_client->steam_matchmaking->SendLobbySnapshotToUserForDotaInvite(generic_lobby_id, CSteamID((uint64)request.steam_id));
+        sent_invite = steam_client->steam_matchmaking->InviteUserToLobby(generic_lobby_id, CSteamID((uint64)request.steam_id));
     }
 
     bool sent_dota_invite = false;
-    if (network && request.steam_id != 0 && dota_lobby_id != 0) {
-        std::string invite_24;
-        if (GBE_BuildDotaLobbyInviteCacheSubscribedPayload(
-                dota_lobby_id,
-                settings->get_local_steam_id().ConvertToUint64(),
-                request.steam_id,
-                GBE_GetDotaLobbyOwnerName(),
-                GBE_local_lobby.room_name,
-                invite_24)) {
-            auto steam_message = new Steam_Messages();
-            steam_message->set_type(Steam_Messages::FRIEND_CHAT);
-            steam_message->set_message(invite_24);
-
-            Common_Message msg{};
-            msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
-            msg.set_dest_id(request.steam_id);
-            msg.set_allocated_steam_messages(steam_message);
-            sent_dota_invite = network->sendTo(&msg, true);
-        }
-    }
+    if (sent_invite && sent_lobby_snapshot && dota_lobby_id != 0)
+        sent_dota_invite = true;
 
     std::string response_4502;
     if (!GBE_BuildDotaInvitationCreatedPayload(dota_lobby_id, request.steam_id, false, response_4502)) {
@@ -13589,6 +13573,84 @@ bool Steam_Game_Coordinator::GBE_HandleDotaChatMessageRequest(const std::string 
         persona_name.c_str(),
         request.text.size(),
         wrapped ? 1 : 0
+    );
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaFriendLobbyInviteMessage(Common_Message *msg)
+{
+    if (!msg || !msg->has_friend_messages() || !gc_initialized || gc_profile != GC_PROFILE_DOTA2)
+        return false;
+
+    if (msg->friend_messages().type() != Friend_Messages::LOBBY_INVITE)
+        return false;
+
+    CSteamID generic_lobby_id((uint64)msg->friend_messages().lobby_id());
+    if (!generic_lobby_id.IsLobby())
+        return false;
+
+    Steam_Client *steam_client = get_steam_client();
+    if (!steam_client || !steam_client->steam_matchmaking)
+        return false;
+
+    steam_client->steam_matchmaking->RefreshLobbyCallbacksForDota();
+
+    const char *marker = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMarkerKey);
+    if (!marker || std::strcmp(marker, GBE_kDotaGenericLobbyMarkerValue) != 0)
+        return false;
+
+    const uint64 dota_lobby_id = GBE_ParseUint64OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyDotaLobbyIdKey));
+    if (dota_lobby_id == 0) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Ignoring friend lobby invite without Dota lobby id generic_lobby_id=%llu source=%llu",
+            static_cast<unsigned long long>(generic_lobby_id.ConvertToUint64()),
+            static_cast<unsigned long long>(msg->source_id())
+        );
+        return true;
+    }
+
+    uint64 owner_steam_id = GBE_ParseUint64OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerSteamIdKey));
+    if (owner_steam_id == 0)
+        owner_steam_id = msg->source_id();
+
+    const char *owner_name_value = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerNameKey);
+    const std::string owner_name = owner_name_value && owner_name_value[0] != '\0'
+        ? std::string(owner_name_value)
+        : std::string("Lobby Host");
+
+    const char *room_name_value = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyRoomNameKey);
+    const std::string room_name = room_name_value && room_name_value[0] != '\0'
+        ? std::string(room_name_value)
+        : owner_name;
+
+    std::string invite_24;
+    if (!GBE_BuildDotaLobbyInviteCacheSubscribedPayload(
+            dota_lobby_id,
+            owner_steam_id,
+            settings->get_local_steam_id().ConvertToUint64(),
+            owner_name,
+            room_name,
+            invite_24)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Failed building 2011 from friend lobby invite dota_lobby_id=%llu generic_lobby_id=%llu source=%llu",
+            static_cast<unsigned long long>(dota_lobby_id),
+            static_cast<unsigned long long>(generic_lobby_id.ConvertToUint64()),
+            static_cast<unsigned long long>(msg->source_id())
+        );
+        return true;
+    }
+
+    push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, invite_24);
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Created 2011 lobby invite from friend invite dota_lobby_id=%llu generic_lobby_id=%llu source=%llu owner=%llu room='%s'",
+        static_cast<unsigned long long>(dota_lobby_id),
+        static_cast<unsigned long long>(generic_lobby_id.ConvertToUint64()),
+        static_cast<unsigned long long>(msg->source_id()),
+        static_cast<unsigned long long>(owner_steam_id),
+        room_name.c_str()
     );
     return true;
 }
@@ -16260,6 +16322,9 @@ void Steam_Game_Coordinator::network_callback(Common_Message *msg)
             PRINT_DEBUG("unhandled type %i", (int)msg->gameserver_items_messages().type());
         break;
         }
+    } else if (msg->has_friend_messages()) {
+        if (GBE_HandleDotaFriendLobbyInviteMessage(msg))
+            return;
     } else if (msg->has_steam_messages()) {
         if (GBE_HandleDotaNetworkLobbyInviteMessage(msg))
             return;

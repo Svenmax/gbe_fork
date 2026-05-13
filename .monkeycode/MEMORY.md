@@ -425,3 +425,4 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 邀请对象 `2011 CSODOTALobbyInvite` 归属于 owner soid `type=4/id=被邀请玩家 SteamID`，移除邀请后发送的 `25` 也必须使用 `type=4`，不能误用 practice lobby 的 `type=3/lobby_id`。
   - 普通 `Steam_Matchmaking::InviteUserToLobby()` 只会发送 Steam 侧 lobby invite；Dota 客户端的好友列表邀请还需要被邀请方收到 GC `24` 中的 `2011 CSODOTALobbyInvite`，否则 UI 没有 Dota 邀请反应。
   - 发送 Dota 2011 邀请时还应定向同步 generic lobby snapshot 给被邀请方，否则其接受 `4513` 时可能只能看到 2011 invite object，但无法按 Dota lobby id 找到并加入底层 generic lobby。
+  - 被邀请方可在普通 `Friend_Messages::LOBBY_INVITE` 回调中根据已同步的 generic lobby metadata 本地合成 `24(2011)`；房主侧应先发送 generic lobby snapshot，再发送普通 lobby invite，避免接收侧查不到 Dota lobby id。
