@@ -1317,22 +1317,51 @@ bool Steam_Friends::CloseClanChatWindowInSteam( CSteamID steamIDClanChat )
 // this is so you can show P2P chats inline in the game
 bool Steam_Friends::SetListenForFriendsMessages( bool bInterceptEnabled )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("%d", bInterceptEnabled);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    listen_for_friends_messages = bInterceptEnabled;
     return true;
 }
 
 bool Steam_Friends::ReplyToFriendMessage( CSteamID steamIDFriend, const char *pchMsgToSend )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("%llu %s", steamIDFriend.ConvertToUint64(), pchMsgToSend ? pchMsgToSend : "(null)");
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return false;
+    if (!pchMsgToSend || !pchMsgToSend[0]) return false;
+    if (!steamIDFriend.IsValid()) return false;
+
+    Common_Message msg{};
+    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+    msg.set_dest_id(steamIDFriend.ConvertToUint64());
+    Friend_Messages *friend_messages = new Friend_Messages();
+    friend_messages->set_type(Friend_Messages::FRIEND_CHAT);
+    friend_messages->set_chat_message(std::string(pchMsgToSend));
+    msg.set_allocated_friend_messages(friend_messages);
+    network->sendTo(&msg, true);
+    return true;
 }
 
 int Steam_Friends::GetFriendMessage( CSteamID steamIDFriend, int iMessageID, void *pvData, int cubData, EChatEntryType *peChatEntryType )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("%llu %d %p %d", steamIDFriend.ConvertToUint64(), iMessageID, pvData, cubData);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    if (peChatEntryType) *peChatEntryType = k_EChatEntryTypeInvalid;
+    if (iMessageID <= 0 || cubData < 0) return 0;
+    if (static_cast<size_t>(iMessageID) > friend_chat_entries.size()) return 0;
+
+    Friend_Chat_Entry &entry = friend_chat_entries[iMessageID - 1];
+    if (entry.friend_id != steamIDFriend) return 0;
+
+    if (peChatEntryType) *peChatEntryType = entry.type;
+
+    if (pvData && cubData > 0) {
+        int copy_len = static_cast<int>(entry.message.size()) + 1; // include null terminator
+        if (copy_len > cubData) copy_len = cubData;
+        memcpy(pvData, entry.message.c_str(), copy_len);
+        return copy_len;
+    }
+
     return 0;
 }
 
@@ -1579,6 +1608,23 @@ void Steam_Friends::Callback(Common_Message *msg)
                 GameRichPresenceJoinRequested_t data = {};
                 data.m_steamIDFriend = CSteamID((uint64)msg->source_id());
                 strncpy(data.m_rgchConnect, connect_str.c_str(), k_cchMaxRichPresenceValueLength - 1);
+                callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+            }
+        }
+
+        if (msg->friend_messages().type() == Friend_Messages::FRIEND_CHAT) {
+            PRINT_DEBUG("Got Friend Chat from %llu", (unsigned long long)msg->source_id());
+            if (listen_for_friends_messages) {
+                CSteamID sender((uint64)msg->source_id());
+                Friend_Chat_Entry entry{};
+                entry.friend_id = sender;
+                entry.type = k_EChatEntryTypeChatMsg;
+                entry.message = msg->friend_messages().chat_message();
+                friend_chat_entries.push_back(entry);
+
+                GameConnectedFriendChatMsg_t data{};
+                data.m_steamIDUser = sender;
+                data.m_iMessageID = static_cast<int>(friend_chat_entries.size()); // 1-based
                 callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
             }
         }
