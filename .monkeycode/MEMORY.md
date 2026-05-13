@@ -427,3 +427,4 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 发送 Dota 2011 邀请时还应定向同步 generic lobby snapshot 给被邀请方，否则其接受 `4513` 时可能只能看到 2011 invite object，但无法按 Dota lobby id 找到并加入底层 generic lobby。
   - 被邀请方可在普通 `Friend_Messages::LOBBY_INVITE` 回调中根据已同步的 generic lobby metadata 本地合成 `24(2011)`；房主侧应先发送 generic lobby snapshot，再发送普通 lobby invite，避免接收侧查不到 Dota lobby id。
   - 官方 `CSODOTALobbyInvite.field6` invite gid 与 `field1` lobby id 的差值为 `2781515`；不要使用随机高位 gid，否则客户端可能取走 `24(2011)` 后仍不展示邀请或不发送 `4513`。
+  - 官方 `CSODOTALobbyInvite.field4` 是 repeated `LobbyMember`，不是 room name；成员子消息至少包含 `name` 和 `steam_id`，当前样本里先展示的是邀请发起者而不是被邀请者。

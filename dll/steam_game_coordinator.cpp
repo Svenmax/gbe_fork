@@ -5708,7 +5708,7 @@ static bool GBE_BuildDotaLobbyInviteCacheSubscribedPayload(
     uint64 inviter_steam_id,
     uint64 invitee_steam_id,
     const std::string &inviter_name,
-    const std::string &room_name,
+    const std::vector<std::pair<uint64, std::string>> &members,
     std::string &message)
 {
     if (lobby_id == 0 || inviter_steam_id == 0 || invitee_steam_id == 0)
@@ -5718,7 +5718,27 @@ static bool GBE_BuildDotaLobbyInviteCacheSubscribedPayload(
     GBE_AppendProtoVarIntField(invite_object, 1u, lobby_id);
     GBE_AppendProtoFixed64Field(invite_object, 2u, inviter_steam_id);
     GBE_AppendProtoBytesField(invite_object, 3u, inviter_name.empty() ? std::string("Lobby Host") : inviter_name);
-    GBE_AppendProtoBytesField(invite_object, 4u, room_name.empty() ? std::string("Lobby") : room_name);
+
+    bool added_member = false;
+    for (const auto &member : members) {
+        if (member.first == 0)
+            continue;
+        std::string member_object;
+        std::string member_name = member.second;
+        if (member_name.empty() && member.first == inviter_steam_id)
+            member_name = inviter_name;
+        GBE_AppendProtoBytesField(member_object, 1u, member_name.empty() ? std::string("Lobby Host") : member_name);
+        GBE_AppendProtoFixed64Field(member_object, 2u, member.first);
+        GBE_AppendProtoBytesField(invite_object, 4u, member_object);
+        added_member = true;
+    }
+    if (!added_member) {
+        std::string member_object;
+        GBE_AppendProtoBytesField(member_object, 1u, inviter_name.empty() ? std::string("Lobby Host") : inviter_name);
+        GBE_AppendProtoFixed64Field(member_object, 2u, inviter_steam_id);
+        GBE_AppendProtoBytesField(invite_object, 4u, member_object);
+    }
+
     GBE_AppendProtoVarIntField(invite_object, 5u, 0u);
     GBE_AppendProtoFixed64Field(invite_object, 6u, GBE_GenerateDotaLobbyInviteGid(lobby_id, invitee_steam_id));
     GBE_AppendProtoFixed64Field(invite_object, 7u, 0u);
@@ -13605,11 +13625,33 @@ bool Steam_Game_Coordinator::GBE_HandleDotaFriendLobbyInviteMessage(Common_Messa
     uint64 owner_steam_id = GBE_ParseUint64OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerSteamIdKey));
     if (owner_steam_id == 0)
         owner_steam_id = msg->source_id();
+    const uint64 inviter_steam_id = msg->source_id() != 0 ? msg->source_id() : owner_steam_id;
 
     const char *owner_name_value = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerNameKey);
     const std::string owner_name = owner_name_value && owner_name_value[0] != '\0'
         ? std::string(owner_name_value)
         : std::string("Lobby Host");
+
+    auto get_invite_member_name = [&](uint64 steam_id) -> std::string {
+        CSteamID member_id((uint64)steam_id);
+        const char *member_name = steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby_id, member_id, GBE_kDotaGenericLobbyMemberNameKey);
+        if (member_name && member_name[0] != '\0')
+            return std::string(member_name);
+        if (steam_id == owner_steam_id || steam_id == inviter_steam_id)
+            return owner_name;
+        return std::string("Lobby Host");
+    };
+
+    std::vector<std::pair<uint64, std::string>> invite_members;
+    const std::string inviter_name = get_invite_member_name(inviter_steam_id);
+    if (inviter_steam_id != 0)
+        invite_members.emplace_back(inviter_steam_id, inviter_name);
+    for (const auto &member_id : steam_client->steam_matchmaking->GetLobbyMemberListSnapshot(generic_lobby_id)) {
+        const uint64 member_steam_id = member_id.ConvertToUint64();
+        if (member_steam_id == 0 || member_steam_id == inviter_steam_id)
+            continue;
+        invite_members.emplace_back(member_steam_id, get_invite_member_name(member_steam_id));
+    }
 
     const char *room_name_value = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyRoomNameKey);
     const std::string room_name = room_name_value && room_name_value[0] != '\0'
@@ -13619,10 +13661,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaFriendLobbyInviteMessage(Common_Messa
     std::string invite_24;
     if (!GBE_BuildDotaLobbyInviteCacheSubscribedPayload(
             dota_lobby_id,
-            owner_steam_id,
+            inviter_steam_id,
             settings->get_local_steam_id().ConvertToUint64(),
-            owner_name,
-            room_name,
+            inviter_name,
+            invite_members,
             invite_24)) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
@@ -13637,11 +13679,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaFriendLobbyInviteMessage(Common_Messa
     push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, invite_24);
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Created 2011 lobby invite from friend invite dota_lobby_id=%llu generic_lobby_id=%llu source=%llu owner=%llu room='%s'",
+        "[LOBBY] Created 2011 lobby invite from friend invite dota_lobby_id=%llu generic_lobby_id=%llu source=%llu owner=%llu members=%zu room='%s'",
         static_cast<unsigned long long>(dota_lobby_id),
         static_cast<unsigned long long>(generic_lobby_id.ConvertToUint64()),
         static_cast<unsigned long long>(msg->source_id()),
         static_cast<unsigned long long>(owner_steam_id),
+        invite_members.size(),
         room_name.c_str()
     );
     return true;
