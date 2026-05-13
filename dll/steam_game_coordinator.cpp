@@ -5143,16 +5143,8 @@ static uint64 GBE_GenerateDotaMatchId()
 
 static uint64 GBE_GenerateDotaLobbyInviteGid(uint64 lobby_id, uint64 invitee_steam_id)
 {
-    std::random_device device;
-    std::mt19937_64 generator(
-        lobby_id ^
-        (invitee_steam_id << 7) ^
-        (static_cast<uint64>(device()) << 32) ^
-        static_cast<uint64>(std::chrono::high_resolution_clock::now().time_since_epoch().count())
-    );
-
-    const uint64 candidate = (generator() & 0x00FFFFFFFFFFFFFFull) | 0x0002000000000000ull;
-    return candidate != 0 ? candidate : (lobby_id + 2705515ull);
+    (void)invitee_steam_id;
+    return lobby_id + 2781515ull;
 }
 
 static bool GBE_ExtractWrappedClientFromGCPayload(
