@@ -5142,14 +5142,20 @@ static uint64 GBE_GenerateDotaMatchId()
     return 8781757536ull;
 }
 
-static uint64 GBE_GenerateDotaLobbyInviteGid(uint64 lobby_id, uint64 invitee_steam_id)
+static uint64 GBE_GenerateDotaSOChangeVersion(uint64 lobby_id, uint64 owner_id)
 {
-    static std::atomic<uint64> invite_gid_sequence{0};
+    static std::atomic<uint64> so_change_sequence{0};
 
-    const uint64 sequence = invite_gid_sequence.fetch_add(1, std::memory_order_relaxed) + 1u;
-    const uint64 invitee_component = invitee_steam_id & 0xFFull;
-    const uint64 invite_gid = lobby_id + 2781515ull + (sequence << 8) + invitee_component;
-    return invite_gid != 0 ? invite_gid : sequence;
+    const uint64 sequence = so_change_sequence.fetch_add(1, std::memory_order_relaxed) + 1u;
+    const uint64 owner_component = owner_id & 0xFFull;
+    const uint64 version = lobby_id + 2781515ull + (sequence << 16) + owner_component;
+    return version != 0 ? version : sequence;
+}
+
+static uint64 GBE_GenerateDotaLobbyInviteGid(uint64 lobby_id, uint64 invitee_steam_id, uint64 &cache_version)
+{
+    cache_version = GBE_GenerateDotaSOChangeVersion(lobby_id, invitee_steam_id);
+    return cache_version > 2ull ? cache_version - 2ull : cache_version;
 }
 
 static bool GBE_ExtractWrappedClientFromGCPayload(
@@ -5744,7 +5750,8 @@ static bool GBE_BuildDotaLobbyInviteCacheSubscribedPayload(
         GBE_AppendProtoBytesField(invite_object, 4u, member_object);
     }
 
-    const uint64 invite_gid = GBE_GenerateDotaLobbyInviteGid(lobby_id, invitee_steam_id);
+    uint64 cache_version = 0;
+    const uint64 invite_gid = GBE_GenerateDotaLobbyInviteGid(lobby_id, invitee_steam_id, cache_version);
     GBE_AppendProtoVarIntField(invite_object, 5u, 0u);
     GBE_AppendProtoFixed64Field(invite_object, 6u, invite_gid);
     GBE_AppendProtoFixed64Field(invite_object, 7u, 0u);
@@ -5752,11 +5759,12 @@ static bool GBE_BuildDotaLobbyInviteCacheSubscribedPayload(
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Built 2011 lobby invite lobby_id=%llu invitee=%llu inviter=%llu invite_gid=%llu members=%zu",
+        "[LOBBY] Built 2011 lobby invite lobby_id=%llu invitee=%llu inviter=%llu invite_gid=%llu cache_version=%llu members=%zu",
         static_cast<unsigned long long>(lobby_id),
         static_cast<unsigned long long>(invitee_steam_id),
         static_cast<unsigned long long>(inviter_steam_id),
         static_cast<unsigned long long>(invite_gid),
+        static_cast<unsigned long long>(cache_version),
         members.size());
 
     message.clear();
@@ -5767,16 +5775,19 @@ static bool GBE_BuildDotaLobbyInviteCacheSubscribedPayload(
         ser_var<ProtoBufMsgHeader_t>(message, hdr);
     }
 
-    CMsgSOCacheSubscribed protomsg;
-    auto *owner_soid = protomsg.mutable_owner_soid();
-    owner_soid->set_type(4u);
-    owner_soid->set_id(invitee_steam_id);
+    std::string owner_soid;
+    GBE_AppendProtoVarIntField(owner_soid, 1u, 4u);
+    GBE_AppendProtoVarIntField(owner_soid, 2u, invitee_steam_id);
 
-    auto *invite_entry = protomsg.add_objects();
-    invite_entry->set_type_id(2011);
-    invite_entry->add_object_data(invite_object);
+    std::string invite_entry;
+    GBE_AppendProtoVarIntField(invite_entry, 1u, 2011u);
+    GBE_AppendProtoBytesField(invite_entry, 2u, invite_object);
 
-    protomsg.AppendToString(&message);
+    std::string body;
+    GBE_AppendProtoBytesField(body, 2u, invite_entry);
+    GBE_AppendProtoFixed64Field(body, 3u, cache_version);
+    GBE_AppendProtoBytesField(body, 4u, owner_soid);
+    message.append(body);
     return true;
 }
 
@@ -6307,7 +6318,7 @@ static bool GBE_BuildDotaSOOwnerCacheUnsubscribedPayload(uint32 owner_type, uint
     return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheUnsubscribed, body, message);
 }
 
-static bool GBE_BuildDotaRemoveLobbyInvitePayload(uint64 lobby_id, std::string &message)
+static bool GBE_BuildDotaRemoveLobbyInvitePayload(uint64 lobby_id, uint64 owner_steam_id, std::string &message)
 {
     std::string invite_key;
     GBE_AppendProtoVarIntField(invite_key, 1u, lobby_id);
@@ -6316,8 +6327,14 @@ static bool GBE_BuildDotaRemoveLobbyInvitePayload(uint64 lobby_id, std::string &
     GBE_AppendProtoVarIntField(removed_object, 1u, 2011u);
     GBE_AppendProtoBytesField(removed_object, 2u, invite_key);
 
+    std::string owner_soid;
+    GBE_AppendProtoVarIntField(owner_soid, 1u, 4u);
+    GBE_AppendProtoVarIntField(owner_soid, 2u, owner_steam_id);
+
     std::string body;
+    GBE_AppendProtoFixed64Field(body, 3u, GBE_GenerateDotaSOChangeVersion(lobby_id, owner_steam_id));
     GBE_AppendProtoBytesField(body, 5u, removed_object);
+    GBE_AppendProtoBytesField(body, 6u, owner_soid);
     return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaPracticeLobbyDetailsUpdate, body, message);
 }
 
@@ -13422,7 +13439,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyInviteResponseRequest(const std:
 
     if (request.has_accept && !request.accept) {
         std::string response_remove_2011;
-        if (request.has_lobby_id && request.lobby_id != 0 && GBE_BuildDotaRemoveLobbyInvitePayload(request.lobby_id, response_remove_2011)) {
+        if (request.has_lobby_id && request.lobby_id != 0 && GBE_BuildDotaRemoveLobbyInvitePayload(request.lobby_id, settings->get_local_steam_id().ConvertToUint64(), response_remove_2011)) {
             if (wrapped) {
                 if (outer_session_field_raw) {
                     std::string wrapped_remove_2011;
@@ -13466,7 +13483,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyInviteResponseRequest(const std:
         return false;
 
     std::string response_remove_2011;
-    if (request.has_lobby_id && request.lobby_id != 0 && GBE_BuildDotaRemoveLobbyInvitePayload(request.lobby_id, response_remove_2011)) {
+    if (request.has_lobby_id && request.lobby_id != 0 && GBE_BuildDotaRemoveLobbyInvitePayload(request.lobby_id, settings->get_local_steam_id().ConvertToUint64(), response_remove_2011)) {
         if (wrapped) {
             if (outer_session_field_raw) {
                 std::string wrapped_remove_2011;

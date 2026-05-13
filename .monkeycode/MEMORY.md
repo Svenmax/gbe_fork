@@ -438,6 +438,8 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - `CSODOTALobbyInvite.field6 invite_gid` 不能对同一个 lobby 固定复用；重新邀请同一玩家时需要生成新的 gid，否则客户端可能把它当成已处理过的同一邀请对象。
   - 2011 邀请对象的 `group_id/lobby_id` 可以保持不变，但 `invite_gid` 应随每次邀请变化，并且最好在 GC 日志里打印出来方便核对重复邀请链路。
+  - 官方多次邀请抓包中，`24(2011) CMsgSOCacheSubscribed` 顶层带 `field3 fixed64 cache version`，通常为 `invite_gid + 2`；`26(remove 2011)` 顶层也带新的 `field3 fixed64 cache version` 和 `field6 owner_soid(type=4/id=被邀请者)`。
+  - 重新邀请链路中的 SO cache version 应跨 `24` 和 `26` 单调推进，不能只让 `invite_gid` 变化但让顶层订阅/删除消息缺少或回退 version。
 
 [Dota2 邀请同意前的 SteamNetworkingSockets 认证]
 - Date: 2026-05-13
