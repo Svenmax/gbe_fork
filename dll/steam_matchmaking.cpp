@@ -1784,6 +1784,11 @@ void Steam_Matchmaking::Callback(Common_Message *msg)
                 if (msg->lobby_messages().type() == Lobby_Messages::JOIN) {
                     PRINT_DEBUG("LOBBY MESSAGE: JOIN, lobby=%llu from=%llu", (uint64)lobby->room_id(), (uint64)msg->source_id());
                     if (add_member_to_lobby(lobby, (uint64)msg->source_id())) {
+                        Common_Message lobby_update{};
+                        lobby_update.set_allocated_lobby(new Lobby(*lobby));
+                        lobby_update.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+                        lobby_update.set_dest_id(msg->source_id());
+                        network->sendTo(&lobby_update, true);
                         trigger_lobby_member_join_leave((uint64)lobby->room_id(), (uint64)msg->source_id(), false, true, 0.01);
                     }
                 }

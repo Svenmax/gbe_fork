@@ -148,6 +148,7 @@ public ISteamGameCoordinator
         uint64 abandon_pre_postgame_chat_channel_id{};
         bool pending_leave_after_7040{};
         uint64 pending_leave_lobby_id{};
+        bool seen_local_in_generic_lobby{};
     };
 
     GBE_LocalLobby GBE_local_lobby{};

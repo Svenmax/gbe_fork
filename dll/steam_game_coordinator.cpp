@@ -9972,8 +9972,21 @@ bool Steam_Game_Coordinator::GBE_MaybeHandleDotaPracticeLobbyKicked(const char *
             break;
         }
     }
-    if (still_in_generic_lobby)
+    if (still_in_generic_lobby) {
+        GBE_local_lobby.seen_local_in_generic_lobby = true;
         return false;
+    }
+
+    if (!GBE_local_lobby.seen_local_in_generic_lobby) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Waiting for generic lobby join confirmation before treating local user as kicked. LobbyID=%llu generic_lobby_id=%llu reason=%s",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(generic_lobby_id.ConvertToUint64()),
+            reason ? reason : "generic_lobby_members_changed"
+        );
+        return false;
+    }
 
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
     std::string response_25;
@@ -12911,6 +12924,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
     local_member.team = GBE_kDotaTeamPlayerPool;
     local_member.slot = 0u;
     local_member.connected = false;
+    for (const GBE_DotaLobbyMemberState &member : matched_lobby.members) {
+        if (member.steam_id == local_member.steam_id) {
+            GBE_local_lobby.seen_local_in_generic_lobby = true;
+            break;
+        }
+    }
     GBE_UpsertDotaLobbyMember(GBE_local_lobby.members, local_member);
 
     if (request.has_pass_key)
