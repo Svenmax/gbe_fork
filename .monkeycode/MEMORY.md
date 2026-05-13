@@ -450,6 +450,15 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `dll/steam_networking_socketsserialized.cpp` 的 `Steam_Networking_Sockets_Serialized::GetCertAsync()` 不能返回 `k_EResultFail` 和失败文案；Dota 会在点击同意前本地判定不可加入，并把用户同意转成 `4513 accept=false`。
   - 这类问题应先修 serialized cert/auth status，再观察客户端是否发出官方接受包 `4513 accept=true`；不要把 `accept=false` 强行当作加入处理。
 
+[SteamNetworkingSockets serialized cert 签名要求]
+- Date: 2026-05-13
+- Context: Agent 在排查 `Cert request returned invalid signature` 时对照 `GameNetworkingSockets` certstore 与 `SteamNetworkingSocketsCert_t` ABI 发现
+- Category: 代码模式
+- Instructions:
+  - `SteamNetworkingSocketsCert_t.m_certOrMsg` 按 SDK 注释是裸 `CMsgSteamDatagramCertificate` protobuf，而签名和 CA key id 分别放在 `m_signature`、`m_caKeyID`。
+  - `m_cbSignature=0` 会让 Dota 的 SteamNetworkingSockets 私有证书路径进入 `Cert request returned invalid signature`，因此本地 cert 必须返回 64 字节 Ed25519 签名。
+  - SteamNetworkingSockets key id 计算方式是对 32 字节 Ed25519 public key 做 SHA256，并按 little-endian 读取 digest 前 8 字节。
+
 [抓包解析必须完整展开]
 - Date: 2026-05-13
 - Context: 用户纠正 Dota2 invite 构造失败是因为抓包解析遗漏结构和内容

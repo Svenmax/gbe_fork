@@ -24,6 +24,15 @@
 #include <string>
 #include <vector>
 
+#include <mbedtls/sha256.h>
+
+#if defined(__has_include)
+#if __has_include(<psa/crypto.h>)
+#define GBE_HAS_PSA_CRYPTO 1
+#include <psa/crypto.h>
+#endif
+#endif
+
 namespace {
 
 int GBE_CopySerializedNetworkingJson(const char *json, void *buf, uint32 cbBuf)
@@ -103,6 +112,58 @@ std::vector<uint8_t> GBE_BuildSerializedNetworkingCert(CSteamID steam_id, uint32
     return cert;
 }
 
+uint64_t GBE_CalculateSteamNetworkingPublicKeyID(const uint8_t *public_key, size_t public_key_size)
+{
+    if (!public_key || public_key_size != 32)
+        return 0;
+
+    uint8_t digest[32] = {};
+    if (mbedtls_sha256(public_key, public_key_size, digest, 0) != 0)
+        return 0;
+
+    uint64_t key_id = 0;
+    for (int i = 0; i < 8; ++i) {
+        key_id |= static_cast<uint64_t>(digest[i]) << (i * 8);
+    }
+    return key_id;
+}
+
+bool GBE_SignSerializedNetworkingCert(const std::vector<uint8_t> &cert, const uint8_t *private_key, size_t private_key_size, uint8_t *signature, size_t signature_size)
+{
+#if defined(GBE_HAS_PSA_CRYPTO) && defined(PSA_ALG_PURE_EDDSA) && defined(PSA_ECC_FAMILY_TWISTED_EDWARDS)
+    if (cert.empty() || !private_key || private_key_size != 32 || !signature || signature_size < 64)
+        return false;
+
+    if (psa_crypto_init() != PSA_SUCCESS)
+        return false;
+
+    psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_SIGN_MESSAGE);
+    psa_set_key_algorithm(&attributes, PSA_ALG_PURE_EDDSA);
+    psa_set_key_type(&attributes, PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_TWISTED_EDWARDS));
+    psa_set_key_bits(&attributes, 255);
+
+    psa_key_id_t key = 0;
+    psa_status_t status = psa_import_key(&attributes, private_key, private_key_size, &key);
+    psa_reset_key_attributes(&attributes);
+    if (status != PSA_SUCCESS)
+        return false;
+
+    size_t signature_len = 0;
+    status = psa_sign_message(key, PSA_ALG_PURE_EDDSA, cert.data(), cert.size(), signature, signature_size, &signature_len);
+    psa_destroy_key(key);
+
+    return status == PSA_SUCCESS && signature_len == 64;
+#else
+    (void)cert;
+    (void)private_key;
+    (void)private_key_size;
+    (void)signature;
+    (void)signature_size;
+    return false;
+#endif
+}
+
 }
 
 
@@ -160,20 +221,37 @@ SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
     struct SteamNetworkingSocketsCert_t data = {};
     data.m_eResult = k_EResultOK;
 
-    const auto cert = GBE_BuildSerializedNetworkingCert(settings->get_local_steam_id(), settings->get_local_game_id().AppID());
-    data.m_cbCert = static_cast<uint32>(std::min<size_t>(cert.size(), sizeof(data.m_certOrMsg)));
-    if (data.m_cbCert) {
-        std::memcpy(data.m_certOrMsg, cert.data(), data.m_cbCert);
-    }
-
-    data.m_caKeyID = 0;
-    data.m_cbSignature = 0;
+    static constexpr uint8_t public_key[32] = {
+        0xd7, 0x5a, 0x98, 0x01, 0x82, 0xb1, 0x0a, 0xb7,
+        0xd5, 0x4b, 0xfe, 0xd3, 0xc9, 0x64, 0x07, 0x3a,
+        0x0e, 0xe1, 0x72, 0xf3, 0xda, 0xa6, 0x23, 0x25,
+        0xaf, 0x02, 0x1a, 0x68, 0xf7, 0x07, 0x51, 0x1a,
+    };
     static constexpr uint8_t private_key[32] = {
         0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60,
         0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
         0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19,
         0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60,
     };
+
+    const auto cert = GBE_BuildSerializedNetworkingCert(settings->get_local_steam_id(), settings->get_local_game_id().AppID());
+    data.m_cbCert = static_cast<uint32>(std::min<size_t>(cert.size(), sizeof(data.m_certOrMsg)));
+    if (data.m_cbCert) {
+        std::memcpy(data.m_certOrMsg, cert.data(), data.m_cbCert);
+    }
+
+    data.m_caKeyID = GBE_CalculateSteamNetworkingPublicKeyID(public_key, sizeof(public_key));
+    if (data.m_caKeyID != 0 && GBE_SignSerializedNetworkingCert(cert, private_key, sizeof(private_key), reinterpret_cast<uint8_t *>(data.m_signature), sizeof(data.m_signature))) {
+        data.m_cbSignature = 64;
+    } else {
+        data.m_eResult = k_EResultFail;
+        const char *msg = "Goldberg serialized cert signing unavailable";
+        data.m_cbCert = static_cast<uint32>(std::strlen(msg) + 1);
+        std::memset(data.m_certOrMsg, 0, sizeof(data.m_certOrMsg));
+        std::memcpy(data.m_certOrMsg, msg, std::min<size_t>(data.m_cbCert, sizeof(data.m_certOrMsg)));
+        data.m_cbSignature = 0;
+        data.m_caKeyID = 0;
+    }
     data.m_cbPrivKey = sizeof(private_key);
     std::memcpy(data.m_privKey, private_key, sizeof(private_key));
 
