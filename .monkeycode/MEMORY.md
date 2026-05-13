@@ -74,6 +74,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 官方 `hostlobbykickplayer` 抓包中，房主踢人请求是 `7081 k_EMsgGCPracticeLobbyKick`，请求体 `field3 account_id` 指向被踢玩家；房主侧随后收到 `26`，被踢玩家槽位变为 `steam_id=0`，`member_indices` 只保留房主 index，`free_member_indices` 包含被踢玩家 index。
   - 官方 `steambekicked` 抓包中，被踢玩家侧先收到 `25 CacheUnsubscribed` 和 `7102 GCPopup(field1=1)`，随后客户端自行发送 `7272 LeaveChatChannel`，GC 再回 `7014 OtherLeftChannel`。
   - 实现房主踢人时不能复用普通 `LEAVE` 广播语义让所有客户端移除 `source_id`；房主需要移除目标成员并定向通知目标离开 generic lobby，Dota 层再按官方链路推送 `26` 或 `25/7102/7014`。
+  - 被踢检测不能在 `7044` join 早期触发；加入方可能已经构造本地 Dota lobby 但尚未收到 generic lobby join 成功回调，此时不在 generic 成员快照中不代表被踢。应等 practice lobby chat channel 建立后再把本地不在 generic lobby 视为被踢。
 
 ### 用户指令与执行约束
 

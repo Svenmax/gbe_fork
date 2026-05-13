@@ -9951,7 +9951,8 @@ bool Steam_Game_Coordinator::GBE_MaybeHandleDotaPracticeLobbyKicked(const char *
         return false;
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.generic_lobby_id == 0)
         return false;
-    if (GBE_local_lobby.has_chat_channel && std::strcmp(reason ? reason : "", "7272_leave_chat") != 0)
+    const bool after_chat_leave = std::strcmp(reason ? reason : "", "7272_leave_chat") == 0;
+    if (!GBE_local_lobby.has_chat_channel && !after_chat_leave)
         return false;
 
     Steam_Client *steam_client = get_steam_client();
@@ -9987,8 +9988,8 @@ bool Steam_Game_Coordinator::GBE_MaybeHandleDotaPracticeLobbyKicked(const char *
         return true;
     }
 
-    push_incoming_now(GBE_kDotaPopup | GBE_kProtoMask, response_7102);
-    push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25, 0.01);
+    push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
+    push_incoming_now(GBE_kDotaPopup | GBE_kProtoMask, response_7102, 0.01);
     ResetGCMemory("7081_kicked_from_lobby", false, false);
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
