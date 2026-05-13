@@ -426,5 +426,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 普通 `Steam_Matchmaking::InviteUserToLobby()` 只会发送 Steam 侧 lobby invite；Dota 客户端的好友列表邀请还需要被邀请方收到 GC `24` 中的 `2011 CSODOTALobbyInvite`，否则 UI 没有 Dota 邀请反应。
   - 发送 Dota 2011 邀请时还应定向同步 generic lobby snapshot 给被邀请方，否则其接受 `4513` 时可能只能看到 2011 invite object，但无法按 Dota lobby id 找到并加入底层 generic lobby。
   - 被邀请方可在普通 `Friend_Messages::LOBBY_INVITE` 回调中根据已同步的 generic lobby metadata 本地合成 `24(2011)`；房主侧应先发送 generic lobby snapshot，再发送普通 lobby invite，避免接收侧查不到 Dota lobby id。
-  - 官方 `CSODOTALobbyInvite.field6` invite gid 与 `field1` lobby id 的差值为 `2781515`；不要使用随机高位 gid，否则客户端可能取走 `24(2011)` 后仍不展示邀请或不发送 `4513`。
+  - 官方 `CSODOTALobbyInvite.field6` invite gid 是 fixed64，但不同接受/拒绝样本与 `field1` lobby id 的差值不稳定；不要把某个样本差值当作协议常量。
   - 官方 `CSODOTALobbyInvite.field4` 是 repeated `LobbyMember`，不是 room name；成员子消息至少包含 `name` 和 `steam_id`，当前样本里先展示的是邀请发起者而不是被邀请者。
+  - 官方拒绝邀请链路是 `24(2011) -> 4513 accept=false -> 26(remove 2011) -> 25(owner_soid type=4/id=本机 SteamID)`，没有 full lobby、没有 `7009/7010`；`4513 accept=false` 必须走邀请 SO 清理，不应强行加入。
+  - 官方接受邀请 `4513 accept=true` 会带 `custom_game_crc=0` 和 `custom_game_timestamp=0`；官方拒绝邀请 `4513 accept=false` 只带 `lobby_id`、`accept=false`、`client_version`。
+[抓包解析必须完整展开]
+- Date: 2026-05-13
+- Context: 用户纠正 Dota2 invite 构造失败是因为抓包解析遗漏结构和内容
+- Instructions:
+  - 后续解析抓包数据时，必须把消息结构和字段内容都完整展开，不能只看字段号、长度或摘要。
+  - 构造消息前必须核对字段语义、嵌套子消息、owner/key、对象类型、字段值和官方样本内容，避免遗漏导致构造消息不可用。
+  - 对 SO/GC 消息尤其要解析 repeated/object_data 等嵌套结构，确认字段内容后再编码实现。

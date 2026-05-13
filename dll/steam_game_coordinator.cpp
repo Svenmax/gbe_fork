@@ -13386,11 +13386,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyInviteResponseRequest(const std:
         return true;
     }
 
-    if (request.has_accept && !request.accept) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring declined 4513 invite response lobby_id=%llu", static_cast<unsigned long long>(request.lobby_id));
-        return true;
-    }
-
     CSteamID matched_generic_lobby_id = k_steamIDNil;
     GBE_LocalLobby matched_lobby{};
     bool matched_generic_lobby = request.has_lobby_id && request.lobby_id != 0 &&
@@ -13408,6 +13403,44 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyInviteResponseRequest(const std:
             steam_client->steam_matchmaking->RefreshLobbyCallbacksForDota();
             matched_generic_lobby = GBE_FindDotaGenericLobbyByDotaLobbyId(request.lobby_id, matched_generic_lobby_id, &matched_lobby, "4513_invite_accept_local_find");
         }
+    }
+
+    if (request.has_accept && !request.accept) {
+        std::string response_remove_2011;
+        if (request.has_lobby_id && request.lobby_id != 0 && GBE_BuildDotaRemoveLobbyInvitePayload(request.lobby_id, response_remove_2011)) {
+            if (wrapped) {
+                if (outer_session_field_raw) {
+                    std::string wrapped_remove_2011;
+                    if (GBE_BuildWrappedDotaReplayMessage(response_remove_2011, *outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_remove_2011))
+                        push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_remove_2011);
+                }
+            } else {
+                push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, response_remove_2011);
+            }
+        }
+
+        std::string response_25;
+        if (GBE_BuildDotaSOOwnerCacheUnsubscribedPayload(4u, settings->get_local_steam_id().ConvertToUint64(), response_25)) {
+            if (wrapped) {
+                if (outer_session_field_raw) {
+                    std::string wrapped_25;
+                    if (GBE_BuildWrappedDotaReplayMessage(response_25, *outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_25))
+                        push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_25);
+                }
+            } else {
+                push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
+            }
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Processed declined 4513 invite response lobby_id=%llu matched_generic=%u generic_lobby_id=%llu client_version=%u wrapped=%d",
+            static_cast<unsigned long long>(request.lobby_id),
+            matched_generic_lobby ? 1u : 0u,
+            static_cast<unsigned long long>(matched_generic_lobby_id.ConvertToUint64()),
+            request.has_client_version ? request.client_version : 0u,
+            wrapped ? 1 : 0);
+        return true;
     }
 
     std::string join_body;
