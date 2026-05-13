@@ -17,6 +17,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include <atomic>
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -5143,8 +5144,12 @@ static uint64 GBE_GenerateDotaMatchId()
 
 static uint64 GBE_GenerateDotaLobbyInviteGid(uint64 lobby_id, uint64 invitee_steam_id)
 {
-    (void)invitee_steam_id;
-    return lobby_id + 2781515ull;
+    static std::atomic<uint64> invite_gid_sequence{0};
+
+    const uint64 sequence = invite_gid_sequence.fetch_add(1, std::memory_order_relaxed) + 1u;
+    const uint64 invitee_component = invitee_steam_id & 0xFFull;
+    const uint64 invite_gid = lobby_id + 2781515ull + (sequence << 8) + invitee_component;
+    return invite_gid != 0 ? invite_gid : sequence;
 }
 
 static bool GBE_ExtractWrappedClientFromGCPayload(
@@ -5739,10 +5744,20 @@ static bool GBE_BuildDotaLobbyInviteCacheSubscribedPayload(
         GBE_AppendProtoBytesField(invite_object, 4u, member_object);
     }
 
+    const uint64 invite_gid = GBE_GenerateDotaLobbyInviteGid(lobby_id, invitee_steam_id);
     GBE_AppendProtoVarIntField(invite_object, 5u, 0u);
-    GBE_AppendProtoFixed64Field(invite_object, 6u, GBE_GenerateDotaLobbyInviteGid(lobby_id, invitee_steam_id));
+    GBE_AppendProtoFixed64Field(invite_object, 6u, invite_gid);
     GBE_AppendProtoFixed64Field(invite_object, 7u, 0u);
     GBE_AppendProtoFixed32Field(invite_object, 8u, 0u);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Built 2011 lobby invite lobby_id=%llu invitee=%llu inviter=%llu invite_gid=%llu members=%zu",
+        static_cast<unsigned long long>(lobby_id),
+        static_cast<unsigned long long>(invitee_steam_id),
+        static_cast<unsigned long long>(inviter_steam_id),
+        static_cast<unsigned long long>(invite_gid),
+        members.size());
 
     message.clear();
     {

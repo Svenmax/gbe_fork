@@ -431,6 +431,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 官方拒绝邀请链路是 `24(2011) -> 4513 accept=false -> 26(remove 2011) -> 25(owner_soid type=4/id=本机 SteamID)`，没有 full lobby、没有 `7009/7010`；`4513 accept=false` 必须走邀请 SO 清理，不应强行加入。
   - 官方接受邀请 `4513 accept=true` 会带 `custom_game_crc=0` 和 `custom_game_timestamp=0`；官方拒绝邀请 `4513 accept=false` 只带 `lobby_id`、`accept=false`、`client_version`。
 
+[Dota2 2011 邀请去重]
+- Date: 2026-05-13
+- Context: Agent 在修复 Dota2 practice lobby 二次邀请不再弹 UI 时发现
+- Category: 代码模式
+- Instructions:
+  - `CSODOTALobbyInvite.field6 invite_gid` 不能对同一个 lobby 固定复用；重新邀请同一玩家时需要生成新的 gid，否则客户端可能把它当成已处理过的同一邀请对象。
+  - 2011 邀请对象的 `group_id/lobby_id` 可以保持不变，但 `invite_gid` 应随每次邀请变化，并且最好在 GC 日志里打印出来方便核对重复邀请链路。
+
 [Dota2 邀请同意前的 SteamNetworkingSockets 认证]
 - Date: 2026-05-13
 - Context: Agent 在排查 Dota2 practice lobby 邀请 UI 已弹出但点击同意仍弹 VAC 并发送 `4513 accept=false` 时发现
