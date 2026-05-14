@@ -12639,6 +12639,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         );
 
         GBE_TrySyncDotaLobbyServerIdFromGameServer("4508_game_server_info");
+        if (GBE_HasDotaLaunchServerSetupSync())
+            GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseSetupSynced, "4508_game_server_info");
 
         if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
             if (GBE_TryAdvanceDotaLaunchToRun("runtime packet after 4508", request_emsg, source_job, "4508_launch_run"))
@@ -14231,7 +14233,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
 
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
     GBE_local_lobby.server_id = 0;
-    GBE_local_lobby.connect = GBE_FormatDotaPracticeLobbyConnectFromIp(network ? network->getOwnIP() : 0);
+    if (GBE_local_lobby.members.size() > 1) {
+        GBE_local_lobby.connect.clear();
+    } else {
+        GBE_local_lobby.connect = GBE_FormatDotaPracticeLobbyConnectFromIp(network ? network->getOwnIP() : 0);
+    }
     GBE_local_lobby.game_start_time = static_cast<uint32>(std::time(nullptr));
     GBE_local_lobby.launch_phase = GBE_kDotaLaunchPhaseRequested;
     GBE_PublishSharedDotaLobbyState("7041_launch_init");
