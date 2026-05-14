@@ -19,7 +19,7 @@
 
 #include <cstdio>
 
-static void GBE_LogNetSockTrace(const char *scope, const void *self, uint64 local_id, uint64 remote_id, int real_port, int status, int server_like)
+static void GBE_LogNetSockTrace(const char *scope, const void *self, uint64 local_id, uint64 remote_id, int virtual_port, int real_port, int status, int server_like)
 {
     FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
     if (!file)
@@ -27,11 +27,12 @@ static void GBE_LogNetSockTrace(const char *scope, const void *self, uint64 loca
 
     std::fprintf(
         file,
-        "[%s] self=%p local_id=%llu remote_id=%llu real_port=%d status=%d server_like=%d\n",
+        "[%s] self=%p local_id=%llu remote_id=%llu virtual_port=%d real_port=%d status=%d server_like=%d\n",
         scope ? scope : "NETSOCK_TRACE",
         self,
         (unsigned long long)local_id,
         (unsigned long long)remote_id,
+        virtual_port,
         real_port,
         status,
         server_like
@@ -144,6 +145,7 @@ bool Steam_Networking_Sockets::send_packet_new_connection(HSteamNetConnection m_
         this,
         connect_socket->second.created_by.ConvertToUint64(),
         connect_socket->second.remote_identity.GetSteamID64(),
+        connect_socket->second.virtual_port,
         connect_socket->second.real_port,
         connect_socket->second.status,
         sbcs != nullptr && sbcs->used > 0 ? 1 : 0
@@ -199,6 +201,7 @@ HSteamListenSocket Steam_Networking_Sockets::new_listen_socket(int nSteamConnect
     listen_socket.real_port = real_port;
     listen_socket.created_by = steam_id;
     sbcs->listen_sockets.push_back(listen_socket);
+    GBE_LogNetSockTrace("NETSOCK_CREATE_LISTEN", this, steam_id.ConvertToUint64(), 0, nSteamConnectVirtualPort, real_port, 0, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
     return socket_id;
 }
 
@@ -288,7 +291,7 @@ Steam_Networking_Sockets::Steam_Networking_Sockets(class Settings *settings, cla
     this->network->setCallback(CALLBACK_ID_NETWORKING_SOCKETS, settings->get_local_steam_id(), &Steam_Networking_Sockets::steam_callback, this);
     this->run_every_runcb->add(&Steam_Networking_Sockets::steam_run_every_runcb, this);
 
-    GBE_LogNetSockTrace("NETSOCK_CTOR", this, settings->get_local_steam_id().ConvertToUint64(), 0, settings->get_port(), 0, sbcs != nullptr ? 1 : 0);
+    GBE_LogNetSockTrace("NETSOCK_CTOR", this, settings->get_local_steam_id().ConvertToUint64(), 0, 0, settings->get_port(), 0, sbcs != nullptr ? 1 : 0);
 
 }
 
@@ -370,7 +373,7 @@ HSteamListenSocket Steam_Networking_Sockets::CreateListenSocketIP( const SteamNe
 {
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    GBE_LogNetSockTrace("NETSOCK_CREATE_LISTEN_IP", this, settings->get_local_steam_id().ConvertToUint64(), 0, localAddress.m_port, 0, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
+    GBE_LogNetSockTrace("NETSOCK_CREATE_LISTEN_IP", this, settings->get_local_steam_id().ConvertToUint64(), 0, SNS_DISABLED_PORT, localAddress.m_port, 0, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
     return new_listen_socket(SNS_DISABLED_PORT, localAddress.m_port);
 }
 
@@ -418,7 +421,7 @@ HSteamNetConnection Steam_Networking_Sockets::ConnectByIPAddress( const SteamNet
 {
     PRINT_DEBUG("%X", address.GetIPv4());
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    GBE_LogNetSockTrace("NETSOCK_CONNECT_BY_IP", this, settings->get_local_steam_id().ConvertToUint64(), 0, address.m_port, CONNECT_SOCKET_CONNECTING, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
+    GBE_LogNetSockTrace("NETSOCK_CONNECT_BY_IP", this, settings->get_local_steam_id().ConvertToUint64(), 0, SNS_DISABLED_PORT, address.m_port, CONNECT_SOCKET_CONNECTING, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
     SteamNetworkingIdentity ip_id;
     ip_id.SetIPAddr(address);
     HSteamNetConnection socket = new_connect_socket(ip_id, SNS_DISABLED_PORT, address.m_port);
@@ -479,6 +482,7 @@ HSteamNetConnection Steam_Networking_Sockets::ConnectP2P( const SteamNetworkingI
         return k_HSteamNetConnection_Invalid;
     }
 
+    GBE_LogNetSockTrace("NETSOCK_CONNECT_P2P", this, settings->get_local_steam_id().ConvertToUint64(), identityRemote.GetSteamID64(), nVirtualPort, SNS_DISABLED_PORT, CONNECT_SOCKET_CONNECTING, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
     HSteamNetConnection socket = new_connect_socket(identityRemote, nVirtualPort, SNS_DISABLED_PORT);
     send_packet_new_connection(socket);
     return socket;
@@ -563,7 +567,7 @@ EResult Steam_Networking_Sockets::AcceptConnection( HSteamNetConnection hConn )
     auto connect_socket = sbcs->connect_sockets.find(hConn);
     if (connect_socket == sbcs->connect_sockets.end()) return k_EResultInvalidParam;
     if (connect_socket->second.status != CONNECT_SOCKET_NOT_ACCEPTED) return k_EResultInvalidState;
-    GBE_LogNetSockTrace("NETSOCK_ACCEPT_CONNECTION", this, settings->get_local_steam_id().ConvertToUint64(), connect_socket->second.remote_identity.GetSteamID64(), connect_socket->second.real_port, connect_socket->second.status, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
+    GBE_LogNetSockTrace("NETSOCK_ACCEPT_CONNECTION", this, settings->get_local_steam_id().ConvertToUint64(), connect_socket->second.remote_identity.GetSteamID64(), connect_socket->second.virtual_port, connect_socket->second.real_port, connect_socket->second.status, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
     connect_socket->second.status = CONNECT_SOCKET_CONNECTED;
     send_packet_new_connection(connect_socket->first);
     launch_callback(connect_socket->first, CONNECT_SOCKET_NOT_ACCEPTED);
@@ -1315,7 +1319,7 @@ bool Steam_Networking_Sockets::GetIdentity( SteamNetworkingIdentity *pIdentity )
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (!pIdentity) return false;
     pIdentity->SetSteamID(settings->get_local_steam_id());
-    GBE_LogNetSockTrace("NETSOCK_GET_IDENTITY", this, settings->get_local_steam_id().ConvertToUint64(), 0, 0, 0, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
+    GBE_LogNetSockTrace("NETSOCK_GET_IDENTITY", this, settings->get_local_steam_id().ConvertToUint64(), 0, 0, 0, 0, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
     return true;
 }
 
@@ -2175,9 +2179,11 @@ void Steam_Networking_Sockets::Callback(Common_Message *msg)
                     SteamNetworkingIdentity identity;
                     identity.SetSteamID64(msg->source_id());
                     HSteamNetConnection new_connection = new_connect_socket(identity, virtual_port, real_port, CONNECT_SOCKET_NOT_ACCEPTED, conn->socket_id, static_cast<HSteamNetConnection>(msg->networking_sockets().connection_id_from()));
-                    GBE_LogNetSockTrace("NETSOCK_RX_CONNECTION_REQUEST", this, settings->get_local_steam_id().ConvertToUint64(), msg->source_id(), real_port, CONNECT_SOCKET_NOT_ACCEPTED, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
+                    GBE_LogNetSockTrace("NETSOCK_RX_CONNECTION_REQUEST", this, settings->get_local_steam_id().ConvertToUint64(), msg->source_id(), virtual_port, real_port, CONNECT_SOCKET_NOT_ACCEPTED, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
                     launch_callback(new_connection, CONNECT_SOCKET_NO_CONNECTION);
                 }
+            } else {
+                GBE_LogNetSockTrace("NETSOCK_RX_CONNECTION_REQUEST_NO_LISTENER", this, settings->get_local_steam_id().ConvertToUint64(), msg->source_id(), virtual_port, real_port, CONNECT_SOCKET_NO_CONNECTION, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
             }
 
         } else if (msg->networking_sockets().type() == Networking_Sockets::CONNECTION_ACCEPTED) {

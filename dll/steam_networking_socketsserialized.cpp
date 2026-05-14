@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <string>
@@ -34,6 +35,24 @@
 #endif
 
 namespace {
+
+void GBE_LogSerializedNetSockTrace(const char *scope, uint64 local_id, uint64 remote_id, uint32 connection_id, uint32 size_or_reason)
+{
+    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (!file)
+        return;
+
+    std::fprintf(
+        file,
+        "[%s] local_id=%llu remote_id=%llu connection_id=%u size_or_reason=%u\n",
+        scope ? scope : "NETSOCK_SERIALIZED_TRACE",
+        (unsigned long long)local_id,
+        (unsigned long long)remote_id,
+        connection_id,
+        size_or_reason
+    );
+    std::fclose(file);
+}
 
 int GBE_CopySerializedNetworkingJson(const char *json, void *buf, uint32 cbBuf)
 {
@@ -206,12 +225,14 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_SEND_RENDEZVOUS", settings->get_local_steam_id().ConvertToUint64(), steamIDRemote.ConvertToUint64(), unConnectionIDSrc, cbRendezvous);
 }
 
 void Steam_Networking_Sockets_Serialized::SendP2PConnectionFailure( CSteamID steamIDRemote, uint32 unConnectionIDDest, uint32 nReason, const char *pszReason )
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_SEND_FAILURE", settings->get_local_steam_id().ConvertToUint64(), steamIDRemote.ConvertToUint64(), unConnectionIDDest, nReason);
 }
 
 SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
@@ -257,6 +278,7 @@ SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
 
     auto ret = callback_results->addCallResult(data.k_iCallback, &data, sizeof(data));
     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+    GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_GET_CERT", settings->get_local_steam_id().ConvertToUint64(), 0, data.m_cbCert, data.m_eResult);
     return ret;
 }
 
@@ -313,6 +335,7 @@ bool Steam_Networking_Sockets_Serialized::BAllowDirectConnectToPeer(SteamNetwork
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_ALLOW_DIRECT", settings->get_local_steam_id().ConvertToUint64(), identity.GetSteamID64(), 0, 1);
     return true;
 }
 
