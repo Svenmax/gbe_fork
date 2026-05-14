@@ -431,6 +431,16 @@ static uint32 GBE_ParseDotaPracticeLobbyConnectIPv4(const std::string &connect)
     return (octet1 << 24) | (octet2 << 16) | (octet3 << 8) | octet4;
 }
 
+static std::string GBE_GetDotaPracticeLobbyFirstConnectEndpoint(const std::string &connect)
+{
+    const size_t first = connect.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos)
+        return std::string();
+
+    const size_t last = connect.find_first_of(" \t\r\n", first);
+    return connect.substr(first, last == std::string::npos ? std::string::npos : last - first);
+}
+
 static uint64 GBE_DeriveDotaPracticeLobbyAnonGameServerId(CSteamID game_server_id, uint64 lobby_id)
 {
     if (!game_server_id.IsValid() || game_server_id.GetAccountID() == 0u)
@@ -15729,6 +15739,15 @@ void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const
     steam_client->steam_friends->SetRichPresence("EventLevel_39", "0");
     steam_client->steam_friends->SetRichPresence("EventLevel_56", "1");
     steam_client->steam_friends->SetRichPresence("EventLevel_55", "1");
+    const std::string direct_connect_endpoint = include_party
+        ? GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect)
+        : std::string();
+    if (!direct_connect_endpoint.empty()) {
+        const std::string connect_command = std::string("+connect ") + direct_connect_endpoint;
+        steam_client->steam_friends->SetRichPresence("connect", connect_command.c_str());
+    } else {
+        steam_client->steam_friends->SetRichPresence("connect", nullptr);
+    }
     if (include_lobby) {
         steam_client->steam_friends->SetRichPresence("lobby", lobby_value);
     } else {
@@ -15742,12 +15761,13 @@ void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
-        "updated local launch rich presence status=%s lobby_state=%s include_party=%u include_lobby=%u lobby_id=%llu",
+        "updated local launch rich presence status=%s lobby_state=%s include_party=%u include_lobby=%u lobby_id=%llu connect=%s",
         status ? status : "",
         lobby_state ? lobby_state : "",
         include_party ? 1u : 0u,
         include_lobby ? 1u : 0u,
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        direct_connect_endpoint.c_str()
     );
 }
 
@@ -15766,6 +15786,7 @@ void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
     steam_client->steam_friends->SetRichPresence("EventLevel_39", nullptr);
     steam_client->steam_friends->SetRichPresence("EventLevel_56", nullptr);
     steam_client->steam_friends->SetRichPresence("EventLevel_55", nullptr);
+    steam_client->steam_friends->SetRichPresence("connect", nullptr);
     steam_client->steam_friends->SetRichPresence("lobby", nullptr);
     steam_client->steam_friends->SetRichPresence("party", nullptr);
 }
