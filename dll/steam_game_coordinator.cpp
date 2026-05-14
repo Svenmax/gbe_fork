@@ -431,6 +431,24 @@ static uint32 GBE_ParseDotaPracticeLobbyConnectIPv4(const std::string &connect)
     return (octet1 << 24) | (octet2 << 16) | (octet3 << 8) | octet4;
 }
 
+static uint64 GBE_DeriveDotaPracticeLobbyAnonGameServerId(CSteamID game_server_id, uint64 lobby_id)
+{
+    if (!game_server_id.IsValid() || game_server_id.GetAccountID() == 0u)
+        return game_server_id.ConvertToUint64();
+
+    if (game_server_id.BAnonGameServerAccount())
+        return game_server_id.ConvertToUint64();
+
+    const uint32 instance_seed = static_cast<uint32>((lobby_id >> 32) ^ lobby_id ^ game_server_id.GetAccountID());
+    const uint32 anon_instance = (instance_seed & 0xFFFFFu) != 0u ? (instance_seed & 0xFFFFFu) : 1u;
+    CSteamID anon_game_server_id(
+        game_server_id.GetAccountID(),
+        anon_instance,
+        game_server_id.GetEUniverse(),
+        k_EAccountTypeAnonGameServer);
+    return anon_game_server_id.ConvertToUint64();
+}
+
 static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
 static constexpr uint32 GBE_kSteamAuthList = 5432u;
 static constexpr uint32 GBE_kSteamPersonaState = 766u;
@@ -11554,7 +11572,8 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
     if (!game_server->BLoggedOn())
         return false;
 
-    const uint64 server_id = game_server->GetSteamID().ConvertToUint64();
+    const CSteamID game_server_steam_id = game_server->GetSteamID();
+    const uint64 server_id = GBE_DeriveDotaPracticeLobbyAnonGameServerId(game_server_steam_id, GBE_local_lobby.lobby_id);
     if (server_id == 0 || GBE_local_lobby.server_id == server_id)
         return false;
 
@@ -11566,11 +11585,12 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
-        "adopted game server SteamID as lobby server_id reason=%s lobby_id=%llu match_id=%llu old=%llu new=%llu",
+        "adopted anon game server SteamID as lobby server_id reason=%s lobby_id=%llu match_id=%llu old=%llu raw=%llu new=%llu",
         reason ? reason : "unknown",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         static_cast<unsigned long long>(GBE_local_lobby.match_id),
         static_cast<unsigned long long>(previous_server_id),
+        static_cast<unsigned long long>(game_server_steam_id.ConvertToUint64()),
         static_cast<unsigned long long>(server_id)
     );
 
