@@ -9833,7 +9833,6 @@ bool Steam_Game_Coordinator::GBE_HasDotaLaunchServerSetupSync() const
         GBE_local_lobby.active &&
         GBE_local_lobby.lobby_id != 0 &&
         GBE_local_lobby.match_id != 0 &&
-        GBE_local_lobby.server_id != 0 &&
         GBE_local_lobby.game_start_time != 0 &&
         !GBE_local_lobby.connect.empty();
 }
@@ -10566,7 +10565,8 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyStateKey, std::to_string(GBE_local_lobby.state).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStateKey, std::to_string(GBE_local_lobby.game_state).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey, std::to_string(GBE_local_lobby.match_id).c_str());
-    steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey, std::to_string(GBE_local_lobby.server_id).c_str());
+    const uint64 published_server_id = !GBE_local_lobby.connect.empty() ? 0ull : GBE_local_lobby.server_id;
+    steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey, std::to_string(published_server_id).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyConnectKey, GBE_local_lobby.connect.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStartTimeKey, std::to_string(GBE_local_lobby.game_start_time).c_str());
 
@@ -10583,7 +10583,7 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
         GBE_local_lobby.state,
         GBE_local_lobby.game_state,
         static_cast<unsigned long long>(GBE_local_lobby.match_id),
-        static_cast<unsigned long long>(GBE_local_lobby.server_id),
+        static_cast<unsigned long long>(published_server_id),
         GBE_local_lobby.connect.c_str()
     );
 }
@@ -11242,7 +11242,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
         return;
     }
 
-    if (lobby.state != 2u || lobby.game_state < 1u || lobby.server_id == 0) {
+    if (lobby.state != 2u || lobby.game_state < 1u || (lobby.server_id == 0 && lobby.connect.empty())) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipped pushing launch state to client reason=%s target=%p lobby_id=%llu state=%u game_state=%u server_id=%llu",
@@ -11573,6 +11573,25 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
 
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.match_id == 0)
         return false;
+
+    if (!GBE_local_lobby.connect.empty()) {
+        if (GBE_local_lobby.server_id != 0) {
+            const uint64 previous_server_id = GBE_local_lobby.server_id;
+            GBE_local_lobby.server_id = 0;
+            if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id)
+                GBE_shared_dota_lobby_state.server_id = 0;
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "cleared lobby server_id for connect-only launch reason=%s lobby_id=%llu match_id=%llu old=%llu connect=%s",
+                reason ? reason : "unknown",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                static_cast<unsigned long long>(previous_server_id),
+                GBE_local_lobby.connect.c_str()
+            );
+        }
+        return false;
+    }
 
     Steam_Client *steam_client = get_steam_client();
     if (!steam_client || !steam_client->steam_gameserver)
@@ -12239,7 +12258,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == 7034) {
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.match_id != 0 && GBE_local_lobby.server_id != 0) {
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.match_id != 0 && (GBE_local_lobby.server_id != 0 || !GBE_local_lobby.connect.empty())) {
             const GBE_Dota7034RequestShape request_shape = GBE_ParseDota7034RequestShape(body, body_size);
             bool queued_runtime_lobby_update = false;
 

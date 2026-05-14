@@ -277,8 +277,9 @@ SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
         data.m_cbSignature = 0;
         data.m_caKeyID = 0;
     }
-    data.m_cbPrivKey = sizeof(private_key);
+    data.m_cbPrivKey = sizeof(private_key) + sizeof(public_key);
     std::memcpy(data.m_privKey, private_key, sizeof(private_key));
+    std::memcpy(data.m_privKey + sizeof(private_key), public_key, sizeof(public_key));
 
     auto ret = callback_results->addCallResult(data.k_iCallback, &data, sizeof(data));
     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
