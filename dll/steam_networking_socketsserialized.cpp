@@ -16,6 +16,7 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/steam_networking_socketsserialized.h"
+#include "dll/gbe_ed25519.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -149,10 +150,13 @@ uint64_t GBE_CalculateSteamNetworkingPublicKeyID(const uint8_t *public_key, size
 
 bool GBE_SignSerializedNetworkingCert(const std::vector<uint8_t> &cert, const uint8_t *private_key, size_t private_key_size, uint8_t *signature, size_t signature_size)
 {
-#if defined(GBE_HAS_PSA_CRYPTO) && defined(PSA_ALG_PURE_EDDSA) && defined(PSA_ECC_FAMILY_TWISTED_EDWARDS)
     if (cert.empty() || !private_key || private_key_size != 32 || !signature || signature_size < 64)
         return false;
 
+    if (gbe_ed25519_sign(signature, cert.data(), cert.size(), private_key) == 0)
+        return true;
+
+#if defined(GBE_HAS_PSA_CRYPTO) && defined(PSA_ALG_PURE_EDDSA) && defined(PSA_ECC_FAMILY_TWISTED_EDWARDS)
     if (psa_crypto_init() != PSA_SUCCESS)
         return false;
 
