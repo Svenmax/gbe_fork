@@ -415,14 +415,20 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
     return GBE_FormatDotaPracticeLobbyConnectFromEndpoint(endpoint);
 }
 
-static bool GBE_ShouldAdvertiseDotaLobbyConnectOnly(bool lan, const std::string &connect)
+static uint32 GBE_ParseDotaPracticeLobbyConnectIPv4(const std::string &connect)
 {
-    return lan && !connect.empty();
-}
+    unsigned int octet1 = 0;
+    unsigned int octet2 = 0;
+    unsigned int octet3 = 0;
+    unsigned int octet4 = 0;
+    unsigned int port = 0;
+    if (std::sscanf(connect.c_str(), "%u.%u.%u.%u:%u", &octet1, &octet2, &octet3, &octet4, &port) != 5)
+        return 0;
 
-static uint64 GBE_GetAdvertisedDotaLobbyServerId(uint64 server_id, bool lan, const std::string &connect)
-{
-    return GBE_ShouldAdvertiseDotaLobbyConnectOnly(lan, connect) ? 0ull : server_id;
+    if (octet1 > 255u || octet2 > 255u || octet3 > 255u || octet4 > 255u || port == 0u || port > 65535u)
+        return 0;
+
+    return (octet1 << 24) | (octet2 << 16) | (octet3 << 8) | octet4;
 }
 
 static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
@@ -10532,8 +10538,7 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyStateKey, std::to_string(GBE_local_lobby.state).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStateKey, std::to_string(GBE_local_lobby.game_state).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey, std::to_string(GBE_local_lobby.match_id).c_str());
-    const uint64 advertised_server_id = GBE_GetAdvertisedDotaLobbyServerId(GBE_local_lobby.server_id, GBE_local_lobby.lan, GBE_local_lobby.connect);
-    steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey, std::to_string(advertised_server_id).c_str());
+    steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey, std::to_string(GBE_local_lobby.server_id).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyConnectKey, GBE_local_lobby.connect.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStartTimeKey, std::to_string(GBE_local_lobby.game_start_time).c_str());
 
@@ -10550,7 +10555,7 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
         GBE_local_lobby.state,
         GBE_local_lobby.game_state,
         static_cast<unsigned long long>(GBE_local_lobby.match_id),
-        static_cast<unsigned long long>(advertised_server_id),
+        static_cast<unsigned long long>(GBE_local_lobby.server_id),
         GBE_local_lobby.connect.c_str()
     );
 }
@@ -11300,9 +11305,6 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscri
     const uint32 owner_account_id = lobby.owner_account_id != 0 ? lobby.owner_account_id : GBE_GetDotaLobbyOwnerAccountId();
     const bool launch_started = lobby.match_id != 0;
     const std::string effective_player_name = player_name.empty() ? GBE_GetDotaLobbyOwnerName() : player_name;
-    const uint64 advertised_server_id = GBE_GetAdvertisedDotaLobbyServerId(lobby.server_id, lobby.lan, lobby.connect);
-    GBE_LocalLobby advertised_lobby = lobby;
-    advertised_lobby.server_id = advertised_server_id;
 
     if (!launch_started && lobby.members.size() > 1)
         return GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(lobby, effective_player_name, message);
@@ -11328,7 +11330,7 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscri
                        lobby.lobby_id,
                        lobby.state,
                        lobby.game_state,
-                       advertised_server_id,
+                       lobby.server_id,
                        lobby.match_id,
                        lobby.game_start_time,
                        lobby.connect,
@@ -11356,10 +11358,7 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscri
         }
     }
 
-    if (advertised_server_id != lobby.server_id)
-        return GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(advertised_lobby, effective_player_name, message);
-
-    return GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(advertised_lobby, effective_player_name, message);
+    return GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(lobby, effective_player_name, message);
 }
 
 bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message)
@@ -11368,9 +11367,6 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
     const uint32 owner_account_id = lobby.owner_account_id != 0 ? lobby.owner_account_id : GBE_GetDotaLobbyOwnerAccountId();
     const std::string effective_player_name = player_name.empty() ? GBE_GetDotaLobbyOwnerName() : player_name;
     const uint32 startup_account_id = GBE_GetDotaPracticeLobbyStartupAccountIdForState(owner_account_id, lobby.state, lobby.game_state);
-    const uint64 advertised_server_id = GBE_GetAdvertisedDotaLobbyServerId(lobby.server_id, lobby.lan, lobby.connect);
-    GBE_LocalLobby advertised_lobby = lobby;
-    advertised_lobby.server_id = advertised_server_id;
 
     if (lobby.match_id == 0 && lobby.members.size() > 1)
         return GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(lobby, effective_player_name, message);
@@ -11382,7 +11378,7 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
                 owner_account_id,
                 owner_steam_id,
                 lobby.lobby_id,
-                advertised_server_id,
+                lobby.server_id,
                 lobby.match_id,
                 lobby.game_start_time,
                 lobby.connect,
@@ -11413,7 +11409,7 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
         }
     }
 
-    return GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(advertised_lobby, effective_player_name, message);
+    return GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(lobby, effective_player_name, message);
 }
 
 uint64 Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerSteamId() const
@@ -11476,19 +11472,6 @@ bool Steam_Game_Coordinator::GBE_SyncGenericLobbyGameServer(const char *reason)
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.generic_lobby_id == 0 || GBE_local_lobby.server_id == 0)
         return false;
 
-    if (GBE_ShouldAdvertiseDotaLobbyConnectOnly(GBE_local_lobby.lan, GBE_local_lobby.connect)) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "skipped generic lobby gameserver sync reason=%s dota_lobby_id=%llu generic_lobby_id=%llu server_id=%llu connect=%s note=lan_connect_only",
-            reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.server_id),
-            GBE_local_lobby.connect.c_str()
-        );
-        return false;
-    }
-
     Steam_Client *steam_client = get_steam_client();
     if (!steam_client || !steam_client->steam_matchmaking || !steam_client->steam_gameserver)
         return false;
@@ -11497,7 +11480,14 @@ bool Steam_Game_Coordinator::GBE_SyncGenericLobbyGameServer(const char *reason)
     if (!game_server->BLoggedOn())
         return false;
 
-    const uint32 lobby_ip = game_server->GetPublicIP_old();
+    uint32 lobby_ip = game_server->GetPublicIP_old();
+    if (GBE_local_lobby.lan) {
+        const uint32 connect_ip = GBE_ParseDotaPracticeLobbyConnectIPv4(GBE_local_lobby.connect);
+        if (connect_ip != 0)
+            lobby_ip = connect_ip;
+        else if (network)
+            lobby_ip = network->getOwnIP();
+    }
     constexpr uint16 lobby_port = 27015u;
     CSteamID lobby_steam_id((uint64)GBE_local_lobby.generic_lobby_id);
     CSteamID gameserver_steam_id((uint64)GBE_local_lobby.server_id);
