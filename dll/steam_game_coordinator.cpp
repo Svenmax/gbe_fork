@@ -11554,8 +11554,8 @@ bool Steam_Game_Coordinator::GBE_SyncGenericLobbyGameServer(const char *reason)
     constexpr uint16 lobby_port = 27015u;
     CSteamID lobby_steam_id((uint64)GBE_local_lobby.generic_lobby_id);
     CSteamID gameserver_steam_id((uint64)GBE_local_lobby.server_id);
-    const bool has_lan_ip_server_id = GBE_local_lobby.lan && GBE_local_lobby.server_id != 0ull && !gameserver_steam_id.IsValid();
-    if (!lobby_steam_id.IsLobby() || (!gameserver_steam_id.IsValid() && !has_lan_ip_server_id))
+    const bool has_ip_server_id = GBE_local_lobby.server_id != 0ull && !gameserver_steam_id.IsValid() && GBE_ParseDotaPracticeLobbyConnectIPv4(GBE_local_lobby.connect) != 0u;
+    if (!lobby_steam_id.IsLobby() || (!gameserver_steam_id.IsValid() && !has_ip_server_id))
         return false;
 
     uint32 previous_ip = 0;
@@ -11620,13 +11620,11 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
 
     const CSteamID game_server_steam_id = game_server->GetSteamID();
     uint64 server_id = 0ull;
-    uint32 lan_server_ip = 0u;
-    if (GBE_local_lobby.lan) {
-        lan_server_ip = GBE_ParseDotaPracticeLobbyConnectIPv4(GBE_local_lobby.connect);
-        if (lan_server_ip == 0u && network)
-            lan_server_ip = network->getOwnIP();
-        server_id = GBE_BuildDotaPracticeLobbyIpServerId(lan_server_ip);
-    }
+    uint32 connect_server_ip = GBE_ParseDotaPracticeLobbyConnectIPv4(GBE_local_lobby.connect);
+    if (connect_server_ip == 0u && GBE_local_lobby.lan && network)
+        connect_server_ip = network->getOwnIP();
+
+    server_id = GBE_BuildDotaPracticeLobbyIpServerId(connect_server_ip);
 
     if (server_id == 0ull)
         server_id = GBE_DeriveDotaPracticeLobbyAnonGameServerId(game_server_steam_id, GBE_local_lobby.lobby_id);
@@ -11649,8 +11647,8 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
         static_cast<unsigned long long>(previous_server_id),
         static_cast<unsigned long long>(game_server_steam_id.ConvertToUint64()),
         static_cast<unsigned long long>(server_id),
-        GBE_FormatIPv4(lan_server_ip).c_str(),
-        GBE_local_lobby.lan && lan_server_ip != 0u ? "lan_ip" : "anon_steamid"
+        GBE_FormatIPv4(connect_server_ip).c_str(),
+        connect_server_ip != 0u ? "connect_ip" : "anon_steamid"
     );
 
     GBE_SyncGenericLobbyGameServer(reason);
