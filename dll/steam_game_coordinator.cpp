@@ -461,11 +461,11 @@ static uint64 GBE_DeriveDotaPracticeLobbyAnonGameServerId(CSteamID game_server_i
 
 static uint64 GBE_BuildDotaPracticeLobbyIpServerId(uint32 ip)
 {
-    // Dota rejects invalid SteamIDs with a non-zero account ID as invalid
-    // addresses. Use the exact Steam LAN-mode gameserver sentinel and keep the
-    // real endpoint in the lobby connect/GameServer IP fields.
+    // Dota rejects invalid SteamIDs before consulting the lobby endpoint. Use a
+    // valid GameServer identity keyed by the LAN IPv4 so the Remote Connect path
+    // can resolve a gameserver address instead of failing at address parsing.
     return ip != 0u
-        ? CSteamID(0u, 0u, k_EUniversePublic, k_EAccountTypeInvalid).ConvertToUint64()
+        ? CSteamID(ip, 0u, k_EUniversePublic, k_EAccountTypeGameServer).ConvertToUint64()
         : 0ull;
 }
 
