@@ -461,10 +461,12 @@ static uint64 GBE_DeriveDotaPracticeLobbyAnonGameServerId(CSteamID game_server_i
 
 static uint64 GBE_BuildDotaPracticeLobbyIpServerId(uint32 ip)
 {
-    // Dota treats an invalid SteamID server_id as an IP endpoint. A zero value
-    // becomes [I:0:0] -> 0.0.0.0:27015, so keep the low 32 bits populated with
-    // the LAN IPv4 address to force the UDP/IP fallback path instead of P2P.
-    return ip != 0u ? static_cast<uint64>(ip) : 0ull;
+    // Dota's LAN-mode game server placeholder is an invalid SteamID in the
+    // public universe. Keep that shape and replace the account ID with the LAN
+    // IPv4 so the client does not treat it as the all-zero invalid identity.
+    return ip != 0u
+        ? CSteamID(ip, 0u, k_EUniversePublic, k_EAccountTypeInvalid).ConvertToUint64()
+        : 0ull;
 }
 
 static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
