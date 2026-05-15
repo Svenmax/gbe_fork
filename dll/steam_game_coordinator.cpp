@@ -459,6 +459,14 @@ static uint64 GBE_DeriveDotaPracticeLobbyAnonGameServerId(CSteamID game_server_i
     return anon_game_server_id.ConvertToUint64();
 }
 
+static uint64 GBE_BuildDotaPracticeLobbyIpServerId(uint32 ip)
+{
+    // Dota treats an invalid SteamID server_id as an IP endpoint. A zero value
+    // becomes [I:0:0] -> 0.0.0.0:27015, so keep the low 32 bits populated with
+    // the LAN IPv4 address to force the UDP/IP fallback path instead of P2P.
+    return ip != 0u ? static_cast<uint64>(ip) : 0ull;
+}
+
 static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
 static constexpr uint32 GBE_kSteamAuthList = 5432u;
 static constexpr uint32 GBE_kSteamPersonaState = 766u;
@@ -9905,6 +9913,34 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                     if (generic_server_id != 0 || !is_server)
                         GBE_local_lobby.server_id = generic_server_id;
                 }
+
+                // Fallback: if metadata path (SetLobbyData) did not deliver server_id
+                // (e.g. because the game server GC instance is not the generic lobby owner),
+                // try reading it from the generic lobby's GameServer protobuf field which
+                // is set via SetLobbyGameServer (no owner check) and successfully propagated
+                // to peers through the lobby network broadcast.
+                if (GBE_local_lobby.server_id == 0 && !is_server) {
+                    CSteamID gameserver_steam_id;
+                    uint32 gameserver_ip = 0;
+                    uint16 gameserver_port = 0;
+                    if (steam_client->steam_matchmaking->GetLobbyGameServer(generic_lobby_id, &gameserver_ip, &gameserver_port, &gameserver_steam_id)) {
+                        const uint64 gs_id = gameserver_steam_id.ConvertToUint64();
+                        if (gs_id != 0) {
+                            GBE_local_lobby.server_id = gs_id;
+                            GBE_GC_DebugLog(
+                                "GC_DOTA_LOBBY",
+                                "[LOBBY] Recovered server_id from GetLobbyGameServer fallback reason=%s lobby_id=%llu generic_lobby_id=%llu server_id=%llu gameserver_ip=%s gameserver_port=%u",
+                                reason ? reason : "capture_current_lobby_state",
+                                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                                static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+                                static_cast<unsigned long long>(gs_id),
+                                GBE_FormatIPv4(gameserver_ip).c_str(),
+                                static_cast<unsigned>(gameserver_port)
+                            );
+                        }
+                    }
+                }
+
                 if (!generic_connect.empty())
                     GBE_local_lobby.connect = generic_connect;
                 if (!generic_game_start_time_raw.empty())
@@ -11518,7 +11554,8 @@ bool Steam_Game_Coordinator::GBE_SyncGenericLobbyGameServer(const char *reason)
     constexpr uint16 lobby_port = 27015u;
     CSteamID lobby_steam_id((uint64)GBE_local_lobby.generic_lobby_id);
     CSteamID gameserver_steam_id((uint64)GBE_local_lobby.server_id);
-    if (!lobby_steam_id.IsLobby() || !gameserver_steam_id.IsValid())
+    const bool has_lan_ip_server_id = GBE_local_lobby.lan && GBE_local_lobby.server_id != 0ull && !gameserver_steam_id.IsValid();
+    if (!lobby_steam_id.IsLobby() || (!gameserver_steam_id.IsValid() && !has_lan_ip_server_id))
         return false;
 
     uint32 previous_ip = 0;
@@ -11582,7 +11619,18 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
         return false;
 
     const CSteamID game_server_steam_id = game_server->GetSteamID();
-    const uint64 server_id = GBE_DeriveDotaPracticeLobbyAnonGameServerId(game_server_steam_id, GBE_local_lobby.lobby_id);
+    uint64 server_id = 0ull;
+    uint32 lan_server_ip = 0u;
+    if (GBE_local_lobby.lan) {
+        lan_server_ip = GBE_ParseDotaPracticeLobbyConnectIPv4(GBE_local_lobby.connect);
+        if (lan_server_ip == 0u && network)
+            lan_server_ip = network->getOwnIP();
+        server_id = GBE_BuildDotaPracticeLobbyIpServerId(lan_server_ip);
+    }
+
+    if (server_id == 0ull)
+        server_id = GBE_DeriveDotaPracticeLobbyAnonGameServerId(game_server_steam_id, GBE_local_lobby.lobby_id);
+
     if (server_id == 0 || GBE_local_lobby.server_id == server_id)
         return false;
 
@@ -11594,13 +11642,15 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
-        "adopted anon game server SteamID as lobby server_id reason=%s lobby_id=%llu match_id=%llu old=%llu raw=%llu new=%llu",
+        "adopted game server identity as lobby server_id reason=%s lobby_id=%llu match_id=%llu old=%llu raw=%llu new=%llu lan_ip=%s mode=%s",
         reason ? reason : "unknown",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         static_cast<unsigned long long>(GBE_local_lobby.match_id),
         static_cast<unsigned long long>(previous_server_id),
         static_cast<unsigned long long>(game_server_steam_id.ConvertToUint64()),
-        static_cast<unsigned long long>(server_id)
+        static_cast<unsigned long long>(server_id),
+        GBE_FormatIPv4(lan_server_ip).c_str(),
+        GBE_local_lobby.lan && lan_server_ip != 0u ? "lan_ip" : "anon_steamid"
     );
 
     GBE_SyncGenericLobbyGameServer(reason);
