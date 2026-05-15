@@ -278,8 +278,33 @@ SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
         data.m_caKeyID = 0;
     }
     data.m_cbPrivKey = sizeof(private_key) + sizeof(public_key);
-    std::memcpy(data.m_privKey, private_key, sizeof(private_key));
-    std::memcpy(data.m_privKey + sizeof(private_key), public_key, sizeof(public_key));
+    std::memcpy(data.m_privKey, public_key, sizeof(public_key));
+    std::memcpy(data.m_privKey + sizeof(public_key), private_key, sizeof(private_key));
+
+    {
+        FILE *dbg = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+        if (dbg) {
+            std::fprintf(dbg, "[NETSOCK_SERIALIZED_GET_CERT] eResult=%d cbCert=%u cbSig=%u cbPrivKey=%u caKeyID=%llu\n",
+                (int)data.m_eResult, data.m_cbCert, data.m_cbSignature, data.m_cbPrivKey, (unsigned long long)data.m_caKeyID);
+            std::fprintf(dbg, "[NETSOCK_SERIALIZED_GET_CERT] privKey[0..7]=");
+            for (int i = 0; i < 8 && i < (int)data.m_cbPrivKey; ++i)
+                std::fprintf(dbg, "%02x", (unsigned char)data.m_privKey[i]);
+            std::fprintf(dbg, " certKeyData[0..7]=");
+            /* field 2 in protobuf cert starts after field 1 (varint tag+val = 2 bytes), then tag for field 2 (1 byte 0x12), len (1 byte 0x20), then 32 bytes key_data */
+            if (data.m_cbCert > 4) {
+                /* Scan for field 2 tag byte 0x12 followed by length 0x20 */
+                for (uint32 off = 0; off + 34 <= data.m_cbCert; ++off) {
+                    if ((unsigned char)data.m_certOrMsg[off] == 0x12 && (unsigned char)data.m_certOrMsg[off+1] == 0x20) {
+                        for (int i = 0; i < 8; ++i)
+                            std::fprintf(dbg, "%02x", (unsigned char)data.m_certOrMsg[off+2+i]);
+                        break;
+                    }
+                }
+            }
+            std::fprintf(dbg, "\n");
+            std::fclose(dbg);
+        }
+    }
 
     auto ret = callback_results->addCallResult(data.k_iCallback, &data, sizeof(data));
     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
