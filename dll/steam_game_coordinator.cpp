@@ -10384,12 +10384,28 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
     std::string response_26;
     const bool sent_details_update = GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26);
     if (sent_details_update) {
-        push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, response_26);
-        if (runtime_changed)
-            GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "generic_lobby_runtime_changed");
+        const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
+        const bool peer_lan_direct_launch =
+            local_steam_id != 0ull &&
+            GBE_local_lobby.owner_steam_id != 0ull &&
+            local_steam_id != GBE_local_lobby.owner_steam_id &&
+            GBE_local_lobby.lan &&
+            GBE_local_lobby.match_id != 0ull &&
+            GBE_local_lobby.state == 2u &&
+            GBE_local_lobby.server_id == 0ull &&
+            GBE_ParseDotaPracticeLobbyConnectIPv4(GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect)) != 0u;
+
+        if (peer_lan_direct_launch) {
+            GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "generic_lobby_peer_lan_direct_launch");
+        } else {
+            push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, response_26);
+            if (runtime_changed)
+                GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "generic_lobby_runtime_changed");
+        }
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Sent direct 26 details update from preserved member snapshot LobbyID=%llu reason=%s size=%zu body_prefix=%s",
+            "[LOBBY] %s direct 26 details update from preserved member snapshot LobbyID=%llu reason=%s size=%zu body_prefix=%s",
+            peer_lan_direct_launch ? "Suppressed peer LAN" : "Sent",
             static_cast<unsigned long long>(lobby.lobby_id),
             reason ? reason : "generic_lobby_members_changed",
             response_26.size(),
@@ -15967,7 +15983,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || !GBE_local_lobby.lan)
         return;
 
-    if (GBE_local_lobby.state != 2u || GBE_local_lobby.game_state < 1u || GBE_local_lobby.match_id == 0)
+    if (GBE_local_lobby.state != 2u || GBE_local_lobby.match_id == 0)
         return;
 
     const std::string endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect);
