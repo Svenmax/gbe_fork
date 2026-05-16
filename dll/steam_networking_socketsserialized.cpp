@@ -80,8 +80,7 @@ const char *GBE_GetSerializedNetworkingConfigJSON()
         "\"relays\":[{\"ipv4\":\"103.10.124.116\",\"port_range\":[27015,27060]}]}},"
         "\"certs\":["
         "\"Ii4IARIgSJbwDpn/07/GHiGMKio0Vh18VN3D/hKzQGh6n0Yx9qpF2uYEak3a6dB8KT6tfJIvitz8MkADsyKTi+VwxYwR6npnpWPd42q0AYGT5GY9Fje8AbrTFvsRwS6tNRX/1JQqpZZYhC/drdKjYcIPKUxa1KEgS/QO\","
-        "\"Ii4IARIgmuygThdRzmJo1WkALKHh+hstvCbTa06joAg603KCm4RF2uYEak3a6dB8KT6tfJIvitz8MkDiEksgJ+a351sr1F+N+GTvtboavJFRg/M2/x1B6Biro/BEgHskHZlIQJULbpvkDCvzBHBiZ+1L59hmdj32aucK\","
-        "\"Ii4IARIg11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURpF2uYEak3a6dB8KSH+Md+hVKJhMkA3AklRdYuhNhyG3ufi9teAy/KRI7zukiHrsJU5pIdZv+Qlvkkgh+S2aUU5pDqTDqr+W12SNVJvIWdK7USRwuIH\""
+        "\"Ii4IARIgmuygThdRzmJo1WkALKHh+hstvCbTa06joAg603KCm4RF2uYEak3a6dB8KT6tfJIvitz8MkDiEksgJ+a351sr1F+N+GTvtboavJFRg/M2/x1B6Biro/BEgHskHZlIQJULbpvkDCvzBHBiZ+1L59hmdj32aucK\""
         "],\"p2p_share_ip\":{\"default\":40,\"cn\":20,\"ru\":20},"
         "\"relay_public_key\":\"5AC884C1045BA0FF44142AC8DCA51B8A98C8F1CB4FEE36284AFBE92FCF594932\","
         "\"revoked_keys\":[\"11146342570456886677\"],\"typical_pings\":[],\"success\":true}";
@@ -323,18 +322,11 @@ SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
         std::memcpy(data.m_certOrMsg, cert.data(), data.m_cbCert);
     }
 
-    data.m_caKeyID = GBE_CalculateSteamNetworkingPublicKeyID(public_key, sizeof(public_key));
-    if (data.m_caKeyID != 0 && GBE_SignSerializedNetworkingCert(cert, private_key, sizeof(private_key), reinterpret_cast<uint8_t *>(data.m_signature), sizeof(data.m_signature))) {
-        data.m_cbSignature = 64;
-    } else {
-        data.m_eResult = k_EResultFail;
-        const char *msg = "Goldberg serialized cert signing unavailable";
-        data.m_cbCert = static_cast<uint32>(std::strlen(msg) + 1);
-        std::memset(data.m_certOrMsg, 0, sizeof(data.m_certOrMsg));
-        std::memcpy(data.m_certOrMsg, msg, std::min<size_t>(data.m_cbCert, sizeof(data.m_certOrMsg)));
-        data.m_cbSignature = 0;
-        data.m_caKeyID = 0;
-    }
+    /* Retail SteamNetworkingSockets has a hardcoded root CA and rejects extra
+       self-signed CA roots from SDR config.  Return an unsigned direct-IP cert
+       instead so LAN connections use the IP_AllowWithoutAuth path. */
+    data.m_caKeyID = 0;
+    data.m_cbSignature = 0;
     data.m_cbPrivKey = sizeof(private_key) + sizeof(public_key);
     std::memcpy(data.m_privKey, public_key, sizeof(public_key));
     std::memcpy(data.m_privKey + sizeof(public_key), private_key, sizeof(private_key));
