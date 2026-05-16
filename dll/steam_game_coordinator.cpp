@@ -15757,8 +15757,36 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
         return;
 
     const std::string endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect);
-    if (endpoint.empty() || GBE_ParseDotaPracticeLobbyConnectIPv4(endpoint) == 0u)
+    const uint32 endpoint_ip = GBE_ParseDotaPracticeLobbyConnectIPv4(endpoint);
+    if (endpoint.empty() || endpoint_ip == 0u)
         return;
+
+    const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
+    const uint64 owner_steam_id = GBE_local_lobby.owner_steam_id != 0 ? GBE_local_lobby.owner_steam_id : GBE_GetDotaLobbyOwnerSteamId();
+    if (local_steam_id != 0ull && owner_steam_id != 0ull && local_steam_id == owner_steam_id) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipping owner direct connect callback reason=%s lobby_id=%llu endpoint=%s owner=%llu",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            endpoint.c_str(),
+            static_cast<unsigned long long>(owner_steam_id)
+        );
+        return;
+    }
+
+    const uint32 local_ip = network ? network->getOwnIP() : 0u;
+    if (local_ip != 0u && local_ip == endpoint_ip) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipping self-IP direct connect callback reason=%s lobby_id=%llu endpoint=%s local_ip=%s",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            endpoint.c_str(),
+            GBE_FormatIPv4(local_ip).c_str()
+        );
+        return;
+    }
 
     std::string signature;
     signature.reserve(96);
@@ -15784,7 +15812,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
 
     const std::string connect_command = std::string("+connect ") + endpoint;
     GameRichPresenceJoinRequested_t rich_join{};
-    rich_join.m_steamIDFriend = CSteamID(GBE_local_lobby.owner_steam_id != 0 ? GBE_local_lobby.owner_steam_id : GBE_GetDotaLobbyOwnerSteamId());
+    rich_join.m_steamIDFriend = CSteamID(owner_steam_id);
     std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
     callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
 
