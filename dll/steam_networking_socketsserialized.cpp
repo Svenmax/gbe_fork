@@ -75,7 +75,9 @@ int GBE_CopySerializedNetworkingJson(const char *json, void *buf, uint32 cbBuf)
 const char *GBE_GetSerializedNetworkingConfigJSON()
 {
     return
-        "{\"revision\":1778707800,\"pops\":{},"
+        "{\"revision\":1778707800,\"pops\":{"
+        "\"sgp\":{\"desc\":\"Singapore\",\"geo\":[103.83,1.28],\"partners\":3,\"tier\":0,"
+        "\"relays\":[{\"ipv4\":\"103.10.124.116\",\"port_range\":[27015,27060]}]}},"
         "\"certs\":["
         "\"Ii4IARIgSJbwDpn/07/GHiGMKio0Vh18VN3D/hKzQGh6n0Yx9qpF2uYEak3a6dB8KT6tfJIvitz8MkADsyKTi+VwxYwR6npnpWPd42q0AYGT5GY9Fje8AbrTFvsRwS6tNRX/1JQqpZZYhC/drdKjYcIPKUxa1KEgS/QO\","
         "\"Ii4IARIgmuygThdRzmJo1WkALKHh+hstvCbTa06joAg603KCm4RF2uYEak3a6dB8KT6tfJIvitz8MkDiEksgJ+a351sr1F+N+GTvtboavJFRg/M2/x1B6Biro/BEgHskHZlIQJULbpvkDCvzBHBiZ+1L59hmdj32aucK\""
