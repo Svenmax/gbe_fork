@@ -11872,7 +11872,11 @@ static bool GBE_ShouldPreferDotaLobbyConnectUpdate(const std::string &current_co
     if (current_connect.empty())
         return true;
 
-    return current_connect == GBE_FormatDotaPracticeLobbyLoopbackConnect();
+    const std::string loopback_connect = GBE_FormatDotaPracticeLobbyLoopbackConnect();
+    if (candidate_connect == loopback_connect)
+        return current_connect == loopback_connect;
+
+    return true;
 }
 
 bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData)

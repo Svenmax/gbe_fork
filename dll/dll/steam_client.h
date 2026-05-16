@@ -191,6 +191,8 @@ public:
     bool gameserver_has_ipv6_functions{};
     int steamclient_version{};
     bool using_old_callbacks{};
+    uint32 local_ip_binding_ip{};
+    uint16 local_ip_binding_port{};
     
     uint32 steam_pipe_counter = 1;
     std::priority_queue<uint32, std::vector<uint32>, std::greater<>> freed_steam_pipes{};
