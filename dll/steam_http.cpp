@@ -19,6 +19,8 @@
 
 #include <cstdio>
 
+#include "steam/isteamnetworkingsocketsserialized.h"
+
 namespace {
 
 const char *GBE_GetOfflineSDRConfigJSON()
@@ -56,6 +58,13 @@ void GBE_LogHTTPTrace(const char *scope, HTTPRequestHandle handle, const std::st
         url.c_str()
     );
     std::fclose(file);
+}
+
+void GBE_PostNetworkingSocketsConfigUpdated(SteamCallBacks *callbacks, const Steam_Http_Request &request)
+{
+    SteamNetworkingSocketsConfigUpdated_t data{};
+    callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
+    GBE_LogHTTPTrace("HTTP_SDR_CONFIG_UPDATED_CB", request.handle, request.url, sizeof(data));
 }
 
 }
@@ -534,6 +543,7 @@ bool Steam_HTTP::SendHTTPRequest( HTTPRequestHandle hRequest, SteamAPICall_t *pC
     if (GBE_IsSDRConfigURL(request->url)) {
         request->response = GBE_GetOfflineSDRConfigJSON();
         GBE_LogHTTPTrace("HTTP_SDR_CONFIG_SEND", request->handle, request->url, request->response.size());
+        GBE_PostNetworkingSocketsConfigUpdated(callbacks, *request);
     }
 
     switch (request->protocol)
