@@ -6808,6 +6808,7 @@ STEAMAPI_API EResult SteamAPI_ISteamNetworkingUtils_GetRealIdentityForFakeIP( IS
 
 STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValueInt32( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eValue, int32 val )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_SET_GLOBAL_INT32", self, eValue, k_ESteamNetworkingConfig_Global, val);
     return ((ISteamNetworkingUtils*)get_steam_client()->steam_networking_utils)->SetGlobalConfigValueInt32(eValue, val);
 }
 
@@ -6828,6 +6829,7 @@ STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValuePtr( 
 
 STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetConnectionConfigValueInt32( ISteamNetworkingUtils* self, HSteamNetConnection hConn, ESteamNetworkingConfigValue eValue, int32 val )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_SET_CONN_INT32", self, eValue, hConn, val);
     return ((ISteamNetworkingUtils*)get_steam_client()->steam_networking_utils)->SetConnectionConfigValueInt32(hConn, eValue, val);
 }
 
@@ -6882,6 +6884,10 @@ STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetConfigValue( ISteamNet
 
 STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetConfigValueStruct( ISteamNetworkingUtils* self, const SteamNetworkingConfigValue_t & opt, ESteamNetworkingConfigScope eScopeType, intptr_t scopeObj )
 {
+    int data = 0;
+    if (opt.m_eDataType == k_ESteamNetworkingConfig_Int32)
+        data = opt.m_val.m_int32;
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_SET_CONFIG_STRUCT", self, opt.m_eValue, eScopeType, data);
     return ((ISteamNetworkingUtils*)get_steam_client()->steam_networking_utils)->SetConfigValueStruct(opt, eScopeType, scopeObj);
 }
 
