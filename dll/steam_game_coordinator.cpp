@@ -2122,7 +2122,7 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
     }
 }
 
-static void GBE_BuildDotaLobbyMemberObject2004(const GBE_DotaLobbyMemberState &member, std::string &member_state)
+static void GBE_BuildDotaLobbyMemberObject2004(const GBE_DotaLobbyMemberState &member, uint32 lobby_state, uint32 lobby_game_state, std::string &member_state)
 {
     member_state.clear();
     if (member.steam_id == 0ull) {
@@ -2136,9 +2136,12 @@ static void GBE_BuildDotaLobbyMemberObject2004(const GBE_DotaLobbyMemberState &m
     GBE_AppendProtoVarIntField(member_state, 3u, member.team);
     if (member.slot != 0u)
         GBE_AppendProtoVarIntField(member_state, 7u, member.slot);
-    GBE_AppendProtoFixed32Field(member_state, 16u, member.connected ? 0u : 1u);
-    if (member.connected)
-        GBE_AppendProtoVarIntField(member_state, 28u, 0u);
+    const bool member_leaver_disconnected = !member.connected && (lobby_state != 2u || lobby_game_state >= 1u);
+    if (member_leaver_disconnected) {
+        GBE_AppendProtoVarIntField(member_state, 16u, 1u);
+        if (lobby_state == 2u && lobby_game_state >= 1u)
+            GBE_AppendProtoVarIntField(member_state, 28u, 0u);
+    }
 }
 
 static std::vector<GBE_DotaLobbyMemberState> GBE_BuildDotaLobbyMembers(
@@ -6592,7 +6595,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
 
     for (const GBE_DotaLobbyMemberState &member : effective_members) {
         std::string member_state;
-        GBE_BuildDotaLobbyMemberObject2004(member, member_state);
+        GBE_BuildDotaLobbyMemberObject2004(member, lobby_state, lobby_game_state, member_state);
         if (!member_state.empty())
             GBE_AppendProtoBytesField(object_2004, 120, member_state);
     }
