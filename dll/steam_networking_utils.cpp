@@ -511,6 +511,7 @@ bool Steam_Networking_Utils::GetConfigValueInfo( ESteamNetworkingConfigValue eVa
     if (pOutNextValue)
         *pOutNextValue = GBE_GetNextOfflineLanConfigValue(eValue);
 
+    GBE_LogNetworkingConfigTrace("NETUTILS_GET_CONFIG_INFO", eValue, pOutScope ? *pOutScope : k_ESteamNetworkingConfig_Global, 0);
     return true;
 }
 
@@ -530,6 +531,7 @@ const char* Steam_Networking_Utils::GetConfigValueInfo( ESteamNetworkingConfigVa
     if (pOutScope)
         *pOutScope = k_ESteamNetworkingConfig_Global;
 
+    GBE_LogNetworkingConfigTrace("NETUTILS_GET_CONFIG_INFO", eValue, pOutScope ? *pOutScope : k_ESteamNetworkingConfig_Global, 0);
     return name;
 }
 
@@ -557,7 +559,9 @@ ESteamNetworkingConfigValue Steam_Networking_Utils::IterateGenericEditableConfig
     if (!GBE_IsOfflineLanConfigValue(eCurrent) && eCurrent != k_ESteamNetworkingConfig_Invalid)
         return k_ESteamNetworkingConfig_Invalid;
 
-    return GBE_GetNextOfflineLanConfigValue(eCurrent);
+    ESteamNetworkingConfigValue next = GBE_GetNextOfflineLanConfigValue(eCurrent);
+    GBE_LogNetworkingConfigTrace("NETUTILS_ITER_CONFIG", next, k_ESteamNetworkingConfig_Global, bEnumerateDevVars ? 1 : 0);
+    return next;
 }
 
 

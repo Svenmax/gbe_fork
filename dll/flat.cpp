@@ -6846,8 +6846,7 @@ STEAMAPI_API ESteamNetworkingGetConfigValueResult SteamAPI_ISteamNetworkingUtils
 //STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_GetConfigValueInfo( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eValue, const char ** pOutName, ESteamNetworkingConfigDataType * pOutDataType, ESteamNetworkingConfigScope * pOutScope, ESteamNetworkingConfigValue * pOutNextValue )
 STEAMAPI_API const char * SteamAPI_ISteamNetworkingUtils_GetConfigValueInfo( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eValue, ESteamNetworkingConfigDataType * pOutDataType, ESteamNetworkingConfigScope * pOutScope )
 {
-    //return (get_steam_client()->steam_networking_utils)->GetConfigValueInfo(eValue, pOutDataType, pOutScope);
-    return NULL;
+    return (get_steam_client()->steam_networking_utils)->GetConfigValueInfo(eValue, pOutDataType, pOutScope);
 }
 
 STEAMAPI_API ESteamNetworkingConfigValue SteamAPI_ISteamNetworkingUtils_GetFirstConfigValue( ISteamNetworkingUtils* self )
