@@ -2324,6 +2324,75 @@ static void GBE_UpsertDotaLobbyMember(std::vector<GBE_DotaLobbyMemberState> &mem
     members.push_back(member);
 }
 
+static bool GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bool connected)
+{
+    if (steam_id == 0ull)
+        return false;
+
+    bool changed = false;
+    if (steam_id == GBE_local_lobby.owner_steam_id && GBE_local_lobby.owner_connected != connected) {
+        GBE_local_lobby.owner_connected = connected;
+        changed = true;
+    }
+
+    for (GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+        if (member.steam_id != steam_id)
+            continue;
+        if (member.connected != connected) {
+            member.connected = connected;
+            changed = true;
+        }
+        return changed;
+    }
+
+    if (connected && steam_id != GBE_local_lobby.owner_steam_id) {
+        GBE_DotaLobbyMemberState member{};
+        member.steam_id = steam_id;
+        member.account_id = CSteamID((uint64)steam_id).GetAccountID();
+        member.team = GBE_kDotaTeamPlayerPool;
+        member.connected = true;
+        GBE_UpsertDotaLobbyMember(GBE_local_lobby.members, member);
+        return true;
+    }
+
+    return changed;
+}
+
+static bool GBE_ShouldHoldDotaLanLaunchForRemoteMembers(uint32 next_game_state, uint32 *remote_count_out, uint32 *connected_remote_count_out)
+{
+    if (remote_count_out)
+        *remote_count_out = 0u;
+    if (connected_remote_count_out)
+        *connected_remote_count_out = 0u;
+
+    if (next_game_state < 2u)
+        return false;
+    if (!GBE_local_lobby.active || GBE_local_lobby.state != 2u || GBE_local_lobby.match_id == 0ull)
+        return false;
+    if (GBE_ParseDotaPracticeLobbyConnectIPv4(GBE_local_lobby.connect) == 0u && !GBE_local_lobby.lan)
+        return false;
+
+    uint32 remote_count = 0u;
+    uint32 connected_remote_count = 0u;
+    const uint64 owner_steam_id = GBE_local_lobby.owner_steam_id != 0ull
+        ? GBE_local_lobby.owner_steam_id
+        : settings->get_local_steam_id().ConvertToUint64();
+    for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+        if (member.steam_id == 0ull || member.steam_id == owner_steam_id)
+            continue;
+        ++remote_count;
+        if (member.connected)
+            ++connected_remote_count;
+    }
+
+    if (remote_count_out)
+        *remote_count_out = remote_count;
+    if (connected_remote_count_out)
+        *connected_remote_count_out = connected_remote_count;
+
+    return remote_count != 0u && connected_remote_count < remote_count;
+}
+
 static bool GBE_IsDotaPracticeLobbyPrelaunchState(uint64 server_id, uint64 match_id, uint32 game_start_time, const std::string &connect)
 {
     return server_id == 0ull && match_id == 0ull && game_start_time == 0u && connect.empty();
@@ -9324,6 +9393,19 @@ void Steam_Game_Coordinator::on_client_connected(CSteamID steam_id)
                 GBE_local_lobby.owner_connected = true;
                 GBE_PublishSharedDotaLobbyState("owner_connected");
             }
+        } else if (gc_initialized && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && connected_steam_id != 0) {
+            if (GBE_SetDotaLobbyMemberConnected(connected_steam_id, true)) {
+                GBE_PublishSharedDotaLobbyState("member_connected");
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "marked Dota lobby member connected steam_id=%llu lobby_id=%llu state=%u game_state=%u members=%zu",
+                    static_cast<unsigned long long>(connected_steam_id),
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    GBE_local_lobby.members.size()
+                );
+            }
         }
     }
 
@@ -9356,6 +9438,19 @@ void Steam_Game_Coordinator::on_client_disconnected(CSteamID steam_id)
                 GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
                 GBE_local_lobby.abandon_postgame_active ? 1u : 0u
             );
+        } else if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && disconnected_steam_id != 0) {
+            if (GBE_SetDotaLobbyMemberConnected(disconnected_steam_id, false)) {
+                GBE_PublishSharedDotaLobbyState("member_disconnected");
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "marked Dota lobby member disconnected steam_id=%llu lobby_id=%llu state=%u game_state=%u members=%zu",
+                    static_cast<unsigned long long>(disconnected_steam_id),
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    GBE_local_lobby.members.size()
+                );
+            }
         }
     }
 
@@ -12235,6 +12330,34 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_PublishSharedDotaLobbyState("7034_connected_player_hero");
             }
 
+            if (request_shape.has_connected_steam_id && request_shape.connected_steam_id != 0ull) {
+                if (GBE_SetDotaLobbyMemberConnected(request_shape.connected_steam_id, true)) {
+                    GBE_PublishSharedDotaLobbyState("7034_connected_player");
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "marked connected player from 7034 steam_id=%llu source_job=%llu state=%u game_state=%u",
+                        static_cast<unsigned long long>(request_shape.connected_steam_id),
+                        static_cast<unsigned long long>(source_job),
+                        GBE_local_lobby.state,
+                        GBE_local_lobby.game_state
+                    );
+                }
+            }
+
+            if (request_shape.has_disconnected_steam_id && request_shape.disconnected_steam_id != 0ull) {
+                if (GBE_SetDotaLobbyMemberConnected(request_shape.disconnected_steam_id, false)) {
+                    GBE_PublishSharedDotaLobbyState("7034_disconnected_player");
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "marked disconnected player from 7034 steam_id=%llu source_job=%llu state=%u game_state=%u",
+                        static_cast<unsigned long long>(request_shape.disconnected_steam_id),
+                        static_cast<unsigned long long>(source_job),
+                        GBE_local_lobby.state,
+                        GBE_local_lobby.game_state
+                    );
+                }
+            }
+
             if (GBE_local_lobby.state == 1u &&
                 GBE_local_lobby.game_state == 0u &&
                 GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced &&
@@ -12284,9 +12407,25 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 if (!GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8870/7034 wait_for_players", request_emsg, source_job, 2u, 1u))
                     return true;
                 queued_runtime_lobby_update = true;
-                if (request_advances_to_hero_selection &&
-                    GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8870/7034 hero_selection", request_emsg, source_job, 2u, 2u))
-                    queued_runtime_lobby_update = true;
+                if (request_advances_to_hero_selection) {
+                    uint32 remote_count = 0u;
+                    uint32 connected_remote_count = 0u;
+                    if (GBE_ShouldHoldDotaLanLaunchForRemoteMembers(2u, &remote_count, &connected_remote_count)) {
+                        GBE_GC_DebugLog(
+                            "GC_DOTA_DIRECT",
+                            "holding LAN hero_selection req=%u source_job=%llu remote_connected=%u remote_total=%u state=%u game_state=%u summary=%s",
+                            request_emsg,
+                            static_cast<unsigned long long>(source_job),
+                            connected_remote_count,
+                            remote_count,
+                            GBE_local_lobby.state,
+                            GBE_local_lobby.game_state,
+                            GBE_FormatDota7034Summary(body, body_size).c_str()
+                        );
+                    } else if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8870/7034 hero_selection", request_emsg, source_job, 2u, 2u)) {
+                        queued_runtime_lobby_update = true;
+                    }
+                }
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 0u &&
@@ -12296,8 +12435,23 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 2u && request_advances_to_strategy_time) {
-                if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8330/7034 strategy_time", request_emsg, source_job, 2u, 3u))
+                uint32 remote_count = 0u;
+                uint32 connected_remote_count = 0u;
+                if (GBE_ShouldHoldDotaLanLaunchForRemoteMembers(3u, &remote_count, &connected_remote_count)) {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "holding LAN strategy_time req=%u source_job=%llu remote_connected=%u remote_total=%u state=%u game_state=%u summary=%s",
+                        request_emsg,
+                        static_cast<unsigned long long>(source_job),
+                        connected_remote_count,
+                        remote_count,
+                        GBE_local_lobby.state,
+                        GBE_local_lobby.game_state,
+                        GBE_FormatDota7034Summary(body, body_size).c_str()
+                    );
+                } else if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8330/7034 strategy_time", request_emsg, source_job, 2u, 3u)) {
                     queued_runtime_lobby_update = true;
+                }
             }
 
             if (GBE_local_lobby.state == 2u &&
@@ -12305,8 +12459,23 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 request_shape.has_game_state && request_shape.game_state == 2u &&
                 request_shape.has_send_reason && request_shape.send_reason == 2u &&
                 GBE_local_lobby.game_mode == 1u) {
-                if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime AP hero_selection fallback strategy_time", request_emsg, source_job, 2u, 3u, 1.0))
+                uint32 remote_count = 0u;
+                uint32 connected_remote_count = 0u;
+                if (GBE_ShouldHoldDotaLanLaunchForRemoteMembers(3u, &remote_count, &connected_remote_count)) {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "holding LAN AP fallback strategy_time req=%u source_job=%llu remote_connected=%u remote_total=%u state=%u game_state=%u summary=%s",
+                        request_emsg,
+                        static_cast<unsigned long long>(source_job),
+                        connected_remote_count,
+                        remote_count,
+                        GBE_local_lobby.state,
+                        GBE_local_lobby.game_state,
+                        GBE_FormatDota7034Summary(body, body_size).c_str()
+                    );
+                } else if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime AP hero_selection fallback strategy_time", request_emsg, source_job, 2u, 3u, 1.0)) {
                     queued_runtime_lobby_update = true;
+                }
             }
 
             if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 3u) {
