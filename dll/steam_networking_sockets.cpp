@@ -1146,9 +1146,14 @@ int Steam_Networking_Sockets::GetDetailedConnectionStatus( HSteamNetConnection h
 /// An IPv6 address of ::ffff:0000:0000 means "any IPv4"
 bool Steam_Networking_Sockets::GetListenSocketAddress( HSteamListenSocket hSocket, SteamNetworkingIPAddr *address )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return false;
+    struct Listen_Socket *socket = get_connection_socket(hSocket);
+    if (!socket || !address || socket->real_port == SNS_DISABLED_PORT) return false;
+
+    address->Clear();
+    address->m_port = static_cast<uint16>(socket->real_port);
+    return true;
 }
 
 /// Returns information about the listen socket.
@@ -1164,8 +1169,8 @@ bool Steam_Networking_Sockets::GetListenSocketInfo( HSteamListenSocket hSocket, 
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     struct Listen_Socket *socket = get_connection_socket(hSocket);
     if (!socket) return false;
-    if (pnIP) *pnIP = 0;//socket->ip;
-    if (pnPort) *pnPort = 0;//socket->port;
+    if (pnIP) *pnIP = 0;
+    if (pnPort) *pnPort = socket->real_port == SNS_DISABLED_PORT ? 0 : static_cast<uint16>(socket->real_port);
     return true;
 }
 

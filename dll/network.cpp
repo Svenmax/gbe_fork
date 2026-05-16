@@ -1162,17 +1162,30 @@ bool Networking::sendToIPPort(Common_Message *msg, uint32 ip, uint16 port, bool 
     bool is_local_ip = ((ip >> 24) == 0x7F);
     uint32_t local_ip = getIP(ids.front());
     PRINT_DEBUG("%X %u %X", ip, is_local_ip, local_ip);
-    //TODO: actually send to ip/port
+    bool sent = false;
     for (auto &conn: connections) {
         if (ntohl(conn.tcp_ip_port.ip) == ip || (is_local_ip && ntohl(conn.tcp_ip_port.ip) == local_ip)) {
             for (auto &steam_id : conn.ids) {
                 msg->set_dest_id(steam_id.ConvertToUint64());
-                sendTo(msg, reliable, &conn);
+                sent = sendTo(msg, reliable, &conn) || sent;
             }
         }
     }
 
-    return true;
+    if (sent) return true;
+
+    // Some virtual LAN adapters expose the game server address through lobby
+    // metadata, while the emulator may have discovered the peer through a
+    // different source address.  Fall back to known peers and let the real
+    // SteamNetworkingSockets listener port decide who accepts the request.
+    for (auto &conn: connections) {
+        for (auto &steam_id : conn.ids) {
+            msg->set_dest_id(steam_id.ConvertToUint64());
+            sent = sendTo(msg, reliable, &conn) || sent;
+        }
+    }
+
+    return sent;
 }
 
 uint32 Networking::getIP(CSteamID id)
