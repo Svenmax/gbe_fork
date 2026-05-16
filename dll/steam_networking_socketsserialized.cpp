@@ -72,6 +72,18 @@ int GBE_CopySerializedNetworkingJson(const char *json, void *buf, uint32 cbBuf)
     return static_cast<int>(required);
 }
 
+const char *GBE_GetSerializedNetworkingConfigJSON()
+{
+    return
+        "{\"revision\":1778707800,\"pops\":{},"
+        "\"certs\":["
+        "\"Ii4IARIgSJbwDpn/07/GHiGMKio0Vh18VN3D/hKzQGh6n0Yx9qpF2uYEak3a6dB8KT6tfJIvitz8MkADsyKTi+VwxYwR6npnpWPd42q0AYGT5GY9Fje8AbrTFvsRwS6tNRX/1JQqpZZYhC/drdKjYcIPKUxa1KEgS/QO\","
+        "\"Ii4IARIgmuygThdRzmJo1WkALKHh+hstvCbTa06joAg603KCm4RF2uYEak3a6dB8KT6tfJIvitz8MkDiEksgJ+a351sr1F+N+GTvtboavJFRg/M2/x1B6Biro/BEgHskHZlIQJULbpvkDCvzBHBiZ+1L59hmdj32aucK\""
+        "],\"p2p_share_ip\":{\"default\":40,\"cn\":20,\"ru\":20},"
+        "\"relay_public_key\":\"5AC884C1045BA0FF44142AC8DCA51B8A98C8F1CB4FEE36284AFBE92FCF594932\","
+        "\"revoked_keys\":[\"11146342570456886677\"],\"typical_pings\":[],\"success\":true}";
+}
+
 void GBE_AppendVarint(std::vector<uint8_t> &out, uint64_t value)
 {
     while (value >= 0x80) {
@@ -356,7 +368,10 @@ int Steam_Networking_Sockets_Serialized::GetNetworkConfigJSON( void *buf, uint32
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     (void)pszLauncherPartner;
-    return GBE_CopySerializedNetworkingJson("{}", buf, cbBuf);
+    const char *json = GBE_GetSerializedNetworkingConfigJSON();
+    const int required = GBE_CopySerializedNetworkingJson(json, buf, cbBuf);
+    GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_GET_CONFIG", settings->get_local_steam_id().ConvertToUint64(), 0, cbBuf, static_cast<uint32>(required));
+    return required;
 }
 
 int Steam_Networking_Sockets_Serialized::GetNetworkConfigJSON( void *buf, uint32 cbBuf )
