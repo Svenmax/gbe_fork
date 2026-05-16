@@ -6068,6 +6068,7 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     uint32 game_state,
     uint32 owner_team,
     uint32 owner_slot,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
     const GBE_Dota7034RequestShape &request_shape,
     bool has_request_job,
     uint64 request_job_id,
@@ -6075,16 +6076,58 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
 {
     const std::string leaver_state = GBE_BuildDota7034LeaverStatePayload(lobby_state, game_state);
     const bool include_draft = (lobby_state >= 2u && game_state >= 2u);
-
-    std::string player;
-    GBE_AppendProtoFixed64Field(player, 1u, steam_id);
-    if (request_shape.has_connected_steam_id && request_shape.connected_steam_id == steam_id && request_shape.has_connected_hero_id && request_shape.connected_hero_id != 0u)
-        GBE_AppendProtoVarIntField(player, 2u, request_shape.connected_hero_id);
-    GBE_AppendProtoBytesField(player, 3u, leaver_state);
-    GBE_AppendProtoVarIntField(player, 4u, 0u);
+    std::vector<uint64> connected_steam_ids;
+    std::vector<uint64> disconnected_steam_ids;
 
     std::string body;
-    GBE_AppendProtoBytesField(body, 1u, player);
+
+    auto append_connected_player = [&](uint64 player_steam_id, uint32 hero_id, uint32 team, uint32 slot) {
+        if (player_steam_id == 0ull || std::find(connected_steam_ids.begin(), connected_steam_ids.end(), player_steam_id) != connected_steam_ids.end())
+            return;
+
+        std::string player;
+        GBE_AppendProtoFixed64Field(player, 1u, player_steam_id);
+        if (request_shape.has_connected_steam_id && request_shape.connected_steam_id == player_steam_id && request_shape.has_connected_hero_id && request_shape.connected_hero_id != 0u)
+            GBE_AppendProtoVarIntField(player, 2u, request_shape.connected_hero_id);
+        else if (hero_id != 0u)
+            GBE_AppendProtoVarIntField(player, 2u, hero_id);
+        GBE_AppendProtoBytesField(player, 3u, leaver_state);
+        GBE_AppendProtoVarIntField(player, 4u, 0u);
+        GBE_AppendProtoBytesField(body, 1u, player);
+        connected_steam_ids.push_back(player_steam_id);
+
+        if (include_draft) {
+            std::string draft;
+            GBE_AppendProtoFixed64Field(draft, 1u, player_steam_id);
+            GBE_AppendProtoVarIntField(draft, 2u, team);
+            GBE_AppendProtoVarIntField(draft, 3u, slot > 0u ? (slot - 1u) : 0u);
+            GBE_AppendProtoBytesField(body, 16u, draft);
+        }
+    };
+
+    auto append_disconnected_player = [&](uint64 player_steam_id, uint32 disconnected_lobby_state, uint32 disconnected_game_state) {
+        if (player_steam_id == 0ull || std::find(disconnected_steam_ids.begin(), disconnected_steam_ids.end(), player_steam_id) != disconnected_steam_ids.end())
+            return;
+
+        std::string disconnected_player;
+        GBE_AppendProtoFixed64Field(disconnected_player, 1u, player_steam_id);
+        GBE_AppendProtoBytesField(disconnected_player, 3u, GBE_BuildDota7034LeaverStatePayload(disconnected_lobby_state, disconnected_game_state));
+        GBE_AppendProtoVarIntField(disconnected_player, 4u, 0u);
+        GBE_AppendProtoBytesField(body, 7u, disconnected_player);
+        disconnected_steam_ids.push_back(player_steam_id);
+    };
+
+    append_connected_player(steam_id, 0u, owner_team, owner_slot);
+    for (const GBE_DotaLobbyMemberState &member : members) {
+        if (member.steam_id == 0ull || member.steam_id == steam_id)
+            continue;
+
+        if (member.connected)
+            append_connected_player(member.steam_id, member.hero_id, member.team, member.slot);
+        else
+            append_disconnected_player(member.steam_id, lobby_state, game_state);
+    }
+
     GBE_AppendProtoVarIntField(body, 2u, game_state);
     if (request_shape.has_first_blood_happened)
         GBE_AppendProtoVarIntField(body, 6u, request_shape.first_blood_happened);
@@ -6097,14 +6140,6 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
         GBE_AppendProtoVarIntField(body, 14u, request_shape.radiant_lead);
     if (request_shape.has_building_state)
         GBE_AppendProtoVarIntField(body, 15u, request_shape.building_state);
-    if (include_draft) {
-        std::string draft;
-        GBE_AppendProtoFixed64Field(draft, 1u, steam_id);
-        GBE_AppendProtoVarIntField(draft, 2u, owner_team);
-        GBE_AppendProtoVarIntField(draft, 3u, owner_slot > 0u ? (owner_slot - 1u) : 0u);
-        GBE_AppendProtoBytesField(body, 16u, draft);
-    }
-
     if (request_shape.has_disconnected_player && (!request_shape.has_disconnected_steam_id || request_shape.disconnected_steam_id == steam_id)) {
         uint32 disconnected_lobby_state = request_shape.has_disconnected_lobby_state ? request_shape.disconnected_lobby_state : lobby_state;
         uint32 disconnected_game_state = request_shape.has_disconnected_game_state ? request_shape.disconnected_game_state : game_state;
@@ -6113,11 +6148,7 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
         if (disconnected_game_state < game_state)
             disconnected_game_state = game_state;
 
-        std::string disconnected_player;
-        GBE_AppendProtoFixed64Field(disconnected_player, 1u, steam_id);
-        GBE_AppendProtoBytesField(disconnected_player, 3u, GBE_BuildDota7034LeaverStatePayload(disconnected_lobby_state, disconnected_game_state));
-        GBE_AppendProtoVarIntField(disconnected_player, 4u, 0u);
-        GBE_AppendProtoBytesField(body, 7u, disconnected_player);
+        append_disconnected_player(steam_id, disconnected_lobby_state, disconnected_game_state);
     }
 
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7034u, has_request_job, request_job_id, body, message);
@@ -12532,6 +12563,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_local_lobby.game_state,
                 GBE_local_lobby.owner_team,
                 GBE_local_lobby.owner_slot,
+                GBE_local_lobby.members,
                 request_shape,
                 has_source_job,
                 source_job,
@@ -12850,10 +12882,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 23u), allow_custom_games);
         GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 24u), build_version);
 
-        const uint32 connect_ip = private_ip != 0 ? private_ip : public_ip;
+        const uint32 connect_ip = public_ip != 0 ? public_ip : private_ip;
         const std::string runtime_connect = GBE_FormatDotaPracticeLobbyConnectFromIp(connect_ip);
-        const bool force_private_connect = GBE_local_lobby.lan && private_ip != 0u && GBE_local_lobby.connect != runtime_connect;
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && (force_private_connect || GBE_ShouldPreferDotaLobbyConnectUpdate(GBE_local_lobby.connect, runtime_connect))) {
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_ShouldPreferDotaLobbyConnectUpdate(GBE_local_lobby.connect, runtime_connect)) {
             const std::string previous_connect = GBE_local_lobby.connect;
             GBE_local_lobby.connect = runtime_connect;
             if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id)
@@ -12866,8 +12897,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 previous_connect.c_str(),
                 runtime_connect.c_str()
             );
-            GBE_PublishSharedDotaLobbyState("4508_game_server_connect");
-            GBE_PushDotaLaunchStateToClientPeer("4508_game_server_connect");
         }
 
         GBE_GC_DebugLog(
