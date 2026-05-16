@@ -11492,7 +11492,9 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscri
     effective_lobby.server_id = effective_server_id;
     effective_lobby.connect = effective_connect;
 
-    if (!launch_started && lobby.members.size() > 1)
+    const bool launched_lan_with_remote_members = launch_started && lobby.lan && lobby.members.size() > 1;
+
+    if ((!launch_started || launched_lan_with_remote_members) && lobby.members.size() > 1)
         return GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(effective_lobby, effective_player_name, message);
 
     if (launch_started && owner_steam_id != 0 && owner_account_id != 0) {
@@ -11544,7 +11546,9 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
     effective_lobby.server_id = 0ull;
     effective_lobby.connect = effective_connect;
 
-    if (lobby.match_id == 0 && lobby.members.size() > 1)
+    const bool launched_lan_with_remote_members = lobby.match_id != 0 && lobby.lan && lobby.members.size() > 1;
+
+    if ((lobby.match_id == 0 || launched_lan_with_remote_members) && lobby.members.size() > 1)
         return GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(effective_lobby, effective_player_name, message);
 
     if (owner_steam_id != 0 && owner_account_id != 0) {
