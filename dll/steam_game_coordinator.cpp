@@ -10382,10 +10382,17 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
         reason ? reason : "generic_lobby_members_changed"
     );
 
+    const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
+    const bool local_owner_lan_launch =
+        local_steam_id != 0ull &&
+        GBE_local_lobby.owner_steam_id != 0ull &&
+        local_steam_id == GBE_local_lobby.owner_steam_id &&
+        GBE_local_lobby.lan &&
+        GBE_local_lobby.match_id != 0ull;
+
     std::string response_26;
-    const bool sent_details_update = GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, is_server);
+    const bool sent_details_update = GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, is_server || local_owner_lan_launch);
     if (sent_details_update) {
-        const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
         const bool peer_lan_direct_launch =
             local_steam_id != 0ull &&
             GBE_local_lobby.owner_steam_id != 0ull &&
@@ -11296,8 +11303,16 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
     if (GBE_dota_private_lobby_snapshot_replayed)
         return;
 
+    const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
+    const bool local_owner_lan_launch =
+        local_steam_id != 0ull &&
+        lobby.owner_steam_id != 0ull &&
+        local_steam_id == lobby.owner_steam_id &&
+        lobby.lan &&
+        lobby.match_id != 0ull;
+
     std::string response_24;
-    if (!GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(lobby, GBE_GetDotaLobbyOwnerName(), response_24)) {
+    if (!GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(lobby, GBE_GetDotaLobbyOwnerName(), response_24, is_server || local_owner_lan_launch)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "failed building current private lobby snapshot 24 reason=%s lobby_id=%llu state=%u game_state=%u server_id=%llu",
@@ -11311,7 +11326,7 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
     }
 
     std::string response_26;
-    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26)) {
+    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, is_server || local_owner_lan_launch)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "failed building current private lobby snapshot 26 reason=%s lobby_id=%llu state=%u game_state=%u server_id=%llu",
@@ -11425,8 +11440,16 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
         return;
     }
 
+    const uint64 target_local_steam_id = target->settings ? target->settings->get_local_steam_id().ConvertToUint64() : 0ull;
+    const bool target_owner_lan_launch =
+        target_local_steam_id != 0ull &&
+        lobby.owner_steam_id != 0ull &&
+        target_local_steam_id == lobby.owner_steam_id &&
+        lobby.lan &&
+        lobby.match_id != 0ull;
+
     std::string response_24;
-    if (!target->GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(lobby, target->GBE_GetDotaLobbyOwnerName(), response_24)) {
+    if (!target->GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(lobby, target->GBE_GetDotaLobbyOwnerName(), response_24, target_owner_lan_launch)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "failed building launch state 24 for client reason=%s target=%p lobby_id=%llu state=%u game_state=%u server_id=%llu",
@@ -11441,7 +11464,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
     }
 
     std::string response_26;
-    if (!target->GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, target->GBE_GetDotaLobbyOwnerName(), response_26)) {
+    if (!target->GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, target->GBE_GetDotaLobbyOwnerName(), response_26, target_owner_lan_launch)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "failed building launch state 26 for client reason=%s target=%p lobby_id=%llu state=%u game_state=%u server_id=%llu",
@@ -11488,8 +11511,17 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscri
     const bool launch_started = lobby.match_id != 0;
     const std::string effective_player_name = player_name.empty() ? GBE_GetDotaLobbyOwnerName() : player_name;
     const std::string effective_connect = GBE_NormalizeDotaPracticeLobbyConnect(lobby.connect);
-    const uint64 local_server_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
-    const uint64 effective_server_id = (preserve_server_id && is_server && launch_started) ? (lobby.server_id != 0ull ? lobby.server_id : local_server_id) : 0ull;
+    uint64 effective_server_id = 0ull;
+    if (preserve_server_id && launch_started) {
+        effective_server_id = lobby.server_id;
+        if (effective_server_id == 0ull && is_server && settings)
+            effective_server_id = settings->get_local_steam_id().ConvertToUint64();
+        if (effective_server_id == 0ull && !is_server && settings && owner_steam_id == settings->get_local_steam_id().ConvertToUint64()) {
+            Steam_Client *steam_client = get_steam_client();
+            if (steam_client && steam_client->settings_server)
+                effective_server_id = steam_client->settings_server->get_local_steam_id().ConvertToUint64();
+        }
+    }
     GBE_LocalLobby effective_lobby = lobby;
     effective_lobby.server_id = effective_server_id;
     effective_lobby.connect = effective_connect;
@@ -11544,8 +11576,17 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
     const std::string effective_player_name = player_name.empty() ? GBE_GetDotaLobbyOwnerName() : player_name;
     const std::string effective_connect = GBE_NormalizeDotaPracticeLobbyConnect(lobby.connect);
     const uint32 startup_account_id = GBE_GetDotaPracticeLobbyStartupAccountIdForState(owner_account_id, lobby.state, lobby.game_state);
-    const uint64 local_server_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
-    const uint64 effective_server_id = (preserve_server_id && is_server && lobby.match_id != 0) ? (lobby.server_id != 0ull ? lobby.server_id : local_server_id) : 0ull;
+    uint64 effective_server_id = 0ull;
+    if (preserve_server_id && lobby.match_id != 0) {
+        effective_server_id = lobby.server_id;
+        if (effective_server_id == 0ull && is_server && settings)
+            effective_server_id = settings->get_local_steam_id().ConvertToUint64();
+        if (effective_server_id == 0ull && !is_server && settings && owner_steam_id == settings->get_local_steam_id().ConvertToUint64()) {
+            Steam_Client *steam_client = get_steam_client();
+            if (steam_client && steam_client->settings_server)
+                effective_server_id = steam_client->settings_server->get_local_steam_id().ConvertToUint64();
+        }
+    }
     GBE_LocalLobby effective_lobby = lobby;
     effective_lobby.server_id = effective_server_id;
     effective_lobby.connect = effective_connect;
@@ -14558,7 +14599,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     GBE_PublishSharedDotaLobbyState("7041_launch_init");
 
     std::string stage1_message;
-    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, GBE_local_lobby.owner_name, stage1_message)) {
+    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, GBE_local_lobby.owner_name, stage1_message, true)) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Failed building initial 26 after 7041 LobbyID=%llu match_id=%llu server_id=%llu connect=%s",
