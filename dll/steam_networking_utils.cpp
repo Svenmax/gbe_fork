@@ -212,6 +212,7 @@ ESteamNetworkingAvailability Steam_Networking_Utils::GetRelayNetworkStatus( Stea
         *pDetails = data;
     }
 
+    GBE_LogNetworkingConfigTrace("NETUTILS_GET_RELAY_STATUS", k_ESteamNetworkingConfig_Invalid, k_ESteamNetworkingConfig_Global, relay_initialized ? 1 : 0);
     return k_ESteamNetworkingAvailability_Current;
 }
 

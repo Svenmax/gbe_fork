@@ -128,6 +128,9 @@ std::vector<uint8_t> GBE_BuildSerializedNetworkingCert(CSteamID steam_id, uint32
     const uint32 expiry = now + 24u * 60u * 60u;
     const uint64 steam_id64 = steam_id.ConvertToUint64();
     const std::string identity = std::string("steamid:") + std::to_string(steam_id64);
+    std::vector<uint8_t> identity_binary;
+    GBE_AppendVarint(identity_binary, (16u << 3) | 1u);
+    GBE_AppendFixed64(identity_binary, steam_id64);
 
     std::vector<uint8_t> cert;
     cert.reserve(128);
@@ -142,6 +145,7 @@ std::vector<uint8_t> GBE_BuildSerializedNetworkingCert(CSteamID steam_id, uint32
     GBE_AppendFixed32(cert, expiry);
     GBE_AppendVarint(cert, (10u << 3) | 0u);
     GBE_AppendVarint(cert, app_id);
+    GBE_AppendBytes(cert, 11, identity_binary.data(), identity_binary.size());
     GBE_AppendBytes(cert, 12, identity.data(), identity.size());
     return cert;
 }

@@ -18,6 +18,96 @@
 #include "dll/steam_networking_sockets.h"
 
 #include <cstdio>
+#include <cstdint>
+#include <cstring>
+#include <ctime>
+#include <string>
+
+namespace {
+
+static constexpr uint8_t GBE_kSyntheticNetworkingPublicKey[32] = {
+    0xd7, 0x5a, 0x98, 0x01, 0x82, 0xb1, 0x0a, 0xb7,
+    0xd5, 0x4b, 0xfe, 0xd3, 0xc9, 0x64, 0x07, 0x3a,
+    0x0e, 0xe1, 0x72, 0xf3, 0xda, 0xa6, 0x23, 0x25,
+    0xaf, 0x02, 0x1a, 0x68, 0xf7, 0x07, 0x51, 0x1a,
+};
+
+void GBE_AppendCertVarint(std::string &out, uint64_t value)
+{
+    while (value >= 0x80) {
+        out.push_back(static_cast<char>(value | 0x80));
+        value >>= 7;
+    }
+    out.push_back(static_cast<char>(value));
+}
+
+void GBE_AppendCertFixed32(std::string &out, uint32_t value)
+{
+    for (int i = 0; i < 4; ++i)
+        out.push_back(static_cast<char>((value >> (i * 8)) & 0xff));
+}
+
+void GBE_AppendCertFixed64(std::string &out, uint64_t value)
+{
+    for (int i = 0; i < 8; ++i)
+        out.push_back(static_cast<char>((value >> (i * 8)) & 0xff));
+}
+
+void GBE_AppendCertBytes(std::string &out, uint32_t field, const void *data, size_t size)
+{
+    GBE_AppendCertVarint(out, (static_cast<uint64_t>(field) << 3) | 2u);
+    GBE_AppendCertVarint(out, size);
+    out.append(reinterpret_cast<const char *>(data), size);
+}
+
+std::string GBE_BuildSteamDatagramCertificate(CSteamID steam_id, uint32 app_id)
+{
+    const uint32 now = static_cast<uint32>(std::time(nullptr));
+    const uint32 expiry = now + 24u * 60u * 60u;
+    const uint64 steam_id64 = steam_id.ConvertToUint64();
+    const std::string identity = std::string("steamid:") + std::to_string(steam_id64);
+    std::string identity_binary;
+    GBE_AppendCertVarint(identity_binary, (16u << 3) | 1u);
+    GBE_AppendCertFixed64(identity_binary, steam_id64);
+
+    std::string cert;
+    cert.reserve(128);
+    GBE_AppendCertVarint(cert, (1u << 3) | 0u);
+    GBE_AppendCertVarint(cert, 1u);
+    GBE_AppendCertBytes(cert, 2u, GBE_kSyntheticNetworkingPublicKey, sizeof(GBE_kSyntheticNetworkingPublicKey));
+    GBE_AppendCertVarint(cert, (4u << 3) | 1u);
+    GBE_AppendCertFixed64(cert, steam_id64);
+    GBE_AppendCertVarint(cert, (8u << 3) | 5u);
+    GBE_AppendCertFixed32(cert, now);
+    GBE_AppendCertVarint(cert, (9u << 3) | 5u);
+    GBE_AppendCertFixed32(cert, expiry);
+    GBE_AppendCertVarint(cert, (10u << 3) | 0u);
+    GBE_AppendCertVarint(cert, app_id);
+    GBE_AppendCertBytes(cert, 11u, identity_binary.data(), identity_binary.size());
+    GBE_AppendCertBytes(cert, 12u, identity.data(), identity.size());
+    return cert;
+}
+
+std::string GBE_BuildSteamDatagramCertificateRequest(CSteamID steam_id, uint32 app_id)
+{
+    (void)steam_id;
+    std::string request;
+    request.reserve(sizeof(GBE_kSyntheticNetworkingPublicKey) + 8);
+    GBE_AppendCertBytes(request, 2u, GBE_kSyntheticNetworkingPublicKey, sizeof(GBE_kSyntheticNetworkingPublicKey));
+    GBE_AppendCertVarint(request, (3u << 3) | 0u);
+    GBE_AppendCertVarint(request, app_id);
+    return request;
+}
+
+void GBE_SetNetworkingErrMsg(SteamNetworkingErrMsg &errMsg, const char *message)
+{
+    if (!message)
+        message = "";
+    std::strncpy(errMsg, message, k_cchMaxSteamNetworkingErrMsg - 1);
+    errMsg[k_cchMaxSteamNetworkingErrMsg - 1] = '\0';
+}
+
+}
 
 static void GBE_LogNetSockTrace(const char *scope, const void *self, uint64 local_id, uint64 remote_id, int virtual_port, int real_port, int status, int server_like)
 {
@@ -1359,6 +1449,7 @@ ESteamNetworkingAvailability Steam_Networking_Sockets::InitAuthentication()
     data.m_eAvail = k_ESteamNetworkingAvailability_Current;
     memcpy(data.m_debugMsg, "OK", 3);
     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+    GBE_LogNetSockTrace("NETSOCK_INIT_AUTH", this, settings->get_local_steam_id().ConvertToUint64(), 0, 0, 0, data.m_eAvail, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
     return k_ESteamNetworkingAvailability_Current;
 }
 
@@ -1379,6 +1470,7 @@ ESteamNetworkingAvailability Steam_Networking_Sockets::GetAuthenticationStatus( 
         pDetails->m_eAvail = k_ESteamNetworkingAvailability_Current;
         memcpy(pDetails->m_debugMsg, "OK", 3);
     }
+    GBE_LogNetSockTrace("NETSOCK_GET_AUTH_STATUS", this, settings->get_local_steam_id().ConvertToUint64(), 0, 0, 0, k_ESteamNetworkingAvailability_Current, pDetails ? 1 : 0);
     return k_ESteamNetworkingAvailability_Current;
 }
 
@@ -1950,18 +2042,48 @@ bool Steam_Networking_Sockets::ReceivedP2PCustomSignal( const void *pMsg, int cb
 /// Pass this blob to your game coordinator and call SteamDatagram_CreateCert.
 bool Steam_Networking_Sockets::GetCertificateRequest( int *pcbBlob, void *pBlob, SteamNetworkingErrMsg &errMsg )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return false;
+
+    if (!pcbBlob) {
+        GBE_SetNetworkingErrMsg(errMsg, "pcbBlob is null");
+        GBE_LogNetSockTrace("NETSOCK_GET_CERT_REQUEST", this, settings->get_local_steam_id().ConvertToUint64(), 0, 0, 0, -1, 0);
+        return false;
+    }
+
+    const std::string request = GBE_BuildSteamDatagramCertificateRequest(settings->get_local_steam_id(), settings->get_local_game_id().AppID());
+    const int required = static_cast<int>(request.size());
+    const int available = *pcbBlob;
+    *pcbBlob = required;
+
+    if (!pBlob || available < required) {
+        GBE_SetNetworkingErrMsg(errMsg, "buffer too small for networking certificate request");
+        GBE_LogNetSockTrace("NETSOCK_GET_CERT_REQUEST_SIZE", this, settings->get_local_steam_id().ConvertToUint64(), 0, 0, required, available, 0);
+        return false;
+    }
+
+    std::memcpy(pBlob, request.data(), request.size());
+    GBE_SetNetworkingErrMsg(errMsg, "");
+    GBE_LogNetSockTrace("NETSOCK_GET_CERT_REQUEST", this, settings->get_local_steam_id().ConvertToUint64(), 0, 0, required, 1, 0);
+    return true;
 }
 
 /// Set the certificate.  The certificate blob should be the output of
 /// SteamDatagram_CreateCert.
 bool Steam_Networking_Sockets::SetCertificate( const void *pCertificate, int cbCertificate, SteamNetworkingErrMsg &errMsg )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return false;
+
+    if (!pCertificate || cbCertificate <= 0) {
+        GBE_SetNetworkingErrMsg(errMsg, "empty networking certificate");
+        GBE_LogNetSockTrace("NETSOCK_SET_CERT", this, settings->get_local_steam_id().ConvertToUint64(), 0, 0, cbCertificate, -1, 0);
+        return false;
+    }
+
+    GBE_SetNetworkingErrMsg(errMsg, "");
+    GBE_LogNetSockTrace("NETSOCK_SET_CERT", this, settings->get_local_steam_id().ConvertToUint64(), 0, 0, cbCertificate, 1, 0);
+    return true;
 }
 
 /// Reset the identity associated with this instance.

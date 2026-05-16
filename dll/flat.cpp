@@ -20,6 +20,44 @@
 #include "dll/dll.h"
 #include "steam/steam_api_flat.h"
 
+#include <cstdio>
+
+static void GBE_LogFlatNetworkingUtilsTrace(const char *scope, ISteamNetworkingUtils *self, int value, int scope_type, int data)
+{
+    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (!file)
+        return;
+
+    std::fprintf(
+        file,
+        "[%s] self=%p value=%d scope=%d data=%d\n",
+        scope ? scope : "FLAT_NETUTILS",
+        self,
+        value,
+        scope_type,
+        data
+    );
+    std::fclose(file);
+}
+
+static void GBE_LogFlatNetworkingSocketsCertTrace(const char *scope, ISteamNetworkingSockets *self, const void *selected, int size_or_available, int status)
+{
+    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (!file)
+        return;
+
+    std::fprintf(
+        file,
+        "[%s] self=%p selected=%p size_or_available=%d status=%d\n",
+        scope ? scope : "FLAT_NETSOCK_CERT",
+        self,
+        selected,
+        size_or_available,
+        status
+    );
+    std::fclose(file);
+}
+
 STEAMAPI_API HSteamPipe SteamAPI_ISteamClient_CreateSteamPipe( ISteamClient* self )
 {
     return get_steam_client()->CreateSteamPipe();
@@ -6341,6 +6379,7 @@ STEAMAPI_API ESteamNetworkingAvailability SteamAPI_ISteamNetworkingSockets_InitA
         ptr = get_steam_client()->steam_networking_sockets;
     }
 
+    GBE_LogFlatNetworkingSocketsCertTrace("FLAT_NETSOCK_INIT_AUTH", self, ptr, 0, 1);
     return (ptr)->InitAuthentication();
 }
 
@@ -6353,6 +6392,7 @@ STEAMAPI_API ESteamNetworkingAvailability SteamAPI_ISteamNetworkingSockets_GetAu
         ptr = get_steam_client()->steam_networking_sockets;
     }
 
+    GBE_LogFlatNetworkingSocketsCertTrace("FLAT_NETSOCK_GET_AUTH_STATUS", self, ptr, 0, pDetails ? 1 : 0);
     return (ptr)->GetAuthenticationStatus(pDetails);
 }
 
@@ -6538,6 +6578,7 @@ STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingSockets_GetCertificateRequest( 
         ptr = get_steam_client()->steam_networking_sockets;
     }
 
+    GBE_LogFlatNetworkingSocketsCertTrace("FLAT_NETSOCK_GET_CERT_REQUEST", self, ptr, pcbBlob ? *pcbBlob : -1, pBlob ? 1 : 0);
     return (ptr)->GetCertificateRequest(pcbBlob, pBlob, errMsg);
 }
 
@@ -6550,6 +6591,7 @@ STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingSockets_SetCertificate( ISteamN
         ptr = get_steam_client()->steam_networking_sockets;
     }
 
+    GBE_LogFlatNetworkingSocketsCertTrace("FLAT_NETSOCK_SET_CERT", self, ptr, cbCertificate, pCertificate ? 1 : 0);
     return (ptr)->SetCertificate(pCertificate, cbCertificate, errMsg);
 }
 
@@ -6679,11 +6721,13 @@ STEAMAPI_API SteamNetworkingMessage_t * SteamAPI_ISteamNetworkingUtils_AllocateM
 
 STEAMAPI_API void SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess( ISteamNetworkingUtils* self )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_INIT_RELAY", self, 0, 0, 0);
     return ((ISteamNetworkingUtils*)get_steam_client()->steam_networking_utils)->InitRelayNetworkAccess();
 }
 
 STEAMAPI_API ESteamNetworkingAvailability SteamAPI_ISteamNetworkingUtils_GetRelayNetworkStatus( ISteamNetworkingUtils* self, SteamRelayNetworkStatus_t * pDetails )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_GET_RELAY_STATUS", self, 0, 0, pDetails ? 1 : 0);
     return (get_steam_client()->steam_networking_utils)->GetRelayNetworkStatus(pDetails);
 }
 
@@ -6829,6 +6873,10 @@ STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetGlobalCallback_Message
 
 STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetConfigValue( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eValue, ESteamNetworkingConfigScope eScopeType, intptr_t scopeObj, ESteamNetworkingConfigDataType eDataType, const void * pArg )
 {
+    int data = 0;
+    if (pArg && eDataType == k_ESteamNetworkingConfig_Int32)
+        data = *reinterpret_cast<const int32 *>(pArg);
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_SET_CONFIG", self, eValue, eScopeType, data);
     return (get_steam_client()->steam_networking_utils)->SetConfigValue(eValue, eScopeType, scopeObj, eDataType, pArg);
 }
 
@@ -6839,6 +6887,7 @@ STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetConfigValueStruct( ISt
 
 STEAMAPI_API ESteamNetworkingGetConfigValueResult SteamAPI_ISteamNetworkingUtils_GetConfigValue( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eValue, ESteamNetworkingConfigScope eScopeType, intptr_t scopeObj, ESteamNetworkingConfigDataType * pOutDataType, void * pResult, size_t * cbResult )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_GET_CONFIG", self, eValue, eScopeType, cbResult ? static_cast<int>(*cbResult) : -1);
     return (get_steam_client()->steam_networking_utils)->GetConfigValue(eValue, eScopeType, scopeObj, pOutDataType, pResult, cbResult);
 }
 
@@ -6846,16 +6895,19 @@ STEAMAPI_API ESteamNetworkingGetConfigValueResult SteamAPI_ISteamNetworkingUtils
 //STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_GetConfigValueInfo( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eValue, const char ** pOutName, ESteamNetworkingConfigDataType * pOutDataType, ESteamNetworkingConfigScope * pOutScope, ESteamNetworkingConfigValue * pOutNextValue )
 STEAMAPI_API const char * SteamAPI_ISteamNetworkingUtils_GetConfigValueInfo( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eValue, ESteamNetworkingConfigDataType * pOutDataType, ESteamNetworkingConfigScope * pOutScope )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_GET_CONFIG_INFO", self, eValue, pOutScope ? *pOutScope : k_ESteamNetworkingConfig_Global, 0);
     return (get_steam_client()->steam_networking_utils)->GetConfigValueInfo(eValue, pOutDataType, pOutScope);
 }
 
 STEAMAPI_API ESteamNetworkingConfigValue SteamAPI_ISteamNetworkingUtils_GetFirstConfigValue( ISteamNetworkingUtils* self )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_GET_FIRST_CONFIG", self, 0, 0, 0);
     return (get_steam_client()->steam_networking_utils)->GetFirstConfigValue();
 }
 
 STEAMAPI_API ESteamNetworkingConfigValue SteamAPI_ISteamNetworkingUtils_IterateGenericEditableConfigValues( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eCurrent, bool bEnumerateDevVars )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_ITER_CONFIG", self, eCurrent, k_ESteamNetworkingConfig_Global, bEnumerateDevVars ? 1 : 0);
     return (get_steam_client()->steam_networking_utils)->IterateGenericEditableConfigValues(eCurrent, bEnumerateDevVars);
 }
 
