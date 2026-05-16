@@ -15656,6 +15656,7 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
 
 void Steam_Game_Coordinator::GBE_ResetDotaPracticeLobbyLaunchPeripheralState()
 {
+    GBE_last_dota_direct_connect_callback_signature.clear();
 }
 
 bool Steam_Game_Coordinator::GBE_ShouldTrackDotaPracticeLobbyLateSteamChain() const
@@ -15726,6 +15727,7 @@ void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const
 void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
 {
     GBE_last_dota_launch_persona_signature.clear();
+    GBE_last_dota_direct_connect_callback_signature.clear();
 
     Steam_Client *steam_client = get_steam_client();
     if (!steam_client || !steam_client->steam_friends)
@@ -15741,6 +15743,61 @@ void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
     steam_client->steam_friends->SetRichPresence("connect", nullptr);
     steam_client->steam_friends->SetRichPresence("lobby", nullptr);
     steam_client->steam_friends->SetRichPresence("party", nullptr);
+}
+
+void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback(const char *reason)
+{
+    if (is_server || gc_profile != GC_PROFILE_DOTA2 || !callbacks)
+        return;
+
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || !GBE_local_lobby.lan)
+        return;
+
+    if (GBE_local_lobby.state != 2u || GBE_local_lobby.game_state < 1u || GBE_local_lobby.match_id == 0)
+        return;
+
+    const std::string endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect);
+    if (endpoint.empty() || GBE_ParseDotaPracticeLobbyConnectIPv4(endpoint) == 0u)
+        return;
+
+    std::string signature;
+    signature.reserve(96);
+    signature.append(std::to_string(GBE_local_lobby.lobby_id));
+    signature.push_back('|');
+    signature.append(std::to_string(GBE_local_lobby.match_id));
+    signature.push_back('|');
+    signature.append(endpoint);
+    if (signature == GBE_last_dota_direct_connect_callback_signature) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipping duplicate direct connect callback reason=%s lobby_id=%llu endpoint=%s",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            endpoint.c_str()
+        );
+        return;
+    }
+
+    GameServerChangeRequested_t server_change{};
+    std::strncpy(server_change.m_rgchServer, endpoint.c_str(), sizeof(server_change.m_rgchServer) - 1);
+    callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0);
+
+    const std::string connect_command = std::string("+connect ") + endpoint;
+    GameRichPresenceJoinRequested_t rich_join{};
+    rich_join.m_steamIDFriend = CSteamID(GBE_local_lobby.owner_steam_id != 0 ? GBE_local_lobby.owner_steam_id : GBE_GetDotaLobbyOwnerSteamId());
+    std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
+    callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
+
+    GBE_last_dota_direct_connect_callback_signature = signature;
+    GBE_GC_DebugLog(
+        "GC_DOTA_SYNC",
+        "queued direct connect callbacks reason=%s lobby_id=%llu match_id=%llu endpoint=%s command=%s",
+        reason ? reason : "unknown",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        endpoint.c_str(),
+        connect_command.c_str()
+    );
 }
 
 void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(const char *status, const char *lobby_state, bool include_party, bool include_lobby, const char *reason)
@@ -15882,6 +15939,7 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
 
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence(status, lobby_state, include_party, !GBE_local_lobby.abandon_postgame_active);
     GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(status, lobby_state, include_party, !GBE_local_lobby.abandon_postgame_active, reason);
+    GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback(reason);
 }
 
 void Steam_Game_Coordinator::GBE_FinalizeDotaAbandonAfterOtherLeftChannel(uint64 consumed_lobby_id, const char *reason)
