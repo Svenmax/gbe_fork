@@ -60,6 +60,8 @@ static bool GBE_ShouldUseLocalIPBinding(uint32 unIP)
 
 static uint32 GBE_ApplyLocalIPBindingForGameServer(Steam_Client *client, uint32 unIP, const char *source)
 {
+    // Some Source2 paths set the desired LAN bind via SetLocalIPBinding first
+    // and still initialize the game server with 0.0.0.0 or loopback.
     if (!client || client->local_ip_binding_ip == 0u) {
         GBE_GC_DebugLog(
             "STEAM_LOCAL_IP_BINDING",
