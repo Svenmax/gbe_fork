@@ -2324,75 +2324,6 @@ static void GBE_UpsertDotaLobbyMember(std::vector<GBE_DotaLobbyMemberState> &mem
     members.push_back(member);
 }
 
-static bool GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bool connected)
-{
-    if (steam_id == 0ull)
-        return false;
-
-    bool changed = false;
-    if (steam_id == GBE_local_lobby.owner_steam_id && GBE_local_lobby.owner_connected != connected) {
-        GBE_local_lobby.owner_connected = connected;
-        changed = true;
-    }
-
-    for (GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
-        if (member.steam_id != steam_id)
-            continue;
-        if (member.connected != connected) {
-            member.connected = connected;
-            changed = true;
-        }
-        return changed;
-    }
-
-    if (connected && steam_id != GBE_local_lobby.owner_steam_id) {
-        GBE_DotaLobbyMemberState member{};
-        member.steam_id = steam_id;
-        member.account_id = CSteamID((uint64)steam_id).GetAccountID();
-        member.team = GBE_kDotaTeamPlayerPool;
-        member.connected = true;
-        GBE_UpsertDotaLobbyMember(GBE_local_lobby.members, member);
-        return true;
-    }
-
-    return changed;
-}
-
-static bool GBE_ShouldHoldDotaLanLaunchForRemoteMembers(uint32 next_game_state, uint32 *remote_count_out, uint32 *connected_remote_count_out)
-{
-    if (remote_count_out)
-        *remote_count_out = 0u;
-    if (connected_remote_count_out)
-        *connected_remote_count_out = 0u;
-
-    if (next_game_state < 2u)
-        return false;
-    if (!GBE_local_lobby.active || GBE_local_lobby.state != 2u || GBE_local_lobby.match_id == 0ull)
-        return false;
-    if (GBE_ParseDotaPracticeLobbyConnectIPv4(GBE_local_lobby.connect) == 0u && !GBE_local_lobby.lan)
-        return false;
-
-    uint32 remote_count = 0u;
-    uint32 connected_remote_count = 0u;
-    const uint64 owner_steam_id = GBE_local_lobby.owner_steam_id != 0ull
-        ? GBE_local_lobby.owner_steam_id
-        : settings->get_local_steam_id().ConvertToUint64();
-    for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
-        if (member.steam_id == 0ull || member.steam_id == owner_steam_id)
-            continue;
-        ++remote_count;
-        if (member.connected)
-            ++connected_remote_count;
-    }
-
-    if (remote_count_out)
-        *remote_count_out = remote_count;
-    if (connected_remote_count_out)
-        *connected_remote_count_out = connected_remote_count;
-
-    return remote_count != 0u && connected_remote_count < remote_count;
-}
-
 static bool GBE_IsDotaPracticeLobbyPrelaunchState(uint64 server_id, uint64 match_id, uint32 game_start_time, const std::string &connect)
 {
     return server_id == 0ull && match_id == 0ull && game_start_time == 0u && connect.empty();
@@ -9831,6 +9762,73 @@ bool Steam_Game_Coordinator::GBE_TryQueueDotaPrelaunch021(const char *note, uint
         wait_for_players_lobby.game_state
     );
     return true;
+}
+
+bool Steam_Game_Coordinator::GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bool connected)
+{
+    if (steam_id == 0ull)
+        return false;
+
+    bool changed = false;
+    if (steam_id == GBE_local_lobby.owner_steam_id && GBE_local_lobby.owner_connected != connected) {
+        GBE_local_lobby.owner_connected = connected;
+        changed = true;
+    }
+
+    for (GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+        if (member.steam_id != steam_id)
+            continue;
+        if (member.connected != connected) {
+            member.connected = connected;
+            changed = true;
+        }
+        return changed;
+    }
+
+    if (connected && steam_id != GBE_local_lobby.owner_steam_id) {
+        GBE_DotaLobbyMemberState member{};
+        member.steam_id = steam_id;
+        member.account_id = CSteamID((uint64)steam_id).GetAccountID();
+        member.team = GBE_kDotaTeamPlayerPool;
+        member.connected = true;
+        GBE_UpsertDotaLobbyMember(GBE_local_lobby.members, member);
+        return true;
+    }
+
+    return changed;
+}
+
+bool Steam_Game_Coordinator::GBE_ShouldHoldDotaLanLaunchForRemoteMembers(uint32 next_game_state, uint32 *remote_count_out, uint32 *connected_remote_count_out) const
+{
+    if (remote_count_out)
+        *remote_count_out = 0u;
+    if (connected_remote_count_out)
+        *connected_remote_count_out = 0u;
+
+    if (next_game_state < 2u)
+        return false;
+    if (!GBE_local_lobby.active || GBE_local_lobby.state != 2u || GBE_local_lobby.match_id == 0ull)
+        return false;
+    if (GBE_ParseDotaPracticeLobbyConnectIPv4(GBE_local_lobby.connect) == 0u && !GBE_local_lobby.lan)
+        return false;
+
+    uint32 remote_count = 0u;
+    uint32 connected_remote_count = 0u;
+    const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
+    for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+        if (member.steam_id == 0ull || member.steam_id == owner_steam_id)
+            continue;
+        ++remote_count;
+        if (member.connected)
+            ++connected_remote_count;
+    }
+
+    if (remote_count_out)
+        *remote_count_out = remote_count;
+    if (connected_remote_count_out)
+        *connected_remote_count_out = connected_remote_count;
+
+    return remote_count != 0u && connected_remote_count < remote_count;
 }
 
 bool Steam_Game_Coordinator::GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state, double delay)
