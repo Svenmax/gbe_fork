@@ -2136,7 +2136,7 @@ static void GBE_BuildDotaLobbyMemberObject2004(const GBE_DotaLobbyMemberState &m
     GBE_AppendProtoVarIntField(member_state, 3u, member.team);
     if (member.slot != 0u)
         GBE_AppendProtoVarIntField(member_state, 7u, member.slot);
-    const bool member_leaver_disconnected = !member.connected && (lobby_state != 2u || lobby_game_state >= 1u);
+    const bool member_leaver_disconnected = !member.connected && lobby_state == 2u && lobby_game_state >= 1u;
     if (member_leaver_disconnected) {
         GBE_AppendProtoVarIntField(member_state, 16u, 1u);
         if (lobby_state == 2u && lobby_game_state >= 1u)
@@ -6513,7 +6513,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
         owner_team,
         owner_slot,
         owner_hero_id,
-        lobby_state == 3u,
+        true,
         members);
 
     if (!GBE_BuildDotaServerLobbyObject2015(effective_members.size(), extra_startup_account_id, object_2015))
@@ -10085,9 +10085,21 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                     GBE_UpsertDotaLobbyMember(members, member);
                 }
 
+                const bool preserve_launched_lan_members =
+                    GBE_local_lobby.lan &&
+                    GBE_local_lobby.match_id != 0ull &&
+                    GBE_local_lobby.state >= 1u &&
+                    !generic_members.empty();
                 for (const GBE_DotaLobbyMemberState &existing : GBE_local_lobby.members) {
-                    if (generic_members.empty() || existing.steam_id == local_steam_id)
-                        GBE_UpsertDotaLobbyMember(members, existing);
+                    const bool missing_from_generic =
+                        existing.steam_id != 0ull &&
+                        !GBE_DotaLobbyMembersContainSteamId(members, existing.steam_id);
+                    if (generic_members.empty() || existing.steam_id == local_steam_id || (preserve_launched_lan_members && missing_from_generic)) {
+                        GBE_DotaLobbyMemberState preserved = existing;
+                        if (preserve_launched_lan_members && missing_from_generic && preserved.steam_id != GBE_local_lobby.owner_steam_id)
+                            preserved.connected = false;
+                        GBE_UpsertDotaLobbyMember(members, preserved);
+                    }
                 }
 
                 GBE_DotaLobbyMemberState owner{};
