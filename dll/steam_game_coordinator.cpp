@@ -12852,7 +12852,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
         const uint32 connect_ip = private_ip != 0 ? private_ip : public_ip;
         const std::string runtime_connect = GBE_FormatDotaPracticeLobbyConnectFromIp(connect_ip);
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_ShouldPreferDotaLobbyConnectUpdate(GBE_local_lobby.connect, runtime_connect)) {
+        const bool force_private_connect = GBE_local_lobby.lan && private_ip != 0u && GBE_local_lobby.connect != runtime_connect;
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && (force_private_connect || GBE_ShouldPreferDotaLobbyConnectUpdate(GBE_local_lobby.connect, runtime_connect))) {
             const std::string previous_connect = GBE_local_lobby.connect;
             GBE_local_lobby.connect = runtime_connect;
             if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id)
@@ -12865,6 +12866,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 previous_connect.c_str(),
                 runtime_connect.c_str()
             );
+            GBE_PublishSharedDotaLobbyState("4508_game_server_connect");
+            GBE_PushDotaLaunchStateToClientPeer("4508_game_server_connect");
         }
 
         GBE_GC_DebugLog(
