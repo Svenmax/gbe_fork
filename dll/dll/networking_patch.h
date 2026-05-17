@@ -68,22 +68,6 @@ static void DebugLog(const char* format, ...)
     std::fflush(file);  // 立即刷新到磁盘
     std::fclose(file);
 }
-    
-    if (!file) return;
-    
-    // 添加时间戳
-    auto now = std::chrono::system_clock::now();
-    auto time = std::chrono::system_clock::to_time_t(now);
-    std::fprintf(file, "[%s] ", std::ctime(&time));
-    
-    va_list args;
-    va_start(args, format);
-    std::vfprintf(file, format, args);
-    va_end(args);
-    std::fprintf(file, "\n");
-    std::fflush(file);  // 立即刷新到磁盘
-    std::fclose(file);
-}
 
 // 跨平台类型定义
 #ifdef __WINDOWS__
