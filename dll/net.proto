@@ -207,6 +207,7 @@ message Friend_Messages {
     enum Types {
         LOBBY_INVITE = 0;
         GAME_INVITE = 1;
+        FRIEND_CHAT = 2;
     }
 
     Types type = 1;
@@ -214,6 +215,7 @@ message Friend_Messages {
         uint64 lobby_id = 2;
         bytes connect_str = 3;
     }
+    string chat_message = 4;
 }
 
 message Steam_Messages {

@@ -19,6 +19,24 @@
 #include "dll/settings_parser.h"
 #include "dll/dll.h"
 
+namespace {
+
+uint32 GBE_local_ip_binding_ip{};
+uint16 GBE_local_ip_binding_port{};
+
+}
+
+bool GBE_GetSteamClientLocalIPBinding(uint32 *ip, uint16 *port)
+{
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    if (!GBE_local_ip_binding_ip)
+        return false;
+
+    if (ip) *ip = GBE_local_ip_binding_ip;
+    if (port) *port = GBE_local_ip_binding_port;
+    return true;
+}
+
 
 void Steam_Client::background_thread_proc()
 {
@@ -429,12 +447,20 @@ void Steam_Client::ReleaseUser( HSteamPipe hSteamPipe, HSteamUser hUser )
 // this must be set before CreateLocalUser()
 void Steam_Client::SetLocalIPBinding( uint32 unIP, uint16 usPort )
 {
-    PRINT_DEBUG("old %u %hu // TODO", unIP, usPort);
+    PRINT_DEBUG("old %u %hu", unIP, usPort);
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    GBE_local_ip_binding_ip = unIP;
+    GBE_local_ip_binding_port = usPort;
 }
 
 void Steam_Client::SetLocalIPBinding( const SteamIPAddress_t &unIP, uint16 usPort )
 {
-    PRINT_DEBUG("%i %u %hu // TODO", unIP.m_eType, unIP.m_unIPv4, usPort);
+    PRINT_DEBUG("%i %u %hu", unIP.m_eType, unIP.m_unIPv4, usPort);
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    if (unIP.m_eType == k_ESteamIPTypeIPv4) {
+        GBE_local_ip_binding_ip = unIP.m_unIPv4;
+        GBE_local_ip_binding_port = usPort;
+    }
 }
 
 

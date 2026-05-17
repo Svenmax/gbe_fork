@@ -17,6 +17,9 @@
 
 #include "dll/steam_matchmaking.h"
 
+#include <cstdlib>
+#include <random>
+
 #define SEND_LOBBY_RATE 5.0
 
 #define PENDING_JOIN_TIMEOUT 10.0
@@ -311,6 +314,139 @@ CSteamID Steam_Matchmaking::CreateLobbyImmediate(ELobbyType eLobbyType, int cMax
     on_self_enter_leave_lobby(lobby_id, eLobbyType, false);
     trigger_lobby_dataupdate(lobby_id, lobby_id, true);
     return lobby_id;
+}
+
+std::vector<CSteamID> Steam_Matchmaking::GetLobbyListSnapshot()
+{
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    std::vector<CSteamID> result;
+    for (const auto &lobby : lobbies) {
+        const bool visible = lobby.joinable() &&
+            (lobby.type() == k_ELobbyTypePublic || lobby.type() == k_ELobbyTypeInvisible || lobby.type() == k_ELobbyTypeFriendsOnly) &&
+            !lobby.deleted();
+        if (visible)
+            result.push_back(CSteamID((uint64)lobby.room_id()));
+    }
+    return result;
+}
+
+std::vector<CSteamID> Steam_Matchmaking::GetLobbyMemberListSnapshot(CSteamID steamIDLobby)
+{
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    std::vector<CSteamID> result;
+    Lobby *lobby = get_lobby(steamIDLobby);
+    if (!lobby || lobby->deleted())
+        return result;
+
+    for (const auto &member : lobby->members())
+        result.push_back(CSteamID((uint64)member.id()));
+    return result;
+}
+
+CSteamID Steam_Matchmaking::FindLobbyByDotaLobbyIdForInvite(uint64 dotaLobbyId, const char *markerKey, const char *markerValue, const char *dotaLobbyIdKey)
+{
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    if (dotaLobbyId == 0 || !markerKey || !markerValue || !dotaLobbyIdKey)
+        return k_steamIDNil;
+
+    for (const auto &lobby : lobbies) {
+        if (lobby.deleted())
+            continue;
+        if (lobby.appid() != settings->get_local_game_id().AppID())
+            continue;
+
+        auto marker = caseinsensitive_find(lobby.values(), markerKey);
+        if (marker == lobby.values().end() || marker->second != markerValue)
+            continue;
+
+        auto lobby_id = caseinsensitive_find(lobby.values(), dotaLobbyIdKey);
+        if (lobby_id == lobby.values().end())
+            continue;
+
+        char *end = nullptr;
+        const uint64 parsed_lobby_id = std::strtoull(lobby_id->second.c_str(), &end, 10);
+        if (end && *end == '\0' && parsed_lobby_id == dotaLobbyId)
+            return CSteamID((uint64)lobby.room_id());
+    }
+
+    return k_steamIDNil;
+}
+
+bool Steam_Matchmaking::SendLobbySnapshotToUserForDotaInvite(CSteamID steamIDLobby, CSteamID steamIDInvitee)
+{
+    PRINT_DEBUG("lobby=%llu invitee=%llu", steamIDLobby.ConvertToUint64(), steamIDInvitee.ConvertToUint64());
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    Lobby *lobby = get_lobby(steamIDLobby);
+    if (!lobby || lobby->deleted() || !steamIDInvitee.IsValid())
+        return false;
+
+    Common_Message msg{};
+    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+    msg.set_dest_id(steamIDInvitee.ConvertToUint64());
+    msg.set_allocated_lobby(new Lobby(*lobby));
+    return network->sendTo(&msg, true);
+}
+
+bool Steam_Matchmaking::RepairLobbyOwnerIfMissing(CSteamID steamIDLobby, const char *reason)
+{
+    PRINT_DEBUG("%llu reason=%s", steamIDLobby.ConvertToUint64(), reason ? reason : "unknown");
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    Lobby *lobby = get_lobby(steamIDLobby);
+    if (!lobby || lobby->deleted() || lobby->members_size() <= 0)
+        return false;
+
+    const uint64 current_owner = lobby->owner();
+    for (const auto &member : lobby->members()) {
+        if (member.id() == current_owner)
+            return false;
+    }
+
+    uint64 owner_seed = lobby->room_id() ^ current_owner;
+    for (const auto &member : lobby->members())
+        owner_seed ^= member.id() + 0x9e3779b97f4a7c15ull + (owner_seed << 6) + (owner_seed >> 2);
+    const int new_owner_index = static_cast<int>(owner_seed % static_cast<uint64>(lobby->members_size()));
+    const uint64 new_owner = lobby->members(new_owner_index).id();
+
+    PRINT_DEBUG("repairing lobby owner lobby=%llu old_owner=%llu new_owner=%llu reason=%s", lobby->room_id(), current_owner, new_owner, reason ? reason : "unknown");
+    change_owner(lobby, CSteamID((uint64)new_owner));
+    return true;
+}
+
+bool Steam_Matchmaking::KickLobbyMemberForDota(CSteamID steamIDLobby, CSteamID steamIDMember)
+{
+    PRINT_DEBUG("lobby=%llu member=%llu", steamIDLobby.ConvertToUint64(), steamIDMember.ConvertToUint64());
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    Lobby *lobby = get_lobby(steamIDLobby);
+    if (!lobby || lobby->deleted())
+        return false;
+    if (lobby->owner() != settings->get_local_steam_id().ConvertToUint64())
+        return false;
+    if (steamIDMember == settings->get_local_steam_id())
+        return false;
+    if (!leave_lobby(lobby, steamIDMember))
+        return false;
+
+    Lobby_Messages *message = new Lobby_Messages();
+    message->set_type(Lobby_Messages::LEAVE);
+    message->set_idata(steamIDMember.ConvertToUint64());
+    message->set_id(steamIDLobby.ConvertToUint64());
+
+    Common_Message msg{};
+    msg.set_allocated_lobby_messages(message);
+    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+    msg.set_dest_id(steamIDMember.ConvertToUint64());
+    network->sendTo(&msg, true);
+
+    trigger_lobby_member_join_leave(steamIDLobby, steamIDMember, true, true, 0.01);
+    trigger_lobby_dataupdate(steamIDLobby, steamIDLobby, true, 0.01, true);
+    return true;
+}
+
+void Steam_Matchmaking::RefreshLobbyCallbacksForDota()
+{
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    RunCallbacks();
 }
 
 
@@ -735,7 +871,16 @@ void Steam_Matchmaking::LeaveLobby( CSteamID steamIDLobby )
 
                 if (lobby->members().size() > 1) {
                     leave_lobby(&(*lobby), settings->get_local_steam_id());
-                    change_owner(&(*lobby), (uint64)lobby->members(0).id());
+                    const int remaining_members = lobby->members_size();
+                    if (remaining_members > 0) {
+                        int new_owner_index = 0;
+                        if (remaining_members > 1) {
+                            static thread_local std::mt19937 generator(std::random_device{}());
+                            std::uniform_int_distribution<int> distribution(0, remaining_members - 1);
+                            new_owner_index = distribution(generator);
+                        }
+                        change_owner(&(*lobby), (uint64)lobby->members(new_owner_index).id());
+                    }
                     send_owner_packet(steamIDLobby, message);
                 } else {
                     send_clients_packet(steamIDLobby, message);
@@ -1684,6 +1829,11 @@ void Steam_Matchmaking::Callback(Common_Message *msg)
                 if (msg->lobby_messages().type() == Lobby_Messages::JOIN) {
                     PRINT_DEBUG("LOBBY MESSAGE: JOIN, lobby=%llu from=%llu", (uint64)lobby->room_id(), (uint64)msg->source_id());
                     if (add_member_to_lobby(lobby, (uint64)msg->source_id())) {
+                        Common_Message lobby_update{};
+                        lobby_update.set_allocated_lobby(new Lobby(*lobby));
+                        lobby_update.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+                        lobby_update.set_dest_id(msg->source_id());
+                        network->sendTo(&lobby_update, true);
                         trigger_lobby_member_join_leave((uint64)lobby->room_id(), (uint64)msg->source_id(), false, true, 0.01);
                     }
                 }
@@ -1709,8 +1859,11 @@ void Steam_Matchmaking::Callback(Common_Message *msg)
 
             if (msg->lobby_messages().type() == Lobby_Messages::LEAVE) {
                 PRINT_DEBUG("LOBBY MESSAGE: LEAVE " "%" PRIu64 "", msg->source_id());
-                leave_lobby(lobby, (uint64)msg->source_id());
-                if (we_are_in_lobby) trigger_lobby_member_join_leave((uint64)lobby->room_id(), (uint64)msg->source_id(), true, true, 0.2);
+                CSteamID leaving_member((uint64)(msg->lobby_messages().idata() != 0 ? msg->lobby_messages().idata() : msg->source_id()));
+                const bool member_removed = leave_lobby(lobby, leaving_member);
+                if (leaving_member == settings->get_local_steam_id())
+                    on_self_enter_leave_lobby((uint64)lobby->room_id(), lobby->type(), true);
+                if (member_removed && we_are_in_lobby) trigger_lobby_member_join_leave((uint64)lobby->room_id(), leaving_member, true, true, 0.2);
             }
 
             if (msg->lobby_messages().type() == Lobby_Messages::CHANGE_OWNER) {
@@ -1753,8 +1906,17 @@ void Steam_Matchmaking::Callback(Common_Message *msg)
 
         if (msg->low_level().type() == Low_Level::DISCONNECT) {
             for (auto & l: lobbies) {
-                if (leave_lobby(&(l), (uint64)msg->source_id()))
+                const bool disconnected_was_owner = l.owner() == msg->source_id();
+                if (leave_lobby(&(l), (uint64)msg->source_id())) {
+                    if (disconnected_was_owner && !l.deleted() && l.members_size() > 0) {
+                        uint64 owner_seed = l.room_id() ^ msg->source_id();
+                        for (const auto &member : l.members())
+                            owner_seed ^= member.id() + 0x9e3779b97f4a7c15ull + (owner_seed << 6) + (owner_seed >> 2);
+                        const int new_owner_index = static_cast<int>(owner_seed % static_cast<uint64>(l.members_size()));
+                        change_owner(&(l), (uint64)l.members(new_owner_index).id());
+                    }
                     trigger_lobby_member_join_leave((uint64)l.room_id(), (uint64)msg->source_id(), true, true, 0.0);
+                }
             }
         }
     }

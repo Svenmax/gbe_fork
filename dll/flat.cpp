@@ -20,6 +20,26 @@
 #include "dll/dll.h"
 #include "steam/steam_api_flat.h"
 
+#include <cstdio>
+
+static void GBE_LogFlatNetworkingUtilsTrace(const char *scope, ISteamNetworkingUtils *self, int value, int scope_type, int data)
+{
+    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (!file)
+        return;
+
+    std::fprintf(
+        file,
+        "[%s] self=%p value=%d scope=%d data=%d\n",
+        scope ? scope : "FLAT_NETUTILS",
+        self,
+        value,
+        scope_type,
+        data
+    );
+    std::fclose(file);
+}
+
 STEAMAPI_API HSteamPipe SteamAPI_ISteamClient_CreateSteamPipe( ISteamClient* self )
 {
     return get_steam_client()->CreateSteamPipe();
@@ -6679,11 +6699,13 @@ STEAMAPI_API SteamNetworkingMessage_t * SteamAPI_ISteamNetworkingUtils_AllocateM
 
 STEAMAPI_API void SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess( ISteamNetworkingUtils* self )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_INIT_RELAY", self, 0, 0, 0);
     return ((ISteamNetworkingUtils*)get_steam_client()->steam_networking_utils)->InitRelayNetworkAccess();
 }
 
 STEAMAPI_API ESteamNetworkingAvailability SteamAPI_ISteamNetworkingUtils_GetRelayNetworkStatus( ISteamNetworkingUtils* self, SteamRelayNetworkStatus_t * pDetails )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_GET_RELAY_STATUS", self, 0, 0, pDetails ? 1 : 0);
     return (get_steam_client()->steam_networking_utils)->GetRelayNetworkStatus(pDetails);
 }
 
@@ -6764,6 +6786,7 @@ STEAMAPI_API EResult SteamAPI_ISteamNetworkingUtils_GetRealIdentityForFakeIP( IS
 
 STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValueInt32( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eValue, int32 val )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_SET_GLOBAL_INT32", self, eValue, k_ESteamNetworkingConfig_Global, val);
     return ((ISteamNetworkingUtils*)get_steam_client()->steam_networking_utils)->SetGlobalConfigValueInt32(eValue, val);
 }
 
@@ -6784,6 +6807,7 @@ STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValuePtr( 
 
 STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetConnectionConfigValueInt32( ISteamNetworkingUtils* self, HSteamNetConnection hConn, ESteamNetworkingConfigValue eValue, int32 val )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_SET_CONN_INT32", self, eValue, hConn, val);
     return ((ISteamNetworkingUtils*)get_steam_client()->steam_networking_utils)->SetConnectionConfigValueInt32(hConn, eValue, val);
 }
 
@@ -6829,16 +6853,25 @@ STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetGlobalCallback_Message
 
 STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetConfigValue( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eValue, ESteamNetworkingConfigScope eScopeType, intptr_t scopeObj, ESteamNetworkingConfigDataType eDataType, const void * pArg )
 {
+    int data = 0;
+    if (pArg && eDataType == k_ESteamNetworkingConfig_Int32)
+        data = *reinterpret_cast<const int32 *>(pArg);
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_SET_CONFIG", self, eValue, eScopeType, data);
     return (get_steam_client()->steam_networking_utils)->SetConfigValue(eValue, eScopeType, scopeObj, eDataType, pArg);
 }
 
 STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_SetConfigValueStruct( ISteamNetworkingUtils* self, const SteamNetworkingConfigValue_t & opt, ESteamNetworkingConfigScope eScopeType, intptr_t scopeObj )
 {
+    int data = 0;
+    if (opt.m_eDataType == k_ESteamNetworkingConfig_Int32)
+        data = opt.m_val.m_int32;
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_SET_CONFIG_STRUCT", self, opt.m_eValue, eScopeType, data);
     return ((ISteamNetworkingUtils*)get_steam_client()->steam_networking_utils)->SetConfigValueStruct(opt, eScopeType, scopeObj);
 }
 
 STEAMAPI_API ESteamNetworkingGetConfigValueResult SteamAPI_ISteamNetworkingUtils_GetConfigValue( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eValue, ESteamNetworkingConfigScope eScopeType, intptr_t scopeObj, ESteamNetworkingConfigDataType * pOutDataType, void * pResult, size_t * cbResult )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_GET_CONFIG", self, eValue, eScopeType, cbResult ? static_cast<int>(*cbResult) : -1);
     return (get_steam_client()->steam_networking_utils)->GetConfigValue(eValue, eScopeType, scopeObj, pOutDataType, pResult, cbResult);
 }
 
@@ -6846,17 +6879,19 @@ STEAMAPI_API ESteamNetworkingGetConfigValueResult SteamAPI_ISteamNetworkingUtils
 //STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingUtils_GetConfigValueInfo( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eValue, const char ** pOutName, ESteamNetworkingConfigDataType * pOutDataType, ESteamNetworkingConfigScope * pOutScope, ESteamNetworkingConfigValue * pOutNextValue )
 STEAMAPI_API const char * SteamAPI_ISteamNetworkingUtils_GetConfigValueInfo( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eValue, ESteamNetworkingConfigDataType * pOutDataType, ESteamNetworkingConfigScope * pOutScope )
 {
-    //return (get_steam_client()->steam_networking_utils)->GetConfigValueInfo(eValue, pOutDataType, pOutScope);
-    return NULL;
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_GET_CONFIG_INFO", self, eValue, pOutScope ? *pOutScope : k_ESteamNetworkingConfig_Global, 0);
+    return (get_steam_client()->steam_networking_utils)->GetConfigValueInfo(eValue, pOutDataType, pOutScope);
 }
 
 STEAMAPI_API ESteamNetworkingConfigValue SteamAPI_ISteamNetworkingUtils_GetFirstConfigValue( ISteamNetworkingUtils* self )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_GET_FIRST_CONFIG", self, 0, 0, 0);
     return (get_steam_client()->steam_networking_utils)->GetFirstConfigValue();
 }
 
 STEAMAPI_API ESteamNetworkingConfigValue SteamAPI_ISteamNetworkingUtils_IterateGenericEditableConfigValues( ISteamNetworkingUtils* self, ESteamNetworkingConfigValue eCurrent, bool bEnumerateDevVars )
 {
+    GBE_LogFlatNetworkingUtilsTrace("FLAT_NETUTILS_ITER_CONFIG", self, eCurrent, k_ESteamNetworkingConfig_Global, bEnumerateDevVars ? 1 : 0);
     return (get_steam_client()->steam_networking_utils)->IterateGenericEditableConfigValues(eCurrent, bEnumerateDevVars);
 }
 

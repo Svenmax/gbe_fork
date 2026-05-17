@@ -395,16 +395,28 @@ void *Steam_Client::GetISteamGenericInterface( HSteamUser hSteamUser, HSteamPipe
             steam_networking_sockets_serialized_temp = steam_networking_sockets_serialized;
         }
 
+        GBE_LogGenericInterfaceRequest("NETSOCK_SERIALIZED_INTERFACE_REQUEST", pchVersion, hSteamUser, hSteamPipe, steam_networking_sockets_serialized_temp, server);
+
         if (strcmp(pchVersion, "SteamNetworkingSocketsSerialized001") == 0) { // not found in public archives, defined as an alias to v002 in proton src
-            return reinterpret_cast<void *>(static_cast<ISteamNetworkingSocketsSerialized002 *>(steam_networking_sockets_serialized_temp));
+            void *result = reinterpret_cast<void *>(static_cast<ISteamNetworkingSocketsSerialized002 *>(steam_networking_sockets_serialized_temp));
+            GBE_LogGenericInterfaceRequest("NETSOCK_SERIALIZED_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, server);
+            return result;
         } else if (strcmp(pchVersion, "SteamNetworkingSocketsSerialized002") == 0) {
-            return reinterpret_cast<void *>(static_cast<ISteamNetworkingSocketsSerialized002 *>(steam_networking_sockets_serialized_temp));
+            void *result = reinterpret_cast<void *>(static_cast<ISteamNetworkingSocketsSerialized002 *>(steam_networking_sockets_serialized_temp));
+            GBE_LogGenericInterfaceRequest("NETSOCK_SERIALIZED_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, server);
+            return result;
         } else if (strcmp(pchVersion, "SteamNetworkingSocketsSerialized003") == 0) {
-            return reinterpret_cast<void *>(static_cast<ISteamNetworkingSocketsSerialized003 *>(steam_networking_sockets_serialized_temp));
+            void *result = reinterpret_cast<void *>(static_cast<ISteamNetworkingSocketsSerialized003 *>(steam_networking_sockets_serialized_temp));
+            GBE_LogGenericInterfaceRequest("NETSOCK_SERIALIZED_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, server);
+            return result;
         } else if (strcmp(pchVersion, "SteamNetworkingSocketsSerialized004") == 0) {
-            return reinterpret_cast<void *>(static_cast<ISteamNetworkingSocketsSerialized004 *>(steam_networking_sockets_serialized_temp));
+            void *result = reinterpret_cast<void *>(static_cast<ISteamNetworkingSocketsSerialized004 *>(steam_networking_sockets_serialized_temp));
+            GBE_LogGenericInterfaceRequest("NETSOCK_SERIALIZED_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, server);
+            return result;
         } else if (strcmp(pchVersion, "SteamNetworkingSocketsSerialized005") == 0) {
-            return reinterpret_cast<void *>(static_cast<ISteamNetworkingSocketsSerialized005 *>(steam_networking_sockets_serialized_temp));
+            void *result = reinterpret_cast<void *>(static_cast<ISteamNetworkingSocketsSerialized005 *>(steam_networking_sockets_serialized_temp));
+            GBE_LogGenericInterfaceRequest("NETSOCK_SERIALIZED_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, server);
+            return result;
         }
     } else if (strstr(pchVersion, "SteamNetworkingSockets") == pchVersion) {
         Steam_Networking_Sockets *steam_networking_sockets_temp{};
@@ -472,14 +484,24 @@ void *Steam_Client::GetISteamGenericInterface( HSteamUser hSteamUser, HSteamPipe
             return reinterpret_cast<void *>(static_cast<ISteamNetworkingMessages *>(steam_networking_messages_temp));
         }
     } else if (strstr(pchVersion, "SteamNetworkingUtils") == pchVersion) {
+        GBE_LogGenericInterfaceRequest("NETUTILS_INTERFACE_REQUEST", pchVersion, hSteamUser, hSteamPipe, steam_networking_utils, server);
+
         if (strcmp(pchVersion, "SteamNetworkingUtils001") == 0) {
-            return reinterpret_cast<void *>(static_cast<ISteamNetworkingUtils001 *>(steam_networking_utils));
+            void *result = reinterpret_cast<void *>(static_cast<ISteamNetworkingUtils001 *>(steam_networking_utils));
+            GBE_LogGenericInterfaceRequest("NETUTILS_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, server);
+            return result;
         } else if (strcmp(pchVersion, "SteamNetworkingUtils002") == 0) {
-            return reinterpret_cast<void *>(static_cast<ISteamNetworkingUtils002 *>(steam_networking_utils));
+            void *result = reinterpret_cast<void *>(static_cast<ISteamNetworkingUtils002 *>(steam_networking_utils));
+            GBE_LogGenericInterfaceRequest("NETUTILS_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, server);
+            return result;
         } else if (strcmp(pchVersion, "SteamNetworkingUtils003") == 0) {
-            return reinterpret_cast<void *>(static_cast<ISteamNetworkingUtils003 *>(steam_networking_utils));
+            void *result = reinterpret_cast<void *>(static_cast<ISteamNetworkingUtils003 *>(steam_networking_utils));
+            GBE_LogGenericInterfaceRequest("NETUTILS_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, server);
+            return result;
         } else if (strcmp(pchVersion, STEAMNETWORKINGUTILS_INTERFACE_VERSION) == 0) {
-            return reinterpret_cast<void *>(static_cast<ISteamNetworkingUtils *>(steam_networking_utils));
+            void *result = reinterpret_cast<void *>(static_cast<ISteamNetworkingUtils *>(steam_networking_utils));
+            GBE_LogGenericInterfaceRequest("NETUTILS_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, server);
+            return result;
         }
     } else if (strstr(pchVersion, "SteamNetworking") == pchVersion) {
         return GetISteamNetworking(hSteamUser, hSteamPipe, pchVersion);
@@ -492,6 +514,9 @@ void *Steam_Client::GetISteamGenericInterface( HSteamUser hSteamUser, HSteamPipe
         }
 
         GBE_LogGenericInterfaceRequest("GC_INTERFACE_REQUEST", pchVersion, hSteamUser, hSteamPipe, steam_game_coordinator_temp, server);
+        if (server && steam_game_coordinator_temp) {
+            steam_game_coordinator_temp->GBE_MaybePrimeDotaServerWelcomeFromCache("gc_interface_request");
+        }
 
         if (strcmp(pchVersion, STEAMGAMECOORDINATOR_INTERFACE_VERSION) == 0) {
             void *result = reinterpret_cast<void *>(static_cast<ISteamGameCoordinator *>(steam_game_coordinator_temp));

@@ -36,6 +36,8 @@ struct ContextInitData {
 
 static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
 
+extern bool GBE_GetSteamClientLocalIPBinding(uint32 *ip, uint16 *port);
+
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)
 {
     FILE *file = std::fopen(GBE_kGcDebugLogPath, "a");
@@ -51,6 +53,34 @@ static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)
 
     std::fprintf(file, "\n");
     std::fclose(file);
+}
+
+static bool GBE_IsAnyOrLoopbackIPv4(uint32 ip)
+{
+    return ip == 0 || ip == 0x0100007fu || ip == 0x7f000001u;
+}
+
+static uint32 GBE_ApplyLocalIPBindingForGameServer(uint32 unIP, uint16 usGamePort, const char *caller)
+{
+    uint32 binding_ip{};
+    uint16 binding_port{};
+    if (!GBE_IsAnyOrLoopbackIPv4(unIP) || !GBE_GetSteamClientLocalIPBinding(&binding_ip, &binding_port))
+        return unIP;
+
+    if (!binding_ip)
+        return unIP;
+
+    GBE_GC_DebugLog(
+        "STEAM_LOCAL_IP_BINDING",
+        "%s unIP=%u game_port=%hu binding_ip=%u binding_port=%hu applied_ip=%u",
+        caller ? caller : "SteamGameServer_Init",
+        unIP,
+        usGamePort,
+        binding_ip,
+        binding_port,
+        binding_ip
+    );
+    return binding_ip;
 }
 
 class steam_lifetime_counters {
@@ -1068,6 +1098,7 @@ STEAMAPI_API steam_bool SteamGameServer_Init( void *a1, void *a2, void *a3, void
         memcpy(&nGameAppId, &a5, sizeof(nGameAppId));
         memcpy(&pchGameDir, &a6, sizeof(pchGameDir));
         memcpy(&pchVersionString, &a7, sizeof(pchVersionString));
+        unIP = GBE_ApplyLocalIPBindingForGameServer(unIP, usGamePort, "SteamGameServer_Init_v2");
 
         uint32 unFlags = 0;
         if (eServerMode == eServerModeAuthenticationAndSecure) unFlags = k_unServerFlagSecure;
@@ -1100,6 +1131,7 @@ STEAMAPI_API steam_bool SteamGameServer_Init( void *a1, void *a2, void *a3, void
         memcpy(&nGameAppId, &a7, sizeof(nGameAppId));
         memcpy(&pchGameDir, &a8, sizeof(pchGameDir));
         memcpy(&pchVersionString, &a9, sizeof(pchVersionString));
+        unIP = GBE_ApplyLocalIPBindingForGameServer(unIP, usGamePort, "SteamGameServer_Init_v4");
 
         uint32 unFlags = 0;
         if (eServerMode == eServerModeAuthenticationAndSecure) unFlags = k_unServerFlagSecure;
@@ -1131,6 +1163,7 @@ STEAMAPI_API steam_bool SteamGameServer_Init( void *a1, void *a2, void *a3, void
         memcpy(&eServerMode, &a6, sizeof(eServerMode));
         memcpy(&pchGameDir, &a7, sizeof(pchGameDir));
         memcpy(&pchVersionString, &a8, sizeof(pchVersionString));
+        unIP = GBE_ApplyLocalIPBindingForGameServer(unIP, usGamePort, "SteamGameServer_Init_v10");
 
         uint32 unFlags = 0;
         if (eServerMode == eServerModeAuthenticationAndSecure) unFlags = k_unServerFlagSecure;
@@ -1156,6 +1189,7 @@ STEAMAPI_API steam_bool SteamGameServer_Init( void *a1, void *a2, void *a3, void
         memcpy(&usQueryPort, &a4, sizeof(usQueryPort));
         memcpy(&eServerMode, &a5, sizeof(eServerMode));
         memcpy(&pchVersionString, &a6, sizeof(pchVersionString));
+        unIP = GBE_ApplyLocalIPBindingForGameServer(unIP, usGamePort, "SteamGameServer_Init_v12");
 
         uint32 unFlags = 0;
         if (eServerMode == eServerModeAuthenticationAndSecure) unFlags = k_unServerFlagSecure;
@@ -1225,6 +1259,7 @@ STEAMAPI_API steam_bool S_CALLTYPE SteamInternal_GameServer_Init( uint32 unIP, u
         return false;
     }
 
+    unIP = GBE_ApplyLocalIPBindingForGameServer(unIP, usGamePort, "SteamInternal_GameServer_Init");
     return client->steam_gameserver->InitGameServer(unIP, usGamePort, usQueryPort, unFlags, nGameAppId, pchVersionString);
 }
 

@@ -17,6 +17,76 @@
 
 #include "dll/steam_networking_utils.h"
 
+#include <cstdio>
+#include <cstring>
+
+namespace {
+
+int32 g_gbe_ip_allow_without_auth = 2;
+int32 g_gbe_ip_localhost_allow_without_auth = 2;
+int32 g_gbe_unencrypted = 2;
+
+void GBE_LogNetworkingConfigTrace(const char *scope, ESteamNetworkingConfigValue value, ESteamNetworkingConfigScope scope_type, int32 data)
+{
+    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (!file)
+        return;
+
+    std::fprintf(file, "[%s] value=%d scope=%d data=%d\n", scope ? scope : "NETUTILS_CONFIG", (int)value, (int)scope_type, (int)data);
+    std::fclose(file);
+}
+
+bool GBE_IsOfflineLanConfigValue(ESteamNetworkingConfigValue value)
+{
+    return value == k_ESteamNetworkingConfig_IP_AllowWithoutAuth
+        || value == k_ESteamNetworkingConfig_IPLocalHost_AllowWithoutAuth
+        || value == k_ESteamNetworkingConfig_Unencrypted;
+}
+
+int32 *GBE_GetOfflineLanConfigValuePtr(ESteamNetworkingConfigValue value)
+{
+    switch (value) {
+        case k_ESteamNetworkingConfig_IP_AllowWithoutAuth:
+            return &g_gbe_ip_allow_without_auth;
+        case k_ESteamNetworkingConfig_IPLocalHost_AllowWithoutAuth:
+            return &g_gbe_ip_localhost_allow_without_auth;
+        case k_ESteamNetworkingConfig_Unencrypted:
+            return &g_gbe_unencrypted;
+        default:
+            return nullptr;
+    }
+}
+
+const char *GBE_GetOfflineLanConfigValueName(ESteamNetworkingConfigValue value)
+{
+    switch (value) {
+        case k_ESteamNetworkingConfig_IP_AllowWithoutAuth:
+            return "IP_AllowWithoutAuth";
+        case k_ESteamNetworkingConfig_IPLocalHost_AllowWithoutAuth:
+            return "IPLocalHost_AllowWithoutAuth";
+        case k_ESteamNetworkingConfig_Unencrypted:
+            return "Unencrypted";
+        default:
+            return nullptr;
+    }
+}
+
+ESteamNetworkingConfigValue GBE_GetNextOfflineLanConfigValue(ESteamNetworkingConfigValue value)
+{
+    switch (value) {
+        case k_ESteamNetworkingConfig_Invalid:
+            return k_ESteamNetworkingConfig_IP_AllowWithoutAuth;
+        case k_ESteamNetworkingConfig_IP_AllowWithoutAuth:
+            return k_ESteamNetworkingConfig_IPLocalHost_AllowWithoutAuth;
+        case k_ESteamNetworkingConfig_IPLocalHost_AllowWithoutAuth:
+            return k_ESteamNetworkingConfig_Unencrypted;
+        default:
+            return k_ESteamNetworkingConfig_Invalid;
+    }
+}
+
+}
+
 void Steam_Networking_Utils::steam_callback(void *object, Common_Message *msg)
 {
     // PRINT_DEBUG_ENTRY();
@@ -142,6 +212,7 @@ ESteamNetworkingAvailability Steam_Networking_Utils::GetRelayNetworkStatus( Stea
         *pDetails = data;
     }
 
+    GBE_LogNetworkingConfigTrace("NETUTILS_GET_RELAY_STATUS", k_ESteamNetworkingConfig_Invalid, k_ESteamNetworkingConfig_Global, relay_initialized ? 1 : 0);
     return k_ESteamNetworkingAvailability_Current;
 }
 
@@ -361,6 +432,17 @@ bool Steam_Networking_Utils::SetConfigValue( ESteamNetworkingConfigValue eValue,
     PRINT_DEBUG("TODO %i %i " "%" PRIdPTR " %i %p", eValue, eScopeType, scopeObj, eDataType, pArg);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
+    if (int32 *stored_value = GBE_GetOfflineLanConfigValuePtr(eValue)) {
+        if (pArg && eDataType != k_ESteamNetworkingConfig_Int32)
+            return false;
+
+        if (pArg)
+            *stored_value = *reinterpret_cast<const int32 *>(pArg);
+
+        GBE_LogNetworkingConfigTrace("NETUTILS_SET_CONFIG", eValue, eScopeType, *stored_value);
+        return true;
+    }
+
     return true;
 }
 
@@ -377,6 +459,34 @@ ESteamNetworkingGetConfigValueResult Steam_Networking_Utils::GetConfigValue( ESt
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    if (int32 *stored_value = GBE_GetOfflineLanConfigValuePtr(eValue)) {
+        if (pOutDataType)
+            *pOutDataType = k_ESteamNetworkingConfig_Int32;
+
+        const size_t required = sizeof(*stored_value);
+        const size_t available = cbResult ? *cbResult : 0;
+
+        if (!pResult)
+        {
+            if (cbResult)
+                *cbResult = required;
+            return k_ESteamNetworkingGetConfigValue_BufferTooSmall;
+        }
+
+        if (!cbResult || available < required)
+        {
+            if (cbResult)
+                *cbResult = required;
+            return k_ESteamNetworkingGetConfigValue_BufferTooSmall;
+        }
+
+        std::memcpy(pResult, stored_value, required);
+        *cbResult = required;
+        GBE_LogNetworkingConfigTrace("NETUTILS_GET_CONFIG", eValue, eScopeType, *stored_value);
+        return k_ESteamNetworkingGetConfigValue_OK;
+    }
+
     return k_ESteamNetworkingGetConfigValue_BadValue;
 }
 
@@ -389,8 +499,21 @@ bool Steam_Networking_Utils::GetConfigValueInfo( ESteamNetworkingConfigValue eVa
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    //TODO flat api
-    return false;
+    const char *name = GBE_GetOfflineLanConfigValueName(eValue);
+    if (!name)
+        return false;
+
+    if (pOutName)
+        *pOutName = name;
+    if (pOutDataType)
+        *pOutDataType = k_ESteamNetworkingConfig_Int32;
+    if (pOutScope)
+        *pOutScope = k_ESteamNetworkingConfig_Global;
+    if (pOutNextValue)
+        *pOutNextValue = GBE_GetNextOfflineLanConfigValue(eValue);
+
+    GBE_LogNetworkingConfigTrace("NETUTILS_GET_CONFIG_INFO", eValue, pOutScope ? *pOutScope : k_ESteamNetworkingConfig_Global, 0);
+    return true;
 }
 
 /// Get info about a configuration value.  Returns the name of the value,
@@ -400,8 +523,17 @@ const char* Steam_Networking_Utils::GetConfigValueInfo( ESteamNetworkingConfigVa
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    //TODO flat api
-    return NULL;
+    const char *name = GBE_GetOfflineLanConfigValueName(eValue);
+    if (!name)
+        return NULL;
+
+    if (pOutDataType)
+        *pOutDataType = k_ESteamNetworkingConfig_Int32;
+    if (pOutScope)
+        *pOutScope = k_ESteamNetworkingConfig_Global;
+
+    GBE_LogNetworkingConfigTrace("NETUTILS_GET_CONFIG_INFO", eValue, pOutScope ? *pOutScope : k_ESteamNetworkingConfig_Global, 0);
+    return name;
 }
 
 /// Return the lowest numbered configuration value available in the current environment.
@@ -409,7 +541,7 @@ ESteamNetworkingConfigValue Steam_Networking_Utils::GetFirstConfigValue()
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return k_ESteamNetworkingConfig_Invalid;
+    return k_ESteamNetworkingConfig_IP_AllowWithoutAuth;
 }
 
 /// Iterate the list of all configuration values in the current environment that it might
@@ -424,7 +556,13 @@ ESteamNetworkingConfigValue Steam_Networking_Utils::IterateGenericEditableConfig
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return k_ESteamNetworkingConfig_Invalid;
+    (void)bEnumerateDevVars;
+    if (!GBE_IsOfflineLanConfigValue(eCurrent) && eCurrent != k_ESteamNetworkingConfig_Invalid)
+        return k_ESteamNetworkingConfig_Invalid;
+
+    ESteamNetworkingConfigValue next = GBE_GetNextOfflineLanConfigValue(eCurrent);
+    GBE_LogNetworkingConfigTrace("NETUTILS_ITER_CONFIG", next, k_ESteamNetworkingConfig_Global, bEnumerateDevVars ? 1 : 0);
+    return next;
 }
 
 

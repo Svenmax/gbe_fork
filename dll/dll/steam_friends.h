@@ -27,6 +27,12 @@ struct Avatar_Numbers {
     int large{};
 };
 
+struct Friend_Chat_Entry {
+    CSteamID friend_id{};
+    EChatEntryType type{};
+    std::string message{};
+};
+
 class Steam_Friends : 
 public ISteamFriends001,
 public ISteamFriends002,
@@ -65,6 +71,9 @@ public ISteamFriends
     std::chrono::high_resolution_clock::time_point last_sent_friends{};
     std::map<std::string, std::string> reg{};
     std::string reg_nullptr{};
+
+    bool listen_for_friends_messages{};
+    std::vector<Friend_Chat_Entry> friend_chat_entries{};
 
     Friend *find_friend(CSteamID id);
 

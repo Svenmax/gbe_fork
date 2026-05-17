@@ -17,24 +17,29 @@
 
 #include "dll/steam_networking_socketsserialized.h"
 
-#include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 namespace {
 
-int GBE_CopySerializedNetworkingJson(const char *json, void *buf, uint32 cbBuf)
+constexpr int GBE_kSerializedRendezvousPort = -5434;
+
+void GBE_LogSerializedNetSockTrace(const char *scope, uint64 local_id, uint64 remote_id, uint32 connection_id, uint32 size_or_reason)
 {
-    if (!json)
-        json = "{}";
+    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (!file)
+        return;
 
-    const size_t required = std::strlen(json) + 1;
-    if (buf && cbBuf > 0) {
-        const size_t to_copy = std::min<size_t>(required, cbBuf);
-        std::memcpy(buf, json, to_copy);
-        reinterpret_cast<char *>(buf)[to_copy - 1] = '\0';
-    }
-
-    return static_cast<int>(required);
+    std::fprintf(
+        file,
+        "[%s] local_id=%llu remote_id=%llu connection_id=%u size_or_reason=%u\n",
+        scope ? scope : "NETSOCK_SERIALIZED_TRACE",
+        (unsigned long long)local_id,
+        (unsigned long long)remote_id,
+        connection_id,
+        size_or_reason
+    );
+    std::fclose(file);
 }
 
 }
@@ -65,12 +70,14 @@ Steam_Networking_Sockets_Serialized::Steam_Networking_Sockets_Serialized(class S
     this->run_every_runcb = run_every_runcb;
 
     this->network->setCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
+    this->network->setCallback(CALLBACK_ID_NETWORKING_SOCKETS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
     this->run_every_runcb->add(&Steam_Networking_Sockets_Serialized::steam_run_every_runcb, this);
 
 }
 
 Steam_Networking_Sockets_Serialized::~Steam_Networking_Sockets_Serialized()
 {
+    this->network->rmCallback(CALLBACK_ID_NETWORKING_SOCKETS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
     this->network->rmCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
     this->run_every_runcb->remove(&Steam_Networking_Sockets_Serialized::steam_run_every_runcb, this);
 }
@@ -79,27 +86,57 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_SEND_RENDEZVOUS", settings->get_local_steam_id().ConvertToUint64(), steamIDRemote.ConvertToUint64(), unConnectionIDSrc, cbRendezvous);
+
+    if (!steamIDRemote.IsValid() || !pMsgRendezvous || cbRendezvous == 0)
+        return;
+
+    Common_Message msg;
+    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+    msg.set_dest_id(steamIDRemote.ConvertToUint64());
+    msg.set_allocated_networking_sockets(new Networking_Sockets);
+    msg.mutable_networking_sockets()->set_type(Networking_Sockets::DATA);
+    msg.mutable_networking_sockets()->set_real_port(GBE_kSerializedRendezvousPort);
+    msg.mutable_networking_sockets()->set_connection_id(unConnectionIDSrc);
+    msg.mutable_networking_sockets()->set_data(pMsgRendezvous, cbRendezvous);
+    network->sendTo(&msg, true);
 }
 
 void Steam_Networking_Sockets_Serialized::SendP2PConnectionFailure( CSteamID steamIDRemote, uint32 unConnectionIDDest, uint32 nReason, const char *pszReason )
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_SEND_FAILURE", settings->get_local_steam_id().ConvertToUint64(), steamIDRemote.ConvertToUint64(), unConnectionIDDest, nReason);
+
+    if (!steamIDRemote.IsValid())
+        return;
+
+    SteamNetworkingSocketsRecvP2PFailure_t failure = {};
+    failure.steamIDRemote = settings->get_local_steam_id().ConvertToUint64();
+    failure.unConnectionIDDest = unConnectionIDDest;
+    failure.nReason = nReason;
+    if (pszReason) {
+        std::strncpy(failure.pszReason, pszReason, sizeof(failure.pszReason) - 1);
+    }
+
+    Common_Message msg;
+    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+    msg.set_dest_id(steamIDRemote.ConvertToUint64());
+    msg.set_allocated_networking_sockets(new Networking_Sockets);
+    msg.mutable_networking_sockets()->set_type(Networking_Sockets::CONNECTION_END);
+    msg.mutable_networking_sockets()->set_real_port(GBE_kSerializedRendezvousPort);
+    msg.mutable_networking_sockets()->set_connection_id(unConnectionIDDest);
+    msg.mutable_networking_sockets()->set_message_number(nReason);
+    msg.mutable_networking_sockets()->set_data(&failure, sizeof(failure));
+    network->sendTo(&msg, true);
 }
 
 SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     struct SteamNetworkingSocketsCert_t data = {};
-    data.m_eResult = k_EResultFail;
-    const char *message = "Goldberg serialized cert is unavailable";
-    std::strncpy(data.m_certOrMsg, message, sizeof(data.m_certOrMsg) - 1);
-    data.m_certOrMsg[sizeof(data.m_certOrMsg) - 1] = '\0';
-    data.m_cbCert = 0;
-    data.m_caKeyID = 0;
-    data.m_cbSignature = 0;
-    data.m_cbPrivKey = 0;
+    data.m_eResult = k_EResultNoConnection;
 
     auto ret = callback_results->addCallResult(data.k_iCallback, &data, sizeof(data));
     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
@@ -110,7 +147,10 @@ int Steam_Networking_Sockets_Serialized::GetNetworkConfigJSON( void *buf, uint32
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return GBE_CopySerializedNetworkingJson("{}", buf, cbBuf);
+    (void)pszLauncherPartner;
+    if (buf && cbBuf > 0)
+        reinterpret_cast<char *>(buf)[0] = '\0';
+    return 0;
 }
 
 int Steam_Networking_Sockets_Serialized::GetNetworkConfigJSON( void *buf, uint32 cbBuf )
@@ -159,6 +199,7 @@ bool Steam_Networking_Sockets_Serialized::BAllowDirectConnectToPeer(SteamNetwork
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_ALLOW_DIRECT", settings->get_local_steam_id().ConvertToUint64(), identity.GetSteamID64(), 0, 1);
     return true;
 }
 
@@ -183,6 +224,33 @@ void Steam_Networking_Sockets_Serialized::Callback(Common_Message *msg)
 
         if (msg->low_level().type() == Low_Level::DISCONNECT) {
 
+        }
+    }
+
+    if (msg->has_networking_sockets() && msg->networking_sockets().real_port() == GBE_kSerializedRendezvousPort) {
+        const Networking_Sockets &net_msg = msg->networking_sockets();
+        if (net_msg.type() == Networking_Sockets::DATA) {
+            SteamNetworkingSocketsRecvP2PRendezvous_t data = {};
+            data.steamIDRemote = msg->source_id();
+            data.unConnectionIDSrc = static_cast<uint32>(net_msg.connection_id());
+            data.m_cbRendezvous = static_cast<uint32>(std::min<size_t>(net_msg.data().size(), sizeof(data.m_MsgRendezvous)));
+            if (data.m_cbRendezvous > 0)
+                std::memcpy(data.m_MsgRendezvous, net_msg.data().data(), data.m_cbRendezvous);
+
+            GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_RECV_RENDEZVOUS", settings->get_local_steam_id().ConvertToUint64(), msg->source_id(), data.unConnectionIDSrc, data.m_cbRendezvous);
+            callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+        } else if (net_msg.type() == Networking_Sockets::CONNECTION_END) {
+            SteamNetworkingSocketsRecvP2PFailure_t data = {};
+            if (net_msg.data().size() >= sizeof(data)) {
+                std::memcpy(&data, net_msg.data().data(), sizeof(data));
+            } else {
+                data.steamIDRemote = msg->source_id();
+                data.unConnectionIDDest = static_cast<uint32>(net_msg.connection_id());
+                data.nReason = static_cast<uint32>(net_msg.message_number());
+            }
+
+            GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_RECV_FAILURE", settings->get_local_steam_id().ConvertToUint64(), msg->source_id(), data.unConnectionIDDest, data.nReason);
+            callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
         }
     }
 }

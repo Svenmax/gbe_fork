@@ -17,6 +17,58 @@
 
 #include "dll/steam_http.h"
 
+#include <cstdio>
+
+#include "steam/isteamnetworkingsocketsserialized.h"
+
+namespace {
+
+const char *GBE_GetOfflineSDRConfigJSON()
+{
+    return
+        "{\"revision\":1778707800,\"pops\":{"
+        "\"sgp\":{\"desc\":\"Singapore\",\"geo\":[103.83,1.28],\"partners\":3,\"tier\":0,"
+        "\"relays\":[{\"ipv4\":\"103.10.124.116\",\"port_range\":[27015,27060]}]}},"
+        "\"certs\":["
+        "\"Ii4IARIgSJbwDpn/07/GHiGMKio0Vh18VN3D/hKzQGh6n0Yx9qpF2uYEak3a6dB8KT6tfJIvitz8MkADsyKTi+VwxYwR6npnpWPd42q0AYGT5GY9Fje8AbrTFvsRwS6tNRX/1JQqpZZYhC/drdKjYcIPKUxa1KEgS/QO\","
+        "\"Ii4IARIgmuygThdRzmJo1WkALKHh+hstvCbTa06joAg603KCm4RF2uYEak3a6dB8KT6tfJIvitz8MkDiEksgJ+a351sr1F+N+GTvtboavJFRg/M2/x1B6Biro/BEgHskHZlIQJULbpvkDCvzBHBiZ+1L59hmdj32aucK\""
+        "],\"p2p_share_ip\":{\"default\":40,\"cn\":20,\"ru\":20},"
+        "\"relay_public_key\":\"5AC884C1045BA0FF44142AC8DCA51B8A98C8F1CB4FEE36284AFBE92FCF594932\","
+        "\"revoked_keys\":[\"11146342570456886677\"],\"typical_pings\":[],\"success\":true}";
+}
+
+bool GBE_IsSDRConfigURL(const std::string &url)
+{
+    return url.find("/ISteamApps/GetSDRConfig/v1") != std::string::npos
+        && (url.find("api.steampowered.com") != std::string::npos || url.find("api.steamchina.com") != std::string::npos);
+}
+
+void GBE_LogHTTPTrace(const char *scope, HTTPRequestHandle handle, const std::string &url, size_t response_size)
+{
+    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (!file)
+        return;
+
+    std::fprintf(
+        file,
+        "[%s] handle=%u response_size=%zu url=%s\n",
+        scope ? scope : "HTTP_TRACE",
+        handle,
+        response_size,
+        url.c_str()
+    );
+    std::fclose(file);
+}
+
+void GBE_PostNetworkingSocketsConfigUpdated(SteamCallBacks *callbacks, const Steam_Http_Request &request)
+{
+    SteamNetworkingSocketsConfigUpdated_t data{};
+    callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
+    GBE_LogHTTPTrace("HTTP_SDR_CONFIG_UPDATED_CB", request.handle, request.url, sizeof(data));
+}
+
+}
+
 Steam_HTTP::Steam_HTTP(class Settings *settings, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks)
 {
     this->settings = settings;
@@ -165,6 +217,10 @@ HTTPRequestHandle Steam_HTTP::CreateHTTPRequest( EHTTPMethod eHTTPRequestMethod,
     if (url_index > 0) {
         PRINT_DEBUG("URL is a web link");
         create_http_request_web(request, url_index);
+        if (GBE_IsSDRConfigURL(request.url)) {
+            request.response = GBE_GetOfflineSDRConfigJSON();
+            GBE_LogHTTPTrace("HTTP_SDR_CONFIG_CREATE", request.handle, request.url, request.response.size());
+        }
     } else if (file_index > 0) {
         PRINT_DEBUG("URL is a filepath");
         create_http_request_file(request, file_index);
@@ -482,6 +538,12 @@ bool Steam_HTTP::SendHTTPRequest( HTTPRequestHandle hRequest, SteamAPICall_t *pC
     Steam_Http_Request *request = get_request(hRequest);
     if (!request) {
         return false;
+    }
+
+    if (GBE_IsSDRConfigURL(request->url)) {
+        request->response = GBE_GetOfflineSDRConfigJSON();
+        GBE_LogHTTPTrace("HTTP_SDR_CONFIG_SEND", request->handle, request->url, request->response.size());
+        GBE_PostNetworkingSocketsConfigUpdated(callbacks, *request);
     }
 
     switch (request->protocol)
