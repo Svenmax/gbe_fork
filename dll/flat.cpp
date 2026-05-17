@@ -40,24 +40,6 @@ static void GBE_LogFlatNetworkingUtilsTrace(const char *scope, ISteamNetworkingU
     std::fclose(file);
 }
 
-static void GBE_LogFlatNetworkingSocketsCertTrace(const char *scope, ISteamNetworkingSockets *self, const void *selected, int size_or_available, int status)
-{
-    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
-    if (!file)
-        return;
-
-    std::fprintf(
-        file,
-        "[%s] self=%p selected=%p size_or_available=%d status=%d\n",
-        scope ? scope : "FLAT_NETSOCK_CERT",
-        self,
-        selected,
-        size_or_available,
-        status
-    );
-    std::fclose(file);
-}
-
 STEAMAPI_API HSteamPipe SteamAPI_ISteamClient_CreateSteamPipe( ISteamClient* self )
 {
     return get_steam_client()->CreateSteamPipe();
@@ -6379,7 +6361,6 @@ STEAMAPI_API ESteamNetworkingAvailability SteamAPI_ISteamNetworkingSockets_InitA
         ptr = get_steam_client()->steam_networking_sockets;
     }
 
-    GBE_LogFlatNetworkingSocketsCertTrace("FLAT_NETSOCK_INIT_AUTH", self, ptr, 0, 1);
     return (ptr)->InitAuthentication();
 }
 
@@ -6392,7 +6373,6 @@ STEAMAPI_API ESteamNetworkingAvailability SteamAPI_ISteamNetworkingSockets_GetAu
         ptr = get_steam_client()->steam_networking_sockets;
     }
 
-    GBE_LogFlatNetworkingSocketsCertTrace("FLAT_NETSOCK_GET_AUTH_STATUS", self, ptr, 0, pDetails ? 1 : 0);
     return (ptr)->GetAuthenticationStatus(pDetails);
 }
 
@@ -6578,7 +6558,6 @@ STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingSockets_GetCertificateRequest( 
         ptr = get_steam_client()->steam_networking_sockets;
     }
 
-    GBE_LogFlatNetworkingSocketsCertTrace("FLAT_NETSOCK_GET_CERT_REQUEST", self, ptr, pcbBlob ? *pcbBlob : -1, pBlob ? 1 : 0);
     return (ptr)->GetCertificateRequest(pcbBlob, pBlob, errMsg);
 }
 
@@ -6591,7 +6570,6 @@ STEAMAPI_API steam_bool SteamAPI_ISteamNetworkingSockets_SetCertificate( ISteamN
         ptr = get_steam_client()->steam_networking_sockets;
     }
 
-    GBE_LogFlatNetworkingSocketsCertTrace("FLAT_NETSOCK_SET_CERT", self, ptr, cbCertificate, pCertificate ? 1 : 0);
     return (ptr)->SetCertificate(pCertificate, cbCertificate, errMsg);
 }
 

@@ -17,7 +17,6 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
-#include "dll/gbe_ed25519.h"
 #include <atomic>
 #include <algorithm>
 #include <array>
@@ -45,8 +44,6 @@ constexpr int GC_MIN_VERSION = 20091217;
 static constexpr uint32 GBE_kProtoMask = 0x80000000u;
 static constexpr uint32 GBE_kEMsgClientToGC = 5452u;
 static constexpr uint32 GBE_kEMsgClientFromGC = 5453u;
-static constexpr uint32 GBE_kEMsgClientNetworkingCertRequest = 5621u;
-static constexpr uint32 GBE_kEMsgClientNetworkingCertRequestResponse = 5622u;
 static constexpr uint32 GBE_kEMsgGCClientHello = 4006u;
 static constexpr uint32 GBE_kEMsgGCServerHello = 4007u;
 static constexpr uint32 GBE_kEMsgGCClientWelcome = 4004u;
@@ -96,12 +93,6 @@ static constexpr uint32 GBE_kDotaLobbyListResponse = 8012u;
 static constexpr uint32 GBE_kDotaSOUpdateMultiple = 6146u;
 static constexpr size_t GBE_kDotaWelcomeInnerBodyOffset = 48u;
 static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
-static constexpr uint8 GBE_kSyntheticNetworkingPublicKey[32] = {
-    0xd7, 0x5a, 0x98, 0x01, 0x82, 0xb1, 0x0a, 0xb7,
-    0xd5, 0x4b, 0xfe, 0xd3, 0xc9, 0x64, 0x07, 0x3a,
-    0x0e, 0xe1, 0x72, 0xf3, 0xda, 0xa6, 0x23, 0x25,
-    0xaf, 0x02, 0x1a, 0x68, 0xf7, 0x07, 0x51, 0x1a,
-};
 static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
 static constexpr uint32 GBE_kDotaLobbyField128Value = 1776809986u;
 static constexpr uint32 GBE_kDotaTeamGoodGuys = 0u;
@@ -1737,52 +1728,6 @@ static void GBE_AppendProtoFixed32Field(std::string &buffer, uint32 field_number
 {
     GBE_AppendVarUint64(buffer, (static_cast<uint64>(field_number) << 3) | 5u);
     ser_var<uint32>(buffer, value);
-}
-
-static std::string GBE_BuildNetworkingCertBody(uint64 steam_id64, uint32 app_id, const std::string &public_key)
-{
-    const uint32 now = static_cast<uint32>(std::time(nullptr));
-    const uint32 expiry = now + 24u * 60u * 60u;
-    const std::string identity = std::string("steamid:") + std::to_string(steam_id64);
-    std::string identity_binary;
-    GBE_AppendProtoFixed64Field(identity_binary, 16u, steam_id64);
-
-    std::string cert;
-    cert.reserve(128);
-    GBE_AppendProtoVarIntField(cert, 1u, 1u);
-    GBE_AppendProtoBytesField(cert, 2u, public_key);
-    GBE_AppendProtoFixed64Field(cert, 4u, steam_id64);
-    GBE_AppendProtoFixed32Field(cert, 8u, now);
-    GBE_AppendProtoFixed32Field(cert, 9u, expiry);
-    GBE_AppendProtoVarIntField(cert, 10u, app_id);
-    GBE_AppendProtoBytesField(cert, 11u, identity_binary);
-    GBE_AppendProtoBytesField(cert, 12u, identity);
-    return cert;
-}
-
-static bool GBE_BuildNetworkingCertReplyBody(uint64 steam_id64, uint32 app_id, const std::string &requested_public_key, std::string &body)
-{
-    static constexpr uint8 private_key[32] = {
-        0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60,
-        0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
-        0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19,
-        0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60,
-    };
-    static constexpr uint64 ca_key_id = 7035278622117199393ull;
-
-    const std::string public_key = requested_public_key.size() == sizeof(GBE_kSyntheticNetworkingPublicKey)
-        ? requested_public_key
-        : std::string(reinterpret_cast<const char *>(GBE_kSyntheticNetworkingPublicKey), sizeof(GBE_kSyntheticNetworkingPublicKey));
-    const std::string cert = GBE_BuildNetworkingCertBody(steam_id64, app_id, public_key);
-    uint8 signature[64] = {};
-    if (gbe_ed25519_sign(signature, reinterpret_cast<const uint8 *>(cert.data()), cert.size(), private_key) != 0)
-        return false;
-
-    body.clear();
-    GBE_AppendProtoBytesField(body, 4u, cert);
-    GBE_AppendProtoFixed64Field(body, 5u, ca_key_id);
-    GBE_AppendProtoBytesField(body, 6u, std::string(reinterpret_cast<const char *>(signature), sizeof(signature)));
-    return true;
 }
 
 static bool GBE_RewriteProtoVarIntFields(
@@ -16431,55 +16376,6 @@ EGCResults Steam_Game_Coordinator::SendMessage_( uint32 unMsgType, const void *p
 
     if (!gc_initialized) {
         GBE_GC_DebugLog("GC_SEND", "gc not initialized, swallowing msg=%u", GBE_GC_MaskedEMsg(unMsgType));
-        return k_EGCResultOK;
-    }
-
-    if (GBE_GC_MaskedEMsg(unMsgType) == GBE_kEMsgClientNetworkingCertRequest) {
-        uint64 source_job = k_GIDNil;
-        const uint8 *request_body = nullptr;
-        size_t request_body_size = 0;
-        if ((unMsgType & protobuf_mask) != 0 && pubData && cubData >= sizeof(ProtoBufMsgHeader_t)) {
-            const char *cursor = reinterpret_cast<const char *>(pubData);
-            const char *end = cursor + cubData;
-            ProtoBufMsgHeader_t hdr = deser_var<ProtoBufMsgHeader_t>(cursor);
-            if ((end - cursor) >= hdr.m_cubProtoBufExtHdr) {
-                CMsgProtoBufHeader protohdr;
-                if (protohdr.ParseFromArray(cursor, hdr.m_cubProtoBufExtHdr) && protohdr.has_job_id_source())
-                    source_job = protohdr.job_id_source();
-                cursor += hdr.m_cubProtoBufExtHdr;
-                request_body = reinterpret_cast<const uint8 *>(cursor);
-                request_body_size = static_cast<size_t>(end - cursor);
-            }
-        } else if (pubData && cubData != 0) {
-            request_body = reinterpret_cast<const uint8 *>(pubData);
-            request_body_size = cubData;
-        }
-
-        uint32 requested_app_id = settings->get_local_game_id().AppID();
-        std::string requested_public_key;
-        if (request_body && request_body_size != 0) {
-            GBE_ExtractProtoFieldBytes(request_body, request_body_size, GBE_FindProtoField(request_body, request_body_size, 2u), requested_public_key);
-            GBE_ExtractProtoFieldUint32(request_body, request_body_size, GBE_FindProtoField(request_body, request_body_size, 3u), requested_app_id);
-        }
-
-        std::string reply_body;
-        if (GBE_BuildNetworkingCertReplyBody(settings->get_local_steam_id().ConvertToUint64(), requested_app_id, requested_public_key, reply_body)) {
-            std::string reply = build_protomsg_header(GBE_kEMsgClientNetworkingCertRequestResponse | protobuf_mask, source_job, k_GIDNil);
-            reply.append(reply_body);
-            push_incoming_now(GBE_kEMsgClientNetworkingCertRequestResponse | protobuf_mask, reply);
-            GBE_GC_DebugLog(
-                "GC_NET_CERT",
-                "handled 5621 via GameCoordinator shim source_job=%llu app_id=%u key_size=%zu request_body=%zu reply_size=%zu body_size=%zu",
-                static_cast<unsigned long long>(source_job),
-                requested_app_id,
-                requested_public_key.size(),
-                request_body_size,
-                reply.size(),
-                reply_body.size()
-            );
-        } else {
-            GBE_GC_DebugLog("GC_NET_CERT", "failed to build 5622 reply for 5621 request");
-        }
         return k_EGCResultOK;
     }
 
