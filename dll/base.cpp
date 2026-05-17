@@ -687,10 +687,8 @@ BOOL WINAPI DllMain( HINSTANCE, DWORD dwReason, LPVOID )
             GBE_LogDllBootstrap("DLL LOADED SUCCESSFULLY");
             PRINT_DEBUG("experimental DLL_PROCESS_ATTACH");
             
-#ifdef __WINDOWS__
-            // Apply Dota 2 LAN patch for steamnetworkingsockets.dll
+            // Apply Dota 2 LAN patch for steamnetworkingsockets (cross-platform)
             NetworkingPatch::ApplyAll();
-#endif
             
             if (!settings_disable_lan_only()) {
                 PRINT_DEBUG("Hooking lan only functions");
@@ -748,6 +746,10 @@ struct CppRuntimeTrick {
     CppRuntimeTrick()
     {
         PRINT_DEBUG_ENTRY();
+        
+        // Apply Dota 2 LAN patch for steamnetworkingsockets (cross-platform)
+        NetworkingPatch::ApplyAll();
+        
         load_dlls();
     }
 
