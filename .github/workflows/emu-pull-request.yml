@@ -47,6 +47,6 @@ jobs:
     if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     uses: "./.github/workflows/emu-build-all-win.yml"
     with:
-      matrix_prj: '["api_regular"]'
+      matrix_prj: '["api_experimental"]'
       matrix_arch: '["x64"]'
       matrix_cfg: '["release"]'
