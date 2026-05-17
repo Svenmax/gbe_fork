@@ -10043,6 +10043,11 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                 std::vector<GBE_DotaLobbyMemberState> members;
                 const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
                 const std::vector<CSteamID> generic_members = steam_client->steam_matchmaking->GetLobbyMemberListSnapshot(generic_lobby_id);
+                const bool preserve_launched_lan_members =
+                    GBE_local_lobby.lan &&
+                    GBE_local_lobby.match_id != 0ull &&
+                    GBE_local_lobby.state >= 1u &&
+                    !generic_members.empty();
                 bool owner_in_generic_members = false;
                 for (const CSteamID &member_id : generic_members) {
                     if (!member_id.IsValid())
@@ -10082,15 +10087,18 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                         member.slot = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby_id, member_id, GBE_kDotaGenericLobbyMemberSlotKey));
                         member.hero_id = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby_id, member_id, GBE_kDotaGenericLobbyMemberHeroKey));
                         member.connected = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby_id, member_id, GBE_kDotaGenericLobbyMemberConnectedKey)) != 0u;
+                        if (preserve_launched_lan_members && !member.connected) {
+                            for (const GBE_DotaLobbyMemberState &existing : GBE_local_lobby.members) {
+                                if (existing.steam_id == member.steam_id && existing.connected) {
+                                    member.connected = true;
+                                    break;
+                                }
+                            }
+                        }
                     }
                     GBE_UpsertDotaLobbyMember(members, member);
                 }
 
-                const bool preserve_launched_lan_members =
-                    GBE_local_lobby.lan &&
-                    GBE_local_lobby.match_id != 0ull &&
-                    GBE_local_lobby.state >= 1u &&
-                    !generic_members.empty();
                 for (const GBE_DotaLobbyMemberState &existing : GBE_local_lobby.members) {
                     const bool missing_from_generic =
                         existing.steam_id != 0ull &&

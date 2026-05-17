@@ -441,23 +441,41 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 官方多次邀请抓包中，`24(2011) CMsgSOCacheSubscribed` 顶层带 `field3 fixed64 cache version`，通常为 `invite_gid + 2`；`26(remove 2011)` 顶层也带新的 `field3 fixed64 cache version` 和 `field6 owner_soid(type=4/id=被邀请者)`。
   - 重新邀请链路中的 SO cache version 应跨 `24` 和 `26` 单调推进，不能只让 `invite_gid` 变化但让顶层订阅/删除消息缺少或回退 version。
 
-[Dota2 邀请同意前的 SteamNetworkingSockets 认证]
-- Date: 2026-05-13
-- Context: Agent 在排查 Dota2 practice lobby 邀请 UI 已弹出但点击同意仍弹 VAC 并发送 `4513 accept=false` 时发现
-- Category: 代码模式
+[Dota2 LAN 调试当前约束]
+- Date: 2026-05-17
+- Context: 用户在 Dota2 LAN practice lobby 调试中纠正过时方向并确认证书问题已自行解决
 - Instructions:
-  - 如果 `console.log` 出现 `SteamNetSockets` 的 `Cert failure 2: Goldberg serialized cert is unavailable` 和 `AuthStatus Failed`，问题不在 GC 接受链路，而是客户端本地 SteamNetworkingSockets 认证已失败。
-  - `dll/steam_networking_socketsserialized.cpp` 的 `Steam_Networking_Sockets_Serialized::GetCertAsync()` 不能返回 `k_EResultFail` 和失败文案；Dota 会在点击同意前本地判定不可加入，并把用户同意转成 `4513 accept=false`。
-  - 这类问题应先修 serialized cert/auth status，再观察客户端是否发出官方接受包 `4513 accept=true`；不要把 `accept=false` 强行当作加入处理。
+  - 继续在 `gbe_fork` 的 `260503-fix-dashboard-hero-select-homepage` 分支开发，不要切回 main/master；不本地编译，以用户实测日志和远端 CI 为准。
+  - 严格按官方抓包和实测日志收敛，不靠 synthetic/UI 补丁；有明确下一步就直接继续。
+  - 用户已解决证书问题；不要继续实现或测试 synthetic cert、CA、`GetCertAsync` failure、Dota datagram ticket 等证书/auth 方向。
+  - 不协助 closed-source `steamnetworkingsockets.dll` 逆向、运行期内存 patch、config/auth gating 绕过；继续只做 emu 侧公开接口、HTTP hook、CM/GC 协议模拟和必要清理。
+  - `networking_sockets_lib/steamnetworkingsockets.cpp` 只是薄 shim，不能替代 closed-source `steamnetworkingsockets.dll`，不要把它当主方案。
 
-[SteamNetworkingSockets serialized cert 签名要求]
-- Date: 2026-05-13
-- Context: Agent 在排查 `Cert request returned invalid signature` 时对照 `GameNetworkingSockets` certstore 与 `SteamNetworkingSocketsCert_t` ABI 发现
+[Dota2 LAN 直连 endpoint 约束]
+- Date: 2026-05-17
+- Context: Agent 在多轮 LAN practice lobby 连接实测后更新旧的 `server_id` 结论
 - Category: 代码模式
 - Instructions:
-  - `SteamNetworkingSocketsCert_t.m_certOrMsg` 按 SDK 注释是裸 `CMsgSteamDatagramCertificate` protobuf，而签名和 CA key id 分别放在 `m_signature`、`m_caKeyID`。
-  - `m_cbSignature=0` 会让 Dota 的 SteamNetworkingSockets 私有证书路径进入 `Cert request returned invalid signature`，因此本地 cert 必须返回 64 字节 Ed25519 签名。
-  - SteamNetworkingSockets key id 计算方式是对 32 字节 Ed25519 public key 做 SHA256，并按 little-endian 读取 digest 前 8 字节。
+  - LAN practice lobby 当前优先保持 `server_id=0` 或不写 field 6，避免 peer 通过 lobby `server_id` / `GetLobbyGameServer` fallback 回到 `[A:]` / `[G:]` endpoint。
+  - peer 连接目标应走干净单个 `connect ip:27015`，例如 `172.19.60.90:27015`；不要拼接重复 endpoint。
+  - 组网软件 LAN 场景继续发布 4508 `public_ip` / 虚拟地址，例如 `172.19.x.x:27015`，不要改成物理 LAN `private_ip`，例如 `192.168.x.x:27015`。
+  - 有效 `[G:1:<ip>]` 会进入 closed-source `P2P steamid` 路径，离线 LAN 下超时；`[I:*:<ip>]` / invalid SteamID account ID 变体也已被实测排除。
+
+[Dota2 LAN 7034 connected 状态不能被过期 generic member data 降级]
+- Date: 2026-05-17
+- Context: Agent 在分析 host 卡在 `Loaded/expected players: 1/2` 和 peer `connection state 1` 时发现
+- Category: 代码模式
+- Instructions:
+  - host 端 `7034` 请求可携带 peer 的 connected player 信息，server GC 会据此把远端成员标记为 connected。
+  - 已启动 LAN lobby 中，generic lobby member data 可能仍保留 peer 端早先发布的 `gbe_dota_member_connected=0`，后续 snapshot 重建如果直接读取该值，会把 server 已确认的运行期 connected 状态降级为 disconnected。
+  - 修复方向是在 launched LAN member preservation 路径中保留已确认 connected 的 remote member，不让过期 generic member data 使 `7034` 响应继续输出 `connected=1 disconnected=1`。
+
+[Git 提交身份偏好]
+- Date: 2026-05-06
+- Context: 用户要求后续使用指定 Git 提交身份
+- Instructions:
+  - 后续需要提交时，使用提交作者名称 `OpenCode` 和邮箱 `OpenCode@opencode.com`。
+  - 不要修改 git config；用单次提交环境变量或命令参数应用该身份。
 
 [抓包解析必须完整展开]
 - Date: 2026-05-13
