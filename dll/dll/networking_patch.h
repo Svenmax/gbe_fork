@@ -20,6 +20,7 @@
 #include <cstring>
 #include <thread>
 #include <chrono>
+#include <cstdio>
 
 #ifdef __WINDOWS__
 #include <windows.h>
@@ -36,6 +37,20 @@
 #endif
 
 namespace NetworkingPatch {
+
+// 调试日志函数
+static void DebugLog(const char* format, ...)
+{
+    FILE* file = std::fopen("C:\\Users\\Public\\gbe_networking_patch.log", "a");
+    if (!file) return;
+    
+    va_list args;
+    va_start(args, format);
+    std::vfprintf(file, format, args);
+    va_end(args);
+    std::fprintf(file, "\n");
+    std::fclose(file);
+}
 
 // 跨平台类型定义
 #ifdef __WINDOWS__
@@ -65,34 +80,39 @@ static byte_t* FindPattern(byte_t* base, size_t size, const byte_t* pattern, con
 // 修改内存中的字节（跨平台）
 static bool PatchByte(byte_t* address, byte_t oldValue, byte_t newValue)
 {
-    if (*address != oldValue) return false;
+    if (*address != oldValue) {
+        DebugLog("[PATCH] Byte mismatch at %p: expected 0x%02X, found 0x%02X", address, oldValue, *address);
+        return false;
+    }
 
 #ifdef __WINDOWS__
     DWORD oldProtect;
     if (!VirtualProtect(address, 1, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+        DebugLog("[PATCH] VirtualProtect failed: error %lu", GetLastError());
         return false;
     }
     *address = newValue;
     VirtualProtect(address, 1, oldProtect, &oldProtect);
+    DebugLog("[PATCH] Successfully patched byte at %p: 0x%02X -> 0x%02X", address, oldValue, newValue);
     return true;
 #else
     // Linux/macOS: 使用 mprotect
-    // 获取页面大小
     long pageSize = sysconf(_SC_PAGESIZE);
-    if (pageSize <= 0) return false;
+    if (pageSize <= 0) {
+        DebugLog("[PATCH] Failed to get page size");
+        return false;
+    }
     
-    // 计算页面对齐的地址
     void* pageStart = (void*)((uintptr_t)address & ~(pageSize - 1));
     
-    // 修改内存保护
     if (mprotect(pageStart, pageSize, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
+        DebugLog("[PATCH] mprotect failed: errno %d", errno);
         return false;
     }
     
     *address = newValue;
-    
-    // 恢复内存保护（可选，但更安全）
     mprotect(pageStart, pageSize, PROT_READ | PROT_EXEC);
+    DebugLog("[PATCH] Successfully patched byte at %p: 0x%02X -> 0x%02X", address, oldValue, newValue);
     return true;
 #endif
 }
@@ -107,6 +127,8 @@ static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
         nullptr
     };
 
+    DebugLog("[INIT] Searching for steamnetworkingsockets DLL...");
+    
     // 尝试 30 秒（300 次 * 100ms）
     for (int retry = 0; retry < 300; retry++) {
         for (int i = 0; dllNames[i]; i++) {
@@ -116,12 +138,15 @@ static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
                 if (GetModuleInformation(GetCurrentProcess(), h, &modInfo, sizeof(modInfo))) {
                     *outBase = (byte_t*)modInfo.lpBaseOfDll;
                     *outSize = modInfo.SizeOfImage;
+                    DebugLog("[INIT] Found %s at base %p, size %lu bytes", dllNames[i], *outBase, *outSize);
                     return h;
                 }
             }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    
+    DebugLog("[INIT] Failed to find steamnetworkingsockets DLL after 30 seconds");
     return nullptr;
 }
 #else
@@ -139,14 +164,14 @@ static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
         nullptr
     };
 
+    DebugLog("[INIT] Searching for steamnetworkingsockets library...");
+    
     // 尝试 30 秒（300 次 * 100ms）
     for (int retry = 0; retry < 300; retry++) {
         for (int i = 0; libNames[i]; i++) {
             void* handle = dlopen(libNames[i], RTLD_LAZY | RTLD_NOLOAD);
             if (handle) {
-                // 获取库的基地址和大小
 #ifdef __APPLE__
-                // macOS: 使用 dyld API
                 uint32_t imageCount = _dyld_image_count();
                 for (uint32_t j = 0; j < imageCount; j++) {
                     const char* imageName = _dyld_get_image_name(j);
@@ -154,15 +179,13 @@ static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
                         const struct mach_header* header = (const struct mach_header*)_dyld_get_image_header(j);
                         if (header) {
                             *outBase = (byte_t*)header;
-                            // 估算大小（遍历 load commands）
-                            // 简化处理：使用一个合理的默认值
                             *outSize = 10 * 1024 * 1024; // 10MB
+                            DebugLog("[INIT] Found %s at base %p", imageName, *outBase);
                             return handle;
                         }
                     }
                 }
 #else
-                // Linux: 使用 dl_iterate_phdr
                 struct CallbackData {
                     const char* targetName;
                     byte_t** base;
@@ -174,7 +197,6 @@ static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
                     CallbackData* d = (CallbackData*)data;
                     if (info->dlpi_name && strstr(info->dlpi_name, "steamnetworkingsockets")) {
                         *(d->base) = (byte_t*)info->dlpi_addr;
-                        // 计算总大小
                         size_t totalSize = 0;
                         for (int k = 0; k < info->dlpi_phnum; k++) {
                             if (info->dlpi_phdr[k].p_type == PT_LOAD) {
@@ -186,7 +208,8 @@ static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
                         }
                         *(d->size) = totalSize;
                         d->found = true;
-                        return 1; // 停止迭代
+                        DebugLog("[INIT] Found %s at base %p, size %zu bytes", info->dlpi_name, *(d->base), *(d->size));
+                        return 1;
                     }
                     return 0;
                 }, &data);
@@ -200,92 +223,90 @@ static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    
+    DebugLog("[INIT] Failed to find steamnetworkingsockets library after 30 seconds");
     return nullptr;
 }
 #endif
 
 // 补丁：让 IP_AllowWithoutAuth 参数在 release 模式下可见
-// 
-// Windows 特征：TEST BL,BL + JNZ +0x11 + MOV RAX,[RAX+0x20]
-// 字节：84 DB 75 11 48 8B 40 20
-// 修改：75 -> 74 (JNZ -> JZ)
-//
-// Linux/macOS 可能使用不同的寄存器和指令，但逻辑相同
-// 需要根据实际情况调整特征字节
 static bool PatchConfigVisibility(byte_t* base, size_t size)
 {
+    DebugLog("[PATCH] Starting pattern search in %zu bytes...", size);
+    
     // Windows 特征
     byte_t pattern_win[] = { 0x84, 0xDB, 0x75, 0x11, 0x48, 0x8B, 0x40, 0x20 };
     char mask_win[] = "xxxxxxxx";
     
     byte_t* addr = FindPattern(base, size, pattern_win, mask_win, 8);
     if (addr) {
-        return PatchByte(addr + 2, 0x75, 0x74); // JNZ -> JZ
+        DebugLog("[PATCH] Found Windows pattern at offset %p", (void*)(addr - base));
+        return PatchByte(addr + 2, 0x75, 0x74);
     }
     
 #ifndef __WINDOWS__
     // Linux/macOS 可能的特征变体
-    // 变体 1: 使用不同的寄存器
     byte_t pattern_unix1[] = { 0x84, 0xC0, 0x75, 0x11, 0x48, 0x8B, 0x40, 0x20 };
     char mask_unix1[] = "xxxxxxxx";
     
     addr = FindPattern(base, size, pattern_unix1, mask_unix1, 8);
     if (addr) {
-        return PatchByte(addr + 2, 0x75, 0x74); // JNZ -> JZ
+        DebugLog("[PATCH] Found Unix pattern variant 1 at offset %p", (void*)(addr - base));
+        return PatchByte(addr + 2, 0x75, 0x74);
     }
     
-    // 变体 2: 使用 TEST + JNE 组合
-    byte_t pattern_unix2[] = { 0x84, 0xDB, 0x0F, 0x85 }; // TEST BL,BL + JNE
+    byte_t pattern_unix2[] = { 0x84, 0xDB, 0x0F, 0x85 };
     char mask_unix2[] = "xxxx";
     
     addr = FindPattern(base, size, pattern_unix2, mask_unix2, 4);
     if (addr) {
-        // JNE (0F 85) -> JE (0F 84)
+        DebugLog("[PATCH] Found Unix pattern variant 2 at offset %p", (void*)(addr - base));
         return PatchByte(addr + 3, 0x85, 0x84);
     }
     
-    // 变体 3: 更宽松的匹配（仅匹配 TEST + JNZ 的核心部分）
-    byte_t pattern_unix3[] = { 0x84, 0x00, 0x75 }; // TEST reg,reg + JNZ
+    byte_t pattern_unix3[] = { 0x84, 0x00, 0x75 };
     char mask_unix3[] = "x?x";
     
     addr = FindPattern(base, size, pattern_unix3, mask_unix3, 3);
     if (addr) {
-        return PatchByte(addr + 2, 0x75, 0x74); // JNZ -> JZ
+        DebugLog("[PATCH] Found Unix pattern variant 3 at offset %p", (void*)(addr - base));
+        return PatchByte(addr + 2, 0x75, 0x74);
     }
 #endif
     
+    DebugLog("[PATCH] No matching pattern found");
     return false;
 }
 
 // 主入口：应用所有补丁
 static void ApplyAll()
 {
+    DebugLog("[MAIN] NetworkingPatch::ApplyAll() called");
+    
     // 在后台线程中执行，避免阻塞 DLL/SO 加载
     std::thread([]() {
+        DebugLog("[THREAD] Patch thread started");
+        
         byte_t* base = nullptr;
         size_t size = 0;
         
         void* handle = GetSteamNetworkingSocketsModule(&base, &size);
         if (!handle || !base || size == 0) {
-            // 未找到 steamnetworkingsockets 库，可能游戏不使用它
+            DebugLog("[THREAD] Failed to get module information");
             return;
         }
 
         // 应用补丁：让 IP_AllowWithoutAuth 参数可见
         bool patched = PatchConfigVisibility(base, size);
         
-        // 可选：记录补丁结果到日志
-        // 注意：这里不使用 PRINT_DEBUG，因为可能在后台线程中
         if (patched) {
-            // 补丁成功
+            DebugLog("[THREAD] Patch applied successfully!");
         } else {
-            // 补丁失败或未找到特征字节
-            // 可能是库版本不匹配或平台特征不同
+            DebugLog("[THREAD] Patch failed - pattern not found or byte mismatch");
         }
         
 #ifndef __WINDOWS__
         // Linux/macOS: 不需要关闭句柄，因为使用了 RTLD_NOLOAD
-        // dlclose(handle);
 #endif
     }).detach();
 }
