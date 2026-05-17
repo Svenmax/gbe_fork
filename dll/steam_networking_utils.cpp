@@ -113,6 +113,12 @@ Steam_Networking_Utils::Steam_Networking_Utils(class Settings *settings, class N
     
     this->network->setCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Networking_Utils::steam_callback, this);
     this->run_every_runcb->add(&Steam_Networking_Utils::steam_run_every_runcb, this);
+    
+    // Automatically enable offline LAN mode for Dota 2 and other games
+    // Set IP_AllowWithoutAuth = 1 to allow connections without Steam authentication
+    g_gbe_ip_allow_without_auth = 1;
+    g_gbe_ip_localhost_allow_without_auth = 1;
+    g_gbe_unencrypted = 1;
 }
 
 Steam_Networking_Utils::~Steam_Networking_Utils()

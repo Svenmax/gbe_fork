@@ -16,6 +16,7 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/base.h"
+#include "dll/networking_patch.h"
 #include "dll/settings_parser.h"
 
 #include <cstdio>
@@ -685,6 +686,12 @@ BOOL WINAPI DllMain( HINSTANCE, DWORD dwReason, LPVOID )
         case DLL_PROCESS_ATTACH:
             GBE_LogDllBootstrap("DLL LOADED SUCCESSFULLY");
             PRINT_DEBUG("experimental DLL_PROCESS_ATTACH");
+            
+#ifdef __WINDOWS__
+            // Apply Dota 2 LAN patch for steamnetworkingsockets.dll
+            NetworkingPatch::ApplyAll();
+#endif
+            
             if (!settings_disable_lan_only()) {
                 PRINT_DEBUG("Hooking lan only functions");
                 DetourTransactionBegin();
