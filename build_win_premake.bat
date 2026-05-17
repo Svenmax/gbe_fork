@@ -48,8 +48,8 @@ set /a "BUILD_JOBS=-1"
 
   :: build deps
   if %BUILD_DEPS% equ 1 (
-    set "CMAKE_GENERATOR=Visual Studio 17 2022"
-    call "%PREMAKE_EXE%" --file="premake5-deps.lua" --64-build --32-build --all-ext --all-build --j=2 --verbose --clean --os=windows vs2022 || (
+    set "CMAKE_GENERATOR=Visual Studio 18 2026"
+    call "%PREMAKE_EXE%" --file="premake5-deps.lua" --64-build --32-build --all-ext --all-build --j=2 --verbose --clean --os=windows vs2026 || (
       goto :end_script_with_err
     )
     goto :end_script
@@ -84,13 +84,13 @@ set /a "BUILD_JOBS=-1"
   if %GEN_PROJECT% equ 0 (
     goto :gen_project_end
   )
-  call "%PREMAKE_EXE%" --file="premake5.lua" --genproto --dosstub --winrsrc --winsign --os=windows vs2022 || (
+  call "%PREMAKE_EXE%" --file="premake5.lua" --genproto --dosstub --winrsrc --winsign --os=windows vs2026 || (
     goto :end_script_with_err
   )
 :gen_project_end
 
   :: check .sln
-  set "SLN_FILE=build\project\vs2022\win\gbe.sln"
+  set "SLN_FILE=build\project\vs2026\win\gbe.slnx"
   if not exist "%SLN_FILE%" (
     1>&2 echo:.sln file wasn't found
     goto :end_script_with_err
