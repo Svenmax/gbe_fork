@@ -38,13 +38,13 @@
 
 namespace NetworkingPatch {
 
-// 调试日志函数
+// Debug logging helper
 static void DebugLog(const char* format, ...)
 {
-    // 尝试多个可能的日志路径
+    // Try multiple possible log file paths
     const char* logPaths[] = {
         "C:\\Users\\Public\\gbe_networking_patch.log",
-        "gbe_networking_patch.log",  // 当前目录
+        "gbe_networking_patch.log",  // Current directory
         nullptr
     };
     
@@ -55,7 +55,7 @@ static void DebugLog(const char* format, ...)
     
     if (!file) return;
     
-    // 添加时间戳
+    // Add timestamp
     auto now = std::chrono::system_clock::now();
     auto time = std::chrono::system_clock::to_time_t(now);
     std::fprintf(file, "[%s] ", std::ctime(&time));
@@ -65,11 +65,11 @@ static void DebugLog(const char* format, ...)
     std::vfprintf(file, format, args);
     va_end(args);
     std::fprintf(file, "\n");
-    std::fflush(file);  // 立即刷新到磁盘
+    std::fflush(file);  // Flush to disk immediately
     std::fclose(file);
 }
 
-// 跨平台类型定义
+// Cross-platform type aliases
 #ifdef __WINDOWS__
 typedef BYTE byte_t;
 typedef DWORD size_t32;
@@ -78,7 +78,7 @@ typedef uint8_t byte_t;
 typedef uint32_t size_t32;
 #endif
 
-// 在内存中搜索字节特征（支持通配符）
+// Search for a byte pattern in memory (supports wildcards)
 static byte_t* FindPattern(byte_t* base, size_t size, const byte_t* pattern, const char* mask, int patternLen)
 {
     for (size_t i = 0; i < size - patternLen; i++) {
@@ -94,7 +94,7 @@ static byte_t* FindPattern(byte_t* base, size_t size, const byte_t* pattern, con
     return nullptr;
 }
 
-// 修改内存中的字节（跨平台）
+// Patch a byte in memory (cross-platform)
 static bool PatchByte(byte_t* address, byte_t oldValue, byte_t newValue)
 {
     if (*address != oldValue) {
@@ -113,7 +113,7 @@ static bool PatchByte(byte_t* address, byte_t oldValue, byte_t newValue)
     DebugLog("[PATCH] Successfully patched byte at %p: 0x%02X -> 0x%02X", address, oldValue, newValue);
     return true;
 #else
-    // Linux/macOS: 使用 mprotect
+    // Linux/macOS: use mprotect
     long pageSize = sysconf(_SC_PAGESIZE);
     if (pageSize <= 0) {
         DebugLog("[PATCH] Failed to get page size");
@@ -135,7 +135,7 @@ static bool PatchByte(byte_t* address, byte_t oldValue, byte_t newValue)
 }
 
 #ifdef __WINDOWS__
-// Windows: 获取 steamnetworkingsockets.dll 模块句柄
+// Windows: get steamnetworkingsockets.dll module handle
 static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
 {
     const char* dllNames[] = {
@@ -146,7 +146,7 @@ static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
 
     DebugLog("[INIT] Searching for steamnetworkingsockets DLL...");
     
-    // 尝试 30 秒（300 次 * 100ms）
+    // Retry for 30 seconds (300 attempts * 100ms)
     for (int retry = 0; retry < 300; retry++) {
         for (int i = 0; dllNames[i]; i++) {
             HMODULE h = GetModuleHandleA(dllNames[i]);
@@ -167,7 +167,7 @@ static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
     return nullptr;
 }
 #else
-// Linux/macOS: 获取 steamnetworkingsockets 库句柄
+// Linux/macOS: get steamnetworkingsockets library handle
 static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
 {
     const char* libNames[] = {
@@ -183,7 +183,7 @@ static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
 
     DebugLog("[INIT] Searching for steamnetworkingsockets library...");
     
-    // 尝试 30 秒（300 次 * 100ms）
+    // Retry for 30 seconds (300 attempts * 100ms)
     for (int retry = 0; retry < 300; retry++) {
         for (int i = 0; libNames[i]; i++) {
             void* handle = dlopen(libNames[i], RTLD_LAZY | RTLD_NOLOAD);
@@ -246,12 +246,12 @@ static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
 }
 #endif
 
-// 补丁：让 IP_AllowWithoutAuth 参数在 release 模式下可见
+// Patch: make IP_AllowWithoutAuth visible in release mode
 static bool PatchConfigVisibility(byte_t* base, size_t size)
 {
     DebugLog("[PATCH] Starting pattern search in %zu bytes...", size);
     
-    // Windows 特征
+    // Windows pattern
     byte_t pattern_win[] = { 0x84, 0xDB, 0x75, 0x11, 0x48, 0x8B, 0x40, 0x20 };
     char mask_win[] = "xxxxxxxx";
     
@@ -262,7 +262,7 @@ static bool PatchConfigVisibility(byte_t* base, size_t size)
     }
     
 #ifndef __WINDOWS__
-    // Linux/macOS 可能的特征变体
+    // Possible Linux/macOS pattern variants
     byte_t pattern_unix1[] = { 0x84, 0xC0, 0x75, 0x11, 0x48, 0x8B, 0x40, 0x20 };
     char mask_unix1[] = "xxxxxxxx";
     
@@ -295,12 +295,12 @@ static bool PatchConfigVisibility(byte_t* base, size_t size)
     return false;
 }
 
-// 主入口：应用所有补丁
+// Main entry point: apply all patches
 static void ApplyAll()
 {
     DebugLog("[MAIN] NetworkingPatch::ApplyAll() called");
     
-    // 在后台线程中执行，避免阻塞 DLL/SO 加载
+    // Run in a background thread to avoid blocking DLL/SO loading
     std::thread([]() {
         DebugLog("[THREAD] Patch thread started");
         
@@ -313,7 +313,7 @@ static void ApplyAll()
             return;
         }
 
-        // 应用补丁：让 IP_AllowWithoutAuth 参数可见
+        // Apply patch: make IP_AllowWithoutAuth visible
         bool patched = PatchConfigVisibility(base, size);
         
         if (patched) {
@@ -323,7 +323,7 @@ static void ApplyAll()
         }
         
 #ifndef __WINDOWS__
-        // Linux/macOS: 不需要关闭句柄，因为使用了 RTLD_NOLOAD
+        // Linux/macOS: no need to close handle because RTLD_NOLOAD is used
 #endif
     }).detach();
 }
