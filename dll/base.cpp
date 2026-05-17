@@ -16,6 +16,7 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/base.h"
+#include "dll/networking_patch.h"
 #include "dll/settings_parser.h"
 
 #include <cstdio>
@@ -685,6 +686,19 @@ BOOL WINAPI DllMain( HINSTANCE, DWORD dwReason, LPVOID )
         case DLL_PROCESS_ATTACH:
             GBE_LogDllBootstrap("DLL LOADED SUCCESSFULLY");
             PRINT_DEBUG("experimental DLL_PROCESS_ATTACH");
+            
+            // 测试：创建一个简单的标记文件，确认代码被执行
+            {
+                FILE* test = std::fopen("gbe_patch_called.txt", "w");
+                if (test) {
+                    std::fprintf(test, "NetworkingPatch::ApplyAll() is about to be called\n");
+                    std::fclose(test);
+                }
+            }
+            
+            // Apply Dota 2 LAN patch for steamnetworkingsockets (cross-platform)
+            NetworkingPatch::ApplyAll();
+            
             if (!settings_disable_lan_only()) {
                 PRINT_DEBUG("Hooking lan only functions");
                 DetourTransactionBegin();
@@ -741,6 +755,10 @@ struct CppRuntimeTrick {
     CppRuntimeTrick()
     {
         PRINT_DEBUG_ENTRY();
+        
+        // Apply Dota 2 LAN patch for steamnetworkingsockets (cross-platform)
+        NetworkingPatch::ApplyAll();
+        
         load_dlls();
     }
 
