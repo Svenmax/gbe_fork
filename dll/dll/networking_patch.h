@@ -41,14 +41,47 @@ namespace NetworkingPatch {
 // 调试日志函数
 static void DebugLog(const char* format, ...)
 {
-    FILE* file = std::fopen("C:\\Users\\Public\\gbe_networking_patch.log", "a");
+    // 尝试多个可能的日志路径
+    const char* logPaths[] = {
+        "C:\\Users\\Public\\gbe_networking_patch.log",
+        "gbe_networking_patch.log",  // 当前目录
+        nullptr
+    };
+    
+    FILE* file = nullptr;
+    for (int i = 0; logPaths[i] && !file; i++) {
+        file = std::fopen(logPaths[i], "a");
+    }
+    
     if (!file) return;
+    
+    // 添加时间戳
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+    std::fprintf(file, "[%s] ", std::ctime(&time));
     
     va_list args;
     va_start(args, format);
     std::vfprintf(file, format, args);
     va_end(args);
     std::fprintf(file, "\n");
+    std::fflush(file);  // 立即刷新到磁盘
+    std::fclose(file);
+}
+    
+    if (!file) return;
+    
+    // 添加时间戳
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+    std::fprintf(file, "[%s] ", std::ctime(&time));
+    
+    va_list args;
+    va_start(args, format);
+    std::vfprintf(file, format, args);
+    va_end(args);
+    std::fprintf(file, "\n");
+    std::fflush(file);  // 立即刷新到磁盘
     std::fclose(file);
 }
 
