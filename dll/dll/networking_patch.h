@@ -246,53 +246,227 @@ static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
 }
 #endif
 
+// Count pattern matches
+static int CountPattern(byte_t* base, size_t size, const byte_t* pattern, const char* mask, int patternLen)
+{
+    int count = 0;
+    for (size_t i = 0; i < size - patternLen; i++) {
+        bool found = true;
+        for (int j = 0; j < patternLen; j++) {
+            if (mask[j] == 'x' && base[i + j] != pattern[j]) {
+                found = false;
+                break;
+            }
+        }
+        if (found) count++;
+    }
+    return count;
+}
+
+// Pattern definition structure
+struct PatternDef {
+    byte_t pattern[16];
+    char mask[16];
+    int len;
+    int patchOffset;
+    byte_t oldByte;
+    byte_t newByte;
+    const char* description;
+};
+
+// Fallback: search by string and context
+static bool FallbackPatch(byte_t* base, size_t size)
+{
+    DebugLog("[FALLBACK] Attempting string-based search...");
+    
+    // Step 1: Find "IP_AllowWithoutAuth" string
+    const char* targetStr = "IP_AllowWithoutAuth";
+    int strLen = (int)strlen(targetStr);
+    
+    byte_t* strAddr = nullptr;
+    for (size_t i = 0; i < size - strLen - 1; i++) {
+        if (memcmp(base + i, targetStr, strLen) == 0 && base[i + strLen] == 0) {
+            strAddr = base + i;
+            break;
+        }
+    }
+    
+    if (!strAddr) {
+        DebugLog("[FALLBACK] String 'IP_AllowWithoutAuth' not found");
+        return false;
+    }
+    
+    DebugLog("[FALLBACK] Found string at offset %p", (void*)(strAddr - base));
+    
+    // Step 2: Find pointer to this string (config struct at offset 0x08)
+    uintptr_t strAbsAddr = (uintptr_t)strAddr;
+    int configId = -1;
+    
+    for (size_t i = 0; i < size - sizeof(uintptr_t); i++) {
+        if (*(uintptr_t*)(base + i) == strAbsAddr) {
+            byte_t* structBase = base + i - 0x08;
+            int id = *(int*)structBase;
+            if (id > 0 && id < 256) {
+                configId = id;
+                DebugLog("[FALLBACK] Found config ID: 0x%02X", configId);
+                break;
+            }
+        }
+    }
+    
+    if (configId < 0) {
+        DebugLog("[FALLBACK] Config ID not found");
+        return false;
+    }
+    
+    // Step 3: Search for TEST + conditional jump + MOV pattern
+    for (size_t i = 0; i < size - 8; i++) {
+        // Match TEST r8, r8 (84 xx)
+        if (base[i] != 0x84) continue;
+        
+        // Match conditional jump JNZ(75) or JZ(74)
+        byte_t jmpByte = base[i + 2];
+        if (jmpByte != 0x75 && jmpByte != 0x74) continue;
+        
+        // Match MOV RAX,[RAX+0x20] or similar (48 8B 40 20)
+        if (base[i + 4] != 0x48 || base[i + 5] != 0x8B ||
+            base[i + 6] != 0x40 || base[i + 7] != 0x20) continue;
+        
+        // Verify: search backwards for configId reference
+        bool hasIdRef = false;
+        int searchBack = (i > 200) ? 200 : (int)i;
+        for (int back = 0; back < searchBack; back++) {
+            if (base[i - back] == (byte_t)configId) {
+                hasIdRef = true;
+                break;
+            }
+        }
+        
+        if (!hasIdRef) continue;
+        
+        DebugLog("[FALLBACK] Found target pattern at offset %p", (void*)(base + i - base));
+        
+        // Patch: reverse conditional jump
+        if (jmpByte == 0x75) {
+            return PatchByte(base + i + 2, 0x75, 0x74);
+        } else if (jmpByte == 0x74) {
+            return PatchByte(base + i + 2, 0x74, 0x75);
+        }
+    }
+    
+    DebugLog("[FALLBACK] Pattern not found in code section");
+    return false;
+}
+
 // Patch: make IP_AllowWithoutAuth visible in release mode
 static bool PatchConfigVisibility(byte_t* base, size_t size)
 {
     DebugLog("[PATCH] Starting pattern search in %zu bytes...", size);
     
-    // Windows pattern
-    byte_t pattern_win[] = { 0x84, 0xDB, 0x75, 0x11, 0x48, 0x8B, 0x40, 0x20 };
-    char mask_win[] = "xxxxxxxx";
-    
-    byte_t* addr = FindPattern(base, size, pattern_win, mask_win, 8);
-    if (addr) {
-        DebugLog("[PATCH] Found Windows pattern at offset %p", (void*)(addr - base));
-        return PatchByte(addr + 2, 0x75, 0x74);
-    }
-    
+    // Define multiple patterns with priority (from specific to generic)
+    PatternDef patterns[] = {
+        // Pattern 1: Exact match (current version 2024)
+        // TEST BL,BL + JNZ +0x11 + MOV RAX,[RAX+0x20]
+        {
+            { 0x84, 0xDB, 0x75, 0x11, 0x48, 0x8B, 0x40, 0x20 },
+            "xxxxxxxx",
+            8, 2, 0x75, 0x74,
+            "Windows exact (TEST BL,BL + JNZ 0x11)"
+        },
+        // Pattern 2: Jump offset may vary
+        {
+            { 0x84, 0xDB, 0x75, 0x00, 0x48, 0x8B, 0x40, 0x20 },
+            "xxx?xxxx",
+            8, 2, 0x75, 0x74,
+            "Windows flexible offset (TEST BL,BL + JNZ ?)"
+        },
+        // Pattern 3: Register may vary (BL→CL: 84 C9, BL→DL: 84 D2)
+        {
+            { 0x84, 0x00, 0x75, 0x00, 0x48, 0x8B, 0x40, 0x20 },
+            "x?x?xxxx",
+            8, 2, 0x75, 0x74,
+            "Cross-platform (TEST ?,? + JNZ ?)"
+        },
+        // Pattern 4: Compiler may use JZ instead of JNZ (logic reversed)
+        {
+            { 0x84, 0xDB, 0x74, 0x00, 0x48, 0x8B, 0x40, 0x20 },
+            "xxx?xxxx",
+            8, 2, 0x74, 0x75,
+            "Windows JZ variant (TEST BL,BL + JZ ?)"
+        },
+        // Pattern 5: Register + JZ
+        {
+            { 0x84, 0x00, 0x74, 0x00, 0x48, 0x8B, 0x40, 0x20 },
+            "x?x?xxxx",
+            8, 2, 0x74, 0x75,
+            "Cross-platform JZ (TEST ?,? + JZ ?)"
+        },
+        // Pattern 6: Long jump form (0F 85 = JNZ near)
+        {
+            { 0x84, 0xDB, 0x0F, 0x85 },
+            "xxxx",
+            4, 3, 0x85, 0x84,
+            "Long jump JNZ (TEST BL,BL + JNZ near)"
+        },
+        // Pattern 7: Long jump JZ form
+        {
+            { 0x84, 0xDB, 0x0F, 0x84 },
+            "xxxx",
+            4, 3, 0x84, 0x85,
+            "Long jump JZ (TEST BL,BL + JZ near)"
+        },
 #ifndef __WINDOWS__
-    // Possible Linux/macOS pattern variants
-    byte_t pattern_unix1[] = { 0x84, 0xC0, 0x75, 0x11, 0x48, 0x8B, 0x40, 0x20 };
-    char mask_unix1[] = "xxxxxxxx";
-    
-    addr = FindPattern(base, size, pattern_unix1, mask_unix1, 8);
-    if (addr) {
-        DebugLog("[PATCH] Found Unix pattern variant 1 at offset %p", (void*)(addr - base));
-        return PatchByte(addr + 2, 0x75, 0x74);
-    }
-    
-    byte_t pattern_unix2[] = { 0x84, 0xDB, 0x0F, 0x85 };
-    char mask_unix2[] = "xxxx";
-    
-    addr = FindPattern(base, size, pattern_unix2, mask_unix2, 4);
-    if (addr) {
-        DebugLog("[PATCH] Found Unix pattern variant 2 at offset %p", (void*)(addr - base));
-        return PatchByte(addr + 3, 0x85, 0x84);
-    }
-    
-    byte_t pattern_unix3[] = { 0x84, 0x00, 0x75 };
-    char mask_unix3[] = "x?x";
-    
-    addr = FindPattern(base, size, pattern_unix3, mask_unix3, 3);
-    if (addr) {
-        DebugLog("[PATCH] Found Unix pattern variant 3 at offset %p", (void*)(addr - base));
-        return PatchByte(addr + 2, 0x75, 0x74);
-    }
+        // Pattern 8: Unix/Linux specific - TEST AL,AL variant
+        {
+            { 0x84, 0xC0, 0x75, 0x00, 0x48, 0x8B, 0x40, 0x20 },
+            "xxx?xxxx",
+            8, 2, 0x75, 0x74,
+            "Unix (TEST AL,AL + JNZ ?)"
+        },
+        // Pattern 9: Unix with different register
+        {
+            { 0x84, 0xC9, 0x75, 0x00, 0x48, 0x8B, 0x40, 0x20 },
+            "xxx?xxxx",
+            8, 2, 0x75, 0x74,
+            "Unix (TEST CL,CL + JNZ ?)"
+        },
 #endif
+    };
     
-    DebugLog("[PATCH] No matching pattern found");
-    return false;
+    int numPatterns = sizeof(patterns) / sizeof(patterns[0]);
+    
+    // Try each pattern in order
+    for (int i = 0; i < numPatterns; i++) {
+        PatternDef& p = patterns[i];
+        
+        int count = CountPattern(base, size, p.pattern, p.mask, p.len);
+        DebugLog("[PATCH] Pattern %d (%s): %d matches", i + 1, p.description, count);
+        
+        if (count == 1) {
+            byte_t* addr = FindPattern(base, size, p.pattern, p.mask, p.len);
+            if (!addr) continue;
+            
+            // Check if already patched
+            if (*(addr + p.patchOffset) == p.newByte) {
+                DebugLog("[PATCH] Already patched (byte is already 0x%02X)", p.newByte);
+                return true;
+            }
+            
+            DebugLog("[PATCH] Found unique match at offset %p", (void*)(addr - base));
+            if (PatchByte(addr + p.patchOffset, p.oldByte, p.newByte)) {
+                return true;
+            } else {
+                DebugLog("[PATCH] Patch failed for pattern %d", i + 1);
+                return false;
+            }
+        } else if (count > 1) {
+            DebugLog("[PATCH] Pattern %d has multiple matches, trying next pattern", i + 1);
+        }
+    }
+    
+    // All predefined patterns failed, try fallback
+    DebugLog("[PATCH] All predefined patterns failed, trying fallback method");
+    return FallbackPatch(base, size);
 }
 
 // Main entry point: apply all patches
