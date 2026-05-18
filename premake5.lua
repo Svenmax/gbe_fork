@@ -727,12 +727,12 @@ local signer_tool = path.translate(path.getabsolute('third-party/build/win/cert/
 -- change dos stub
 filter { "system:windows", "options:dosstub", }
     postbuildcommands {
-        '"' .. dos_stub_exe .. '" %[%{!cfg.buildtarget.abspath}]',
+        '"' .. dos_stub_exe .. '" "$(TargetPath)"',
     }
 -- sign
 filter { "system:windows", "options:winsign", }
     postbuildcommands {
-        '"' .. signer_tool .. '" %[%{!cfg.buildtarget.abspath}]',
+        '"' .. signer_tool .. '" "$(TargetPath)"',
     }
 filter {} -- reset the filter and remove all active keywords
 end
