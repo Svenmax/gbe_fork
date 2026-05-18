@@ -470,6 +470,18 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 已启动 LAN lobby 中，generic lobby member data 可能仍保留 peer 端早先发布的 `gbe_dota_member_connected=0`，后续 snapshot 重建如果直接读取该值，会把 server 已确认的运行期 connected 状态降级为 disconnected。
   - 修复方向是在 launched LAN member preservation 路径中保留已确认 connected 的 remote member，不让过期 generic member data 使 `7034` 响应继续输出 `connected=1 disconnected=1`。
 
+[Dota2 practice lobby 断线重连官方链]
+- Date: 2026-05-18
+- Context: Agent 在解析 `dotahostplayerdisconnectandreconnect`、`steamhostplayerdisconnectandreconnect`、`steamplayerdisconnectandreconnect` 官方抓包并修复 7034/26 时发现
+- Category: 代码模式
+- Instructions:
+  - practice lobby 运行期玩家断开时，Dota 侧主线是 `7034 CMsgConnectedPlayers` 携带 `disconnected_players`、`send_reason=PLAYER_DISCONNECTED_NOCONSEQUENCES`、`game_state=HERO_SELECTION`、`building_state=19138340`，随后 GC 推 `26`。
+  - 断开后的 `26 type=2004 CSODOTALobby` 不移除断开成员；成员仍在 `all_members/member_indices` 中，但写 `leaver_status=DOTA_LEAVER_DISCONNECTED` 和 `leaver_actions=0`。
+  - 玩家重连时，`7034` 携带 `connected_players`、`send_reason=PLAYER_CONNECTED`；随后 `26 type=2004` 保留同一成员 team/slot，并移除 leaver 字段。
+  - 运行期 `7034` 触发 `26` lobby update 后仍必须继续返回真正的 `7034 connected players` job reply，不能提前 return。
+  - `26 type=2016 CSODOTAServerStaticLobby` 的 `lobby_event_points` 应为所有真实成员写 account_points；event 19 非 owner 的 `owned=false`，event 26/39/56 全成员 `owned=true`，event 56 `normal_points=1000`、`event_level=1`。
+  - event 19 的 periodic resources 按官方样本写 resource 15 `remaining/max=10/10`、resource 28 `remaining/max=1000/1000`，不要继续写全 0。
+
 [Git 提交身份偏好]
 - Date: 2026-05-06
 - Context: 用户要求后续使用指定 Git 提交身份

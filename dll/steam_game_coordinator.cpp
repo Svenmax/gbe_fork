@@ -2021,9 +2021,8 @@ static void GBE_AppendDotaLobbyEventPeriodicResource(
     GBE_AppendProtoBytesField(account_points, 31u, resource);
 }
 
-static void GBE_AppendDotaLobbyEventPoints(
-    std::string &object_2016,
-    uint32 event_id,
+static void GBE_AppendDotaLobbyEventAccountPoints(
+    std::string &event_points,
     uint32 account_id,
     uint32 normal_points,
     uint32 premium_points,
@@ -2042,13 +2041,42 @@ static void GBE_AppendDotaLobbyEventPoints(
     GBE_AppendProtoVarIntField(account_points, 27u, 0u);
     GBE_AppendProtoVarIntField(account_points, 28u, 0u);
     if (include_periodic_resources) {
-        GBE_AppendDotaLobbyEventPeriodicResource(account_points, 15u, 0u, 0u);
-        GBE_AppendDotaLobbyEventPeriodicResource(account_points, 28u, 0u, 0u);
+        GBE_AppendDotaLobbyEventPeriodicResource(account_points, 15u, 10u, 10u);
+        GBE_AppendDotaLobbyEventPeriodicResource(account_points, 28u, 1000u, 1000u);
     }
 
+    GBE_AppendProtoBytesField(event_points, 2u, account_points);
+}
+
+static void GBE_AppendDotaLobbyEventPoints(
+    std::string &object_2016,
+    uint32 event_id,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
+    uint32 owner_account_id,
+    uint32 normal_points,
+    uint32 premium_points,
+    bool owner_owned,
+    bool non_owner_owned,
+    uint32 event_level,
+    bool include_periodic_resources)
+{
     std::string event_points;
     GBE_AppendProtoVarIntField(event_points, 1u, event_id);
-    GBE_AppendProtoBytesField(event_points, 2u, account_points);
+    for (const GBE_DotaLobbyMemberState &member : members) {
+        if (member.steam_id == 0ull)
+            continue;
+        const uint32 member_account_id = member.account_id != 0u ? member.account_id : CSteamID((uint64)member.steam_id).GetAccountID();
+        if (member_account_id == 0u)
+            continue;
+        GBE_AppendDotaLobbyEventAccountPoints(
+            event_points,
+            member_account_id,
+            normal_points,
+            premium_points,
+            member_account_id == owner_account_id ? owner_owned : non_owner_owned,
+            event_level,
+            include_periodic_resources);
+    }
     GBE_AppendProtoBytesField(object_2016, 3u, event_points);
 }
 
@@ -2115,10 +2143,10 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
     GBE_AppendProtoFixed32Field(object_2016, 2u, 0u);
 
     if (include_event_points && account_id != 0u && wrote_owner_event_points) {
-        GBE_AppendDotaLobbyEventPoints(object_2016, 19u, account_id, 0u, 0u, 0u, 0u, true);
-        GBE_AppendDotaLobbyEventPoints(object_2016, 26u, account_id, 0u, 0u, 0u, 0u, false);
-        GBE_AppendDotaLobbyEventPoints(object_2016, 39u, account_id, 0u, 0u, 0u, 0u, false);
-        GBE_AppendDotaLobbyEventPoints(object_2016, 56u, account_id, 0u, 0u, 0u, 0u, false);
+        GBE_AppendDotaLobbyEventPoints(object_2016, 19u, effective_members, account_id, 0u, 0u, true, false, 0u, true);
+        GBE_AppendDotaLobbyEventPoints(object_2016, 26u, effective_members, account_id, 0u, 0u, true, true, 0u, false);
+        GBE_AppendDotaLobbyEventPoints(object_2016, 39u, effective_members, account_id, 0u, 0u, true, true, 0u, false);
+        GBE_AppendDotaLobbyEventPoints(object_2016, 56u, effective_members, account_id, 1000u, 0u, true, true, 1u, false);
     }
 }
 
@@ -6120,15 +6148,38 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
         disconnected_steam_ids.push_back(player_steam_id);
     };
 
-    append_connected_player(steam_id, 0u, owner_team, owner_slot);
-    for (const GBE_DotaLobbyMemberState &member : members) {
-        if (member.steam_id == 0ull || member.steam_id == steam_id)
-            continue;
+    if (request_shape.has_connected_player || request_shape.has_disconnected_player) {
+        if (request_shape.has_connected_steam_id && request_shape.connected_steam_id != 0ull) {
+            uint32 hero_id = 0u;
+            uint32 team = owner_team;
+            uint32 slot = owner_slot;
+            for (const GBE_DotaLobbyMemberState &member : members) {
+                if (member.steam_id == request_shape.connected_steam_id) {
+                    hero_id = member.hero_id;
+                    team = member.team;
+                    slot = member.slot;
+                    break;
+                }
+            }
+            append_connected_player(request_shape.connected_steam_id, hero_id, team, slot);
+        }
 
-        if (member.connected)
-            append_connected_player(member.steam_id, member.hero_id, member.team, member.slot);
-        else
-            append_disconnected_player(member.steam_id, lobby_state, game_state);
+        if (request_shape.has_disconnected_steam_id && request_shape.disconnected_steam_id != 0ull) {
+            const uint32 disconnected_lobby_state = request_shape.has_disconnected_lobby_state ? request_shape.disconnected_lobby_state : lobby_state;
+            const uint32 disconnected_game_state = request_shape.has_disconnected_game_state ? request_shape.disconnected_game_state : game_state;
+            append_disconnected_player(request_shape.disconnected_steam_id, disconnected_lobby_state, disconnected_game_state);
+        }
+    } else {
+        append_connected_player(steam_id, 0u, owner_team, owner_slot);
+        for (const GBE_DotaLobbyMemberState &member : members) {
+            if (member.steam_id == 0ull || member.steam_id == steam_id)
+                continue;
+
+            if (member.connected)
+                append_connected_player(member.steam_id, member.hero_id, member.team, member.slot);
+            else
+                append_disconnected_player(member.steam_id, lobby_state, game_state);
+        }
     }
 
     GBE_AppendProtoVarIntField(body, 2u, game_state);
