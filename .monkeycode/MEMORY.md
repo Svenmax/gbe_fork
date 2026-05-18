@@ -482,6 +482,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - `26 type=2016 CSODOTAServerStaticLobby` 的 `lobby_event_points` 应为所有真实成员写 account_points；event 19 非 owner 的 `owned=false`，event 26/39/56 全成员 `owned=true`，event 56 `normal_points=1000`、`event_level=1`。
   - event 19 的 periodic resources 按官方样本写 resource 15 `remaining/max=10/10`、resource 28 `remaining/max=1000/1000`，不要继续写全 0。
 
+[Dota2 VAC 重连日志切分约束]
+- Date: 2026-05-18
+- Context: 用户补充玩家重连提示 VAC 后才让房主直接退出
+- Instructions:
+  - 分析玩家重连 VAC 弹窗时，必须把 VAC 弹窗之后的房主主动退出、generic owner transfer、CacheUnsubscribed `25` 等日志与 VAC 根因切分开。
+  - 只有 VAC 弹窗之前发生的玩家侧/房主侧 GC、Steam lobby、network 状态变化，才能作为重连 VAC 根因证据。
+
 [Git 提交身份偏好]
 - Date: 2026-05-06
 - Context: 用户要求后续使用指定 Git 提交身份

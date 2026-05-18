@@ -8842,20 +8842,20 @@ void Steam_Game_Coordinator::callback_items_removed(CSteamID steam_id)
     if (!gc_initialized)
         return;
 
-    if (is_server &&
-        gc_profile == GC_PROFILE_DOTA2 &&
+    if (gc_profile == GC_PROFILE_DOTA2 &&
         GBE_local_lobby.active &&
         GBE_local_lobby.lobby_id != 0 &&
         steam_id.BIndividualAccount() &&
         steam_id.ConvertToUint64() == GBE_GetDotaLobbyOwnerSteamId()) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
-            "skipping generic CacheUnsubscribed for active dota owner steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s",
+            "skipping generic CacheUnsubscribed for active dota owner steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s is_server=%u",
             static_cast<unsigned long long>(steam_id.ConvertToUint64()),
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
             GBE_local_lobby.state,
             GBE_local_lobby.game_state,
-            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
+            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
+            is_server ? 1u : 0u
         );
         return;
     }
@@ -10655,6 +10655,32 @@ bool Steam_Game_Coordinator::GBE_AdoptDotaGenericLobbyOwnerIfNeeded(const char *
     const uint64 previous_owner_steam_id = GBE_local_lobby.owner_steam_id;
     const uint64 new_owner_steam_id = generic_owner.ConvertToUint64();
     const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
+
+    if (!is_server &&
+        local_steam_id != 0ull &&
+        previous_owner_steam_id != 0ull &&
+        previous_owner_steam_id != local_steam_id &&
+        new_owner_steam_id == local_steam_id &&
+        GBE_local_lobby.lan &&
+        GBE_local_lobby.state == 2u &&
+        GBE_local_lobby.match_id != 0ull &&
+        !GBE_local_lobby.connect.empty()) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Ignored generic lobby owner adoption during launched LAN peer disconnect reason=%s dota_lobby_id=%llu generic_lobby_id=%llu dota_owner=%llu generic_owner=%llu local=%llu state=%u game_state=%u match_id=%llu connect=%s",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+            static_cast<unsigned long long>(previous_owner_steam_id),
+            static_cast<unsigned long long>(new_owner_steam_id),
+            static_cast<unsigned long long>(local_steam_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            static_cast<unsigned long long>(GBE_local_lobby.match_id),
+            GBE_local_lobby.connect.c_str()
+        );
+        return false;
+    }
 
     GBE_DotaLobbyMemberState new_owner{};
     new_owner.steam_id = new_owner_steam_id;
