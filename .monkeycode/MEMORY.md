@@ -489,6 +489,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 分析玩家重连 VAC 弹窗时，必须把 VAC 弹窗之后的房主主动退出、generic owner transfer、CacheUnsubscribed `25` 等日志与 VAC 根因切分开。
   - 只有 VAC 弹窗之前发生的玩家侧/房主侧 GC、Steam lobby、network 状态变化，才能作为重连 VAC 根因证据。
 
+[Dota2 VAC 主界面切换触发约束]
+- Date: 2026-05-18
+- Context: 用户补充玩家从游戏界面切到主界面时就会弹 VAC，断开连接后点击重连又弹 VAC
+- Instructions:
+  - 分析 VAC 时必须同时检查“玩家从游戏界面切回主界面立即弹 VAC”和“断开后点击重连再次弹 VAC”两段链路。
+  - 不要只把重连按钮作为唯一触发点；优先定位切回主界面时客户端请求的 lobby/game/session 状态是否已经被 emu 错误改写。
+
 [Git 提交身份偏好]
 - Date: 2026-05-06
 - Context: 用户要求后续使用指定 Git 提交身份
