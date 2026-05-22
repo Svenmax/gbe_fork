@@ -2623,8 +2623,24 @@ static bool GBE_RewriteDotaAccountBoundObjectData(const std::string &input, int 
     if (!rewrote_conduct_score)
         GBE_AppendProtoVarIntField(conduct_output, 72u, GBE_kDotaConductScore);
 
-    // Clear account chat restrictions from the welcome account SO; stale donor timestamps make Dota treat chat as restricted.
-    return GBE_RewriteProtoVarIntFields(conduct_output, { 20u, 21u, 86u, 122u }, 0u, output, nullptr);
+    // Clear all ban/disable/restriction fields from the welcome account SO;
+    // stale donor timestamps cause Dota to show "unable to verify" (VAC) popup
+    // and block lobby join.
+    // Fields cleared:
+    //   18  low_priority_until_date
+    //   20  prevent_text_chat_until_date
+    //   21  prevent_voice_until_date
+    //   38  account_disabled_until_date
+    //   39  account_disabled_count
+    //   41  match_disabled_until_date
+    //   42  match_disabled_count
+    //   48  low_priority_games_remaining
+    //   69  account_flags
+    //   86  prevent_public_text_chat_until_date
+    //   89  ranked_matchmaking_ban_until_date
+    //  105  custom_game_disabled_until_date
+    //  122  prevent_new_player_chat_until_date
+    return GBE_RewriteProtoVarIntFields(conduct_output, { 18u, 20u, 21u, 38u, 39u, 41u, 42u, 48u, 69u, 86u, 89u, 105u, 122u }, 0u, output, nullptr);
 }
 
 static bool GBE_PatchDotaWelcomeAccountObjects(std::string &inner_body, uint32 account_id)
