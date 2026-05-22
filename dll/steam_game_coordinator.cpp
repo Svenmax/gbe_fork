@@ -11179,6 +11179,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "restore_client_full_adopt");
             GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "restore_client_full_adopt");
             GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(reason ? reason : "restore_client_full_adopt");
+            GBE_PushDotaLoginSyncMessages();
             return;
         }
 
@@ -11300,6 +11301,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "restore_client_runtime");
         GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "restore_client_runtime");
         GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(reason ? reason : "restore_client_runtime");
+        GBE_PushDotaLoginSyncMessages();
         return;
     }
 
