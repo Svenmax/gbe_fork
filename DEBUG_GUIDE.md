@@ -221,8 +221,188 @@ byte_t pattern_win[] = { 0xXX, 0xXX, 0xXX, ... };
 
 **解决方法**：使用更宽松的匹配模式或放弃内存补丁
 
+---
+
+## VAC Secure Flag Patch (client.dll)
+
+### 问题描述
+
+好友接受组队邀请时弹出 VAC 弹窗（"无法验证本机是否安全"），accept 被静默转换为 decline。Wireshark 中 4513 消息 body 显示 `10 00`（accept=0）。
+
+### 根因分析
+
+#### 完整调用链
+
+```
+dota2.exe 启动
+  -> 加载 steamnetworkingsockets.dll（游戏目录下的真实版本）
+  -> steamnetworkingsockets.dll 尝试连接 Valve 网络基础设施
+  -> LAN 环境下连接失败
+  -> dota2.exe 内部签名验证流程无法完成
+  -> BSecureAllowed() 返回 false
+  -> client.dll 设置全局标志字节 = 1
+  -> 处理 lobby invite accept 时检查该标志
+  -> 标志非零 -> 弹出 VAC 弹窗 -> accept 转为 decline
+```
+
+#### BSecureAllowed 函数
+
+位于 `dota2.exe` 中（偏移 `0x49470`），检查全局状态对象的 5 个条件：
+
+| 偏移 | 要求 | 含义 | 正常Steam值 | emu值 |
+|------|------|------|-------------|-------|
+| +24 | == 1 | 签名验证结果A | 1 | 5 |
+| +28 | == 1 | 签名验证结果B (steam.signatures) | 1 | 2 |
+| +2C | 1或2 | 未知 | 1 | 1 (PASS) |
+| +30 | 1或2 | 未知 | 2 | 2 (PASS) |
+| +44 | == 9 | 初始化阶段计数 | 9 | 1 |
+
+全部满足才返回 true。emu 环境下 3 个条件失败。
+
+#### 为什么 emu 无法控制这些条件
+
+1. **签名验证**（+24, +28）：`dota2.exe` 直接读取 `steam.signatures` / `system.signatures` 文件，验证 Steam 客户端 DLL 的完整性。单个文件 SHA1 匹配，但 DIGEST（RSA 签名）验证需要 Valve 公钥，该公钥的获取依赖正常运行的 Steam 客户端环境。
+
+2. **初始化阶段**（+44）：需要经过完整的网络初始化流程才能从 1 递增到 9。LAN 环境下 `steamnetworkingsockets.dll` 无法连接 Valve 网络，流程卡在阶段 1。
+
+3. **不经过 steam_api64.dll**：这些检查完全在 `dota2.exe` 内部完成，不调用任何我们能 hook 的 Steam API 接口。
+
+#### client.dll 中设置全局标志的代码
+
+位于 `client.dll` 偏移 `0x54FE47`：
+
+```asm
+; 调用 BSecureAllowed(0, 0, 0)
+call [rsp+28]              ; BSecureAllowed 函数指针
+movzx eax, al              ; 获取返回值
+test eax, eax              ; 检查
+jne +0x0A                  ; 返回 true -> 跳过（安全）
+mov dword [rsp+20], 1      ; 返回 false -> 标记不安全
+jmp ...
+mov dword [rsp+20], 0      ; 返回 true 的路径
+
+; 后续将 [rsp+20] 写入对象+0x41，然后：
+test eax, eax              ; 85 C0
+je +0x26                   ; 74 26 (如果为0跳过)
+mov byte ptr [rip+X], 1   ; C6 05 xx xx xx xx 01  <-- 设置全局标志
+xor eax, eax              ; 33 C0
+cmp eax, 1                ; 83 F8 01
+```
+
+#### client.dll 中检查全局标志的代码
+
+位于 `client.dll` 偏移 `0x24EB7AF`：
+
+```asm
+; 先执行 3 个 vtable 检查（都通过了）
+call qword ptr [rax+190]   ; 检查1：返回指针，非空则 decline
+call qword ptr [rax+B0]    ; 检查2：返回 bool，true 则 decline
+call qword ptr [rax+C8]    ; 检查3：返回 bool，true 则 decline
+
+; 第4个检查：全局标志
+cmp byte ptr [rip+X], al   ; al=0，比较全局标志和0
+jne ShowPopup              ; 不等于0 -> 弹窗 + decline
+```
+
+### 修复方案
+
+在 `networking_patch.h` 中的 `ApplyVACPatch()` 函数：
+
+1. 后台线程等待 `client.dll` 加载（最多 120 秒）
+2. 用 pattern scan 找到 `mov byte ptr [rip+X], 1` 指令
+3. 将立即数 `01` patch 为 `00`
+
+**Pattern 特征码**：
+```
+85 C0 74 ?? C6 05 ?? ?? ?? ?? 01 33 C0 83 F8 01
+```
+
+含义：`test eax,eax / je ? / mov byte [rip+X], 1 / xor eax,eax / cmp eax, 1`
+
+`xor eax,eax` 后紧跟 `cmp eax, 1` 是一个永远为 false 的比较，这个序列在 client.dll 中是唯一的，保证了 pattern 匹配的准确性。
+
+### 调试 VAC Patch
+
+#### 检查日志
+
+日志文件：`C:\Users\Public\gbe_networking_patch.log`
+
+成功时显示：
+```
+[VAC_MAIN] VACPatch thread starting
+[VAC_THREAD] VAC patch thread started
+[VAC_PATCH] Searching for client.dll...
+[VAC_PATCH] Found client.dll at base 0x..., size ... bytes
+[VAC_PATCH] Starting VAC secure flag patch in ... bytes...
+[VAC_PATCH] Found exact pattern at offset 0x54FE43
+[PATCH] Successfully patched byte at 0x...: 0x01 -> 0x00
+[VAC_THREAD] VAC secure flag patch applied successfully!
+```
+
+失败时显示：
+```
+[VAC_PATCH] No matching pattern found
+```
+或：
+```
+[VAC_PATCH] Failed to find client.dll after 120 seconds
+```
+
+#### 手动验证（x64dbg）
+
+1. 附加 x64dbg 到 Dota2 进程
+2. `Alt+E` 找到 `client.dll` 基地址
+3. 计算全局标志地址：基地址 + `0x6011E18`
+4. 在 Dump 面板查看该字节：
+   - `00` = patch 成功，accept 正常
+   - `01` = patch 失败，会触发 decline
+5. 手动修改为 0 验证：命令栏输入 `mov byte:[地址],0`
+
+#### Dota2 更新后 pattern 失效
+
+如果 Valve 更新了 `client.dll` 导致 pattern 匹配失败：
+
+1. 用 x64dbg 附加到 Dota2
+2. 找到 `client.dll` 基地址
+3. 搜索字符串 `"ShowPopup"` 定位 VAC 检查函数
+4. 往上找 `cmp byte ptr [rip+X], al` + `jne` 的组合
+5. 再往上找设置该全局字节的代码（`mov byte ptr [rip+X], 1`）
+6. 记录新的字节序列，更新 `networking_patch.h` 中的 pattern
+
+#### 验证签名文件状态
+
+确认 `steam.signatures` 是否和当前 Steam 客户端匹配：
+
+```powershell
+# PowerShell
+Get-FileHash "C:\Program Files (x86)\Steam\steamclient64.dll" -Algorithm SHA1
+```
+
+对比 `steam.signatures` 中 `steamclient64.dll` 行的 SHA1 值。
+
+### 相关文件
+
+| 文件 | 说明 |
+|------|------|
+| `dll/dll/networking_patch.h` | patch 实现（`ApplyVACPatch`、`PatchVACSecureFlag`） |
+| `dll/base.cpp` | 调用入口（DllMain / CppRuntimeTrick） |
+| `steam.signatures` | Steam 客户端 DLL 签名文件（游戏目录） |
+| `system.signatures` | 系统完整性签名文件（游戏目录） |
+
+### 已排除的方案
+
+| 方案 | 为什么不行 |
+|------|-----------|
+| 修改 GetCertAsync 返回 k_EResultOK | 不影响 BSecureAllowed 检查 |
+| 清零 2002 消息中的 ban 字段 | 不影响 BSecureAllowed 检查 |
+| 修改 account_flags | 不影响 BSecureAllowed 检查 |
+| steamclient 模式（不替换 steam_api64.dll） | 签名文件不校验 steam_api64.dll，问题在 DIGEST 验证和网络初始化 |
+| 启动真正的 Steam 客户端 | LAN 环境下 Steam 也无法完成网络初始化 |
+| 从 emu 层面设置 BSecureAllowed 条件 | 检查完全在 dota2.exe 内部，不经过 steam_api64.dll |
+
 ## 测试清单
 
+### steamnetworkingsockets patch
 - [ ] 日志文件已创建
 - [ ] 日志显示 `[MAIN]` 被调用
 - [ ] 日志显示找到了 DLL
@@ -232,6 +412,15 @@ byte_t pattern_win[] = { 0xXX, 0xXX, 0xXX, ... };
 - [ ] 配置项值为 1
 - [ ] 能够创建局域网游戏
 - [ ] 能够连接到局域网游戏
+
+### VAC secure flag patch
+- [ ] 日志显示 `[VAC_THREAD]` 启动
+- [ ] 日志显示找到了 client.dll
+- [ ] 日志显示找到了 pattern
+- [ ] 日志显示 patch 成功
+- [ ] 好友接受邀请不弹 VAC 弹窗
+- [ ] Wireshark 中 4513 body 显示 `10 01`（accept=1）
+- [ ] 好友成功加入房间
 
 ## 联系支持
 
