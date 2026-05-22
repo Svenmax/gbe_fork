@@ -502,4 +502,195 @@ static void ApplyAll()
     }).detach();
 }
 
+// ============================================================
+// VAC Secure Flag Patch for client.dll
+// ============================================================
+// When BSecureAllowed() returns false (because steamnetworkingsockets.dll
+// cannot reach Valve infrastructure in LAN mode), client.dll sets a global
+// byte to 1 which later causes lobby invite accepts to be silently converted
+// to declines (the "cannot verify this machine is secure" popup).
+//
+// We patch the instruction that writes 1 into that global byte so it writes 0
+// instead, effectively neutralizing the check.
+//
+// Target instruction in client.dll:
+//   test eax, eax          ; 85 C0
+//   je   +0x26             ; 74 26
+//   mov byte ptr [rip+X],1 ; C6 05 xx xx xx xx 01  <-- patch 01 -> 00
+//   xor eax, eax           ; 33 C0
+//   cmp eax, 1             ; 83 F8 01
+
+#ifdef __WINDOWS__
+static void* GetClientDllModule(byte_t** outBase, size_t* outSize)
+{
+    const char* dllNames[] = {
+        "client.dll",
+        nullptr
+    };
+
+    DebugLog("[VAC_PATCH] Searching for client.dll...");
+    
+    // Retry for 120 seconds (1200 attempts * 100ms)
+    // client.dll loads late (when entering game UI)
+    for (int retry = 0; retry < 1200; retry++) {
+        for (int i = 0; dllNames[i]; i++) {
+            HMODULE h = GetModuleHandleA(dllNames[i]);
+            if (h) {
+                MODULEINFO modInfo;
+                if (GetModuleInformation(GetCurrentProcess(), h, &modInfo, sizeof(modInfo))) {
+                    *outBase = (byte_t*)modInfo.lpBaseOfDll;
+                    *outSize = modInfo.SizeOfImage;
+                    DebugLog("[VAC_PATCH] Found %s at base %p, size %zu bytes", dllNames[i], *outBase, *outSize);
+                    return h;
+                }
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    
+    DebugLog("[VAC_PATCH] Failed to find client.dll after 120 seconds");
+    return nullptr;
+}
+#else
+static void* GetClientDllModule(byte_t** outBase, size_t* outSize)
+{
+    const char* libNames[] = {
+        "libclient.so",
+        "client.so",
+        nullptr
+    };
+
+    DebugLog("[VAC_PATCH] Searching for client library...");
+    
+    for (int retry = 0; retry < 1200; retry++) {
+        for (int i = 0; libNames[i]; i++) {
+            void* handle = dlopen(libNames[i], RTLD_LAZY | RTLD_NOLOAD);
+            if (handle) {
+#ifdef __APPLE__
+                uint32_t imageCount = _dyld_image_count();
+                for (uint32_t j = 0; j < imageCount; j++) {
+                    const char* imageName = _dyld_get_image_name(j);
+                    if (imageName && strstr(imageName, "client")) {
+                        const struct mach_header* header = (const struct mach_header*)_dyld_get_image_header(j);
+                        if (header) {
+                            *outBase = (byte_t*)header;
+                            *outSize = 100 * 1024 * 1024; // 100MB estimate
+                            DebugLog("[VAC_PATCH] Found %s at base %p", imageName, *outBase);
+                            return handle;
+                        }
+                    }
+                }
+#else
+                struct link_map* map = nullptr;
+                if (dlinfo(handle, RTLD_DI_LINKMAP, &map) == 0 && map) {
+                    *outBase = (byte_t*)map->l_addr;
+                    *outSize = 100 * 1024 * 1024; // 100MB estimate
+                    DebugLog("[VAC_PATCH] Found %s at base %p", libNames[i], *outBase);
+                    return handle;
+                }
+#endif
+                dlclose(handle);
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    
+    DebugLog("[VAC_PATCH] Failed to find client library after 120 seconds");
+    return nullptr;
+}
+#endif
+
+// Patch the VAC secure flag write in client.dll
+static bool PatchVACSecureFlag(byte_t* base, size_t size)
+{
+    DebugLog("[VAC_PATCH] Starting VAC secure flag patch in %zu bytes...", size);
+    
+    // Pattern: 85 C0 74 26 C6 05 ?? ?? ?? ?? 01 33 C0 83 F8 01
+    // Meaning: test eax,eax / je +0x26 / mov byte ptr [rip+X], 1 / xor eax,eax / cmp eax,1
+    // We patch the 01 (immediate value) to 00 so it writes 0 instead of 1
+    
+    // Pattern 1: Exact match with je offset 0x26
+    byte_t pattern1[] = { 0x85, 0xC0, 0x74, 0x26, 0xC6, 0x05 };
+    byte_t suffix1[] = { 0x01, 0x33, 0xC0, 0x83, 0xF8, 0x01 };
+    
+    for (size_t i = 0; i < size - 20; i++) {
+        if (memcmp(base + i, pattern1, sizeof(pattern1)) != 0) continue;
+        // Skip 4 bytes of RIP-relative offset
+        if (memcmp(base + i + 10, suffix1, sizeof(suffix1)) != 0) continue;
+        
+        DebugLog("[VAC_PATCH] Found exact pattern at offset 0x%zX", i);
+        // Patch byte at offset i+10 (the immediate 01 in mov byte ptr [rip+X], 1)
+        return PatchByte(base + i + 10, 0x01, 0x00);
+    }
+    
+    // Pattern 2: Flexible je offset (74 ??)
+    byte_t pattern2_prefix[] = { 0x85, 0xC0, 0x74 };
+    byte_t pattern2_mov[] = { 0xC6, 0x05 };
+    byte_t suffix2[] = { 0x33, 0xC0, 0x83, 0xF8, 0x01 };
+    
+    for (size_t i = 0; i < size - 20; i++) {
+        if (memcmp(base + i, pattern2_prefix, sizeof(pattern2_prefix)) != 0) continue;
+        // base[i+3] is the je offset (variable)
+        // base[i+4..i+5] should be C6 05 (mov byte ptr [rip+...])
+        if (memcmp(base + i + 4, pattern2_mov, sizeof(pattern2_mov)) != 0) continue;
+        // base[i+6..i+9] is the 4-byte RIP offset (skip)
+        // base[i+10] should be 0x01 (the value being written)
+        if (base[i + 10] != 0x01) continue;
+        // base[i+11..i+15] should match suffix
+        if (memcmp(base + i + 11, suffix2, sizeof(suffix2)) != 0) continue;
+        
+        DebugLog("[VAC_PATCH] Found flexible pattern at offset 0x%zX", i);
+        return PatchByte(base + i + 10, 0x01, 0x00);
+    }
+    
+    // Pattern 3: Long conditional jump (0F 84 instead of 74)
+    // test eax,eax / je near [0F 84 xx xx xx xx] / mov byte ptr [rip+X], 1
+    byte_t pattern3_prefix[] = { 0x85, 0xC0, 0x0F, 0x84 };
+    
+    for (size_t i = 0; i < size - 24; i++) {
+        if (memcmp(base + i, pattern3_prefix, sizeof(pattern3_prefix)) != 0) continue;
+        // Skip 4 bytes of jump offset: i+4..i+7
+        // base[i+8..i+9] should be C6 05
+        if (memcmp(base + i + 8, pattern2_mov, sizeof(pattern2_mov)) != 0) continue;
+        // base[i+10..i+13] is RIP offset
+        // base[i+14] should be 0x01
+        if (base[i + 14] != 0x01) continue;
+        // base[i+15..i+19] should match suffix
+        if (memcmp(base + i + 15, suffix2, sizeof(suffix2)) != 0) continue;
+        
+        DebugLog("[VAC_PATCH] Found long-jump pattern at offset 0x%zX", i);
+        return PatchByte(base + i + 14, 0x01, 0x00);
+    }
+    
+    DebugLog("[VAC_PATCH] No matching pattern found");
+    return false;
+}
+
+// Main entry point for VAC patch
+static void ApplyVACPatch()
+{
+    DebugLog("[VAC_MAIN] VACPatch thread starting");
+    
+    std::thread([]() {
+        DebugLog("[VAC_THREAD] VAC patch thread started");
+        
+        byte_t* base = nullptr;
+        size_t size = 0;
+        
+        void* handle = GetClientDllModule(&base, &size);
+        if (!handle || !base || size == 0) {
+            DebugLog("[VAC_THREAD] Failed to get client.dll module information");
+            return;
+        }
+        
+        bool patched = PatchVACSecureFlag(base, size);
+        
+        if (patched) {
+            DebugLog("[VAC_THREAD] VAC secure flag patch applied successfully!");
+        } else {
+            DebugLog("[VAC_THREAD] VAC secure flag patch failed - pattern not found");
+        }
+    }).detach();
+}
+
 } // namespace NetworkingPatch
