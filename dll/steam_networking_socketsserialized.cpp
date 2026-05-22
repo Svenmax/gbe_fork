@@ -136,11 +136,7 @@ SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     struct SteamNetworkingSocketsCert_t data = {};
-    data.m_eResult = k_EResultOK;
-    data.m_cbCert = 0;
-    data.m_caKeyID = 0;
-    data.m_cbSignature = 0;
-    data.m_cbPrivKey = 0;
+    data.m_eResult = k_EResultNoConnection;
 
     auto ret = callback_results->addCallResult(data.k_iCallback, &data, sizeof(data));
     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
