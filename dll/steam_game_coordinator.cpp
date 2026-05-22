@@ -10822,10 +10822,14 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey, std::to_string(GBE_local_lobby.match_id).c_str());
     const std::string normalized_connect = GBE_NormalizeDotaPracticeLobbyConnect(GBE_local_lobby.connect);
     GBE_local_lobby.connect = normalized_connect;
-    GBE_local_lobby.server_id = 0ull;
+    if (GBE_local_lobby.match_id == 0) {
+        GBE_local_lobby.server_id = 0ull;
+    }
     if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id) {
         GBE_shared_dota_lobby_state.connect = normalized_connect;
-        GBE_shared_dota_lobby_state.server_id = 0ull;
+        if (GBE_local_lobby.match_id == 0) {
+            GBE_shared_dota_lobby_state.server_id = 0ull;
+        }
     }
 
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey, "0");
