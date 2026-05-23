@@ -10438,6 +10438,25 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
     if (!owner_changed && !runtime_changed && GBE_DotaLobbyMembersEqual(previous_members, GBE_local_lobby.members))
         return false;
 
+    // When lobby member state changes on the client (e.g. a member disconnected
+    // from the game server), clear the direct-connect callback dedup signature
+    // and allow the private lobby snapshot to be replayed.  This ensures that
+    // GameServerChangeRequested_t is re-sent with the real IP address when the
+    // disconnected player tries to reconnect via the Dota UI (which would
+    // otherwise attempt the invalid Steam network address [I:0:server_id]).
+    if (!is_server && !GBE_DotaLobbyMembersEqual(previous_members, GBE_local_lobby.members)) {
+        GBE_last_dota_direct_connect_callback_signature.clear();
+        GBE_dota_private_lobby_snapshot_replayed = false;
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "cleared direct connect signature and snapshot replay flag on member change reason=%s lobby_id=%llu state=%u game_state=%u",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state
+        );
+    }
+
     if (is_server)
         GBE_PublishSharedDotaLobbyState(reason ? reason : "generic_lobby_members_changed");
     GBE_GC_DebugLog(
@@ -11302,6 +11321,30 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 GBE_local_lobby.connect.c_str()
             );
         }
+
+        // When the lobby is in-game and the private lobby snapshot was already
+        // replayed (i.e. the client connected at least once and returned to
+        // the dashboard), clear the direct-connect callback dedup signature.
+        // This allows GameServerChangeRequested_t to fire again on reconnect,
+        // overriding the invalid Steam network address [I:0:server_id] with
+        // the real LAN IP endpoint.
+        if (GBE_dota_private_lobby_snapshot_replayed &&
+            GBE_local_lobby.lan &&
+            GBE_local_lobby.state == 2u &&
+            GBE_local_lobby.game_state >= 2u &&
+            GBE_local_lobby.match_id != 0ull &&
+            !GBE_last_dota_direct_connect_callback_signature.empty()) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "clearing direct connect signature for LAN reconnect reason=%s lobby_id=%llu state=%u game_state=%u",
+                reason ? reason : "unknown",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state
+            );
+            GBE_last_dota_direct_connect_callback_signature.clear();
+        }
+
         GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "restore_client_runtime");
         GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "restore_client_runtime");
         GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(reason ? reason : "restore_client_runtime");
