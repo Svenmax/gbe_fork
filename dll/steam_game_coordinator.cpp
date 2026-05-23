@@ -14707,7 +14707,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
 
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
-    GBE_local_lobby.server_id = GBE_BuildDotaPracticeLobbyIpServerId(network ? network->getOwnIP() : 0u);
+    GBE_local_lobby.server_id = GBE_local_lobby.lan ? 0ull : GBE_BuildDotaPracticeLobbyIpServerId(network ? network->getOwnIP() : 0u);
     {
         const std::string launch_connect = GBE_FormatDotaPracticeLobbyConnectFromIp(network ? network->getOwnIP() : 0);
         if (GBE_ShouldPreferDotaLobbyConnectUpdate(GBE_local_lobby.connect, launch_connect))
