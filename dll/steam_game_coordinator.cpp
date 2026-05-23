@@ -443,10 +443,10 @@ static std::string GBE_GetDotaPracticeLobbyFirstConnectEndpoint(const std::strin
 
 static uint64 GBE_BuildDotaPracticeLobbyIpServerId(uint32 ip)
 {
-    (void)ip;
-    // Keep LAN lobbies on the explicit connect endpoint path. Any non-zero
-    // SteamID tested so far makes Dota prefer Remote Connect/P2P over connect.
-    return 0ull;
+    if (ip == 0u)
+        return 0ull;
+
+    return static_cast<uint64>(ip);
 }
 
 static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
@@ -14707,7 +14707,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
 
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
-    GBE_local_lobby.server_id = 0;
+    GBE_local_lobby.server_id = GBE_BuildDotaPracticeLobbyIpServerId(network ? network->getOwnIP() : 0u);
     {
         const std::string launch_connect = GBE_FormatDotaPracticeLobbyConnectFromIp(network ? network->getOwnIP() : 0);
         if (GBE_ShouldPreferDotaLobbyConnectUpdate(GBE_local_lobby.connect, launch_connect))
