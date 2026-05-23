@@ -11618,12 +11618,14 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscri
     uint64 effective_server_id = 0ull;
     if (preserve_server_id && launch_started) {
         effective_server_id = lobby.server_id;
-        if (effective_server_id == 0ull && is_server && settings)
-            effective_server_id = settings->get_local_steam_id().ConvertToUint64();
-        if (effective_server_id == 0ull && !is_server && settings && owner_steam_id == settings->get_local_steam_id().ConvertToUint64()) {
-            Steam_Client *steam_client = get_steam_client();
-            if (steam_client && steam_client->settings_server)
-                effective_server_id = steam_client->settings_server->get_local_steam_id().ConvertToUint64();
+        if (effective_server_id == 0ull && !lobby.lan) {
+            if (is_server && settings)
+                effective_server_id = settings->get_local_steam_id().ConvertToUint64();
+            if (effective_server_id == 0ull && !is_server && settings && owner_steam_id == settings->get_local_steam_id().ConvertToUint64()) {
+                Steam_Client *steam_client = get_steam_client();
+                if (steam_client && steam_client->settings_server)
+                    effective_server_id = steam_client->settings_server->get_local_steam_id().ConvertToUint64();
+            }
         }
     }
     GBE_LocalLobby effective_lobby = lobby;
@@ -11683,12 +11685,14 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
     uint64 effective_server_id = 0ull;
     if (preserve_server_id && lobby.match_id != 0) {
         effective_server_id = lobby.server_id;
-        if (effective_server_id == 0ull && is_server && settings)
-            effective_server_id = settings->get_local_steam_id().ConvertToUint64();
-        if (effective_server_id == 0ull && !is_server && settings && owner_steam_id == settings->get_local_steam_id().ConvertToUint64()) {
-            Steam_Client *steam_client = get_steam_client();
-            if (steam_client && steam_client->settings_server)
-                effective_server_id = steam_client->settings_server->get_local_steam_id().ConvertToUint64();
+        if (effective_server_id == 0ull && !lobby.lan) {
+            if (is_server && settings)
+                effective_server_id = settings->get_local_steam_id().ConvertToUint64();
+            if (effective_server_id == 0ull && !is_server && settings && owner_steam_id == settings->get_local_steam_id().ConvertToUint64()) {
+                Steam_Client *steam_client = get_steam_client();
+                if (steam_client && steam_client->settings_server)
+                    effective_server_id = steam_client->settings_server->get_local_steam_id().ConvertToUint64();
+            }
         }
     }
     GBE_LocalLobby effective_lobby = lobby;
