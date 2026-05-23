@@ -11661,7 +11661,7 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscri
     uint64 effective_server_id = 0ull;
     if (preserve_server_id && launch_started) {
         effective_server_id = lobby.server_id;
-        if (effective_server_id == 0ull && !lobby.lan) {
+        if (effective_server_id == 0ull) {
             if (is_server && settings)
                 effective_server_id = settings->get_local_steam_id().ConvertToUint64();
             if (effective_server_id == 0ull && !is_server && settings && owner_steam_id == settings->get_local_steam_id().ConvertToUint64()) {
@@ -11728,7 +11728,7 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
     uint64 effective_server_id = 0ull;
     if (preserve_server_id && lobby.match_id != 0) {
         effective_server_id = lobby.server_id;
-        if (effective_server_id == 0ull && !lobby.lan) {
+        if (effective_server_id == 0ull) {
             if (is_server && settings)
                 effective_server_id = settings->get_local_steam_id().ConvertToUint64();
             if (effective_server_id == 0ull && !is_server && settings && owner_steam_id == settings->get_local_steam_id().ConvertToUint64()) {
@@ -14750,7 +14750,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
 
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
-    GBE_local_lobby.server_id = GBE_local_lobby.lan ? 0ull : GBE_BuildDotaPracticeLobbyIpServerId(network ? network->getOwnIP() : 0u);
+    GBE_local_lobby.server_id = GBE_BuildDotaPracticeLobbyIpServerId(network ? network->getOwnIP() : 0u);
     {
         const std::string launch_connect = GBE_FormatDotaPracticeLobbyConnectFromIp(network ? network->getOwnIP() : 0);
         if (GBE_ShouldPreferDotaLobbyConnectUpdate(GBE_local_lobby.connect, launch_connect))
