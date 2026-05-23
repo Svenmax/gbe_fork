@@ -446,7 +446,12 @@ static uint64 GBE_BuildDotaPracticeLobbyIpServerId(uint32 ip)
     if (ip == 0u)
         return 0ull;
 
-    return static_cast<uint64>(ip);
+    // Build an AnonGameServer-style CSteamID (Type=4) using the IP as the
+    // account ID.  Real Steam servers get a similar SteamID assigned by the
+    // backend during SERVERSETUP; we synthesize one locally so that Dota can
+    // resolve the game server via [I:0:account_id] Steam networking address.
+    CSteamID server_id(ip, k_unSteamUserDefaultInstance, k_EUniversePublic, k_EAccountTypeAnonGameServer);
+    return server_id.ConvertToUint64();
 }
 
 static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
