@@ -10088,8 +10088,9 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                     GBE_local_lobby.game_state = GBE_ParseUint32OrZero(generic_lobby_game_state_raw.c_str());
                 if (!generic_match_id_raw.empty())
                     GBE_local_lobby.match_id = GBE_ParseUint64OrZero(generic_match_id_raw.c_str());
-                (void)generic_server_id_raw;
-                GBE_local_lobby.server_id = 0ull;
+                const uint64 generic_server_id = GBE_ParseUint64OrZero(generic_server_id_raw.c_str());
+                if (generic_lobby_state_raw.empty() || GBE_ParseUint32OrZero(generic_lobby_state_raw.c_str()) == 0u || generic_server_id != 0ull)
+                    GBE_local_lobby.server_id = generic_server_id;
 
                 if (!generic_connect.empty())
                     GBE_local_lobby.connect = GBE_NormalizeDotaPracticeLobbyConnect(generic_connect);
@@ -10832,7 +10833,7 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
         }
     }
 
-    steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey, "0");
+    steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey, std::to_string(GBE_local_lobby.server_id).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyConnectKey, normalized_connect.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStartTimeKey, std::to_string(GBE_local_lobby.game_start_time).c_str());
 
@@ -11195,7 +11196,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         const uint64 previous_server_id = GBE_local_lobby.server_id;
         const std::string previous_connect = GBE_local_lobby.connect;
 
-        if (GBE_local_lobby.server_id != 0ull) {
+        if (GBE_local_lobby.server_id != 0ull && GBE_shared_dota_lobby_state.match_id == 0ull) {
             GBE_local_lobby.server_id = 0ull;
             changed = true;
         }
@@ -11332,7 +11333,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
     GBE_local_lobby.state = GBE_shared_dota_lobby_state.state;
     GBE_local_lobby.game_state = GBE_shared_dota_lobby_state.game_state;
     GBE_local_lobby.match_id = GBE_shared_dota_lobby_state.match_id;
-    GBE_local_lobby.server_id = 0ull;
+    GBE_local_lobby.server_id = GBE_shared_dota_lobby_state.match_id != 0ull ? GBE_shared_dota_lobby_state.server_id : 0ull;
     GBE_local_lobby.owner_steam_id = GBE_shared_dota_lobby_state.owner_steam_id;
     GBE_local_lobby.owner_account_id = GBE_shared_dota_lobby_state.owner_account_id;
     GBE_local_lobby.owner_name = GBE_shared_dota_lobby_state.owner_name;
@@ -11897,13 +11898,13 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
         return false;
 
     const uint64 previous_server_id = GBE_local_lobby.server_id;
-    GBE_local_lobby.server_id = 0ull;
+    GBE_local_lobby.server_id = derived_server_id;
     if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id)
-        GBE_shared_dota_lobby_state.server_id = 0ull;
+        GBE_shared_dota_lobby_state.server_id = derived_server_id;
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
-        "cleared lobby server_id to force connect endpoint reason=%s lobby_id=%llu match_id=%llu old=%llu derived=%llu lan_ip=%s",
+        "synced lobby server_id from connect endpoint reason=%s lobby_id=%llu match_id=%llu old=%llu derived=%llu lan_ip=%s",
         reason ? reason : "unknown",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         static_cast<unsigned long long>(GBE_local_lobby.match_id),
