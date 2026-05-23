@@ -11925,7 +11925,14 @@ static bool GBE_ShouldPreferDotaLobbyConnectUpdate(const std::string &current_co
     if (current_connect.empty())
         return true;
 
-    return current_connect == GBE_FormatDotaPracticeLobbyLoopbackConnect();
+    const uint32 candidate_ip = GBE_ParseDotaPracticeLobbyConnectIPv4(candidate_connect);
+    if (candidate_ip == 0u)
+        return false;
+
+    if (current_connect == GBE_FormatDotaPracticeLobbyLoopbackConnect())
+        return true;
+
+    return false;
 }
 
 bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData)
@@ -14701,7 +14708,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
 
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
     GBE_local_lobby.server_id = 0;
-    GBE_local_lobby.connect = GBE_FormatDotaPracticeLobbyConnectFromIp(network ? network->getOwnIP() : 0);
+    {
+        const std::string launch_connect = GBE_FormatDotaPracticeLobbyConnectFromIp(network ? network->getOwnIP() : 0);
+        if (GBE_ShouldPreferDotaLobbyConnectUpdate(GBE_local_lobby.connect, launch_connect))
+            GBE_local_lobby.connect = launch_connect;
+    }
     GBE_local_lobby.game_start_time = static_cast<uint32>(std::time(nullptr));
     GBE_local_lobby.launch_phase = GBE_kDotaLaunchPhaseRequested;
     GBE_PublishSharedDotaLobbyState("7041_launch_init");
