@@ -10089,10 +10089,8 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                 if (!generic_match_id_raw.empty())
                     GBE_local_lobby.match_id = GBE_ParseUint64OrZero(generic_match_id_raw.c_str());
                 const uint64 generic_server_id = GBE_ParseUint64OrZero(generic_server_id_raw.c_str());
-                if (!generic_server_id_raw.empty()) {
-                    if (generic_lobby_state_raw.empty() || GBE_ParseUint32OrZero(generic_lobby_state_raw.c_str()) == 0u || generic_server_id != 0ull)
-                        GBE_local_lobby.server_id = generic_server_id;
-                }
+                if (!generic_server_id_raw.empty() && (generic_server_id != 0ull || GBE_local_lobby.match_id == 0ull))
+                    GBE_local_lobby.server_id = generic_server_id;
 
                 if (!generic_connect.empty())
                     GBE_local_lobby.connect = GBE_NormalizeDotaPracticeLobbyConnect(generic_connect);
