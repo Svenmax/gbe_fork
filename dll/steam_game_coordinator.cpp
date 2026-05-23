@@ -11698,6 +11698,15 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
                 effective_server_id = steam_client->settings_server->get_local_steam_id().ConvertToUint64();
         }
     }
+    GBE_GC_DebugLog(
+        "GC_DOTA_26_BUILD",
+        "Building 26 lobby_id=%llu preserve=%u input_match_id=%llu input_server_id=%llu effective_server_id=%llu",
+        static_cast<unsigned long long>(lobby.lobby_id),
+        preserve_server_id ? 1u : 0u,
+        static_cast<unsigned long long>(lobby.match_id),
+        static_cast<unsigned long long>(lobby.server_id),
+        static_cast<unsigned long long>(effective_server_id)
+    );
     GBE_LocalLobby effective_lobby = lobby;
     effective_lobby.server_id = effective_server_id;
     effective_lobby.connect = effective_connect;
