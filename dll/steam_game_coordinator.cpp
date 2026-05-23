@@ -10461,15 +10461,12 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
     );
 
     const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
-    const bool local_owner_lan_launch =
-        local_steam_id != 0ull &&
-        GBE_local_lobby.owner_steam_id != 0ull &&
-        local_steam_id == GBE_local_lobby.owner_steam_id &&
+    const bool lan_launch_active =
         GBE_local_lobby.lan &&
         GBE_local_lobby.match_id != 0ull;
 
     std::string response_26;
-    const bool sent_details_update = GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, is_server || local_owner_lan_launch);
+    const bool sent_details_update = GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, is_server || lan_launch_active);
     if (sent_details_update) {
         const bool peer_lan_direct_launch =
             local_steam_id != 0ull &&
@@ -11698,15 +11695,6 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
                 effective_server_id = steam_client->settings_server->get_local_steam_id().ConvertToUint64();
         }
     }
-    GBE_GC_DebugLog(
-        "GC_DOTA_26_BUILD",
-        "Building 26 lobby_id=%llu preserve=%u input_match_id=%llu input_server_id=%llu effective_server_id=%llu",
-        static_cast<unsigned long long>(lobby.lobby_id),
-        preserve_server_id ? 1u : 0u,
-        static_cast<unsigned long long>(lobby.match_id),
-        static_cast<unsigned long long>(lobby.server_id),
-        static_cast<unsigned long long>(effective_server_id)
-    );
     GBE_LocalLobby effective_lobby = lobby;
     effective_lobby.server_id = effective_server_id;
     effective_lobby.connect = effective_connect;
