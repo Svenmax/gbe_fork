@@ -17,6 +17,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "dll/gbe_dota_reconnect_shared.h"
 #include <atomic>
 #include <algorithm>
 #include <array>
@@ -268,6 +269,31 @@ struct GBE_DotaGenericLobbyEntry {
 static GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 static bool GBE_pending_dota_normal_signout_finalize_after_25 = false;
 static uint64 GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+
+// --- Dota reconnect shared state ---
+std::atomic<bool> GBE_dota_reconnect_eligible{false};
+
+bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
+{
+    if (!out)
+        return false;
+    if (!GBE_shared_dota_lobby_state.valid || !GBE_shared_dota_lobby_state.active)
+        return false;
+    if (GBE_shared_dota_lobby_state.game_state < 2u)
+        return false;
+    if (GBE_shared_dota_lobby_state.connect.empty())
+        return false;
+    if (GBE_shared_dota_lobby_state.server_id == 0)
+        return false;
+
+    out->server_id = GBE_shared_dota_lobby_state.server_id;
+    out->game_state = GBE_shared_dota_lobby_state.game_state;
+    std::strncpy(out->connect, GBE_shared_dota_lobby_state.connect.c_str(), sizeof(out->connect) - 1);
+    out->connect[sizeof(out->connect) - 1] = '\0';
+    out->owner_steam_id = GBE_shared_dota_lobby_state.owner_steam_id;
+    return true;
+}
+// --- End Dota reconnect shared state ---
 
 enum : uint32 {
     GBE_kDotaLaunchPhaseNone = 0u,
