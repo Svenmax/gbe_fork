@@ -8031,7 +8031,14 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         static_cast<unsigned long long>(GBE_local_lobby.server_id)
     );
 
-    GBE_ReapplyDotaPracticeLobbyLaunchRichPresence("queued_state");
+    // Only reapply launch rich presence (which triggers direct connect callbacks)
+    // when the lobby is still in pre-game (game_state == 0).  When game_state >= 1
+    // the match is already running; reapplying here would fire
+    // GameServerChangeRequested_t on every member-change update from the host,
+    // causing an automatic reconnect loop.  Manual reconnect is handled by the
+    // separate restore_client_runtime path which calls reapply directly.
+    if (GBE_local_lobby.game_state == 0u)
+        GBE_ReapplyDotaPracticeLobbyLaunchRichPresence("queued_state");
 
     if (gc_profile == GC_PROFILE_DOTA2 &&
         is_server &&
