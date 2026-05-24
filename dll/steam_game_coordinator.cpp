@@ -65,6 +65,7 @@ static constexpr uint32 GBE_kDotaJoinChatChannelResponse = 7010u;
 static constexpr uint32 GBE_kDotaOtherJoinedChannel = 7013u;
 static constexpr uint32 GBE_kDotaOtherLeftChannel = 7014u;
 static constexpr uint32 GBE_kDotaAbandonCurrentGame = 7035u;
+static constexpr uint32 GBE_kDotaLeaverDetected = 7072u;
 static constexpr uint32 GBE_kDotaSubmitPlayerReportV2 = 7082u;
 static constexpr uint32 GBE_kDotaSubmitPlayerReportResponseV2 = 7083u;
 static constexpr uint32 GBE_kDotaGameMatchSignOutPermissionRequest = 7381u;
@@ -2194,9 +2195,13 @@ static void GBE_BuildDotaLobbyMemberObject2004(const GBE_DotaLobbyMemberState &m
     GBE_AppendProtoVarIntField(member_state, 3u, member.team);
     if (member.slot != 0u)
         GBE_AppendProtoVarIntField(member_state, 7u, member.slot);
-    const bool member_leaver_disconnected = !member.connected && lobby_state == 2u && lobby_game_state >= 1u;
-    if (member_leaver_disconnected) {
-        GBE_AppendProtoVarIntField(member_state, 16u, 1u);
+
+    // Leaver status: use explicit leaver_status if set, otherwise derive from connected state
+    uint32 effective_leaver = member.leaver_status;
+    if (effective_leaver == 0u && !member.connected && lobby_state == 2u && lobby_game_state >= 1u)
+        effective_leaver = 1u; // DOTA_LEAVER_DISCONNECTED
+    if (effective_leaver != 0u) {
+        GBE_AppendProtoVarIntField(member_state, 16u, effective_leaver);
         if (lobby_state == 2u && lobby_game_state >= 1u)
             GBE_AppendProtoVarIntField(member_state, 28u, 0u);
     }
@@ -6699,10 +6704,14 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     }
 
     for (size_t i = 0; i < effective_members.size(); ++i) {
-        if (effective_members[i].steam_id != 0ull) {
-            GBE_AppendProtoVarIntField(object_2004, 121, static_cast<uint64>(i));
-        } else {
+        if (effective_members[i].steam_id == 0ull) {
             GBE_AppendProtoVarIntField(object_2004, 123, static_cast<uint64>(i));
+        } else if (effective_members[i].leaver_status >= 5u) {
+            // ABANDONED or worse -> left_member_indices (field 122)
+            GBE_AppendProtoVarIntField(object_2004, 122, static_cast<uint64>(i));
+        } else {
+            // Active or disconnected -> member_indices (field 121)
+            GBE_AppendProtoVarIntField(object_2004, 121, static_cast<uint64>(i));
         }
     }
     GBE_AppendProtoVarIntField(object_2004, 127, 0u);
@@ -9915,6 +9924,11 @@ bool Steam_Game_Coordinator::GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bo
             member.connected = connected;
             changed = true;
         }
+        // Clear leaver_status when player reconnects
+        if (connected && member.leaver_status != 0u) {
+            member.leaver_status = 0u;
+            changed = true;
+        }
         return changed;
     }
 
@@ -12966,6 +12980,64 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             static_cast<unsigned long long>(GBE_local_lobby.server_id)
         );
         return GBE_HandleDotaAbandonCurrentGameRequest(false, nullptr);
+    }
+
+    // Handle CMsgLeaverDetected (7072) from game server
+    // When a player disconnects and later abandons (or the abandon timer expires),
+    // the game server sends this message. We update the member's leaver_status
+    // and push a lobby update so the Dota client sees the transition from
+    // DISCONNECTED to ABANDONED (with left_member_indices updated).
+    if (request_emsg == GBE_kDotaLeaverDetected) {
+        if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "ignoring 7072 because no local lobby is active");
+            return true;
+        }
+
+        // Parse steam_id (field 1, fixed64) and leaver_status (field 2, varint)
+        uint64 leaver_steam_id = 0ull;
+        uint32 leaver_status = 0u;
+        uint32 disconnect_reason = 0u;
+        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), leaver_steam_id);
+        GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 2u), leaver_status);
+        GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 6u), disconnect_reason);
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "handling req=7072 LeaverDetected steam_id=%llu leaver_status=%u disconnect_reason=%u lobby_id=%llu state=%u game_state=%u",
+            static_cast<unsigned long long>(leaver_steam_id),
+            leaver_status,
+            disconnect_reason,
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state
+        );
+
+        if (leaver_steam_id != 0ull && leaver_status != 0u) {
+            bool updated = false;
+            for (GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+                if (member.steam_id == leaver_steam_id) {
+                    if (member.leaver_status != leaver_status) {
+                        member.leaver_status = leaver_status;
+                        member.connected = false;
+                        updated = true;
+                        GBE_GC_DebugLog(
+                            "GC_DOTA_DIRECT",
+                            "updated member leaver_status steam_id=%llu leaver_status=%u",
+                            static_cast<unsigned long long>(leaver_steam_id),
+                            leaver_status
+                        );
+                    }
+                    break;
+                }
+            }
+
+            if (updated) {
+                GBE_PublishSharedDotaLobbyState("7072_leaver_detected");
+                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "7072_leaver_detected");
+            }
+        }
+
+        return true;
     }
 
     if (request_emsg == GBE_kDotaGameMatchSignOutPermissionRequest) {

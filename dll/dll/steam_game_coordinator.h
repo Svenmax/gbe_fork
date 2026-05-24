@@ -36,6 +36,7 @@ struct GBE_DotaLobbyMemberState
     uint32 slot{};
     uint32 hero_id{};
     bool connected{};
+    uint32 leaver_status{};  // 0=NONE, 1=DISCONNECTED, 5=ABANDONED, etc.
 };
 
 class Steam_Game_Coordinator :
