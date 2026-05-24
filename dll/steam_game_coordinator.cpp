@@ -2196,7 +2196,10 @@ static void GBE_BuildDotaLobbyMemberObject2004(const GBE_DotaLobbyMemberState &m
     if (member.slot != 0u)
         GBE_AppendProtoVarIntField(member_state, 7u, member.slot);
 
-    // Leaver status: use explicit leaver_status if set, otherwise derive from connected state
+    // Leaver status (field 16): use explicit leaver_status if set, otherwise derive
+    // from connected state.  Real GC always writes field 16 = 1 for active members
+    // even in pre-game lobbies; Dota uses this to determine member presence/color
+    // in the lobby chat panel.
     uint32 effective_leaver = member.leaver_status;
     if (effective_leaver == 0u && !member.connected && lobby_state == 2u && lobby_game_state >= 1u)
         effective_leaver = 1u; // DOTA_LEAVER_DISCONNECTED
@@ -2204,6 +2207,9 @@ static void GBE_BuildDotaLobbyMemberObject2004(const GBE_DotaLobbyMemberState &m
         GBE_AppendProtoVarIntField(member_state, 16u, effective_leaver);
         if (lobby_state == 2u && lobby_game_state >= 1u)
             GBE_AppendProtoVarIntField(member_state, 28u, 0u);
+    } else {
+        // Active member with no leaver status: write field 16 = 1 to match real GC
+        GBE_AppendProtoVarIntField(member_state, 16u, 1u);
     }
 }
 
