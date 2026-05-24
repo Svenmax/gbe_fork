@@ -11332,24 +11332,14 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             );
         }
 
-        // Clear the direct-connect callback dedup signature so that
-        // RunCallbacks can fire a one-shot GameServerChangeRequested_t with the
-        // LAN IP.  This is safe because GBE_ReapplyDotaPracticeLobbyLaunchRichPresence
-        // no longer fires the direct connect callback when game_state >= 2,
-        // preventing the automatic reconnect loop that previously occurred.
-        // The one-shot in RunCallbacks will re-set the signature after firing,
-        // so only one reconnect attempt happens per restore_client_runtime cycle.
-        if (GBE_local_lobby.lan && GBE_local_lobby.state == 2u && GBE_local_lobby.match_id != 0) {
-            GBE_last_dota_direct_connect_callback_signature.clear();
-            GBE_GC_DebugLog(
-                "GC_DOTA_SYNC",
-                "cleared direct connect signature in restore_client_runtime reason=%s lobby_id=%llu state=%u game_state=%u",
-                reason ? reason : "unknown",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_local_lobby.state,
-                GBE_local_lobby.game_state
-            );
-        }
+        // NOTE: Signature clearing was previously done here for LAN reconnect,
+        // but it caused every restore_client_runtime invocation (including
+        // routine lobby state syncs while the player is still connected) to
+        // re-fire GameServerChangeRequested_t, producing an automatic
+        // reconnect loop.  Manual reconnect works through Dota's own rich
+        // presence "connect" field (+connect <LAN IP>:<port>) which is kept
+        // up-to-date by GBE_ReapplyDotaPracticeLobbyLaunchRichPresence below,
+        // so GameServerChangeRequested_t does not need to fire again.
 
         GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "restore_client_runtime");
         GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "restore_client_runtime");
@@ -16415,25 +16405,7 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
 
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence(status, lobby_state, include_party, !GBE_local_lobby.abandon_postgame_active);
     GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(status, lobby_state, include_party, !GBE_local_lobby.abandon_postgame_active, reason);
-
-    // During an active match (game_state >= 2), do NOT fire the direct connect
-    // callback from the reapply path.  This prevents routine lobby state syncs
-    // (e.g. members changed, dashboard switch) from issuing a redundant
-    // GameServerChangeRequested_t while the player is already connected.
-    // Reconnect after disconnect is handled separately: restore_client_runtime
-    // clears the dedup signature, and RunCallbacks fires a one-shot direct
-    // connect when it detects the signature became empty.
-    if (GBE_local_lobby.game_state < 2u) {
-        GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback(reason);
-    } else {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "skipped direct connect callback from reapply (game_state >= 2) reason=%s lobby_id=%llu game_state=%u",
-            reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.game_state
-        );
-    }
+    GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback(reason);
 }
 
 void Steam_Game_Coordinator::GBE_FinalizeDotaAbandonAfterOtherLeftChannel(uint64 consumed_lobby_id, const char *reason)
@@ -17117,28 +17089,6 @@ void Steam_Game_Coordinator::RunCallbacks()
 
     if (!GBE_MaybeHandleDotaPracticeLobbyKicked("run_callbacks_generic_lobby_members_changed"))
         GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("run_callbacks_generic_lobby_members_changed");
-
-    // One-shot direct connect re-fire for LAN reconnect.
-    // When restore_client_runtime clears the dedup signature (after a lobby
-    // state sync), and GBE_ReapplyDotaPracticeLobbyLaunchRichPresence skips
-    // the direct connect callback (game_state >= 2), the signature remains
-    // empty.  Detect this here and fire the callback exactly once.
-    // GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback will re-set the
-    // signature after firing, so this only triggers once per clear.
-    if (!is_server && gc_profile == GC_PROFILE_DOTA2 &&
-        GBE_local_lobby.active && GBE_local_lobby.lan &&
-        GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 2u &&
-        GBE_local_lobby.match_id != 0 &&
-        GBE_last_dota_direct_connect_callback_signature.empty()) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "one-shot direct connect re-fire from RunCallbacks lobby_id=%llu state=%u game_state=%u",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state
-        );
-        GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback("run_callbacks_oneshot_reconnect");
-    }
 
     auto due_time = [](const GC_Message &message) {
         return message.created + std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(std::chrono::duration<double>(message.post_in));
