@@ -1494,7 +1494,6 @@ static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)
     const char *log_scope = scope ? scope : "GC";
     if (std::strcmp(log_scope, "GC_SEND") == 0 ||
         std::strcmp(log_scope, "GC_SEND_DOTA") == 0 ||
-        std::strcmp(log_scope, "GC_DOTA_SYNC") == 0 ||
         std::strcmp(log_scope, "GC_CONFIG") == 0 ||
         std::strcmp(log_scope, "GC_INIT") == 0 ||
         std::strcmp(log_scope, "CREATE_INTERFACE") == 0 ||
@@ -11333,28 +11332,14 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             );
         }
 
-        // When the lobby is in-game and the private lobby snapshot was already
-        // replayed (i.e. the client connected at least once and returned to
-        // the dashboard), clear the direct-connect callback dedup signature.
-        // This allows GameServerChangeRequested_t to fire again on reconnect,
-        // overriding the invalid Steam network address [I:0:server_id] with
-        // the real LAN IP endpoint.
-        if (GBE_dota_private_lobby_snapshot_replayed &&
-            GBE_local_lobby.lan &&
-            GBE_local_lobby.state == 2u &&
-            GBE_local_lobby.game_state >= 2u &&
-            GBE_local_lobby.match_id != 0ull &&
-            !GBE_last_dota_direct_connect_callback_signature.empty()) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_SYNC",
-                "clearing direct connect signature for LAN reconnect reason=%s lobby_id=%llu state=%u game_state=%u",
-                reason ? reason : "unknown",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_local_lobby.state,
-                GBE_local_lobby.game_state
-            );
-            GBE_last_dota_direct_connect_callback_signature.clear();
-        }
+        // NOTE: Signature clearing was previously done here for LAN reconnect,
+        // but it caused every restore_client_runtime invocation (including
+        // routine lobby state syncs while the player is still connected) to
+        // re-fire GameServerChangeRequested_t, producing an automatic
+        // reconnect loop.  Manual reconnect works through Dota's own rich
+        // presence "connect" field (+connect <LAN IP>:<port>) which is kept
+        // up-to-date by GBE_ReapplyDotaPracticeLobbyLaunchRichPresence below,
+        // so GameServerChangeRequested_t does not need to fire again.
 
         GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "restore_client_runtime");
         GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "restore_client_runtime");
