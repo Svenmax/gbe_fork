@@ -272,7 +272,7 @@ static bool GBE_pending_dota_normal_signout_finalize_after_25 = false;
 static uint64 GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
 
 // --- Dota reconnect shared state ---
-std::atomic<bool> GBE_dota_reconnect_eligible{false};
+std::atomic<bool> GBE_dota_reconnect_eligible{true};
 
 bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
 {

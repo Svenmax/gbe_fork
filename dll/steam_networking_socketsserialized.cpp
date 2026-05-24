@@ -89,48 +89,57 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_SEND_RENDEZVOUS", settings->get_local_steam_id().ConvertToUint64(), steamIDRemote.ConvertToUint64(), unConnectionIDSrc, cbRendezvous);
 
-    // --- Dota 2 LAN reconnect interception ---
-    // When a player disconnects and clicks "Reconnect", Dota's Valve DLL tries to
-    // connect via P2P relay using the server's SteamID. This fails on LAN (Cert failure 3).
-    // We intercept this call and fire GameServerChangeRequested_t with the LAN IP instead,
-    // causing Dota's engine to execute "connect <LAN IP>" which works.
+    // --- Dota 2 LAN reconnect / initial connect interception ---
+    // When Dota tries to connect via P2P relay using the server's SteamID,
+    // it fails on LAN (Cert failure 3). We intercept this call and fire
+    // GameServerChangeRequested_t with the LAN IP instead, causing Dota's
+    // engine to execute "connect <LAN IP>" which works.
     //
-    // Three gates:
-    //   1. reconnect_eligible flag (set by CancelAuthTicket, cleared by GetAuthSessionTicket)
-    //   2. remote_id matches lobby server_id
-    //   3. game_state >= 2 (game started)
-    if (GBE_dota_reconnect_eligible.load()) {
+    // This covers two scenarios:
+    //   a) Initial connect: Dota gets lobby with server_id, tries P2P first
+    //   b) Reconnect after disconnect: Dota retries P2P to same server_id
+    //
+    // Gates:
+    //   1. remote_id matches lobby server_id
+    //   2. game_state >= 2 (game started)
+    //   3. connect endpoint available (LAN IP)
+    //   4. One-shot per connection_id to avoid firing repeatedly
+    {
         GBE_DotaReconnectContext ctx{};
         if (GBE_GetDotaReconnectContext(&ctx) &&
             steamIDRemote.ConvertToUint64() == ctx.server_id &&
             ctx.game_state >= 2 &&
             ctx.connect[0] != '\0')
         {
-            // One-shot: clear the flag so we only fire once per disconnect
-            GBE_dota_reconnect_eligible.store(false);
+            // One-shot: use eligible flag to avoid firing more than once per P2P attempt.
+            // The flag is set to true by default (always eligible) and cleared after firing.
+            // GetAuthSessionTicket resets it to true (new connection established).
+            // CancelAuthTicket also sets it to true (disconnect, ready for reconnect).
+            bool expected = true;
+            if (GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false)) {
+                GBE_ReconnectLog("GBE_RECONNECT",
+                    "Intercepted SendP2PRendezvous: remote_id=%llu matches server_id=%llu, firing GameServerChangeRequested_t endpoint=%s",
+                    (unsigned long long)steamIDRemote.ConvertToUint64(),
+                    (unsigned long long)ctx.server_id,
+                    ctx.connect);
 
-            GBE_ReconnectLog("GBE_RECONNECT",
-                "Intercepted SendP2PRendezvous: remote_id=%llu matches server_id=%llu, firing GameServerChangeRequested_t endpoint=%s",
-                (unsigned long long)steamIDRemote.ConvertToUint64(),
-                (unsigned long long)ctx.server_id,
-                ctx.connect);
+                // Fire GameServerChangeRequested_t with LAN IP
+                GameServerChangeRequested_t server_change{};
+                std::strncpy(server_change.m_rgchServer, ctx.connect, sizeof(server_change.m_rgchServer) - 1);
+                server_change.m_rgchServer[sizeof(server_change.m_rgchServer) - 1] = '\0';
+                callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0);
 
-            // Fire GameServerChangeRequested_t with LAN IP
-            GameServerChangeRequested_t server_change{};
-            std::strncpy(server_change.m_rgchServer, ctx.connect, sizeof(server_change.m_rgchServer) - 1);
-            server_change.m_rgchServer[sizeof(server_change.m_rgchServer) - 1] = '\0';
-            callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0);
-
-            // Also fire GameRichPresenceJoinRequested_t for belt-and-suspenders
-            std::string connect_command = std::string("+connect ") + ctx.connect;
-            GameRichPresenceJoinRequested_t rich_join{};
-            rich_join.m_steamIDFriend = CSteamID(ctx.owner_steam_id);
-            std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
-            rich_join.m_rgchConnect[sizeof(rich_join.m_rgchConnect) - 1] = '\0';
-            callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
+                // Also fire GameRichPresenceJoinRequested_t for belt-and-suspenders
+                std::string connect_command = std::string("+connect ") + ctx.connect;
+                GameRichPresenceJoinRequested_t rich_join{};
+                rich_join.m_steamIDFriend = CSteamID(ctx.owner_steam_id);
+                std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
+                rich_join.m_rgchConnect[sizeof(rich_join.m_rgchConnect) - 1] = '\0';
+                callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
+            }
         }
     }
-    // --- End Dota 2 LAN reconnect interception ---
+    // --- End Dota 2 LAN connect interception ---
 
     if (!steamIDRemote.IsValid() || !pMsgRendezvous || cbRendezvous == 0)
         return;

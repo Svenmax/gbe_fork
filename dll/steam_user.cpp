@@ -669,9 +669,11 @@ HAuthTicket Steam_User::GetAuthSessionTicket( void *pTicket, int cbMaxTicket, ui
     PRINT_DEBUG("%p [%i] %p", pTicket, cbMaxTicket, pcbTicket);
 
     // Clear reconnect eligibility -- a new auth session means a fresh connection is being established.
-    if (GBE_dota_reconnect_eligible.load()) {
-        GBE_dota_reconnect_eligible.store(false);
-        GBE_ReconnectLog("GBE_RECONNECT", "GetAuthSessionTicket: cleared reconnect_eligible");
+    // Reset reconnect interception flag: new connection established,
+    // ready for next disconnect+reconnect cycle
+    if (!GBE_dota_reconnect_eligible.load()) {
+        GBE_dota_reconnect_eligible.store(true);
+        GBE_ReconnectLog("GBE_RECONNECT", "GetAuthSessionTicket: reset reconnect_eligible=true (new connection)");
     }
 
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
