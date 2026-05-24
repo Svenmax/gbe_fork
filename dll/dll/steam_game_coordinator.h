@@ -333,9 +333,4 @@ public:
 
 };
 
-// Global LAN connect endpoint accessor for use by Steam_Networking_Sockets.
-// Returns true and fills |endpoint| (e.g. "172.19.60.150:27015") if a Dota
-// LAN lobby is active and the given server_id matches.
-bool GBE_GetDotaLanConnectEndpoint(uint64 target_server_id, std::string &endpoint);
-
 #endif // __INCLUDED_STEAM_GAME_COORDINATOR_H__

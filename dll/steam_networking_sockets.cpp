@@ -16,7 +16,6 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/steam_networking_sockets.h"
-#include "dll/steam_game_coordinator.h"
 
 #include <cstdio>
 #include <cstring>
@@ -488,32 +487,7 @@ HSteamNetConnection Steam_Networking_Sockets::ConnectP2P( const SteamNetworkingI
 
     if (identityRemote.m_eType == k_ESteamNetworkingIdentityType_SteamID) {
         PRINT_DEBUG("%llu", identityRemote.GetSteamID64());
-
-        // Dota LAN reconnect: when the target is an AnonGameServer SteamID
-        // and we have a known LAN endpoint for that server, redirect to
-        // ConnectByIPAddress instead of attempting a P2P/relay connection
-        // that would fail in LAN mode.
-        CSteamID target_steam_id(identityRemote.GetSteamID64());
-        if (target_steam_id.GetEAccountType() == k_EAccountTypeAnonGameServer) {
-            std::string lan_endpoint;
-            if (GBE_GetDotaLanConnectEndpoint(target_steam_id.ConvertToUint64(), lan_endpoint)) {
-                // Parse IP:port from endpoint string
-                unsigned int o1 = 0, o2 = 0, o3 = 0, o4 = 0, port = 0;
-                if (std::sscanf(lan_endpoint.c_str(), "%u.%u.%u.%u:%u", &o1, &o2, &o3, &o4, &port) == 5 &&
-                    o1 <= 255 && o2 <= 255 && o3 <= 255 && o4 <= 255 && port > 0 && port <= 65535) {
-                    SteamNetworkingIPAddr addr{};
-                    addr.Clear();
-                    addr.SetIPv4((o1 << 24) | (o2 << 16) | (o3 << 8) | o4, static_cast<uint16>(port));
-                    PRINT_DEBUG("LAN redirect: ConnectP2P [A:1:%u:1] -> ConnectByIPAddress %s",
-                        target_steam_id.GetAccountID(), lan_endpoint.c_str());
-                    GBE_LogNetSockTrace("NETSOCK_CONNECT_P2P_LAN_REDIRECT", this,
-                        settings->get_local_steam_id().ConvertToUint64(),
-                        identityRemote.GetSteamID64(), nVirtualPort, static_cast<int>(port),
-                        CONNECT_SOCKET_CONNECTING, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
-                    return ConnectByIPAddress(addr, 0, nullptr);
-                }
-            }
-        }
+        //steam id identity
     } else if (ip) {
         PRINT_DEBUG("%u:%u ipv4? %u", ip->GetIPv4(), ip->m_port, ip->IsIPv4());
         //ip addr
