@@ -6288,7 +6288,6 @@ static bool GBE_BuildDotaJoinChatChannelResponsePayload(
         GBE_AppendProtoFixed64Field(member, 1u, member_steam_id);
         GBE_AppendProtoBytesField(member, 2u, effective_member_name);
         GBE_AppendProtoVarIntField(member, 3u, 0u);
-        GBE_AppendProtoVarIntField(member, 4u, 0u);
         GBE_AppendProtoBytesField(body, 5u, member);
         written_members.push_back(member_steam_id);
         GBE_GC_DebugLog(
@@ -6364,7 +6363,6 @@ static bool GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
     GBE_AppendProtoFixed64Field(member, 1u, steam_id);
     GBE_AppendProtoBytesField(member, 2u, player_name);
     GBE_AppendProtoVarIntField(member, 3u, 0u);
-    GBE_AppendProtoVarIntField(member, 4u, 0u);
     GBE_AppendProtoBytesField(body, 5u, member);
 
     GBE_AppendProtoVarIntField(body, 6u, 18u);
