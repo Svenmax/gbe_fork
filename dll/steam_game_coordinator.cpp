@@ -14673,10 +14673,11 @@ bool Steam_Game_Coordinator::GBE_QueueDotaPostGameTeardown(const char *reason, b
 
     std::string no_lobby_persona;
     if (GBE_BuildDotaPersonaStatePeripheralMessage(GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex, steam_id, lobby_id, no_lobby_persona)) {
-        push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, no_lobby_persona);
+        // Rich Presence is already updated via ISteamFriends::SetRichPresence above.
+        // No need to push 766 (CMsgClientPersonaState) into GC queue -- Dota ignores it.
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
-            "queued postgame persona label=private_lobby_no_lobby lobby_id=%llu size=%zu reason=%s",
+            "built postgame persona label=private_lobby_no_lobby lobby_id=%llu size=%zu reason=%s (not queued, using SetRichPresence)",
             static_cast<unsigned long long>(lobby_id),
             no_lobby_persona.size(),
             reason ? reason : "unknown"
@@ -15428,10 +15429,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
                 static_cast<unsigned long long>(lobby_id)
             );
         } else {
-            push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
+            // Rich Presence already handled via ISteamFriends::SetRichPresence.
+            // Do not push 766 into GC queue -- Dota does not handle it.
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
-                "queued abandon persona label=7272_init lobby_id=%llu size=%zu",
+                "built abandon persona label=7272_init lobby_id=%llu size=%zu (not queued, using SetRichPresence)",
                 static_cast<unsigned long long>(lobby_id),
                 persona_message.size()
             );
@@ -16423,11 +16425,13 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(c
         return;
     }
 
-    push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
+    // Rich Presence is already updated via ISteamFriends::SetRichPresence
+    // (called by GBE_UpdateDotaPracticeLobbyLaunchRichPresence before this point).
+    // Do not push 766 (CMsgClientPersonaState) into GC queue -- Dota does not handle it.
     GBE_last_dota_launch_persona_signature = signature;
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
-        "queued launch persona reason=%s lobby_id=%llu status=%s lobby_state=%s size=%zu",
+        "built launch persona reason=%s lobby_id=%llu status=%s lobby_state=%s size=%zu (not queued, using SetRichPresence)",
         reason ? reason : "unknown",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         status,
@@ -16589,11 +16593,11 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
 
     std::string persona_message;
     if (GBE_BuildDotaPersonaStatePeripheralMessage(GBE_kDotaAbandonPersonaStateInitHex, steam_id, lobby_id, persona_message)) {
-        if (client_target && client_target->gc_profile == GC_PROFILE_DOTA2)
-            client_target->push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
+        // Rich Presence handled via ISteamFriends::SetRichPresence.
+        // Do not push 766 into GC queue -- Dota does not handle it.
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
-            "queued normal signout persona label=25_init lobby_id=%llu size=%zu",
+            "built normal signout persona label=25_init lobby_id=%llu size=%zu (not queued, using SetRichPresence)",
             static_cast<unsigned long long>(lobby_id),
             persona_message.size()
         );
