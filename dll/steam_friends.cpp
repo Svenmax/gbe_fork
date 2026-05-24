@@ -1035,14 +1035,6 @@ EUserRestriction Steam_Friends::GetUserRestrictions_old()
 bool Steam_Friends::SetRichPresence( const char *pchKey, const char *pchValue )
 {
     PRINT_DEBUG("%s %s", pchKey, pchValue ? pchValue : "NULL");
-    {
-        FILE *f = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
-        if (f) {
-            std::fprintf(f, "[STEAM_FRIENDS_TRACE] SetRichPresence key='%s' value='%s'\n",
-                pchKey ? pchKey : "NULL", pchValue ? pchValue : "NULL");
-            std::fclose(f);
-        }
-    }
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     bool changed = false;
 

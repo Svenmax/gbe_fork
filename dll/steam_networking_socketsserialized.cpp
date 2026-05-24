@@ -109,16 +109,11 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
             // One-shot: clear the flag so we only fire once per disconnect
             GBE_dota_reconnect_eligible.store(false);
 
-            {
-                FILE *f = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
-                if (f) {
-                    std::fprintf(f, "[GBE_RECONNECT] Intercepted SendP2PRendezvous: remote_id=%llu matches server_id=%llu, firing GameServerChangeRequested_t endpoint=%s\n",
-                        (unsigned long long)steamIDRemote.ConvertToUint64(),
-                        (unsigned long long)ctx.server_id,
-                        ctx.connect);
-                    std::fclose(f);
-                }
-            }
+            GBE_ReconnectLog("GBE_RECONNECT",
+                "Intercepted SendP2PRendezvous: remote_id=%llu matches server_id=%llu, firing GameServerChangeRequested_t endpoint=%s",
+                (unsigned long long)steamIDRemote.ConvertToUint64(),
+                (unsigned long long)ctx.server_id,
+                ctx.connect);
 
             // Fire GameServerChangeRequested_t with LAN IP
             GameServerChangeRequested_t server_change{};

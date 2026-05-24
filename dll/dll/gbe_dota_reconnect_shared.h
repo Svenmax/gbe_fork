@@ -2,6 +2,8 @@
 #define __INCLUDED_GBE_DOTA_RECONNECT_SHARED_H__
 
 #include <cstdint>
+#include <cstdio>
+#include <cstdarg>
 #include <atomic>
 
 // Shared state for Dota 2 LAN reconnect interception.
@@ -21,5 +23,19 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out);
 // Flag indicating player has disconnected (CancelAuthTicket called)
 // and is eligible for reconnect interception.
 extern std::atomic<bool> GBE_dota_reconnect_eligible;
+
+// Lightweight debug log for reconnect subsystem (writes to gbe_gc_debug.log)
+inline void GBE_ReconnectLog(const char *scope, const char *fmt, ...)
+{
+    FILE *f = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (!f) return;
+    std::fprintf(f, "[%s] ", scope);
+    va_list args;
+    va_start(args, fmt);
+    std::vfprintf(f, fmt, args);
+    va_end(args);
+    std::fprintf(f, "\n");
+    std::fclose(f);
+}
 
 #endif // __INCLUDED_GBE_DOTA_RECONNECT_SHARED_H__
