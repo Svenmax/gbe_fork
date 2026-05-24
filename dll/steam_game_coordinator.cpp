@@ -8031,14 +8031,7 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         static_cast<unsigned long long>(GBE_local_lobby.server_id)
     );
 
-    // Only reapply launch rich presence (which triggers direct connect callbacks)
-    // when the lobby is still in pre-game (game_state == 0).  When game_state >= 1
-    // the match is already running; reapplying here would fire
-    // GameServerChangeRequested_t on every member-change update from the host,
-    // causing an automatic reconnect loop.  Manual reconnect is handled by the
-    // separate restore_client_runtime path which calls reapply directly.
-    if (GBE_local_lobby.game_state == 0u)
-        GBE_ReapplyDotaPracticeLobbyLaunchRichPresence("queued_state");
+    GBE_ReapplyDotaPracticeLobbyLaunchRichPresence("queued_state");
 
     if (gc_profile == GC_PROFILE_DOTA2 &&
         is_server &&
@@ -10450,13 +10443,19 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
     if (!owner_changed && !runtime_changed && GBE_DotaLobbyMembersEqual(previous_members, GBE_local_lobby.members))
         return false;
 
-    // When lobby member state changes on the client (e.g. a member disconnected
-    // from the game server), clear the direct-connect callback dedup signature
+    // When lobby member state changes on the client during pre-game
+    // (game_state == 0), clear the direct-connect callback dedup signature
     // and allow the private lobby snapshot to be replayed.  This ensures that
     // GameServerChangeRequested_t is re-sent with the real IP address when the
-    // disconnected player tries to reconnect via the Dota UI (which would
-    // otherwise attempt the invalid Steam network address [I:0:server_id]).
-    if (!is_server && !GBE_DotaLobbyMembersEqual(previous_members, GBE_local_lobby.members)) {
+    // lobby state transitions during initial match setup.
+    //
+    // During an active match (game_state >= 1), do NOT clear the signature.
+    // The host sends member-change updates continuously (e.g. when a player
+    // disconnects), and clearing the signature would allow every subsequent
+    // queued_state apply to re-fire GameServerChangeRequested_t, causing an
+    // automatic reconnect loop.  Manual reconnect uses restore_client_runtime
+    // which has its own signature-clearing logic (line ~11336-11350).
+    if (!is_server && !GBE_DotaLobbyMembersEqual(previous_members, GBE_local_lobby.members) && GBE_local_lobby.game_state == 0u) {
         GBE_last_dota_direct_connect_callback_signature.clear();
         GBE_dota_private_lobby_snapshot_replayed = false;
         GBE_GC_DebugLog(
@@ -10513,7 +10512,7 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
             GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "generic_lobby_peer_lan_direct_launch");
         } else {
             push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, response_26);
-            if (runtime_changed && GBE_local_lobby.game_state == 0u)
+            if (runtime_changed)
                 GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "generic_lobby_runtime_changed");
         }
         GBE_GC_DebugLog(
