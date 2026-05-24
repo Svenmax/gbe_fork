@@ -666,6 +666,18 @@ HAuthTicket Steam_User::GetAuthSessionTicket( void *pTicket, int cbMaxTicket, ui
 HAuthTicket Steam_User::GetAuthSessionTicket( void *pTicket, int cbMaxTicket, uint32 *pcbTicket, const SteamNetworkingIdentity *pSteamNetworkingIdentity )
 {
     PRINT_DEBUG("%p [%i] %p", pTicket, cbMaxTicket, pcbTicket);
+    {
+        FILE *f = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+        if (f) {
+            if (pSteamNetworkingIdentity && pSteamNetworkingIdentity->GetSteamID64()) {
+                std::fprintf(f, "[STEAM_USER_TRACE] GetAuthSessionTicket cbMaxTicket=%d identity_type=%d identity_steamid=%llu\n",
+                    cbMaxTicket, (int)pSteamNetworkingIdentity->m_eType, (unsigned long long)pSteamNetworkingIdentity->GetSteamID64());
+            } else {
+                std::fprintf(f, "[STEAM_USER_TRACE] GetAuthSessionTicket cbMaxTicket=%d identity=NULL\n", cbMaxTicket);
+            }
+            std::fclose(f);
+        }
+    }
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     if (!pTicket) return k_HAuthTicketInvalid;
@@ -679,6 +691,13 @@ HAuthTicket Steam_User::GetAuthSessionTicket( void *pTicket, int cbMaxTicket, ui
 HAuthTicket Steam_User::GetAuthTicketForWebApi( const char *pchIdentity )
 {
     PRINT_DEBUG("'%s'", pchIdentity);
+    {
+        FILE *f = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+        if (f) {
+            std::fprintf(f, "[STEAM_USER_TRACE] GetAuthTicketForWebApi identity='%s'\n", pchIdentity ? pchIdentity : "NULL");
+            std::fclose(f);
+        }
+    }
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     return auth_manager->getWebApiTicket(pchIdentity);
@@ -689,6 +708,14 @@ HAuthTicket Steam_User::GetAuthTicketForWebApi( const char *pchIdentity )
 EBeginAuthSessionResult Steam_User::BeginAuthSession( const void *pAuthTicket, int cbAuthTicket, CSteamID steamID )
 {
     PRINT_DEBUG("%i %llu", cbAuthTicket, steamID.ConvertToUint64());
+    {
+        FILE *f = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+        if (f) {
+            std::fprintf(f, "[STEAM_USER_TRACE] BeginAuthSession cbAuthTicket=%d steamID=%llu\n",
+                cbAuthTicket, (unsigned long long)steamID.ConvertToUint64());
+            std::fclose(f);
+        }
+    }
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     return auth_manager->beginAuth(pAuthTicket, cbAuthTicket, steamID);
@@ -698,6 +725,13 @@ EBeginAuthSessionResult Steam_User::BeginAuthSession( const void *pAuthTicket, i
 void Steam_User::EndAuthSession( CSteamID steamID )
 {
     PRINT_DEBUG_ENTRY();
+    {
+        FILE *f = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+        if (f) {
+            std::fprintf(f, "[STEAM_USER_TRACE] EndAuthSession steamID=%llu\n", (unsigned long long)steamID.ConvertToUint64());
+            std::fclose(f);
+        }
+    }
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     auth_manager->endAuth(steamID);
@@ -707,6 +741,13 @@ void Steam_User::EndAuthSession( CSteamID steamID )
 void Steam_User::CancelAuthTicket( HAuthTicket hAuthTicket )
 {
     PRINT_DEBUG_ENTRY();
+    {
+        FILE *f = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+        if (f) {
+            std::fprintf(f, "[STEAM_USER_TRACE] CancelAuthTicket hAuthTicket=%u\n", hAuthTicket);
+            std::fclose(f);
+        }
+    }
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     auth_manager->cancelTicket(hAuthTicket);

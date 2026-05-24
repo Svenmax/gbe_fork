@@ -411,6 +411,14 @@ HSteamListenSocket Steam_Networking_Sockets::CreateListenSocketIP( const SteamNe
 HSteamNetConnection Steam_Networking_Sockets::ConnectByIPAddress( const SteamNetworkingIPAddr &address )
 {
     PRINT_DEBUG("old");
+    GBE_LogNetSockTrace("NETSOCK_CONNECT_BY_IP_OLD", this, settings->get_local_steam_id().ConvertToUint64(), 0, SNS_DISABLED_PORT, address.m_port, CONNECT_SOCKET_CONNECTING, 0);
+    {
+        FILE *f = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+        if (f) {
+            std::fprintf(f, "[NETSOCK_CONNECT_BY_IP] overload=1arg ipv4=%u port=%u\n", address.GetIPv4(), address.m_port);
+            std::fclose(f);
+        }
+    }
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     SteamNetworkingIdentity ip_id;
     ip_id.SetIPAddr(address);
@@ -422,6 +430,14 @@ HSteamNetConnection Steam_Networking_Sockets::ConnectByIPAddress( const SteamNet
 HSteamNetConnection Steam_Networking_Sockets::ConnectByIPAddress( const SteamNetworkingIPAddr *address )
 {
     PRINT_DEBUG("old1");
+    GBE_LogNetSockTrace("NETSOCK_CONNECT_BY_IP_OLD1", this, settings->get_local_steam_id().ConvertToUint64(), 0, SNS_DISABLED_PORT, address ? address->m_port : 0, CONNECT_SOCKET_CONNECTING, 0);
+    {
+        FILE *f = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+        if (f) {
+            std::fprintf(f, "[NETSOCK_CONNECT_BY_IP] overload=ptr ipv4=%u port=%u\n", address ? address->GetIPv4() : 0, address ? address->m_port : 0);
+            std::fclose(f);
+        }
+    }
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     SteamNetworkingIdentity ip_id;
     ip_id.SetIPAddr(*address);
@@ -435,6 +451,13 @@ HSteamNetConnection Steam_Networking_Sockets::ConnectByIPAddress( const SteamNet
     PRINT_DEBUG("%X", address.GetIPv4());
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     GBE_LogNetSockTrace("NETSOCK_CONNECT_BY_IP", this, settings->get_local_steam_id().ConvertToUint64(), 0, SNS_DISABLED_PORT, address.m_port, CONNECT_SOCKET_CONNECTING, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
+    {
+        FILE *f = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+        if (f) {
+            std::fprintf(f, "[NETSOCK_CONNECT_BY_IP] overload=3arg ipv4=%u port=%u nOptions=%d\n", address.GetIPv4(), address.m_port, nOptions);
+            std::fclose(f);
+        }
+    }
     SteamNetworkingIdentity ip_id;
     ip_id.SetIPAddr(address);
     HSteamNetConnection socket = new_connect_socket(ip_id, SNS_DISABLED_PORT, address.m_port);
@@ -481,6 +504,14 @@ HSteamListenSocket Steam_Networking_Sockets::CreateListenSocketP2P( int nVirtual
 HSteamNetConnection Steam_Networking_Sockets::ConnectP2P( const SteamNetworkingIdentity &identityRemote, int nVirtualPort )
 {
     PRINT_DEBUG("old %i", nVirtualPort);
+    {
+        FILE *f = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+        if (f) {
+            std::fprintf(f, "[NETSOCK_CONNECT_P2P] overload=old vport=%d identity_type=%d steamid=%llu\n",
+                nVirtualPort, (int)identityRemote.m_eType, (unsigned long long)identityRemote.GetSteamID64());
+            std::fclose(f);
+        }
+    }
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     const SteamNetworkingIPAddr *ip = identityRemote.GetIPAddr();
