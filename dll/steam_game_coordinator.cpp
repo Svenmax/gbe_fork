@@ -121,6 +121,32 @@ static constexpr const char *GBE_kDotaGenericLobbyMemberHeroKey = "gbe_dota_memb
 static constexpr const char *GBE_kDotaGenericLobbyMemberConnectedKey = "gbe_dota_member_connected";
 static constexpr const char *GBE_kDotaGenericLobbyMemberNameKey = "gbe_dota_member_name";
 
+// Global LAN connect endpoint shared between GC and networking sockets.
+// When a Dota LAN lobby is active and has a valid connect address, the GC
+// writes the endpoint here.  ConnectP2P reads it to redirect AnonGameServer
+// connections to the LAN IP instead of failing via Steam relay.
+static std::mutex GBE_dota_lan_connect_mutex;
+static std::string GBE_dota_lan_connect_endpoint_global;
+static uint64 GBE_dota_lan_connect_server_id_global = 0;
+
+void GBE_SetDotaLanConnectEndpoint(const std::string &endpoint, uint64 server_id)
+{
+    std::lock_guard<std::mutex> lock(GBE_dota_lan_connect_mutex);
+    GBE_dota_lan_connect_endpoint_global = endpoint;
+    GBE_dota_lan_connect_server_id_global = server_id;
+}
+
+bool GBE_GetDotaLanConnectEndpoint(uint64 target_server_id, std::string &endpoint)
+{
+    std::lock_guard<std::mutex> lock(GBE_dota_lan_connect_mutex);
+    if (GBE_dota_lan_connect_endpoint_global.empty() || GBE_dota_lan_connect_server_id_global == 0)
+        return false;
+    if (target_server_id != GBE_dota_lan_connect_server_id_global)
+        return false;
+    endpoint = GBE_dota_lan_connect_endpoint_global;
+    return true;
+}
+
 static void GBE_BuildDotaPracticeLobbySOObjectData(
     uint64 steam_id,
     uint64 lobby_id,
@@ -16139,6 +16165,12 @@ void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const
     } else {
         steam_client->steam_friends->SetRichPresence("connect", nullptr);
     }
+
+    // Keep the global LAN connect endpoint in sync so that ConnectP2P can
+    // redirect AnonGameServer connections to the LAN IP.
+    if (GBE_local_lobby.lan && !direct_connect_endpoint.empty() && GBE_local_lobby.server_id != 0) {
+        GBE_SetDotaLanConnectEndpoint(direct_connect_endpoint, GBE_local_lobby.server_id);
+    }
     if (include_lobby) {
         steam_client->steam_friends->SetRichPresence("lobby", lobby_value);
     } else {
@@ -16166,6 +16198,9 @@ void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
 {
     GBE_last_dota_launch_persona_signature.clear();
     GBE_last_dota_direct_connect_callback_signature.clear();
+
+    // Clear global LAN connect endpoint when lobby is torn down.
+    GBE_SetDotaLanConnectEndpoint(std::string(), 0);
 
     Steam_Client *steam_client = get_steam_client();
     if (!steam_client || !steam_client->steam_friends)
