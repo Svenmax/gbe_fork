@@ -13329,6 +13329,23 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == 4506) {
+        // If we are stuck at state=1 (SERVERSETUP) because 4508 never arrived
+        // (dedicated server did not restart between matches), use 4506 as the
+        // signal to advance the launch to RUN.  This is safe because:
+        //  - If 4508 already advanced us to state=2, the state==1 check fails.
+        //  - 4506 is "server available acknowledgement" so the server IS ready.
+        if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "4506 advancing stalled launch: lobby_id=%llu state=%u launch_phase=%s",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_local_lobby.state,
+                GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
+            );
+            if (GBE_TryAdvanceDotaLaunchToRun("runtime packet after 4506 stall recovery", request_emsg, source_job, "4506_launch_run"))
+                return true;
+        }
+
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "consumed req=%u source_job=%llu note=server available acknowledgement body_size=%zu active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
