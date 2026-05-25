@@ -12818,6 +12818,73 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             account_ids.size()
         );
         push_incoming_now(7451u | GBE_kProtoMask, response_message);
+
+        // After 7451, send per-player item CacheSubscribed so the dedicated
+        // server knows each player's equipped cosmetics (loadout).
+        // In Valve's system the GC pushes a CMsgSOCacheSubscribed (owner type=1)
+        // containing each player's CSOEconItem list.  GBE's server GC does not
+        // have this data, so we read it from the client GC (same process).
+        if (is_server && gc_profile == GC_PROFILE_DOTA2) {
+            Steam_Client *steam_client = get_steam_client();
+            Steam_Game_Coordinator *client_gc = steam_client ? steam_client->steam_game_coordinator : nullptr;
+            if (client_gc) {
+                const auto &client_items = client_gc->get_items();
+                // Collect only items that have equipped_state (i.e. currently worn).
+                // This is all the server needs to spawn the correct wearables.
+                std::vector<const Econ_Item *> equipped_items;
+                for (const auto &item : client_items) {
+                    if (!item.equip_states.empty())
+                        equipped_items.push_back(&item);
+                }
+
+                if (!equipped_items.empty()) {
+                    for (uint32 target_account_id : account_ids) {
+                        // Build a CMsgSOCacheSubscribed with owner type=1 (player)
+                        // containing type_id=1 (CSOEconItem) objects.
+                        const uint64 player_steam64 = static_cast<uint64>(target_account_id) + 76561197960265728ull;
+                        const CSteamID player_steam_id(player_steam64);
+
+                        // owner_soid: field 1 = type (uint32), field 2 = id (uint64 varint)
+                        std::string owner_soid;
+                        GBE_AppendProtoVarIntField(owner_soid, 1u, 1u); // type = 1 (individual)
+                        GBE_AppendProtoVarIntField(owner_soid, 2u, player_steam64);
+
+                        // SubscribedType: field 1 = type_id, field 2 (repeated) = object_data
+                        std::string subscribed_type;
+                        GBE_AppendProtoVarIntField(subscribed_type, 1u, 1u); // type_id = 1 (CSOEconItem)
+                        size_t item_count = 0;
+                        for (const Econ_Item *item_ptr : equipped_items) {
+                            const std::string serialized = client_gc->serialize_item_to_gcprotobuf(*item_ptr, player_steam_id);
+                            GBE_AppendProtoBytesField(subscribed_type, 2u, serialized);
+                            item_count++;
+                        }
+
+                        // CMsgSOCacheSubscribed: field 2 = objects, field 3 = version (fixed64), field 4 = owner_soid
+                        std::string cache_body;
+                        GBE_AppendProtoBytesField(cache_body, 2u, subscribed_type);
+                        GBE_AppendProtoFixed64Field(cache_body, 3u, 1ull); // version
+                        GBE_AppendProtoBytesField(cache_body, 4u, owner_soid);
+
+                        // Wrap in message: [emsg|proto_mask][header_size=0][body]
+                        std::string cache_message;
+                        GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheSubscribed, cache_body, cache_message);
+                        push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, cache_message);
+
+                        GBE_GC_DebugLog(
+                            "GC_DOTA_DIRECT",
+                            "pushed player item CacheSubscribed for server: account_id=%u steam64=%llu equipped_items=%zu message_size=%zu",
+                            target_account_id,
+                            static_cast<unsigned long long>(player_steam64),
+                            item_count,
+                            cache_message.size()
+                        );
+                    }
+                } else {
+                    GBE_GC_DebugLog("GC_DOTA_DIRECT", "no equipped items in client GC, skipping player item CacheSubscribed for server");
+                }
+            }
+        }
+
         return true;
     }
 
