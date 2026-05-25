@@ -28,7 +28,6 @@
 #include <ctime>
 #include <cstring>
 #include <sstream>
-#include <utility>
 #include <iomanip>
 #include <random>
 #include <string>
@@ -6359,7 +6358,6 @@ static bool GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
     uint64 channel_id,
     const std::string &channel_name,
     const std::string &player_name,
-    const std::vector<std::pair<uint64, std::string>> &extra_members,
     std::string &message)
 {
     std::string body;
@@ -6368,21 +6366,11 @@ static bool GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
     GBE_AppendProtoFixed64Field(body, 3u, channel_id);
     GBE_AppendProtoVarIntField(body, 4u, 200u);
 
-    // Self member entry (always first)
     std::string member;
     GBE_AppendProtoFixed64Field(member, 1u, steam_id);
     GBE_AppendProtoBytesField(member, 2u, player_name);
     GBE_AppendProtoVarIntField(member, 3u, 0u);
     GBE_AppendProtoBytesField(body, 5u, member);
-
-    // Additional members (other lobby participants)
-    for (const auto &extra : extra_members) {
-        std::string extra_member;
-        GBE_AppendProtoFixed64Field(extra_member, 1u, extra.first);
-        GBE_AppendProtoBytesField(extra_member, 2u, extra.second);
-        GBE_AppendProtoVarIntField(extra_member, 3u, 0u);
-        GBE_AppendProtoBytesField(body, 5u, extra_member);
-    }
 
     GBE_AppendProtoVarIntField(body, 6u, 18u);
     GBE_AppendProtoVarIntField(body, 7u, 0u);
@@ -14628,40 +14616,12 @@ bool Steam_Game_Coordinator::GBE_QueueDotaPostGameTeardown(const char *reason, b
     GBE_local_lobby.abandon_postgame_active = true;
     GBE_PublishSharedDotaLobbyState(reason ? reason : "postgame_teardown");
 
-    // Collect other lobby members for PostGame 7010 member list and 7013 notifications
-    std::vector<std::pair<uint64, std::string>> extra_members;
-    {
-        Steam_Client *steam_client = get_steam_client();
-        for (const GBE_DotaLobbyMemberState &m : GBE_local_lobby.members) {
-            if (m.steam_id == steam_id || m.steam_id == 0)
-                continue;
-            std::string member_name;
-            if (steam_client && steam_client->steam_matchmaking && GBE_local_lobby.generic_lobby_id != 0ull) {
-                const char *generic_name = steam_client->steam_matchmaking->GetLobbyMemberData(
-                    CSteamID((uint64)GBE_local_lobby.generic_lobby_id),
-                    CSteamID((uint64)m.steam_id),
-                    GBE_kDotaGenericLobbyMemberNameKey);
-                if (generic_name && generic_name[0] != '\0')
-                    member_name = generic_name;
-            }
-            if (member_name.empty() && steam_client && steam_client->steam_friends) {
-                const char *friend_name = steam_client->steam_friends->GetFriendPersonaName(CSteamID((uint64)m.steam_id));
-                if (friend_name && friend_name[0] != '\0' && std::string(friend_name) != "Unknown User")
-                    member_name = friend_name;
-            }
-            if (member_name.empty())
-                member_name = "Lobby Member";
-            extra_members.emplace_back(m.steam_id, member_name);
-        }
-    }
-
     std::string response_7010_postgame;
     if (!GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
             steam_id,
             GBE_local_lobby.chat_channel_id,
             GBE_local_lobby.chat_channel_name,
             std::string(settings->get_local_name()),
-            extra_members,
             response_7010_postgame)) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
@@ -14700,24 +14660,6 @@ bool Steam_Game_Coordinator::GBE_QueueDotaPostGameTeardown(const char *reason, b
 
     if (push_postgame_join && !push_reply(response_7010_postgame, GBE_kDotaJoinChatChannelResponse, "7010_postgame"))
         return false;
-
-    // Send 7013 (OtherJoinedChannel) for each other member so PostGame chat panel shows them
-    if (push_postgame_join) {
-        for (const auto &extra : extra_members) {
-            std::string response_7013;
-            if (GBE_BuildDotaOtherJoinedChannelPayload(GBE_local_lobby.chat_channel_id, extra.second, extra.first, response_7013)) {
-                push_reply(response_7013, GBE_kDotaOtherJoinedChannel, "7013_postgame");
-                GBE_GC_DebugLog(
-                    "GC_DOTA_LOBBY",
-                    "[LOBBY] Sent postgame 7013 other joined channel=%llu steam_id=%llu name=%s reason=%s",
-                    static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
-                    static_cast<unsigned long long>(extra.first),
-                    extra.second.c_str(),
-                    reason ? reason : "unknown"
-                );
-            }
-        }
-    }
 
     GBE_pending_reset_after_cache_unsubscribed = false;
     GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
@@ -15391,40 +15333,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         !matches_current_postgame_channel &&
         pre_postgame_channel_id == 0;
     if (leaving_legacy_channel_after_signout) {
-        // Collect other lobby members for PostGame 7010 member list and 7013 notifications
-        std::vector<std::pair<uint64, std::string>> extra_members_signout;
-        {
-            Steam_Client *steam_client = get_steam_client();
-            for (const GBE_DotaLobbyMemberState &m : GBE_local_lobby.members) {
-                if (m.steam_id == steam_id || m.steam_id == 0)
-                    continue;
-                std::string member_name;
-                if (steam_client && steam_client->steam_matchmaking && GBE_local_lobby.generic_lobby_id != 0ull) {
-                    const char *generic_name = steam_client->steam_matchmaking->GetLobbyMemberData(
-                        CSteamID((uint64)GBE_local_lobby.generic_lobby_id),
-                        CSteamID((uint64)m.steam_id),
-                        GBE_kDotaGenericLobbyMemberNameKey);
-                    if (generic_name && generic_name[0] != '\0')
-                        member_name = generic_name;
-                }
-                if (member_name.empty() && steam_client && steam_client->steam_friends) {
-                    const char *friend_name = steam_client->steam_friends->GetFriendPersonaName(CSteamID((uint64)m.steam_id));
-                    if (friend_name && friend_name[0] != '\0' && std::string(friend_name) != "Unknown User")
-                        member_name = friend_name;
-                }
-                if (member_name.empty())
-                    member_name = "Lobby Member";
-                extra_members_signout.emplace_back(m.steam_id, member_name);
-            }
-        }
-
         std::string response_7010_postgame;
         if (GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
                 steam_id,
                 local_channel_id,
                 GBE_local_lobby.chat_channel_name,
                 std::string(settings->get_local_name()),
-                extra_members_signout,
                 response_7010_postgame)) {
             if (wrapped) {
                 if (!outer_session_field_raw) {
@@ -15448,28 +15362,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
                 static_cast<unsigned long long>(local_channel_id),
                 static_cast<unsigned long long>(lobby_id)
             );
-
-            // Send 7013 (OtherJoinedChannel) for each other member after the PostGame 7010
-            for (const auto &extra : extra_members_signout) {
-                std::string response_7013;
-                if (GBE_BuildDotaOtherJoinedChannelPayload(local_channel_id, extra.second, extra.first, response_7013)) {
-                    if (wrapped) {
-                        std::string wrapped_7013;
-                        if (GBE_BuildWrappedDotaReplayMessage(response_7013, *outer_session_field_raw, steam_id, wrapped_7013)) {
-                            push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_7013);
-                        }
-                    } else {
-                        push_incoming_now(GBE_kDotaOtherJoinedChannel | GBE_kProtoMask, response_7013);
-                    }
-                    GBE_GC_DebugLog(
-                        "GC_DOTA_LOBBY",
-                        "[LOBBY] Sent postgame 7013 after signout legacy 7272 channel=%llu steam_id=%llu name=%s",
-                        static_cast<unsigned long long>(local_channel_id),
-                        static_cast<unsigned long long>(extra.first),
-                        extra.second.c_str()
-                    );
-                }
-            }
         } else {
             GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building postgame 7010 after signout channel=%llu", static_cast<unsigned long long>(channel_id));
         }
