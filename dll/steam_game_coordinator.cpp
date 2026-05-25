@@ -17439,29 +17439,6 @@ void Steam_Game_Coordinator::RunCallbacks()
     if (!GBE_MaybeHandleDotaPracticeLobbyKicked("run_callbacks_generic_lobby_members_changed"))
         GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("run_callbacks_generic_lobby_members_changed");
 
-    // Launch safety-net: if all preconditions for advancing to RUN (state=2)
-    // are met but we are still stuck in state=1, advance unconditionally.
-    // This avoids relying on any specific message (4506, 4508, 5429, etc.) to
-    // trigger the transition -- making the logic resilient to Valve protocol
-    // changes or re-launch scenarios where the expected message never arrives.
-    if (is_server &&
-        GBE_local_lobby.state == 1u &&
-        GBE_local_lobby.game_state == 0u &&
-        GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced &&
-        GBE_local_lobby.launch_phase < GBE_kDotaLaunchPhaseRunQueued &&
-        GBE_HasDotaLaunchServerSetupSync())
-    {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "launch safety-net: advancing stalled launch to RUN lobby_id=%llu state=%u game_state=%u launch_phase=%u",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            static_cast<unsigned>(GBE_local_lobby.launch_phase)
-        );
-        GBE_TryAdvanceDotaLaunchToRun("launch safety-net in RunCallbacks", 0u, 0ull, "safety_net_launch_run");
-    }
-
     auto due_time = [](const GC_Message &message) {
         return message.created + std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(std::chrono::duration<double>(message.post_in));
     };
