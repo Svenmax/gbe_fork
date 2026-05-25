@@ -13511,81 +13511,137 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return true;
     }
 
-    // Handle k_EMsgClientToGCEquipItems (2569) -> reply k_EMsgClientToGCEquipItemsResponse (2570)
-    // CMsgClientToGCEquipItems { repeated CMsgAdjustItemEquippedState equips = 1; }
-    // CMsgClientToGCEquipItemsResponse { optional fixed64 so_cache_version_id = 1; }
+    // Handle k_EMsgClientToGCEquipItems (2569) -> reply msg 26 (SO Cache update) + msg 2570
+    // Official flow: client sends 2569, server replies with msg 26 (CMsgSOMultipleObjects
+    // containing updated CSOEconItem with new equipped_state) THEN msg 2570.
     if (request_emsg == 2569u) {
         // Parse the repeated equips (field 1, length-delimited sub-messages)
-        size_t offset = 0;
-        size_t equip_count = 0;
-        while (offset < body_size) {
-            // Each sub-message: field 1, wire type 2 (LDel) -> tag byte = 0x0a
-            if (body[offset] != 0x0a) break;
-            offset++;
-            // Decode varint length
-            uint64_t sub_len = 0;
-            unsigned shift = 0;
+        struct EquipOp { uint64_t item_id; uint32_t new_class; uint32_t new_slot; };
+        std::vector<EquipOp> equip_ops;
+        {
+            size_t offset = 0;
             while (offset < body_size) {
-                uint8_t b = body[offset++];
-                sub_len |= (uint64_t)(b & 0x7F) << shift;
-                shift += 7;
-                if (!(b & 0x80)) break;
-            }
-            if (offset + sub_len > body_size) break;
-
-            // Parse CMsgAdjustItemEquippedState fields from sub-message
-            const uint8_t *sub = body + offset;
-            size_t sub_off = 0;
-            uint64_t item_id = 0;
-            uint32_t new_class = 0;
-            uint32_t new_slot = 0;
-
-            while (sub_off < sub_len) {
-                uint8_t tag = sub[sub_off++];
-                uint32_t field_num = tag >> 3;
-                uint32_t wire_type = tag & 0x07;
-                if (wire_type == 0) { // varint
-                    uint64_t val = 0;
-                    unsigned s = 0;
-                    while (sub_off < sub_len) {
-                        uint8_t b = sub[sub_off++];
-                        val |= (uint64_t)(b & 0x7F) << s;
-                        s += 7;
-                        if (!(b & 0x80)) break;
-                    }
-                    if (field_num == 1) item_id = val;
-                    else if (field_num == 2) new_class = (uint32_t)val;
-                    else if (field_num == 3) new_slot = (uint32_t)val;
-                } else {
-                    break; // unexpected wire type, stop parsing
+                if (body[offset] != 0x0a) break;
+                offset++;
+                uint64_t sub_len = 0;
+                unsigned shift = 0;
+                while (offset < body_size) {
+                    uint8_t b = body[offset++];
+                    sub_len |= (uint64_t)(b & 0x7F) << shift;
+                    shift += 7;
+                    if (!(b & 0x80)) break;
                 }
+                if (offset + sub_len > body_size) break;
+                const uint8_t *sub = body + offset;
+                size_t sub_off = 0;
+                EquipOp op{0, 0, 0};
+                while (sub_off < sub_len) {
+                    uint8_t tag = sub[sub_off++];
+                    uint32_t field_num = tag >> 3;
+                    uint32_t wire_type = tag & 0x07;
+                    if (wire_type == 0) {
+                        uint64_t val = 0;
+                        unsigned s = 0;
+                        while (sub_off < sub_len) {
+                            uint8_t b = sub[sub_off++];
+                            val |= (uint64_t)(b & 0x7F) << s;
+                            s += 7;
+                            if (!(b & 0x80)) break;
+                        }
+                        if (field_num == 1) op.item_id = val;
+                        else if (field_num == 2) op.new_class = (uint32_t)val;
+                        else if (field_num == 3) op.new_slot = (uint32_t)val;
+                    } else {
+                        break;
+                    }
+                }
+                offset += (size_t)sub_len;
+                equip_ops.push_back(op);
             }
-            offset += (size_t)sub_len;
-            equip_count++;
+        }
 
-            // Apply equip logic (same as handle_adjust_equip_state)
+        // Apply equip logic and track which items were modified
+        std::unordered_set<uint64_t> modified_item_ids;
+        for (const auto &op : equip_ops) {
             for (Econ_Item &item : items) {
-                if (item_id != UINT64_MAX && item.id == item_id) {
-                    item.equip_states.insert_or_assign(new_class, new_slot);
+                if (op.item_id != UINT64_MAX && item.id == op.item_id) {
+                    item.equip_states.insert_or_assign(op.new_class, op.new_slot);
+                    modified_item_ids.insert(item.id);
                 } else {
-                    auto it = item.equip_states.find(new_class);
-                    if (it == item.equip_states.end() || it->second != new_slot)
+                    auto it = item.equip_states.find(op.new_class);
+                    if (it == item.equip_states.end() || it->second != op.new_slot)
                         continue;
                     item.equip_states.erase(it);
+                    modified_item_ids.insert(item.id);
                 }
             }
         }
 
-        // Build response: CMsgClientToGCEquipItemsResponse with so_cache_version_id = 0
-        // field 1, wire type 1 (fixed64) -> tag = 0x09, then 8 bytes LE
-        std::string resp_body;
-        resp_body.push_back(0x09);
-        uint64_t cache_ver = 0;
-        resp_body.append(reinterpret_cast<const char*>(&cache_ver), 8);
+        // Generate a cache version (monotonically increasing timestamp-based)
+        static uint64_t equip_cache_version = 0;
+        if (equip_cache_version == 0) {
+            equip_cache_version = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()
+                ).count()
+            );
+        }
+        equip_cache_version++;
 
-        // Build full GC message with header
-        std::string response_message;
+        // Build msg 26 (k_ESOMsg_UpdateMultiple = CMsgSOMultipleObjects)
+        // Contains: objects_modified (field 2), version (field 3), owner_soid (field 6), service_id (field 7)
+        if (!modified_item_ids.empty()) {
+            CMsgSOMultipleObjects update_msg;
+
+            // owner_soid: type=1, id=steam_id
+            auto *owner = update_msg.mutable_owner_soid();
+            owner->set_type(1u);
+            owner->set_id(settings->get_local_steam_id().ConvertToUint64());
+
+            // Add modified items (field 2 = repeated SingleObject objects)
+            for (uint64_t mid : modified_item_ids) {
+                for (const Econ_Item &item : items) {
+                    if (item.id != mid) continue;
+                    auto *obj = update_msg.add_objects();
+                    obj->set_type_id(1);
+                    obj->set_object_data(item_to_gcprotobuf(item, settings->get_local_steam_id()));
+                    break;
+                }
+            }
+
+            update_msg.set_version(equip_cache_version);
+            update_msg.set_service_id(1u);
+
+            // Serialize into GC message format: emsg(4) + proto_hdr_len(4) + proto_hdr + body
+            std::string update_message;
+            {
+                uint32_t flagged_emsg = 26u | GBE_kProtoMask;
+                // Empty proto header (matching official capture)
+                uint32_t hdr_len = 0;
+                update_message.resize(sizeof(flagged_emsg) + sizeof(hdr_len));
+                memcpy(&update_message[0], &flagged_emsg, sizeof(flagged_emsg));
+                memcpy(&update_message[sizeof(flagged_emsg)], &hdr_len, sizeof(hdr_len));
+                update_msg.AppendToString(&update_message);
+            }
+
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "replying req=2569 resp=26 source_job=%llu size=%zu note=SO cache update modified_items=%zu",
+                static_cast<unsigned long long>(source_job),
+                update_message.size(),
+                modified_item_ids.size()
+            );
+            push_incoming_now(26u | GBE_kProtoMask, update_message);
+        }
+
+        // Build msg 2570 (CMsgClientToGCEquipItemsResponse) with so_cache_version_id
         {
+            std::string resp_body;
+            // field 1, wire type 1 (fixed64) -> tag = 0x09
+            resp_body.push_back(0x09);
+            resp_body.append(reinterpret_cast<const char*>(&equip_cache_version), 8);
+
+            std::string response_message;
             uint32_t flagged_emsg = 2570u | GBE_kProtoMask;
             CMsgProtoBufHeader response_protohdr;
             if (has_source_job) {
@@ -13600,17 +13656,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             memcpy(&response_message[sizeof(flagged_emsg)], &hdr_len, sizeof(hdr_len));
             response_message += serialized_protohdr;
             response_message += resp_body;
+
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "replying req=2569 resp=2570 source_job=%llu size=%zu note=equip response count=%zu version=%llu",
+                static_cast<unsigned long long>(source_job),
+                response_message.size(),
+                equip_ops.size(),
+                static_cast<unsigned long long>(equip_cache_version)
+            );
+            push_incoming_now(2570u | GBE_kProtoMask, response_message);
         }
 
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=2569 resp=2570 source_job=%llu size=%zu note=equip items count=%zu",
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            equip_count
-        );
-
-        push_incoming_now(2570u | GBE_kProtoMask, response_message);
         save_items_to_file();
         return true;
     }
