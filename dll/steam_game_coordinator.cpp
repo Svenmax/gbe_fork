@@ -8906,6 +8906,7 @@ void Steam_Game_Coordinator::callback_items_removed(CSteamID steam_id)
     if (gc_profile == GC_PROFILE_DOTA2 &&
         GBE_local_lobby.active &&
         GBE_local_lobby.lobby_id != 0 &&
+        GBE_local_lobby.state < 3u &&
         steam_id.BIndividualAccount() &&
         steam_id.ConvertToUint64() == GBE_GetDotaLobbyOwnerSteamId()) {
         GBE_GC_DebugLog(
