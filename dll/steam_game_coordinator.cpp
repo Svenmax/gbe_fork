@@ -6142,7 +6142,7 @@ static bool GBE_BuildDota7451BatchPlayerResourcesResponsePayload(const std::vect
         std::string result;
         GBE_AppendProtoVarIntField(result, 1u, account_id);
         GBE_AppendProtoVarIntField(result, 6u, 0u);
-        GBE_AppendProtoVarIntField(result, 9u, GBE_kDotaBehaviorLevel);
+        GBE_AppendProtoVarIntField(result, 9u, 0u); // comm_level: 0 = no restriction (higher = more restricted)
         GBE_AppendProtoVarIntField(result, 10u, GBE_kDotaBehaviorLevel);
         GBE_AppendProtoVarIntField(result, 14u, GBE_kDotaConductScore);
         GBE_AppendProtoVarIntField(result, 15u, GBE_kDotaConductScore);
