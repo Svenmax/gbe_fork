@@ -15460,7 +15460,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         GBE_local_lobby.chat_channel_type = 0;
     }
 
-    GBE_PublishSharedDotaLobbyState("7272_leave_chat");
+    // If shared state was already cleared by the normal signout finalize (GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed),
+    // do not re-publish stale local lobby state back into it. Instead, clear the local lobby too.
+    if (leaving_postgame_channel && matches_current_postgame_channel && !GBE_shared_dota_lobby_state.valid) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Skipping publish after postgame 7272 because shared state was already cleared by signout finalize LobbyID=%llu",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+        );
+        GBE_local_lobby = GBE_LocalLobby{};
+    } else {
+        GBE_PublishSharedDotaLobbyState("7272_leave_chat");
+    }
     if (!GBE_MaybeHandleDotaPracticeLobbyKicked("7272_leave_chat")) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
