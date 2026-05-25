@@ -279,18 +279,20 @@ private:
 
 struct GBE_DotaItemDef {
     uint32_t def_index;
+    // num_styles kept for potential future use but not used for injection
     uint8_t num_styles; // 0 means 1 default style
 };
 
 // Prefabs that represent equippable cosmetic items
 static bool GBE_IsCosmeticPrefab(const std::string &prefab) {
-    // Some items have compound prefabs like "wearable default_item"
+    // Only actual equippable cosmetics. Excludes: misc, tool, default_item, bundle,
+    // treasure_chest, recipe, tournament, player_card, retired_item, etc.
     static const std::unordered_set<std::string> cosmetic_prefabs = {
         "wearable", "courier", "ward", "loading_screen", "taunt",
         "terrain", "hero_effigy_block", "announcer", "announcer_pack",
-        "music", "pennant", "blink_dagger", "cursor_pack",
+        "music", "pennant", "cursor_pack",
         "weather", "emoticon", "spray", "emblem",
-        "hero_statue", "misc", "tool", "default_item"
+        "hero_statue"
     };
 
     // Check if any token in the prefab string matches
