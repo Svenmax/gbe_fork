@@ -8460,6 +8460,22 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 proto_item.set_contains_equipped_state_v2(false);
 
                 item_object->add_object_data(proto_item.SerializeAsString());
+
+                // Also add to in-memory items vector so equip handler (2569) can find them
+                Econ_Item mem_item;
+                mem_item.id = item_id;
+                mem_item.def = def.def_index;
+                mem_item.level = 1;
+                mem_item.quality = static_cast<EItemQuality>(4); // Unique
+                mem_item.inv_pos = item_seq;
+                mem_item.quantity = 1;
+                mem_item.flags = 0;
+                mem_item.origin = 0;
+                mem_item.in_use = false;
+                mem_item.original_id = item_id;
+                mem_item.style = 0;
+                items.push_back(mem_item);
+
                 item_seq++;
                 injected_count++;
             }
@@ -13562,11 +13578,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
         // Apply equip logic and track which items were modified
         std::unordered_set<uint64_t> modified_item_ids;
-        for (const auto &op : equip_ops) {
+        for (size_t ei = 0; ei < equip_ops.size(); ei++) {
+            const auto &op = equip_ops[ei];
+            bool found_target = false;
             for (Econ_Item &item : items) {
-                if (op.item_id != UINT64_MAX && item.id == op.item_id) {
+                if (op.item_id != UINT64_MAX && op.item_id != 0 && item.id == op.item_id) {
                     item.equip_states.insert_or_assign(op.new_class, op.new_slot);
                     modified_item_ids.insert(item.id);
+                    found_target = true;
                 } else {
                     auto it = item.equip_states.find(op.new_class);
                     if (it == item.equip_states.end() || it->second != op.new_slot)
@@ -13575,7 +13594,22 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     modified_item_ids.insert(item.id);
                 }
             }
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "equip op[%zu]: item_id=0x%llx (%llu) new_class=%u new_slot=%u found=%d items_count=%zu",
+                ei,
+                static_cast<unsigned long long>(op.item_id),
+                static_cast<unsigned long long>(op.item_id),
+                op.new_class, op.new_slot,
+                (int)found_target,
+                items.size()
+            );
         }
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "equip result: modified_items=%zu total_ops=%zu",
+            modified_item_ids.size(), equip_ops.size()
+        );
 
         // Generate a cache version (monotonically increasing timestamp-based)
         static uint64_t equip_cache_version = 0;
