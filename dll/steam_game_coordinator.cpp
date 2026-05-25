@@ -8379,17 +8379,33 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
     }
 
     // Dota 2: inject all cosmetic items from VPK items_game.txt
+    // Controlled by GBE_DOTA_UNLOCK_ITEMS env var: "0" to disable, "1" or unset to enable
+    // GBE_DOTA_UNLOCK_ITEMS_MAX limits the count (default: no limit)
     if (gc_profile == GC_PROFILE_DOTA2) {
         static bool vpk_items_loaded = false;
         static std::vector<GBE_DotaItemDef> vpk_item_defs;
+        static bool vpk_items_disabled = false;
 
         if (!vpk_items_loaded) {
             vpk_items_loaded = true;
-            vpk_item_defs = GBE_LoadAllDotaItemsFromVpk();
-            GBE_GC_DebugLog("GC_DOTA_ITEMS", "loaded %zu cosmetic item defs from VPK items_game.txt", vpk_item_defs.size());
+            const char *env_disable = std::getenv("GBE_DOTA_UNLOCK_ITEMS");
+            if (env_disable && std::string(env_disable) == "0") {
+                vpk_items_disabled = true;
+                GBE_GC_DebugLog("GC_DOTA_ITEMS", "VPK item unlock disabled via GBE_DOTA_UNLOCK_ITEMS=0");
+            } else {
+                vpk_item_defs = GBE_LoadAllDotaItemsFromVpk();
+                GBE_GC_DebugLog("GC_DOTA_ITEMS", "loaded %zu cosmetic item defs from VPK items_game.txt", vpk_item_defs.size());
+            }
         }
 
-        if (!vpk_item_defs.empty()) {
+        if (!vpk_items_disabled && !vpk_item_defs.empty()) {
+            // Max items to inject (default: all, override via GBE_DOTA_UNLOCK_ITEMS_MAX)
+            size_t max_items = vpk_item_defs.size();
+            const char *env_max = std::getenv("GBE_DOTA_UNLOCK_ITEMS_MAX");
+            if (env_max && env_max[0]) {
+                try { max_items = std::stoul(env_max); } catch (...) {}
+            }
+
             // Collect existing def_indices from user items to avoid duplicates
             std::unordered_set<uint32_t> existing_defs;
             for (const Econ_Item &item : local_items) {
@@ -8419,6 +8435,7 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
 
             for (const auto &def : vpk_item_defs) {
                 if (existing_defs.count(def.def_index)) continue;
+                if (injected_count >= max_items) break;
 
                 CSOEconItem proto_item;
                 // ID format: high 32 bits = base marker (0x40), low 32 bits = account_id XOR seq
