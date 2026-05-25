@@ -13511,6 +13511,110 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return true;
     }
 
+    // Handle k_EMsgClientToGCEquipItems (2569) -> reply k_EMsgClientToGCEquipItemsResponse (2570)
+    // CMsgClientToGCEquipItems { repeated CMsgAdjustItemEquippedState equips = 1; }
+    // CMsgClientToGCEquipItemsResponse { optional fixed64 so_cache_version_id = 1; }
+    if (request_emsg == 2569u) {
+        // Parse the repeated equips (field 1, length-delimited sub-messages)
+        size_t offset = 0;
+        size_t equip_count = 0;
+        while (offset < body_size) {
+            // Each sub-message: field 1, wire type 2 (LDel) -> tag byte = 0x0a
+            if (body[offset] != 0x0a) break;
+            offset++;
+            // Decode varint length
+            uint64_t sub_len = 0;
+            unsigned shift = 0;
+            while (offset < body_size) {
+                uint8_t b = body[offset++];
+                sub_len |= (uint64_t)(b & 0x7F) << shift;
+                shift += 7;
+                if (!(b & 0x80)) break;
+            }
+            if (offset + sub_len > body_size) break;
+
+            // Parse CMsgAdjustItemEquippedState fields from sub-message
+            const uint8_t *sub = body + offset;
+            size_t sub_off = 0;
+            uint64_t item_id = 0;
+            uint32_t new_class = 0;
+            uint32_t new_slot = 0;
+
+            while (sub_off < sub_len) {
+                uint8_t tag = sub[sub_off++];
+                uint32_t field_num = tag >> 3;
+                uint32_t wire_type = tag & 0x07;
+                if (wire_type == 0) { // varint
+                    uint64_t val = 0;
+                    unsigned s = 0;
+                    while (sub_off < sub_len) {
+                        uint8_t b = sub[sub_off++];
+                        val |= (uint64_t)(b & 0x7F) << s;
+                        s += 7;
+                        if (!(b & 0x80)) break;
+                    }
+                    if (field_num == 1) item_id = val;
+                    else if (field_num == 2) new_class = (uint32_t)val;
+                    else if (field_num == 3) new_slot = (uint32_t)val;
+                } else {
+                    break; // unexpected wire type, stop parsing
+                }
+            }
+            offset += (size_t)sub_len;
+            equip_count++;
+
+            // Apply equip logic (same as handle_adjust_equip_state)
+            for (Econ_Item &item : items) {
+                if (item_id != UINT64_MAX && item.id == item_id) {
+                    item.equip_states.insert_or_assign(new_class, new_slot);
+                } else {
+                    auto it = item.equip_states.find(new_class);
+                    if (it == item.equip_states.end() || it->second != new_slot)
+                        continue;
+                    item.equip_states.erase(it);
+                }
+            }
+        }
+
+        // Build response: CMsgClientToGCEquipItemsResponse with so_cache_version_id = 0
+        // field 1, wire type 1 (fixed64) -> tag = 0x09, then 8 bytes LE
+        std::string resp_body;
+        resp_body.push_back(0x09);
+        uint64_t cache_ver = 0;
+        resp_body.append(reinterpret_cast<const char*>(&cache_ver), 8);
+
+        // Build full GC message with header
+        std::string response_message;
+        {
+            uint32_t flagged_emsg = 2570u | GBE_kProtoMask;
+            CMsgProtoBufHeader response_protohdr;
+            if (has_source_job) {
+                response_protohdr.set_job_id_target(source_job);
+            }
+            response_protohdr.set_job_id_source(18446744073709551615ULL);
+            std::string serialized_protohdr = response_protohdr.SerializeAsString();
+            uint32_t hdr_len = static_cast<uint32_t>(serialized_protohdr.size());
+
+            response_message.resize(sizeof(flagged_emsg) + sizeof(hdr_len));
+            memcpy(&response_message[0], &flagged_emsg, sizeof(flagged_emsg));
+            memcpy(&response_message[sizeof(flagged_emsg)], &hdr_len, sizeof(hdr_len));
+            response_message += serialized_protohdr;
+            response_message += resp_body;
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=2569 resp=2570 source_job=%llu size=%zu note=equip items count=%zu",
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            equip_count
+        );
+
+        push_incoming_now(2570u | GBE_kProtoMask, response_message);
+        save_items_to_file();
+        return true;
+    }
+
     switch (request_emsg) {
         case 2536:
             template_bytes = GBE_kDota2538Template;
