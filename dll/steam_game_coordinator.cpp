@@ -9502,32 +9502,43 @@ void Steam_Game_Coordinator::on_client_disconnected(CSteamID steam_id)
     if (is_server && gc_profile == GC_PROFILE_DOTA2) {
         const uint64 disconnected_steam_id = steam_id.ConvertToUint64();
         const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
+
+        // In PostGame (state >= 3), do NOT publish shared state for disconnect
+        // events.  The 7004 signout finalize path handles PostGame cleanup.
+        // Re-publishing state=3 here would race with finalize and leave stale
+        // shared state that causes an initialize_gc adopt loop.
+        const bool postgame_suppress_publish = GBE_local_lobby.state >= 3u;
+
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && disconnected_steam_id != 0 && disconnected_steam_id == owner_steam_id) {
             GBE_local_lobby.owner_connected = false;
-            GBE_PublishSharedDotaLobbyState("owner_disconnected");
+            if (!postgame_suppress_publish)
+                GBE_PublishSharedDotaLobbyState("owner_disconnected");
 
             suppress_user_item_unsubscribe = true;
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
-                "preserving owner inventory cache across dota reconnect steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s abandon_postgame=%u",
+                "preserving owner inventory cache across dota reconnect steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s abandon_postgame=%u postgame_suppress=%u",
                 static_cast<unsigned long long>(disconnected_steam_id),
                 static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                 GBE_local_lobby.state,
                 GBE_local_lobby.game_state,
                 GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
-                GBE_local_lobby.abandon_postgame_active ? 1u : 0u
+                GBE_local_lobby.abandon_postgame_active ? 1u : 0u,
+                postgame_suppress_publish ? 1u : 0u
             );
         } else if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && disconnected_steam_id != 0) {
             if (GBE_SetDotaLobbyMemberConnected(disconnected_steam_id, false)) {
-                GBE_PublishSharedDotaLobbyState("member_disconnected");
+                if (!postgame_suppress_publish)
+                    GBE_PublishSharedDotaLobbyState("member_disconnected");
                 GBE_GC_DebugLog(
                     "GC_DOTA_SYNC",
-                    "marked Dota lobby member disconnected steam_id=%llu lobby_id=%llu state=%u game_state=%u members=%zu",
+                    "marked Dota lobby member disconnected steam_id=%llu lobby_id=%llu state=%u game_state=%u members=%zu postgame_suppress=%u",
                     static_cast<unsigned long long>(disconnected_steam_id),
                     static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                     GBE_local_lobby.state,
                     GBE_local_lobby.game_state,
-                    GBE_local_lobby.members.size()
+                    GBE_local_lobby.members.size(),
+                    postgame_suppress_publish ? 1u : 0u
                 );
             }
         }
@@ -10521,7 +10532,30 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
     // (state >= 3), clear shared state, Rich Presence, and push CacheUnsubscribed.
     // The HOST's server GC handles this via 7004 signout; the PLAYER has no such
     // path and must rely on observing the generic lobby metadata change.
-    if (!is_server && previous_state < 3u && GBE_local_lobby.state >= 3u && GBE_local_lobby.lobby_id != 0) {
+    //
+    // IMPORTANT: On the HOST machine, the client GC is also !is_server and will
+    // see this same state transition (because the server GC just published state=3
+    // to generic lobby metadata).  We must NOT run PLAYER cleanup on the HOST's
+    // client GC -- that would invalidate shared state before the server GC's
+    // normal signout finalize path can use it.  Detect this by checking whether
+    // a server GC exists in this process and owns the same lobby.
+    bool host_has_active_server_gc = false;
+    {
+        Steam_Client *sc = get_steam_client();
+        if (sc && sc->steam_gameserver_game_coordinator) {
+            host_has_active_server_gc = sc->steam_gameserver_game_coordinator->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id);
+        }
+    }
+    if (!is_server && host_has_active_server_gc && previous_state < 3u && GBE_local_lobby.state >= 3u) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Skipping PLAYER PostGame cleanup on HOST client GC: server GC owns lobby LobbyID=%llu state=%u reason=%s",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            reason ? reason : "generic_lobby_members_changed"
+        );
+    }
+    if (!is_server && !host_has_active_server_gc && previous_state < 3u && GBE_local_lobby.state >= 3u && GBE_local_lobby.lobby_id != 0) {
         const uint64 cleaning_lobby_id = GBE_local_lobby.lobby_id;
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",

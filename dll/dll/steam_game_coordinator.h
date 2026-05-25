@@ -306,6 +306,12 @@ public:
     void shutdown_gc();
     void GBE_MaybePrimeDotaServerWelcomeFromCache(const char *reason);
 
+    // Returns true if the server GC has an active lobby matching the given lobby_id.
+    // Used by client GC to detect HOST scenario and avoid running PLAYER PostGame cleanup.
+    bool GBE_HasActiveServerLobby(uint64 lobby_id) const {
+        return GBE_local_lobby.active && GBE_local_lobby.lobby_id == lobby_id;
+    }
+
     const std::vector<Econ_Item> &get_items() { return items; }
     const std::map<CSteamID, std::vector<Econ_Item>> &get_all_user_items() { return all_user_items; }
     const bool has_items_for_user(CSteamID steam_id) { return (all_user_items.count(steam_id) != 0); }
