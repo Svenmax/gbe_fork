@@ -18,6 +18,7 @@
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
 #include "dll/gbe_dota_reconnect_shared.h"
+#include "dll/gbe_dota_unlock_items.h"
 #include <atomic>
 #include <algorithm>
 #include <array>
@@ -8374,6 +8375,100 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
         object->set_type_id(1u);
         for (const Econ_Item &item : local_items) {
             object->add_object_data(item_to_gcprotobuf(item, steam_id));
+        }
+    }
+
+    // Dota 2: inject all cosmetic items from VPK items_game.txt
+    if (gc_profile == GC_PROFILE_DOTA2) {
+        static bool vpk_items_loaded = false;
+        static std::vector<GBE_DotaItemDef> vpk_item_defs;
+
+        if (!vpk_items_loaded) {
+            vpk_items_loaded = true;
+            vpk_item_defs = GBE_LoadAllDotaItemsFromVpk();
+            GBE_GC_DebugLog("GC_DOTA_ITEMS", "loaded %zu cosmetic item defs from VPK items_game.txt", vpk_item_defs.size());
+        }
+
+        if (!vpk_item_defs.empty()) {
+            // Collect existing def_indices from user items to avoid duplicates
+            std::unordered_set<uint32_t> existing_defs;
+            for (const Econ_Item &item : local_items) {
+                existing_defs.insert(item.def);
+            }
+
+            // Find the type_id=1 object (or create one)
+            CMsgSOCacheSubscribed_SubscribedType *item_object = nullptr;
+            for (int i = 0; i < protomsg.mutable_objects()->size(); ++i) {
+                if (protomsg.mutable_objects()->Get(i).type_id() == 1u) {
+                    item_object = protomsg.mutable_objects()->Mutable(i);
+                    break;
+                }
+            }
+            if (!item_object) {
+                item_object = protomsg.add_objects();
+                item_object->set_type_id(1u);
+            }
+
+            // ID base: start from a high value to avoid collisions with user items
+            // Use a range that won't collide with item_id_local_to_network encoding
+            uint64_t next_id = 0x50000000ULL; // ~1.3 billion base
+            const uint32_t account_id = steam_id.GetAccountID();
+            size_t injected_count = 0;
+
+            for (const auto &def : vpk_item_defs) {
+                if (existing_defs.count(def.def_index)) continue;
+
+                CSOEconItem proto_item;
+                // Encode ID same way as item_id_local_to_network for 64-bit mode
+                uint64_t item_id = (next_id << 32ull) | static_cast<uint64_t>(account_id);
+                proto_item.set_id(item_id);
+                proto_item.set_account_id(account_id);
+                proto_item.set_def_index(def.def_index);
+                proto_item.set_inventory(0x30000000u + next_id); // valid backpack position
+                proto_item.set_quantity(1);
+                proto_item.set_level(1);
+                proto_item.set_quality(4); // Unique
+                proto_item.set_flags(0);
+                proto_item.set_origin(0);
+                proto_item.set_in_use(false);
+                proto_item.set_style(0);
+                proto_item.set_original_id(item_id);
+                proto_item.set_contains_equipped_state(true);
+                proto_item.set_contains_equipped_state_v2(true);
+
+                item_object->add_object_data(proto_item.SerializeAsString());
+                next_id++;
+                injected_count++;
+
+                // If item has multiple styles, create additional items for each style
+                if (def.num_styles > 1) {
+                    for (uint8_t s = 1; s < def.num_styles; s++) {
+                        CSOEconItem style_item;
+                        uint64_t style_item_id = (next_id << 32ull) | static_cast<uint64_t>(account_id);
+                        style_item.set_id(style_item_id);
+                        style_item.set_account_id(account_id);
+                        style_item.set_def_index(def.def_index);
+                        style_item.set_inventory(0x30000000u + next_id);
+                        style_item.set_quantity(1);
+                        style_item.set_level(1);
+                        style_item.set_quality(4);
+                        style_item.set_flags(0);
+                        style_item.set_origin(0);
+                        style_item.set_in_use(false);
+                        style_item.set_style(s);
+                        style_item.set_original_id(style_item_id);
+                        style_item.set_contains_equipped_state(true);
+                        style_item.set_contains_equipped_state_v2(true);
+
+                        item_object->add_object_data(style_item.SerializeAsString());
+                        next_id++;
+                        injected_count++;
+                    }
+                }
+            }
+
+            GBE_GC_DebugLog("GC_DOTA_ITEMS", "injected %zu CSOEconItem entries from %zu unique defs (skipped %zu existing)",
+                injected_count, vpk_item_defs.size(), existing_defs.size());
         }
     }
 
