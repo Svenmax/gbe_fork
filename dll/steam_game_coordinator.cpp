@@ -10515,6 +10515,56 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
 
     if (is_server)
         GBE_PublishSharedDotaLobbyState(reason ? reason : "generic_lobby_members_changed");
+
+    // PLAYER-side PostGame cleanup: when a non-server client GC detects that the
+    // generic lobby state transitioned from in-game (state < 3) to PostGame
+    // (state >= 3), clear shared state, Rich Presence, and push CacheUnsubscribed.
+    // The HOST's server GC handles this via 7004 signout; the PLAYER has no such
+    // path and must rely on observing the generic lobby metadata change.
+    if (!is_server && previous_state < 3u && GBE_local_lobby.state >= 3u && GBE_local_lobby.lobby_id != 0) {
+        const uint64 cleaning_lobby_id = GBE_local_lobby.lobby_id;
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] PLAYER PostGame cleanup: generic lobby transitioned to state=%u game_state=%u LobbyID=%llu reason=%s",
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            static_cast<unsigned long long>(cleaning_lobby_id),
+            reason ? reason : "generic_lobby_members_changed"
+        );
+
+        // Send a final msg 26 with PostGame state so Dota sees the transition
+        std::string postgame_response_26;
+        if (GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), postgame_response_26, true)) {
+            push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, postgame_response_26);
+        }
+
+        // Clear Rich Presence
+        GBE_ClearDotaPracticeLobbyLaunchRichPresence();
+
+        // Reset local lobby and invalidate shared state
+        GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+        GBE_local_lobby = GBE_LocalLobby{};
+        GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+        GBE_last_dota_launch_state_pushed_game_state = 0;
+
+        // Push CacheUnsubscribed (msg 25) so Dota knows the lobby SO is gone
+        std::string response_25;
+        if (GBE_BuildDotaLobbyCacheUnsubscribedPayload(cleaning_lobby_id, response_25)) {
+            push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "PLAYER PostGame: pushed CacheUnsubscribed lobby_id=%llu size=%zu",
+                static_cast<unsigned long long>(cleaning_lobby_id),
+                response_25.size()
+            );
+        }
+
+        if (settings && settings->get_lobby().ConvertToUint64() != 0)
+            settings->set_lobby(k_steamIDNil);
+
+        return true;
+    }
+
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Detected generic lobby member/owner/runtime change LobbyID=%llu generic_lobby_id=%llu old_members=%zu new_members=%zu old_owner=%llu new_owner=%llu old_state=%u new_state=%u old_game_state=%u new_game_state=%u old_server_id=%llu new_server_id=%llu old_connect=%s new_connect=%s reason=%s",
