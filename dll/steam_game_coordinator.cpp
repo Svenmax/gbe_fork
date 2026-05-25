@@ -15574,10 +15574,29 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             static_cast<unsigned long long>(GBE_local_lobby.server_id)
         );
     } else {
-        GBE_local_lobby.has_chat_channel = false;
-        GBE_local_lobby.chat_channel_id = 0;
-        GBE_local_lobby.chat_channel_name.clear();
-        GBE_local_lobby.chat_channel_type = 0;
+        // Only clear chat state if the request channel matches the current local channel.
+        // A stale 7272 from a previous game's PostGame channel should not wipe the current
+        // lobby's chat state -- doing so causes the next abandon to lose pre_channel context,
+        // which prevents the postgame 7272/7014 from triggering ResetGCMemory and the
+        // client never sees the score screen.
+        const bool request_matches_local = (channel_id == local_channel_id);
+        if (request_matches_local) {
+            GBE_local_lobby.has_chat_channel = false;
+            GBE_local_lobby.chat_channel_id = 0;
+            GBE_local_lobby.chat_channel_name.clear();
+            GBE_local_lobby.chat_channel_type = 0;
+        } else {
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Ignoring stale 7272 for non-current channel; preserving current chat state. request_channel=%llu local_channel=%llu lobby_id=%llu state=%u game_state=%u",
+                static_cast<unsigned long long>(channel_id),
+                static_cast<unsigned long long>(local_channel_id),
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state
+            );
+            return true;
+        }
     }
 
     // If shared state was already cleared by the normal signout finalize (GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed),
