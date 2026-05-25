@@ -320,6 +320,9 @@ public:
     // Public accessor for cross-GC item serialization (server GC reads client GC items)
     std::string serialize_item_to_gcprotobuf(const Econ_Item &item, CSteamID steam_id) { return item_to_gcprotobuf(item, steam_id); }
 
+    // Public accessor for cross-GC message injection (client GC pushes to server GC)
+    void push_incoming_message(uint32 msg_type, const std::string &message) { push_incoming_now(msg_type, message); }
+
     const std::vector<Econ_Item> &load_items_from_file();
     void save_items_to_file();
     const Econ_Item *set_item_pos(uint64 item_id, uint32 inv_pos, bool is_gc, bool save = true);

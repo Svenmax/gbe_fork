@@ -13787,6 +13787,56 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         }
 
         save_items_to_file();
+
+        // Forward item equip changes to the server GC so the dedicated server
+        // can update wearables in real-time (e.g. courier, ward skins changed
+        // during strategy phase or in-game).
+        if (!is_server && gc_profile == GC_PROFILE_DOTA2 && !modified_item_ids.empty()) {
+            Steam_Client *steam_client = get_steam_client();
+            Steam_Game_Coordinator *server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
+            if (server_gc && server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id)) {
+                // Build a CacheSubscribed with only the modified items (including
+                // their updated equipped_state).  Using emsg=24 (CacheSubscribed)
+                // instead of emsg=26 (SOMultipleObjects) because the server may
+                // not have seen these items before (first equip of a world item).
+                const uint64 player_steam64 = settings->get_local_steam_id().ConvertToUint64();
+                const CSteamID player_csid = settings->get_local_steam_id();
+
+                std::string owner_soid;
+                GBE_AppendProtoVarIntField(owner_soid, 1u, 1u); // type = 1
+                GBE_AppendProtoVarIntField(owner_soid, 2u, player_steam64);
+
+                std::string subscribed_type;
+                GBE_AppendProtoVarIntField(subscribed_type, 1u, 1u); // type_id = 1
+                size_t fwd_count = 0;
+                for (uint64_t mid : modified_item_ids) {
+                    for (const Econ_Item &item : items) {
+                        if (item.id != mid) continue;
+                        GBE_AppendProtoBytesField(subscribed_type, 2u, item_to_gcprotobuf(item, player_csid));
+                        fwd_count++;
+                        break;
+                    }
+                }
+
+                std::string cache_body;
+                GBE_AppendProtoBytesField(cache_body, 2u, subscribed_type);
+                GBE_AppendProtoFixed64Field(cache_body, 3u, equip_cache_version);
+                GBE_AppendProtoBytesField(cache_body, 4u, owner_soid);
+
+                std::string server_cache_message;
+                GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheSubscribed, cache_body, server_cache_message);
+                server_gc->push_incoming_message(GBE_kDotaCacheSubscribed | GBE_kProtoMask, server_cache_message);
+
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "forwarded equip update to server GC: modified_items=%zu message_size=%zu lobby_id=%llu",
+                    fwd_count,
+                    server_cache_message.size(),
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+                );
+            }
+        }
+
         return true;
     }
 
