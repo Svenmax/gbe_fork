@@ -10685,17 +10685,49 @@ bool Steam_Game_Coordinator::GBE_MaybeHandleDotaPracticeLobbyKicked(const char *
     }
     if (still_in_generic_lobby) {
         GBE_local_lobby.seen_local_in_generic_lobby = true;
+        GBE_local_lobby.kicked_suppressed_logged = false;
+        GBE_local_lobby.owner_adoption_suppressed_logged = false;
         return false;
     }
 
     if (!GBE_local_lobby.seen_local_in_generic_lobby) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Waiting for generic lobby join confirmation before treating local user as kicked. LobbyID=%llu generic_lobby_id=%llu reason=%s",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(generic_lobby_id.ConvertToUint64()),
-            reason ? reason : "generic_lobby_members_changed"
-        );
+        if (!GBE_local_lobby.waiting_join_confirmation_logged) {
+            GBE_local_lobby.waiting_join_confirmation_logged = true;
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Waiting for generic lobby join confirmation before treating local user as kicked. LobbyID=%llu generic_lobby_id=%llu reason=%s",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(generic_lobby_id.ConvertToUint64()),
+                reason ? reason : "generic_lobby_members_changed"
+            );
+        }
+        return false;
+    }
+
+    // During a launched LAN game, the generic lobby member list can become empty
+    // because the underlying P2P connection was lost (e.g. sleep/hibernate).
+    // This does NOT mean the user was actually kicked by the lobby leader.
+    // The real game connection uses steamnetworkingsockets.dll and can survive
+    // or reconnect independently. Suppress the kicked detection here.
+    if (GBE_local_lobby.lan &&
+        GBE_local_lobby.state >= 2u &&
+        GBE_local_lobby.match_id != 0ull &&
+        !GBE_local_lobby.connect.empty()) {
+        if (!GBE_local_lobby.kicked_suppressed_logged) {
+            GBE_local_lobby.kicked_suppressed_logged = true;
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Suppressed kicked detection during launched LAN game (generic lobby member loss from P2P disconnect). "
+                "LobbyID=%llu generic_lobby_id=%llu state=%u game_state=%u match_id=%llu connect=%s reason=%s",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(generic_lobby_id.ConvertToUint64()),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state,
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                GBE_local_lobby.connect.c_str(),
+                reason ? reason : "generic_lobby_members_changed"
+            );
+        }
         return false;
     }
 
@@ -10755,20 +10787,23 @@ bool Steam_Game_Coordinator::GBE_AdoptDotaGenericLobbyOwnerIfNeeded(const char *
         GBE_local_lobby.state == 2u &&
         GBE_local_lobby.match_id != 0ull &&
         !GBE_local_lobby.connect.empty()) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Ignored generic lobby owner adoption during launched LAN peer disconnect reason=%s dota_lobby_id=%llu generic_lobby_id=%llu dota_owner=%llu generic_owner=%llu local=%llu state=%u game_state=%u match_id=%llu connect=%s",
-            reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
-            static_cast<unsigned long long>(previous_owner_steam_id),
-            static_cast<unsigned long long>(new_owner_steam_id),
-            static_cast<unsigned long long>(local_steam_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            static_cast<unsigned long long>(GBE_local_lobby.match_id),
-            GBE_local_lobby.connect.c_str()
-        );
+        if (!GBE_local_lobby.owner_adoption_suppressed_logged) {
+            GBE_local_lobby.owner_adoption_suppressed_logged = true;
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Ignored generic lobby owner adoption during launched LAN peer disconnect reason=%s dota_lobby_id=%llu generic_lobby_id=%llu dota_owner=%llu generic_owner=%llu local=%llu state=%u game_state=%u match_id=%llu connect=%s",
+                reason ? reason : "unknown",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+                static_cast<unsigned long long>(previous_owner_steam_id),
+                static_cast<unsigned long long>(new_owner_steam_id),
+                static_cast<unsigned long long>(local_steam_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state,
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                GBE_local_lobby.connect.c_str()
+            );
+        }
         return false;
     }
 

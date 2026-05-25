@@ -151,6 +151,9 @@ public ISteamGameCoordinator
         bool pending_leave_after_7040{};
         uint64 pending_leave_lobby_id{};
         bool seen_local_in_generic_lobby{};
+        bool kicked_suppressed_logged{};
+        bool waiting_join_confirmation_logged{};
+        bool owner_adoption_suppressed_logged{};
     };
 
     GBE_LocalLobby GBE_local_lobby{};
