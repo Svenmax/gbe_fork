@@ -13789,19 +13789,46 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         save_items_to_file();
 
         // Forward item equip changes to the server GC so the dedicated server
-        // can update wearables in real-time (e.g. courier, ward skins changed
-        // during strategy phase or in-game).
-        // Use emsg=26 (CMsgSOMultipleObjects) which is an incremental update,
-        // NOT emsg=24 (CacheSubscribed) which would replace the entire cache.
+        // can update wearables in real-time (e.g. during strategy phase).
+        // Valve's GC sends emsg=21 (k_ESOMsg_Create) per item FIRST, then
+        // emsg=26 (CMsgSOMultipleObjects) with all modified items.  The server
+        // needs emsg=21 to register the item objects in its SO Cache before
+        // emsg=26 can trigger a wearable refresh.
         if (!is_server && gc_profile == GC_PROFILE_DOTA2 && !update_message.empty()) {
             Steam_Client *steam_client = get_steam_client();
             Steam_Game_Coordinator *server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
             if (server_gc && server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id)) {
+                const uint64 player_steam64 = settings->get_local_steam_id().ConvertToUint64();
+                const CSteamID player_steam_id = settings->get_local_steam_id();
+
+                // Step 1: Send emsg=21 (k_ESOMsg_Create) for each modified item
+                uint64_t create_version = equip_cache_version - modified_item_ids.size();
+                for (uint64_t mid : modified_item_ids) {
+                    for (const Econ_Item &item : items) {
+                        if (item.id != mid) continue;
+
+                        create_version++;
+                        CMsgSOSingleObject create_msg;
+                        auto *create_owner = create_msg.mutable_owner_soid();
+                        create_owner->set_type(1u);
+                        create_owner->set_id(player_steam64);
+                        create_msg.set_type_id(1);
+                        create_msg.set_object_data(item_to_gcprotobuf(item, player_steam_id));
+                        create_msg.set_version(create_version);
+
+                        std::string create_message;
+                        GBE_BuildDotaZeroHeaderPayload(21u, create_msg.SerializeAsString(), create_message);
+                        server_gc->push_incoming_message(21u | GBE_kProtoMask, create_message);
+                        break;
+                    }
+                }
+
+                // Step 2: Send emsg=26 (CMsgSOMultipleObjects) with all modified items
                 server_gc->push_incoming_message(26u | GBE_kProtoMask, update_message);
 
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
-                    "forwarded equip update to server GC: modified_items=%zu message_size=%zu lobby_id=%llu",
+                    "forwarded equip to server GC: emsg21_count=%zu emsg26_size=%zu lobby_id=%llu",
                     modified_item_ids.size(),
                     update_message.size(),
                     static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
