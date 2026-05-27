@@ -8384,6 +8384,7 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
     if (gc_profile == GC_PROFILE_DOTA2) {
         static bool vpk_items_loaded = false;
         static std::vector<GBE_DotaItemDef> vpk_item_defs;
+        static GBE_DotaStyleUnlockInfo vpk_style_unlock{};
         static bool vpk_items_disabled = false;
 
         if (!vpk_items_loaded) {
@@ -8393,8 +8394,11 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 vpk_items_disabled = true;
                 GBE_GC_DebugLog("GC_DOTA_ITEMS", "VPK item unlock disabled via GBE_DOTA_UNLOCK_ITEMS=0");
             } else {
-                vpk_item_defs = GBE_LoadAllDotaItemsFromVpk();
-                GBE_GC_DebugLog("GC_DOTA_ITEMS", "loaded %zu cosmetic item defs from VPK items_game.txt", vpk_item_defs.size());
+                auto vpk_data = GBE_LoadAllDotaItemsFromVpk();
+                vpk_item_defs = std::move(vpk_data.item_defs);
+                vpk_style_unlock = vpk_data.style_unlock;
+                GBE_GC_DebugLog("GC_DOTA_ITEMS", "loaded %zu cosmetic item defs from VPK items_game.txt (style_unlock_attrs=%s)",
+                    vpk_item_defs.size(), vpk_style_unlock.found ? "found" : "not_found");
             }
         }
 
@@ -8459,6 +8463,26 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 proto_item.set_contains_equipped_state(false);
                 proto_item.set_contains_equipped_state_v2(false);
 
+                // Add style unlock attributes for items with locked styles.
+                // Dota 2 client checks per-style unlock attributes from items_game.txt.
+                // We use the attribute def_index found in items_game.txt "attributes" section,
+                // falling back to def_index = 1114 + style_index if not found.
+                if (def.locked_styles_mask != 0) {
+                    for (uint8_t si = 1; si < def.num_styles && si < 32; si++) {
+                        if (def.locked_styles_mask & (1u << si)) {
+                            auto *attr = proto_item.add_attribute();
+                            uint32_t attr_id = vpk_style_unlock.found && vpk_style_unlock.attr_def_index[si] != 0
+                                ? vpk_style_unlock.attr_def_index[si]
+                                : (1114u + si);
+                            attr->set_def_index(attr_id);
+                            // value_bytes: uint32 unix timestamp (any non-zero = unlocked)
+                            uint32_t unlock_ts = 1609459200u; // 2021-01-01 00:00:00 UTC
+                            std::string val_bytes(reinterpret_cast<const char *>(&unlock_ts), 4);
+                            attr->set_value_bytes(val_bytes);
+                        }
+                    }
+                }
+
                 item_object->add_object_data(proto_item.SerializeAsString());
 
                 // Also add to in-memory items vector so equip handler (2569) can find them
@@ -8474,14 +8498,37 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 mem_item.in_use = false;
                 mem_item.original_id = item_id;
                 mem_item.style = 0;
+
+                // Add style unlock attributes to in-memory item too
+                if (def.locked_styles_mask != 0) {
+                    for (uint8_t si = 1; si < def.num_styles && si < 32; si++) {
+                        if (def.locked_styles_mask & (1u << si)) {
+                            Econ_Item_Attribute unlock_attr;
+                            unlock_attr.def = vpk_style_unlock.found && vpk_style_unlock.attr_def_index[si] != 0
+                                ? vpk_style_unlock.attr_def_index[si]
+                                : (1114u + si);
+                            uint32_t unlock_ts = 1609459200u;
+                            unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&unlock_ts), 4);
+                            unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+                            mem_item.attributes.push_back(unlock_attr);
+                        }
+                    }
+                }
+
                 items.push_back(mem_item);
 
                 item_seq++;
                 injected_count++;
             }
 
-            GBE_GC_DebugLog("GC_DOTA_ITEMS", "injected %zu CSOEconItem entries from %zu unique defs (skipped %zu existing)",
-                injected_count, vpk_item_defs.size(), existing_defs.size());
+            // Count items with style unlock attributes for logging
+            size_t style_unlock_count = 0;
+            for (const auto &def : vpk_item_defs) {
+                if (def.locked_styles_mask != 0) style_unlock_count++;
+            }
+
+            GBE_GC_DebugLog("GC_DOTA_ITEMS", "injected %zu CSOEconItem entries from %zu unique defs (skipped %zu existing, %zu with_style_unlocks)",
+                injected_count, vpk_item_defs.size(), existing_defs.size(), style_unlock_count);
         }
     }
 

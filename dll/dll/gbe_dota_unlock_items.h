@@ -279,32 +279,124 @@ private:
 
 struct GBE_DotaItemDef {
     uint32_t def_index;
-    // num_styles kept for potential future use but not used for injection
-    uint8_t num_styles; // 0 means 1 default style
+    uint8_t num_styles; // total style count; 0 means 1 default style
+    // Bitmask of styles that have "additional_hidden" and need unlock attributes.
+    // Bit N set = style N requires unlock. Style 0 is never locked.
+    uint32_t locked_styles_mask;
 };
+
+// Resolved style unlock attribute def_index values.
+// In items_game.txt attributes section, these are named "unlock_style_#".
+// We search for them dynamically; fallback to hardcoded range if not found.
+struct GBE_DotaStyleUnlockInfo {
+    // attr_def_index[N] = the attribute def_index that unlocks style N (1-based)
+    // Index 0 is unused (style 0 never needs unlock)
+    uint32_t attr_def_index[32];
+    bool found;
+};
+
+static GBE_DotaStyleUnlockInfo GBE_FindStyleUnlockAttributes(const GBE_VdfNode &root)
+{
+    GBE_DotaStyleUnlockInfo info{};
+    info.found = false;
+
+    const GBE_VdfNode *items_game = root.find("items_game");
+    if (!items_game) {
+        for (const auto &c : root.children) {
+            if (c.key == "items_game") { items_game = &c; break; }
+        }
+    }
+    if (!items_game) return info;
+
+    const GBE_VdfNode *attributes = items_game->find("attributes");
+    if (!attributes) return info;
+
+    // Search for attributes named "unlock_style_#" or "style_#_unlock_date"
+    for (const auto &attr_node : attributes->children) {
+        std::string attr_name = attr_node.get_string("name");
+        uint32_t attr_id = 0;
+        try {
+            attr_id = static_cast<uint32_t>(std::stoul(attr_node.key));
+        } catch (...) {
+            continue;
+        }
+        if (attr_id == 0) continue;
+
+        // Pattern: "unlock_style_1", "unlock_style_2", etc.
+        if (attr_name.rfind("unlock_style_", 0) == 0) {
+            std::string num_str = attr_name.substr(13); // after "unlock_style_"
+            try {
+                uint32_t style_idx = static_cast<uint32_t>(std::stoul(num_str));
+                if (style_idx > 0 && style_idx < 32) {
+                    info.attr_def_index[style_idx] = attr_id;
+                    info.found = true;
+                }
+            } catch (...) {}
+        }
+        // Pattern: "style_1_unlock_date", "style_2_unlock_date", etc.
+        else if (attr_name.rfind("style_", 0) == 0 && attr_name.find("_unlock") != std::string::npos) {
+            // Extract style number
+            size_t num_start = 6; // after "style_"
+            size_t num_end = attr_name.find('_', num_start);
+            if (num_end != std::string::npos) {
+                std::string num_str = attr_name.substr(num_start, num_end - num_start);
+                try {
+                    uint32_t style_idx = static_cast<uint32_t>(std::stoul(num_str));
+                    if (style_idx > 0 && style_idx < 32) {
+                        info.attr_def_index[style_idx] = attr_id;
+                        info.found = true;
+                    }
+                } catch (...) {}
+            }
+        }
+    }
+
+    return info;
+}
 
 // Prefabs that represent equippable cosmetic items
 static bool GBE_IsCosmeticPrefab(const std::string &prefab) {
-    // Only actual equippable cosmetics. Excludes: misc, tool, default_item, bundle,
-    // treasure_chest, recipe, tournament, player_card, retired_item, etc.
+    // Whitelist approach: known cosmetic/equippable prefabs
     static const std::unordered_set<std::string> cosmetic_prefabs = {
         "wearable", "courier", "ward", "loading_screen", "taunt",
         "terrain", "hero_effigy_block", "announcer", "announcer_pack",
         "music", "pennant", "cursor_pack",
         "weather", "emoticon", "spray", "emblem",
-        "hero_statue"
+        "hero_statue",
+        // World items: creeps, towers, HUD skins, kill effects, etc.
+        "creep", "creep_skin",
+        "tower", "tower_skin",
+        "hud_skin",
+        "kill_effect", "kill_streak_effect",
+        "blink_effect", "teleport_effect", "tp_effect",
+        "versus_screen",
+        "map_effect",
+        "courier_effect",
+    };
+
+    // Blacklist: known non-cosmetic prefabs that should never be injected
+    static const std::unordered_set<std::string> excluded_prefabs = {
+        "tool", "bundle", "treasure_chest", "recipe",
+        "tournament", "player_card", "retired_item",
+        "ticket", "league", "passport", "gem",
+        "key", "supply_crate",
     };
 
     // Check if any token in the prefab string matches
     size_t start = 0;
+    bool has_excluded = false;
+    bool has_cosmetic = false;
     while (start < prefab.size()) {
         size_t end = prefab.find(' ', start);
         if (end == std::string::npos) end = prefab.size();
         std::string token = prefab.substr(start, end - start);
-        if (cosmetic_prefabs.count(token)) return true;
+        if (excluded_prefabs.count(token)) has_excluded = true;
+        if (cosmetic_prefabs.count(token)) has_cosmetic = true;
         start = end + 1;
     }
-    return false;
+    // Excluded prefabs take priority over cosmetic ones
+    if (has_excluded) return false;
+    return has_cosmetic;
 }
 
 static std::vector<GBE_DotaItemDef> GBE_ExtractDotaItemDefs(const GBE_VdfNode &root)
@@ -336,10 +428,14 @@ static std::vector<GBE_DotaItemDef> GBE_ExtractDotaItemDefs(const GBE_VdfNode &r
 
     auto resolve_prefab = [&](const std::string &prefab) -> bool {
         if (GBE_IsCosmeticPrefab(prefab)) return true;
-        // Check inheritance chain (1 level)
-        auto it = prefab_inherits.find(prefab);
-        if (it != prefab_inherits.end() && GBE_IsCosmeticPrefab(it->second))
-            return true;
+        // Check inheritance chain (up to 3 levels)
+        std::string current = prefab;
+        for (int depth = 0; depth < 3; depth++) {
+            auto it = prefab_inherits.find(current);
+            if (it == prefab_inherits.end()) break;
+            if (GBE_IsCosmeticPrefab(it->second)) return true;
+            current = it->second;
+        }
         return false;
     };
 
@@ -359,14 +455,22 @@ static std::vector<GBE_DotaItemDef> GBE_ExtractDotaItemDefs(const GBE_VdfNode &r
 
         if (!resolve_prefab(prefab)) continue;
 
-        // Count styles
+        // Count styles and detect locked ones (those with "additional_hidden" "1")
         uint8_t num_styles = 0;
+        uint32_t locked_styles_mask = 0;
         const GBE_VdfNode *styles_node = item_node.find("styles");
         if (styles_node) {
             num_styles = static_cast<uint8_t>(styles_node->children.size());
+            for (uint8_t si = 0; si < num_styles && si < 32; si++) {
+                const auto &style_node = styles_node->children[si];
+                std::string hidden = style_node.get_string("additional_hidden");
+                if (hidden == "1") {
+                    locked_styles_mask |= (1u << si);
+                }
+            }
         }
 
-        result.push_back({ def_index, num_styles });
+        result.push_back({ def_index, num_styles, locked_styles_mask });
     }
 
     return result;
@@ -424,7 +528,12 @@ static std::string GBE_FindDotaVpkPath()
 // Main Entry Point: Load All Dota Items from VPK
 // ============================================================================
 
-static std::vector<GBE_DotaItemDef> GBE_LoadAllDotaItemsFromVpk()
+struct GBE_DotaVpkData {
+    std::vector<GBE_DotaItemDef> item_defs;
+    GBE_DotaStyleUnlockInfo style_unlock;
+};
+
+static GBE_DotaVpkData GBE_LoadAllDotaItemsFromVpk()
 {
     std::string vpk_path = GBE_FindDotaVpkPath();
     if (vpk_path.empty()) {
@@ -451,8 +560,10 @@ static std::vector<GBE_DotaItemDef> GBE_LoadAllDotaItemsFromVpk()
     GBE_VdfNode root;
     if (!GBE_VdfParser::Parse(items_game_text, root)) return {};
 
-    // Extract item definitions
-    return GBE_ExtractDotaItemDefs(root);
+    GBE_DotaVpkData data;
+    data.item_defs = GBE_ExtractDotaItemDefs(root);
+    data.style_unlock = GBE_FindStyleUnlockAttributes(root);
+    return data;
 }
 
 #endif // GBE_DOTA_UNLOCK_ITEMS_H
