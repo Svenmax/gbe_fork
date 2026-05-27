@@ -487,13 +487,7 @@ static std::vector<GBE_DotaItemDef> GBE_ExtractDotaItemDefs(const GBE_VdfNode &r
                 for (uint8_t si = 0; si < num_styles && si < 32; si++) {
                     const auto &style_node = styles_node->children[si];
 
-                    // Check all known unlock indicators
-                    std::string hidden = style_node.get_string("additional_hidden");
-                    std::string unlock = style_node.get_string("unlock");
-                    if (hidden == "1" || unlock == "1") {
-                        locked_styles_mask |= (1u << si);
-                    }
-                    // Also check if the style has an "unlock" child node (not leaf value)
+                    // A style is locked if it has an "unlock" child node (sub-tree)
                     const GBE_VdfNode *unlock_node = style_node.find("unlock");
                     if (unlock_node && !unlock_node->children.empty()) {
                         locked_styles_mask |= (1u << si);

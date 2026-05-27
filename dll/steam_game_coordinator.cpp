@@ -8481,24 +8481,17 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 proto_item.set_contains_equipped_state(false);
                 proto_item.set_contains_equipped_state_v2(false);
 
-                // Add style unlock attributes for items with locked styles.
-                // Dota 2 client checks per-style unlock attributes from items_game.txt.
-                // We use the attribute def_index found in items_game.txt "attributes" section,
-                // falling back to def_index = 1114 + style_index if not found.
+                // Add style unlock attribute for items with locked styles.
+                // Dota 2 uses attribute def_index=400 ("unlocked styles") as a bitmask.
+                // Each bit represents whether a style is unlocked.
+                // We set all style bits to unlock everything.
                 if (def.locked_styles_mask != 0) {
-                    for (uint8_t si = 1; si < def.num_styles && si < 32; si++) {
-                        if (def.locked_styles_mask & (1u << si)) {
-                            auto *attr = proto_item.add_attribute();
-                            uint32_t attr_id = vpk_style_unlock.found && vpk_style_unlock.attr_def_index[si] != 0
-                                ? vpk_style_unlock.attr_def_index[si]
-                                : (1114u + si);
-                            attr->set_def_index(attr_id);
-                            // value_bytes: uint32 unix timestamp (any non-zero = unlocked)
-                            uint32_t unlock_ts = 1609459200u; // 2021-01-01 00:00:00 UTC
-                            std::string val_bytes(reinterpret_cast<const char *>(&unlock_ts), 4);
-                            attr->set_value_bytes(val_bytes);
-                        }
-                    }
+                    auto *attr = proto_item.add_attribute();
+                    attr->set_def_index(400u);
+                    // value_bytes: uint32 bitmask with all styles unlocked
+                    uint32_t all_styles_mask = (1u << def.num_styles) - 1u;
+                    std::string val_bytes(reinterpret_cast<const char *>(&all_styles_mask), 4);
+                    attr->set_value_bytes(val_bytes);
                 }
 
                 item_object->add_object_data(proto_item.SerializeAsString());
@@ -8517,20 +8510,14 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 mem_item.original_id = item_id;
                 mem_item.style = 0;
 
-                // Add style unlock attributes to in-memory item too
+                // Add style unlock attribute to in-memory item too
                 if (def.locked_styles_mask != 0) {
-                    for (uint8_t si = 1; si < def.num_styles && si < 32; si++) {
-                        if (def.locked_styles_mask & (1u << si)) {
-                            Econ_Item_Attribute unlock_attr;
-                            unlock_attr.def = vpk_style_unlock.found && vpk_style_unlock.attr_def_index[si] != 0
-                                ? vpk_style_unlock.attr_def_index[si]
-                                : (1114u + si);
-                            uint32_t unlock_ts = 1609459200u;
-                            unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&unlock_ts), 4);
-                            unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
-                            mem_item.attributes.push_back(unlock_attr);
-                        }
-                    }
+                    Econ_Item_Attribute unlock_attr;
+                    unlock_attr.def = 400u; // "unlocked styles" bitmask
+                    uint32_t all_styles_mask = (1u << def.num_styles) - 1u;
+                    unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&all_styles_mask), 4);
+                    unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+                    mem_item.attributes.push_back(unlock_attr);
                 }
 
                 items.push_back(mem_item);
@@ -8563,43 +8550,27 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                     if (it == def_map.end()) continue;
                     const GBE_DotaItemDef &def = *it->second;
 
-                    // Check if item already has unlock attributes
+                    // Check if item already has "unlocked styles" attribute (def=400)
                     bool has_unlock = false;
                     for (const auto &attr : item.attributes) {
-                        if (attr.def >= 1115u && attr.def <= 1145u) {
+                        if (attr.def == 400u) {
                             has_unlock = true;
                             break;
                         }
-                        // Also check dynamically resolved IDs
-                        if (vpk_style_unlock.found) {
-                            for (uint8_t si = 1; si < 32; si++) {
-                                if (vpk_style_unlock.attr_def_index[si] != 0 && attr.def == vpk_style_unlock.attr_def_index[si]) {
-                                    has_unlock = true;
-                                    break;
-                                }
-                            }
-                        }
-                        if (has_unlock) break;
                     }
 
                     if (!has_unlock) {
-                        for (uint8_t si = 1; si < def.num_styles && si < 32; si++) {
-                            if (def.locked_styles_mask & (1u << si)) {
-                                Econ_Item_Attribute unlock_attr;
-                                unlock_attr.def = vpk_style_unlock.found && vpk_style_unlock.attr_def_index[si] != 0
-                                    ? vpk_style_unlock.attr_def_index[si]
-                                    : (1114u + si);
-                                uint32_t unlock_ts = 1609459200u;
-                                unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&unlock_ts), 4);
-                                unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
-                                item.attributes.push_back(unlock_attr);
-                            }
-                        }
+                        Econ_Item_Attribute unlock_attr;
+                        unlock_attr.def = 400u;
+                        uint32_t all_styles_mask = (1u << def.num_styles) - 1u;
+                        unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&all_styles_mask), 4);
+                        unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+                        item.attributes.push_back(unlock_attr);
                         patched_count++;
                     }
                 }
                 if (patched_count > 0) {
-                    GBE_GC_DebugLog("GC_DOTA_ITEMS", "patched %zu existing items with style unlock attributes", patched_count);
+                    GBE_GC_DebugLog("GC_DOTA_ITEMS", "patched %zu existing items with style unlock attr=400", patched_count);
                 }
             }
         }
