@@ -8481,16 +8481,13 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 proto_item.set_contains_equipped_state(false);
                 proto_item.set_contains_equipped_state_v2(false);
 
-                // Add style unlock attribute for items with locked styles.
-                // Dota 2 uses attribute def_index=400 ("unlocked styles") as a bitmask.
-                // Each bit represents whether a style is unlocked.
-                // We set all style bits to unlock everything.
-                if (def.locked_styles_mask != 0) {
+                // Unconditionally add attr=400 ("unlocked styles") with all bits set.
+                // This unlocks every style variant. Items without styles ignore it.
+                {
                     auto *attr = proto_item.add_attribute();
                     attr->set_def_index(400u);
-                    // value_bytes: uint32 bitmask with all styles unlocked
-                    uint32_t all_styles_mask = (1u << def.num_styles) - 1u;
-                    std::string val_bytes(reinterpret_cast<const char *>(&all_styles_mask), 4);
+                    uint32_t all_unlocked = 0xFFFFFFFFu;
+                    std::string val_bytes(reinterpret_cast<const char *>(&all_unlocked), 4);
                     attr->set_value_bytes(val_bytes);
                 }
 
@@ -8510,12 +8507,12 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 mem_item.original_id = item_id;
                 mem_item.style = 0;
 
-                // Add style unlock attribute to in-memory item too
-                if (def.locked_styles_mask != 0) {
+                // Add style unlock attr to in-memory item too
+                {
                     Econ_Item_Attribute unlock_attr;
-                    unlock_attr.def = 400u; // "unlocked styles" bitmask
-                    uint32_t all_styles_mask = (1u << def.num_styles) - 1u;
-                    unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&all_styles_mask), 4);
+                    unlock_attr.def = 400u;
+                    uint32_t all_unlocked = 0xFFFFFFFFu;
+                    unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&all_unlocked), 4);
                     unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
                     mem_item.attributes.push_back(unlock_attr);
                 }
@@ -8526,31 +8523,14 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 injected_count++;
             }
 
-            // Count items with style unlock attributes for logging
-            size_t style_unlock_count = 0;
-            for (const auto &def : vpk_item_defs) {
-                if (def.locked_styles_mask != 0) style_unlock_count++;
-            }
+            GBE_GC_DebugLog("GC_DOTA_ITEMS", "injected %zu CSOEconItem entries from %zu unique defs (skipped %zu existing)",
+                injected_count, vpk_item_defs.size(), existing_defs.size());
 
-            GBE_GC_DebugLog("GC_DOTA_ITEMS", "injected %zu CSOEconItem entries from %zu unique defs (skipped %zu existing, %zu with_style_unlocks)",
-                injected_count, vpk_item_defs.size(), existing_defs.size(), style_unlock_count);
-
-            // Patch existing items (from items.json) with style unlock attributes
-            // Build a map of def_index -> locked_styles_mask for quick lookup
-            if (style_unlock_count > 0) {
-                std::unordered_map<uint32_t, const GBE_DotaItemDef *> def_map;
-                for (const auto &def : vpk_item_defs) {
-                    if (def.locked_styles_mask != 0)
-                        def_map[def.def_index] = &def;
-                }
-
+            // Patch ALL existing items (from items.json) with attr=400 unconditionally.
+            // This ensures styles are unlocked even when VPK detection misses them.
+            {
                 size_t patched_count = 0;
                 for (Econ_Item &item : items) {
-                    auto it = def_map.find(item.def);
-                    if (it == def_map.end()) continue;
-                    const GBE_DotaItemDef &def = *it->second;
-
-                    // Check if item already has "unlocked styles" attribute (def=400)
                     bool has_unlock = false;
                     for (const auto &attr : item.attributes) {
                         if (attr.def == 400u) {
@@ -8562,16 +8542,15 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                     if (!has_unlock) {
                         Econ_Item_Attribute unlock_attr;
                         unlock_attr.def = 400u;
-                        uint32_t all_styles_mask = (1u << def.num_styles) - 1u;
-                        unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&all_styles_mask), 4);
+                        uint32_t all_unlocked = 0xFFFFFFFFu;
+                        unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&all_unlocked), 4);
                         unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
                         item.attributes.push_back(unlock_attr);
                         patched_count++;
                     }
                 }
-                if (patched_count > 0) {
-                    GBE_GC_DebugLog("GC_DOTA_ITEMS", "patched %zu existing items with style unlock attr=400", patched_count);
-                }
+                GBE_GC_DebugLog("GC_DOTA_ITEMS", "patched %zu/%zu items with style unlock attr=400 (all_bits=0xFFFFFFFF)",
+                    patched_count, items.size());
             }
         }
     }
@@ -8700,7 +8679,12 @@ std::string Steam_Game_Coordinator::item_to_gcprotobuf(const Econ_Item &item, CS
         proto_equip->set_new_slot(slot_id);
     }
 
+    // Dota 2: unconditionally inject attr=400 ("unlocked styles") with all bits set.
+    // This unlocks all style variants for every item regardless of gem progress.
+    // Items without multiple styles simply ignore this attribute.
+    bool has_attr_400 = false;
     for (const Econ_Item_Attribute &attr : item.attributes) {
+        if (attr.def == 400u) has_attr_400 = true;
         auto proto_attr = proto_item.add_attribute();
         proto_attr->set_def_index(attr.def);
         if (gc_version < 20130319 || is_portal2) {
@@ -8711,6 +8695,14 @@ std::string Steam_Game_Coordinator::item_to_gcprotobuf(const Econ_Item &item, CS
         } else {
             proto_attr->set_value_bytes(attr.value_bytes);
         }
+    }
+
+    if (!has_attr_400 && gc_profile == GC_PROFILE_DOTA2) {
+        auto proto_attr = proto_item.add_attribute();
+        proto_attr->set_def_index(400u);
+        uint32_t all_unlocked = 0xFFFFFFFFu;
+        std::string val_bytes(reinterpret_cast<const char *>(&all_unlocked), 4);
+        proto_attr->set_value_bytes(val_bytes);
     }
 
     return proto_item.SerializeAsString();
