@@ -377,11 +377,19 @@ static bool GBE_IsCosmeticPrefab(const std::string &prefab) {
         "courier_effect",
         // Roshan, Tormentor, Ancient
         "roshan", "tormentor", "ancient",
+        // Interface items: stickers, emoticons, gems, bundles, tools
+        "sticker", "sticker_capsule", "socket_gem",
+        "emoticon_tool", "bundle", "tool",
+        // Misc items with player_loadout (streak effects, etc.)
+        "streak_effect", "dynamic_recipe",
+        "courier_wearable", "showcase_decoration",
+        "default_item", "retired_treasure_chest",
+        "summons", "head_effect", "death_effect",
     };
 
     // Blacklist: known non-cosmetic prefabs that should never be injected
     static const std::unordered_set<std::string> excluded_prefabs = {
-        "tool", "bundle", "treasure_chest", "recipe",
+        "treasure_chest", "recipe",
         "tournament", "player_card", "retired_item",
         "ticket", "league", "passport", "gem",
         "key", "supply_crate",
@@ -490,7 +498,7 @@ static std::vector<GBE_DotaItemDef> GBE_ExtractDotaItemDefs(const GBE_VdfNode &r
             // Still check blacklist
             bool blacklisted = false;
             static const std::unordered_set<std::string> bl = {
-                "tool", "bundle", "treasure_chest", "recipe",
+                "treasure_chest", "recipe",
                 "tournament", "player_card", "retired_item",
                 "ticket", "league", "passport", "gem",
                 "key", "supply_crate",
