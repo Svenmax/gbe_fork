@@ -382,19 +382,21 @@ static bool GBE_IsCosmeticPrefab(const std::string &prefab) {
         // Interface items: stickers, emoticons, gems, bundles, tools
         "sticker", "sticker_capsule", "socket_gem",
         "emoticon_tool", "bundle", "tool",
+        // Treasury items: treasure chests, keys
+        "treasure_chest", "retired_treasure_chest", "key",
         // Misc items with player_loadout (streak effects, etc.)
         "streak_effect", "dynamic_recipe",
         "courier_wearable", "showcase_decoration",
-        "default_item", "retired_treasure_chest",
+        "default_item",
         "summons", "head_effect", "death_effect",
     };
 
     // Blacklist: known non-cosmetic prefabs that should never be injected
     static const std::unordered_set<std::string> excluded_prefabs = {
-        "treasure_chest", "recipe",
+        "recipe",
         "tournament", "player_card", "retired_item",
         "ticket", "league", "passport", "gem",
-        "key", "supply_crate",
+        "supply_crate",
     };
 
     // Check if any token in the prefab string matches

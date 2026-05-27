@@ -14059,6 +14059,153 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             response_emsg = 9024;
             response_note = "9023->9024";
             break;
+        case 2510: {
+            // StorePurchaseInit - client wants to buy an item from the store.
+            // Parse the request to get item_def_id, then respond with success
+            // and grant the item to the player's inventory.
+            
+            // Parse line_items (field 4) to get item_def_id
+            uint32_t purchased_def = 0;
+            uint32_t purchased_qty = 1;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint8_t tag = body[pos];
+                    uint8_t field_num = tag >> 3;
+                    uint8_t wire_type = tag & 0x07;
+                    pos++;
+                    if (wire_type == 0) { // varint
+                        while (pos < body_size && (body[pos] & 0x80)) pos++;
+                        pos++;
+                    } else if (wire_type == 2) { // length-delimited
+                        uint32_t len = 0;
+                        uint8_t shift = 0;
+                        while (pos < body_size) {
+                            uint8_t b = body[pos++];
+                            len |= (b & 0x7F) << shift;
+                            shift += 7;
+                            if (!(b & 0x80)) break;
+                        }
+                        if (field_num == 4 && len > 0 && pos + len <= body_size) {
+                            // Parse CGCStorePurchaseInit_LineItem sub-message
+                            const uint8_t *sub = body + pos;
+                            size_t sub_pos = 0;
+                            while (sub_pos < len) {
+                                uint8_t st = sub[sub_pos];
+                                uint8_t sf = st >> 3;
+                                uint8_t sw = st & 0x07;
+                                sub_pos++;
+                                if (sw == 0) {
+                                    uint32_t val = 0;
+                                    uint8_t s2 = 0;
+                                    while (sub_pos < len) {
+                                        uint8_t b = sub[sub_pos++];
+                                        val |= (b & 0x7F) << s2;
+                                        s2 += 7;
+                                        if (!(b & 0x80)) break;
+                                    }
+                                    if (sf == 1) purchased_def = val;
+                                    else if (sf == 2) purchased_qty = val;
+                                } else if (sw == 2) {
+                                    uint32_t sl = 0;
+                                    uint8_t s2 = 0;
+                                    while (sub_pos < len) {
+                                        uint8_t b = sub[sub_pos++];
+                                        sl |= (b & 0x7F) << s2;
+                                        s2 += 7;
+                                        if (!(b & 0x80)) break;
+                                    }
+                                    sub_pos += sl;
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                        pos += len;
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            if (purchased_def == 0) {
+                GBE_GC_DebugLog("GC_DOTA_DIRECT", "StorePurchaseInit failed to parse item_def_id body_size=%zu", body_size);
+                return true;
+            }
+
+            // Build StorePurchaseInitResponse (msg 2511): result=1, txn_id=fake
+            {
+                std::string resp_body;
+                GBE_AppendProtoVarIntField(resp_body, 1u, 1u); // result = 1 (success)
+                // txn_id (field 2, varint/fixed64) - use a fake transaction ID
+                uint64_t fake_txn = (static_cast<uint64_t>(0xBEEF0000u) | purchased_def);
+                GBE_AppendProtoVarIntField(resp_body, 2u, fake_txn);
+
+                std::string response_message;
+                GBE_BuildDotaJobReplyOrZeroHeaderPayload(2511u, has_source_job, source_job, resp_body, response_message);
+                push_incoming_now(2511u | GBE_kProtoMask, response_message);
+            }
+
+            // Grant the purchased item to inventory
+            {
+                CSteamID player_steam_id = settings->get_local_steam_id();
+                uint32_t account_id = player_steam_id.GetAccountID();
+
+                for (uint32_t qi = 0; qi < purchased_qty; qi++) {
+                    uint32_t seq = static_cast<uint32_t>(items.size()) + 1;
+                    uint64_t new_item_id = (static_cast<uint64_t>(0x50000000u + seq) << 32ull) | static_cast<uint64_t>(account_id);
+
+                    Econ_Item item;
+                    item.id = new_item_id;
+                    item.def = purchased_def;
+                    item.level = 1;
+                    item.quality = static_cast<EItemQuality>(4);
+                    item.inv_pos = seq;
+                    item.quantity = 1;
+                    item.flags = 0;
+                    item.origin = 2; // purchased
+                    item.in_use = false;
+                    item.original_id = new_item_id;
+                    item.style = 0;
+                    items.push_back(item);
+
+                    // Notify client via SOCreate (msg 21 = k_ESOMsg_Create)
+                    CSOEconItem proto_item;
+                    proto_item.set_id(new_item_id);
+                    proto_item.set_account_id(account_id);
+                    proto_item.set_def_index(purchased_def);
+                    proto_item.set_inventory(seq);
+                    proto_item.set_quantity(1);
+                    proto_item.set_level(1);
+                    proto_item.set_quality(4);
+                    proto_item.set_flags(0);
+                    proto_item.set_origin(2);
+                    proto_item.set_in_use(false);
+                    proto_item.set_style(0);
+                    proto_item.set_original_id(new_item_id);
+
+                    CMsgSOSingleObject create_msg;
+                    create_msg.set_type_id(1);
+                    create_msg.set_object_data(proto_item.SerializeAsString());
+                    create_msg.set_version(0);
+
+                    std::string create_body = create_msg.SerializeAsString();
+                    std::string create_response;
+                    GBE_BuildDotaZeroHeaderPayload(21u, create_body, create_response);
+                    push_incoming_now(21u | GBE_kProtoMask, create_response);
+                }
+
+                save_items_to_file();
+            }
+
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "StorePurchaseInit success def=%u qty=%u source_job=%llu",
+                purchased_def, purchased_qty,
+                static_cast<unsigned long long>(source_job)
+            );
+            return true;
+        }
         default:
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
