@@ -399,7 +399,21 @@ static bool GBE_IsCosmeticPrefab(const std::string &prefab) {
     return has_cosmetic;
 }
 
-static std::vector<GBE_DotaItemDef> GBE_ExtractDotaItemDefs(const GBE_VdfNode &root)
+// Diagnostics from style parsing
+struct GBE_DotaStyleDiag {
+    uint32_t multi_style_items;
+    uint32_t items_with_locked_styles;
+    std::unordered_map<std::string, uint32_t> style_field_counts;
+    // Samples: first few multi-style items
+    struct Sample {
+        uint32_t def_index;
+        uint8_t num_styles;
+        std::string style1_fields; // concatenated fields from style[1]
+    };
+    std::vector<Sample> samples;
+};
+
+static std::vector<GBE_DotaItemDef> GBE_ExtractDotaItemDefs(const GBE_VdfNode &root, GBE_DotaStyleDiag *diag = nullptr)
 {
     std::vector<GBE_DotaItemDef> result;
 
@@ -439,6 +453,11 @@ static std::vector<GBE_DotaItemDef> GBE_ExtractDotaItemDefs(const GBE_VdfNode &r
         return false;
     };
 
+    // Diagnostics: track style field names for debugging
+    uint32_t multi_style_items = 0;
+    uint32_t items_with_locked_styles = 0;
+    std::unordered_map<std::string, uint32_t> style_field_counts;
+
     for (const auto &item_node : items->children) {
         // Skip non-numeric keys (like "default")
         uint32_t def_index = 0;
@@ -455,22 +474,61 @@ static std::vector<GBE_DotaItemDef> GBE_ExtractDotaItemDefs(const GBE_VdfNode &r
 
         if (!resolve_prefab(prefab)) continue;
 
-        // Count styles and detect locked ones (those with "additional_hidden" "1")
+        // Count styles and detect locked ones
         uint8_t num_styles = 0;
         uint32_t locked_styles_mask = 0;
         const GBE_VdfNode *styles_node = item_node.find("styles");
         if (styles_node) {
             num_styles = static_cast<uint8_t>(styles_node->children.size());
-            for (uint8_t si = 0; si < num_styles && si < 32; si++) {
-                const auto &style_node = styles_node->children[si];
-                std::string hidden = style_node.get_string("additional_hidden");
-                if (hidden == "1") {
-                    locked_styles_mask |= (1u << si);
+
+            if (num_styles > 1) {
+                multi_style_items++;
+
+                for (uint8_t si = 0; si < num_styles && si < 32; si++) {
+                    const auto &style_node = styles_node->children[si];
+
+                    // Check all known unlock indicators
+                    std::string hidden = style_node.get_string("additional_hidden");
+                    std::string unlock = style_node.get_string("unlock");
+                    if (hidden == "1" || unlock == "1") {
+                        locked_styles_mask |= (1u << si);
+                    }
+                    // Also check if the style has an "unlock" child node (not leaf value)
+                    const GBE_VdfNode *unlock_node = style_node.find("unlock");
+                    if (unlock_node && !unlock_node->children.empty()) {
+                        locked_styles_mask |= (1u << si);
+                    }
+
+                    // Collect field names for diagnostics
+                    for (const auto &child : style_node.children) {
+                        style_field_counts[child.key]++;
+                    }
+                }
+
+                // Collect samples
+                if (diag && diag->samples.size() < 5) {
+                    GBE_DotaStyleDiag::Sample sample;
+                    sample.def_index = def_index;
+                    sample.num_styles = num_styles;
+                    if (styles_node->children.size() > 1) {
+                        for (const auto &style_child : styles_node->children[1].children) {
+                            sample.style1_fields += style_child.key + "=" + style_child.value + " ";
+                        }
+                    }
+                    diag->samples.push_back(sample);
                 }
             }
         }
 
+        if (locked_styles_mask != 0) items_with_locked_styles++;
         result.push_back({ def_index, num_styles, locked_styles_mask });
+    }
+
+    // Populate diagnostics
+    if (diag) {
+        diag->multi_style_items = multi_style_items;
+        diag->items_with_locked_styles = items_with_locked_styles;
+        diag->style_field_counts = style_field_counts;
     }
 
     return result;
@@ -531,6 +589,7 @@ static std::string GBE_FindDotaVpkPath()
 struct GBE_DotaVpkData {
     std::vector<GBE_DotaItemDef> item_defs;
     GBE_DotaStyleUnlockInfo style_unlock;
+    GBE_DotaStyleDiag style_diag;
 };
 
 static GBE_DotaVpkData GBE_LoadAllDotaItemsFromVpk()
@@ -561,7 +620,7 @@ static GBE_DotaVpkData GBE_LoadAllDotaItemsFromVpk()
     if (!GBE_VdfParser::Parse(items_game_text, root)) return {};
 
     GBE_DotaVpkData data;
-    data.item_defs = GBE_ExtractDotaItemDefs(root);
+    data.item_defs = GBE_ExtractDotaItemDefs(root, &data.style_diag);
     data.style_unlock = GBE_FindStyleUnlockAttributes(root);
     return data;
 }

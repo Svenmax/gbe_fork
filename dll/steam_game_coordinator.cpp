@@ -8406,6 +8406,17 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 vpk_style_unlock = vpk_data.style_unlock;
                 GBE_GC_DebugLog("GC_DOTA_ITEMS", "loaded %zu cosmetic item defs from VPK items_game.txt (style_unlock_attrs=%s)",
                     vpk_item_defs.size(), vpk_style_unlock.found ? "found" : "not_found");
+
+                // Log style diagnostics
+                const auto &sd = vpk_data.style_diag;
+                GBE_GC_DebugLog("GC_DOTA_STYLES", "multi_style_items=%u locked=%u", sd.multi_style_items, sd.items_with_locked_styles);
+                for (const auto &[field_name, count] : sd.style_field_counts) {
+                    GBE_GC_DebugLog("GC_DOTA_STYLES", "  field: %s count=%u", field_name.c_str(), count);
+                }
+                for (const auto &sample : sd.samples) {
+                    GBE_GC_DebugLog("GC_DOTA_STYLES", "  sample def=%u styles=%u style1=[%s]",
+                        sample.def_index, sample.num_styles, sample.style1_fields.c_str());
+                }
             }
         }
 
@@ -8536,6 +8547,61 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
 
             GBE_GC_DebugLog("GC_DOTA_ITEMS", "injected %zu CSOEconItem entries from %zu unique defs (skipped %zu existing, %zu with_style_unlocks)",
                 injected_count, vpk_item_defs.size(), existing_defs.size(), style_unlock_count);
+
+            // Patch existing items (from items.json) with style unlock attributes
+            // Build a map of def_index -> locked_styles_mask for quick lookup
+            if (style_unlock_count > 0) {
+                std::unordered_map<uint32_t, const GBE_DotaItemDef *> def_map;
+                for (const auto &def : vpk_item_defs) {
+                    if (def.locked_styles_mask != 0)
+                        def_map[def.def_index] = &def;
+                }
+
+                size_t patched_count = 0;
+                for (Econ_Item &item : items) {
+                    auto it = def_map.find(item.def);
+                    if (it == def_map.end()) continue;
+                    const GBE_DotaItemDef &def = *it->second;
+
+                    // Check if item already has unlock attributes
+                    bool has_unlock = false;
+                    for (const auto &attr : item.attributes) {
+                        if (attr.def >= 1115u && attr.def <= 1145u) {
+                            has_unlock = true;
+                            break;
+                        }
+                        // Also check dynamically resolved IDs
+                        if (vpk_style_unlock.found) {
+                            for (uint8_t si = 1; si < 32; si++) {
+                                if (vpk_style_unlock.attr_def_index[si] != 0 && attr.def == vpk_style_unlock.attr_def_index[si]) {
+                                    has_unlock = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (has_unlock) break;
+                    }
+
+                    if (!has_unlock) {
+                        for (uint8_t si = 1; si < def.num_styles && si < 32; si++) {
+                            if (def.locked_styles_mask & (1u << si)) {
+                                Econ_Item_Attribute unlock_attr;
+                                unlock_attr.def = vpk_style_unlock.found && vpk_style_unlock.attr_def_index[si] != 0
+                                    ? vpk_style_unlock.attr_def_index[si]
+                                    : (1114u + si);
+                                uint32_t unlock_ts = 1609459200u;
+                                unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&unlock_ts), 4);
+                                unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+                                item.attributes.push_back(unlock_attr);
+                            }
+                        }
+                        patched_count++;
+                    }
+                }
+                if (patched_count > 0) {
+                    GBE_GC_DebugLog("GC_DOTA_ITEMS", "patched %zu existing items with style unlock attributes", patched_count);
+                }
+            }
         }
     }
 
@@ -13977,7 +14043,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
-                    "replying req=%u resp=%u source_job=%llu size=%zu note=7387 selector=%llu minimal zero points account_id=%u",
+                    "replying req=%u resp=%u source_job=%llu size=%zu note=7387 selector=%llu owned=true level=1000 account_id=%u",
                     request_emsg,
                     7388u,
                     static_cast<unsigned long long>(source_job),
