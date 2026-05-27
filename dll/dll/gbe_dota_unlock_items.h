@@ -375,6 +375,8 @@ static bool GBE_IsCosmeticPrefab(const std::string &prefab) {
         "versus_screen",
         "map_effect",
         "courier_effect",
+        // Roshan, Tormentor, Ancient
+        "roshan", "tormentor", "ancient",
     };
 
     // Blacklist: known non-cosmetic prefabs that should never be injected
@@ -475,7 +477,33 @@ static std::vector<GBE_DotaItemDef> GBE_ExtractDotaItemDefs(const GBE_VdfNode &r
         std::string prefab = item_node.get_string("prefab");
         if (prefab.empty()) continue;
 
-        if (!resolve_prefab(prefab)) continue;
+        // Items with player_loadout=1 are equippable cosmetics (e.g. weather effects
+        // with prefab=misc), but still respect the excluded prefabs blacklist.
+        bool has_player_loadout = (item_node.get_string("player_loadout") == "1");
+        bool is_excluded = GBE_IsCosmeticPrefab(prefab) == false && 
+                           prefab.find("league") != std::string::npos; // crude check
+        
+        // Use resolve_prefab for normal path; player_loadout bypasses prefab whitelist
+        // but excluded prefabs (tool, bundle, league, etc.) still block injection.
+        if (!resolve_prefab(prefab) && !has_player_loadout) continue;
+        if (has_player_loadout) {
+            // Still check blacklist
+            bool blacklisted = false;
+            static const std::unordered_set<std::string> bl = {
+                "tool", "bundle", "treasure_chest", "recipe",
+                "tournament", "player_card", "retired_item",
+                "ticket", "league", "passport", "gem",
+                "key", "supply_crate",
+            };
+            size_t s = 0;
+            while (s < prefab.size()) {
+                size_t e = prefab.find(' ', s);
+                if (e == std::string::npos) e = prefab.size();
+                if (bl.count(prefab.substr(s, e - s))) { blacklisted = true; break; }
+                s = e + 1;
+            }
+            if (blacklisted) continue;
+        }
 
         // Count styles and detect locked ones
         uint8_t num_styles = 0;
