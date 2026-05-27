@@ -8515,10 +8515,11 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 item_seq++;
                 injected_count++;
 
-                // Inject sticker quality variants (attr 449 = 22, 23, 24)
-                // Each sticker has Holo/Gold/Signature variants that the client
-                // treats as separate collectible items. These do NOT count against
-                // max_items to avoid displacing other base items.
+                // Inject sticker quality variants (quality field = 22, 23, 24)
+                // Each sticker has Glitter/Holo/Gold variants that the client
+                // treats as separate collectible items. The variant is determined
+                // by CSOEconItem.quality field, not by attributes.
+                // These do NOT count against max_items to avoid displacing other base items.
                 if (def.is_sticker) {
                     static const uint32_t sticker_variant_qualities[] = { 22, 23, 24 };
                     for (uint32_t sq : sticker_variant_qualities) {
@@ -8530,7 +8531,7 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                         variant_item.set_inventory(item_seq);
                         variant_item.set_quantity(1);
                         variant_item.set_level(1);
-                        variant_item.set_quality(4);
+                        variant_item.set_quality(sq); // 22=Glitter, 23=Holo, 24=Gold
                         variant_item.set_flags(0);
                         variant_item.set_origin(0);
                         variant_item.set_in_use(false);
@@ -8539,12 +8540,6 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                         variant_item.set_contains_equipped_state(false);
                         variant_item.set_contains_equipped_state_v2(false);
 
-                        // Set sticker quality attribute (def_index=449)
-                        auto *sq_attr = variant_item.add_attribute();
-                        sq_attr->set_def_index(449u);
-                        std::string sq_bytes(reinterpret_cast<const char *>(&sq), 4);
-                        sq_attr->set_value_bytes(sq_bytes);
-
                         item_object->add_object_data(variant_item.SerializeAsString());
 
                         // In-memory copy
@@ -8552,7 +8547,7 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                         var_mem.id = var_id;
                         var_mem.def = def.def_index;
                         var_mem.level = 1;
-                        var_mem.quality = static_cast<EItemQuality>(4);
+                        var_mem.quality = static_cast<EItemQuality>(sq);
                         var_mem.inv_pos = item_seq;
                         var_mem.quantity = 1;
                         var_mem.flags = 0;
@@ -8560,12 +8555,6 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                         var_mem.in_use = false;
                         var_mem.original_id = var_id;
                         var_mem.style = 0;
-
-                        Econ_Item_Attribute sq_mem_attr;
-                        sq_mem_attr.def = 449u;
-                        sq_mem_attr.value_bytes.assign(reinterpret_cast<const char *>(&sq), 4);
-                        sq_mem_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
-                        var_mem.attributes.push_back(sq_mem_attr);
 
                         items.push_back(var_mem);
                         item_seq++;
