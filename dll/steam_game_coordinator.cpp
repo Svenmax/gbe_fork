@@ -2175,10 +2175,15 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
     GBE_AppendProtoFixed32Field(object_2016, 2u, 0u);
 
     if (include_event_points && account_id != 0u && wrote_owner_event_points) {
-        GBE_AppendDotaLobbyEventPoints(object_2016, 19u, effective_members, account_id, 0u, 0u, true, false, 0u, true);
-        GBE_AppendDotaLobbyEventPoints(object_2016, 26u, effective_members, account_id, 0u, 0u, true, true, 0u, false);
-        GBE_AppendDotaLobbyEventPoints(object_2016, 39u, effective_members, account_id, 0u, 0u, true, true, 0u, false);
-        GBE_AppendDotaLobbyEventPoints(object_2016, 56u, effective_members, account_id, 1000u, 0u, true, true, 1u, false);
+        // Declare ownership for all known Dota 2 event/Battle Pass IDs so that
+        // world items (creep skins, tower skins, weather, etc.) bound to any
+        // historical event are not marked "Unavailable" by the client.
+        // Known event IDs span from ~7 (TI4) through ~56 (TI 2024+).
+        // We iterate a wide range and mark all as owned with a reasonable level.
+        for (uint32 eid = 7; eid <= 60; eid++) {
+            bool include_periodic = (eid == 19u); // only TI7 gets periodic resources
+            GBE_AppendDotaLobbyEventPoints(object_2016, eid, effective_members, account_id, 1000u, 0u, true, true, 1u, include_periodic);
+        }
     }
 }
 
@@ -6071,14 +6076,16 @@ static bool GBE_BuildDotaSubmitPlayerReportResponseV2Payload(const uint8 *reques
 
 static bool GBE_BuildDota7388MinimalResponsePayload(uint32 event_id, uint32 account_id, bool has_request_job, uint64 request_job_id, std::string &message)
 {
+    // Reply with owned=true and a reasonable event level so that
+    // items bound to any event/Battle Pass are not marked "Unavailable".
     std::string body;
-    GBE_AppendProtoVarIntField(body, 1u, 0u);
-    GBE_AppendProtoVarIntField(body, 2u, 0u);
-    GBE_AppendProtoVarIntField(body, 3u, event_id);
-    GBE_AppendProtoVarIntField(body, 4u, 0u);
-    GBE_AppendProtoVarIntField(body, 5u, 0u);
-    GBE_AppendProtoVarIntField(body, 7u, account_id);
-    GBE_AppendProtoVarIntField(body, 8u, 0u);
+    GBE_AppendProtoVarIntField(body, 1u, 1000u);       // total_points
+    GBE_AppendProtoVarIntField(body, 2u, 0u);           // total_premium_points
+    GBE_AppendProtoVarIntField(body, 3u, event_id);     // event_id
+    GBE_AppendProtoVarIntField(body, 4u, 1000u);        // points / event_level
+    GBE_AppendProtoVarIntField(body, 5u, 0u);           // premium_points
+    GBE_AppendProtoVarIntField(body, 7u, account_id);   // account_id
+    GBE_AppendProtoVarIntField(body, 8u, 1u);           // owned = true
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7388u, has_request_job, request_job_id, body, message);
 }
 
@@ -16848,10 +16855,12 @@ void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const
     steam_client->steam_friends->SetRichPresence("status", status ? status : "");
     steam_client->steam_friends->SetRichPresence("steam_display", status ? status : "");
     steam_client->steam_friends->SetRichPresence("num_params", "0");
-    steam_client->steam_friends->SetRichPresence("EventLevel_26", "0");
-    steam_client->steam_friends->SetRichPresence("EventLevel_39", "0");
-    steam_client->steam_friends->SetRichPresence("EventLevel_56", "1");
-    steam_client->steam_friends->SetRichPresence("EventLevel_55", "1");
+    // Declare event levels for all known Battle Pass/event IDs
+    for (int eid = 7; eid <= 60; eid++) {
+        char key[32];
+        snprintf(key, sizeof(key), "EventLevel_%d", eid);
+        steam_client->steam_friends->SetRichPresence(key, "1");
+    }
     const std::string direct_connect_endpoint = include_party
         ? GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect)
         : std::string();
@@ -16896,10 +16905,12 @@ void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
     steam_client->steam_friends->SetRichPresence("status", nullptr);
     steam_client->steam_friends->SetRichPresence("steam_display", nullptr);
     steam_client->steam_friends->SetRichPresence("num_params", nullptr);
-    steam_client->steam_friends->SetRichPresence("EventLevel_26", nullptr);
-    steam_client->steam_friends->SetRichPresence("EventLevel_39", nullptr);
-    steam_client->steam_friends->SetRichPresence("EventLevel_56", nullptr);
-    steam_client->steam_friends->SetRichPresence("EventLevel_55", nullptr);
+    // Clear event level keys for all known event IDs
+    for (int eid = 7; eid <= 60; eid++) {
+        char key[32];
+        snprintf(key, sizeof(key), "EventLevel_%d", eid);
+        steam_client->steam_friends->SetRichPresence(key, nullptr);
+    }
     steam_client->steam_friends->SetRichPresence("connect", nullptr);
     steam_client->steam_friends->SetRichPresence("lobby", nullptr);
     steam_client->steam_friends->SetRichPresence("party", nullptr);
