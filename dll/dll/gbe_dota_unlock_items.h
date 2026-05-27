@@ -366,6 +366,9 @@ static bool GBE_IsCosmeticPrefab(const std::string &prefab) {
         // World items: creeps, towers, HUD skins, kill effects, etc.
         "creep", "creep_skin",
         "tower", "tower_skin",
+        "radiantcreeps", "direcreeps",
+        "radianttowers", "diretowers",
+        "radiantsiegecreeps", "diresiegecreeps",
         "hud_skin",
         "kill_effect", "kill_streak_effect",
         "blink_effect", "teleport_effect", "tp_effect",
