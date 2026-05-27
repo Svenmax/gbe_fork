@@ -9,6 +9,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <fstream>
@@ -283,6 +284,10 @@ struct GBE_DotaItemDef {
     // Bitmask of styles that have "additional_hidden" and need unlock attributes.
     // Bit N set = style N requires unlock. Style 0 is never locked.
     uint32_t locked_styles_mask;
+    // Sticker quality variants (attribute 449). Empty = not a sticker.
+    // Contains unique StickerQuality values found in the item's visuals.
+    // Quality 4 is the base; 22/23/24 are Holo/Gold/Signature variants.
+    std::vector<uint8_t> sticker_qualities;
 };
 
 // Resolved style unlock attribute def_index values.
@@ -554,7 +559,30 @@ static std::vector<GBE_DotaItemDef> GBE_ExtractDotaItemDefs(const GBE_VdfNode &r
         }
 
         if (locked_styles_mask != 0) items_with_locked_styles++;
-        result.push_back({ def_index, num_styles, locked_styles_mask });
+
+        // Detect sticker quality variants from visuals/asset_modifiers
+        std::vector<uint8_t> sticker_quals;
+        if (prefab.find("sticker") != std::string::npos) {
+            const GBE_VdfNode *visuals = item_node.find("visuals");
+            if (visuals) {
+                std::set<uint8_t> seen_quals;
+                for (const auto &vis_child : visuals->children) {
+                    // Look for asset_modifier nodes with StickerQuality
+                    std::string sq = vis_child.get_string("StickerQuality");
+                    if (!sq.empty()) {
+                        try {
+                            uint8_t q = static_cast<uint8_t>(std::stoul(sq));
+                            if (q != 4 && seen_quals.find(q) == seen_quals.end()) {
+                                seen_quals.insert(q);
+                                sticker_quals.push_back(q);
+                            }
+                        } catch (...) {}
+                    }
+                }
+            }
+        }
+
+        result.push_back({ def_index, num_styles, locked_styles_mask, std::move(sticker_quals) });
     }
 
     // Populate diagnostics

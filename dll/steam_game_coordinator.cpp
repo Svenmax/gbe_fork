@@ -8514,6 +8514,64 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
 
                 item_seq++;
                 injected_count++;
+
+                // Inject additional sticker quality variants (attr 449)
+                // Each variant gets a separate CSOEconItem with the same def_index
+                // but a different sticker_quality_table_type attribute value.
+                for (uint8_t sq : def.sticker_qualities) {
+                    if (injected_count >= max_items) break;
+
+                    CSOEconItem variant_item;
+                    uint64_t var_id = (static_cast<uint64_t>(0x40000000u + item_seq) << 32ull) | static_cast<uint64_t>(account_id);
+                    variant_item.set_id(var_id);
+                    variant_item.set_account_id(account_id);
+                    variant_item.set_def_index(def.def_index);
+                    variant_item.set_inventory(item_seq);
+                    variant_item.set_quantity(1);
+                    variant_item.set_level(1);
+                    variant_item.set_quality(4);
+                    variant_item.set_flags(0);
+                    variant_item.set_origin(0);
+                    variant_item.set_in_use(false);
+                    variant_item.set_style(0);
+                    variant_item.set_original_id(var_id);
+                    variant_item.set_contains_equipped_state(false);
+                    variant_item.set_contains_equipped_state_v2(false);
+
+                    // Set sticker quality attribute (def_index=449)
+                    auto *sq_attr = variant_item.add_attribute();
+                    sq_attr->set_def_index(449u);
+                    uint32_t sq_val = static_cast<uint32_t>(sq);
+                    std::string sq_bytes(reinterpret_cast<const char *>(&sq_val), 4);
+                    sq_attr->set_value_bytes(sq_bytes);
+
+                    item_object->add_object_data(variant_item.SerializeAsString());
+
+                    // In-memory copy
+                    Econ_Item var_mem;
+                    var_mem.id = var_id;
+                    var_mem.def = def.def_index;
+                    var_mem.level = 1;
+                    var_mem.quality = static_cast<EItemQuality>(4);
+                    var_mem.inv_pos = item_seq;
+                    var_mem.quantity = 1;
+                    var_mem.flags = 0;
+                    var_mem.origin = 0;
+                    var_mem.in_use = false;
+                    var_mem.original_id = var_id;
+                    var_mem.style = 0;
+
+                    Econ_Item_Attribute sq_mem_attr;
+                    sq_mem_attr.def = 449u;
+                    sq_mem_attr.value_bytes.assign(reinterpret_cast<const char *>(&sq_val), 4);
+                    sq_mem_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+                    var_mem.attributes.push_back(sq_mem_attr);
+
+                    items.push_back(var_mem);
+
+                    item_seq++;
+                    injected_count++;
+                }
             }
 
             GBE_GC_DebugLog("GC_DOTA_ITEMS", "injected %zu CSOEconItem entries from %zu unique defs (skipped %zu existing)",
