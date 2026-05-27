@@ -1211,17 +1211,9 @@ static const uint8 GBE_kDota7198Template[] = {
     0x00, 0x42, 0x0A, 0x08, 0xD8, 0x02, 0x10, 0x00, 0x18, 0x00, 0x20, 0x82, 0x02,
 };
 
-static const uint8 GBE_kDota7388Profile20Template[] = {
-    0xDC, 0x1C, 0x00, 0x80, 0x09, 0x00, 0x00, 0x00, 0x59, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x08, 0x00, 0x10, 0x00, 0x18, 0x20, 0x20, 0x00, 0x28, 0x00, 0x38, 0xF5, 0xED, 0x86, 0x41,
-    0x40, 0x00, 0x50, 0x00,
-};
-
-static const uint8 GBE_kDota7388Profile37Template[] = {
-    0xDC, 0x1C, 0x00, 0x80, 0x09, 0x00, 0x00, 0x00, 0x59, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x08, 0xE8, 0x07, 0x10, 0x00, 0x18, 0x37, 0x20, 0xE8, 0x07, 0x28, 0x00, 0x38, 0xF5, 0xED,
-    0x86, 0x41, 0x40, 0x01, 0x50, 0x00,
-};
+// Removed: GBE_kDota7388Profile20Template (had owned=0, caused "Unavailable")
+// Removed: GBE_kDota7388Profile37Template (had owned=1 but used hardcoded account_id)
+// All 7387->7388 event queries now use GBE_BuildDota7388MinimalResponsePayload.
 
 static const uint8 GBE_kDota8079Template[] = {
     0x8F, 0x1F, 0x00, 0x80, 0x09, 0x00, 0x00, 0x00, 0x59, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -13984,15 +13976,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             uint64 account_id_field = settings->get_local_steam_id().GetAccountID();
             GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2), account_id_field);
 
-            if (profile_selector == 0x20u) {
-                template_bytes = GBE_kDota7388Profile20Template;
-                template_size = sizeof(GBE_kDota7388Profile20Template);
-                response_note = "7387 selector=0x20";
-            } else if (profile_selector == 0x37u) {
-                template_bytes = GBE_kDota7388Profile37Template;
-                template_size = sizeof(GBE_kDota7388Profile37Template);
-                response_note = "7387 selector=0x37";
-            } else {
+            // Always use minimal response with owned=true for ALL event selectors.
+            // Previous code had hardcoded templates for 0x20 (owned=0) and 0x37 (owned=1)
+            // which caused items bound to event 0x20 to show "Unavailable".
+            {
                 std::string response_message;
                 if (!GBE_BuildDota7388MinimalResponsePayload(
                         static_cast<uint32>(profile_selector),
@@ -14017,10 +14004,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 push_incoming_now(7388u | GBE_kProtoMask, response_message);
                 return true;
             }
-
-            response_emsg = 7388;
-            replace_account = true;
-            break;
         }
         case 8078:
             template_bytes = GBE_kDota8079Template;
