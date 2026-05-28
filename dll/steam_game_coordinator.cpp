@@ -488,6 +488,9 @@ static constexpr uint32 GBE_kSteamPersonaState = 766u;
 static constexpr uint32 GBE_kSteamTicketAuthComplete = 5429u;
 static constexpr uint32 GBE_kDotaConductScore = 12000u;
 static constexpr uint32 GBE_kDotaBehaviorLevel = 4u;
+static constexpr uint32 GBE_kDotaPlusOriginalStartDate = 1522540800u; // 2018-04-01 (Plus launch era)
+static constexpr uint32 GBE_kDotaPlusFlags = 1u;
+static constexpr uint32 GBE_kDotaPlusStatusActive = 1u;
 
 static constexpr const char *GBE_kDotaAbandonPersonaStatePrivateLobbyPostgameHex =
     "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112ee0309911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f505249564154455f4c4f424259ba04270a0d737465616d5f646973706c6179121623444f54415f52505f505249564154455f4c4f424259ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348ba0492010a056c6f6262791288016c6f6262795f69643a203239383232343938363432383535303930206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a20226565656522206c6f6262795f747970653a2031c1040000000000000000c9040000000000000000f80400800500880500980501";
@@ -1978,6 +1981,12 @@ static bool GBE_BuildDotaLobbyAdditionalStartupAccountDataPayload(uint32 account
         return true;
 
     GBE_AppendProtoVarIntField(payload, 1u, account_id);
+
+    // CMsgLobbyPlayerPlusSubscriptionData (field 2) - mark as Plus subscriber
+    // Contains repeated HeroBadge entries; empty is valid (no hero badges yet).
+    std::string plus_data;
+    GBE_AppendProtoBytesField(payload, 2u, plus_data);
+
     return true;
 }
 
@@ -2148,7 +2157,7 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
         std::string member_bytes;
         GBE_AppendProtoFixed64Field(member_bytes, 1u, member_steam_id);
         GBE_AppendProtoVarIntField(member_bytes, 9u, 0u);
-        GBE_AppendProtoVarIntField(member_bytes, 11u, 0u);
+        GBE_AppendProtoVarIntField(member_bytes, 11u, 1u); // is_plus_subscriber = true
         GBE_AppendProtoFixed64Field(member_bytes, 12u, 0ull);
         GBE_AppendProtoVarIntField(member_bytes, 13u, 0u);
         if (game_mode != 2u && member.connected)
@@ -2650,6 +2659,34 @@ static bool GBE_RewriteDotaAccountBoundObjectData(const std::string &input, int 
 
     if (!saw_account_id)
         GBE_AppendProtoVarIntField(account_output, 1u, account_id);
+
+    if (type_id == 2012) {
+        // CSODOTAGameAccountPlus: activate Dota Plus subscription.
+        // Keep only field 1 (account_id), rebuild all other fields with active values.
+        std::string plus_output;
+        size_t ao_offset = 0;
+        while (ao_offset < account_output.size()) {
+            uint32 fn = 0, wt = 0;
+            size_t fo = 0, vo = 0, vs = 0, fe = 0;
+            if (!GBE_ReadNextProtoField(
+                    reinterpret_cast<const uint8 *>(account_output.data()),
+                    account_output.size(), ao_offset, fn, wt, fo, vo, vs, fe))
+                return false;
+            if (fn == 1u) {
+                plus_output.append(account_output.data() + fo, fe - fo);
+            }
+            // Skip all other fields; we rebuild them below.
+        }
+        GBE_AppendProtoVarIntField(plus_output, 2u, GBE_kDotaPlusOriginalStartDate);
+        GBE_AppendProtoVarIntField(plus_output, 3u, GBE_kDotaPlusFlags);
+        GBE_AppendProtoVarIntField(plus_output, 4u, GBE_kDotaPlusStatusActive);
+        GBE_AppendProtoVarIntField(plus_output, 5u, 0u);
+        GBE_AppendProtoVarIntField(plus_output, 6u, 0u);
+        GBE_AppendProtoFixed32Field(plus_output, 7u, 1893456000u); // 2030-01-01
+        GBE_AppendProtoFixed64Field(plus_output, 8u, 0ull);
+        output.swap(plus_output);
+        return true;
+    }
 
     if (type_id != 2002) {
         output.swap(account_output);
@@ -3636,6 +3673,12 @@ static bool GBE_RewriteDotaServerStaticLobbyMemberObject(
         if (field_number == 1u && wire_type == 1u) {
             saw_steam_id = true;
             GBE_AppendProtoFixed64Field(output, 1u, steam_id);
+            continue;
+        }
+
+        // Force is_plus_subscriber = true (field 11, varint)
+        if (field_number == 11u && wire_type == 0u) {
+            GBE_AppendProtoVarIntField(output, 11u, 1u);
             continue;
         }
 
@@ -14137,6 +14180,42 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             response_emsg = 9024;
             response_note = "9023->9024";
             break;
+        case 8218: {
+            // CMsgClientToGCGiveTip -> CMsgClientToGCGiveTipResponse
+            // Return result=0 (success) so tipping works in-game.
+            std::string tip_body;
+            GBE_AppendProtoVarIntField(tip_body, 1u, 0u); // result = 0 (success)
+
+            std::string tip_response;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(8219u, has_source_job, source_job, tip_body, tip_response);
+            push_incoming_now(8219u | GBE_kProtoMask, tip_response);
+
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "tip request -> success response source_job=%llu", static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 8879: {
+            // CMsgClientToGCRankRequest -> CMsgGCToClientRankResponse
+            // Return empty first, then with rank data (field 2=10000, field 3=10000)
+            std::string rank_body;
+            GBE_AppendProtoVarIntField(rank_body, 1u, 0u);   // result = success
+            GBE_AppendProtoVarIntField(rank_body, 2u, 10000u); // rank_value
+            GBE_AppendProtoVarIntField(rank_body, 3u, 10000u); // rank_value2
+            GBE_AppendProtoVarIntField(rank_body, 4u, 0u);
+            GBE_AppendProtoVarIntField(rank_body, 5u, 0u);
+
+            std::string rank_response;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(8880u, has_source_job, source_job, rank_body, rank_response);
+            push_incoming_now(8880u | GBE_kProtoMask, rank_response);
+
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "rank request -> response source_job=%llu", static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 8095: {
+            // CMsgPlayerConductScorecardRequest -> suppress (don't reply)
+            // Not replying prevents misleading conduct scorecard popup.
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "conduct scorecard request suppressed source_job=%llu", static_cast<unsigned long long>(source_job));
+            return true;
+        }
         case 2510: {
             // StorePurchaseInit - client wants to buy an item from the store.
             // Parse the request to get item_def_id, then respond with success
