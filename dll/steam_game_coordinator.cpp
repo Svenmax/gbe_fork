@@ -13961,6 +13961,68 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
                 );
             }
+
+            // Also broadcast equipped items via network so the remote server GC
+            // (on the host machine in LAN mode) can build CacheSubscribed for us.
+            // This handles the case where we are a remote player and the server GC
+            // is in a different process.
+            {
+                std::vector<const Econ_Item *> equipped_items;
+                for (const auto &item : items) {
+                    if (!item.equip_states.empty())
+                        equipped_items.push_back(&item);
+                }
+
+                if (!equipped_items.empty()) {
+                    auto response_msg = new GameServer_Items_Messages::InventoryResponse();
+                    response_msg->set_steam_api_call(0);  // 0 = unsolicited push
+
+                    for (const Econ_Item *ep : equipped_items) {
+                        auto new_item = response_msg->add_items();
+                        new_item->set_id(ep->id);
+                        new_item->set_def(ep->def);
+                        new_item->set_level(ep->level);
+                        new_item->set_quality(static_cast<int32>(ep->quality));
+                        new_item->set_inv_pos(ep->inv_pos);
+                        new_item->set_quantity(ep->quantity);
+                        new_item->set_flags(ep->flags);
+                        new_item->set_origin(ep->origin);
+                        new_item->set_original_id(ep->original_id);
+                        new_item->set_in_use(ep->in_use);
+                        new_item->set_style(ep->style);
+
+                        for (const auto &[class_id, slot_id] : ep->equip_states) {
+                            auto new_state = new_item->add_equip_states();
+                            new_state->set_class_id(class_id);
+                            new_state->set_slot_id(slot_id);
+                        }
+
+                        for (const Econ_Item_Attribute &attr : ep->attributes) {
+                            auto new_attr = new_item->add_attributes();
+                            new_attr->set_def(attr.def);
+                            new_attr->set_value(attr.value);
+                            new_attr->set_value_bytes(attr.value_bytes);
+                        }
+                    }
+
+                    auto gameserver_items_msg = new GameServer_Items_Messages();
+                    gameserver_items_msg->set_type(GameServer_Items_Messages::Response_Inventory);
+                    gameserver_items_msg->set_is_gc(true);
+                    gameserver_items_msg->set_allocated_inventory_response(response_msg);
+
+                    Common_Message msg{};
+                    msg.set_allocated_gameserver_items_messages(gameserver_items_msg);
+                    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+                    network->sendToAllGameservers(&msg, true);
+
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "broadcast equipped items to gameservers via network: steam64=%llu equipped_items=%zu",
+                        static_cast<unsigned long long>(settings->get_local_steam_id().ConvertToUint64()),
+                        equipped_items.size()
+                    );
+                }
+            }
         }
 
         return true;
@@ -17769,19 +17831,25 @@ void Steam_Game_Coordinator::network_callback_inventory_response(Common_Message 
     const auto &response_msg = msg->gameserver_items_messages().inventory_response();
     SteamAPICall_t api_call = response_msg.steam_api_call();
 
-    // Find this pending request.
-    auto it = std::find_if(
-        pending_items_requests.begin(), pending_items_requests.end(),
-        [=](const RequestInventory &item) {
-            return item.steam_api_call == response_msg.steam_api_call() &&
-                item.steam_id == user_steamid;
+    // For unsolicited pushes (api_call == 0, e.g. from Dota 2 equip broadcast),
+    // skip the pending request check.
+    bool is_unsolicited = (api_call == 0);
+
+    if (!is_unsolicited) {
+        // Find this pending request.
+        auto it = std::find_if(
+            pending_items_requests.begin(), pending_items_requests.end(),
+            [=](const RequestInventory &item) {
+                return item.steam_api_call == response_msg.steam_api_call() &&
+                    item.steam_id == user_steamid;
+            }
+        );
+        if (pending_items_requests.end() == it) {
+            PRINT_DEBUG("error got player inventory but pending request timedout/removed (doesn't exist)");
+            return;
         }
-    );
-    if (pending_items_requests.end() == it) {
-        PRINT_DEBUG("error got player inventory but pending request timedout/removed (doesn't exist)");
-        return;
+        pending_items_requests.erase(it);
     }
-    pending_items_requests.erase(it);
 
     auto &items = all_user_items[user_steamid];
     items.clear();
@@ -18079,6 +18147,75 @@ void Steam_Game_Coordinator::RunCallbacks()
 
     if (!GBE_MaybeHandleDotaPracticeLobbyKicked("run_callbacks_generic_lobby_members_changed"))
         GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("run_callbacks_generic_lobby_members_changed");
+
+    // [Dota 2 LAN] Once per match, when the client detects an active lobby with
+    // a server, broadcast equipped items to the gameserver so it can build
+    // CacheSubscribed for this player.  This handles items equipped in the armory
+    // before the game starts (when no gameserver existed yet to receive them).
+    if (!is_server && gc_profile == GC_PROFILE_DOTA2 &&
+        GBE_local_lobby.active && GBE_local_lobby.server_id != 0 && GBE_local_lobby.state >= 1u) {
+        static uint64 s_last_broadcast_match_id = 0;
+        if (s_last_broadcast_match_id != GBE_local_lobby.match_id && GBE_local_lobby.match_id != 0) {
+            s_last_broadcast_match_id = GBE_local_lobby.match_id;
+
+            std::vector<const Econ_Item *> equipped_items;
+            for (const auto &item : items) {
+                if (!item.equip_states.empty())
+                    equipped_items.push_back(&item);
+            }
+
+            if (!equipped_items.empty()) {
+                auto response_msg = new GameServer_Items_Messages::InventoryResponse();
+                response_msg->set_steam_api_call(0);  // unsolicited push
+
+                for (const Econ_Item *ep : equipped_items) {
+                    auto new_item = response_msg->add_items();
+                    new_item->set_id(ep->id);
+                    new_item->set_def(ep->def);
+                    new_item->set_level(ep->level);
+                    new_item->set_quality(static_cast<int32>(ep->quality));
+                    new_item->set_inv_pos(ep->inv_pos);
+                    new_item->set_quantity(ep->quantity);
+                    new_item->set_flags(ep->flags);
+                    new_item->set_origin(ep->origin);
+                    new_item->set_original_id(ep->original_id);
+                    new_item->set_in_use(ep->in_use);
+                    new_item->set_style(ep->style);
+
+                    for (const auto &[class_id, slot_id] : ep->equip_states) {
+                        auto new_state = new_item->add_equip_states();
+                        new_state->set_class_id(class_id);
+                        new_state->set_slot_id(slot_id);
+                    }
+
+                    for (const Econ_Item_Attribute &attr : ep->attributes) {
+                        auto new_attr = new_item->add_attributes();
+                        new_attr->set_def(attr.def);
+                        new_attr->set_value(attr.value);
+                        new_attr->set_value_bytes(attr.value_bytes);
+                    }
+                }
+
+                auto gameserver_items_msg = new GameServer_Items_Messages();
+                gameserver_items_msg->set_type(GameServer_Items_Messages::Response_Inventory);
+                gameserver_items_msg->set_is_gc(true);
+                gameserver_items_msg->set_allocated_inventory_response(response_msg);
+
+                Common_Message msg{};
+                msg.set_allocated_gameserver_items_messages(gameserver_items_msg);
+                msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+                network->sendToAllGameservers(&msg, true);
+
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "broadcast initial equipped items to gameservers: steam64=%llu equipped_items=%zu match_id=%llu",
+                    static_cast<unsigned long long>(settings->get_local_steam_id().ConvertToUint64()),
+                    equipped_items.size(),
+                    static_cast<unsigned long long>(GBE_local_lobby.match_id)
+                );
+            }
+        }
+    }
 
     auto due_time = [](const GC_Message &message) {
         return message.created + std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(std::chrono::duration<double>(message.post_in));
