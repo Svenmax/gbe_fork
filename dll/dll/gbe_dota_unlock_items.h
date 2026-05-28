@@ -389,6 +389,8 @@ static bool GBE_IsCosmeticPrefab(const std::string &prefab) {
         "courier_wearable", "showcase_decoration",
         "default_item",
         "summons", "head_effect", "death_effect",
+        // Misc items: charms, collector pins, relics, etc.
+        "misc",
     };
 
     // Blacklist: known non-cosmetic prefabs that should never be injected
@@ -502,10 +504,10 @@ static std::vector<GBE_DotaItemDef> GBE_ExtractDotaItemDefs(const GBE_VdfNode &r
             // Still check blacklist
             bool blacklisted = false;
             static const std::unordered_set<std::string> bl = {
-                "treasure_chest", "recipe",
+                "recipe",
                 "tournament", "player_card", "retired_item",
                 "ticket", "league", "passport", "gem",
-                "key", "supply_crate",
+                "supply_crate",
             };
             size_t s = 0;
             while (s < prefab.size()) {
