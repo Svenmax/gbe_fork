@@ -14667,6 +14667,187 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             );
             return true;
         }
+        case 1092: {
+            // k_EMsgGCRequestCrateItems -> k_EMsgGCRequestCrateItemsResponse (1093)
+            // Client asks what items are in a crate. Return success with empty lists;
+            // the client already knows the loot list from its local items_game.txt.
+            uint32 crate_def = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe)) break;
+                    if (fn == 1u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        crate_def = static_cast<uint32>(v);
+                    }
+                }
+            }
+            // CMsgRequestCrateItemsResponse: field 1 = response (0=Succeeded)
+            std::string resp_body;
+            GBE_AppendProtoVarIntField(resp_body, 1u, 0u); // k_Succeeded
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(1093u, has_source_job, source_job, resp_body, response_message);
+            push_incoming_now(1093u | GBE_kProtoMask, response_message);
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "RequestCrateItems -> success crate_def=%u source_job=%llu",
+                crate_def, static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 1025: {
+            // k_EMsgGCUseItemRequest -> k_EMsgGCUseItemResponse (1026)
+            // Client wants to "use" an item (open a treasure, activate something).
+            // Parse item_id from field 1 (fixed64 in the old format, or varint).
+            uint64 use_item_id = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe)) break;
+                    if (fn == 1u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        use_item_id = v;
+                    } else if (fn == 1u && wt == 1u) {
+                        // fixed64
+                        if (vo + 8 <= body_size) {
+                            memcpy(&use_item_id, body + vo, 8);
+                        }
+                    }
+                }
+            }
+            // Return k_EGCMsgUseItemResponse_ItemUsed_ItemsGranted (4)
+            // The response is a simple varint: field 1 = EGCMsgUseItemResponse
+            std::string resp_body;
+            GBE_AppendProtoVarIntField(resp_body, 1u, 4u); // ItemUsed_ItemsGranted
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(1026u, has_source_job, source_job, resp_body, response_message);
+            push_incoming_now(1026u | GBE_kProtoMask, response_message);
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "UseItemRequest -> ItemUsed_ItemsGranted item_id=0x%llx source_job=%llu",
+                static_cast<unsigned long long>(use_item_id), static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 2574: {
+            // k_EMsgClientToGCUnlockCrate -> k_EMsgClientToGCUnlockCrateResponse (2575)
+            // Client wants to open a treasure chest.
+            // Parse: field 1 = crate_item_id (varint), field 2 = key_item_id (varint)
+            uint64 crate_item_id = 0;
+            uint64 key_item_id = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe)) break;
+                    if (fn == 1u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        crate_item_id = v;
+                    } else if (fn == 2u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        key_item_id = v;
+                    }
+                }
+            }
+            // CMsgClientToGCUnlockCrateResponse: field 1 = result (EGCMsgResponse, 0=OK)
+            // field 2 = granted_items (repeated Item sub-message, empty for now)
+            std::string resp_body;
+            GBE_AppendProtoVarIntField(resp_body, 1u, 0u); // k_EGCMsgResponseOK
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(2575u, has_source_job, source_job, resp_body, response_message);
+            push_incoming_now(2575u | GBE_kProtoMask, response_message);
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "UnlockCrate -> OK crate_id=0x%llx key_id=0x%llx source_job=%llu",
+                static_cast<unsigned long long>(crate_item_id),
+                static_cast<unsigned long long>(key_item_id),
+                static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 2576: {
+            // k_EMsgClientToGCUnpackBundle -> k_EMsgClientToGCUnpackBundleResponse (2567)
+            // Client wants to unpack a bundle item.
+            // Parse: field 1 = item_id (varint)
+            uint64 bundle_item_id = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe)) break;
+                    if (fn == 1u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        bundle_item_id = v;
+                    }
+                }
+            }
+            // CMsgClientToGCUnpackBundleResponse:
+            // field 1 = result (varint, but note: this is actually inside a sub-message in some versions)
+            // field 2 = response enum (0 = k_UnpackBundle_Succeeded)
+            std::string resp_body;
+            GBE_AppendProtoVarIntField(resp_body, 2u, 0u); // k_UnpackBundle_Succeeded
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(2567u, has_source_job, source_job, resp_body, response_message);
+            push_incoming_now(2567u | GBE_kProtoMask, response_message);
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "UnpackBundle -> Succeeded bundle_id=0x%llx source_job=%llu",
+                static_cast<unsigned long long>(bundle_item_id),
+                static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 8260: {
+            // k_EMsgClientToGCClaimEventActionUsingItem -> k_EMsgClientToGCClaimEventActionUsingItemResponse (8261)
+            // Similar to 8209 but uses an item. Parse event_id, action_id, item_id.
+            uint32 claim_event_id = 0;
+            uint32 claim_action_id = 0;
+            uint64 claim_item_id = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe)) break;
+                    if (fn == 1u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        claim_event_id = static_cast<uint32>(v);
+                    } else if (fn == 2u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        claim_action_id = static_cast<uint32>(v);
+                    } else if (fn == 3u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        claim_item_id = v;
+                    }
+                }
+            }
+            // CMsgClientToGCClaimEventActionUsingItemResponse:
+            // field 1 = action_results (CMsgDOTAClaimEventActionResponse sub-message)
+            //   sub field 1 = result (0=Success)
+            //   sub field 3 = action_id
+            std::string action_results;
+            GBE_AppendProtoVarIntField(action_results, 1u, 0u); // result = Success
+            std::string reward_data;
+            GBE_AppendProtoVarIntField(reward_data, 1u, 0u);
+            GBE_AppendProtoVarIntField(reward_data, 2u, 0u);
+            GBE_AppendProtoVarIntField(reward_data, 3u, 0u);
+            GBE_AppendProtoVarIntField(reward_data, 5u, claim_action_id);
+            GBE_AppendProtoBytesField(action_results, 2u, reward_data);
+            GBE_AppendProtoVarIntField(action_results, 3u, claim_action_id);
+
+            std::string resp_body;
+            GBE_AppendProtoBytesField(resp_body, 1u, action_results); // action_results sub-message
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(8261u, has_source_job, source_job, resp_body, response_message);
+            push_incoming_now(8261u | GBE_kProtoMask, response_message);
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "ClaimEventActionUsingItem -> success event=%u action=%u item=0x%llx source_job=%llu",
+                claim_event_id, claim_action_id,
+                static_cast<unsigned long long>(claim_item_id),
+                static_cast<unsigned long long>(source_job));
+            return true;
+        }
         default:
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
