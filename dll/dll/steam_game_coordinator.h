@@ -139,6 +139,8 @@ public ISteamGameCoordinator
         std::string broadcast_description;
         std::string broadcast_language_code;
         std::string pass_key;
+        uint64 tv_secret_code{};
+        uint32 tv_port{};
         bool has_cache_version{};
         uint64 cache_version{};
         bool has_cache_service_id{};

@@ -120,6 +120,8 @@ static constexpr const char *GBE_kDotaGenericLobbyMatchIdKey = "gbe_dota_match_i
 static constexpr const char *GBE_kDotaGenericLobbyServerIdKey = "gbe_dota_server_id";
 static constexpr const char *GBE_kDotaGenericLobbyConnectKey = "gbe_dota_connect";
 static constexpr const char *GBE_kDotaGenericLobbyGameStartTimeKey = "gbe_dota_game_start_time";
+static constexpr const char *GBE_kDotaGenericLobbyTvSecretCodeKey = "gbe_dota_tv_secret_code";
+static constexpr const char *GBE_kDotaGenericLobbyTvPortKey = "gbe_dota_tv_port";
 static constexpr const char *GBE_kDotaGenericLobbyMemberTeamKey = "gbe_dota_member_team";
 static constexpr const char *GBE_kDotaGenericLobbyMemberSlotKey = "gbe_dota_member_slot";
 static constexpr const char *GBE_kDotaGenericLobbyMemberHeroKey = "gbe_dota_member_hero";
@@ -11292,6 +11294,10 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey, std::to_string(GBE_local_lobby.server_id).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyConnectKey, normalized_connect.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStartTimeKey, std::to_string(GBE_local_lobby.game_start_time).c_str());
+    if (GBE_local_lobby.tv_secret_code != 0)
+        steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyTvSecretCodeKey, std::to_string(GBE_local_lobby.tv_secret_code).c_str());
+    if (GBE_local_lobby.tv_port != 0)
+        steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyTvPortKey, std::to_string(GBE_local_lobby.tv_port).c_str());
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -11441,6 +11447,10 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
         owner.connected = snapshot.owner_connected;
         if (owner_in_generic_members || generic_members.empty())
             GBE_UpsertDotaLobbyMember(snapshot.members, owner);
+
+        // Read SourceTV credentials from generic lobby data
+        snapshot.tv_secret_code = GBE_ParseUint64OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyTvSecretCodeKey));
+        snapshot.tv_port = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyTvPortKey));
 
         snapshots.push_back(snapshot);
     }
@@ -13703,6 +13713,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 23u), allow_custom_games);
         GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 24u), build_version);
 
+        // Extract tv_secret_code from field 18 (fixed64) - needed for SourceTV spectating
+        uint64 tv_secret_code = 0;
+        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 18u), tv_secret_code);
+
         const uint32 connect_ip = public_ip != 0 ? public_ip : private_ip;
         const std::string runtime_connect = GBE_FormatDotaPracticeLobbyConnectFromIp(connect_ip);
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_ShouldPreferDotaLobbyConnectUpdate(GBE_local_lobby.connect, runtime_connect)) {
@@ -13740,6 +13754,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         );
 
         GBE_TrySyncDotaLobbyServerIdFromGameServer("4508_game_server_info");
+
+        // Store tv_secret_code and tv_port for SourceTV spectating
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+            if (tv_secret_code != 0)
+                GBE_local_lobby.tv_secret_code = tv_secret_code;
+            if (tv_port != 0)
+                GBE_local_lobby.tv_port = tv_port;
+            GBE_PublishDotaPracticeLobbyMetadata("4508_game_server_info");
+        }
+
         if (GBE_HasDotaLaunchServerSetupSync())
             GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseSetupSynced, "4508_game_server_info");
 
@@ -14340,6 +14364,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             // Parse SourceTV address from lobby connect string (ip:port -> ip, port+5)
             uint32 source_tv_addr = 0;
             uint32 source_tv_port = 27020; // default SourceTV port
+            uint64 tv_secret_code = 0;
             std::string connect_str;
             if (GBE_shared_dota_lobby_state.valid && !GBE_shared_dota_lobby_state.connect.empty()) {
                 connect_str = GBE_shared_dota_lobby_state.connect;
@@ -14349,10 +14374,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 for (const auto &snap : snapshots) {
                     if (snap.game_state >= 1u && snap.server_id != 0 && !snap.connect.empty()) {
                         connect_str = snap.connect;
+                        if (snap.tv_secret_code != 0)
+                            tv_secret_code = snap.tv_secret_code;
+                        if (snap.tv_port != 0)
+                            source_tv_port = snap.tv_port;
                         break;
                     }
                 }
             }
+            // If we have local lobby tv_secret_code (host side), use it
+            if (tv_secret_code == 0 && GBE_local_lobby.tv_secret_code != 0)
+                tv_secret_code = GBE_local_lobby.tv_secret_code;
+            if (GBE_local_lobby.tv_port != 0)
+                source_tv_port = GBE_local_lobby.tv_port;
             if (!connect_str.empty()) {
                 size_t colon = connect_str.find(':');
                 std::string ip_str = (colon != std::string::npos) ? connect_str.substr(0, colon) : connect_str;
@@ -14390,8 +14424,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_AppendProtoVarIntField(ready_body, 4u, source_tv_port);
                 GBE_AppendProtoFixed64Field(ready_body, 5u, watch_server_steamid); // game_server_steamid
                 GBE_AppendProtoFixed64Field(ready_body, 6u, watch_server_steamid); // watch_server_steamid
-                // Generate a deterministic secret code from server steamid
-                uint64 secret_code = watch_server_steamid ^ 0x0514D449EDC24001ULL;
+                // Use real tv_secret_code from host's 4508 if available, otherwise fallback
+                uint64 secret_code = (tv_secret_code != 0) ? tv_secret_code : (watch_server_steamid ^ 0x0514D449EDC24001ULL);
                 GBE_AppendProtoFixed64Field(ready_body, 7u, secret_code); // watch_tv_unique_secret_code
                 std::string ready_msg;
                 GBE_BuildDotaJobReplyOrZeroHeaderPayload(7092u, false, 0, ready_body, ready_msg);
@@ -17339,6 +17373,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         // Parse SourceTV address from lobby connect string
         uint32 source_tv_addr = 0;
         uint32 source_tv_port = 27020;
+        uint64 tv_secret_code_w = 0;
         std::string connect_str_w;
         if (GBE_shared_dota_lobby_state.valid && !GBE_shared_dota_lobby_state.connect.empty()) {
             connect_str_w = GBE_shared_dota_lobby_state.connect;
@@ -17347,10 +17382,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
             for (const auto &snap : snapshots) {
                 if (snap.game_state >= 1u && snap.server_id != 0 && !snap.connect.empty()) {
                     connect_str_w = snap.connect;
+                    if (snap.tv_secret_code != 0)
+                        tv_secret_code_w = snap.tv_secret_code;
+                    if (snap.tv_port != 0)
+                        source_tv_port = snap.tv_port;
                     break;
                 }
             }
         }
+        if (tv_secret_code_w == 0 && GBE_local_lobby.tv_secret_code != 0)
+            tv_secret_code_w = GBE_local_lobby.tv_secret_code;
+        if (GBE_local_lobby.tv_port != 0)
+            source_tv_port = GBE_local_lobby.tv_port;
         if (!connect_str_w.empty()) {
             size_t colon = connect_str_w.find(':');
             std::string ip_str = (colon != std::string::npos) ? connect_str_w.substr(0, colon) : connect_str_w;
@@ -17382,7 +17425,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         GBE_AppendProtoVarIntField(ready_body, 4u, source_tv_port);
         GBE_AppendProtoFixed64Field(ready_body, 5u, watch_server_steamid);
         GBE_AppendProtoFixed64Field(ready_body, 6u, watch_server_steamid);
-        uint64 secret_code = watch_server_steamid ^ 0x0514D449EDC24001ULL;
+        uint64 secret_code = (tv_secret_code_w != 0) ? tv_secret_code_w : (watch_server_steamid ^ 0x0514D449EDC24001ULL);
         GBE_AppendProtoFixed64Field(ready_body, 7u, secret_code);
         std::string ready_inner;
         GBE_BuildDotaJobReplyOrZeroHeaderPayload(7092u, false, 0, ready_body, ready_inner);
