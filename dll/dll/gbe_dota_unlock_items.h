@@ -637,6 +637,8 @@ struct GBE_DotaLootListData {
     std::unordered_map<std::string, std::vector<std::string>> loot_lists;
     // treasure def_index -> loot_list_name (from "treasure loot list" static attribute)
     std::unordered_map<uint32_t, std::string> treasure_to_loot_list;
+    // tool def_index -> loot_list_name (from "tool.usage.loot_list")
+    std::unordered_map<uint32_t, std::string> tool_to_loot_list;
     // bundle def_index -> list of contained item names (from "bundle" sub-node)
     std::unordered_map<uint32_t, std::vector<std::string>> bundle_contents;
 };
@@ -686,6 +688,18 @@ static GBE_DotaLootListData GBE_ExtractLootListData(const GBE_VdfNode &root)
                 }
                 if (!contents.empty()) {
                     data.bundle_contents[def_index] = std::move(contents);
+                }
+            }
+
+            // Check for tool.usage.loot_list (gem packs, gifts, etc.)
+            const GBE_VdfNode *tool_node = item.find("tool");
+            if (tool_node) {
+                const GBE_VdfNode *usage_node = tool_node->find("usage");
+                if (usage_node) {
+                    std::string tool_loot_list = usage_node->get_string("loot_list");
+                    if (!tool_loot_list.empty()) {
+                        data.tool_to_loot_list[def_index] = tool_loot_list;
+                    }
                 }
             }
         }

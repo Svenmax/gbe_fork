@@ -8445,9 +8445,10 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 vpk_item_defs = std::move(vpk_data.item_defs);
                 vpk_style_unlock = vpk_data.style_unlock;
                 GBE_vpk_loot_data = std::move(vpk_data.loot_data);
-                GBE_GC_DebugLog("GC_DOTA_ITEMS", "loaded %zu cosmetic item defs from VPK items_game.txt (style_unlock_attrs=%s loot_lists=%zu treasures=%zu bundles=%zu)",
+                GBE_GC_DebugLog("GC_DOTA_ITEMS", "loaded %zu cosmetic item defs from VPK items_game.txt (style_unlock_attrs=%s loot_lists=%zu treasures=%zu tools=%zu bundles=%zu)",
                     vpk_item_defs.size(), vpk_style_unlock.found ? "found" : "not_found",
-                    GBE_vpk_loot_data.loot_lists.size(), GBE_vpk_loot_data.treasure_to_loot_list.size(), GBE_vpk_loot_data.bundle_contents.size());
+                    GBE_vpk_loot_data.loot_lists.size(), GBE_vpk_loot_data.treasure_to_loot_list.size(),
+                    GBE_vpk_loot_data.tool_to_loot_list.size(), GBE_vpk_loot_data.bundle_contents.size());
 
                 // Log style diagnostics
                 const auto &sd = vpk_data.style_diag;
@@ -14739,9 +14740,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             }
             // Try to open as treasure: look up loot list
             uint32 granted_def = 0;
+            std::string resolved_loot_list;
             auto tll_it = GBE_vpk_loot_data.treasure_to_loot_list.find(item_def);
             if (tll_it != GBE_vpk_loot_data.treasure_to_loot_list.end()) {
-                auto ll_it = GBE_vpk_loot_data.loot_lists.find(tll_it->second);
+                resolved_loot_list = tll_it->second;
+            } else {
+                // Try tool.usage.loot_list path (gem packs, gifts, etc.)
+                auto tool_it = GBE_vpk_loot_data.tool_to_loot_list.find(item_def);
+                if (tool_it != GBE_vpk_loot_data.tool_to_loot_list.end()) {
+                    resolved_loot_list = tool_it->second;
+                }
+            }
+            if (!resolved_loot_list.empty()) {
+                auto ll_it = GBE_vpk_loot_data.loot_lists.find(resolved_loot_list);
                 if (ll_it != GBE_vpk_loot_data.loot_lists.end() && !ll_it->second.empty()) {
                     // Pick random item from loot list
                     size_t idx = static_cast<size_t>(rand()) % ll_it->second.size();
