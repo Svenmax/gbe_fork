@@ -627,6 +627,92 @@ static std::string GBE_FindDotaVpkPath()
 }
 
 // ============================================================================
+// Loot List / Treasure / Bundle Data
+// ============================================================================
+
+struct GBE_DotaLootListData {
+    // name -> def_index mapping (from items section, key=item "name" field)
+    std::unordered_map<std::string, uint32_t> name_to_def;
+    // loot_lists: loot_list_name -> list of item/set names (normal drops only, no escalating)
+    std::unordered_map<std::string, std::vector<std::string>> loot_lists;
+    // treasure def_index -> loot_list_name (from "treasure loot list" static attribute)
+    std::unordered_map<uint32_t, std::string> treasure_to_loot_list;
+    // bundle def_index -> list of contained item names (from "bundle" sub-node)
+    std::unordered_map<uint32_t, std::vector<std::string>> bundle_contents;
+};
+
+static GBE_DotaLootListData GBE_ExtractLootListData(const GBE_VdfNode &root)
+{
+    GBE_DotaLootListData data;
+
+    const GBE_VdfNode *items_game = root.find("items_game");
+    if (!items_game) {
+        for (const auto &c : root.children) {
+            if (c.key == "items_game") { items_game = &c; break; }
+        }
+    }
+    if (!items_game) return data;
+
+    // 1. Build name -> def_index map from items section
+    const GBE_VdfNode *items_node = items_game->find("items");
+    if (items_node) {
+        for (const auto &item : items_node->children) {
+            uint32_t def_index = 0;
+            try { def_index = static_cast<uint32_t>(std::stoul(item.key)); } catch (...) { continue; }
+            if (def_index == 0) continue;
+
+            std::string name = item.get_string("name");
+            if (!name.empty()) {
+                data.name_to_def[name] = def_index;
+            }
+
+            // Check for treasure loot list attribute
+            const GBE_VdfNode *static_attrs = item.find("static_attributes");
+            if (static_attrs) {
+                std::string loot_list_name = static_attrs->get_string("treasure loot list");
+                if (!loot_list_name.empty()) {
+                    data.treasure_to_loot_list[def_index] = loot_list_name;
+                }
+            }
+
+            // Check for bundle contents
+            const GBE_VdfNode *bundle_node = item.find("bundle");
+            if (bundle_node) {
+                std::vector<std::string> contents;
+                for (const auto &entry : bundle_node->children) {
+                    if (!entry.key.empty()) {
+                        contents.push_back(entry.key);
+                    }
+                }
+                if (!contents.empty()) {
+                    data.bundle_contents[def_index] = std::move(contents);
+                }
+            }
+        }
+    }
+
+    // 2. Parse loot_lists section
+    const GBE_VdfNode *loot_lists_node = items_game->find("loot_lists");
+    if (loot_lists_node) {
+        for (const auto &ll : loot_lists_node->children) {
+            std::vector<std::string> entries;
+            for (const auto &entry : ll.children) {
+                // Skip special sub-nodes like "additional_drop", "escalating_chance_drop_by_rarity"
+                if (entry.children.empty() && !entry.key.empty()) {
+                    // Normal drop entry: key is item/set name, value is weight
+                    entries.push_back(entry.key);
+                }
+            }
+            if (!entries.empty()) {
+                data.loot_lists[ll.key] = std::move(entries);
+            }
+        }
+    }
+
+    return data;
+}
+
+// ============================================================================
 // Main Entry Point: Load All Dota Items from VPK
 // ============================================================================
 
@@ -634,6 +720,7 @@ struct GBE_DotaVpkData {
     std::vector<GBE_DotaItemDef> item_defs;
     GBE_DotaStyleUnlockInfo style_unlock;
     GBE_DotaStyleDiag style_diag;
+    GBE_DotaLootListData loot_data;
 };
 
 static GBE_DotaVpkData GBE_LoadAllDotaItemsFromVpk()
@@ -666,6 +753,7 @@ static GBE_DotaVpkData GBE_LoadAllDotaItemsFromVpk()
     GBE_DotaVpkData data;
     data.item_defs = GBE_ExtractDotaItemDefs(root, &data.style_diag);
     data.style_unlock = GBE_FindStyleUnlockAttributes(root);
+    data.loot_data = GBE_ExtractLootListData(root);
     return data;
 }
 

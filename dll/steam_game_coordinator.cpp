@@ -275,6 +275,7 @@ struct GBE_DotaGenericLobbyEntry {
 static GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 static bool GBE_pending_dota_normal_signout_finalize_after_25 = false;
 static uint64 GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+static GBE_DotaLootListData GBE_vpk_loot_data;
 
 // --- Dota reconnect shared state ---
 std::atomic<bool> GBE_dota_reconnect_eligible{true};
@@ -8443,8 +8444,10 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 auto vpk_data = GBE_LoadAllDotaItemsFromVpk();
                 vpk_item_defs = std::move(vpk_data.item_defs);
                 vpk_style_unlock = vpk_data.style_unlock;
-                GBE_GC_DebugLog("GC_DOTA_ITEMS", "loaded %zu cosmetic item defs from VPK items_game.txt (style_unlock_attrs=%s)",
-                    vpk_item_defs.size(), vpk_style_unlock.found ? "found" : "not_found");
+                GBE_vpk_loot_data = std::move(vpk_data.loot_data);
+                GBE_GC_DebugLog("GC_DOTA_ITEMS", "loaded %zu cosmetic item defs from VPK items_game.txt (style_unlock_attrs=%s loot_lists=%zu treasures=%zu bundles=%zu)",
+                    vpk_item_defs.size(), vpk_style_unlock.found ? "found" : "not_found",
+                    GBE_vpk_loot_data.loot_lists.size(), GBE_vpk_loot_data.treasure_to_loot_list.size(), GBE_vpk_loot_data.bundle_contents.size());
 
                 // Log style diagnostics
                 const auto &sd = vpk_data.style_diag;
@@ -14669,8 +14672,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         }
         case 1092: {
             // k_EMsgGCRequestCrateItems -> k_EMsgGCRequestCrateItemsResponse (1093)
-            // Client asks what items are in a crate. Return success with empty lists;
-            // the client already knows the loot list from its local items_game.txt.
+            // Client asks what items are in a crate. Parse crate_item_def, look up
+            // loot list, return the def_indexes of items in the loot list.
             uint32 crate_def = 0;
             {
                 size_t pos = 0;
@@ -14685,9 +14688,22 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     }
                 }
             }
-            // CMsgRequestCrateItemsResponse: field 1 = response (0=Succeeded)
+            // Build response with item_defs from loot list
             std::string resp_body;
             GBE_AppendProtoVarIntField(resp_body, 1u, 0u); // k_Succeeded
+            // Look up loot list for this treasure
+            auto tll_it = GBE_vpk_loot_data.treasure_to_loot_list.find(crate_def);
+            if (tll_it != GBE_vpk_loot_data.treasure_to_loot_list.end()) {
+                auto ll_it = GBE_vpk_loot_data.loot_lists.find(tll_it->second);
+                if (ll_it != GBE_vpk_loot_data.loot_lists.end()) {
+                    for (const auto &entry_name : ll_it->second) {
+                        auto def_it = GBE_vpk_loot_data.name_to_def.find(entry_name);
+                        if (def_it != GBE_vpk_loot_data.name_to_def.end()) {
+                            GBE_AppendProtoVarIntField(resp_body, 2u, def_it->second); // item_defs
+                        }
+                    }
+                }
+            }
             std::string response_message;
             GBE_BuildDotaJobReplyOrZeroHeaderPayload(1093u, has_source_job, source_job, resp_body, response_message);
             push_incoming_now(1093u | GBE_kProtoMask, response_message);
@@ -14697,8 +14713,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         }
         case 1025: {
             // k_EMsgGCUseItemRequest -> k_EMsgGCUseItemResponse (1026)
-            // Client wants to "use" an item (open a treasure, activate something).
-            // Parse item_id from field 1 (fixed64 in the old format, or varint).
+            // Client wants to "use" an item (open a treasure).
+            // Find the item in inventory, get its def_index, look up loot list,
+            // pick a random item, grant it, then respond.
             uint64 use_item_id = 0;
             {
                 size_t pos = 0;
@@ -14711,28 +14728,90 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         GBE_ReadVarUint64(body, body_size, tmp, v);
                         use_item_id = v;
                     } else if (fn == 1u && wt == 1u) {
-                        // fixed64
-                        if (vo + 8 <= body_size) {
-                            memcpy(&use_item_id, body + vo, 8);
-                        }
+                        if (vo + 8 <= body_size) memcpy(&use_item_id, body + vo, 8);
                     }
                 }
             }
-            // Return k_EGCMsgUseItemResponse_ItemUsed_ItemsGranted (4)
-            // The response is a simple varint: field 1 = EGCMsgUseItemResponse
+            // Find item def_index from inventory
+            uint32 item_def = 0;
+            for (const auto &inv_item : items) {
+                if (inv_item.id == use_item_id) { item_def = inv_item.def; break; }
+            }
+            // Try to open as treasure: look up loot list
+            uint32 granted_def = 0;
+            auto tll_it = GBE_vpk_loot_data.treasure_to_loot_list.find(item_def);
+            if (tll_it != GBE_vpk_loot_data.treasure_to_loot_list.end()) {
+                auto ll_it = GBE_vpk_loot_data.loot_lists.find(tll_it->second);
+                if (ll_it != GBE_vpk_loot_data.loot_lists.end() && !ll_it->second.empty()) {
+                    // Pick random item from loot list
+                    size_t idx = static_cast<size_t>(rand()) % ll_it->second.size();
+                    const std::string &chosen_name = ll_it->second[idx];
+                    auto def_it = GBE_vpk_loot_data.name_to_def.find(chosen_name);
+                    if (def_it != GBE_vpk_loot_data.name_to_def.end()) {
+                        granted_def = def_it->second;
+                    }
+                }
+            }
+            // Grant the item if we found one
+            if (granted_def != 0) {
+                CSteamID player_steam_id = settings->get_local_steam_id();
+                uint32_t account_id = player_steam_id.GetAccountID();
+                uint32_t seq = static_cast<uint32_t>(items.size()) + 1;
+                uint64_t new_item_id = (static_cast<uint64_t>(0x60000000u + seq) << 32ull) | static_cast<uint64_t>(account_id);
+
+                Econ_Item new_item;
+                new_item.id = new_item_id;
+                new_item.def = granted_def;
+                new_item.level = 1;
+                new_item.quality = static_cast<EItemQuality>(4);
+                new_item.inv_pos = seq;
+                new_item.quantity = 1;
+                new_item.flags = 0;
+                new_item.origin = 8; // opened from crate
+                new_item.in_use = false;
+                new_item.original_id = new_item_id;
+                new_item.style = 0;
+                items.push_back(new_item);
+
+                CSOEconItem proto_item;
+                proto_item.set_id(new_item_id);
+                proto_item.set_account_id(account_id);
+                proto_item.set_def_index(granted_def);
+                proto_item.set_inventory(seq);
+                proto_item.set_quantity(1);
+                proto_item.set_level(1);
+                proto_item.set_quality(4);
+                proto_item.set_flags(0);
+                proto_item.set_origin(8);
+                proto_item.set_in_use(false);
+                proto_item.set_style(0);
+                proto_item.set_original_id(new_item_id);
+
+                CMsgSOSingleObject create_msg;
+                create_msg.set_type_id(1);
+                create_msg.set_object_data(proto_item.SerializeAsString());
+                create_msg.set_version(0);
+                std::string create_body = create_msg.SerializeAsString();
+                std::string create_response;
+                GBE_BuildDotaZeroHeaderPayload(21u, create_body, create_response);
+                push_incoming_now(21u | GBE_kProtoMask, create_response);
+
+                save_items_to_file();
+            }
+            // Response
             std::string resp_body;
-            GBE_AppendProtoVarIntField(resp_body, 1u, 4u); // ItemUsed_ItemsGranted
+            GBE_AppendProtoVarIntField(resp_body, 1u, granted_def != 0 ? 4u : 0u); // ItemUsed_ItemsGranted or ItemUsed
             std::string response_message;
             GBE_BuildDotaJobReplyOrZeroHeaderPayload(1026u, has_source_job, source_job, resp_body, response_message);
             push_incoming_now(1026u | GBE_kProtoMask, response_message);
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "UseItemRequest -> ItemUsed_ItemsGranted item_id=0x%llx source_job=%llu",
-                static_cast<unsigned long long>(use_item_id), static_cast<unsigned long long>(source_job));
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "UseItemRequest -> item_id=0x%llx def=%u granted_def=%u source_job=%llu",
+                static_cast<unsigned long long>(use_item_id), item_def, granted_def,
+                static_cast<unsigned long long>(source_job));
             return true;
         }
         case 2574: {
             // k_EMsgClientToGCUnlockCrate -> k_EMsgClientToGCUnlockCrateResponse (2575)
-            // Client wants to open a treasure chest.
-            // Parse: field 1 = crate_item_id (varint), field 2 = key_item_id (varint)
+            // Open a treasure chest. Find crate in inventory, pick random from loot list, grant it.
             uint64 crate_item_id = 0;
             uint64 key_item_id = 0;
             {
@@ -14752,23 +14831,90 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     }
                 }
             }
-            // CMsgClientToGCUnlockCrateResponse: field 1 = result (EGCMsgResponse, 0=OK)
-            // field 2 = granted_items (repeated Item sub-message, empty for now)
+            // Find crate def_index
+            uint32 crate_def = 0;
+            for (const auto &inv_item : items) {
+                if (inv_item.id == crate_item_id) { crate_def = inv_item.def; break; }
+            }
+            // Pick random item from loot list
+            std::vector<uint32> granted_defs;
+            auto tll_it = GBE_vpk_loot_data.treasure_to_loot_list.find(crate_def);
+            if (tll_it != GBE_vpk_loot_data.treasure_to_loot_list.end()) {
+                auto ll_it = GBE_vpk_loot_data.loot_lists.find(tll_it->second);
+                if (ll_it != GBE_vpk_loot_data.loot_lists.end() && !ll_it->second.empty()) {
+                    size_t idx = static_cast<size_t>(rand()) % ll_it->second.size();
+                    const std::string &chosen_name = ll_it->second[idx];
+                    auto def_it = GBE_vpk_loot_data.name_to_def.find(chosen_name);
+                    if (def_it != GBE_vpk_loot_data.name_to_def.end()) {
+                        granted_defs.push_back(def_it->second);
+                    }
+                }
+            }
+            // Grant items
+            CSteamID player_steam_id = settings->get_local_steam_id();
+            uint32_t account_id = player_steam_id.GetAccountID();
+            for (uint32 gdef : granted_defs) {
+                uint32_t seq = static_cast<uint32_t>(items.size()) + 1;
+                uint64_t new_item_id = (static_cast<uint64_t>(0x61000000u + seq) << 32ull) | static_cast<uint64_t>(account_id);
+
+                Econ_Item new_item;
+                new_item.id = new_item_id;
+                new_item.def = gdef;
+                new_item.level = 1;
+                new_item.quality = static_cast<EItemQuality>(4);
+                new_item.inv_pos = seq;
+                new_item.quantity = 1;
+                new_item.flags = 0;
+                new_item.origin = 8;
+                new_item.in_use = false;
+                new_item.original_id = new_item_id;
+                new_item.style = 0;
+                items.push_back(new_item);
+
+                CSOEconItem proto_item;
+                proto_item.set_id(new_item_id);
+                proto_item.set_account_id(account_id);
+                proto_item.set_def_index(gdef);
+                proto_item.set_inventory(seq);
+                proto_item.set_quantity(1);
+                proto_item.set_level(1);
+                proto_item.set_quality(4);
+                proto_item.set_flags(0);
+                proto_item.set_origin(8);
+                proto_item.set_in_use(false);
+                proto_item.set_style(0);
+                proto_item.set_original_id(new_item_id);
+
+                CMsgSOSingleObject create_msg;
+                create_msg.set_type_id(1);
+                create_msg.set_object_data(proto_item.SerializeAsString());
+                create_msg.set_version(0);
+                std::string create_body = create_msg.SerializeAsString();
+                std::string create_response;
+                GBE_BuildDotaZeroHeaderPayload(21u, create_body, create_response);
+                push_incoming_now(21u | GBE_kProtoMask, create_response);
+            }
+            if (!granted_defs.empty()) save_items_to_file();
+            // Build response with granted items
             std::string resp_body;
             GBE_AppendProtoVarIntField(resp_body, 1u, 0u); // k_EGCMsgResponseOK
+            for (uint32 gdef : granted_defs) {
+                // CMsgClientToGCUnlockCrateResponse.Item: field 1=item_id, field 2=def_index
+                std::string item_sub;
+                GBE_AppendProtoVarIntField(item_sub, 2u, gdef);
+                GBE_AppendProtoBytesField(resp_body, 2u, item_sub);
+            }
             std::string response_message;
             GBE_BuildDotaJobReplyOrZeroHeaderPayload(2575u, has_source_job, source_job, resp_body, response_message);
             push_incoming_now(2575u | GBE_kProtoMask, response_message);
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "UnlockCrate -> OK crate_id=0x%llx key_id=0x%llx source_job=%llu",
-                static_cast<unsigned long long>(crate_item_id),
-                static_cast<unsigned long long>(key_item_id),
-                static_cast<unsigned long long>(source_job));
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "UnlockCrate -> OK crate_id=0x%llx crate_def=%u granted=%zu source_job=%llu",
+                static_cast<unsigned long long>(crate_item_id), crate_def,
+                granted_defs.size(), static_cast<unsigned long long>(source_job));
             return true;
         }
         case 2576: {
             // k_EMsgClientToGCUnpackBundle -> k_EMsgClientToGCUnpackBundleResponse (2567)
-            // Client wants to unpack a bundle item.
-            // Parse: field 1 = item_id (varint)
+            // Unpack a bundle: grant all contained items.
             uint64 bundle_item_id = 0;
             {
                 size_t pos = 0;
@@ -14783,17 +14929,79 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     }
                 }
             }
-            // CMsgClientToGCUnpackBundleResponse:
-            // field 1 = result (varint, but note: this is actually inside a sub-message in some versions)
-            // field 2 = response enum (0 = k_UnpackBundle_Succeeded)
+            // Find bundle def_index
+            uint32 bundle_def = 0;
+            for (const auto &inv_item : items) {
+                if (inv_item.id == bundle_item_id) { bundle_def = inv_item.def; break; }
+            }
+            // Look up bundle contents and grant all items
+            std::vector<uint32> granted_defs;
+            auto bc_it = GBE_vpk_loot_data.bundle_contents.find(bundle_def);
+            if (bc_it != GBE_vpk_loot_data.bundle_contents.end()) {
+                for (const auto &item_name : bc_it->second) {
+                    auto def_it = GBE_vpk_loot_data.name_to_def.find(item_name);
+                    if (def_it != GBE_vpk_loot_data.name_to_def.end()) {
+                        granted_defs.push_back(def_it->second);
+                    }
+                }
+            }
+            // Grant items
+            CSteamID player_steam_id2 = settings->get_local_steam_id();
+            uint32_t account_id2 = player_steam_id2.GetAccountID();
+            for (uint32 gdef : granted_defs) {
+                uint32_t seq = static_cast<uint32_t>(items.size()) + 1;
+                uint64_t new_item_id = (static_cast<uint64_t>(0x62000000u + seq) << 32ull) | static_cast<uint64_t>(account_id2);
+
+                Econ_Item new_item;
+                new_item.id = new_item_id;
+                new_item.def = gdef;
+                new_item.level = 1;
+                new_item.quality = static_cast<EItemQuality>(4);
+                new_item.inv_pos = seq;
+                new_item.quantity = 1;
+                new_item.flags = 0;
+                new_item.origin = 8;
+                new_item.in_use = false;
+                new_item.original_id = new_item_id;
+                new_item.style = 0;
+                items.push_back(new_item);
+
+                CSOEconItem proto_item;
+                proto_item.set_id(new_item_id);
+                proto_item.set_account_id(account_id2);
+                proto_item.set_def_index(gdef);
+                proto_item.set_inventory(seq);
+                proto_item.set_quantity(1);
+                proto_item.set_level(1);
+                proto_item.set_quality(4);
+                proto_item.set_flags(0);
+                proto_item.set_origin(8);
+                proto_item.set_in_use(false);
+                proto_item.set_style(0);
+                proto_item.set_original_id(new_item_id);
+
+                CMsgSOSingleObject create_msg;
+                create_msg.set_type_id(1);
+                create_msg.set_object_data(proto_item.SerializeAsString());
+                create_msg.set_version(0);
+                std::string create_body = create_msg.SerializeAsString();
+                std::string create_response;
+                GBE_BuildDotaZeroHeaderPayload(21u, create_body, create_response);
+                push_incoming_now(21u | GBE_kProtoMask, create_response);
+            }
+            if (!granted_defs.empty()) save_items_to_file();
+            // Response
             std::string resp_body;
             GBE_AppendProtoVarIntField(resp_body, 2u, 0u); // k_UnpackBundle_Succeeded
+            for (uint32 gdef : granted_defs) {
+                GBE_AppendProtoVarIntField(resp_body, 3u, gdef); // unpacked_item_def_indexes
+            }
             std::string response_message;
             GBE_BuildDotaJobReplyOrZeroHeaderPayload(2567u, has_source_job, source_job, resp_body, response_message);
             push_incoming_now(2567u | GBE_kProtoMask, response_message);
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "UnpackBundle -> Succeeded bundle_id=0x%llx source_job=%llu",
-                static_cast<unsigned long long>(bundle_item_id),
-                static_cast<unsigned long long>(source_job));
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "UnpackBundle -> Succeeded bundle_id=0x%llx bundle_def=%u granted=%zu source_job=%llu",
+                static_cast<unsigned long long>(bundle_item_id), bundle_def,
+                granted_defs.size(), static_cast<unsigned long long>(source_job));
             return true;
         }
         case 8260: {
