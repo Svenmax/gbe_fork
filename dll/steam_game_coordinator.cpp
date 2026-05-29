@@ -14218,6 +14218,105 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_GC_DebugLog("GC_DOTA_DIRECT", "conduct scorecard request suppressed source_job=%llu", static_cast<unsigned long long>(source_job));
             return true;
         }
+        case GBE_kDotaFindTopSourceTVGames: {
+            // CMsgClientToGCFindTopSourceTVGames -> CMsgGCToClientFindTopSourceTVGamesResponse
+            // Build response from local shared lobby state OR remote generic lobbies.
+            std::string response_body;
+            bool found_game = false;
+
+            // First: check local shared lobby state (we are the host)
+            if (!found_game &&
+                GBE_shared_dota_lobby_state.valid &&
+                GBE_shared_dota_lobby_state.active &&
+                GBE_shared_dota_lobby_state.game_state >= 1u &&
+                GBE_shared_dota_lobby_state.server_id != 0) {
+
+                std::string game_entry;
+                GBE_AppendProtoVarIntField(game_entry, 1u,
+                    GBE_shared_dota_lobby_state.game_start_time != 0
+                        ? GBE_shared_dota_lobby_state.game_start_time
+                        : static_cast<uint32>(std::time(nullptr) - 300));
+                GBE_AppendProtoVarIntField(game_entry, 3u, GBE_shared_dota_lobby_state.server_id);
+                GBE_AppendProtoVarIntField(game_entry, 4u, GBE_shared_dota_lobby_state.lobby_id);
+                GBE_AppendProtoVarIntField(game_entry, 6u, 1u);
+                int32 game_time = GBE_shared_dota_lobby_state.game_start_time != 0
+                    ? static_cast<int32>(std::time(nullptr)) - static_cast<int32>(GBE_shared_dota_lobby_state.game_start_time)
+                    : 300;
+                GBE_AppendProtoVarIntField(game_entry, 7u, static_cast<uint64>(static_cast<uint32>(game_time)));
+                GBE_AppendProtoVarIntField(game_entry, 8u, 0u);
+                GBE_AppendProtoVarIntField(game_entry, 9u, 0u);
+                GBE_AppendProtoVarIntField(game_entry, 10u, GBE_shared_dota_lobby_state.game_mode);
+                GBE_AppendProtoVarIntField(game_entry, 12u, GBE_shared_dota_lobby_state.match_id);
+                for (const auto &member : GBE_shared_dota_lobby_state.members) {
+                    if (member.account_id == 0) continue;
+                    std::string player_entry;
+                    GBE_AppendProtoVarIntField(player_entry, 1u, member.account_id);
+                    GBE_AppendProtoVarIntField(player_entry, 2u, member.hero_id);
+                    GBE_AppendProtoVarIntField(player_entry, 3u, member.slot);
+                    GBE_AppendProtoVarIntField(player_entry, 4u, member.team);
+                    GBE_AppendProtoBytesField(game_entry, 22u, player_entry);
+                }
+                GBE_AppendProtoBytesField(response_body, 7u, game_entry);
+                found_game = true;
+            }
+
+            // Second: check remote generic lobbies via matchmaking
+            if (!found_game) {
+                const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("8009_find_top_source_tv");
+                for (const auto &snap : snapshots) {
+                    if (snap.game_state >= 1u && snap.server_id != 0 && snap.allow_spectating) {
+                        std::string game_entry;
+                        GBE_AppendProtoVarIntField(game_entry, 1u,
+                            snap.game_start_time != 0
+                                ? snap.game_start_time
+                                : static_cast<uint32>(std::time(nullptr) - 300));
+                        GBE_AppendProtoVarIntField(game_entry, 3u, snap.server_id);
+                        GBE_AppendProtoVarIntField(game_entry, 4u, snap.lobby_id);
+                        GBE_AppendProtoVarIntField(game_entry, 6u, 1u);
+                        int32 gt = snap.game_start_time != 0
+                            ? static_cast<int32>(std::time(nullptr)) - static_cast<int32>(snap.game_start_time)
+                            : 300;
+                        GBE_AppendProtoVarIntField(game_entry, 7u, static_cast<uint64>(static_cast<uint32>(gt)));
+                        GBE_AppendProtoVarIntField(game_entry, 8u, 0u);
+                        GBE_AppendProtoVarIntField(game_entry, 9u, 0u);
+                        GBE_AppendProtoVarIntField(game_entry, 10u, snap.game_mode);
+                        GBE_AppendProtoVarIntField(game_entry, 12u, snap.match_id);
+                        for (const auto &member : snap.members) {
+                            if (member.account_id == 0) continue;
+                            std::string player_entry;
+                            GBE_AppendProtoVarIntField(player_entry, 1u, member.account_id);
+                            GBE_AppendProtoVarIntField(player_entry, 2u, member.hero_id);
+                            GBE_AppendProtoVarIntField(player_entry, 3u, member.slot);
+                            GBE_AppendProtoVarIntField(player_entry, 4u, member.team);
+                            GBE_AppendProtoBytesField(game_entry, 22u, player_entry);
+                        }
+                        GBE_AppendProtoBytesField(response_body, 7u, game_entry);
+                        found_game = true;
+                        break; // Use first matching game
+                    }
+                }
+            }
+
+            if (found_game) {
+                GBE_AppendProtoVarIntField(response_body, 5u, 1u); // num_games = 1
+            } else {
+                GBE_AppendProtoVarIntField(response_body, 5u, 0u); // num_games = 0
+            }
+
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(
+                GBE_kDotaFindTopSourceTVGamesResponse,
+                has_source_job, source_job,
+                response_body, response_message);
+            push_incoming_now(GBE_kDotaFindTopSourceTVGamesResponse | GBE_kProtoMask, response_message);
+
+            GBE_GC_DebugLog("GC_DOTA_DIRECT",
+                "FindTopSourceTVGames -> response found=%d source_job=%llu local_valid=%d",
+                found_game ? 1 : 0,
+                static_cast<unsigned long long>(source_job),
+                GBE_shared_dota_lobby_state.valid ? 1 : 0);
+            return true;
+        }
         case 7091: {
             // CMsgWatchGame -> CMsgWatchGameResponse
             // Parse server_steamid from request (field 1, fixed64).
@@ -14241,12 +14340,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             // Parse SourceTV address from lobby connect string (ip:port -> ip, port+5)
             uint32 source_tv_addr = 0;
             uint32 source_tv_port = 27020; // default SourceTV port
+            std::string connect_str;
             if (GBE_shared_dota_lobby_state.valid && !GBE_shared_dota_lobby_state.connect.empty()) {
-                const std::string &conn = GBE_shared_dota_lobby_state.connect;
-                size_t colon = conn.find(':');
-                std::string ip_str = (colon != std::string::npos) ? conn.substr(0, colon) : conn;
+                connect_str = GBE_shared_dota_lobby_state.connect;
+            } else {
+                // Fallback: find connect from remote generic lobbies
+                const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("7091_watch_game");
+                for (const auto &snap : snapshots) {
+                    if (snap.game_state >= 1u && snap.server_id != 0 && !snap.connect.empty()) {
+                        connect_str = snap.connect;
+                        break;
+                    }
+                }
+            }
+            if (!connect_str.empty()) {
+                size_t colon = connect_str.find(':');
+                std::string ip_str = (colon != std::string::npos) ? connect_str.substr(0, colon) : connect_str;
                 if (colon != std::string::npos) {
-                    uint32 game_port = static_cast<uint32>(std::strtoul(conn.c_str() + colon + 1, nullptr, 10));
+                    uint32 game_port = static_cast<uint32>(std::strtoul(connect_str.c_str() + colon + 1, nullptr, 10));
                     if (game_port > 0) source_tv_port = game_port + 5;
                 }
                 // Convert IP string to uint32 (network byte order as stored by Dota)
@@ -17106,39 +17217,30 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         // Build CMsgGCToClientFindTopSourceTVGamesResponse (8010)
         // If there's an active LAN game with spectating enabled, include it.
         std::string response_body;
+        bool found_game_w = false;
 
+        // First: check local shared lobby state (we are the host)
         if (GBE_shared_dota_lobby_state.valid &&
             GBE_shared_dota_lobby_state.active &&
-            GBE_shared_dota_lobby_state.game_state >= 2u &&
+            GBE_shared_dota_lobby_state.game_state >= 1u &&
             GBE_shared_dota_lobby_state.server_id != 0) {
 
-            // Build CSourceTVGameSmall (field 7 = game_list)
             std::string game_entry;
-            // field 1: activate_time (approximate)
             GBE_AppendProtoVarIntField(game_entry, 1u,
                 GBE_shared_dota_lobby_state.game_start_time != 0
                     ? GBE_shared_dota_lobby_state.game_start_time
                     : static_cast<uint32>(std::time(nullptr) - 300));
-            // field 3: server_steam_id
             GBE_AppendProtoVarIntField(game_entry, 3u, GBE_shared_dota_lobby_state.server_id);
-            // field 4: lobby_id
             GBE_AppendProtoVarIntField(game_entry, 4u, GBE_shared_dota_lobby_state.lobby_id);
-            // field 6: lobby_type (1 = practice)
             GBE_AppendProtoVarIntField(game_entry, 6u, 1u);
-            // field 7: game_time (seconds since start, estimate)
             int32 game_time = GBE_shared_dota_lobby_state.game_start_time != 0
                 ? static_cast<int32>(std::time(nullptr)) - static_cast<int32>(GBE_shared_dota_lobby_state.game_start_time)
                 : 300;
             GBE_AppendProtoVarIntField(game_entry, 7u, static_cast<uint64>(static_cast<uint32>(game_time)));
-            // field 8: delay (seconds, SourceTV delay)
             GBE_AppendProtoVarIntField(game_entry, 8u, 0u);
-            // field 9: spectators
             GBE_AppendProtoVarIntField(game_entry, 9u, 0u);
-            // field 10: game_mode
             GBE_AppendProtoVarIntField(game_entry, 10u, GBE_shared_dota_lobby_state.game_mode);
-            // field 12: match_id
             GBE_AppendProtoVarIntField(game_entry, 12u, GBE_shared_dota_lobby_state.match_id);
-            // field 22: players (CSourceTVGameSmall.Player)
             for (const auto &member : GBE_shared_dota_lobby_state.members) {
                 if (member.account_id == 0) continue;
                 std::string player_entry;
@@ -17148,12 +17250,50 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
                 GBE_AppendProtoVarIntField(player_entry, 4u, member.team);
                 GBE_AppendProtoBytesField(game_entry, 22u, player_entry);
             }
-
             GBE_AppendProtoBytesField(response_body, 7u, game_entry);
-            // field 5: num_games
+            found_game_w = true;
+        }
+
+        // Second: check remote generic lobbies via matchmaking
+        if (!found_game_w) {
+            const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("8009_wrapped_find_top_source_tv");
+            for (const auto &snap : snapshots) {
+                if (snap.game_state >= 1u && snap.server_id != 0 && snap.allow_spectating) {
+                    std::string game_entry;
+                    GBE_AppendProtoVarIntField(game_entry, 1u,
+                        snap.game_start_time != 0
+                            ? snap.game_start_time
+                            : static_cast<uint32>(std::time(nullptr) - 300));
+                    GBE_AppendProtoVarIntField(game_entry, 3u, snap.server_id);
+                    GBE_AppendProtoVarIntField(game_entry, 4u, snap.lobby_id);
+                    GBE_AppendProtoVarIntField(game_entry, 6u, 1u);
+                    int32 gt = snap.game_start_time != 0
+                        ? static_cast<int32>(std::time(nullptr)) - static_cast<int32>(snap.game_start_time)
+                        : 300;
+                    GBE_AppendProtoVarIntField(game_entry, 7u, static_cast<uint64>(static_cast<uint32>(gt)));
+                    GBE_AppendProtoVarIntField(game_entry, 8u, 0u);
+                    GBE_AppendProtoVarIntField(game_entry, 9u, 0u);
+                    GBE_AppendProtoVarIntField(game_entry, 10u, snap.game_mode);
+                    GBE_AppendProtoVarIntField(game_entry, 12u, snap.match_id);
+                    for (const auto &member : snap.members) {
+                        if (member.account_id == 0) continue;
+                        std::string player_entry;
+                        GBE_AppendProtoVarIntField(player_entry, 1u, member.account_id);
+                        GBE_AppendProtoVarIntField(player_entry, 2u, member.hero_id);
+                        GBE_AppendProtoVarIntField(player_entry, 3u, member.slot);
+                        GBE_AppendProtoVarIntField(player_entry, 4u, member.team);
+                        GBE_AppendProtoBytesField(game_entry, 22u, player_entry);
+                    }
+                    GBE_AppendProtoBytesField(response_body, 7u, game_entry);
+                    found_game_w = true;
+                    break;
+                }
+            }
+        }
+
+        if (found_game_w) {
             GBE_AppendProtoVarIntField(response_body, 5u, 1u);
         } else {
-            // No active game, return empty list
             GBE_AppendProtoVarIntField(response_body, 5u, 0u);
         }
 
@@ -17172,9 +17312,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_response);
 
         GBE_GC_DebugLog("GC_DOTA_LOBBY",
-            "[WATCH] replied 8010 FindTopSourceTVGamesResponse active=%d server_id=0x%llx",
-            (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.active) ? 1 : 0,
-            static_cast<unsigned long long>(GBE_shared_dota_lobby_state.server_id));
+            "[WATCH] replied 8010 FindTopSourceTVGamesResponse found=%d local_valid=%d",
+            found_game_w ? 1 : 0,
+            GBE_shared_dota_lobby_state.valid ? 1 : 0);
         return true;
     }
 
@@ -17199,12 +17339,23 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         // Parse SourceTV address from lobby connect string
         uint32 source_tv_addr = 0;
         uint32 source_tv_port = 27020;
+        std::string connect_str_w;
         if (GBE_shared_dota_lobby_state.valid && !GBE_shared_dota_lobby_state.connect.empty()) {
-            const std::string &conn = GBE_shared_dota_lobby_state.connect;
-            size_t colon = conn.find(':');
-            std::string ip_str = (colon != std::string::npos) ? conn.substr(0, colon) : conn;
+            connect_str_w = GBE_shared_dota_lobby_state.connect;
+        } else {
+            const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("7091_wrapped_watch_game");
+            for (const auto &snap : snapshots) {
+                if (snap.game_state >= 1u && snap.server_id != 0 && !snap.connect.empty()) {
+                    connect_str_w = snap.connect;
+                    break;
+                }
+            }
+        }
+        if (!connect_str_w.empty()) {
+            size_t colon = connect_str_w.find(':');
+            std::string ip_str = (colon != std::string::npos) ? connect_str_w.substr(0, colon) : connect_str_w;
             if (colon != std::string::npos) {
-                uint32 game_port = static_cast<uint32>(std::strtoul(conn.c_str() + colon + 1, nullptr, 10));
+                uint32 game_port = static_cast<uint32>(std::strtoul(connect_str_w.c_str() + colon + 1, nullptr, 10));
                 if (game_port > 0) source_tv_port = game_port + 5;
             }
             unsigned int a = 0, b = 0, c = 0, d = 0;
