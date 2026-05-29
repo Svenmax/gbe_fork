@@ -14216,6 +14216,105 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_GC_DebugLog("GC_DOTA_DIRECT", "conduct scorecard request suppressed source_job=%llu", static_cast<unsigned long long>(source_job));
             return true;
         }
+        case 7091: {
+            // CMsgWatchGame -> CMsgWatchGameResponse
+            // Parse server_steamid from request (field 1, fixed64).
+            // Return READY with the same server as both game and watch server.
+            uint64 watch_server_steamid = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(
+                            body, body_size,
+                            pos, fn, wt, fo, vo, vs, fe))
+                        break;
+                    if (fn == 1u && wt == 1u && vs == 8) {
+                        memcpy(&watch_server_steamid, body + vo, 8);
+                    }
+                }
+            }
+
+            // First response: PENDING (field 1 = 0)
+            {
+                std::string pending_body;
+                GBE_AppendProtoVarIntField(pending_body, 1u, 0u); // PENDING
+                std::string pending_msg;
+                GBE_BuildDotaJobReplyOrZeroHeaderPayload(7092u, has_source_job, source_job, pending_body, pending_msg);
+                push_incoming_now(7092u | GBE_kProtoMask, pending_msg);
+            }
+
+            // Second response: READY with server info
+            {
+                std::string ready_body;
+                GBE_AppendProtoVarIntField(ready_body, 1u, 1u); // READY
+                GBE_AppendProtoFixed64Field(ready_body, 5u, watch_server_steamid); // game_server_steamid
+                GBE_AppendProtoFixed64Field(ready_body, 6u, watch_server_steamid); // watch_server_steamid
+                // Generate a deterministic secret code from server steamid
+                uint64 secret_code = watch_server_steamid ^ 0x0514D449EDC24001ULL;
+                GBE_AppendProtoFixed64Field(ready_body, 7u, secret_code); // watch_tv_unique_secret_code
+                std::string ready_msg;
+                GBE_BuildDotaJobReplyOrZeroHeaderPayload(7092u, false, 0, ready_body, ready_msg);
+                push_incoming_now(7092u | GBE_kProtoMask, ready_msg);
+            }
+
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "watch game request -> READY server=0x%llx source_job=%llu",
+                static_cast<unsigned long long>(watch_server_steamid),
+                static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 8209: {
+            // CMsgDOTAClaimEventAction -> CMsgDOTAClaimEventActionResponse
+            // Parse event_id (field 1) and action_id (field 2) from request.
+            // Return result=Success(0) with the action_id echoed back.
+            uint32 claim_event_id = 0;
+            uint32 claim_action_id = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(
+                            body, body_size,
+                            pos, fn, wt, fo, vo, vs, fe))
+                        break;
+                    if (fn == 1u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        claim_event_id = static_cast<uint32>(v);
+                    }
+                    if (fn == 2u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        claim_action_id = static_cast<uint32>(v);
+                    }
+                }
+            }
+
+            // Build CMsgDOTAClaimEventActionResponse:
+            // field 1 = result (varint, 0=Success)
+            // field 2 = reward_results (repeated, empty for now)
+            // field 3 = action_id (varint)
+            std::string claim_body;
+            GBE_AppendProtoVarIntField(claim_body, 1u, 0u); // result = Success
+            // field 2: empty GrantedRewardData sub-message matching the capture
+            std::string reward_data;
+            GBE_AppendProtoVarIntField(reward_data, 1u, 0u); // grant_index
+            GBE_AppendProtoVarIntField(reward_data, 2u, 0u); // score_index
+            GBE_AppendProtoVarIntField(reward_data, 3u, 0u); // reward_index
+            GBE_AppendProtoVarIntField(reward_data, 5u, claim_action_id); // action_id
+            GBE_AppendProtoBytesField(claim_body, 2u, reward_data);
+            GBE_AppendProtoVarIntField(claim_body, 3u, claim_action_id); // action_id
+
+            std::string claim_response;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(8210u, has_source_job, source_job, claim_body, claim_response);
+            push_incoming_now(8210u | GBE_kProtoMask, claim_response);
+
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "claim event action -> success event=%u action=%u source_job=%llu",
+                claim_event_id, claim_action_id, static_cast<unsigned long long>(source_job));
+            return true;
+        }
         case 2510: {
             // StorePurchaseInit - client wants to buy an item from the store.
             // Parse the request to get item_def_id, then respond with success
