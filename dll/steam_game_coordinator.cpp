@@ -13713,9 +13713,39 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 23u), allow_custom_games);
         GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 24u), build_version);
 
-        // Extract tv_secret_code from field 18 (fixed64) - needed for SourceTV spectating
+        // Extract tv_secret_code from field 18 - needed for SourceTV spectating
+        // Try fixed64 first (wire type 1), then varint (wire type 0)
         uint64 tv_secret_code = 0;
-        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 18u), tv_secret_code);
+        {
+            GBE_ProtoFieldView f18 = GBE_FindProtoField(body, body_size, 18u);
+            if (f18.found) {
+                if (f18.wire_type == 1 && f18.value_size == 8) {
+                    std::memcpy(&tv_secret_code, body + f18.value_offset, sizeof(tv_secret_code));
+                } else if (f18.wire_type == 0) {
+                    size_t off = f18.value_offset;
+                    GBE_ReadVarUint64(body, body_size, off, tv_secret_code);
+                }
+                GBE_GC_DebugLog("GC_DOTA_DIRECT",
+                    "4508 field_18 found wire_type=%u value_size=%zu tv_secret_code=0x%llx",
+                    f18.wire_type, f18.value_size,
+                    static_cast<unsigned long long>(tv_secret_code));
+            } else {
+                // Field 18 not found - dump all fields for diagnosis
+                size_t pos = 0;
+                std::string field_list;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe))
+                        break;
+                    if (!field_list.empty()) field_list += ",";
+                    field_list += std::to_string(fn) + ":" + std::to_string(wt);
+                }
+                GBE_GC_DebugLog("GC_DOTA_DIRECT",
+                    "4508 field_18 NOT found body_size=%zu fields=[%s]",
+                    body_size, field_list.c_str());
+            }
+        }
 
         const uint32 connect_ip = public_ip != 0 ? public_ip : private_ip;
         const std::string runtime_connect = GBE_FormatDotaPracticeLobbyConnectFromIp(connect_ip);
@@ -14432,9 +14462,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 push_incoming_now(7092u | GBE_kProtoMask, ready_msg);
             }
 
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "watch game request -> READY server=0x%llx tv_addr=0x%x tv_port=%u source_job=%llu",
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "watch game request -> READY server=0x%llx tv_addr=0x%x tv_port=%u secret=0x%llx source_job=%llu",
                 static_cast<unsigned long long>(watch_server_steamid),
                 source_tv_addr, source_tv_port,
+                static_cast<unsigned long long>(tv_secret_code != 0 ? tv_secret_code : (watch_server_steamid ^ 0x0514D449EDC24001ULL)),
                 static_cast<unsigned long long>(source_job));
             return true;
         }
