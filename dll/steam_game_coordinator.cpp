@@ -9114,16 +9114,57 @@ void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const st
             GBE_local_lobby.lobby_id != 0 &&
             steam_id.BIndividualAccount() &&
             steam_id.ConvertToUint64() == GBE_GetDotaLobbyOwnerSteamId()) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_SYNC",
-                "skipping generic CacheSubscribed for active dota owner steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s items=%zu",
-                static_cast<unsigned long long>(steam_id.ConvertToUint64()),
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_local_lobby.state,
-                GBE_local_lobby.game_state,
-                GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
-                items.size()
-            );
+            // Skip the full generic CacheSubscribed (too large, e.g. 27k items / 706KB)
+            // but still push equipped-only items so the server engine creates wearables.
+            std::vector<const Econ_Item *> equipped_items;
+            for (const Econ_Item &item : items) {
+                if (!item.equip_states.empty())
+                    equipped_items.push_back(&item);
+            }
+
+            if (!equipped_items.empty()) {
+                std::string owner_soid;
+                GBE_AppendProtoVarIntField(owner_soid, 1u, 1u);
+                GBE_AppendProtoVarIntField(owner_soid, 2u, steam_id.ConvertToUint64());
+
+                std::string subscribed_type;
+                GBE_AppendProtoVarIntField(subscribed_type, 1u, 1u);
+                for (const Econ_Item *ep : equipped_items) {
+                    std::string serialized = serialize_item_to_gcprotobuf(*ep, steam_id);
+                    GBE_AppendProtoBytesField(subscribed_type, 2u, serialized);
+                }
+
+                std::string cache_body;
+                GBE_AppendProtoBytesField(cache_body, 2u, subscribed_type);
+                GBE_AppendProtoFixed64Field(cache_body, 3u, 1ull);
+                GBE_AppendProtoBytesField(cache_body, 4u, owner_soid);
+
+                std::string cache_message;
+                GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheSubscribed, cache_body, cache_message);
+                push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, cache_message);
+
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "pushed owner equipped-only CacheSubscribed for server (skipped full generic): steam_id=%llu lobby_id=%llu state=%u game_state=%u equipped=%zu total=%zu message_size=%zu",
+                    static_cast<unsigned long long>(steam_id.ConvertToUint64()),
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    equipped_items.size(),
+                    items.size(),
+                    cache_message.size()
+                );
+            } else {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "skipping generic CacheSubscribed for active dota owner (no equipped items): steam_id=%llu lobby_id=%llu state=%u game_state=%u items=%zu",
+                    static_cast<unsigned long long>(steam_id.ConvertToUint64()),
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    items.size()
+                );
+            }
             return;
         }
     }
@@ -14055,9 +14096,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 const uint64 player_steam64 = settings->get_local_steam_id().ConvertToUint64();
                 const CSteamID player_steam_id = settings->get_local_steam_id();
 
-                // Step 0 (FIX): Push a full player-item CacheSubscribed
-                // (emsg=24, owner_type=1) so the engine's SO cache is
-                // established / refreshed before any Create/Update messages.
+                // Step 0 (FIX): Force the server engine to re-subscribe to
+                // the host player's SO cache by sending CacheUnsubscribed
+                // followed by CacheSubscribed.  Without the Unsubscribe, the
+                // engine treats the second CacheSubscribed as a no-op update
+                // and does NOT trigger wearable entity creation for an
+                // already-spawned hero.  The Unsub+Resub cycle forces the
+                // engine to re-evaluate equipped items and spawn wearables.
                 {
                     std::vector<const Econ_Item *> all_equipped;
                     for (const auto &item : items) {
@@ -14066,6 +14111,21 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     }
 
                     if (!all_equipped.empty()) {
+                        // Push CacheUnsubscribed (emsg=25) first to tear down
+                        // any existing subscription for this owner.
+                        std::string unsub_message;
+                        GBE_BuildDotaSOOwnerCacheUnsubscribedPayload(1u, player_steam64, unsub_message);
+                        server_gc->push_incoming_message(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, unsub_message);
+
+                        GBE_GC_DebugLog(
+                            "GC_DOTA_DIRECT",
+                            "pushed host player CacheUnsubscribed to server GC before re-subscribe: "
+                            "steam64=%llu message_size=%zu",
+                            static_cast<unsigned long long>(player_steam64),
+                            unsub_message.size()
+                        );
+
+                        // Now push CacheSubscribed (emsg=24) with all equipped items.
                         std::string owner_soid;
                         GBE_AppendProtoVarIntField(owner_soid, 1u, 1u);   // type = 1 (player)
                         GBE_AppendProtoVarIntField(owner_soid, 2u, player_steam64);
@@ -19004,6 +19064,16 @@ void Steam_Game_Coordinator::network_callback_inventory_response(Common_Message 
         if (!equipped_items.empty()) {
             const CSteamID player_steam_id(user_steamid);
 
+            // For the lobby owner (host), push CacheUnsubscribed first to
+            // force the engine to re-evaluate equipped items and spawn
+            // wearables for an already-spawned hero.
+            const bool is_owner = (user_steamid == GBE_GetDotaLobbyOwnerSteamId());
+            if (is_owner) {
+                std::string unsub_message;
+                GBE_BuildDotaSOOwnerCacheUnsubscribedPayload(1u, user_steamid, unsub_message);
+                push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, unsub_message);
+            }
+
             std::string owner_soid;
             GBE_AppendProtoVarIntField(owner_soid, 1u, 1u);
             GBE_AppendProtoVarIntField(owner_soid, 2u, user_steamid);
@@ -19026,11 +19096,13 @@ void Steam_Game_Coordinator::network_callback_inventory_response(Common_Message 
 
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
-                "pushed remote player item CacheSubscribed for server after inventory response: steam64=%llu equipped_items=%zu total_items=%zu message_size=%zu",
+                "pushed %s player item CacheSubscribed for server after inventory response: steam64=%llu equipped_items=%zu total_items=%zu message_size=%zu unsub_first=%d",
+                is_owner ? "owner" : "remote",
                 static_cast<unsigned long long>(user_steamid),
                 equipped_items.size(),
                 items.size(),
-                cache_message.size()
+                cache_message.size(),
+                is_owner ? 1 : 0
             );
         }
     }
