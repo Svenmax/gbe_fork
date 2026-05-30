@@ -701,6 +701,9 @@ BOOL WINAPI DllMain( HINSTANCE, DWORD dwReason, LPVOID )
             
             // Apply VAC secure flag patch for client.dll (fixes lobby invite decline)
             NetworkingPatch::ApplyVACPatch();
+
+            // Apply HLTV relay password bypass for LAN spectating
+            NetworkingPatch::ApplyHLTVPatch();
             
             if (!settings_disable_lan_only()) {
                 PRINT_DEBUG("Hooking lan only functions");
@@ -764,6 +767,9 @@ struct CppRuntimeTrick {
         
         // Apply VAC secure flag patch for client.dll (fixes lobby invite decline)
         NetworkingPatch::ApplyVACPatch();
+
+        // Apply HLTV relay password bypass for LAN spectating
+        NetworkingPatch::ApplyHLTVPatch();
         
         load_dlls();
     }

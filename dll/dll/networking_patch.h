@@ -134,6 +134,47 @@ static bool PatchByte(byte_t* address, byte_t oldValue, byte_t newValue)
 #endif
 }
 
+static bool PatchBytes(byte_t* address, const byte_t* oldBytes, const byte_t* newBytes, size_t count)
+{
+    for (size_t i = 0; i < count; i++) {
+        if (address[i] != oldBytes[i]) {
+            DebugLog("[PATCH] Byte mismatch at %p + 0x%zX: expected 0x%02X, found 0x%02X", address, i, oldBytes[i], address[i]);
+            return false;
+        }
+    }
+
+#ifdef __WINDOWS__
+    DWORD oldProtect;
+    if (!VirtualProtect(address, count, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+        DebugLog("[PATCH] VirtualProtect failed: error %lu", GetLastError());
+        return false;
+    }
+    std::memcpy(address, newBytes, count);
+    VirtualProtect(address, count, oldProtect, &oldProtect);
+    DebugLog("[PATCH] Successfully patched %zu bytes at %p", count, address);
+    return true;
+#else
+    long pageSize = sysconf(_SC_PAGESIZE);
+    if (pageSize <= 0) {
+        DebugLog("[PATCH] Failed to get page size");
+        return false;
+    }
+
+    void* pageStart = (void*)((uintptr_t)address & ~(pageSize - 1));
+    size_t pageSpan = ((count + ((uintptr_t)address - (uintptr_t)pageStart) + pageSize - 1) / pageSize) * pageSize;
+
+    if (mprotect(pageStart, pageSpan, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
+        DebugLog("[PATCH] mprotect failed: errno %d", errno);
+        return false;
+    }
+
+    std::memcpy(address, newBytes, count);
+    mprotect(pageStart, pageSpan, PROT_READ | PROT_EXEC);
+    DebugLog("[PATCH] Successfully patched %zu bytes at %p", count, address);
+    return true;
+#endif
+}
+
 #ifdef __WINDOWS__
 // Windows: get steamnetworkingsockets.dll module handle
 static void* GetSteamNetworkingSocketsModule(byte_t** outBase, size_t* outSize)
@@ -599,6 +640,179 @@ static void* GetClientDllModule(byte_t** outBase, size_t* outSize)
     return nullptr;
 }
 #endif
+
+// ============================================================
+// HLTV Relay Password Patch for engine2.dll
+// ============================================================
+// SourceTV spectator connections are rejected with BADRELAYPASSWORD because
+// the client sends the raw tv_secret_code while engine2 expects a derived
+// account-bound secret. For LAN mode, patch the validation tail to accept the
+// connection after the function formats/computes the expected secret.
+
+#ifdef __WINDOWS__
+static void* GetEngine2Module(byte_t** outBase, size_t* outSize)
+{
+    const char* dllNames[] = {
+        "engine2.dll",
+        nullptr
+    };
+
+    DebugLog("[HLTV_PATCH] Searching for engine2.dll...");
+
+    for (int retry = 0; retry < 1200; retry++) {
+        for (int i = 0; dllNames[i]; i++) {
+            HMODULE h = GetModuleHandleA(dllNames[i]);
+            if (h) {
+                MODULEINFO modInfo;
+                if (GetModuleInformation(GetCurrentProcess(), h, &modInfo, sizeof(modInfo))) {
+                    *outBase = (byte_t*)modInfo.lpBaseOfDll;
+                    *outSize = modInfo.SizeOfImage;
+                    DebugLog("[HLTV_PATCH] Found %s at base %p, size %zu bytes", dllNames[i], *outBase, *outSize);
+                    return h;
+                }
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    DebugLog("[HLTV_PATCH] Failed to find engine2.dll after 120 seconds");
+    return nullptr;
+}
+#else
+static void* GetEngine2Module(byte_t** outBase, size_t* outSize)
+{
+    const char* libNames[] = {
+        "libengine2.so",
+        "engine2.so",
+        nullptr
+    };
+
+    DebugLog("[HLTV_PATCH] Searching for engine2 library...");
+
+    for (int retry = 0; retry < 1200; retry++) {
+        for (int i = 0; libNames[i]; i++) {
+            void* handle = dlopen(libNames[i], RTLD_LAZY | RTLD_NOLOAD);
+            if (handle) {
+#ifdef __APPLE__
+                uint32_t imageCount = _dyld_image_count();
+                for (uint32_t j = 0; j < imageCount; j++) {
+                    const char* imageName = _dyld_get_image_name(j);
+                    if (imageName && strstr(imageName, "engine2")) {
+                        const struct mach_header* header = (const struct mach_header*)_dyld_get_image_header(j);
+                        if (header) {
+                            *outBase = (byte_t*)header;
+                            *outSize = 100 * 1024 * 1024;
+                            DebugLog("[HLTV_PATCH] Found %s at base %p", imageName, *outBase);
+                            return handle;
+                        }
+                    }
+                }
+#else
+                struct link_map* map = nullptr;
+                if (dlinfo(handle, RTLD_DI_LINKMAP, &map) == 0 && map) {
+                    *outBase = (byte_t*)map->l_addr;
+                    *outSize = 100 * 1024 * 1024;
+                    DebugLog("[HLTV_PATCH] Found %s at base %p", libNames[i], *outBase);
+                    return handle;
+                }
+#endif
+                dlclose(handle);
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    DebugLog("[HLTV_PATCH] Failed to find engine2 library after 120 seconds");
+    return nullptr;
+}
+#endif
+
+static bool PatchHLTVRelayPasswordCheck(byte_t* base, size_t size)
+{
+    DebugLog("[HLTV_PATCH] Starting engine2 HLTV patch in %zu bytes...", size);
+
+    // Windows engine2.dll (build 6796 sample):
+    //   cmp r8d,eax
+    //   je +4
+    //   xor al,al
+    //   jmp +0x13
+    //   lea rdx,[rsp+0x40]
+    //   mov rcx,rbx
+    //   call strcmp-like helper
+    //   test eax,eax
+    //   sete al
+    // We force the length gate to fall through and replace "sete al" with
+    // "mov al,1; nop" so the validation succeeds in LAN mode.
+    byte_t pattern[] = {
+        0x44, 0x3B, 0xC0, 0x74, 0x04, 0x32, 0xC0, 0xEB,
+        0x13, 0x48, 0x8D, 0x54, 0x24, 0x40, 0x48, 0x8B,
+        0xCB, 0xFF, 0x15, 0x00, 0x00, 0x00, 0x00, 0x85,
+        0xC0, 0x0F, 0x94, 0xC0
+    };
+    const char* mask = "xxxxxxxxxxxxxxxxxxx????xxxxx";
+    const int patternLen = 28;
+
+    int count = CountPattern(base, size, pattern, mask, patternLen);
+    DebugLog("[HLTV_PATCH] Validation tail pattern matches: %d", count);
+    if (count != 1) {
+        DebugLog("[HLTV_PATCH] Expected exactly one validation tail match");
+        return false;
+    }
+
+    byte_t* addr = FindPattern(base, size, pattern, mask, patternLen);
+    if (!addr) {
+        DebugLog("[HLTV_PATCH] Validation tail pattern not found after count");
+        return false;
+    }
+
+    DebugLog("[HLTV_PATCH] Found validation tail at offset 0x%zX", static_cast<size_t>(addr - base));
+
+    if (*(addr + 3) != 0x74) {
+        DebugLog("[HLTV_PATCH] Length gate already patched or unexpected: 0x%02X", *(addr + 3));
+    } else if (!PatchByte(addr + 3, 0x74, 0xEB)) {
+        DebugLog("[HLTV_PATCH] Failed to patch length gate");
+        return false;
+    }
+
+    const byte_t oldTail[] = { 0x0F, 0x94, 0xC0 };
+    const byte_t newTail[] = { 0xB0, 0x01, 0x90 };
+    if (std::memcmp(addr + 25, newTail, sizeof(newTail)) == 0) {
+        DebugLog("[HLTV_PATCH] Return tail already patched");
+        return true;
+    }
+    if (!PatchBytes(addr + 25, oldTail, newTail, sizeof(oldTail))) {
+        DebugLog("[HLTV_PATCH] Failed to patch return tail");
+        return false;
+    }
+
+    DebugLog("[HLTV_PATCH] HLTV relay password patch applied successfully");
+    return true;
+}
+
+static void ApplyHLTVPatch()
+{
+    DebugLog("[HLTV_MAIN] HLTV patch thread starting");
+
+    std::thread([]() {
+        DebugLog("[HLTV_THREAD] HLTV patch thread started");
+
+        byte_t* base = nullptr;
+        size_t size = 0;
+
+        void* handle = GetEngine2Module(&base, &size);
+        if (!handle || !base || size == 0) {
+            DebugLog("[HLTV_THREAD] Failed to get engine2 module information");
+            return;
+        }
+
+        bool patched = PatchHLTVRelayPasswordCheck(base, size);
+        if (patched) {
+            DebugLog("[HLTV_THREAD] HLTV relay password patch applied successfully!");
+        } else {
+            DebugLog("[HLTV_THREAD] HLTV relay password patch failed - pattern not found");
+        }
+    }).detach();
+}
 
 // Patch the VAC secure flag write in client.dll
 static bool PatchVACSecureFlag(byte_t* base, size_t size)
