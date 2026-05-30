@@ -118,6 +118,13 @@ static constexpr const char *GBE_kDotaGenericLobbyStateKey = "gbe_dota_state";
 static constexpr const char *GBE_kDotaGenericLobbyGameStateKey = "gbe_dota_game_state";
 static constexpr const char *GBE_kDotaGenericLobbyMatchIdKey = "gbe_dota_match_id";
 static constexpr const char *GBE_kDotaGenericLobbyServerIdKey = "gbe_dota_server_id";
+
+static bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
+    Steam_Game_Coordinator *target_gc,
+    const CSteamID &player_steam_id,
+    const std::vector<Econ_Item> &source_items,
+    bool unsubscribe_first,
+    const char *reason);
 static constexpr const char *GBE_kDotaGenericLobbyConnectKey = "gbe_dota_connect";
 static constexpr const char *GBE_kDotaGenericLobbyGameStartTimeKey = "gbe_dota_game_start_time";
 static constexpr const char *GBE_kDotaGenericLobbyTvSecretCodeKey = "gbe_dota_tv_secret_code";
