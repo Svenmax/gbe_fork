@@ -8829,8 +8829,18 @@ std::string Steam_Game_Coordinator::item_to_gcprotobuf(const Econ_Item &item, CS
     proto_item.set_style(item.style);
     proto_item.set_original_id(item.original_id);
 
-    proto_item.set_contains_equipped_state(true);
-    proto_item.set_contains_equipped_state_v2(true);
+    // Only declare equipped_state presence when the item actually has equip
+    // data.  Setting contains_equipped_state=true on items with an empty
+    // equipped_state list causes the engine to "lock in" the item as
+    // unequipped in the SO cache established by the login CacheSubscribed.
+    // Subsequent emsg=26 (UpdateMultiple) cannot override this because the
+    // shared SO cache is already marked [in cache].  By omitting the flag
+    // for items without equip_states, the engine treats their equip status
+    // as unknown, allowing later updates to take effect.
+    if (!item.equip_states.empty()) {
+        proto_item.set_contains_equipped_state(true);
+        proto_item.set_contains_equipped_state_v2(true);
+    }
 
     for (const auto &[class_id, slot_id] : item.equip_states) {
         auto proto_equip = proto_item.add_equipped_state();
