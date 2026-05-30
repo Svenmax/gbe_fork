@@ -9230,44 +9230,25 @@ void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const st
             return;
         }
 
-        // [FIX] Fallback: even if the owner check above failed (e.g. lobby
-        // owner_steam_id not yet populated), prevent pushing a massive generic
-        // CacheSubscribed for the host player to the server engine.  In a
-        // listen server the shared SO cache already has these items from the
-        // login CacheSubscribed; pushing them again as a 706KB message with no
-        // equipped_state pollutes the SO cache and prevents subsequent emsg=26
-        // equip updates from creating wearables.
-        // Detect host by checking if steam_id matches client GC's local ID.
+        // [FIX] In a listen server, never push the host's full generic
+        // CacheSubscribed (706KB / 27k items) to the server engine.  The
+        // shared SO cache already has these items from the login
+        // CacheSubscribed.  Pushing them again with no equipped_state
+        // pollutes the server engine's item cache and prevents the later
+        // equip-forward CacheSubscribed (with equipped items) from creating
+        // wearable entities.  Just skip entirely -- the equip-forward path
+        // will push the correct equipped-only CacheSubscribed when needed.
         Steam_Client *steam_client = get_steam_client();
         Steam_Game_Coordinator *client_gc = steam_client ? steam_client->steam_game_coordinator : nullptr;
         if (client_gc && steam_id.ConvertToUint64() == client_gc->settings->get_local_steam_id().ConvertToUint64()) {
-            if (GBE_PushDotaPlayerEquippedItemsCacheToGC(this, steam_id, items, false, "callback_items_received_host_fallback_server")) {
-                size_t equipped_count = 0;
-                for (const Econ_Item &item : items) {
-                    if (!item.equip_states.empty())
-                        ++equipped_count;
-                }
-                GBE_GC_DebugLog(
-                    "GC_DOTA_SYNC",
-                    "pushed host equipped-only CacheSubscribed (fallback): steam_id=%llu lobby_active=%d lobby_id=%llu owner_steam_id=%llu equipped=%zu total=%zu",
-                    static_cast<unsigned long long>(steam_id.ConvertToUint64()),
-                    GBE_local_lobby.active ? 1 : 0,
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    static_cast<unsigned long long>(GBE_GetDotaLobbyOwnerSteamId()),
-                    equipped_count,
-                    items.size()
-                );
-            } else {
-                GBE_GC_DebugLog(
-                    "GC_DOTA_SYNC",
-                    "skipping generic CacheSubscribed for host (fallback, no equipped): steam_id=%llu lobby_active=%d lobby_id=%llu owner_steam_id=%llu items=%zu",
-                    static_cast<unsigned long long>(steam_id.ConvertToUint64()),
-                    GBE_local_lobby.active ? 1 : 0,
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    static_cast<unsigned long long>(GBE_GetDotaLobbyOwnerSteamId()),
-                    items.size()
-                );
-            }
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "skipping generic CacheSubscribed for host (fallback): steam_id=%llu lobby_active=%d lobby_id=%llu items=%zu",
+                static_cast<unsigned long long>(steam_id.ConvertToUint64()),
+                GBE_local_lobby.active ? 1 : 0,
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                items.size()
+            );
             return;
         }
     }
