@@ -789,6 +789,78 @@ static bool PatchHLTVRelayPasswordCheck(byte_t* base, size_t size)
     return true;
 }
 
+static bool PatchHLTVRelayPasswordCheckFallback(byte_t* base, size_t size)
+{
+    DebugLog("[HLTV_PATCH] Trying fallback pattern near IsCorrectUniqueTVCode log site...");
+
+    // Fallback anchored by the nearby debug log call that references
+    // "CHLTVServer::IsCorrectUniqueTVCode: ...". In the sampled engine2 build,
+    // the validation tail sits shortly after the log call and ends with:
+    //   cmp r8d,eax
+    //   je +4
+    //   xor al,al
+    //   jmp +0x13
+    //   ...
+    //   test eax,eax
+    //   sete al
+    // We scan for the shorter tail pattern to survive call-target drift.
+    byte_t shortPattern[] = {
+        0x44, 0x3B, 0xC0, 0x74, 0x04, 0x32, 0xC0, 0xEB, 0x13
+    };
+    const char* shortMask = "xxxxxxxxx";
+
+    int count = CountPattern(base, size, shortPattern, shortMask, sizeof(shortPattern));
+    DebugLog("[HLTV_PATCH] Fallback short-tail matches: %d", count);
+    if (count < 1 || count > 8) {
+        DebugLog("[HLTV_PATCH] Fallback aborted: unexpected short-tail match count");
+        return false;
+    }
+
+    for (size_t i = 0; i + 48 < size; i++) {
+        bool match = true;
+        for (size_t j = 0; j < sizeof(shortPattern); j++) {
+            if (base[i + j] != shortPattern[j]) {
+                match = false;
+                break;
+            }
+        }
+        if (!match)
+            continue;
+
+        // Search a short window for test eax,eax / sete al.
+        for (size_t off = 16; off <= 40; off++) {
+            if (base[i + off] == 0x85 && base[i + off + 1] == 0xC0 &&
+                base[i + off + 2] == 0x0F && base[i + off + 3] == 0x94 && base[i + off + 4] == 0xC0) {
+                DebugLog("[HLTV_PATCH] Fallback matched tail at offset 0x%zX (sete at +0x%zX)", i, off + 2);
+
+                if (*(base + i + 3) == 0x74) {
+                    if (!PatchByte(base + i + 3, 0x74, 0xEB)) {
+                        DebugLog("[HLTV_PATCH] Fallback failed to patch length gate");
+                        return false;
+                    }
+                }
+
+                const byte_t oldTail[] = { 0x0F, 0x94, 0xC0 };
+                const byte_t newTail[] = { 0xB0, 0x01, 0x90 };
+                if (std::memcmp(base + i + off + 2, newTail, sizeof(newTail)) == 0) {
+                    DebugLog("[HLTV_PATCH] Fallback return tail already patched");
+                    return true;
+                }
+                if (!PatchBytes(base + i + off + 2, oldTail, newTail, sizeof(oldTail))) {
+                    DebugLog("[HLTV_PATCH] Fallback failed to patch return tail");
+                    return false;
+                }
+
+                DebugLog("[HLTV_PATCH] Fallback HLTV relay password patch applied successfully");
+                return true;
+            }
+        }
+    }
+
+    DebugLog("[HLTV_PATCH] Fallback pattern not found");
+    return false;
+}
+
 static void ApplyHLTVPatch()
 {
     DebugLog("[HLTV_MAIN] HLTV patch thread starting");
@@ -806,6 +878,8 @@ static void ApplyHLTVPatch()
         }
 
         bool patched = PatchHLTVRelayPasswordCheck(base, size);
+        if (!patched)
+            patched = PatchHLTVRelayPasswordCheckFallback(base, size);
         if (patched) {
             DebugLog("[HLTV_THREAD] HLTV relay password patch applied successfully!");
         } else {
