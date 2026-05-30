@@ -14444,6 +14444,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 push_incoming_now(7092u | GBE_kProtoMask, pending_msg);
             }
 
+            const CSteamID local_steam_id = settings->get_local_steam_id();
+            const uint32 local_account_id = local_steam_id.GetAccountID();
+
             // Second response: READY with server info
             {
                 std::string ready_body;
@@ -14466,9 +14469,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 push_incoming_now(7092u | GBE_kProtoMask, ready_msg);
             }
 
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "watch game request -> READY server=0x%llx tv_addr=0x%x tv_port=%u secret=0x%llx source_job=%llu",
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "watch game request -> READY server=0x%llx tv_addr=0x%x tv_port=%u local_account=%u local_steamid=%llu raw_tv_secret=0x%llx sent_secret=0x%llx source_job=%llu",
                 static_cast<unsigned long long>(watch_server_steamid),
                 source_tv_addr, source_tv_port,
+                local_account_id,
+                static_cast<unsigned long long>(local_steam_id.ConvertToUint64()),
+                static_cast<unsigned long long>(tv_secret_code),
                 static_cast<unsigned long long>(tv_secret_code != 0 ? tv_secret_code : (watch_server_steamid ^ 0x0514D449EDC24001ULL)),
                 static_cast<unsigned long long>(source_job));
             return true;
@@ -17846,6 +17852,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         if (GBE_BuildWrappedDotaReplayMessage(pending_inner, context.outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_pending))
             push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_pending);
 
+        const CSteamID local_steam_id = settings->get_local_steam_id();
+        const uint32 local_account_id = local_steam_id.GetAccountID();
+
         // Build READY response
         std::string ready_body;
         GBE_AppendProtoVarIntField(ready_body, 1u, 1u);
@@ -17865,8 +17874,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
             push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_ready);
 
         GBE_GC_DebugLog("GC_DOTA_LOBBY",
-            "[WATCH] wrapped WatchGame -> READY server=0x%llx tv_addr=0x%x tv_port=%u",
-            static_cast<unsigned long long>(watch_server_steamid), source_tv_addr, source_tv_port);
+            "[WATCH] wrapped WatchGame -> READY server=0x%llx tv_addr=0x%x tv_port=%u local_account=%u local_steamid=%llu raw_tv_secret=0x%llx sent_secret=0x%llx",
+            static_cast<unsigned long long>(watch_server_steamid),
+            source_tv_addr,
+            source_tv_port,
+            local_account_id,
+            static_cast<unsigned long long>(local_steam_id.ConvertToUint64()),
+            static_cast<unsigned long long>(tv_secret_code_w),
+            static_cast<unsigned long long>(secret_code));
         return true;
     }
 
