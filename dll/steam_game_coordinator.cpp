@@ -6556,6 +6556,72 @@ static bool GBE_BuildDotaSOOwnerCacheUnsubscribedPayload(uint32 owner_type, uint
     return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheUnsubscribed, body, message);
 }
 
+static bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
+    Steam_Game_Coordinator *target_gc,
+    const CSteamID &player_steam_id,
+    const std::vector<Econ_Item> &source_items,
+    bool unsubscribe_first,
+    const char *reason)
+{
+    if (!target_gc || !player_steam_id.BIndividualAccount())
+        return false;
+
+    std::vector<const Econ_Item *> equipped_items;
+    for (const Econ_Item &item : source_items) {
+        if (!item.equip_states.empty())
+            equipped_items.push_back(&item);
+    }
+
+    if (equipped_items.empty())
+        return false;
+
+    const uint64 player_steam64 = player_steam_id.ConvertToUint64();
+
+    if (unsubscribe_first) {
+        std::string unsub_message;
+        GBE_BuildDotaSOOwnerCacheUnsubscribedPayload(1u, player_steam64, unsub_message);
+        target_gc->push_incoming_message(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, unsub_message);
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "pushed player CacheUnsubscribed to target GC: steam64=%llu reason=%s message_size=%zu",
+            static_cast<unsigned long long>(player_steam64),
+            reason ? reason : "unknown",
+            unsub_message.size()
+        );
+    }
+
+    std::string owner_soid;
+    GBE_AppendProtoVarIntField(owner_soid, 1u, 1u);
+    GBE_AppendProtoVarIntField(owner_soid, 2u, player_steam64);
+
+    std::string subscribed_type;
+    GBE_AppendProtoVarIntField(subscribed_type, 1u, 1u);
+    for (const Econ_Item *ep : equipped_items) {
+        std::string serialized = target_gc->serialize_item_to_gcprotobuf(*ep, player_steam_id);
+        GBE_AppendProtoBytesField(subscribed_type, 2u, serialized);
+    }
+
+    std::string cache_body;
+    GBE_AppendProtoBytesField(cache_body, 2u, subscribed_type);
+    GBE_AppendProtoFixed64Field(cache_body, 3u, 1ull);
+    GBE_AppendProtoBytesField(cache_body, 4u, owner_soid);
+
+    std::string cache_message;
+    GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheSubscribed, cache_body, cache_message);
+    target_gc->push_incoming_message(GBE_kDotaCacheSubscribed | GBE_kProtoMask, cache_message);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "pushed player item CacheSubscribed to target GC: steam64=%llu equipped_items=%zu reason=%s message_size=%zu unsub_first=%u",
+        static_cast<unsigned long long>(player_steam64),
+        equipped_items.size(),
+        reason ? reason : "unknown",
+        cache_message.size(),
+        unsubscribe_first ? 1u : 0u
+    );
+    return true;
+}
+
 static bool GBE_BuildDotaRemoveLobbyInvitePayload(uint64 lobby_id, uint64 owner_steam_id, std::string &message)
 {
     std::string invite_key;
