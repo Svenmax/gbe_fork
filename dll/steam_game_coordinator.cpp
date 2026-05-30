@@ -14128,6 +14128,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             }
         }
 
+        // [FIX] When the local player (host) equips items during an active game,
+        // the lobby snapshot that was previously replayed is now stale.  Reset the
+        // flag so the next GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot call will
+        // rebuild and push a fresh Lobby CacheSubscribed (emsg=24) containing the
+        // updated equipped items.  Without this, the host's game client never
+        // receives the updated wearable data for its own hero.
+        if (!is_server && gc_profile == GC_PROFILE_DOTA2 &&
+            GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
+            GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 2u &&
+            GBE_dota_private_lobby_snapshot_replayed) {
+            GBE_dota_private_lobby_snapshot_replayed = false;
+            GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot("equip_items_refresh");
+        }
+
         return true;
     }
 
