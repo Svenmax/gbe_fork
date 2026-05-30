@@ -13004,12 +13004,21 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 const uint64 player_steam64 = static_cast<uint64>(target_account_id) + 76561197960265728ull;
                 const CSteamID player_steam_id(player_steam64);
 
-                // Determine which item source to use for this player
+                // Determine which item source to use for this player.
+                // [FIX] On a listen server the server GC's
+                // settings->get_local_steam_id() returns the game-server
+                // steam ID (90071999...), NOT the lobby owner's personal
+                // steam ID.  So we also check against the lobby owner's
+                // steam ID to correctly identify the host player and read
+                // their items from the client GC.
                 std::vector<const Econ_Item *> equipped_items;
 
                 const uint64 local_steam64 = settings->get_local_steam_id().ConvertToUint64();
-                if (player_steam64 == local_steam64 && client_gc) {
-                    // Local player (host): read from client GC
+                const uint64 owner_steam64 = GBE_GetDotaLobbyOwnerSteamId();
+                const bool is_host_player = (player_steam64 == local_steam64 || player_steam64 == owner_steam64);
+
+                if (is_host_player && client_gc) {
+                    // Host player: read from client GC (same process)
                     const auto &client_items = client_gc->get_items();
                     for (const auto &item : client_items) {
                         if (!item.equip_states.empty())
@@ -13027,10 +13036,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 if (equipped_items.empty()) {
                     GBE_GC_DebugLog(
                         "GC_DOTA_DIRECT",
-                        "no equipped items for player at 7450 time: account_id=%u steam64=%llu is_local=%d has_remote_data=%d",
+                        "no equipped items for player at 7450 time: account_id=%u steam64=%llu is_local=%d is_host=%d has_remote_data=%d",
                         target_account_id,
                         static_cast<unsigned long long>(player_steam64),
                         (player_steam64 == local_steam64) ? 1 : 0,
+                        is_host_player ? 1 : 0,
                         all_user_items.count(player_steam64) ? 1 : 0
                     );
                     continue;
@@ -14020,16 +14030,72 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
         // Forward item equip changes to the server GC so the dedicated server
         // can update wearables in real-time (e.g. during strategy phase).
-        // Valve's GC sends emsg=21 (k_ESOMsg_Create) per item FIRST, then
-        // emsg=26 (CMsgSOMultipleObjects) with all modified items.  The server
-        // needs emsg=21 to register the item objects in its SO Cache before
-        // emsg=26 can trigger a wearable refresh.
+        //
+        // [FIX] The server GC's settings->get_local_steam_id() returns the
+        // game-server steam ID, not the lobby owner's personal steam ID.  At
+        // 7450 time (batch player resources) the server therefore fails to
+        // recognise the host as "local" and falls through to all_user_items,
+        // which may have no equip_states yet.  Even when equip_states arrive
+        // later via network inventory response, the Source 2 engine only
+        // creates wearable entities from a CacheSubscribed (emsg=24) that
+        // establishes the player's SO cache.  Bare emsg=21/26 arriving
+        // *before* any CacheSubscribed for that owner are silently dropped by
+        // the engine because no SO cache exists for the owner yet.
+        //
+        // Fix: before pushing emsg=21/26, always push a full player-item
+        // CacheSubscribed (emsg=24, owner_type=1) containing ALL currently
+        // equipped items.  This guarantees the engine has a valid SO cache
+        // for the player before the individual Create/Update messages arrive,
+        // and – crucially – provides the engine with the loadout data it
+        // needs to build wearable entities at hero-spawn time.
         if (!is_server && gc_profile == GC_PROFILE_DOTA2 && !update_message.empty()) {
             Steam_Client *steam_client = get_steam_client();
             Steam_Game_Coordinator *server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
             if (server_gc && server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id)) {
                 const uint64 player_steam64 = settings->get_local_steam_id().ConvertToUint64();
                 const CSteamID player_steam_id = settings->get_local_steam_id();
+
+                // Step 0 (FIX): Push a full player-item CacheSubscribed
+                // (emsg=24, owner_type=1) so the engine's SO cache is
+                // established / refreshed before any Create/Update messages.
+                {
+                    std::vector<const Econ_Item *> all_equipped;
+                    for (const auto &item : items) {
+                        if (!item.equip_states.empty())
+                            all_equipped.push_back(&item);
+                    }
+
+                    if (!all_equipped.empty()) {
+                        std::string owner_soid;
+                        GBE_AppendProtoVarIntField(owner_soid, 1u, 1u);   // type = 1 (player)
+                        GBE_AppendProtoVarIntField(owner_soid, 2u, player_steam64);
+
+                        std::string subscribed_type;
+                        GBE_AppendProtoVarIntField(subscribed_type, 1u, 1u);  // type_id = 1 (CSOEconItem)
+                        for (const Econ_Item *ep : all_equipped) {
+                            std::string serialized = serialize_item_to_gcprotobuf(*ep, player_steam_id);
+                            GBE_AppendProtoBytesField(subscribed_type, 2u, serialized);
+                        }
+
+                        std::string cache_body;
+                        GBE_AppendProtoBytesField(cache_body, 2u, subscribed_type);
+                        GBE_AppendProtoFixed64Field(cache_body, 3u, 1ull);   // version
+                        GBE_AppendProtoBytesField(cache_body, 4u, owner_soid);
+
+                        std::string cache_message;
+                        GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheSubscribed, cache_body, cache_message);
+                        server_gc->push_incoming_message(GBE_kDotaCacheSubscribed | GBE_kProtoMask, cache_message);
+
+                        GBE_GC_DebugLog(
+                            "GC_DOTA_DIRECT",
+                            "pushed host player item CacheSubscribed to server GC before equip forward: "
+                            "steam64=%llu equipped_items=%zu message_size=%zu",
+                            static_cast<unsigned long long>(player_steam64),
+                            all_equipped.size(),
+                            cache_message.size()
+                        );
+                    }
+                }
 
                 // Step 1: Send emsg=21 (k_ESOMsg_Create) for each modified item
                 uint64_t create_version = equip_cache_version - modified_item_ids.size();
