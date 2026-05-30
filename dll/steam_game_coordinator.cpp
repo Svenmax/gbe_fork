@@ -9217,14 +9217,6 @@ void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const st
                     items.size()
                 );
             }
-            // Also push to client GC so host sees own cosmetics locally
-            {
-                Steam_Client *steam_client = get_steam_client();
-                Steam_Game_Coordinator *client_gc = steam_client ? steam_client->steam_game_coordinator : nullptr;
-                if (client_gc) {
-                    GBE_PushDotaPlayerEquippedItemsCacheToGC(client_gc, steam_id, items, false, "callback_items_received_owner_skip_client");
-                }
-            }
             return;
         }
     }
@@ -13246,16 +13238,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                                 static_cast<unsigned long long>(source_job)
                             );
                         }
-                        // Push to client GC so host sees own cosmetics locally
-                        if (GBE_PushDotaPlayerEquippedItemsCacheToGC(client_gc, owner_steam_id, client_items, true, "7034_owner_hero_known_client")) {
-                            GBE_GC_DebugLog(
-                                "GC_DOTA_DIRECT",
-                                "replayed host equipped items to client GC after owner hero became known: steam64=%llu hero_id=%u source_job=%llu",
-                                static_cast<unsigned long long>(owner_steam64),
-                                GBE_local_lobby.owner_hero_id,
-                                static_cast<unsigned long long>(source_job)
-                            );
-                        }
                     }
                 }
             }
@@ -14188,9 +14170,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
                 // Push to server GC so remote players see host cosmetics
                 GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, player_steam_id, items, true, "equip_forward_host_resubscribe_server");
-
-                // Push to client GC so host sees own cosmetics locally
-                GBE_PushDotaPlayerEquippedItemsCacheToGC(this, player_steam_id, items, true, "equip_forward_host_resubscribe_client");
 
                 // Step 1: Send emsg=21 (k_ESOMsg_Create) for each modified item
                 uint64_t create_version = equip_cache_version - modified_item_ids.size();
@@ -19105,15 +19084,6 @@ void Steam_Game_Coordinator::network_callback_inventory_response(Common_Message 
             const bool is_owner = (user_steamid == GBE_GetDotaLobbyOwnerSteamId());
             // Push to server GC so remote players see cosmetics
             GBE_PushDotaPlayerEquippedItemsCacheToGC(this, player_steam_id, items, is_owner, is_owner ? "inventory_response_owner_resubscribe_server" : "inventory_response_remote_subscribe");
-
-            // For owner: also push to client GC so host sees own cosmetics
-            if (is_owner) {
-                Steam_Client *steam_client = get_steam_client();
-                Steam_Game_Coordinator *client_gc = steam_client ? steam_client->steam_game_coordinator : nullptr;
-                if (client_gc) {
-                    GBE_PushDotaPlayerEquippedItemsCacheToGC(client_gc, player_steam_id, items, true, "inventory_response_owner_resubscribe_client");
-                }
-            }
 
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
