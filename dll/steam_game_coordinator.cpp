@@ -11203,8 +11203,11 @@ bool Steam_Game_Coordinator::GBE_MaybeHandleDotaPracticeLobbyKicked(const char *
     // This does NOT mean the user was actually kicked by the lobby leader.
     // The real game connection uses steamnetworkingsockets.dll and can survive
     // or reconnect independently. Suppress the kicked detection here.
+    // EXCEPTION: If the lobby has reached PostGame (state >= 3), the game is over
+    // and the host legitimately destroyed the lobby. Do NOT suppress in that case.
     if (GBE_local_lobby.lan &&
         GBE_local_lobby.state >= 2u &&
+        GBE_local_lobby.state < 3u &&
         GBE_local_lobby.match_id != 0ull &&
         !GBE_local_lobby.connect.empty()) {
         if (!GBE_local_lobby.kicked_suppressed_logged) {
@@ -17372,13 +17375,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
     }
 
     // If shared state was already cleared by the normal signout finalize (GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed),
-    // do not re-publish stale local lobby state back into it. Instead, clear the local lobby too.
+    // do not re-publish stale local lobby state back into it. Instead, leave the generic lobby and clear local state.
     if (leaving_postgame_channel && matches_current_postgame_channel && !GBE_shared_dota_lobby_state.valid) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Skipping publish after postgame 7272 because shared state was already cleared by signout finalize LobbyID=%llu",
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
         );
+        // Leave the generic lobby so other members see the lobby destroyed and can clean up.
+        GBE_LeaveGenericLobby();
         GBE_local_lobby = GBE_LocalLobby{};
     } else {
         GBE_PublishSharedDotaLobbyState("7272_leave_chat");
