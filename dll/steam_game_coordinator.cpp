@@ -6346,17 +6346,20 @@ static bool GBE_BuildDotaJoinChatChannelResponsePayload(
             return;
 
         const std::string effective_member_name = member_name.empty() ? std::to_string(member_steam_id) : member_name;
+        const uint32 channel_user_id = static_cast<uint32>(written_members.size()) + 1u;
         std::string member;
-        GBE_AppendProtoFixed64Field(member, 1u, member_steam_id);
-        GBE_AppendProtoBytesField(member, 2u, effective_member_name);
-        GBE_AppendProtoVarIntField(member, 3u, 0u);
+        GBE_AppendProtoFixed64Field(member, 1u, member_steam_id);   // steam_id
+        GBE_AppendProtoBytesField(member, 2u, effective_member_name); // persona_name
+        GBE_AppendProtoVarIntField(member, 3u, channel_user_id);    // channel_user_id
+        GBE_AppendProtoVarIntField(member, 4u, 0u);                 // status (0 = online/normal)
         GBE_AppendProtoBytesField(body, 5u, member);
         written_members.push_back(member_steam_id);
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Added 7010 chat member channel_id=%llu steam_id=%llu persona=%s",
+            "[LOBBY] Added 7010 chat member channel_id=%llu steam_id=%llu channel_user_id=%u persona=%s",
             static_cast<unsigned long long>(channel_id),
             static_cast<unsigned long long>(member_steam_id),
+            channel_user_id,
             effective_member_name.c_str()
         );
     };
@@ -6401,10 +6404,12 @@ static bool GBE_BuildDotaJoinChatChannelResponsePayload(
         append_channel_member(channel_member.steam_id, resolve_member_name(channel_member));
     }
 
-    GBE_AppendProtoVarIntField(body, 6u, channel_type);
-    GBE_AppendProtoVarIntField(body, 7u, 0u);
-    GBE_AppendProtoVarIntField(body, 9u, 0u);
-    GBE_AppendProtoVarIntField(body, 11u, 0u);
+    GBE_AppendProtoVarIntField(body, 6u, channel_type);          // channel_type
+    GBE_AppendProtoVarIntField(body, 7u, 0u);                    // result (JOIN_SUCCESS = 0)
+    // field 8: gc_initiated_join (bool) - omitted, defaults to false
+    GBE_AppendProtoVarIntField(body, 9u, 1u);                    // channel_user_id (self, always first = 1)
+    // field 10: welcome_message (string) - omitted, no welcome message
+    GBE_AppendProtoVarIntField(body, 11u, 0u);                   // special_privileges (None = 0)
     return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaJoinChatChannelResponse, body, message);
 }
 
@@ -6416,22 +6421,23 @@ static bool GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
     std::string &message)
 {
     std::string body;
-    GBE_AppendProtoVarIntField(body, 1u, 0u);
-    GBE_AppendProtoBytesField(body, 2u, channel_name);
-    GBE_AppendProtoFixed64Field(body, 3u, channel_id);
-    GBE_AppendProtoVarIntField(body, 4u, 200u);
+    GBE_AppendProtoVarIntField(body, 1u, 0u);                    // response (success)
+    GBE_AppendProtoBytesField(body, 2u, channel_name);           // channel_name
+    GBE_AppendProtoFixed64Field(body, 3u, channel_id);           // channel_id
+    GBE_AppendProtoVarIntField(body, 4u, 200u);                  // max_members
 
     std::string member;
-    GBE_AppendProtoFixed64Field(member, 1u, steam_id);
-    GBE_AppendProtoBytesField(member, 2u, player_name);
-    GBE_AppendProtoVarIntField(member, 3u, 0u);
+    GBE_AppendProtoFixed64Field(member, 1u, steam_id);           // steam_id
+    GBE_AppendProtoBytesField(member, 2u, player_name);          // persona_name
+    GBE_AppendProtoVarIntField(member, 3u, 1u);                  // channel_user_id (self = 1)
+    GBE_AppendProtoVarIntField(member, 4u, 0u);                  // status (online)
     GBE_AppendProtoBytesField(body, 5u, member);
 
-    GBE_AppendProtoVarIntField(body, 6u, 18u);
-    GBE_AppendProtoVarIntField(body, 7u, 0u);
-    GBE_AppendProtoVarIntField(body, 8u, 1u);
-    GBE_AppendProtoVarIntField(body, 9u, 0u);
-    GBE_AppendProtoVarIntField(body, 11u, 0u);
+    GBE_AppendProtoVarIntField(body, 6u, 18u);                   // channel_type (PostGame = 18)
+    GBE_AppendProtoVarIntField(body, 7u, 0u);                    // result (JOIN_SUCCESS)
+    GBE_AppendProtoVarIntField(body, 8u, 1u);                    // gc_initiated_join = true
+    GBE_AppendProtoVarIntField(body, 9u, 1u);                    // channel_user_id (self = 1)
+    GBE_AppendProtoVarIntField(body, 11u, 0u);                   // special_privileges (None)
     return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaJoinChatChannelResponse, body, message);
 }
 
