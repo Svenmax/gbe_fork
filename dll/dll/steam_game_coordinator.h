@@ -85,6 +85,7 @@ public ISteamGameCoordinator
     bool welcome_received{};
     std::chrono::high_resolution_clock::time_point welcome_time{};
     bool GBE_dota_login_sync_sent{};
+    bool GBE_dota_host_showcase_equip_pushed{};
     bool GBE_dota_private_lobby_snapshot_replayed{};
     uint32 GBE_last_dota_launch_state_pushed_game_state{};
     bool GBE_pending_reset_after_cache_unsubscribed{};

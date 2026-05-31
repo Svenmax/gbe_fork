@@ -9563,6 +9563,7 @@ void Steam_Game_Coordinator::shutdown_gc()
     welcome_received = false;
     delay_init = false;
     GBE_dota_login_sync_sent = false;
+    GBE_dota_host_showcase_equip_pushed = false;
     GBE_dota_private_lobby_snapshot_replayed = false;
     GBE_last_dota_launch_state_pushed_game_state = 0;
     gc_initialized = false;
@@ -13481,6 +13482,35 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             body_size,
             GBE_FormatDota7034Summary(body, body_size).c_str()
         );
+
+        // [FIX] Re-push host equipped items when game_state reaches TEAM_SHOWCASE (4).
+        // On a listen server the login CacheSubscribed establishes the host's SO cache
+        // with 27k items (no equipped_state) in the shared cache.  The equip-forward
+        // CacheSubscribed arrives during STRATEGY_TIME before hero spawn, so the server
+        // engine sees [in cache] and does not create wearables.  By re-pushing at
+        // TEAM_SHOWCASE (when the server engine is about to spawn heroes), we give it
+        // a fresh CacheSubscribed with only equipped items so wearables are created.
+        if (is_server && !GBE_dota_host_showcase_equip_pushed &&
+            request_shape.has_game_state && request_shape.game_state >= 4u &&
+            GBE_local_lobby.active && GBE_local_lobby.state == 2u) {
+            Steam_Client *steam_client_ptr = get_steam_client();
+            Steam_Game_Coordinator *client_gc_ptr = steam_client_ptr ? steam_client_ptr->steam_game_coordinator : nullptr;
+            const uint64 owner_steam64 = GBE_GetDotaLobbyOwnerSteamId();
+            if (client_gc_ptr && owner_steam64 != 0ull) {
+                const CSteamID owner_steam_id(owner_steam64);
+                const auto &client_items = client_gc_ptr->get_items();
+                if (GBE_PushDotaPlayerEquippedItemsCacheToGC(this, owner_steam_id, client_items, true, "7034_showcase_host_equip_repush")) {
+                    GBE_dota_host_showcase_equip_pushed = true;
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "re-pushed host equipped items at TEAM_SHOWCASE: steam64=%llu request_game_state=%u lobby_game_state=%u",
+                        static_cast<unsigned long long>(owner_steam64),
+                        request_shape.game_state,
+                        GBE_local_lobby.game_state
+                    );
+                }
+            }
+        }
 
         std::string response_message;
         if (!GBE_BuildDota7034ConnectedPlayersResponsePayload(
