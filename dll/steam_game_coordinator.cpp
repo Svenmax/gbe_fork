@@ -11733,6 +11733,21 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             return;
 
         if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+            // Only adopt if this GC instance belongs to a lobby member (or owner).
+            // Bot/fake-player GC instances have steam_ids that are not lobby members
+            // and should not adopt the shared lobby state (avoids hundreds of redundant
+            // adopt cycles during post-game GC re-initialization).
+            const uint64 local_sid = settings ? settings->get_local_steam_id().ConvertToUint64() : 0;
+            if (local_sid != 0 && local_sid != GBE_shared_dota_lobby_state.owner_steam_id) {
+                bool is_member = false;
+                for (const auto &m : GBE_shared_dota_lobby_state.members) {
+                    if (m.steam_id == local_sid) { is_member = true; break; }
+                }
+                if (!is_member) {
+                    return;  // Not a lobby participant; skip adopt
+                }
+            }
+
             GBE_local_lobby.active = GBE_shared_dota_lobby_state.active;
             GBE_local_lobby.lobby_id = GBE_shared_dota_lobby_state.lobby_id;
             GBE_local_lobby.generic_lobby_id = GBE_shared_dota_lobby_state.generic_lobby_id;
