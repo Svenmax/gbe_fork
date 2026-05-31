@@ -14623,6 +14623,97 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_shared_dota_lobby_state.valid ? 1 : 0);
             return true;
         }
+        case 7073: {
+            // CMsgSpectateFriendGame -> CMsgSpectateFriendGameResponse
+            // Sent when a player clicks "Watch Game" on a friend's profile card.
+            // Parse target steam_id (field 1, fixed64), find their lobby,
+            // and return SourceTV connection info (same logic as 7091 WatchGame).
+            uint64 spectate_target_steamid = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe))
+                        break;
+                    if (fn == 1u && wt == 1u && vs == 8) {
+                        memcpy(&spectate_target_steamid, body + vo, 8);
+                    }
+                }
+            }
+
+            // Find SourceTV info from local shared state or remote lobbies
+            uint32 spectate_tv_addr = 0;
+            uint32 spectate_tv_port = 27020;
+            uint64 spectate_tv_secret = 0;
+            uint64 spectate_server_steamid = 0;
+            std::string spectate_connect_str;
+
+            if (GBE_shared_dota_lobby_state.valid && !GBE_shared_dota_lobby_state.connect.empty()) {
+                spectate_connect_str = GBE_shared_dota_lobby_state.connect;
+                spectate_server_steamid = GBE_shared_dota_lobby_state.server_id;
+                if (GBE_local_lobby.tv_secret_code != 0)
+                    spectate_tv_secret = GBE_local_lobby.tv_secret_code;
+                if (GBE_local_lobby.tv_port != 0)
+                    spectate_tv_port = GBE_local_lobby.tv_port;
+            } else {
+                const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("7073_spectate_friend");
+                for (const auto &snap : snapshots) {
+                    if (snap.game_state >= 1u && snap.server_id != 0 && !snap.connect.empty()) {
+                        spectate_connect_str = snap.connect;
+                        spectate_server_steamid = snap.server_id;
+                        if (snap.tv_secret_code != 0)
+                            spectate_tv_secret = snap.tv_secret_code;
+                        if (snap.tv_port != 0)
+                            spectate_tv_port = snap.tv_port;
+                        break;
+                    }
+                }
+            }
+
+            if (!spectate_connect_str.empty()) {
+                size_t colon = spectate_connect_str.find(':');
+                std::string ip_str = (colon != std::string::npos) ? spectate_connect_str.substr(0, colon) : spectate_connect_str;
+                if (colon != std::string::npos) {
+                    uint32 game_port = static_cast<uint32>(std::strtoul(spectate_connect_str.c_str() + colon + 1, nullptr, 10));
+                    if (game_port > 0) spectate_tv_port = game_port + 5;
+                }
+                unsigned int a = 0, b = 0, c = 0, d = 0;
+                if (std::sscanf(ip_str.c_str(), "%u.%u.%u.%u", &a, &b, &c, &d) == 4) {
+                    spectate_tv_addr = (a << 24) | (b << 16) | (c << 8) | d;
+                }
+            }
+
+            if (spectate_server_steamid == 0)
+                spectate_server_steamid = GBE_local_lobby.server_id;
+
+            // Build 7074 response (same structure as 7092 CMsgWatchGameResponse)
+            {
+                std::string ready_body;
+                GBE_AppendProtoVarIntField(ready_body, 1u, 1u); // READY
+                if (spectate_tv_addr != 0)
+                    GBE_AppendProtoVarIntField(ready_body, 2u, spectate_tv_addr);
+                if (spectate_tv_addr != 0)
+                    GBE_AppendProtoVarIntField(ready_body, 3u, spectate_tv_addr);
+                GBE_AppendProtoVarIntField(ready_body, 4u, spectate_tv_port);
+                GBE_AppendProtoFixed64Field(ready_body, 5u, spectate_server_steamid);
+                GBE_AppendProtoFixed64Field(ready_body, 6u, spectate_server_steamid);
+                uint64 secret = (spectate_tv_secret != 0) ? spectate_tv_secret : (spectate_server_steamid ^ 0x0514D449EDC24001ULL);
+                GBE_AppendProtoFixed64Field(ready_body, 7u, secret);
+                std::string response_msg;
+                GBE_BuildDotaJobReplyOrZeroHeaderPayload(7074u, has_source_job, source_job, ready_body, response_msg);
+                push_incoming_now(7074u | GBE_kProtoMask, response_msg);
+            }
+
+            GBE_GC_DebugLog("GC_DOTA_DIRECT",
+                "spectate friend game -> READY target=%llu server=0x%llx tv_addr=0x%x tv_port=%u tv_secret=0x%llx source_job=%llu",
+                static_cast<unsigned long long>(spectate_target_steamid),
+                static_cast<unsigned long long>(spectate_server_steamid),
+                spectate_tv_addr, spectate_tv_port,
+                static_cast<unsigned long long>(spectate_tv_secret != 0 ? spectate_tv_secret : (spectate_server_steamid ^ 0x0514D449EDC24001ULL)),
+                static_cast<unsigned long long>(source_job));
+            return true;
+        }
         case 7091: {
             // CMsgWatchGame -> CMsgWatchGameResponse
             // Parse server_steamid from request (field 1, fixed64).
