@@ -132,7 +132,7 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
                 // Also fire GameRichPresenceJoinRequested_t for belt-and-suspenders
                 std::string connect_command = std::string("+connect ") + ctx.connect;
                 GameRichPresenceJoinRequested_t rich_join{};
-                rich_join.m_steamIDFriend = CSteamID(ctx.owner_steam_id);
+                rich_join.m_steamIDFriend = CSteamID(static_cast<uint64>(ctx.owner_steam_id));
                 std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
                 rich_join.m_rgchConnect[sizeof(rich_join.m_rgchConnect) - 1] = '\0';
                 callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
