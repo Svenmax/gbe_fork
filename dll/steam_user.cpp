@@ -19,6 +19,7 @@
 #include "dll/auth.h"
 #include "dll/appticket.h"
 #include "dll/base64.h"
+#include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/dll.h"
 
 #include <cstdio>
@@ -666,6 +667,15 @@ HAuthTicket Steam_User::GetAuthSessionTicket( void *pTicket, int cbMaxTicket, ui
 HAuthTicket Steam_User::GetAuthSessionTicket( void *pTicket, int cbMaxTicket, uint32 *pcbTicket, const SteamNetworkingIdentity *pSteamNetworkingIdentity )
 {
     PRINT_DEBUG("%p [%i] %p", pTicket, cbMaxTicket, pcbTicket);
+
+    // Clear reconnect eligibility -- a new auth session means a fresh connection is being established.
+    // Reset reconnect interception flag: new connection established,
+    // ready for next disconnect+reconnect cycle
+    if (!GBE_dota_reconnect_eligible.load()) {
+        GBE_dota_reconnect_eligible.store(true);
+        GBE_ReconnectLog("GBE_RECONNECT", "GetAuthSessionTicket: reset reconnect_eligible=true (new connection)");
+    }
+
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     if (!pTicket) return k_HAuthTicketInvalid;
@@ -707,6 +717,20 @@ void Steam_User::EndAuthSession( CSteamID steamID )
 void Steam_User::CancelAuthTicket( HAuthTicket hAuthTicket )
 {
     PRINT_DEBUG_ENTRY();
+
+    // Mark as eligible for Dota LAN reconnect interception.
+    // When the player disconnects from a game server, Dota calls CancelAuthTicket.
+    // The subsequent SendP2PRendezvous from Valve DLL will be intercepted to fire
+    // GameServerChangeRequested_t with the LAN IP instead.
+    {
+        GBE_DotaReconnectContext ctx{};
+        if (GBE_GetDotaReconnectContext(&ctx) && ctx.game_state >= 2) {
+            GBE_dota_reconnect_eligible.store(true);
+            GBE_ReconnectLog("GBE_RECONNECT", "CancelAuthTicket: set reconnect_eligible=true server_id=%llu connect=%s",
+                (unsigned long long)ctx.server_id, ctx.connect);
+        }
+    }
+
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     auth_manager->cancelTicket(hAuthTicket);

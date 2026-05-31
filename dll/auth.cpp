@@ -892,6 +892,13 @@ void Auth_Manager::cancelTicket(uint32 number)
     if (outbound.end() == ticket)
         return;
 
+    const AppId_t app_id = settings->get_local_game_id().AppID();
+    if (app_id == 570) {
+        PRINT_DEBUG("suppressing network auth ticket cancel for Dota 2 ticket %u", number);
+        outbound.erase(ticket);
+        return;
+    }
+
     Auth_Ticket *auth_ticket = new Auth_Ticket();
     auth_ticket->set_number(number);
     auth_ticket->set_type(Auth_Ticket::CANCEL);

@@ -17,6 +17,8 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "dll/gbe_dota_reconnect_shared.h"
+#include "dll/gbe_dota_unlock_items.h"
 #include <atomic>
 #include <algorithm>
 #include <array>
@@ -64,6 +66,7 @@ static constexpr uint32 GBE_kDotaJoinChatChannelResponse = 7010u;
 static constexpr uint32 GBE_kDotaOtherJoinedChannel = 7013u;
 static constexpr uint32 GBE_kDotaOtherLeftChannel = 7014u;
 static constexpr uint32 GBE_kDotaAbandonCurrentGame = 7035u;
+static constexpr uint32 GBE_kDotaLeaverDetected = 7072u;
 static constexpr uint32 GBE_kDotaSubmitPlayerReportV2 = 7082u;
 static constexpr uint32 GBE_kDotaSubmitPlayerReportResponseV2 = 7083u;
 static constexpr uint32 GBE_kDotaGameMatchSignOutPermissionRequest = 7381u;
@@ -88,6 +91,8 @@ static constexpr uint32 GBE_kDotaLobbyUpdateBroadcastChannelInfo = 7367u;
 static constexpr uint32 GBE_kDotaDestroyLobbyRequest = 8246u;
 static constexpr uint32 GBE_kDotaDestroyLobbyResponse = 8247u;
 static constexpr uint32 GBE_kDotaPracticeLobbyCloseBroadcastChannel = 8054u;
+static constexpr uint32 GBE_kDotaFindTopSourceTVGames = 8009u;
+static constexpr uint32 GBE_kDotaFindTopSourceTVGamesResponse = 8010u;
 static constexpr uint32 GBE_kDotaLobbyList = 8011u;
 static constexpr uint32 GBE_kDotaLobbyListResponse = 8012u;
 static constexpr uint32 GBE_kDotaSOUpdateMultiple = 6146u;
@@ -121,8 +126,17 @@ static constexpr const char *GBE_kDotaGenericLobbyStateKey = "gbe_dota_state";
 static constexpr const char *GBE_kDotaGenericLobbyGameStateKey = "gbe_dota_game_state";
 static constexpr const char *GBE_kDotaGenericLobbyMatchIdKey = "gbe_dota_match_id";
 static constexpr const char *GBE_kDotaGenericLobbyServerIdKey = "gbe_dota_server_id";
+
+static bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
+    Steam_Game_Coordinator *target_gc,
+    const CSteamID &player_steam_id,
+    const std::vector<Econ_Item> &source_items,
+    bool unsubscribe_first,
+    const char *reason);
 static constexpr const char *GBE_kDotaGenericLobbyConnectKey = "gbe_dota_connect";
 static constexpr const char *GBE_kDotaGenericLobbyGameStartTimeKey = "gbe_dota_game_start_time";
+static constexpr const char *GBE_kDotaGenericLobbyTvSecretCodeKey = "gbe_dota_tv_secret_code";
+static constexpr const char *GBE_kDotaGenericLobbyTvPortKey = "gbe_dota_tv_port";
 static constexpr const char *GBE_kDotaGenericLobbyMemberTeamKey = "gbe_dota_member_team";
 static constexpr const char *GBE_kDotaGenericLobbyMemberSlotKey = "gbe_dota_member_slot";
 static constexpr const char *GBE_kDotaGenericLobbyMemberHeroKey = "gbe_dota_member_hero";
@@ -276,6 +290,32 @@ struct GBE_DotaGenericLobbyEntry {
 static GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 static bool GBE_pending_dota_normal_signout_finalize_after_25 = false;
 static uint64 GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+static GBE_DotaLootListData GBE_vpk_loot_data;
+
+// --- Dota reconnect shared state ---
+std::atomic<bool> GBE_dota_reconnect_eligible{true};
+
+bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
+{
+    if (!out)
+        return false;
+    if (!GBE_shared_dota_lobby_state.valid || !GBE_shared_dota_lobby_state.active)
+        return false;
+    if (GBE_shared_dota_lobby_state.game_state < 2u)
+        return false;
+    if (GBE_shared_dota_lobby_state.connect.empty())
+        return false;
+    if (GBE_shared_dota_lobby_state.server_id == 0)
+        return false;
+
+    out->server_id = GBE_shared_dota_lobby_state.server_id;
+    out->game_state = GBE_shared_dota_lobby_state.game_state;
+    std::strncpy(out->connect, GBE_shared_dota_lobby_state.connect.c_str(), sizeof(out->connect) - 1);
+    out->connect[sizeof(out->connect) - 1] = '\0';
+    out->owner_steam_id = GBE_shared_dota_lobby_state.owner_steam_id;
+    return true;
+}
+// --- End Dota reconnect shared state ---
 
 enum : uint32 {
     GBE_kDotaLaunchPhaseNone = 0u,
@@ -451,10 +491,15 @@ static std::string GBE_GetDotaPracticeLobbyFirstConnectEndpoint(const std::strin
 
 static uint64 GBE_BuildDotaPracticeLobbyIpServerId(uint32 ip)
 {
-    (void)ip;
-    // Keep LAN lobbies on the explicit connect endpoint path. Any non-zero
-    // SteamID tested so far makes Dota prefer Remote Connect/P2P over connect.
-    return 0ull;
+    if (ip == 0u)
+        return 0ull;
+
+    // Build an AnonGameServer-style CSteamID (Type=4) using the IP as the
+    // account ID.  Real Steam servers get a similar SteamID assigned by the
+    // backend during SERVERSETUP; we synthesize one locally so that Dota can
+    // resolve the game server via [I:0:account_id] Steam networking address.
+    CSteamID server_id(ip, k_unSteamUserDefaultInstance, k_EUniversePublic, k_EAccountTypeAnonGameServer);
+    return server_id.ConvertToUint64();
 }
 
 static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
@@ -462,7 +507,10 @@ static constexpr uint32 GBE_kSteamAuthList = 5432u;
 static constexpr uint32 GBE_kSteamPersonaState = 766u;
 static constexpr uint32 GBE_kSteamTicketAuthComplete = 5429u;
 static constexpr uint32 GBE_kDotaConductScore = 12000u;
-static constexpr uint32 GBE_kDotaBehaviorLevel = 4u;
+static constexpr uint32 GBE_kDotaBehaviorLevel = 5u;
+static constexpr uint32 GBE_kDotaPlusOriginalStartDate = 1522540800u; // 2018-04-01 (Plus launch era)
+static constexpr uint32 GBE_kDotaPlusFlags = 1u;
+static constexpr uint32 GBE_kDotaPlusStatusActive = 1u;
 
 static constexpr const char *GBE_kDotaAbandonPersonaStatePrivateLobbyPostgameHex =
     "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112ee0309911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f505249564154455f4c4f424259ba04270a0d737465616d5f646973706c6179121623444f54415f52505f505249564154455f4c4f424259ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348ba0492010a056c6f6262791288016c6f6262795f69643a203239383232343938363432383535303930206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a20226565656522206c6f6262795f747970653a2031c1040000000000000000c9040000000000000000f80400800500880500980501";
@@ -1186,17 +1234,9 @@ static const uint8 GBE_kDota7198Template[] = {
     0x00, 0x42, 0x0A, 0x08, 0xD8, 0x02, 0x10, 0x00, 0x18, 0x00, 0x20, 0x82, 0x02,
 };
 
-static const uint8 GBE_kDota7388Profile20Template[] = {
-    0xDC, 0x1C, 0x00, 0x80, 0x09, 0x00, 0x00, 0x00, 0x59, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x08, 0x00, 0x10, 0x00, 0x18, 0x20, 0x20, 0x00, 0x28, 0x00, 0x38, 0xF5, 0xED, 0x86, 0x41,
-    0x40, 0x00, 0x50, 0x00,
-};
-
-static const uint8 GBE_kDota7388Profile37Template[] = {
-    0xDC, 0x1C, 0x00, 0x80, 0x09, 0x00, 0x00, 0x00, 0x59, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x08, 0xE8, 0x07, 0x10, 0x00, 0x18, 0x37, 0x20, 0xE8, 0x07, 0x28, 0x00, 0x38, 0xF5, 0xED,
-    0x86, 0x41, 0x40, 0x01, 0x50, 0x00,
-};
+// Removed: GBE_kDota7388Profile20Template (had owned=0, caused "Unavailable")
+// Removed: GBE_kDota7388Profile37Template (had owned=1 but used hardcoded account_id)
+// All 7387->7388 event queries now use GBE_BuildDota7388MinimalResponsePayload.
 
 static const uint8 GBE_kDota8079Template[] = {
     0x8F, 0x1F, 0x00, 0x80, 0x09, 0x00, 0x00, 0x00, 0x59, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -1497,7 +1537,6 @@ static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)
     const char *log_scope = scope ? scope : "GC";
     if (std::strcmp(log_scope, "GC_SEND") == 0 ||
         std::strcmp(log_scope, "GC_SEND_DOTA") == 0 ||
-        std::strcmp(log_scope, "GC_DOTA_SYNC") == 0 ||
         std::strcmp(log_scope, "GC_CONFIG") == 0 ||
         std::strcmp(log_scope, "GC_INIT") == 0 ||
         std::strcmp(log_scope, "CREATE_INTERFACE") == 0 ||
@@ -1962,6 +2001,12 @@ static bool GBE_BuildDotaLobbyAdditionalStartupAccountDataPayload(uint32 account
         return true;
 
     GBE_AppendProtoVarIntField(payload, 1u, account_id);
+
+    // CMsgLobbyPlayerPlusSubscriptionData (field 2) - mark as Plus subscriber
+    // Contains repeated HeroBadge entries; empty is valid (no hero badges yet).
+    std::string plus_data;
+    GBE_AppendProtoBytesField(payload, 2u, plus_data);
+
     return true;
 }
 
@@ -2029,9 +2074,8 @@ static void GBE_AppendDotaLobbyEventPeriodicResource(
     GBE_AppendProtoBytesField(account_points, 31u, resource);
 }
 
-static void GBE_AppendDotaLobbyEventPoints(
-    std::string &object_2016,
-    uint32 event_id,
+static void GBE_AppendDotaLobbyEventAccountPoints(
+    std::string &event_points,
     uint32 account_id,
     uint32 normal_points,
     uint32 premium_points,
@@ -2050,13 +2094,42 @@ static void GBE_AppendDotaLobbyEventPoints(
     GBE_AppendProtoVarIntField(account_points, 27u, 0u);
     GBE_AppendProtoVarIntField(account_points, 28u, 0u);
     if (include_periodic_resources) {
-        GBE_AppendDotaLobbyEventPeriodicResource(account_points, 15u, 0u, 0u);
-        GBE_AppendDotaLobbyEventPeriodicResource(account_points, 28u, 0u, 0u);
+        GBE_AppendDotaLobbyEventPeriodicResource(account_points, 15u, 10u, 10u);
+        GBE_AppendDotaLobbyEventPeriodicResource(account_points, 28u, 1000u, 1000u);
     }
 
+    GBE_AppendProtoBytesField(event_points, 2u, account_points);
+}
+
+static void GBE_AppendDotaLobbyEventPoints(
+    std::string &object_2016,
+    uint32 event_id,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
+    uint32 owner_account_id,
+    uint32 normal_points,
+    uint32 premium_points,
+    bool owner_owned,
+    bool non_owner_owned,
+    uint32 event_level,
+    bool include_periodic_resources)
+{
     std::string event_points;
     GBE_AppendProtoVarIntField(event_points, 1u, event_id);
-    GBE_AppendProtoBytesField(event_points, 2u, account_points);
+    for (const GBE_DotaLobbyMemberState &member : members) {
+        if (member.steam_id == 0ull)
+            continue;
+        const uint32 member_account_id = member.account_id != 0u ? member.account_id : CSteamID((uint64)member.steam_id).GetAccountID();
+        if (member_account_id == 0u)
+            continue;
+        GBE_AppendDotaLobbyEventAccountPoints(
+            event_points,
+            member_account_id,
+            normal_points,
+            premium_points,
+            member_account_id == owner_account_id ? owner_owned : non_owner_owned,
+            event_level,
+            include_periodic_resources);
+    }
     GBE_AppendProtoBytesField(object_2016, 3u, event_points);
 }
 
@@ -2104,7 +2177,7 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
         std::string member_bytes;
         GBE_AppendProtoFixed64Field(member_bytes, 1u, member_steam_id);
         GBE_AppendProtoVarIntField(member_bytes, 9u, 0u);
-        GBE_AppendProtoVarIntField(member_bytes, 11u, 0u);
+        GBE_AppendProtoVarIntField(member_bytes, 11u, 1u); // is_plus_subscriber = true
         GBE_AppendProtoFixed64Field(member_bytes, 12u, 0ull);
         GBE_AppendProtoVarIntField(member_bytes, 13u, 0u);
         if (game_mode != 2u && member.connected)
@@ -2123,10 +2196,15 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
     GBE_AppendProtoFixed32Field(object_2016, 2u, 0u);
 
     if (include_event_points && account_id != 0u && wrote_owner_event_points) {
-        GBE_AppendDotaLobbyEventPoints(object_2016, 19u, account_id, 0u, 0u, 0u, 0u, true);
-        GBE_AppendDotaLobbyEventPoints(object_2016, 26u, account_id, 0u, 0u, 0u, 0u, false);
-        GBE_AppendDotaLobbyEventPoints(object_2016, 39u, account_id, 0u, 0u, 0u, 0u, false);
-        GBE_AppendDotaLobbyEventPoints(object_2016, 56u, account_id, 0u, 0u, 0u, 0u, false);
+        // Declare ownership for all known Dota 2 event/Battle Pass IDs so that
+        // world items (creep skins, tower skins, weather, etc.) bound to any
+        // historical event are not marked "Unavailable" by the client.
+        // Known event IDs span from ~7 (TI4) through ~56 (TI 2024+).
+        // We iterate a wide range and mark all as owned with a reasonable level.
+        for (uint32 eid = 7; eid <= 60; eid++) {
+            bool include_periodic = (eid == 19u); // only TI7 gets periodic resources
+            GBE_AppendDotaLobbyEventPoints(object_2016, eid, effective_members, account_id, 1000u, 0u, true, true, 1u, include_periodic);
+        }
     }
 }
 
@@ -2144,11 +2222,22 @@ static void GBE_BuildDotaLobbyMemberObject2004(const GBE_DotaLobbyMemberState &m
     GBE_AppendProtoVarIntField(member_state, 3u, member.team);
     if (member.slot != 0u)
         GBE_AppendProtoVarIntField(member_state, 7u, member.slot);
-    const bool member_leaver_disconnected = !member.connected && lobby_state == 2u && lobby_game_state >= 1u;
-    if (member_leaver_disconnected) {
-        GBE_AppendProtoVarIntField(member_state, 16u, 1u);
+
+    // Leaver status (field 16):
+    // Pre-game (lobby UI/setup): Real GC always writes field 16 = 1 for all members,
+    //   which Dota uses to determine member presence/color in the lobby chat panel.
+    // In-game (state=RUN, game_state>=1): field 16 is only written for disconnected
+    //   members (value=1=DISCONNECTED); connected members omit it entirely.
+    uint32 effective_leaver = member.leaver_status;
+    if (effective_leaver == 0u && !member.connected && lobby_state == 2u && lobby_game_state >= 1u)
+        effective_leaver = 1u; // DOTA_LEAVER_DISCONNECTED
+    if (effective_leaver != 0u) {
+        GBE_AppendProtoVarIntField(member_state, 16u, effective_leaver);
         if (lobby_state == 2u && lobby_game_state >= 1u)
             GBE_AppendProtoVarIntField(member_state, 28u, 0u);
+    } else if (lobby_state != 2u || lobby_game_state < 1u) {
+        // Pre-game: write field 16 = 1 to match real GC behavior
+        GBE_AppendProtoVarIntField(member_state, 16u, 1u);
     }
 }
 
@@ -2591,6 +2680,34 @@ static bool GBE_RewriteDotaAccountBoundObjectData(const std::string &input, int 
     if (!saw_account_id)
         GBE_AppendProtoVarIntField(account_output, 1u, account_id);
 
+    if (type_id == 2012) {
+        // CSODOTAGameAccountPlus: activate Dota Plus subscription.
+        // Keep only field 1 (account_id), rebuild all other fields with active values.
+        std::string plus_output;
+        size_t ao_offset = 0;
+        while (ao_offset < account_output.size()) {
+            uint32 fn = 0, wt = 0;
+            size_t fo = 0, vo = 0, vs = 0, fe = 0;
+            if (!GBE_ReadNextProtoField(
+                    reinterpret_cast<const uint8 *>(account_output.data()),
+                    account_output.size(), ao_offset, fn, wt, fo, vo, vs, fe))
+                return false;
+            if (fn == 1u) {
+                plus_output.append(account_output.data() + fo, fe - fo);
+            }
+            // Skip all other fields; we rebuild them below.
+        }
+        GBE_AppendProtoVarIntField(plus_output, 2u, GBE_kDotaPlusOriginalStartDate);
+        GBE_AppendProtoVarIntField(plus_output, 3u, GBE_kDotaPlusFlags);
+        GBE_AppendProtoVarIntField(plus_output, 4u, GBE_kDotaPlusStatusActive);
+        GBE_AppendProtoVarIntField(plus_output, 5u, 0u);
+        GBE_AppendProtoVarIntField(plus_output, 6u, 0u);
+        GBE_AppendProtoFixed32Field(plus_output, 7u, 1893456000u); // 2030-01-01
+        GBE_AppendProtoFixed64Field(plus_output, 8u, 0ull);
+        output.swap(plus_output);
+        return true;
+    }
+
     if (type_id != 2002) {
         output.swap(account_output);
         return true;
@@ -2603,8 +2720,25 @@ static bool GBE_RewriteDotaAccountBoundObjectData(const std::string &input, int 
     if (!rewrote_conduct_score)
         GBE_AppendProtoVarIntField(conduct_output, 72u, GBE_kDotaConductScore);
 
-    // Clear account chat restrictions from the welcome account SO; stale donor timestamps make Dota treat chat as restricted.
-    return GBE_RewriteProtoVarIntFields(conduct_output, { 20u, 21u, 86u, 122u }, 0u, output, nullptr);
+    // Clear ban/disable/restriction fields from the welcome account SO;
+    // stale donor timestamps cause Dota to show restriction popups.
+    // NOTE: field 69 (account_flags) must NOT be cleared -- the client checks
+    // bit 0/1 to determine if the account is verified; zeroing it triggers
+    // the "unable to verify" (VAC) popup and blocks lobby invite acceptance.
+    // Fields cleared:
+    //   18  low_priority_until_date
+    //   20  prevent_text_chat_until_date
+    //   21  prevent_voice_until_date
+    //   38  account_disabled_until_date
+    //   39  account_disabled_count
+    //   41  match_disabled_until_date
+    //   42  match_disabled_count
+    //   48  low_priority_games_remaining
+    //   86  prevent_public_text_chat_until_date
+    //   89  ranked_matchmaking_ban_until_date
+    //  105  custom_game_disabled_until_date
+    //  122  prevent_new_player_chat_until_date
+    return GBE_RewriteProtoVarIntFields(conduct_output, { 18u, 20u, 21u, 38u, 39u, 41u, 42u, 48u, 86u, 89u, 105u, 122u }, 0u, output, nullptr);
 }
 
 static bool GBE_PatchDotaWelcomeAccountObjects(std::string &inner_body, uint32 account_id)
@@ -3559,6 +3693,12 @@ static bool GBE_RewriteDotaServerStaticLobbyMemberObject(
         if (field_number == 1u && wire_type == 1u) {
             saw_steam_id = true;
             GBE_AppendProtoFixed64Field(output, 1u, steam_id);
+            continue;
+        }
+
+        // Force is_plus_subscriber = true (field 11, varint)
+        if (field_number == 11u && wire_type == 0u) {
+            GBE_AppendProtoVarIntField(output, 11u, 1u);
             continue;
         }
 
@@ -5991,14 +6131,16 @@ static bool GBE_BuildDotaSubmitPlayerReportResponseV2Payload(const uint8 *reques
 
 static bool GBE_BuildDota7388MinimalResponsePayload(uint32 event_id, uint32 account_id, bool has_request_job, uint64 request_job_id, std::string &message)
 {
+    // Reply with owned=true and a reasonable event level so that
+    // items bound to any event/Battle Pass are not marked "Unavailable".
     std::string body;
-    GBE_AppendProtoVarIntField(body, 1u, 0u);
-    GBE_AppendProtoVarIntField(body, 2u, 0u);
-    GBE_AppendProtoVarIntField(body, 3u, event_id);
-    GBE_AppendProtoVarIntField(body, 4u, 0u);
-    GBE_AppendProtoVarIntField(body, 5u, 0u);
-    GBE_AppendProtoVarIntField(body, 7u, account_id);
-    GBE_AppendProtoVarIntField(body, 8u, 0u);
+    GBE_AppendProtoVarIntField(body, 1u, 1000u);       // total_points
+    GBE_AppendProtoVarIntField(body, 2u, 0u);           // total_premium_points
+    GBE_AppendProtoVarIntField(body, 3u, event_id);     // event_id
+    GBE_AppendProtoVarIntField(body, 4u, 1000u);        // points / event_level
+    GBE_AppendProtoVarIntField(body, 5u, 0u);           // premium_points
+    GBE_AppendProtoVarIntField(body, 7u, account_id);   // account_id
+    GBE_AppendProtoVarIntField(body, 8u, 1u);           // owned = true
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7388u, has_request_job, request_job_id, body, message);
 }
 
@@ -6128,15 +6270,38 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
         disconnected_steam_ids.push_back(player_steam_id);
     };
 
-    append_connected_player(steam_id, 0u, owner_team, owner_slot);
-    for (const GBE_DotaLobbyMemberState &member : members) {
-        if (member.steam_id == 0ull || member.steam_id == steam_id)
-            continue;
+    if (request_shape.has_connected_player || request_shape.has_disconnected_player) {
+        if (request_shape.has_connected_steam_id && request_shape.connected_steam_id != 0ull) {
+            uint32 hero_id = 0u;
+            uint32 team = owner_team;
+            uint32 slot = owner_slot;
+            for (const GBE_DotaLobbyMemberState &member : members) {
+                if (member.steam_id == request_shape.connected_steam_id) {
+                    hero_id = member.hero_id;
+                    team = member.team;
+                    slot = member.slot;
+                    break;
+                }
+            }
+            append_connected_player(request_shape.connected_steam_id, hero_id, team, slot);
+        }
 
-        if (member.connected)
-            append_connected_player(member.steam_id, member.hero_id, member.team, member.slot);
-        else
-            append_disconnected_player(member.steam_id, lobby_state, game_state);
+        if (request_shape.has_disconnected_steam_id && request_shape.disconnected_steam_id != 0ull) {
+            const uint32 disconnected_lobby_state = request_shape.has_disconnected_lobby_state ? request_shape.disconnected_lobby_state : lobby_state;
+            const uint32 disconnected_game_state = request_shape.has_disconnected_game_state ? request_shape.disconnected_game_state : game_state;
+            append_disconnected_player(request_shape.disconnected_steam_id, disconnected_lobby_state, disconnected_game_state);
+        }
+    } else {
+        append_connected_player(steam_id, 0u, owner_team, owner_slot);
+        for (const GBE_DotaLobbyMemberState &member : members) {
+            if (member.steam_id == 0ull || member.steam_id == steam_id)
+                continue;
+
+            if (member.connected)
+                append_connected_player(member.steam_id, member.hero_id, member.team, member.slot);
+            else
+                append_disconnected_player(member.steam_id, lobby_state, game_state);
+        }
     }
 
     GBE_AppendProtoVarIntField(body, 2u, game_state);
@@ -6190,10 +6355,9 @@ static bool GBE_BuildDotaJoinChatChannelResponsePayload(
 
         const std::string effective_member_name = member_name.empty() ? std::to_string(member_steam_id) : member_name;
         std::string member;
-        GBE_AppendProtoFixed64Field(member, 1u, member_steam_id);
-        GBE_AppendProtoBytesField(member, 2u, effective_member_name);
-        GBE_AppendProtoVarIntField(member, 3u, 0u);
-        GBE_AppendProtoVarIntField(member, 4u, 0u);
+        GBE_AppendProtoFixed64Field(member, 1u, member_steam_id);   // steam_id
+        GBE_AppendProtoBytesField(member, 2u, effective_member_name); // persona_name
+        GBE_AppendProtoVarIntField(member, 3u, 0u);                 // channel_user_id (0, matches real GC)
         GBE_AppendProtoBytesField(body, 5u, member);
         written_members.push_back(member_steam_id);
         GBE_GC_DebugLog(
@@ -6245,10 +6409,12 @@ static bool GBE_BuildDotaJoinChatChannelResponsePayload(
         append_channel_member(channel_member.steam_id, resolve_member_name(channel_member));
     }
 
-    GBE_AppendProtoVarIntField(body, 6u, channel_type);
-    GBE_AppendProtoVarIntField(body, 7u, 0u);
-    GBE_AppendProtoVarIntField(body, 9u, 0u);
-    GBE_AppendProtoVarIntField(body, 11u, 0u);
+    GBE_AppendProtoVarIntField(body, 6u, channel_type);          // channel_type
+    GBE_AppendProtoVarIntField(body, 7u, 0u);                    // result (JOIN_SUCCESS = 0)
+    // field 8: gc_initiated_join (bool) - omitted, defaults to false
+    GBE_AppendProtoVarIntField(body, 9u, 0u);                    // channel_user_id (0, matches real GC)
+    // field 10: welcome_message (string) - omitted, no welcome message
+    GBE_AppendProtoVarIntField(body, 11u, 0u);                   // special_privileges (None = 0)
     return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaJoinChatChannelResponse, body, message);
 }
 
@@ -6260,23 +6426,22 @@ static bool GBE_BuildDotaPostGameJoinChatChannelResponsePayload(
     std::string &message)
 {
     std::string body;
-    GBE_AppendProtoVarIntField(body, 1u, 0u);
-    GBE_AppendProtoBytesField(body, 2u, channel_name);
-    GBE_AppendProtoFixed64Field(body, 3u, channel_id);
-    GBE_AppendProtoVarIntField(body, 4u, 200u);
+    GBE_AppendProtoVarIntField(body, 1u, 0u);                    // response (success)
+    GBE_AppendProtoBytesField(body, 2u, channel_name);           // channel_name
+    GBE_AppendProtoFixed64Field(body, 3u, channel_id);           // channel_id
+    GBE_AppendProtoVarIntField(body, 4u, 200u);                  // max_members
 
     std::string member;
-    GBE_AppendProtoFixed64Field(member, 1u, steam_id);
-    GBE_AppendProtoBytesField(member, 2u, player_name);
-    GBE_AppendProtoVarIntField(member, 3u, 0u);
-    GBE_AppendProtoVarIntField(member, 4u, 0u);
+    GBE_AppendProtoFixed64Field(member, 1u, steam_id);           // steam_id
+    GBE_AppendProtoBytesField(member, 2u, player_name);          // persona_name
+    GBE_AppendProtoVarIntField(member, 3u, 0u);                  // channel_user_id (0, matches real GC)
     GBE_AppendProtoBytesField(body, 5u, member);
 
-    GBE_AppendProtoVarIntField(body, 6u, 18u);
-    GBE_AppendProtoVarIntField(body, 7u, 0u);
-    GBE_AppendProtoVarIntField(body, 8u, 1u);
-    GBE_AppendProtoVarIntField(body, 9u, 0u);
-    GBE_AppendProtoVarIntField(body, 11u, 0u);
+    GBE_AppendProtoVarIntField(body, 6u, 18u);                   // channel_type (PostGame = 18)
+    GBE_AppendProtoVarIntField(body, 7u, 0u);                    // result (JOIN_SUCCESS)
+    GBE_AppendProtoVarIntField(body, 8u, 1u);                    // gc_initiated_join = true
+    GBE_AppendProtoVarIntField(body, 9u, 0u);                    // channel_user_id (0, matches real GC)
+    GBE_AppendProtoVarIntField(body, 11u, 0u);                   // special_privileges (None)
     return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaJoinChatChannelResponse, body, message);
 }
 
@@ -6399,6 +6564,72 @@ static bool GBE_BuildDotaSOOwnerCacheUnsubscribedPayload(uint32 owner_type, uint
     std::string body;
     GBE_AppendProtoBytesField(body, 2u, owner_soid);
     return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheUnsubscribed, body, message);
+}
+
+static bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
+    Steam_Game_Coordinator *target_gc,
+    const CSteamID &player_steam_id,
+    const std::vector<Econ_Item> &source_items,
+    bool unsubscribe_first,
+    const char *reason)
+{
+    if (!target_gc || !player_steam_id.BIndividualAccount())
+        return false;
+
+    std::vector<const Econ_Item *> equipped_items;
+    for (const Econ_Item &item : source_items) {
+        if (!item.equip_states.empty())
+            equipped_items.push_back(&item);
+    }
+
+    if (equipped_items.empty())
+        return false;
+
+    const uint64 player_steam64 = player_steam_id.ConvertToUint64();
+
+    if (unsubscribe_first) {
+        std::string unsub_message;
+        GBE_BuildDotaSOOwnerCacheUnsubscribedPayload(1u, player_steam64, unsub_message);
+        target_gc->push_incoming_message(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, unsub_message);
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "pushed player CacheUnsubscribed to target GC: steam64=%llu reason=%s message_size=%zu",
+            static_cast<unsigned long long>(player_steam64),
+            reason ? reason : "unknown",
+            unsub_message.size()
+        );
+    }
+
+    std::string owner_soid;
+    GBE_AppendProtoVarIntField(owner_soid, 1u, 1u);
+    GBE_AppendProtoVarIntField(owner_soid, 2u, player_steam64);
+
+    std::string subscribed_type;
+    GBE_AppendProtoVarIntField(subscribed_type, 1u, 1u);
+    for (const Econ_Item *ep : equipped_items) {
+        std::string serialized = target_gc->serialize_item_to_gcprotobuf(*ep, player_steam_id);
+        GBE_AppendProtoBytesField(subscribed_type, 2u, serialized);
+    }
+
+    std::string cache_body;
+    GBE_AppendProtoBytesField(cache_body, 2u, subscribed_type);
+    GBE_AppendProtoFixed64Field(cache_body, 3u, 1ull);
+    GBE_AppendProtoBytesField(cache_body, 4u, owner_soid);
+
+    std::string cache_message;
+    GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheSubscribed, cache_body, cache_message);
+    target_gc->push_incoming_message(GBE_kDotaCacheSubscribed | GBE_kProtoMask, cache_message);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "pushed player item CacheSubscribed to target GC: steam64=%llu equipped_items=%zu reason=%s message_size=%zu unsub_first=%u",
+        static_cast<unsigned long long>(player_steam64),
+        equipped_items.size(),
+        reason ? reason : "unknown",
+        cache_message.size(),
+        unsubscribe_first ? 1u : 0u
+    );
+    return true;
 }
 
 static bool GBE_BuildDotaRemoveLobbyInvitePayload(uint64 lobby_id, uint64 owner_steam_id, std::string &message)
@@ -6609,10 +6840,14 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     }
 
     for (size_t i = 0; i < effective_members.size(); ++i) {
-        if (effective_members[i].steam_id != 0ull) {
-            GBE_AppendProtoVarIntField(object_2004, 121, static_cast<uint64>(i));
-        } else {
+        if (effective_members[i].steam_id == 0ull) {
             GBE_AppendProtoVarIntField(object_2004, 123, static_cast<uint64>(i));
+        } else if (effective_members[i].leaver_status >= 5u) {
+            // ABANDONED or worse -> left_member_indices (field 122)
+            GBE_AppendProtoVarIntField(object_2004, 122, static_cast<uint64>(i));
+        } else {
+            // Active or disconnected -> member_indices (field 121)
+            GBE_AppendProtoVarIntField(object_2004, 121, static_cast<uint64>(i));
         }
     }
     GBE_AppendProtoVarIntField(object_2004, 127, 0u);
@@ -8273,6 +8508,222 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
         }
     }
 
+    // Dota 2: inject all cosmetic items from VPK items_game.txt
+    // Controlled by GBE_DOTA_UNLOCK_ITEMS env var: "0" to disable, "1" or unset to enable
+    // GBE_DOTA_UNLOCK_ITEMS_MAX limits the count (default: no limit)
+    if (gc_profile == GC_PROFILE_DOTA2) {
+        static bool vpk_items_loaded = false;
+        static std::vector<GBE_DotaItemDef> vpk_item_defs;
+        static GBE_DotaStyleUnlockInfo vpk_style_unlock{};
+        static bool vpk_items_disabled = false;
+
+        if (!vpk_items_loaded) {
+            vpk_items_loaded = true;
+            const char *env_disable = std::getenv("GBE_DOTA_UNLOCK_ITEMS");
+            if (env_disable && std::string(env_disable) == "0") {
+                vpk_items_disabled = true;
+                GBE_GC_DebugLog("GC_DOTA_ITEMS", "VPK item unlock disabled via GBE_DOTA_UNLOCK_ITEMS=0");
+            } else {
+                auto vpk_data = GBE_LoadAllDotaItemsFromVpk();
+                vpk_item_defs = std::move(vpk_data.item_defs);
+                vpk_style_unlock = vpk_data.style_unlock;
+                GBE_vpk_loot_data = std::move(vpk_data.loot_data);
+                GBE_GC_DebugLog("GC_DOTA_ITEMS", "loaded %zu cosmetic item defs from VPK items_game.txt (style_unlock_attrs=%s loot_lists=%zu treasures=%zu tools=%zu bundles=%zu)",
+                    vpk_item_defs.size(), vpk_style_unlock.found ? "found" : "not_found",
+                    GBE_vpk_loot_data.loot_lists.size(), GBE_vpk_loot_data.treasure_to_loot_list.size(),
+                    GBE_vpk_loot_data.tool_to_loot_list.size(), GBE_vpk_loot_data.bundle_contents.size());
+
+                // Log style diagnostics
+                const auto &sd = vpk_data.style_diag;
+                GBE_GC_DebugLog("GC_DOTA_STYLES", "multi_style_items=%u locked=%u", sd.multi_style_items, sd.items_with_locked_styles);
+                for (const auto &[field_name, count] : sd.style_field_counts) {
+                    GBE_GC_DebugLog("GC_DOTA_STYLES", "  field: %s count=%u", field_name.c_str(), count);
+                }
+                for (const auto &sample : sd.samples) {
+                    GBE_GC_DebugLog("GC_DOTA_STYLES", "  sample def=%u styles=%u style1=[%s]",
+                        sample.def_index, sample.num_styles, sample.style1_fields.c_str());
+                }
+            }
+        }
+
+        if (!vpk_items_disabled && !vpk_item_defs.empty()) {
+            // Max items to inject (default: all, override via GBE_DOTA_UNLOCK_ITEMS_MAX)
+            size_t max_items = vpk_item_defs.size();
+            const char *env_max = std::getenv("GBE_DOTA_UNLOCK_ITEMS_MAX");
+            if (env_max && env_max[0]) {
+                try { max_items = std::stoul(env_max); } catch (...) {}
+            }
+
+            // Collect existing def_indices from user items to avoid duplicates
+            std::unordered_set<uint32_t> existing_defs;
+            for (const Econ_Item &item : local_items) {
+                existing_defs.insert(item.def);
+            }
+
+            // Find the type_id=1 object (or create one)
+            CMsgSOCacheSubscribed_SubscribedType *item_object = nullptr;
+            for (int i = 0; i < protomsg.mutable_objects()->size(); ++i) {
+                if (protomsg.mutable_objects()->Get(i).type_id() == 1u) {
+                    item_object = protomsg.mutable_objects()->Mutable(i);
+                    break;
+                }
+            }
+            if (!item_object) {
+                item_object = protomsg.add_objects();
+                item_object->set_type_id(1u);
+            }
+
+            // Item ID: use a simple sequential scheme.
+            // Start from a base that won't collide with user items.json
+            // (which go through item_id_local_to_network and use high bits for account_id).
+            // We use IDs in [0x40000001 .. 0x40000001+N] with account_id in high 32 bits.
+            const uint32_t account_id = steam_id.GetAccountID();
+            uint32_t item_seq = 1; // sequential counter within our block
+            size_t injected_count = 0;
+
+            for (const auto &def : vpk_item_defs) {
+                if (existing_defs.count(def.def_index)) continue;
+                if (injected_count >= max_items) break;
+
+                CSOEconItem proto_item;
+                // ID format: high 32 bits = base marker (0x40), low 32 bits = account_id XOR seq
+                // This avoids collision with item_id_local_to_network which puts seq in high bits
+                uint64_t item_id = (static_cast<uint64_t>(0x40000000u + item_seq) << 32ull) | static_cast<uint64_t>(account_id);
+                proto_item.set_id(item_id);
+                proto_item.set_account_id(account_id);
+                proto_item.set_def_index(def.def_index);
+                // Inventory position: use backpack region.
+                // Dota uses bit 31 clear, bits 0-15 for position.
+                // Position 0 means "not in backpack", valid positions start at 1.
+                proto_item.set_inventory(item_seq); // simple 1-based position
+                proto_item.set_quantity(1);
+                proto_item.set_level(1);
+                proto_item.set_quality(4); // Unique
+                proto_item.set_flags(0);
+                proto_item.set_origin(0);
+                proto_item.set_in_use(false);
+                proto_item.set_style(0);
+                proto_item.set_original_id(item_id);
+                proto_item.set_contains_equipped_state(false);
+                proto_item.set_contains_equipped_state_v2(false);
+
+                // Add attr=400 only for items that actually have multiple styles
+                // (detected by VPK parser). Adding it to all items causes the client
+                // to display wrong cosmetics in-game.
+                if (def.num_styles > 1) {
+                    auto *attr = proto_item.add_attribute();
+                    attr->set_def_index(400u);
+                    uint32_t all_unlocked = (1u << def.num_styles) - 1u;
+                    std::string val_bytes(reinterpret_cast<const char *>(&all_unlocked), 4);
+                    attr->set_value_bytes(val_bytes);
+                }
+
+                item_object->add_object_data(proto_item.SerializeAsString());
+
+                // Also add to in-memory items vector so equip handler (2569) can find them
+                Econ_Item mem_item;
+                mem_item.id = item_id;
+                mem_item.def = def.def_index;
+                mem_item.level = 1;
+                mem_item.quality = static_cast<EItemQuality>(4); // Unique
+                mem_item.inv_pos = item_seq;
+                mem_item.quantity = 1;
+                mem_item.flags = 0;
+                mem_item.origin = 0;
+                mem_item.in_use = false;
+                mem_item.original_id = item_id;
+                mem_item.style = 0;
+
+                // Add style unlock attr to in-memory item too
+                if (def.num_styles > 1) {
+                    Econ_Item_Attribute unlock_attr;
+                    unlock_attr.def = 400u;
+                    uint32_t all_unlocked = (1u << def.num_styles) - 1u;
+                    unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&all_unlocked), 4);
+                    unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+                    mem_item.attributes.push_back(unlock_attr);
+                }
+
+                items.push_back(mem_item);
+
+                item_seq++;
+                injected_count++;
+
+                // Inject sticker quality variants (quality field = 22, 23, 24)
+                // Each sticker has Glitter/Holo/Gold variants that the client
+                // treats as separate collectible items. The variant is determined
+                // by CSOEconItem.quality field, not by attributes.
+                // These do NOT count against max_items to avoid displacing other base items.
+                if (def.is_sticker) {
+                    static const uint32_t sticker_variant_qualities[] = { 22, 23, 24 };
+                    for (uint32_t sq : sticker_variant_qualities) {
+                        CSOEconItem variant_item;
+                        uint64_t var_id = (static_cast<uint64_t>(0x40000000u + item_seq) << 32ull) | static_cast<uint64_t>(account_id);
+                        variant_item.set_id(var_id);
+                        variant_item.set_account_id(account_id);
+                        variant_item.set_def_index(def.def_index);
+                        variant_item.set_inventory(item_seq);
+                        variant_item.set_quantity(1);
+                        variant_item.set_level(1);
+                        variant_item.set_quality(sq); // 22=Glitter, 23=Holo, 24=Gold
+                        variant_item.set_flags(0);
+                        variant_item.set_origin(0);
+                        variant_item.set_in_use(false);
+                        variant_item.set_style(0);
+                        variant_item.set_original_id(var_id);
+                        variant_item.set_contains_equipped_state(false);
+                        variant_item.set_contains_equipped_state_v2(false);
+
+                        item_object->add_object_data(variant_item.SerializeAsString());
+
+                        // In-memory copy
+                        Econ_Item var_mem;
+                        var_mem.id = var_id;
+                        var_mem.def = def.def_index;
+                        var_mem.level = 1;
+                        var_mem.quality = static_cast<EItemQuality>(sq);
+                        var_mem.inv_pos = item_seq;
+                        var_mem.quantity = 1;
+                        var_mem.flags = 0;
+                        var_mem.origin = 0;
+                        var_mem.in_use = false;
+                        var_mem.original_id = var_id;
+                        var_mem.style = 0;
+
+                        items.push_back(var_mem);
+                        item_seq++;
+                    }
+                }
+            }
+
+            GBE_GC_DebugLog("GC_DOTA_ITEMS", "injected %zu CSOEconItem entries from %zu unique defs (skipped %zu existing)",
+                injected_count, vpk_item_defs.size(), existing_defs.size());
+
+            // Patch existing items that already have attr=400: ensure all style bits are set.
+            // Do NOT add attr=400 to items that don't have it -- this breaks cosmetic display.
+            {
+                size_t patched_count = 0;
+                for (Econ_Item &item : items) {
+                    for (auto &attr : item.attributes) {
+                        if (attr.def == 400u) {
+                            // Ensure all bits are set to unlock all styles
+                            uint32_t all_unlocked = 0xFFFFFFFFu;
+                            if (attr.value_bytes.size() < 4 ||
+                                memcmp(attr.value_bytes.data(), &all_unlocked, 4) != 0) {
+                                attr.value_bytes.assign(reinterpret_cast<const char *>(&all_unlocked), 4);
+                                patched_count++;
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (patched_count > 0) {
+                    GBE_GC_DebugLog("GC_DOTA_ITEMS", "patched %zu existing items attr=400 -> all_bits_set", patched_count);
+                }
+            }
+        }
+    }
+
     std::string updated;
     ser_var<ProtoBufMsgHeader_t>(updated, hdr);
     updated.append(proto_header_ptr, hdr.m_cubProtoBufExtHdr);
@@ -8388,8 +8839,18 @@ std::string Steam_Game_Coordinator::item_to_gcprotobuf(const Econ_Item &item, CS
     proto_item.set_style(item.style);
     proto_item.set_original_id(item.original_id);
 
-    proto_item.set_contains_equipped_state(true);
-    proto_item.set_contains_equipped_state_v2(true);
+    // Only declare equipped_state presence when the item actually has equip
+    // data.  Setting contains_equipped_state=true on items with an empty
+    // equipped_state list causes the engine to "lock in" the item as
+    // unequipped in the SO cache established by the login CacheSubscribed.
+    // Subsequent emsg=26 (UpdateMultiple) cannot override this because the
+    // shared SO cache is already marked [in cache].  By omitting the flag
+    // for items without equip_states, the engine treats their equip status
+    // as unknown, allowing later updates to take effect.
+    if (!item.equip_states.empty()) {
+        proto_item.set_contains_equipped_state(true);
+        proto_item.set_contains_equipped_state_v2(true);
+    }
 
     for (const auto &[class_id, slot_id] : item.equip_states) {
         auto proto_equip = proto_item.add_equipped_state();
@@ -8397,7 +8858,13 @@ std::string Steam_Game_Coordinator::item_to_gcprotobuf(const Econ_Item &item, CS
         proto_equip->set_new_slot(slot_id);
     }
 
+    // Dota 2: inject attr=400 ("unlocked styles") ONLY if the item already has it
+    // in its attributes (from items.json). Do NOT add it unconditionally -- setting
+    // attr=400=0xFFFFFFFF on items without multiple styles causes the client to
+    // display wrong cosmetics in-game.
+    bool has_attr_400 = false;
     for (const Econ_Item_Attribute &attr : item.attributes) {
+        if (attr.def == 400u) has_attr_400 = true;
         auto proto_attr = proto_item.add_attribute();
         proto_attr->set_def_index(attr.def);
         if (gc_version < 20130319 || is_portal2) {
@@ -8740,17 +9207,70 @@ void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const st
             GBE_local_lobby.lobby_id != 0 &&
             steam_id.BIndividualAccount() &&
             steam_id.ConvertToUint64() == GBE_GetDotaLobbyOwnerSteamId()) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_SYNC",
-                "skipping generic CacheSubscribed for active dota owner steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s items=%zu",
-                static_cast<unsigned long long>(steam_id.ConvertToUint64()),
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_local_lobby.state,
-                GBE_local_lobby.game_state,
-                GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
-                items.size()
-            );
+            // Skip the full generic CacheSubscribed (too large, e.g. 27k items / 706KB)
+            // but still push equipped-only items so the server engine creates wearables.
+            // Push to server GC for remote players
+            if (GBE_PushDotaPlayerEquippedItemsCacheToGC(this, steam_id, items, false, "callback_items_received_owner_skip_server")) {
+                size_t equipped_count = 0;
+                for (const Econ_Item &item : items) {
+                    if (!item.equip_states.empty())
+                        ++equipped_count;
+                }
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "pushed owner equipped-only CacheSubscribed for server (skipped full generic): steam_id=%llu lobby_id=%llu state=%u game_state=%u equipped=%zu total=%zu",
+                    static_cast<unsigned long long>(steam_id.ConvertToUint64()),
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    equipped_count,
+                    items.size()
+                );
+            } else {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "skipping generic CacheSubscribed for active dota owner (no equipped items): steam_id=%llu lobby_id=%llu state=%u game_state=%u items=%zu",
+                    static_cast<unsigned long long>(steam_id.ConvertToUint64()),
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    items.size()
+                );
+            }
             return;
+        }
+
+        // [FIX] In a listen server, never push the host's full generic
+        // CacheSubscribed (706KB / 27k items) to the server engine.  The
+        // shared SO cache already has these items from the login
+        // CacheSubscribed.  Pushing them again with no equipped_state
+        // pollutes the server engine's item cache and prevents the later
+        // equip-forward CacheSubscribed (with equipped items) from creating
+        // wearable entities.  Just skip entirely -- the equip-forward path
+        // will push the correct equipped-only CacheSubscribed when needed.
+        //
+        // Detection: check if steam_id matches client GC's local ID, OR if
+        // the item count matches the client GC's full inventory (covers the
+        // case where source_id is the game-server steam ID instead of the
+        // player's personal ID).
+        Steam_Client *steam_client = get_steam_client();
+        Steam_Game_Coordinator *client_gc = steam_client ? steam_client->steam_game_coordinator : nullptr;
+        if (client_gc) {
+            const bool is_host_by_id = (steam_id.ConvertToUint64() == client_gc->settings->get_local_steam_id().ConvertToUint64());
+            const bool is_host_by_inventory = (!items.empty() && items.size() == client_gc->get_items().size());
+            if (is_host_by_id || is_host_by_inventory) {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "skipping generic CacheSubscribed for host (fallback): steam_id=%llu lobby_active=%d lobby_id=%llu items=%zu match_by_id=%d match_by_inv=%d",
+                    static_cast<unsigned long long>(steam_id.ConvertToUint64()),
+                    GBE_local_lobby.active ? 1 : 0,
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    items.size(),
+                    is_host_by_id ? 1 : 0,
+                    is_host_by_inventory ? 1 : 0
+                );
+                return;
+            }
         }
     }
 
@@ -8799,20 +9319,21 @@ void Steam_Game_Coordinator::callback_items_removed(CSteamID steam_id)
     if (!gc_initialized)
         return;
 
-    if (is_server &&
-        gc_profile == GC_PROFILE_DOTA2 &&
+    if (gc_profile == GC_PROFILE_DOTA2 &&
         GBE_local_lobby.active &&
         GBE_local_lobby.lobby_id != 0 &&
+        GBE_local_lobby.state < 3u &&
         steam_id.BIndividualAccount() &&
         steam_id.ConvertToUint64() == GBE_GetDotaLobbyOwnerSteamId()) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
-            "skipping generic CacheUnsubscribed for active dota owner steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s",
+            "skipping generic CacheUnsubscribed for active dota owner steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s is_server=%u",
             static_cast<unsigned long long>(steam_id.ConvertToUint64()),
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
             GBE_local_lobby.state,
             GBE_local_lobby.game_state,
-            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
+            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
+            is_server ? 1u : 0u
         );
         return;
     }
@@ -9052,8 +9573,10 @@ void Steam_Game_Coordinator::shutdown_gc()
     welcome_received = false;
     delay_init = false;
     GBE_dota_login_sync_sent = false;
+    GBE_dota_host_showcase_equip_pushed = false;
     GBE_dota_private_lobby_snapshot_replayed = false;
     GBE_last_dota_launch_state_pushed_game_state = 0;
+    GBE_last_lobby_poll_time = {};
     gc_initialized = false;
 }
 
@@ -9397,32 +9920,43 @@ void Steam_Game_Coordinator::on_client_disconnected(CSteamID steam_id)
     if (is_server && gc_profile == GC_PROFILE_DOTA2) {
         const uint64 disconnected_steam_id = steam_id.ConvertToUint64();
         const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
+
+        // In PostGame (state >= 3), do NOT publish shared state for disconnect
+        // events.  The 7004 signout finalize path handles PostGame cleanup.
+        // Re-publishing state=3 here would race with finalize and leave stale
+        // shared state that causes an initialize_gc adopt loop.
+        const bool postgame_suppress_publish = GBE_local_lobby.state >= 3u;
+
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && disconnected_steam_id != 0 && disconnected_steam_id == owner_steam_id) {
             GBE_local_lobby.owner_connected = false;
-            GBE_PublishSharedDotaLobbyState("owner_disconnected");
+            if (!postgame_suppress_publish)
+                GBE_PublishSharedDotaLobbyState("owner_disconnected");
 
             suppress_user_item_unsubscribe = true;
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
-                "preserving owner inventory cache across dota reconnect steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s abandon_postgame=%u",
+                "preserving owner inventory cache across dota reconnect steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s abandon_postgame=%u postgame_suppress=%u",
                 static_cast<unsigned long long>(disconnected_steam_id),
                 static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                 GBE_local_lobby.state,
                 GBE_local_lobby.game_state,
                 GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
-                GBE_local_lobby.abandon_postgame_active ? 1u : 0u
+                GBE_local_lobby.abandon_postgame_active ? 1u : 0u,
+                postgame_suppress_publish ? 1u : 0u
             );
         } else if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && disconnected_steam_id != 0) {
             if (GBE_SetDotaLobbyMemberConnected(disconnected_steam_id, false)) {
-                GBE_PublishSharedDotaLobbyState("member_disconnected");
+                if (!postgame_suppress_publish)
+                    GBE_PublishSharedDotaLobbyState("member_disconnected");
                 GBE_GC_DebugLog(
                     "GC_DOTA_SYNC",
-                    "marked Dota lobby member disconnected steam_id=%llu lobby_id=%llu state=%u game_state=%u members=%zu",
+                    "marked Dota lobby member disconnected steam_id=%llu lobby_id=%llu state=%u game_state=%u members=%zu postgame_suppress=%u",
                     static_cast<unsigned long long>(disconnected_steam_id),
                     static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                     GBE_local_lobby.state,
                     GBE_local_lobby.game_state,
-                    GBE_local_lobby.members.size()
+                    GBE_local_lobby.members.size(),
+                    postgame_suppress_publish ? 1u : 0u
                 );
             }
         }
@@ -9825,6 +10359,11 @@ bool Steam_Game_Coordinator::GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bo
             member.connected = connected;
             changed = true;
         }
+        // Clear leaver_status when player reconnects
+        if (connected && member.leaver_status != 0u) {
+            member.leaver_status = 0u;
+            changed = true;
+        }
         return changed;
     }
 
@@ -10034,10 +10573,12 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                     GBE_local_lobby.state = GBE_ParseUint32OrZero(generic_lobby_state_raw.c_str());
                 if (!generic_lobby_game_state_raw.empty())
                     GBE_local_lobby.game_state = GBE_ParseUint32OrZero(generic_lobby_game_state_raw.c_str());
-                if (!generic_match_id_raw.empty())
-                    GBE_local_lobby.match_id = GBE_ParseUint64OrZero(generic_match_id_raw.c_str());
-                (void)generic_server_id_raw;
-                GBE_local_lobby.server_id = 0ull;
+                const uint64 generic_match_id = GBE_ParseUint64OrZero(generic_match_id_raw.c_str());
+                if (!generic_match_id_raw.empty() && (generic_match_id != 0ull || GBE_local_lobby.match_id == 0ull))
+                    GBE_local_lobby.match_id = generic_match_id;
+                const uint64 generic_server_id = GBE_ParseUint64OrZero(generic_server_id_raw.c_str());
+                if (!generic_server_id_raw.empty() && (generic_server_id != 0ull || GBE_local_lobby.server_id == 0ull || GBE_local_lobby.match_id == 0ull))
+                    GBE_local_lobby.server_id = generic_server_id;
 
                 if (!generic_connect.empty())
                     GBE_local_lobby.connect = GBE_NormalizeDotaPracticeLobbyConnect(generic_connect);
@@ -10427,8 +10968,106 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
     if (!owner_changed && !runtime_changed && !settings_changed && GBE_DotaLobbyMembersEqual(previous_members, GBE_local_lobby.members))
         return false;
 
+    // When lobby member state changes on the client during pre-game
+    // (game_state == 0), clear the direct-connect callback dedup signature
+    // and allow the private lobby snapshot to be replayed.  This ensures that
+    // GameServerChangeRequested_t is re-sent with the real IP address when the
+    // lobby state transitions during initial match setup.
+    //
+    // During an active match (game_state >= 1), do NOT clear the signature.
+    // The host sends member-change updates continuously (e.g. when a player
+    // disconnects), and clearing the signature would allow every subsequent
+    // queued_state apply to re-fire GameServerChangeRequested_t, causing an
+    // automatic reconnect loop.  Manual reconnect uses restore_client_runtime
+    // which has its own signature-clearing logic (line ~11336-11350).
+    if (!is_server && !GBE_DotaLobbyMembersEqual(previous_members, GBE_local_lobby.members) && GBE_local_lobby.game_state == 0u) {
+        GBE_last_dota_direct_connect_callback_signature.clear();
+        GBE_dota_private_lobby_snapshot_replayed = false;
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "cleared direct connect signature and snapshot replay flag on member change reason=%s lobby_id=%llu state=%u game_state=%u",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state
+        );
+    }
+
     if (is_server)
         GBE_PublishSharedDotaLobbyState(reason ? reason : "generic_lobby_members_changed");
+
+    // PLAYER-side PostGame cleanup: when a non-server client GC detects that the
+    // generic lobby state transitioned from in-game (state < 3) to PostGame
+    // (state >= 3), clear shared state, Rich Presence, and push CacheUnsubscribed.
+    // The HOST's server GC handles this via 7004 signout; the PLAYER has no such
+    // path and must rely on observing the generic lobby metadata change.
+    //
+    // IMPORTANT: On the HOST machine, the client GC is also !is_server and will
+    // see this same state transition (because the server GC just published state=3
+    // to generic lobby metadata).  We must NOT run PLAYER cleanup on the HOST's
+    // client GC -- that would invalidate shared state before the server GC's
+    // normal signout finalize path can use it.  Detect this by checking whether
+    // a server GC exists in this process and owns the same lobby.
+    bool host_has_active_server_gc = false;
+    {
+        Steam_Client *sc = get_steam_client();
+        if (sc && sc->steam_gameserver_game_coordinator) {
+            host_has_active_server_gc = sc->steam_gameserver_game_coordinator->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id);
+        }
+    }
+    if (!is_server && host_has_active_server_gc && previous_state < 3u && GBE_local_lobby.state >= 3u) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Skipping PLAYER PostGame cleanup on HOST client GC: server GC owns lobby LobbyID=%llu state=%u reason=%s",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            reason ? reason : "generic_lobby_members_changed"
+        );
+    }
+    if (!is_server && !host_has_active_server_gc && previous_state < 3u && GBE_local_lobby.state >= 3u && GBE_local_lobby.lobby_id != 0) {
+        const uint64 cleaning_lobby_id = GBE_local_lobby.lobby_id;
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] PLAYER PostGame cleanup: generic lobby transitioned to state=%u game_state=%u LobbyID=%llu reason=%s",
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            static_cast<unsigned long long>(cleaning_lobby_id),
+            reason ? reason : "generic_lobby_members_changed"
+        );
+
+        // Send a final msg 26 with PostGame state so Dota sees the transition
+        std::string postgame_response_26;
+        if (GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), postgame_response_26, true)) {
+            push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, postgame_response_26);
+        }
+
+        // Clear Rich Presence
+        GBE_ClearDotaPracticeLobbyLaunchRichPresence();
+
+        // Reset local lobby and invalidate shared state
+        GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+        GBE_local_lobby = GBE_LocalLobby{};
+        GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+        GBE_last_dota_launch_state_pushed_game_state = 0;
+
+        // Push CacheUnsubscribed (msg 25) so Dota knows the lobby SO is gone
+        std::string response_25;
+        if (GBE_BuildDotaLobbyCacheUnsubscribedPayload(cleaning_lobby_id, response_25)) {
+            push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "PLAYER PostGame: pushed CacheUnsubscribed lobby_id=%llu size=%zu",
+                static_cast<unsigned long long>(cleaning_lobby_id),
+                response_25.size()
+            );
+        }
+
+        if (settings && settings->get_lobby().ConvertToUint64() != 0)
+            settings->set_lobby(k_steamIDNil);
+
+        return true;
+    }
+
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Detected generic lobby member/owner/runtime/settings change LobbyID=%llu generic_lobby_id=%llu old_members=%zu new_members=%zu old_owner=%llu new_owner=%llu old_state=%u new_state=%u old_game_state=%u new_game_state=%u old_server_id=%llu new_server_id=%llu old_connect=%s new_connect=%s settings_changed=%u old_cheats=%u new_cheats=%u reason=%s",
@@ -10453,15 +11092,12 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
     );
 
     const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
-    const bool local_owner_lan_launch =
-        local_steam_id != 0ull &&
-        GBE_local_lobby.owner_steam_id != 0ull &&
-        local_steam_id == GBE_local_lobby.owner_steam_id &&
+    const bool lan_launch_active =
         GBE_local_lobby.lan &&
         GBE_local_lobby.match_id != 0ull;
 
     std::string response_26;
-    const bool sent_details_update = GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, is_server || local_owner_lan_launch);
+    const bool sent_details_update = GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, is_server || lan_launch_active);
     if (sent_details_update) {
         const bool peer_lan_direct_launch =
             local_steam_id != 0ull &&
@@ -10606,17 +11242,52 @@ bool Steam_Game_Coordinator::GBE_MaybeHandleDotaPracticeLobbyKicked(const char *
     }
     if (still_in_generic_lobby) {
         GBE_local_lobby.seen_local_in_generic_lobby = true;
+        GBE_local_lobby.kicked_suppressed_logged = false;
+        GBE_local_lobby.owner_adoption_suppressed_logged = false;
         return false;
     }
 
     if (!GBE_local_lobby.seen_local_in_generic_lobby) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Waiting for generic lobby join confirmation before treating local user as kicked. LobbyID=%llu generic_lobby_id=%llu reason=%s",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(generic_lobby_id.ConvertToUint64()),
-            reason ? reason : "generic_lobby_members_changed"
-        );
+        if (!GBE_local_lobby.waiting_join_confirmation_logged) {
+            GBE_local_lobby.waiting_join_confirmation_logged = true;
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Waiting for generic lobby join confirmation before treating local user as kicked. LobbyID=%llu generic_lobby_id=%llu reason=%s",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(generic_lobby_id.ConvertToUint64()),
+                reason ? reason : "generic_lobby_members_changed"
+            );
+        }
+        return false;
+    }
+
+    // During a launched LAN game, the generic lobby member list can become empty
+    // because the underlying P2P connection was lost (e.g. sleep/hibernate).
+    // This does NOT mean the user was actually kicked by the lobby leader.
+    // The real game connection uses steamnetworkingsockets.dll and can survive
+    // or reconnect independently. Suppress the kicked detection here.
+    // EXCEPTION: If the lobby has reached PostGame (state >= 3), the game is over
+    // and the host legitimately destroyed the lobby. Do NOT suppress in that case.
+    if (GBE_local_lobby.lan &&
+        GBE_local_lobby.state >= 2u &&
+        GBE_local_lobby.state < 3u &&
+        GBE_local_lobby.match_id != 0ull &&
+        !GBE_local_lobby.connect.empty()) {
+        if (!GBE_local_lobby.kicked_suppressed_logged) {
+            GBE_local_lobby.kicked_suppressed_logged = true;
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Suppressed kicked detection during launched LAN game (generic lobby member loss from P2P disconnect). "
+                "LobbyID=%llu generic_lobby_id=%llu state=%u game_state=%u match_id=%llu connect=%s reason=%s",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(generic_lobby_id.ConvertToUint64()),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state,
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                GBE_local_lobby.connect.c_str(),
+                reason ? reason : "generic_lobby_members_changed"
+            );
+        }
         return false;
     }
 
@@ -10666,6 +11337,35 @@ bool Steam_Game_Coordinator::GBE_AdoptDotaGenericLobbyOwnerIfNeeded(const char *
     const uint64 previous_owner_steam_id = GBE_local_lobby.owner_steam_id;
     const uint64 new_owner_steam_id = generic_owner.ConvertToUint64();
     const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
+
+    if (!is_server &&
+        local_steam_id != 0ull &&
+        previous_owner_steam_id != 0ull &&
+        previous_owner_steam_id != local_steam_id &&
+        new_owner_steam_id == local_steam_id &&
+        GBE_local_lobby.lan &&
+        GBE_local_lobby.state == 2u &&
+        GBE_local_lobby.match_id != 0ull &&
+        !GBE_local_lobby.connect.empty()) {
+        if (!GBE_local_lobby.owner_adoption_suppressed_logged) {
+            GBE_local_lobby.owner_adoption_suppressed_logged = true;
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Ignored generic lobby owner adoption during launched LAN peer disconnect reason=%s dota_lobby_id=%llu generic_lobby_id=%llu dota_owner=%llu generic_owner=%llu local=%llu state=%u game_state=%u match_id=%llu connect=%s",
+                reason ? reason : "unknown",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+                static_cast<unsigned long long>(previous_owner_steam_id),
+                static_cast<unsigned long long>(new_owner_steam_id),
+                static_cast<unsigned long long>(local_steam_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state,
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                GBE_local_lobby.connect.c_str()
+            );
+        }
+        return false;
+    }
 
     GBE_DotaLobbyMemberState new_owner{};
     new_owner.steam_id = new_owner_steam_id;
@@ -10798,15 +11498,23 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey, std::to_string(GBE_local_lobby.match_id).c_str());
     const std::string normalized_connect = GBE_NormalizeDotaPracticeLobbyConnect(GBE_local_lobby.connect);
     GBE_local_lobby.connect = normalized_connect;
-    GBE_local_lobby.server_id = 0ull;
+    if (GBE_local_lobby.match_id == 0) {
+        GBE_local_lobby.server_id = 0ull;
+    }
     if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id) {
         GBE_shared_dota_lobby_state.connect = normalized_connect;
-        GBE_shared_dota_lobby_state.server_id = 0ull;
+        if (GBE_local_lobby.match_id == 0) {
+            GBE_shared_dota_lobby_state.server_id = 0ull;
+        }
     }
 
-    steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey, "0");
+    steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey, std::to_string(GBE_local_lobby.server_id).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyConnectKey, normalized_connect.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStartTimeKey, std::to_string(GBE_local_lobby.game_start_time).c_str());
+    if (GBE_local_lobby.tv_secret_code != 0)
+        steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyTvSecretCodeKey, std::to_string(GBE_local_lobby.tv_secret_code).c_str());
+    if (GBE_local_lobby.tv_port != 0)
+        steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyTvPortKey, std::to_string(GBE_local_lobby.tv_port).c_str());
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -10891,7 +11599,8 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
         snapshot.state = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyStateKey));
         snapshot.game_state = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStateKey));
         snapshot.match_id = GBE_ParseUint64OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey));
-        snapshot.server_id = 0ull;
+        const std::string generic_server_id_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey);
+        snapshot.server_id = GBE_ParseUint64OrZero(generic_server_id_raw.c_str());
         snapshot.connect = GBE_NormalizeDotaPracticeLobbyConnect(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyConnectKey));
         snapshot.game_start_time = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStartTimeKey));
         if (snapshot.state == 0u)
@@ -10966,6 +11675,10 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
         owner.connected = snapshot.owner_connected;
         if (owner_in_generic_members || generic_members.empty())
             GBE_UpsertDotaLobbyMember(snapshot.members, owner);
+
+        // Read SourceTV credentials from generic lobby data
+        snapshot.tv_secret_code = GBE_ParseUint64OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyTvSecretCodeKey));
+        snapshot.tv_port = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyTvPortKey));
 
         snapshots.push_back(snapshot);
     }
@@ -11102,6 +11815,21 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             return;
 
         if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+            // Only adopt if this GC instance belongs to a lobby member (or owner).
+            // Bot/fake-player GC instances have steam_ids that are not lobby members
+            // and should not adopt the shared lobby state (avoids hundreds of redundant
+            // adopt cycles during post-game GC re-initialization).
+            const uint64 local_sid = settings ? settings->get_local_steam_id().ConvertToUint64() : 0;
+            if (local_sid != 0 && local_sid != GBE_shared_dota_lobby_state.owner_steam_id) {
+                bool is_member = false;
+                for (const auto &m : GBE_shared_dota_lobby_state.members) {
+                    if (m.steam_id == local_sid) { is_member = true; break; }
+                }
+                if (!is_member) {
+                    return;  // Not a lobby participant; skip adopt
+                }
+            }
+
             GBE_local_lobby.active = GBE_shared_dota_lobby_state.active;
             GBE_local_lobby.lobby_id = GBE_shared_dota_lobby_state.lobby_id;
             GBE_local_lobby.generic_lobby_id = GBE_shared_dota_lobby_state.generic_lobby_id;
@@ -11125,7 +11853,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             GBE_local_lobby.state = GBE_shared_dota_lobby_state.state;
             GBE_local_lobby.game_state = GBE_shared_dota_lobby_state.game_state;
             GBE_local_lobby.match_id = GBE_shared_dota_lobby_state.match_id;
-            GBE_local_lobby.server_id = 0ull;
+            GBE_local_lobby.server_id = GBE_shared_dota_lobby_state.match_id != 0ull ? GBE_shared_dota_lobby_state.server_id : 0ull;
             GBE_local_lobby.owner_steam_id = GBE_shared_dota_lobby_state.owner_steam_id;
             GBE_local_lobby.owner_account_id = GBE_shared_dota_lobby_state.owner_account_id;
             GBE_local_lobby.owner_name = GBE_shared_dota_lobby_state.owner_name;
@@ -11166,6 +11894,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "restore_client_full_adopt");
             GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "restore_client_full_adopt");
             GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(reason ? reason : "restore_client_full_adopt");
+            GBE_PushDotaLoginSyncMessages();
             return;
         }
 
@@ -11177,7 +11906,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         const uint64 previous_server_id = GBE_local_lobby.server_id;
         const std::string previous_connect = GBE_local_lobby.connect;
 
-        if (GBE_local_lobby.server_id != 0ull) {
+        if (GBE_local_lobby.server_id != 0ull && GBE_shared_dota_lobby_state.match_id == 0ull) {
             GBE_local_lobby.server_id = 0ull;
             changed = true;
         }
@@ -11354,9 +12083,20 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 GBE_local_lobby.connect.c_str()
             );
         }
+
+        // NOTE: Signature clearing was previously done here for LAN reconnect,
+        // but it caused every restore_client_runtime invocation (including
+        // routine lobby state syncs while the player is still connected) to
+        // re-fire GameServerChangeRequested_t, producing an automatic
+        // reconnect loop.  Manual reconnect works through Dota's own rich
+        // presence "connect" field (+connect <LAN IP>:<port>) which is kept
+        // up-to-date by GBE_ReapplyDotaPracticeLobbyLaunchRichPresence below,
+        // so GameServerChangeRequested_t does not need to fire again.
+
         GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "restore_client_runtime");
         GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "restore_client_runtime");
         GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(reason ? reason : "restore_client_runtime");
+        GBE_PushDotaLoginSyncMessages();
         return;
     }
 
@@ -11383,7 +12123,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
     GBE_local_lobby.state = GBE_shared_dota_lobby_state.state;
     GBE_local_lobby.game_state = GBE_shared_dota_lobby_state.game_state;
     GBE_local_lobby.match_id = GBE_shared_dota_lobby_state.match_id;
-    GBE_local_lobby.server_id = 0ull;
+    GBE_local_lobby.server_id = GBE_shared_dota_lobby_state.match_id != 0ull ? GBE_shared_dota_lobby_state.server_id : 0ull;
     GBE_local_lobby.owner_steam_id = GBE_shared_dota_lobby_state.owner_steam_id;
     GBE_local_lobby.owner_account_id = GBE_shared_dota_lobby_state.owner_account_id;
     GBE_local_lobby.owner_name = GBE_shared_dota_lobby_state.owner_name;
@@ -11462,16 +12202,12 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
     if (GBE_dota_private_lobby_snapshot_replayed)
         return;
 
-    const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
-    const bool local_owner_lan_launch =
-        local_steam_id != 0ull &&
-        lobby.owner_steam_id != 0ull &&
-        local_steam_id == lobby.owner_steam_id &&
+    const bool lan_launch_active =
         lobby.lan &&
         lobby.match_id != 0ull;
 
     std::string response_24;
-    if (!GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(lobby, GBE_GetDotaLobbyOwnerName(), response_24, is_server || local_owner_lan_launch)) {
+    if (!GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(lobby, GBE_GetDotaLobbyOwnerName(), response_24, is_server || lan_launch_active)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "failed building current private lobby snapshot 24 reason=%s lobby_id=%llu state=%u game_state=%u server_id=%llu",
@@ -11485,7 +12221,7 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
     }
 
     std::string response_26;
-    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, is_server || local_owner_lan_launch)) {
+    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, is_server || lan_launch_active)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "failed building current private lobby snapshot 26 reason=%s lobby_id=%llu state=%u game_state=%u server_id=%llu",
@@ -11673,12 +12409,14 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscri
     uint64 effective_server_id = 0ull;
     if (preserve_server_id && launch_started) {
         effective_server_id = lobby.server_id;
-        if (effective_server_id == 0ull && is_server && settings)
-            effective_server_id = settings->get_local_steam_id().ConvertToUint64();
-        if (effective_server_id == 0ull && !is_server && settings && owner_steam_id == settings->get_local_steam_id().ConvertToUint64()) {
-            Steam_Client *steam_client = get_steam_client();
-            if (steam_client && steam_client->settings_server)
-                effective_server_id = steam_client->settings_server->get_local_steam_id().ConvertToUint64();
+        if (effective_server_id == 0ull) {
+            if (is_server && settings)
+                effective_server_id = settings->get_local_steam_id().ConvertToUint64();
+            if (effective_server_id == 0ull && !is_server && settings && owner_steam_id == settings->get_local_steam_id().ConvertToUint64()) {
+                Steam_Client *steam_client = get_steam_client();
+                if (steam_client && steam_client->settings_server)
+                    effective_server_id = steam_client->settings_server->get_local_steam_id().ConvertToUint64();
+            }
         }
     }
     GBE_LocalLobby effective_lobby = lobby;
@@ -11738,12 +12476,14 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
     uint64 effective_server_id = 0ull;
     if (preserve_server_id && lobby.match_id != 0) {
         effective_server_id = lobby.server_id;
-        if (effective_server_id == 0ull && is_server && settings)
-            effective_server_id = settings->get_local_steam_id().ConvertToUint64();
-        if (effective_server_id == 0ull && !is_server && settings && owner_steam_id == settings->get_local_steam_id().ConvertToUint64()) {
-            Steam_Client *steam_client = get_steam_client();
-            if (steam_client && steam_client->settings_server)
-                effective_server_id = steam_client->settings_server->get_local_steam_id().ConvertToUint64();
+        if (effective_server_id == 0ull) {
+            if (is_server && settings)
+                effective_server_id = settings->get_local_steam_id().ConvertToUint64();
+            if (effective_server_id == 0ull && !is_server && settings && owner_steam_id == settings->get_local_steam_id().ConvertToUint64()) {
+                Steam_Client *steam_client = get_steam_client();
+                if (steam_client && steam_client->settings_server)
+                    effective_server_id = steam_client->settings_server->get_local_steam_id().ConvertToUint64();
+            }
         }
     }
     GBE_LocalLobby effective_lobby = lobby;
@@ -11948,13 +12688,13 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
         return false;
 
     const uint64 previous_server_id = GBE_local_lobby.server_id;
-    GBE_local_lobby.server_id = 0ull;
+    GBE_local_lobby.server_id = derived_server_id;
     if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id)
-        GBE_shared_dota_lobby_state.server_id = 0ull;
+        GBE_shared_dota_lobby_state.server_id = derived_server_id;
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
-        "cleared lobby server_id to force connect endpoint reason=%s lobby_id=%llu match_id=%llu old=%llu derived=%llu lan_ip=%s",
+        "synced lobby server_id from connect endpoint reason=%s lobby_id=%llu match_id=%llu old=%llu derived=%llu lan_ip=%s",
         reason ? reason : "unknown",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         static_cast<unsigned long long>(GBE_local_lobby.match_id),
@@ -11976,7 +12716,14 @@ static bool GBE_ShouldPreferDotaLobbyConnectUpdate(const std::string &current_co
     if (current_connect.empty())
         return true;
 
-    return current_connect == GBE_FormatDotaPracticeLobbyLoopbackConnect();
+    const uint32 candidate_ip = GBE_ParseDotaPracticeLobbyConnectIPv4(candidate_connect);
+    if (candidate_ip == 0u)
+        return false;
+
+    if (current_connect == GBE_FormatDotaPracticeLobbyLoopbackConnect())
+        return true;
+
+    return false;
 }
 
 bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData)
@@ -12550,6 +13297,99 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             account_ids.size()
         );
         push_incoming_now(7451u | GBE_kProtoMask, response_message);
+
+        // After 7451, send per-player item CacheSubscribed so the dedicated
+        // server knows each player's equipped cosmetics (loadout).
+        // In Valve's system the GC pushes a CMsgSOCacheSubscribed (owner type=1)
+        // containing each player's CSOEconItem list.  GBE's server GC does not
+        // have this data, so we read it from the client GC (same process) for the
+        // local player, and from all_user_items for remote players (populated via
+        // network inventory exchange).
+        if (is_server && gc_profile == GC_PROFILE_DOTA2) {
+            Steam_Client *steam_client = get_steam_client();
+            Steam_Game_Coordinator *client_gc = steam_client ? steam_client->steam_game_coordinator : nullptr;
+
+            for (uint32 target_account_id : account_ids) {
+                const uint64 player_steam64 = static_cast<uint64>(target_account_id) + 76561197960265728ull;
+                const CSteamID player_steam_id(player_steam64);
+
+                // Determine which item source to use for this player.
+                // [FIX] On a listen server the server GC's
+                // settings->get_local_steam_id() returns the game-server
+                // steam ID (90071999...), NOT the lobby owner's personal
+                // steam ID.  So we also check against the lobby owner's
+                // steam ID to correctly identify the host player and read
+                // their items from the client GC.
+                std::vector<const Econ_Item *> equipped_items;
+
+                const uint64 local_steam64 = settings->get_local_steam_id().ConvertToUint64();
+                const uint64 owner_steam64 = GBE_GetDotaLobbyOwnerSteamId();
+                const bool is_host_player = (player_steam64 == local_steam64 || player_steam64 == owner_steam64);
+
+                if (is_host_player && client_gc) {
+                    // Host player: read from client GC (same process)
+                    const auto &client_items = client_gc->get_items();
+                    for (const auto &item : client_items) {
+                        if (!item.equip_states.empty())
+                            equipped_items.push_back(&item);
+                    }
+                } else if (all_user_items.count(player_steam64)) {
+                    // Remote player: read from all_user_items (received via network)
+                    const auto &remote_items = all_user_items.at(player_steam64);
+                    for (const auto &item : remote_items) {
+                        if (!item.equip_states.empty())
+                            equipped_items.push_back(&item);
+                    }
+                }
+
+                if (equipped_items.empty()) {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "no equipped items for player at 7450 time: account_id=%u steam64=%llu is_local=%d is_host=%d has_remote_data=%d",
+                        target_account_id,
+                        static_cast<unsigned long long>(player_steam64),
+                        (player_steam64 == local_steam64) ? 1 : 0,
+                        is_host_player ? 1 : 0,
+                        all_user_items.count(player_steam64) ? 1 : 0
+                    );
+                    continue;
+                }
+
+                // Build a CMsgSOCacheSubscribed with owner type=1 (player)
+                // containing type_id=1 (CSOEconItem) objects.
+                std::string owner_soid;
+                GBE_AppendProtoVarIntField(owner_soid, 1u, 1u);
+                GBE_AppendProtoVarIntField(owner_soid, 2u, player_steam64);
+
+                std::string subscribed_type;
+                GBE_AppendProtoVarIntField(subscribed_type, 1u, 1u);
+                for (const Econ_Item *item_ptr : equipped_items) {
+                    const std::string serialized = client_gc ?
+                        client_gc->serialize_item_to_gcprotobuf(*item_ptr, player_steam_id) :
+                        serialize_item_to_gcprotobuf(*item_ptr, player_steam_id);
+                    GBE_AppendProtoBytesField(subscribed_type, 2u, serialized);
+                }
+
+                std::string cache_body;
+                GBE_AppendProtoBytesField(cache_body, 2u, subscribed_type);
+                GBE_AppendProtoFixed64Field(cache_body, 3u, 1ull);
+                GBE_AppendProtoBytesField(cache_body, 4u, owner_soid);
+
+                std::string cache_message;
+                GBE_BuildDotaZeroHeaderPayload(GBE_kDotaCacheSubscribed, cache_body, cache_message);
+                push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, cache_message);
+
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "pushed player item CacheSubscribed for server: account_id=%u steam64=%llu equipped_items=%zu message_size=%zu",
+                    target_account_id,
+                    static_cast<unsigned long long>(player_steam64),
+                    equipped_items.size(),
+                    cache_message.size()
+                );
+            }
+        }
+
         return true;
     }
 
@@ -12596,6 +13436,26 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     GBE_local_lobby.game_state
                 );
                 GBE_PublishSharedDotaLobbyState("7034_connected_player_hero");
+
+                if (is_server && gc_profile == GC_PROFILE_DOTA2) {
+                    Steam_Client *steam_client = get_steam_client();
+                    Steam_Game_Coordinator *client_gc = steam_client ? steam_client->steam_game_coordinator : nullptr;
+                    const uint64 owner_steam64 = GBE_GetDotaLobbyOwnerSteamId();
+                    if (client_gc && owner_steam64 != 0ull) {
+                        const CSteamID owner_steam_id(owner_steam64);
+                        const auto &client_items = client_gc->get_items();
+                        // Push to server GC so remote players see host cosmetics
+                        if (GBE_PushDotaPlayerEquippedItemsCacheToGC(this, owner_steam_id, client_items, true, "7034_owner_hero_known_server")) {
+                            GBE_GC_DebugLog(
+                                "GC_DOTA_DIRECT",
+                                "replayed host equipped items to server GC after owner hero became known: steam64=%llu hero_id=%u source_job=%llu",
+                                static_cast<unsigned long long>(owner_steam64),
+                                GBE_local_lobby.owner_hero_id,
+                                static_cast<unsigned long long>(source_job)
+                            );
+                        }
+                    }
+                }
             }
 
             if (request_shape.has_connected_steam_id && request_shape.connected_steam_id != 0ull) {
@@ -12795,6 +13655,35 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_FormatDota7034Summary(body, body_size).c_str()
         );
 
+        // [FIX] Re-push host equipped items when game_state reaches TEAM_SHOWCASE (4).
+        // On a listen server the login CacheSubscribed establishes the host's SO cache
+        // with 27k items (no equipped_state) in the shared cache.  The equip-forward
+        // CacheSubscribed arrives during STRATEGY_TIME before hero spawn, so the server
+        // engine sees [in cache] and does not create wearables.  By re-pushing at
+        // TEAM_SHOWCASE (when the server engine is about to spawn heroes), we give it
+        // a fresh CacheSubscribed with only equipped items so wearables are created.
+        if (is_server && !GBE_dota_host_showcase_equip_pushed &&
+            request_shape.has_game_state && request_shape.game_state >= 4u &&
+            GBE_local_lobby.active && GBE_local_lobby.state == 2u) {
+            Steam_Client *steam_client_ptr = get_steam_client();
+            Steam_Game_Coordinator *client_gc_ptr = steam_client_ptr ? steam_client_ptr->steam_game_coordinator : nullptr;
+            const uint64 owner_steam64 = GBE_GetDotaLobbyOwnerSteamId();
+            if (client_gc_ptr && owner_steam64 != 0ull) {
+                const CSteamID owner_steam_id(owner_steam64);
+                const auto &client_items = client_gc_ptr->get_items();
+                if (GBE_PushDotaPlayerEquippedItemsCacheToGC(this, owner_steam_id, client_items, true, "7034_showcase_host_equip_repush")) {
+                    GBE_dota_host_showcase_equip_pushed = true;
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "re-pushed host equipped items at TEAM_SHOWCASE: steam64=%llu request_game_state=%u lobby_game_state=%u",
+                        static_cast<unsigned long long>(owner_steam64),
+                        request_shape.game_state,
+                        GBE_local_lobby.game_state
+                    );
+                }
+            }
+        }
+
         std::string response_message;
         if (!GBE_BuildDota7034ConnectedPlayersResponsePayload(
                 GBE_GetDotaLobbyOwnerSteamId(),
@@ -12947,6 +13836,64 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return GBE_HandleDotaAbandonCurrentGameRequest(false, nullptr);
     }
 
+    // Handle CMsgLeaverDetected (7072) from game server
+    // When a player disconnects and later abandons (or the abandon timer expires),
+    // the game server sends this message. We update the member's leaver_status
+    // and push a lobby update so the Dota client sees the transition from
+    // DISCONNECTED to ABANDONED (with left_member_indices updated).
+    if (request_emsg == GBE_kDotaLeaverDetected) {
+        if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "ignoring 7072 because no local lobby is active");
+            return true;
+        }
+
+        // Parse steam_id (field 1, fixed64) and leaver_status (field 2, varint)
+        uint64 leaver_steam_id = 0ull;
+        uint32 leaver_status = 0u;
+        uint32 disconnect_reason = 0u;
+        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), leaver_steam_id);
+        GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 2u), leaver_status);
+        GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 6u), disconnect_reason);
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "handling req=7072 LeaverDetected steam_id=%llu leaver_status=%u disconnect_reason=%u lobby_id=%llu state=%u game_state=%u",
+            static_cast<unsigned long long>(leaver_steam_id),
+            leaver_status,
+            disconnect_reason,
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state
+        );
+
+        if (leaver_steam_id != 0ull && leaver_status != 0u) {
+            bool updated = false;
+            for (GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+                if (member.steam_id == leaver_steam_id) {
+                    if (member.leaver_status != leaver_status) {
+                        member.leaver_status = leaver_status;
+                        member.connected = false;
+                        updated = true;
+                        GBE_GC_DebugLog(
+                            "GC_DOTA_DIRECT",
+                            "updated member leaver_status steam_id=%llu leaver_status=%u",
+                            static_cast<unsigned long long>(leaver_steam_id),
+                            leaver_status
+                        );
+                    }
+                    break;
+                }
+            }
+
+            if (updated) {
+                GBE_PublishSharedDotaLobbyState("7072_leaver_detected");
+                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "7072_leaver_detected");
+            }
+        }
+
+        return true;
+    }
+
     if (request_emsg == GBE_kDotaGameMatchSignOutPermissionRequest) {
         std::string response_message;
         if (!GBE_BuildDotaGameMatchSignOutPermissionResponsePayload(has_source_job, source_job, response_message)) {
@@ -13003,6 +13950,23 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == 4506) {
+        // If we are stuck at state=1 (SERVERSETUP) because 4508 never arrived
+        // (dedicated server did not restart between matches), use 4506 as the
+        // signal to advance the launch to RUN.  This is safe because:
+        //  - If 4508 already advanced us to state=2, the state==1 check fails.
+        //  - 4506 is "server available acknowledgement" so the server IS ready.
+        if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "4506 advancing stalled launch: lobby_id=%llu state=%u launch_phase=%s",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_local_lobby.state,
+                GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
+            );
+            if (GBE_TryAdvanceDotaLaunchToRun("runtime packet after 4506 stall recovery", request_emsg, source_job, "4506_launch_run"))
+                return true;
+        }
+
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "consumed req=%u source_job=%llu note=server available acknowledgement body_size=%zu active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
@@ -13121,9 +14085,46 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 23u), allow_custom_games);
         GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 24u), build_version);
 
+        // Extract tv_secret_code from field 18 - needed for SourceTV spectating
+        // Try fixed64 first (wire type 1), then varint (wire type 0)
+        uint64 tv_secret_code = 0;
+        {
+            GBE_ProtoFieldView f18 = GBE_FindProtoField(body, body_size, 18u);
+            if (f18.found) {
+                if (f18.wire_type == 1 && f18.value_size == 8) {
+                    std::memcpy(&tv_secret_code, body + f18.value_offset, sizeof(tv_secret_code));
+                } else if (f18.wire_type == 0) {
+                    size_t off = f18.value_offset;
+                    GBE_ReadVarUint64(body, body_size, off, tv_secret_code);
+                }
+                GBE_GC_DebugLog("GC_DOTA_DIRECT",
+                    "4508 field_18 found wire_type=%u value_size=%zu tv_secret_code=0x%llx",
+                    f18.wire_type, f18.value_size,
+                    static_cast<unsigned long long>(tv_secret_code));
+            } else {
+                // Field 18 not found - dump all fields for diagnosis
+                size_t pos = 0;
+                std::string field_list;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe))
+                        break;
+                    if (!field_list.empty()) field_list += ",";
+                    field_list += std::to_string(fn) + ":" + std::to_string(wt);
+                }
+                GBE_GC_DebugLog("GC_DOTA_DIRECT",
+                    "4508 field_18 NOT found body_size=%zu fields=[%s]",
+                    body_size, field_list.c_str());
+            }
+        }
+
         const uint32 connect_ip = public_ip != 0 ? public_ip : private_ip;
         const std::string runtime_connect = GBE_FormatDotaPracticeLobbyConnectFromIp(connect_ip);
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_ShouldPreferDotaLobbyConnectUpdate(GBE_local_lobby.connect, runtime_connect)) {
+        // 4508 reports the engine's actual listen address — always prefer it over
+        // the peer-announce-derived getOwnIP() that was used at launch time.
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
+            !runtime_connect.empty() && runtime_connect != GBE_local_lobby.connect) {
             const std::string previous_connect = GBE_local_lobby.connect;
             GBE_local_lobby.connect = runtime_connect;
             if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id)
@@ -13158,6 +14159,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         );
 
         GBE_TrySyncDotaLobbyServerIdFromGameServer("4508_game_server_info");
+
+        // Store tv_secret_code and tv_port for SourceTV spectating
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+            if (tv_secret_code != 0)
+                GBE_local_lobby.tv_secret_code = tv_secret_code;
+            if (tv_port != 0)
+                GBE_local_lobby.tv_port = tv_port;
+            GBE_PublishDotaPracticeLobbyMetadata("4508_game_server_info");
+        }
+
         if (GBE_HasDotaLaunchServerSetupSync())
             GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseSetupSynced, "4508_game_server_info");
 
@@ -13198,6 +14209,327 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             body_size,
             GBE_FormatHexPrefix(body, body_size, 48).c_str()
         );
+        return true;
+    }
+
+    // Handle k_EMsgClientToGCEquipItems (2569) -> reply msg 26 (SO Cache update) + msg 2570
+    // Official flow: client sends 2569, server replies with msg 26 (CMsgSOMultipleObjects
+    // containing updated CSOEconItem with new equipped_state) THEN msg 2570.
+    if (request_emsg == 2569u) {
+        // Parse the repeated equips (field 1, length-delimited sub-messages)
+        struct EquipOp { uint64_t item_id; uint32_t new_class; uint32_t new_slot; };
+        std::vector<EquipOp> equip_ops;
+        {
+            size_t offset = 0;
+            while (offset < body_size) {
+                if (body[offset] != 0x0a) break;
+                offset++;
+                uint64_t sub_len = 0;
+                unsigned shift = 0;
+                while (offset < body_size) {
+                    uint8_t b = body[offset++];
+                    sub_len |= (uint64_t)(b & 0x7F) << shift;
+                    shift += 7;
+                    if (!(b & 0x80)) break;
+                }
+                if (offset + sub_len > body_size) break;
+                const uint8_t *sub = body + offset;
+                size_t sub_off = 0;
+                EquipOp op{0, 0, 0};
+                while (sub_off < sub_len) {
+                    uint8_t tag = sub[sub_off++];
+                    uint32_t field_num = tag >> 3;
+                    uint32_t wire_type = tag & 0x07;
+                    if (wire_type == 0) {
+                        uint64_t val = 0;
+                        unsigned s = 0;
+                        while (sub_off < sub_len) {
+                            uint8_t b = sub[sub_off++];
+                            val |= (uint64_t)(b & 0x7F) << s;
+                            s += 7;
+                            if (!(b & 0x80)) break;
+                        }
+                        if (field_num == 1) op.item_id = val;
+                        else if (field_num == 2) op.new_class = (uint32_t)val;
+                        else if (field_num == 3) op.new_slot = (uint32_t)val;
+                    } else {
+                        break;
+                    }
+                }
+                offset += (size_t)sub_len;
+                equip_ops.push_back(op);
+            }
+        }
+
+        // Apply equip logic and track which items were modified
+        std::unordered_set<uint64_t> modified_item_ids;
+        for (size_t ei = 0; ei < equip_ops.size(); ei++) {
+            const auto &op = equip_ops[ei];
+            bool found_target = false;
+            for (Econ_Item &item : items) {
+                if (op.item_id != UINT64_MAX && op.item_id != 0 && item.id == op.item_id) {
+                    item.equip_states.insert_or_assign(op.new_class, op.new_slot);
+                    modified_item_ids.insert(item.id);
+                    found_target = true;
+                } else {
+                    auto it = item.equip_states.find(op.new_class);
+                    if (it == item.equip_states.end() || it->second != op.new_slot)
+                        continue;
+                    item.equip_states.erase(it);
+                    modified_item_ids.insert(item.id);
+                }
+            }
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "equip op[%zu]: item_id=0x%llx (%llu) new_class=%u new_slot=%u found=%d items_count=%zu",
+                ei,
+                static_cast<unsigned long long>(op.item_id),
+                static_cast<unsigned long long>(op.item_id),
+                op.new_class, op.new_slot,
+                (int)found_target,
+                items.size()
+            );
+        }
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "equip result: modified_items=%zu total_ops=%zu",
+            modified_item_ids.size(), equip_ops.size()
+        );
+
+        // Generate a cache version (monotonically increasing timestamp-based)
+        static uint64_t equip_cache_version = 0;
+        if (equip_cache_version == 0) {
+            equip_cache_version = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()
+                ).count()
+            );
+        }
+        equip_cache_version++;
+
+        // Build msg 26 (k_ESOMsg_UpdateMultiple = CMsgSOMultipleObjects)
+        // Contains: objects_modified (field 2), version (field 3), owner_soid (field 6), service_id (field 7)
+        std::string update_message;
+        if (!modified_item_ids.empty()) {
+            CMsgSOMultipleObjects update_msg;
+
+            // owner_soid: type=1, id=steam_id
+            auto *owner = update_msg.mutable_owner_soid();
+            owner->set_type(1u);
+            owner->set_id(settings->get_local_steam_id().ConvertToUint64());
+
+            // Add modified items (field 2 = repeated SingleObject objects)
+            for (uint64_t mid : modified_item_ids) {
+                for (const Econ_Item &item : items) {
+                    if (item.id != mid) continue;
+                    auto *obj = update_msg.add_objects();
+                    obj->set_type_id(1);
+                    obj->set_object_data(item_to_gcprotobuf(item, settings->get_local_steam_id()));
+                    break;
+                }
+            }
+
+            update_msg.set_version(equip_cache_version);
+            update_msg.set_service_id(1u);
+
+            // Serialize into GC message format: emsg(4) + proto_hdr_len(4) + proto_hdr + body
+            {
+                uint32_t flagged_emsg = 26u | GBE_kProtoMask;
+                // Empty proto header (matching official capture)
+                uint32_t hdr_len = 0;
+                update_message.resize(sizeof(flagged_emsg) + sizeof(hdr_len));
+                memcpy(&update_message[0], &flagged_emsg, sizeof(flagged_emsg));
+                memcpy(&update_message[sizeof(flagged_emsg)], &hdr_len, sizeof(hdr_len));
+                update_msg.AppendToString(&update_message);
+            }
+
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "replying req=2569 resp=26 source_job=%llu size=%zu note=SO cache update modified_items=%zu",
+                static_cast<unsigned long long>(source_job),
+                update_message.size(),
+                modified_item_ids.size()
+            );
+            push_incoming_now(26u | GBE_kProtoMask, update_message);
+        }
+
+        // Build msg 2570 (CMsgClientToGCEquipItemsResponse) with so_cache_version_id
+        {
+            std::string resp_body;
+            // field 1, wire type 1 (fixed64) -> tag = 0x09
+            resp_body.push_back(0x09);
+            resp_body.append(reinterpret_cast<const char*>(&equip_cache_version), 8);
+
+            std::string response_message;
+            uint32_t flagged_emsg = 2570u | GBE_kProtoMask;
+            CMsgProtoBufHeader response_protohdr;
+            if (has_source_job) {
+                response_protohdr.set_job_id_target(source_job);
+            }
+            response_protohdr.set_job_id_source(18446744073709551615ULL);
+            std::string serialized_protohdr = response_protohdr.SerializeAsString();
+            uint32_t hdr_len = static_cast<uint32_t>(serialized_protohdr.size());
+
+            response_message.resize(sizeof(flagged_emsg) + sizeof(hdr_len));
+            memcpy(&response_message[0], &flagged_emsg, sizeof(flagged_emsg));
+            memcpy(&response_message[sizeof(flagged_emsg)], &hdr_len, sizeof(hdr_len));
+            response_message += serialized_protohdr;
+            response_message += resp_body;
+
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "replying req=2569 resp=2570 source_job=%llu size=%zu note=equip response count=%zu version=%llu",
+                static_cast<unsigned long long>(source_job),
+                response_message.size(),
+                equip_ops.size(),
+                static_cast<unsigned long long>(equip_cache_version)
+            );
+            push_incoming_now(2570u | GBE_kProtoMask, response_message);
+        }
+
+        save_items_to_file();
+
+        // Forward item equip changes to the server GC so the dedicated server
+        // can update wearables in real-time (e.g. during strategy phase).
+        //
+        // [FIX] The server GC's settings->get_local_steam_id() returns the
+        // game-server steam ID, not the lobby owner's personal steam ID.  At
+        // 7450 time (batch player resources) the server therefore fails to
+        // recognise the host as "local" and falls through to all_user_items,
+        // which may have no equip_states yet.  Even when equip_states arrive
+        // later via network inventory response, the Source 2 engine only
+        // creates wearable entities from a CacheSubscribed (emsg=24) that
+        // establishes the player's SO cache.  Bare emsg=21/26 arriving
+        // *before* any CacheSubscribed for that owner are silently dropped by
+        // the engine because no SO cache exists for the owner yet.
+        //
+        // Fix: before pushing emsg=21/26, always push a full player-item
+        // CacheSubscribed (emsg=24, owner_type=1) containing ALL currently
+        // equipped items.  This guarantees the engine has a valid SO cache
+        // for the player before the individual Create/Update messages arrive,
+        // and – crucially – provides the engine with the loadout data it
+        // needs to build wearable entities at hero-spawn time.
+        if (!is_server && gc_profile == GC_PROFILE_DOTA2 && !update_message.empty()) {
+            Steam_Client *steam_client = get_steam_client();
+            Steam_Game_Coordinator *server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
+            if (server_gc && server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id)) {
+                const uint64 player_steam64 = settings->get_local_steam_id().ConvertToUint64();
+                const CSteamID player_steam_id = settings->get_local_steam_id();
+
+                // Push to server GC so remote players see host cosmetics
+                GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, player_steam_id, items, true, "equip_forward_host_resubscribe_server");
+
+                // Step 1: Send emsg=21 (k_ESOMsg_Create) for each modified item
+                uint64_t create_version = equip_cache_version - modified_item_ids.size();
+                for (uint64_t mid : modified_item_ids) {
+                    for (const Econ_Item &item : items) {
+                        if (item.id != mid) continue;
+
+                        create_version++;
+                        CMsgSOSingleObject create_msg;
+                        auto *create_owner = create_msg.mutable_owner_soid();
+                        create_owner->set_type(1u);
+                        create_owner->set_id(player_steam64);
+                        create_msg.set_type_id(1);
+                        create_msg.set_object_data(item_to_gcprotobuf(item, player_steam_id));
+                        create_msg.set_version(create_version);
+
+                        std::string create_message;
+                        GBE_BuildDotaZeroHeaderPayload(21u, create_msg.SerializeAsString(), create_message);
+                        server_gc->push_incoming_message(21u | GBE_kProtoMask, create_message);
+                        break;
+                    }
+                }
+
+                // Step 2: Send emsg=26 (CMsgSOMultipleObjects) with all modified items
+                server_gc->push_incoming_message(26u | GBE_kProtoMask, update_message);
+
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "forwarded equip to server GC: emsg21_count=%zu emsg26_size=%zu lobby_id=%llu",
+                    modified_item_ids.size(),
+                    update_message.size(),
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+                );
+            }
+
+            // Also broadcast equipped items via network so the remote server GC
+            // (on the host machine in LAN mode) can build CacheSubscribed for us.
+            // This handles the case where we are a remote player and the server GC
+            // is in a different process.
+            {
+                std::vector<const Econ_Item *> equipped_items;
+                for (const auto &item : items) {
+                    if (!item.equip_states.empty())
+                        equipped_items.push_back(&item);
+                }
+
+                if (!equipped_items.empty()) {
+                    auto response_msg = new GameServer_Items_Messages::InventoryResponse();
+                    response_msg->set_steam_api_call(0);  // 0 = unsolicited push
+
+                    for (const Econ_Item *ep : equipped_items) {
+                        auto new_item = response_msg->add_items();
+                        new_item->set_id(ep->id);
+                        new_item->set_def(ep->def);
+                        new_item->set_level(ep->level);
+                        new_item->set_quality(static_cast<int32>(ep->quality));
+                        new_item->set_inv_pos(ep->inv_pos);
+                        new_item->set_quantity(ep->quantity);
+                        new_item->set_flags(ep->flags);
+                        new_item->set_origin(ep->origin);
+                        new_item->set_original_id(ep->original_id);
+                        new_item->set_in_use(ep->in_use);
+                        new_item->set_style(ep->style);
+
+                        for (const auto &[class_id, slot_id] : ep->equip_states) {
+                            auto new_state = new_item->add_equip_states();
+                            new_state->set_class_id(class_id);
+                            new_state->set_slot_id(slot_id);
+                        }
+
+                        for (const Econ_Item_Attribute &attr : ep->attributes) {
+                            auto new_attr = new_item->add_attributes();
+                            new_attr->set_def(attr.def);
+                            new_attr->set_value(attr.value);
+                            new_attr->set_value_bytes(attr.value_bytes);
+                        }
+                    }
+
+                    auto gameserver_items_msg = new GameServer_Items_Messages();
+                    gameserver_items_msg->set_type(GameServer_Items_Messages::Response_Inventory);
+                    gameserver_items_msg->set_is_gc(true);
+                    gameserver_items_msg->set_allocated_inventory_response(response_msg);
+
+                    Common_Message msg{};
+                    msg.set_allocated_gameserver_items_messages(gameserver_items_msg);
+                    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+                    network->sendToAllGameservers(&msg, true);
+
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "broadcast equipped items to gameservers via network: steam64=%llu equipped_items=%zu",
+                        static_cast<unsigned long long>(settings->get_local_steam_id().ConvertToUint64()),
+                        equipped_items.size()
+                    );
+                }
+            }
+        }
+
+        // [FIX] When the local player (host) equips items during an active game,
+        // the lobby snapshot that was previously replayed is now stale.  Reset the
+        // flag so the next GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot call will
+        // rebuild and push a fresh Lobby CacheSubscribed (emsg=24) containing the
+        // updated equipped items.  Without this, the host's game client never
+        // receives the updated wearable data for its own hero.
+        if (!is_server && gc_profile == GC_PROFILE_DOTA2 &&
+            GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
+            GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 2u &&
+            GBE_dota_private_lobby_snapshot_replayed) {
+            GBE_dota_private_lobby_snapshot_replayed = false;
+            GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot("equip_items_refresh");
+        }
+
         return true;
     }
 
@@ -13263,15 +14595,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             uint64 account_id_field = settings->get_local_steam_id().GetAccountID();
             GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2), account_id_field);
 
-            if (profile_selector == 0x20u) {
-                template_bytes = GBE_kDota7388Profile20Template;
-                template_size = sizeof(GBE_kDota7388Profile20Template);
-                response_note = "7387 selector=0x20";
-            } else if (profile_selector == 0x37u) {
-                template_bytes = GBE_kDota7388Profile37Template;
-                template_size = sizeof(GBE_kDota7388Profile37Template);
-                response_note = "7387 selector=0x37";
-            } else {
+            // Always use minimal response with owned=true for ALL event selectors.
+            // Previous code had hardcoded templates for 0x20 (owned=0) and 0x37 (owned=1)
+            // which caused items bound to event 0x20 to show "Unavailable".
+            {
                 std::string response_message;
                 if (!GBE_BuildDota7388MinimalResponsePayload(
                         static_cast<uint32>(profile_selector),
@@ -13285,7 +14612,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
-                    "replying req=%u resp=%u source_job=%llu size=%zu note=7387 selector=%llu minimal zero points account_id=%u",
+                    "replying req=%u resp=%u source_job=%llu size=%zu note=7387 selector=%llu owned=true level=1000 account_id=%u",
                     request_emsg,
                     7388u,
                     static_cast<unsigned long long>(source_job),
@@ -13296,10 +14623,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 push_incoming_now(7388u | GBE_kProtoMask, response_message);
                 return true;
             }
-
-            response_emsg = 7388;
-            replace_account = true;
-            break;
         }
         case 8078:
             template_bytes = GBE_kDota8079Template;
@@ -13319,6 +14642,904 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             response_emsg = 9024;
             response_note = "9023->9024";
             break;
+        case 8218: {
+            // CMsgClientToGCGiveTip -> CMsgClientToGCGiveTipResponse
+            // Return result=0 (success) so tipping works in-game.
+            std::string tip_body;
+            GBE_AppendProtoVarIntField(tip_body, 1u, 0u); // result = 0 (success)
+
+            std::string tip_response;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(8219u, has_source_job, source_job, tip_body, tip_response);
+            push_incoming_now(8219u | GBE_kProtoMask, tip_response);
+
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "tip request -> success response source_job=%llu", static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 8879: {
+            // CMsgClientToGCRankRequest -> CMsgGCToClientRankResponse
+            // Return empty first, then with rank data (field 2=10000, field 3=10000)
+            std::string rank_body;
+            GBE_AppendProtoVarIntField(rank_body, 1u, 0u);   // result = success
+            GBE_AppendProtoVarIntField(rank_body, 2u, 10000u); // rank_value
+            GBE_AppendProtoVarIntField(rank_body, 3u, 10000u); // rank_value2
+            GBE_AppendProtoVarIntField(rank_body, 4u, 0u);
+            GBE_AppendProtoVarIntField(rank_body, 5u, 0u);
+
+            std::string rank_response;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(8880u, has_source_job, source_job, rank_body, rank_response);
+            push_incoming_now(8880u | GBE_kProtoMask, rank_response);
+
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "rank request -> response source_job=%llu", static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 8095: {
+            // CMsgPlayerConductScorecardRequest -> suppress (don't reply)
+            // Not replying prevents misleading conduct scorecard popup.
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "conduct scorecard request suppressed source_job=%llu", static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case GBE_kDotaFindTopSourceTVGames: {
+            // CMsgClientToGCFindTopSourceTVGames -> CMsgGCToClientFindTopSourceTVGamesResponse
+            // Build response from local shared lobby state OR remote generic lobbies.
+            std::string response_body;
+            bool found_game = false;
+
+            // First: check local shared lobby state (we are the host)
+            if (!found_game &&
+                GBE_shared_dota_lobby_state.valid &&
+                GBE_shared_dota_lobby_state.active &&
+                GBE_shared_dota_lobby_state.game_state >= 1u &&
+                GBE_shared_dota_lobby_state.server_id != 0) {
+
+                std::string game_entry;
+                GBE_AppendProtoVarIntField(game_entry, 1u,
+                    GBE_shared_dota_lobby_state.game_start_time != 0
+                        ? GBE_shared_dota_lobby_state.game_start_time
+                        : static_cast<uint32>(std::time(nullptr) - 300));
+                GBE_AppendProtoVarIntField(game_entry, 3u, GBE_shared_dota_lobby_state.server_id);
+                GBE_AppendProtoVarIntField(game_entry, 4u, GBE_shared_dota_lobby_state.lobby_id);
+                GBE_AppendProtoVarIntField(game_entry, 6u, 1u);
+                int32 game_time = GBE_shared_dota_lobby_state.game_start_time != 0
+                    ? static_cast<int32>(std::time(nullptr)) - static_cast<int32>(GBE_shared_dota_lobby_state.game_start_time)
+                    : 300;
+                GBE_AppendProtoVarIntField(game_entry, 7u, static_cast<uint64>(static_cast<uint32>(game_time)));
+                GBE_AppendProtoVarIntField(game_entry, 8u, 0u);
+                GBE_AppendProtoVarIntField(game_entry, 9u, 0u);
+                GBE_AppendProtoVarIntField(game_entry, 10u, GBE_shared_dota_lobby_state.game_mode);
+                GBE_AppendProtoVarIntField(game_entry, 12u, GBE_shared_dota_lobby_state.match_id);
+                for (const auto &member : GBE_shared_dota_lobby_state.members) {
+                    if (member.account_id == 0) continue;
+                    std::string player_entry;
+                    GBE_AppendProtoVarIntField(player_entry, 1u, member.account_id);
+                    GBE_AppendProtoVarIntField(player_entry, 2u, member.hero_id);
+                    GBE_AppendProtoVarIntField(player_entry, 3u, member.slot);
+                    GBE_AppendProtoVarIntField(player_entry, 4u, member.team);
+                    GBE_AppendProtoBytesField(game_entry, 22u, player_entry);
+                }
+                GBE_AppendProtoBytesField(response_body, 7u, game_entry);
+                found_game = true;
+            }
+
+            // Second: check remote generic lobbies via matchmaking
+            if (!found_game) {
+                const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("8009_find_top_source_tv");
+                for (const auto &snap : snapshots) {
+                    if (snap.game_state >= 1u && snap.server_id != 0 && snap.allow_spectating) {
+                        std::string game_entry;
+                        GBE_AppendProtoVarIntField(game_entry, 1u,
+                            snap.game_start_time != 0
+                                ? snap.game_start_time
+                                : static_cast<uint32>(std::time(nullptr) - 300));
+                        GBE_AppendProtoVarIntField(game_entry, 3u, snap.server_id);
+                        GBE_AppendProtoVarIntField(game_entry, 4u, snap.lobby_id);
+                        GBE_AppendProtoVarIntField(game_entry, 6u, 1u);
+                        int32 gt = snap.game_start_time != 0
+                            ? static_cast<int32>(std::time(nullptr)) - static_cast<int32>(snap.game_start_time)
+                            : 300;
+                        GBE_AppendProtoVarIntField(game_entry, 7u, static_cast<uint64>(static_cast<uint32>(gt)));
+                        GBE_AppendProtoVarIntField(game_entry, 8u, 0u);
+                        GBE_AppendProtoVarIntField(game_entry, 9u, 0u);
+                        GBE_AppendProtoVarIntField(game_entry, 10u, snap.game_mode);
+                        GBE_AppendProtoVarIntField(game_entry, 12u, snap.match_id);
+                        for (const auto &member : snap.members) {
+                            if (member.account_id == 0) continue;
+                            std::string player_entry;
+                            GBE_AppendProtoVarIntField(player_entry, 1u, member.account_id);
+                            GBE_AppendProtoVarIntField(player_entry, 2u, member.hero_id);
+                            GBE_AppendProtoVarIntField(player_entry, 3u, member.slot);
+                            GBE_AppendProtoVarIntField(player_entry, 4u, member.team);
+                            GBE_AppendProtoBytesField(game_entry, 22u, player_entry);
+                        }
+                        GBE_AppendProtoBytesField(response_body, 7u, game_entry);
+                        found_game = true;
+                        break; // Use first matching game
+                    }
+                }
+            }
+
+            if (found_game) {
+                GBE_AppendProtoVarIntField(response_body, 5u, 1u); // num_games = 1
+            } else {
+                GBE_AppendProtoVarIntField(response_body, 5u, 0u); // num_games = 0
+            }
+
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(
+                GBE_kDotaFindTopSourceTVGamesResponse,
+                has_source_job, source_job,
+                response_body, response_message);
+            push_incoming_now(GBE_kDotaFindTopSourceTVGamesResponse | GBE_kProtoMask, response_message);
+
+            GBE_GC_DebugLog("GC_DOTA_DIRECT",
+                "FindTopSourceTVGames -> response found=%d source_job=%llu local_valid=%d",
+                found_game ? 1 : 0,
+                static_cast<unsigned long long>(source_job),
+                GBE_shared_dota_lobby_state.valid ? 1 : 0);
+            return true;
+        }
+        case 7073: {
+            // CMsgSpectateFriendGame -> CMsgSpectateFriendGameResponse
+            // Sent when a player clicks "Watch Game" on a friend's profile card.
+            // Parse target steam_id (field 1, fixed64), find the game server they're on,
+            // and return server_steamid + SUCCESS so the client can follow up with 7091.
+            //
+            // CMsgSpectateFriendGameResponse proto:
+            //   field 4: server_steamid (fixed64)
+            //   field 5: watch_live_result (varint enum, 0=SUCCESS)
+            uint64 spectate_target_steamid = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe))
+                        break;
+                    if (fn == 1u && wt == 1u && vs == 8) {
+                        memcpy(&spectate_target_steamid, body + vo, 8);
+                    }
+                }
+            }
+
+            // Find the server_steamid from local shared state or remote lobbies
+            uint64 spectate_server_steamid = 0;
+
+            if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.server_id != 0) {
+                spectate_server_steamid = GBE_shared_dota_lobby_state.server_id;
+            } else {
+                const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("7073_spectate_friend");
+                for (const auto &snap : snapshots) {
+                    if (snap.game_state >= 1u && snap.server_id != 0) {
+                        spectate_server_steamid = snap.server_id;
+                        break;
+                    }
+                }
+            }
+
+            if (spectate_server_steamid == 0)
+                spectate_server_steamid = GBE_local_lobby.server_id;
+
+            // Build 7074 CMsgSpectateFriendGameResponse
+            // Official GC always sends job_id_target = 0xFFFFFFFFFFFFFFFF in the header,
+            // even when the request has no source_job. The client requires this to process
+            // the response and trigger the follow-up 7091 WatchGame request.
+            // Body contains only field 4 (server_steamid); field 5 (watch_live_result)
+            // is omitted when SUCCESS (default value 0 is not serialized by official GC).
+            {
+                std::string resp_body;
+                GBE_AppendProtoFixed64Field(resp_body, 4u, spectate_server_steamid); // server_steamid
+                std::string response_msg;
+                uint64 reply_job = has_source_job ? source_job : 0xFFFFFFFFFFFFFFFFULL;
+                GBE_BuildDotaJobReplyPayload(7074u, reply_job, resp_body, response_msg);
+                push_incoming_now(7074u | GBE_kProtoMask, response_msg);
+            }
+
+            GBE_GC_DebugLog("GC_DOTA_DIRECT",
+                "spectate friend game -> SUCCESS target=%llu server=0x%llx source_job=%llu",
+                static_cast<unsigned long long>(spectate_target_steamid),
+                static_cast<unsigned long long>(spectate_server_steamid),
+                static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 7091: {
+            // CMsgWatchGame -> CMsgWatchGameResponse
+            // Parse server_steamid from request (field 1, fixed64).
+            // Return READY with SourceTV connection info for LAN spectating.
+            uint64 watch_server_steamid = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(
+                            body, body_size,
+                            pos, fn, wt, fo, vo, vs, fe))
+                        break;
+                    if (fn == 1u && wt == 1u && vs == 8) {
+                        memcpy(&watch_server_steamid, body + vo, 8);
+                    }
+                }
+            }
+
+            // Parse SourceTV address from lobby connect string (ip:port -> ip, port+5)
+            uint32 source_tv_addr = 0;
+            uint32 source_tv_port = 27020; // default SourceTV port
+            uint64 tv_secret_code = 0;
+            std::string connect_str;
+            if (GBE_shared_dota_lobby_state.valid && !GBE_shared_dota_lobby_state.connect.empty()) {
+                connect_str = GBE_shared_dota_lobby_state.connect;
+            } else {
+                // Fallback: find connect from remote generic lobbies
+                const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("7091_watch_game");
+                for (const auto &snap : snapshots) {
+                    if (snap.game_state >= 1u && snap.server_id != 0 && !snap.connect.empty()) {
+                        connect_str = snap.connect;
+                        if (snap.tv_secret_code != 0)
+                            tv_secret_code = snap.tv_secret_code;
+                        if (snap.tv_port != 0)
+                            source_tv_port = snap.tv_port;
+                        break;
+                    }
+                }
+            }
+            // If we have local lobby tv_secret_code (host side), use it
+            if (tv_secret_code == 0 && GBE_local_lobby.tv_secret_code != 0)
+                tv_secret_code = GBE_local_lobby.tv_secret_code;
+            if (GBE_local_lobby.tv_port != 0)
+                source_tv_port = GBE_local_lobby.tv_port;
+            if (!connect_str.empty()) {
+                size_t colon = connect_str.find(':');
+                std::string ip_str = (colon != std::string::npos) ? connect_str.substr(0, colon) : connect_str;
+                if (colon != std::string::npos) {
+                    uint32 game_port = static_cast<uint32>(std::strtoul(connect_str.c_str() + colon + 1, nullptr, 10));
+                    if (game_port > 0) source_tv_port = game_port + 5;
+                }
+                // Convert IP string to uint32 (network byte order as stored by Dota)
+                unsigned int a = 0, b = 0, c = 0, d = 0;
+                if (std::sscanf(ip_str.c_str(), "%u.%u.%u.%u", &a, &b, &c, &d) == 4) {
+                    source_tv_addr = (a << 24) | (b << 16) | (c << 8) | d;
+                }
+            }
+
+            // First response: PENDING (field 1 = 0)
+            // Official GC sends job_id_target = 0xFFFFFFFFFFFFFFFF in the header.
+            {
+                std::string pending_body;
+                GBE_AppendProtoVarIntField(pending_body, 1u, 0u); // PENDING
+                std::string pending_msg;
+                uint64 pending_reply_job = has_source_job ? source_job : 0xFFFFFFFFFFFFFFFFULL;
+                GBE_BuildDotaJobReplyPayload(7092u, pending_reply_job, pending_body, pending_msg);
+                push_incoming_now(7092u | GBE_kProtoMask, pending_msg);
+            }
+
+            const CSteamID local_steam_id = settings->get_local_steam_id();
+            const uint32 local_account_id = local_steam_id.GetAccountID();
+
+            // Second response: READY with server info
+            {
+                std::string ready_body;
+                GBE_AppendProtoVarIntField(ready_body, 1u, 1u); // READY
+                // field 2: source_tv_public_addr (uint32 IP)
+                if (source_tv_addr != 0)
+                    GBE_AppendProtoVarIntField(ready_body, 2u, source_tv_addr);
+                // field 3: source_tv_private_addr (same as public for LAN)
+                if (source_tv_addr != 0)
+                    GBE_AppendProtoVarIntField(ready_body, 3u, source_tv_addr);
+                // field 4: source_tv_port
+                GBE_AppendProtoVarIntField(ready_body, 4u, source_tv_port);
+                GBE_AppendProtoFixed64Field(ready_body, 5u, watch_server_steamid); // game_server_steamid
+                GBE_AppendProtoFixed64Field(ready_body, 6u, watch_server_steamid); // watch_server_steamid
+                // Use real tv_secret_code from host's 4508 if available, otherwise fallback
+                uint64 secret_code = (tv_secret_code != 0) ? tv_secret_code : (watch_server_steamid ^ 0x0514D449EDC24001ULL);
+                GBE_AppendProtoFixed64Field(ready_body, 7u, secret_code); // watch_tv_unique_secret_code
+                std::string ready_msg;
+                GBE_BuildDotaJobReplyOrZeroHeaderPayload(7092u, false, 0, ready_body, ready_msg);
+                push_incoming_now(7092u | GBE_kProtoMask, ready_msg);
+            }
+
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "watch game request -> READY server=0x%llx tv_addr=0x%x tv_port=%u local_account=%u local_steamid=%llu raw_tv_secret=0x%llx sent_secret=0x%llx source_job=%llu",
+                static_cast<unsigned long long>(watch_server_steamid),
+                source_tv_addr, source_tv_port,
+                local_account_id,
+                static_cast<unsigned long long>(local_steam_id.ConvertToUint64()),
+                static_cast<unsigned long long>(tv_secret_code),
+                static_cast<unsigned long long>(tv_secret_code != 0 ? tv_secret_code : (watch_server_steamid ^ 0x0514D449EDC24001ULL)),
+                static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 8209: {
+            // CMsgDOTAClaimEventAction -> CMsgDOTAClaimEventActionResponse
+            // Parse event_id (field 1) and action_id (field 2) from request.
+            // Return result=Success(0) with the action_id echoed back.
+            uint32 claim_event_id = 0;
+            uint32 claim_action_id = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(
+                            body, body_size,
+                            pos, fn, wt, fo, vo, vs, fe))
+                        break;
+                    if (fn == 1u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        claim_event_id = static_cast<uint32>(v);
+                    }
+                    if (fn == 2u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        claim_action_id = static_cast<uint32>(v);
+                    }
+                }
+            }
+
+            // Build CMsgDOTAClaimEventActionResponse:
+            // field 1 = result (varint, 0=Success)
+            // field 2 = reward_results (repeated, empty for now)
+            // field 3 = action_id (varint)
+            std::string claim_body;
+            GBE_AppendProtoVarIntField(claim_body, 1u, 0u); // result = Success
+            // field 2: empty GrantedRewardData sub-message matching the capture
+            std::string reward_data;
+            GBE_AppendProtoVarIntField(reward_data, 1u, 0u); // grant_index
+            GBE_AppendProtoVarIntField(reward_data, 2u, 0u); // score_index
+            GBE_AppendProtoVarIntField(reward_data, 3u, 0u); // reward_index
+            GBE_AppendProtoVarIntField(reward_data, 5u, claim_action_id); // action_id
+            GBE_AppendProtoBytesField(claim_body, 2u, reward_data);
+            GBE_AppendProtoVarIntField(claim_body, 3u, claim_action_id); // action_id
+
+            std::string claim_response;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(8210u, has_source_job, source_job, claim_body, claim_response);
+            push_incoming_now(8210u | GBE_kProtoMask, claim_response);
+
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "claim event action -> success event=%u action=%u source_job=%llu",
+                claim_event_id, claim_action_id, static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 2510: {
+            // StorePurchaseInit - client wants to buy an item from the store.
+            // Parse the request to get item_def_id, then respond with success
+            // and grant the item to the player's inventory.
+            
+            // Parse line_items (field 4) to get item_def_id
+            uint32_t purchased_def = 0;
+            uint32_t purchased_qty = 1;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint8_t tag = body[pos];
+                    uint8_t field_num = tag >> 3;
+                    uint8_t wire_type = tag & 0x07;
+                    pos++;
+                    if (wire_type == 0) { // varint
+                        while (pos < body_size && (body[pos] & 0x80)) pos++;
+                        pos++;
+                    } else if (wire_type == 2) { // length-delimited
+                        uint32_t len = 0;
+                        uint8_t shift = 0;
+                        while (pos < body_size) {
+                            uint8_t b = body[pos++];
+                            len |= (b & 0x7F) << shift;
+                            shift += 7;
+                            if (!(b & 0x80)) break;
+                        }
+                        if (field_num == 4 && len > 0 && pos + len <= body_size) {
+                            // Parse CGCStorePurchaseInit_LineItem sub-message
+                            const uint8_t *sub = body + pos;
+                            size_t sub_pos = 0;
+                            while (sub_pos < len) {
+                                uint8_t st = sub[sub_pos];
+                                uint8_t sf = st >> 3;
+                                uint8_t sw = st & 0x07;
+                                sub_pos++;
+                                if (sw == 0) {
+                                    uint32_t val = 0;
+                                    uint8_t s2 = 0;
+                                    while (sub_pos < len) {
+                                        uint8_t b = sub[sub_pos++];
+                                        val |= (b & 0x7F) << s2;
+                                        s2 += 7;
+                                        if (!(b & 0x80)) break;
+                                    }
+                                    if (sf == 1) purchased_def = val;
+                                    else if (sf == 2) purchased_qty = val;
+                                } else if (sw == 2) {
+                                    uint32_t sl = 0;
+                                    uint8_t s2 = 0;
+                                    while (sub_pos < len) {
+                                        uint8_t b = sub[sub_pos++];
+                                        sl |= (b & 0x7F) << s2;
+                                        s2 += 7;
+                                        if (!(b & 0x80)) break;
+                                    }
+                                    sub_pos += sl;
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                        pos += len;
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            if (purchased_def == 0) {
+                GBE_GC_DebugLog("GC_DOTA_DIRECT", "StorePurchaseInit failed to parse item_def_id body_size=%zu", body_size);
+                return true;
+            }
+
+            // Build StorePurchaseInitResponse (msg 2511): result=1, txn_id=fake
+            {
+                std::string resp_body;
+                GBE_AppendProtoVarIntField(resp_body, 1u, 1u); // result = 1 (success)
+                // txn_id (field 2, varint/fixed64) - use a fake transaction ID
+                uint64_t fake_txn = (static_cast<uint64_t>(0xBEEF0000u) | purchased_def);
+                GBE_AppendProtoVarIntField(resp_body, 2u, fake_txn);
+
+                std::string response_message;
+                GBE_BuildDotaJobReplyOrZeroHeaderPayload(2511u, has_source_job, source_job, resp_body, response_message);
+                push_incoming_now(2511u | GBE_kProtoMask, response_message);
+            }
+
+            // Grant the purchased item to inventory
+            {
+                CSteamID player_steam_id = settings->get_local_steam_id();
+                uint32_t account_id = player_steam_id.GetAccountID();
+
+                for (uint32_t qi = 0; qi < purchased_qty; qi++) {
+                    uint32_t seq = static_cast<uint32_t>(items.size()) + 1;
+                    uint64_t new_item_id = (static_cast<uint64_t>(0x50000000u + seq) << 32ull) | static_cast<uint64_t>(account_id);
+
+                    Econ_Item item;
+                    item.id = new_item_id;
+                    item.def = purchased_def;
+                    item.level = 1;
+                    item.quality = static_cast<EItemQuality>(4);
+                    item.inv_pos = seq;
+                    item.quantity = 1;
+                    item.flags = 0;
+                    item.origin = 2; // purchased
+                    item.in_use = false;
+                    item.original_id = new_item_id;
+                    item.style = 0;
+                    items.push_back(item);
+
+                    // Notify client via SOCreate (msg 21 = k_ESOMsg_Create)
+                    CSOEconItem proto_item;
+                    proto_item.set_id(new_item_id);
+                    proto_item.set_account_id(account_id);
+                    proto_item.set_def_index(purchased_def);
+                    proto_item.set_inventory(seq);
+                    proto_item.set_quantity(1);
+                    proto_item.set_level(1);
+                    proto_item.set_quality(4);
+                    proto_item.set_flags(0);
+                    proto_item.set_origin(2);
+                    proto_item.set_in_use(false);
+                    proto_item.set_style(0);
+                    proto_item.set_original_id(new_item_id);
+
+                    CMsgSOSingleObject create_msg;
+                    create_msg.set_type_id(1);
+                    create_msg.set_object_data(proto_item.SerializeAsString());
+                    create_msg.set_version(0);
+
+                    std::string create_body = create_msg.SerializeAsString();
+                    std::string create_response;
+                    GBE_BuildDotaZeroHeaderPayload(21u, create_body, create_response);
+                    push_incoming_now(21u | GBE_kProtoMask, create_response);
+                }
+
+                save_items_to_file();
+            }
+
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "StorePurchaseInit success def=%u qty=%u source_job=%llu",
+                purchased_def, purchased_qty,
+                static_cast<unsigned long long>(source_job)
+            );
+            return true;
+        }
+        case 1092: {
+            // k_EMsgGCRequestCrateItems -> k_EMsgGCRequestCrateItemsResponse (1093)
+            // Client asks what items are in a crate. Parse crate_item_def, look up
+            // loot list, return the def_indexes of items in the loot list.
+            uint32 crate_def = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe)) break;
+                    if (fn == 1u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        crate_def = static_cast<uint32>(v);
+                    }
+                }
+            }
+            // Build response with item_defs from loot list
+            std::string resp_body;
+            GBE_AppendProtoVarIntField(resp_body, 1u, 0u); // k_Succeeded
+            // Look up loot list for this treasure
+            auto tll_it = GBE_vpk_loot_data.treasure_to_loot_list.find(crate_def);
+            if (tll_it != GBE_vpk_loot_data.treasure_to_loot_list.end()) {
+                auto ll_it = GBE_vpk_loot_data.loot_lists.find(tll_it->second);
+                if (ll_it != GBE_vpk_loot_data.loot_lists.end()) {
+                    for (const auto &entry_name : ll_it->second) {
+                        auto def_it = GBE_vpk_loot_data.name_to_def.find(entry_name);
+                        if (def_it != GBE_vpk_loot_data.name_to_def.end()) {
+                            GBE_AppendProtoVarIntField(resp_body, 2u, def_it->second); // item_defs
+                        }
+                    }
+                }
+            }
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(1093u, has_source_job, source_job, resp_body, response_message);
+            push_incoming_now(1093u | GBE_kProtoMask, response_message);
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "RequestCrateItems -> success crate_def=%u source_job=%llu",
+                crate_def, static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 1025: {
+            // k_EMsgGCUseItemRequest -> k_EMsgGCUseItemResponse (1026)
+            // Client wants to "use" an item (open a treasure).
+            // Find the item in inventory, get its def_index, look up loot list,
+            // pick a random item, grant it, then respond.
+            uint64 use_item_id = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe)) break;
+                    if (fn == 1u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        use_item_id = v;
+                    } else if (fn == 1u && wt == 1u) {
+                        if (vo + 8 <= body_size) memcpy(&use_item_id, body + vo, 8);
+                    }
+                }
+            }
+            // Find item def_index from inventory
+            uint32 item_def = 0;
+            for (const auto &inv_item : items) {
+                if (inv_item.id == use_item_id) { item_def = inv_item.def; break; }
+            }
+            // Try to open as treasure: look up loot list
+            uint32 granted_def = 0;
+            std::string resolved_loot_list;
+            auto tll_it = GBE_vpk_loot_data.treasure_to_loot_list.find(item_def);
+            if (tll_it != GBE_vpk_loot_data.treasure_to_loot_list.end()) {
+                resolved_loot_list = tll_it->second;
+            } else {
+                // Try tool.usage.loot_list path (gem packs, gifts, etc.)
+                auto tool_it = GBE_vpk_loot_data.tool_to_loot_list.find(item_def);
+                if (tool_it != GBE_vpk_loot_data.tool_to_loot_list.end()) {
+                    resolved_loot_list = tool_it->second;
+                }
+            }
+            if (!resolved_loot_list.empty()) {
+                auto ll_it = GBE_vpk_loot_data.loot_lists.find(resolved_loot_list);
+                if (ll_it != GBE_vpk_loot_data.loot_lists.end() && !ll_it->second.empty()) {
+                    // Pick random item from loot list
+                    size_t idx = static_cast<size_t>(rand()) % ll_it->second.size();
+                    const std::string &chosen_name = ll_it->second[idx];
+                    auto def_it = GBE_vpk_loot_data.name_to_def.find(chosen_name);
+                    if (def_it != GBE_vpk_loot_data.name_to_def.end()) {
+                        granted_def = def_it->second;
+                    }
+                }
+            }
+            // Grant the item if we found one
+            if (granted_def != 0) {
+                CSteamID player_steam_id = settings->get_local_steam_id();
+                uint32_t account_id = player_steam_id.GetAccountID();
+                uint32_t seq = static_cast<uint32_t>(items.size()) + 1;
+                uint64_t new_item_id = (static_cast<uint64_t>(0x60000000u + seq) << 32ull) | static_cast<uint64_t>(account_id);
+
+                Econ_Item new_item;
+                new_item.id = new_item_id;
+                new_item.def = granted_def;
+                new_item.level = 1;
+                new_item.quality = static_cast<EItemQuality>(4);
+                new_item.inv_pos = seq;
+                new_item.quantity = 1;
+                new_item.flags = 0;
+                new_item.origin = 8; // opened from crate
+                new_item.in_use = false;
+                new_item.original_id = new_item_id;
+                new_item.style = 0;
+                items.push_back(new_item);
+
+                CSOEconItem proto_item;
+                proto_item.set_id(new_item_id);
+                proto_item.set_account_id(account_id);
+                proto_item.set_def_index(granted_def);
+                proto_item.set_inventory(seq);
+                proto_item.set_quantity(1);
+                proto_item.set_level(1);
+                proto_item.set_quality(4);
+                proto_item.set_flags(0);
+                proto_item.set_origin(8);
+                proto_item.set_in_use(false);
+                proto_item.set_style(0);
+                proto_item.set_original_id(new_item_id);
+
+                CMsgSOSingleObject create_msg;
+                create_msg.set_type_id(1);
+                create_msg.set_object_data(proto_item.SerializeAsString());
+                create_msg.set_version(0);
+                std::string create_body = create_msg.SerializeAsString();
+                std::string create_response;
+                GBE_BuildDotaZeroHeaderPayload(21u, create_body, create_response);
+                push_incoming_now(21u | GBE_kProtoMask, create_response);
+
+                save_items_to_file();
+            }
+            // Response
+            std::string resp_body;
+            GBE_AppendProtoVarIntField(resp_body, 1u, granted_def != 0 ? 4u : 0u); // ItemUsed_ItemsGranted or ItemUsed
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(1026u, has_source_job, source_job, resp_body, response_message);
+            push_incoming_now(1026u | GBE_kProtoMask, response_message);
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "UseItemRequest -> item_id=0x%llx def=%u granted_def=%u source_job=%llu",
+                static_cast<unsigned long long>(use_item_id), item_def, granted_def,
+                static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 2574: {
+            // k_EMsgClientToGCUnlockCrate -> k_EMsgClientToGCUnlockCrateResponse (2575)
+            // Open a treasure chest. Find crate in inventory, pick random from loot list, grant it.
+            uint64 crate_item_id = 0;
+            uint64 key_item_id = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe)) break;
+                    if (fn == 1u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        crate_item_id = v;
+                    } else if (fn == 2u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        key_item_id = v;
+                    }
+                }
+            }
+            // Find crate def_index
+            uint32 crate_def = 0;
+            for (const auto &inv_item : items) {
+                if (inv_item.id == crate_item_id) { crate_def = inv_item.def; break; }
+            }
+            // Pick random item from loot list
+            std::vector<uint32> granted_defs;
+            auto tll_it = GBE_vpk_loot_data.treasure_to_loot_list.find(crate_def);
+            if (tll_it != GBE_vpk_loot_data.treasure_to_loot_list.end()) {
+                auto ll_it = GBE_vpk_loot_data.loot_lists.find(tll_it->second);
+                if (ll_it != GBE_vpk_loot_data.loot_lists.end() && !ll_it->second.empty()) {
+                    size_t idx = static_cast<size_t>(rand()) % ll_it->second.size();
+                    const std::string &chosen_name = ll_it->second[idx];
+                    auto def_it = GBE_vpk_loot_data.name_to_def.find(chosen_name);
+                    if (def_it != GBE_vpk_loot_data.name_to_def.end()) {
+                        granted_defs.push_back(def_it->second);
+                    }
+                }
+            }
+            // Grant items
+            CSteamID player_steam_id = settings->get_local_steam_id();
+            uint32_t account_id = player_steam_id.GetAccountID();
+            for (uint32 gdef : granted_defs) {
+                uint32_t seq = static_cast<uint32_t>(items.size()) + 1;
+                uint64_t new_item_id = (static_cast<uint64_t>(0x61000000u + seq) << 32ull) | static_cast<uint64_t>(account_id);
+
+                Econ_Item new_item;
+                new_item.id = new_item_id;
+                new_item.def = gdef;
+                new_item.level = 1;
+                new_item.quality = static_cast<EItemQuality>(4);
+                new_item.inv_pos = seq;
+                new_item.quantity = 1;
+                new_item.flags = 0;
+                new_item.origin = 8;
+                new_item.in_use = false;
+                new_item.original_id = new_item_id;
+                new_item.style = 0;
+                items.push_back(new_item);
+
+                CSOEconItem proto_item;
+                proto_item.set_id(new_item_id);
+                proto_item.set_account_id(account_id);
+                proto_item.set_def_index(gdef);
+                proto_item.set_inventory(seq);
+                proto_item.set_quantity(1);
+                proto_item.set_level(1);
+                proto_item.set_quality(4);
+                proto_item.set_flags(0);
+                proto_item.set_origin(8);
+                proto_item.set_in_use(false);
+                proto_item.set_style(0);
+                proto_item.set_original_id(new_item_id);
+
+                CMsgSOSingleObject create_msg;
+                create_msg.set_type_id(1);
+                create_msg.set_object_data(proto_item.SerializeAsString());
+                create_msg.set_version(0);
+                std::string create_body = create_msg.SerializeAsString();
+                std::string create_response;
+                GBE_BuildDotaZeroHeaderPayload(21u, create_body, create_response);
+                push_incoming_now(21u | GBE_kProtoMask, create_response);
+            }
+            if (!granted_defs.empty()) save_items_to_file();
+            // Build response with granted items
+            std::string resp_body;
+            GBE_AppendProtoVarIntField(resp_body, 1u, 0u); // k_EGCMsgResponseOK
+            for (uint32 gdef : granted_defs) {
+                // CMsgClientToGCUnlockCrateResponse.Item: field 1=item_id, field 2=def_index
+                std::string item_sub;
+                GBE_AppendProtoVarIntField(item_sub, 2u, gdef);
+                GBE_AppendProtoBytesField(resp_body, 2u, item_sub);
+            }
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(2575u, has_source_job, source_job, resp_body, response_message);
+            push_incoming_now(2575u | GBE_kProtoMask, response_message);
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "UnlockCrate -> OK crate_id=0x%llx crate_def=%u granted=%zu source_job=%llu",
+                static_cast<unsigned long long>(crate_item_id), crate_def,
+                granted_defs.size(), static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 2576: {
+            // k_EMsgClientToGCUnpackBundle -> k_EMsgClientToGCUnpackBundleResponse (2567)
+            // Unpack a bundle: grant all contained items.
+            uint64 bundle_item_id = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe)) break;
+                    if (fn == 1u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        bundle_item_id = v;
+                    }
+                }
+            }
+            // Find bundle def_index
+            uint32 bundle_def = 0;
+            for (const auto &inv_item : items) {
+                if (inv_item.id == bundle_item_id) { bundle_def = inv_item.def; break; }
+            }
+            // Look up bundle contents and grant all items
+            std::vector<uint32> granted_defs;
+            auto bc_it = GBE_vpk_loot_data.bundle_contents.find(bundle_def);
+            if (bc_it != GBE_vpk_loot_data.bundle_contents.end()) {
+                for (const auto &item_name : bc_it->second) {
+                    auto def_it = GBE_vpk_loot_data.name_to_def.find(item_name);
+                    if (def_it != GBE_vpk_loot_data.name_to_def.end()) {
+                        granted_defs.push_back(def_it->second);
+                    }
+                }
+            }
+            // Grant items
+            CSteamID player_steam_id2 = settings->get_local_steam_id();
+            uint32_t account_id2 = player_steam_id2.GetAccountID();
+            for (uint32 gdef : granted_defs) {
+                uint32_t seq = static_cast<uint32_t>(items.size()) + 1;
+                uint64_t new_item_id = (static_cast<uint64_t>(0x62000000u + seq) << 32ull) | static_cast<uint64_t>(account_id2);
+
+                Econ_Item new_item;
+                new_item.id = new_item_id;
+                new_item.def = gdef;
+                new_item.level = 1;
+                new_item.quality = static_cast<EItemQuality>(4);
+                new_item.inv_pos = seq;
+                new_item.quantity = 1;
+                new_item.flags = 0;
+                new_item.origin = 8;
+                new_item.in_use = false;
+                new_item.original_id = new_item_id;
+                new_item.style = 0;
+                items.push_back(new_item);
+
+                CSOEconItem proto_item;
+                proto_item.set_id(new_item_id);
+                proto_item.set_account_id(account_id2);
+                proto_item.set_def_index(gdef);
+                proto_item.set_inventory(seq);
+                proto_item.set_quantity(1);
+                proto_item.set_level(1);
+                proto_item.set_quality(4);
+                proto_item.set_flags(0);
+                proto_item.set_origin(8);
+                proto_item.set_in_use(false);
+                proto_item.set_style(0);
+                proto_item.set_original_id(new_item_id);
+
+                CMsgSOSingleObject create_msg;
+                create_msg.set_type_id(1);
+                create_msg.set_object_data(proto_item.SerializeAsString());
+                create_msg.set_version(0);
+                std::string create_body = create_msg.SerializeAsString();
+                std::string create_response;
+                GBE_BuildDotaZeroHeaderPayload(21u, create_body, create_response);
+                push_incoming_now(21u | GBE_kProtoMask, create_response);
+            }
+            if (!granted_defs.empty()) save_items_to_file();
+            // Response
+            std::string resp_body;
+            GBE_AppendProtoVarIntField(resp_body, 2u, 0u); // k_UnpackBundle_Succeeded
+            for (uint32 gdef : granted_defs) {
+                GBE_AppendProtoVarIntField(resp_body, 3u, gdef); // unpacked_item_def_indexes
+            }
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(2567u, has_source_job, source_job, resp_body, response_message);
+            push_incoming_now(2567u | GBE_kProtoMask, response_message);
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "UnpackBundle -> Succeeded bundle_id=0x%llx bundle_def=%u granted=%zu source_job=%llu",
+                static_cast<unsigned long long>(bundle_item_id), bundle_def,
+                granted_defs.size(), static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case 8260: {
+            // k_EMsgClientToGCClaimEventActionUsingItem -> k_EMsgClientToGCClaimEventActionUsingItemResponse (8261)
+            // Similar to 8209 but uses an item. Parse event_id, action_id, item_id.
+            uint32 claim_event_id = 0;
+            uint32 claim_action_id = 0;
+            uint64 claim_item_id = 0;
+            {
+                size_t pos = 0;
+                while (pos < body_size) {
+                    uint32 fn = 0, wt = 0;
+                    size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                    if (!GBE_ReadNextProtoField(body, body_size, pos, fn, wt, fo, vo, vs, fe)) break;
+                    if (fn == 1u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        claim_event_id = static_cast<uint32>(v);
+                    } else if (fn == 2u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        claim_action_id = static_cast<uint32>(v);
+                    } else if (fn == 3u && wt == 0u) {
+                        uint64 v = 0; size_t tmp = vo;
+                        GBE_ReadVarUint64(body, body_size, tmp, v);
+                        claim_item_id = v;
+                    }
+                }
+            }
+            // CMsgClientToGCClaimEventActionUsingItemResponse:
+            // field 1 = action_results (CMsgDOTAClaimEventActionResponse sub-message)
+            //   sub field 1 = result (0=Success)
+            //   sub field 3 = action_id
+            std::string action_results;
+            GBE_AppendProtoVarIntField(action_results, 1u, 0u); // result = Success
+            std::string reward_data;
+            GBE_AppendProtoVarIntField(reward_data, 1u, 0u);
+            GBE_AppendProtoVarIntField(reward_data, 2u, 0u);
+            GBE_AppendProtoVarIntField(reward_data, 3u, 0u);
+            GBE_AppendProtoVarIntField(reward_data, 5u, claim_action_id);
+            GBE_AppendProtoBytesField(action_results, 2u, reward_data);
+            GBE_AppendProtoVarIntField(action_results, 3u, claim_action_id);
+
+            std::string resp_body;
+            GBE_AppendProtoBytesField(resp_body, 1u, action_results); // action_results sub-message
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(8261u, has_source_job, source_job, resp_body, response_message);
+            push_incoming_now(8261u | GBE_kProtoMask, response_message);
+            GBE_GC_DebugLog("GC_DOTA_DIRECT", "ClaimEventActionUsingItem -> success event=%u action=%u item=0x%llx source_job=%llu",
+                claim_event_id, claim_action_id,
+                static_cast<unsigned long long>(claim_item_id),
+                static_cast<unsigned long long>(source_job));
+            return true;
+        }
         default:
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
@@ -14418,9 +16639,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         GBE_local_lobby.owner_connected &&
         lobby_state == 2u &&
         (GBE_local_lobby.server_id != 0 || lobby_game_state >= 1u);
+    // Wrapped 7035 (user clicked Leave Game) can abandon at game_state >= 1
+    // so players can leave during WAIT_FOR_PLAYERS_TO_LOAD if loading stalls.
+    // Direct 7035 on a listen server (engine automatic state sync) requires
+    // game_state >= 2 to avoid premature abandon during HERO_SELECTION.
+    // Direct 7035 on a client (non-host) also uses game_state >= 1 because
+    // the client has no engine-initiated 7035 -- it is always user-triggered.
+    const uint32 abandon_game_state_threshold = (wrapped || !is_server) ? 1u : 2u;
     const bool ready_for_abandon_teardown =
         lobby_state == 2u &&
-        lobby_game_state >= 2u;
+        lobby_game_state >= abandon_game_state_threshold;
     if (!ready_for_abandon_teardown) {
         if (treat_as_current_game_disconnect) {
             std::string response_25;
@@ -14580,10 +16808,11 @@ bool Steam_Game_Coordinator::GBE_QueueDotaPostGameTeardown(const char *reason, b
 
     std::string no_lobby_persona;
     if (GBE_BuildDotaPersonaStatePeripheralMessage(GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex, steam_id, lobby_id, no_lobby_persona)) {
-        push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, no_lobby_persona);
+        // Rich Presence is already updated via ISteamFriends::SetRichPresence above.
+        // No need to push 766 (CMsgClientPersonaState) into GC queue -- Dota ignores it.
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
-            "queued postgame persona label=private_lobby_no_lobby lobby_id=%llu size=%zu reason=%s",
+            "built postgame persona label=private_lobby_no_lobby lobby_id=%llu size=%zu reason=%s (not queued, using SetRichPresence)",
             static_cast<unsigned long long>(lobby_id),
             no_lobby_persona.size(),
             reason ? reason : "unknown"
@@ -14751,8 +16980,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
 
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
-    GBE_local_lobby.server_id = 0;
-    GBE_local_lobby.connect = GBE_FormatDotaPracticeLobbyConnectFromIp(network ? network->getOwnIP() : 0);
+    GBE_local_lobby.server_id = GBE_BuildDotaPracticeLobbyIpServerId(network ? network->getOwnIP() : 0u);
+    {
+        const std::string launch_connect = GBE_FormatDotaPracticeLobbyConnectFromIp(network ? network->getOwnIP() : 0);
+        if (GBE_ShouldPreferDotaLobbyConnectUpdate(GBE_local_lobby.connect, launch_connect))
+            GBE_local_lobby.connect = launch_connect;
+    }
     GBE_local_lobby.game_start_time = static_cast<uint32>(std::time(nullptr));
     GBE_local_lobby.launch_phase = GBE_kDotaLaunchPhaseRequested;
     GBE_PublishSharedDotaLobbyState("7041_launch_init");
@@ -15331,10 +17564,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
                 static_cast<unsigned long long>(lobby_id)
             );
         } else {
-            push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
+            // Rich Presence already handled via ISteamFriends::SetRichPresence.
+            // Do not push 766 into GC queue -- Dota does not handle it.
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
-                "queued abandon persona label=7272_init lobby_id=%llu size=%zu",
+                "built abandon persona label=7272_init lobby_id=%llu size=%zu (not queued, using SetRichPresence)",
                 static_cast<unsigned long long>(lobby_id),
                 persona_message.size()
             );
@@ -15350,13 +17584,45 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             static_cast<unsigned long long>(GBE_local_lobby.server_id)
         );
     } else {
-        GBE_local_lobby.has_chat_channel = false;
-        GBE_local_lobby.chat_channel_id = 0;
-        GBE_local_lobby.chat_channel_name.clear();
-        GBE_local_lobby.chat_channel_type = 0;
+        // Only clear chat state if the request channel matches the current local channel.
+        // A stale 7272 from a previous game's PostGame channel should not wipe the current
+        // lobby's chat state -- doing so causes the next abandon to lose pre_channel context,
+        // which prevents the postgame 7272/7014 from triggering ResetGCMemory and the
+        // client never sees the score screen.
+        const bool request_matches_local = (channel_id == local_channel_id);
+        if (request_matches_local) {
+            GBE_local_lobby.has_chat_channel = false;
+            GBE_local_lobby.chat_channel_id = 0;
+            GBE_local_lobby.chat_channel_name.clear();
+            GBE_local_lobby.chat_channel_type = 0;
+        } else {
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Ignoring stale 7272 for non-current channel; preserving current chat state. request_channel=%llu local_channel=%llu lobby_id=%llu state=%u game_state=%u",
+                static_cast<unsigned long long>(channel_id),
+                static_cast<unsigned long long>(local_channel_id),
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state
+            );
+            return true;
+        }
     }
 
-    GBE_PublishSharedDotaLobbyState("7272_leave_chat");
+    // If shared state was already cleared by the normal signout finalize (GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed),
+    // do not re-publish stale local lobby state back into it. Instead, leave the generic lobby and clear local state.
+    if (leaving_postgame_channel && matches_current_postgame_channel && !GBE_shared_dota_lobby_state.valid) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Skipping publish after postgame 7272 because shared state was already cleared by signout finalize LobbyID=%llu",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+        );
+        // Leave the generic lobby so other members see the lobby destroyed and can clean up.
+        GBE_LeaveGenericLobby();
+        GBE_local_lobby = GBE_LocalLobby{};
+    } else {
+        GBE_PublishSharedDotaLobbyState("7272_leave_chat");
+    }
     if (!GBE_MaybeHandleDotaPracticeLobbyKicked("7272_leave_chat")) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
@@ -15606,6 +17872,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         if (context.inner_emsg != GBE_kDotaLeaveChatChannel)
         if (context.inner_emsg != GBE_kDotaPracticeLobbyCloseBroadcastChannel)
         if (context.inner_emsg != GBE_kDotaDestroyLobbyRequest)
+        if (context.inner_emsg != GBE_kDotaFindTopSourceTVGames)
+        if (context.inner_emsg != 7091u) // WatchGame
             return false;
 
     if (context.inner_emsg == GBE_kDotaJoinChatChannel) {
@@ -15885,6 +18153,214 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         );
     }
 
+    if (context.inner_emsg == GBE_kDotaFindTopSourceTVGames) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[WATCH] Received wrapped 8009 FindTopSourceTVGames has_job=%d request_job=%llu",
+            context.has_request_job ? 1 : 0,
+            static_cast<unsigned long long>(context.request_job_id)
+        );
+
+        // Build CMsgGCToClientFindTopSourceTVGamesResponse (8010)
+        // If there's an active LAN game with spectating enabled, include it.
+        std::string response_body;
+        bool found_game_w = false;
+
+        // First: check local shared lobby state (we are the host)
+        if (GBE_shared_dota_lobby_state.valid &&
+            GBE_shared_dota_lobby_state.active &&
+            GBE_shared_dota_lobby_state.game_state >= 1u &&
+            GBE_shared_dota_lobby_state.server_id != 0) {
+
+            std::string game_entry;
+            GBE_AppendProtoVarIntField(game_entry, 1u,
+                GBE_shared_dota_lobby_state.game_start_time != 0
+                    ? GBE_shared_dota_lobby_state.game_start_time
+                    : static_cast<uint32>(std::time(nullptr) - 300));
+            GBE_AppendProtoVarIntField(game_entry, 3u, GBE_shared_dota_lobby_state.server_id);
+            GBE_AppendProtoVarIntField(game_entry, 4u, GBE_shared_dota_lobby_state.lobby_id);
+            GBE_AppendProtoVarIntField(game_entry, 6u, 1u);
+            int32 game_time = GBE_shared_dota_lobby_state.game_start_time != 0
+                ? static_cast<int32>(std::time(nullptr)) - static_cast<int32>(GBE_shared_dota_lobby_state.game_start_time)
+                : 300;
+            GBE_AppendProtoVarIntField(game_entry, 7u, static_cast<uint64>(static_cast<uint32>(game_time)));
+            GBE_AppendProtoVarIntField(game_entry, 8u, 0u);
+            GBE_AppendProtoVarIntField(game_entry, 9u, 0u);
+            GBE_AppendProtoVarIntField(game_entry, 10u, GBE_shared_dota_lobby_state.game_mode);
+            GBE_AppendProtoVarIntField(game_entry, 12u, GBE_shared_dota_lobby_state.match_id);
+            for (const auto &member : GBE_shared_dota_lobby_state.members) {
+                if (member.account_id == 0) continue;
+                std::string player_entry;
+                GBE_AppendProtoVarIntField(player_entry, 1u, member.account_id);
+                GBE_AppendProtoVarIntField(player_entry, 2u, member.hero_id);
+                GBE_AppendProtoVarIntField(player_entry, 3u, member.slot);
+                GBE_AppendProtoVarIntField(player_entry, 4u, member.team);
+                GBE_AppendProtoBytesField(game_entry, 22u, player_entry);
+            }
+            GBE_AppendProtoBytesField(response_body, 7u, game_entry);
+            found_game_w = true;
+        }
+
+        // Second: check remote generic lobbies via matchmaking
+        if (!found_game_w) {
+            const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("8009_wrapped_find_top_source_tv");
+            for (const auto &snap : snapshots) {
+                if (snap.game_state >= 1u && snap.server_id != 0 && snap.allow_spectating) {
+                    std::string game_entry;
+                    GBE_AppendProtoVarIntField(game_entry, 1u,
+                        snap.game_start_time != 0
+                            ? snap.game_start_time
+                            : static_cast<uint32>(std::time(nullptr) - 300));
+                    GBE_AppendProtoVarIntField(game_entry, 3u, snap.server_id);
+                    GBE_AppendProtoVarIntField(game_entry, 4u, snap.lobby_id);
+                    GBE_AppendProtoVarIntField(game_entry, 6u, 1u);
+                    int32 gt = snap.game_start_time != 0
+                        ? static_cast<int32>(std::time(nullptr)) - static_cast<int32>(snap.game_start_time)
+                        : 300;
+                    GBE_AppendProtoVarIntField(game_entry, 7u, static_cast<uint64>(static_cast<uint32>(gt)));
+                    GBE_AppendProtoVarIntField(game_entry, 8u, 0u);
+                    GBE_AppendProtoVarIntField(game_entry, 9u, 0u);
+                    GBE_AppendProtoVarIntField(game_entry, 10u, snap.game_mode);
+                    GBE_AppendProtoVarIntField(game_entry, 12u, snap.match_id);
+                    for (const auto &member : snap.members) {
+                        if (member.account_id == 0) continue;
+                        std::string player_entry;
+                        GBE_AppendProtoVarIntField(player_entry, 1u, member.account_id);
+                        GBE_AppendProtoVarIntField(player_entry, 2u, member.hero_id);
+                        GBE_AppendProtoVarIntField(player_entry, 3u, member.slot);
+                        GBE_AppendProtoVarIntField(player_entry, 4u, member.team);
+                        GBE_AppendProtoBytesField(game_entry, 22u, player_entry);
+                    }
+                    GBE_AppendProtoBytesField(response_body, 7u, game_entry);
+                    found_game_w = true;
+                    break;
+                }
+            }
+        }
+
+        if (found_game_w) {
+            GBE_AppendProtoVarIntField(response_body, 5u, 1u);
+        } else {
+            GBE_AppendProtoVarIntField(response_body, 5u, 0u);
+        }
+
+        std::string response_message;
+        GBE_BuildDotaJobReplyOrZeroHeaderPayload(
+            GBE_kDotaFindTopSourceTVGamesResponse,
+            context.has_request_job, context.request_job_id,
+            response_body, response_message);
+
+        // Wrap as CMsgGCClient for the ClientFromGC channel
+        std::string wrapped_response;
+        if (!GBE_BuildWrappedDotaReplayMessage(response_message, context.outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_response)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[WATCH] Failed wrapping 8010 response");
+            return true;
+        }
+        push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_response);
+
+        GBE_GC_DebugLog("GC_DOTA_LOBBY",
+            "[WATCH] replied 8010 FindTopSourceTVGamesResponse found=%d local_valid=%d",
+            found_game_w ? 1 : 0,
+            GBE_shared_dota_lobby_state.valid ? 1 : 0);
+        return true;
+    }
+
+    if (context.inner_emsg == 7091u) {
+        // CMsgWatchGame (wrapped) -> CMsgWatchGameResponse
+        // Parse server_steamid from inner body (field 1, fixed64).
+        uint64 watch_server_steamid = 0;
+        {
+            const uint8 *wbody = reinterpret_cast<const uint8 *>(context.inner_body_raw.data());
+            size_t wbody_size = context.inner_body_raw.size();
+            size_t pos = 0;
+            while (pos < wbody_size) {
+                uint32 fn = 0, wt = 0;
+                size_t fo = 0, vo = 0, vs = 0, fe = 0;
+                if (!GBE_ReadNextProtoField(wbody, wbody_size, pos, fn, wt, fo, vo, vs, fe))
+                    break;
+                if (fn == 1u && wt == 1u && vs == 8)
+                    memcpy(&watch_server_steamid, wbody + vo, 8);
+            }
+        }
+
+        // Parse SourceTV address from lobby connect string
+        uint32 source_tv_addr = 0;
+        uint32 source_tv_port = 27020;
+        uint64 tv_secret_code_w = 0;
+        std::string connect_str_w;
+        if (GBE_shared_dota_lobby_state.valid && !GBE_shared_dota_lobby_state.connect.empty()) {
+            connect_str_w = GBE_shared_dota_lobby_state.connect;
+        } else {
+            const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("7091_wrapped_watch_game");
+            for (const auto &snap : snapshots) {
+                if (snap.game_state >= 1u && snap.server_id != 0 && !snap.connect.empty()) {
+                    connect_str_w = snap.connect;
+                    if (snap.tv_secret_code != 0)
+                        tv_secret_code_w = snap.tv_secret_code;
+                    if (snap.tv_port != 0)
+                        source_tv_port = snap.tv_port;
+                    break;
+                }
+            }
+        }
+        if (tv_secret_code_w == 0 && GBE_local_lobby.tv_secret_code != 0)
+            tv_secret_code_w = GBE_local_lobby.tv_secret_code;
+        if (GBE_local_lobby.tv_port != 0)
+            source_tv_port = GBE_local_lobby.tv_port;
+        if (!connect_str_w.empty()) {
+            size_t colon = connect_str_w.find(':');
+            std::string ip_str = (colon != std::string::npos) ? connect_str_w.substr(0, colon) : connect_str_w;
+            if (colon != std::string::npos) {
+                uint32 game_port = static_cast<uint32>(std::strtoul(connect_str_w.c_str() + colon + 1, nullptr, 10));
+                if (game_port > 0) source_tv_port = game_port + 5;
+            }
+            unsigned int a = 0, b = 0, c = 0, d = 0;
+            if (std::sscanf(ip_str.c_str(), "%u.%u.%u.%u", &a, &b, &c, &d) == 4)
+                source_tv_addr = (a << 24) | (b << 16) | (c << 8) | d;
+        }
+
+        // Build PENDING response
+        std::string pending_body;
+        GBE_AppendProtoVarIntField(pending_body, 1u, 0u);
+        std::string pending_inner;
+        GBE_BuildDotaJobReplyOrZeroHeaderPayload(7092u, context.has_request_job, context.request_job_id, pending_body, pending_inner);
+        std::string wrapped_pending;
+        if (GBE_BuildWrappedDotaReplayMessage(pending_inner, context.outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_pending))
+            push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_pending);
+
+        const CSteamID local_steam_id = settings->get_local_steam_id();
+        const uint32 local_account_id = local_steam_id.GetAccountID();
+
+        // Build READY response
+        std::string ready_body;
+        GBE_AppendProtoVarIntField(ready_body, 1u, 1u);
+        if (source_tv_addr != 0) {
+            GBE_AppendProtoVarIntField(ready_body, 2u, source_tv_addr);
+            GBE_AppendProtoVarIntField(ready_body, 3u, source_tv_addr);
+        }
+        GBE_AppendProtoVarIntField(ready_body, 4u, source_tv_port);
+        GBE_AppendProtoFixed64Field(ready_body, 5u, watch_server_steamid);
+        GBE_AppendProtoFixed64Field(ready_body, 6u, watch_server_steamid);
+        uint64 secret_code = (tv_secret_code_w != 0) ? tv_secret_code_w : (watch_server_steamid ^ 0x0514D449EDC24001ULL);
+        GBE_AppendProtoFixed64Field(ready_body, 7u, secret_code);
+        std::string ready_inner;
+        GBE_BuildDotaJobReplyOrZeroHeaderPayload(7092u, false, 0, ready_body, ready_inner);
+        std::string wrapped_ready;
+        if (GBE_BuildWrappedDotaReplayMessage(ready_inner, context.outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_ready))
+            push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_ready);
+
+        GBE_GC_DebugLog("GC_DOTA_LOBBY",
+            "[WATCH] wrapped WatchGame -> READY server=0x%llx tv_addr=0x%x tv_port=%u local_account=%u local_steamid=%llu raw_tv_secret=0x%llx sent_secret=0x%llx",
+            static_cast<unsigned long long>(watch_server_steamid),
+            source_tv_addr,
+            source_tv_port,
+            local_account_id,
+            static_cast<unsigned long long>(local_steam_id.ConvertToUint64()),
+            static_cast<unsigned long long>(tv_secret_code_w),
+            static_cast<unsigned long long>(secret_code));
+        return true;
+    }
+
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Received wrapped 7047 has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
@@ -16127,10 +18603,12 @@ void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const
     steam_client->steam_friends->SetRichPresence("status", status ? status : "");
     steam_client->steam_friends->SetRichPresence("steam_display", status ? status : "");
     steam_client->steam_friends->SetRichPresence("num_params", "0");
-    steam_client->steam_friends->SetRichPresence("EventLevel_26", "0");
-    steam_client->steam_friends->SetRichPresence("EventLevel_39", "0");
-    steam_client->steam_friends->SetRichPresence("EventLevel_56", "1");
-    steam_client->steam_friends->SetRichPresence("EventLevel_55", "1");
+    // Declare event levels for all known Battle Pass/event IDs
+    for (int eid = 7; eid <= 60; eid++) {
+        char key[32];
+        snprintf(key, sizeof(key), "EventLevel_%d", eid);
+        steam_client->steam_friends->SetRichPresence(key, "1");
+    }
     const std::string direct_connect_endpoint = include_party
         ? GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect)
         : std::string();
@@ -16175,10 +18653,12 @@ void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
     steam_client->steam_friends->SetRichPresence("status", nullptr);
     steam_client->steam_friends->SetRichPresence("steam_display", nullptr);
     steam_client->steam_friends->SetRichPresence("num_params", nullptr);
-    steam_client->steam_friends->SetRichPresence("EventLevel_26", nullptr);
-    steam_client->steam_friends->SetRichPresence("EventLevel_39", nullptr);
-    steam_client->steam_friends->SetRichPresence("EventLevel_56", nullptr);
-    steam_client->steam_friends->SetRichPresence("EventLevel_55", nullptr);
+    // Clear event level keys for all known event IDs
+    for (int eid = 7; eid <= 60; eid++) {
+        char key[32];
+        snprintf(key, sizeof(key), "EventLevel_%d", eid);
+        steam_client->steam_friends->SetRichPresence(key, nullptr);
+    }
     steam_client->steam_friends->SetRichPresence("connect", nullptr);
     steam_client->steam_friends->SetRichPresence("lobby", nullptr);
     steam_client->steam_friends->SetRichPresence("party", nullptr);
@@ -16326,11 +18806,13 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(c
         return;
     }
 
-    push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
+    // Rich Presence is already updated via ISteamFriends::SetRichPresence
+    // (called by GBE_UpdateDotaPracticeLobbyLaunchRichPresence before this point).
+    // Do not push 766 (CMsgClientPersonaState) into GC queue -- Dota does not handle it.
     GBE_last_dota_launch_persona_signature = signature;
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
-        "queued launch persona reason=%s lobby_id=%llu status=%s lobby_state=%s size=%zu",
+        "built launch persona reason=%s lobby_id=%llu status=%s lobby_state=%s size=%zu (not queued, using SetRichPresence)",
         reason ? reason : "unknown",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         status,
@@ -16353,6 +18835,33 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
             GBE_local_lobby.state,
             GBE_local_lobby.game_state
         );
+        return;
+    }
+
+    // Once the match is in HERO_SELECTION or later (state=2, game_state>=2),
+    // the game engine takes over rich presence (showing hero name, level, etc.).
+    // GC must not overwrite it.  This applies to BOTH the client GC (is_server=0)
+    // and the server GC (is_server=1) in the host process, since they share the
+    // same ISteamFriends interface and either one calling SetRichPresence will
+    // clobber the engine's values.
+    // Direct connect callback is still needed for reconnect scenarios, so we
+    // call it unconditionally below (only for client GC).
+    const bool engine_owns_rich_presence =
+        !GBE_local_lobby.abandon_postgame_active &&
+        GBE_local_lobby.state == 2u &&
+        GBE_local_lobby.game_state >= 2u;
+
+    if (engine_owns_rich_presence) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipping rich presence update (engine owns it during active match) reason=%s lobby_id=%llu state=%u game_state=%u",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state
+        );
+        // Still allow direct connect callback for reconnect support.
+        GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback(reason);
         return;
     }
 
@@ -16492,11 +19001,11 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
 
     std::string persona_message;
     if (GBE_BuildDotaPersonaStatePeripheralMessage(GBE_kDotaAbandonPersonaStateInitHex, steam_id, lobby_id, persona_message)) {
-        if (client_target && client_target->gc_profile == GC_PROFILE_DOTA2)
-            client_target->push_incoming_now(GBE_kSteamPersonaState | GBE_kProtoMask, persona_message);
+        // Rich Presence handled via ISteamFriends::SetRichPresence.
+        // Do not push 766 into GC queue -- Dota does not handle it.
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
-            "queued normal signout persona label=25_init lobby_id=%llu size=%zu",
+            "built normal signout persona label=25_init lobby_id=%llu size=%zu (not queued, using SetRichPresence)",
             static_cast<unsigned long long>(lobby_id),
             persona_message.size()
         );
@@ -16824,19 +19333,25 @@ void Steam_Game_Coordinator::network_callback_inventory_response(Common_Message 
     const auto &response_msg = msg->gameserver_items_messages().inventory_response();
     SteamAPICall_t api_call = response_msg.steam_api_call();
 
-    // Find this pending request.
-    auto it = std::find_if(
-        pending_items_requests.begin(), pending_items_requests.end(),
-        [=](const RequestInventory &item) {
-            return item.steam_api_call == response_msg.steam_api_call() &&
-                item.steam_id == user_steamid;
+    // For unsolicited pushes (api_call == 0, e.g. from Dota 2 equip broadcast),
+    // skip the pending request check.
+    bool is_unsolicited = (api_call == 0);
+
+    if (!is_unsolicited) {
+        // Find this pending request.
+        auto it = std::find_if(
+            pending_items_requests.begin(), pending_items_requests.end(),
+            [=](const RequestInventory &item) {
+                return item.steam_api_call == response_msg.steam_api_call() &&
+                    item.steam_id == user_steamid;
+            }
+        );
+        if (pending_items_requests.end() == it) {
+            PRINT_DEBUG("error got player inventory but pending request timedout/removed (doesn't exist)");
+            return;
         }
-    );
-    if (pending_items_requests.end() == it) {
-        PRINT_DEBUG("error got player inventory but pending request timedout/removed (doesn't exist)");
-        return;
+        pending_items_requests.erase(it);
     }
-    pending_items_requests.erase(it);
 
     auto &items = all_user_items[user_steamid];
     items.clear();
@@ -16893,6 +19408,38 @@ void Steam_Game_Coordinator::network_callback_inventory_response(Common_Message 
     }
 
     PRINT_DEBUG("got player inventory: %u items", response_msg.items_size());
+
+    // [Dota 2 LAN] When the server GC receives a remote player's inventory,
+    // build and inject a player item CacheSubscribed so the dedicated server
+    // knows that player's equipped cosmetics for wearable loading.
+    if (is_server && gc_profile == GC_PROFILE_DOTA2 && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+        std::vector<const Econ_Item *> equipped_items;
+        for (const Econ_Item &item : items) {
+            if (!item.equip_states.empty())
+                equipped_items.push_back(&item);
+        }
+
+        if (!equipped_items.empty()) {
+            const CSteamID player_steam_id(user_steamid);
+
+            // For the lobby owner (host), push CacheUnsubscribed first to
+            // force the engine to re-evaluate equipped items and spawn
+            // wearables for an already-spawned hero.
+            const bool is_owner = (user_steamid == GBE_GetDotaLobbyOwnerSteamId());
+            // Push to server GC so remote players see cosmetics
+            GBE_PushDotaPlayerEquippedItemsCacheToGC(this, player_steam_id, items, is_owner, is_owner ? "inventory_response_owner_resubscribe_server" : "inventory_response_remote_subscribe");
+
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "pushed %s player item CacheSubscribed for server after inventory response: steam64=%llu equipped_items=%zu total_items=%zu unsub_first=%d",
+                is_owner ? "owner" : "remote",
+                static_cast<unsigned long long>(user_steamid),
+                equipped_items.size(),
+                items.size(),
+                is_owner ? 1 : 0
+            );
+        }
+    }
 }
 
 // user updated an item
@@ -17088,8 +19635,94 @@ void Steam_Game_Coordinator::RunCallbacks()
         delay_init = false;
     }
 
-    if (!GBE_MaybeHandleDotaPracticeLobbyKicked("run_callbacks_generic_lobby_members_changed"))
-        GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("run_callbacks_generic_lobby_members_changed");
+    // [Dota 2 LAN] Throttle lobby state polling during an active LAN match to
+    // reduce mutex contention with the engine's networking thread.  Lobby state
+    // changes (player disconnect, game_state advance, PostGame transition) are
+    // second-granularity events; 500ms latency is imperceptible.
+    {
+        bool skip_lobby_poll = false;
+        if (!is_server && gc_profile == GC_PROFILE_DOTA2 &&
+            GBE_local_lobby.active && GBE_local_lobby.lan &&
+            GBE_local_lobby.state == 2u && GBE_local_lobby.match_id != 0ull) {
+            if (!check_timedout(GBE_last_lobby_poll_time, 0.5))
+                skip_lobby_poll = true;
+            else
+                GBE_last_lobby_poll_time = std::chrono::high_resolution_clock::now();
+        }
+        if (!skip_lobby_poll) {
+            if (!GBE_MaybeHandleDotaPracticeLobbyKicked("run_callbacks_generic_lobby_members_changed"))
+                GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("run_callbacks_generic_lobby_members_changed");
+        }
+    }
+
+    // [Dota 2 LAN] Once per match, when the client detects an active lobby with
+    // a server, broadcast equipped items to the gameserver so it can build
+    // CacheSubscribed for this player.  This handles items equipped in the armory
+    // before the game starts (when no gameserver existed yet to receive them).
+    if (!is_server && gc_profile == GC_PROFILE_DOTA2 &&
+        GBE_local_lobby.active && GBE_local_lobby.server_id != 0 && GBE_local_lobby.state >= 1u) {
+        static uint64 s_last_broadcast_match_id = 0;
+        if (s_last_broadcast_match_id != GBE_local_lobby.match_id && GBE_local_lobby.match_id != 0) {
+            s_last_broadcast_match_id = GBE_local_lobby.match_id;
+
+            std::vector<const Econ_Item *> equipped_items;
+            for (const auto &item : items) {
+                if (!item.equip_states.empty())
+                    equipped_items.push_back(&item);
+            }
+
+            if (!equipped_items.empty()) {
+                auto response_msg = new GameServer_Items_Messages::InventoryResponse();
+                response_msg->set_steam_api_call(0);  // unsolicited push
+
+                for (const Econ_Item *ep : equipped_items) {
+                    auto new_item = response_msg->add_items();
+                    new_item->set_id(ep->id);
+                    new_item->set_def(ep->def);
+                    new_item->set_level(ep->level);
+                    new_item->set_quality(static_cast<int32>(ep->quality));
+                    new_item->set_inv_pos(ep->inv_pos);
+                    new_item->set_quantity(ep->quantity);
+                    new_item->set_flags(ep->flags);
+                    new_item->set_origin(ep->origin);
+                    new_item->set_original_id(ep->original_id);
+                    new_item->set_in_use(ep->in_use);
+                    new_item->set_style(ep->style);
+
+                    for (const auto &[class_id, slot_id] : ep->equip_states) {
+                        auto new_state = new_item->add_equip_states();
+                        new_state->set_class_id(class_id);
+                        new_state->set_slot_id(slot_id);
+                    }
+
+                    for (const Econ_Item_Attribute &attr : ep->attributes) {
+                        auto new_attr = new_item->add_attributes();
+                        new_attr->set_def(attr.def);
+                        new_attr->set_value(attr.value);
+                        new_attr->set_value_bytes(attr.value_bytes);
+                    }
+                }
+
+                auto gameserver_items_msg = new GameServer_Items_Messages();
+                gameserver_items_msg->set_type(GameServer_Items_Messages::Response_Inventory);
+                gameserver_items_msg->set_is_gc(true);
+                gameserver_items_msg->set_allocated_inventory_response(response_msg);
+
+                Common_Message msg{};
+                msg.set_allocated_gameserver_items_messages(gameserver_items_msg);
+                msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+                network->sendToAllGameservers(&msg, true);
+
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "broadcast initial equipped items to gameservers: steam64=%llu equipped_items=%zu match_id=%llu",
+                    static_cast<unsigned long long>(settings->get_local_steam_id().ConvertToUint64()),
+                    equipped_items.size(),
+                    static_cast<unsigned long long>(GBE_local_lobby.match_id)
+                );
+            }
+        }
+    }
 
     auto due_time = [](const GC_Message &message) {
         return message.created + std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(std::chrono::duration<double>(message.post_in));

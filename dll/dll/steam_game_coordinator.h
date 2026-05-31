@@ -36,6 +36,7 @@ struct GBE_DotaLobbyMemberState
     uint32 slot{};
     uint32 hero_id{};
     bool connected{};
+    uint32 leaver_status{};  // 0=NONE, 1=DISCONNECTED, 5=ABANDONED, etc.
 };
 
 class Steam_Game_Coordinator :
@@ -84,6 +85,7 @@ public ISteamGameCoordinator
     bool welcome_received{};
     std::chrono::high_resolution_clock::time_point welcome_time{};
     bool GBE_dota_login_sync_sent{};
+    bool GBE_dota_host_showcase_equip_pushed{};
     bool GBE_dota_private_lobby_snapshot_replayed{};
     uint32 GBE_last_dota_launch_state_pushed_game_state{};
     bool GBE_pending_reset_after_cache_unsubscribed{};
@@ -93,6 +95,7 @@ public ISteamGameCoordinator
     uint64 GBE_pending_dota_abandon_finalize_lobby_id{};
     std::string GBE_last_dota_launch_persona_signature;
     std::string GBE_last_dota_direct_connect_callback_signature;
+    std::chrono::high_resolution_clock::time_point GBE_last_lobby_poll_time{};
 
     struct GBE_LocalLobby
     {
@@ -138,6 +141,8 @@ public ISteamGameCoordinator
         std::string broadcast_description;
         std::string broadcast_language_code;
         std::string pass_key;
+        uint64 tv_secret_code{};
+        uint32 tv_port{};
         bool has_cache_version{};
         uint64 cache_version{};
         bool has_cache_service_id{};
@@ -150,6 +155,9 @@ public ISteamGameCoordinator
         bool pending_leave_after_7040{};
         uint64 pending_leave_lobby_id{};
         bool seen_local_in_generic_lobby{};
+        bool kicked_suppressed_logged{};
+        bool waiting_join_confirmation_logged{};
+        bool owner_adoption_suppressed_logged{};
     };
 
     GBE_LocalLobby GBE_local_lobby{};
@@ -302,10 +310,27 @@ public:
     void shutdown_gc();
     void GBE_MaybePrimeDotaServerWelcomeFromCache(const char *reason);
 
+    // Returns true if the server GC has an active lobby matching the given lobby_id.
+    // Used by client GC to detect HOST scenario and avoid running PLAYER PostGame cleanup.
+    bool GBE_HasActiveServerLobby(uint64 lobby_id) const {
+        // Must be active, same lobby, AND this server GC must be the lobby owner.
+        // On a PLAYER machine, the server GC may sync the same lobby_id from generic
+        // lobby metadata, but it is NOT the owner -- only the HOST's server GC is.
+        if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id != lobby_id) return false;
+        uint64 local_sid = settings ? settings->get_local_steam_id().ConvertToUint64() : 0;
+        return local_sid != 0 && GBE_local_lobby.owner_steam_id == local_sid;
+    }
+
     const std::vector<Econ_Item> &get_items() { return items; }
     const std::map<CSteamID, std::vector<Econ_Item>> &get_all_user_items() { return all_user_items; }
     const bool has_items_for_user(CSteamID steam_id) { return (all_user_items.count(steam_id) != 0); }
     const std::vector<Econ_Item> &get_items_for_user(CSteamID steam_id) { return all_user_items.at(steam_id); }
+
+    // Public accessor for cross-GC item serialization (server GC reads client GC items)
+    std::string serialize_item_to_gcprotobuf(const Econ_Item &item, CSteamID steam_id) { return item_to_gcprotobuf(item, steam_id); }
+
+    // Public accessor for cross-GC message injection (client GC pushes to server GC)
+    void push_incoming_message(uint32 msg_type, const std::string &message) { push_incoming_now(msg_type, message); }
 
     const std::vector<Econ_Item> &load_items_from_file();
     void save_items_to_file();
