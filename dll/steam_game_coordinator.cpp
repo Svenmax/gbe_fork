@@ -18712,10 +18712,13 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
 
     // Once the match is in HERO_SELECTION or later (state=2, game_state>=2),
     // the game engine takes over rich presence (showing hero name, level, etc.).
-    // GC must not overwrite it.  Direct connect callback is still needed for
-    // reconnect scenarios, so we call it unconditionally below.
+    // GC must not overwrite it.  This applies to BOTH the client GC (is_server=0)
+    // and the server GC (is_server=1) in the host process, since they share the
+    // same ISteamFriends interface and either one calling SetRichPresence will
+    // clobber the engine's values.
+    // Direct connect callback is still needed for reconnect scenarios, so we
+    // call it unconditionally below (only for client GC).
     const bool engine_owns_rich_presence =
-        !is_server &&
         !GBE_local_lobby.abandon_postgame_active &&
         GBE_local_lobby.state == 2u &&
         GBE_local_lobby.game_state >= 2u;
