@@ -18619,6 +18619,30 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
         return;
     }
 
+    // Once the match is in HERO_SELECTION or later (state=2, game_state>=2),
+    // the game engine takes over rich presence (showing hero name, level, etc.).
+    // GC must not overwrite it.  Direct connect callback is still needed for
+    // reconnect scenarios, so we call it unconditionally below.
+    const bool engine_owns_rich_presence =
+        !is_server &&
+        !GBE_local_lobby.abandon_postgame_active &&
+        GBE_local_lobby.state == 2u &&
+        GBE_local_lobby.game_state >= 2u;
+
+    if (engine_owns_rich_presence) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipping rich presence update (engine owns it during active match) reason=%s lobby_id=%llu state=%u game_state=%u",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state
+        );
+        // Still allow direct connect callback for reconnect support.
+        GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback(reason);
+        return;
+    }
+
     const char *status = nullptr;
     const char *lobby_state = nullptr;
     bool include_party = false;
