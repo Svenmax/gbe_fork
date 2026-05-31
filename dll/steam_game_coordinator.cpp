@@ -16401,9 +16401,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         (GBE_local_lobby.server_id != 0 || lobby_game_state >= 1u);
     // Wrapped 7035 (user clicked Leave Game) can abandon at game_state >= 1
     // so players can leave during WAIT_FOR_PLAYERS_TO_LOAD if loading stalls.
-    // Direct 7035 (engine automatic state sync on listen server) requires
+    // Direct 7035 on a listen server (engine automatic state sync) requires
     // game_state >= 2 to avoid premature abandon during HERO_SELECTION.
-    const uint32 abandon_game_state_threshold = wrapped ? 1u : 2u;
+    // Direct 7035 on a client (non-host) also uses game_state >= 1 because
+    // the client has no engine-initiated 7035 -- it is always user-triggered.
+    const uint32 abandon_game_state_threshold = (wrapped || !is_server) ? 1u : 2u;
     const bool ready_for_abandon_teardown =
         lobby_state == 2u &&
         lobby_game_state >= abandon_game_state_threshold;
