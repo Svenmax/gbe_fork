@@ -14668,12 +14668,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 spectate_server_steamid = GBE_local_lobby.server_id;
 
             // Build 7074 CMsgSpectateFriendGameResponse
+            // Official GC always sends job_id_target = 0xFFFFFFFFFFFFFFFF in the header,
+            // even when the request has no source_job. The client requires this to process
+            // the response and trigger the follow-up 7091 WatchGame request.
+            // Body contains only field 4 (server_steamid); field 5 (watch_live_result)
+            // is omitted when SUCCESS (default value 0 is not serialized by official GC).
             {
                 std::string resp_body;
                 GBE_AppendProtoFixed64Field(resp_body, 4u, spectate_server_steamid); // server_steamid
-                GBE_AppendProtoVarIntField(resp_body, 5u, 0u); // watch_live_result = SUCCESS
                 std::string response_msg;
-                GBE_BuildDotaJobReplyOrZeroHeaderPayload(7074u, has_source_job, source_job, resp_body, response_msg);
+                uint64 reply_job = has_source_job ? source_job : 0xFFFFFFFFFFFFFFFFULL;
+                GBE_BuildDotaJobReplyPayload(7074u, reply_job, resp_body, response_msg);
                 push_incoming_now(7074u | GBE_kProtoMask, response_msg);
             }
 
@@ -14745,11 +14750,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             }
 
             // First response: PENDING (field 1 = 0)
+            // Official GC sends job_id_target = 0xFFFFFFFFFFFFFFFF in the header.
             {
                 std::string pending_body;
                 GBE_AppendProtoVarIntField(pending_body, 1u, 0u); // PENDING
                 std::string pending_msg;
-                GBE_BuildDotaJobReplyOrZeroHeaderPayload(7092u, has_source_job, source_job, pending_body, pending_msg);
+                uint64 pending_reply_job = has_source_job ? source_job : 0xFFFFFFFFFFFFFFFFULL;
+                GBE_BuildDotaJobReplyPayload(7092u, pending_reply_job, pending_body, pending_msg);
                 push_incoming_now(7092u | GBE_kProtoMask, pending_msg);
             }
 
