@@ -9568,6 +9568,7 @@ void Steam_Game_Coordinator::shutdown_gc()
     GBE_dota_host_showcase_equip_pushed = false;
     GBE_dota_private_lobby_snapshot_replayed = false;
     GBE_last_dota_launch_state_pushed_game_state = 0;
+    GBE_last_lobby_poll_time = {};
     gc_initialized = false;
 }
 
@@ -19388,8 +19389,25 @@ void Steam_Game_Coordinator::RunCallbacks()
         delay_init = false;
     }
 
-    if (!GBE_MaybeHandleDotaPracticeLobbyKicked("run_callbacks_generic_lobby_members_changed"))
-        GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("run_callbacks_generic_lobby_members_changed");
+    // [Dota 2 LAN] Throttle lobby state polling during an active LAN match to
+    // reduce mutex contention with the engine's networking thread.  Lobby state
+    // changes (player disconnect, game_state advance, PostGame transition) are
+    // second-granularity events; 500ms latency is imperceptible.
+    {
+        bool skip_lobby_poll = false;
+        if (!is_server && gc_profile == GC_PROFILE_DOTA2 &&
+            GBE_local_lobby.active && GBE_local_lobby.lan &&
+            GBE_local_lobby.state == 2u && GBE_local_lobby.match_id != 0ull) {
+            if (!check_timedout(GBE_last_lobby_poll_time, 0.5))
+                skip_lobby_poll = true;
+            else
+                GBE_last_lobby_poll_time = std::chrono::high_resolution_clock::now();
+        }
+        if (!skip_lobby_poll) {
+            if (!GBE_MaybeHandleDotaPracticeLobbyKicked("run_callbacks_generic_lobby_members_changed"))
+                GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("run_callbacks_generic_lobby_members_changed");
+        }
+    }
 
     // [Dota 2 LAN] Once per match, when the client detects an active lobby with
     // a server, broadcast equipped items to the gameserver so it can build

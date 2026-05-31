@@ -95,6 +95,7 @@ public ISteamGameCoordinator
     uint64 GBE_pending_dota_abandon_finalize_lobby_id{};
     std::string GBE_last_dota_launch_persona_signature;
     std::string GBE_last_dota_direct_connect_callback_signature;
+    std::chrono::high_resolution_clock::time_point GBE_last_lobby_poll_time{};
 
     struct GBE_LocalLobby
     {
