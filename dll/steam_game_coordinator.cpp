@@ -9238,18 +9238,29 @@ void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const st
         // equip-forward CacheSubscribed (with equipped items) from creating
         // wearable entities.  Just skip entirely -- the equip-forward path
         // will push the correct equipped-only CacheSubscribed when needed.
+        //
+        // Detection: check if steam_id matches client GC's local ID, OR if
+        // the item count matches the client GC's full inventory (covers the
+        // case where source_id is the game-server steam ID instead of the
+        // player's personal ID).
         Steam_Client *steam_client = get_steam_client();
         Steam_Game_Coordinator *client_gc = steam_client ? steam_client->steam_game_coordinator : nullptr;
-        if (client_gc && steam_id.ConvertToUint64() == client_gc->settings->get_local_steam_id().ConvertToUint64()) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_SYNC",
-                "skipping generic CacheSubscribed for host (fallback): steam_id=%llu lobby_active=%d lobby_id=%llu items=%zu",
-                static_cast<unsigned long long>(steam_id.ConvertToUint64()),
-                GBE_local_lobby.active ? 1 : 0,
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                items.size()
-            );
-            return;
+        if (client_gc) {
+            const bool is_host_by_id = (steam_id.ConvertToUint64() == client_gc->settings->get_local_steam_id().ConvertToUint64());
+            const bool is_host_by_inventory = (!items.empty() && items.size() == client_gc->get_items().size());
+            if (is_host_by_id || is_host_by_inventory) {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "skipping generic CacheSubscribed for host (fallback): steam_id=%llu lobby_active=%d lobby_id=%llu items=%zu match_by_id=%d match_by_inv=%d",
+                    static_cast<unsigned long long>(steam_id.ConvertToUint64()),
+                    GBE_local_lobby.active ? 1 : 0,
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    items.size(),
+                    is_host_by_id ? 1 : 0,
+                    is_host_by_inventory ? 1 : 0
+                );
+                return;
+            }
         }
     }
 
