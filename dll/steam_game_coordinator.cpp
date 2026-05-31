@@ -13970,7 +13970,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
         const uint32 connect_ip = public_ip != 0 ? public_ip : private_ip;
         const std::string runtime_connect = GBE_FormatDotaPracticeLobbyConnectFromIp(connect_ip);
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_ShouldPreferDotaLobbyConnectUpdate(GBE_local_lobby.connect, runtime_connect)) {
+        // 4508 reports the engine's actual listen address — always prefer it over
+        // the peer-announce-derived getOwnIP() that was used at launch time.
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
+            !runtime_connect.empty() && runtime_connect != GBE_local_lobby.connect) {
             const std::string previous_connect = GBE_local_lobby.connect;
             GBE_local_lobby.connect = runtime_connect;
             if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id)
