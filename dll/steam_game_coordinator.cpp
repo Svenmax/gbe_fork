@@ -13100,6 +13100,49 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             unlock_style_index
         );
         push_incoming_now(GBE_kDotaUnlockItemStyleResponse | GBE_kProtoMask, response_message);
+
+        // After replying 2572, update item's attr 400 (unlocked styles bitmask)
+        // and push SO update so the client's local cache reflects the unlock.
+        if (unlock_item_id != 0 && unlock_style_index != 255u) {
+            for (Econ_Item &item : items) {
+                if (item.id == unlock_item_id) {
+                    // Find or create attr 400
+                    bool found_attr = false;
+                    for (auto &attr : item.attributes) {
+                        if (attr.def == 400u) {
+                            // Ensure the style bit is set
+                            uint32_t current_val = 0;
+                            if (attr.value_bytes.size() >= 4) {
+                                memcpy(&current_val, attr.value_bytes.data(), 4);
+                            }
+                            current_val |= (1u << unlock_style_index);
+                            attr.value_bytes.assign(reinterpret_cast<const char *>(&current_val), 4);
+                            found_attr = true;
+                            break;
+                        }
+                    }
+                    if (!found_attr) {
+                        // Item didn't have attr 400 yet -- add it with all styles unlocked
+                        Econ_Item_Attribute unlock_attr;
+                        unlock_attr.def = 400u;
+                        uint32_t val = 0xFFFFFFFFu; // unlock all styles
+                        unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&val), 4);
+                        unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+                        item.attributes.push_back(unlock_attr);
+                    }
+                    // Push SO update to client
+                    callback_item_updated(settings->get_local_steam_id(), item);
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "2571 unlock: updated attr=400 for item 0x%llx style_bit=%u and pushed SO update",
+                        static_cast<unsigned long long>(unlock_item_id),
+                        unlock_style_index
+                    );
+                    break;
+                }
+            }
+        }
+
         return true;
     }
 
