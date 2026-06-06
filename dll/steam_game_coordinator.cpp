@@ -13068,19 +13068,81 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     if (request_emsg == GBE_kDotaUnlockItemStyle) {
         uint64 unlock_item_id = 0;
         uint32 unlock_style_index = 255u;
+        uint64 consumable_item_id = 0;
         GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), unlock_item_id);
         GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 2u), unlock_style_index);
+        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 3u), consumable_item_id);
 
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
-            "received direct 2571 UnlockItemStyle source_job=%llu item_id=0x%llx style_index=%u body_size=%zu",
+            "received direct 2571 UnlockItemStyle source_job=%llu item_id=0x%llx style_index=%u consumable=0x%llx body_size=%zu",
             static_cast<unsigned long long>(source_job),
             static_cast<unsigned long long>(unlock_item_id),
             unlock_style_index,
+            static_cast<unsigned long long>(consumable_item_id),
             body_size
         );
 
-        // Build 2572 response: field 1 varint = 0 (Succeeded), field 2 varint = item_id, field 3 varint = style_index
+        // Step 1: Update item's attr 400 (unlocked styles bitmask) BEFORE replying
+        if (unlock_item_id != 0 && unlock_style_index != 255u) {
+            for (Econ_Item &item : items) {
+                if (item.id == unlock_item_id) {
+                    // Also update item.style to the requested style
+                    item.style = static_cast<uint8>(unlock_style_index);
+                    // Find or create attr 400
+                    bool found_attr = false;
+                    for (auto &attr : item.attributes) {
+                        if (attr.def == 400u) {
+                            uint32_t current_val = 0;
+                            if (attr.value_bytes.size() >= 4) {
+                                memcpy(&current_val, attr.value_bytes.data(), 4);
+                            }
+                            current_val |= (1u << unlock_style_index);
+                            attr.value_bytes.assign(reinterpret_cast<const char *>(&current_val), 4);
+                            found_attr = true;
+                            break;
+                        }
+                    }
+                    if (!found_attr) {
+                        Econ_Item_Attribute unlock_attr;
+                        unlock_attr.def = 400u;
+                        uint32_t val = 0xFFFFFFFFu; // unlock all styles in LAN
+                        unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&val), 4);
+                        unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+                        item.attributes.push_back(unlock_attr);
+                    }
+                    // Push SO update for the target item
+                    callback_item_updated(settings->get_local_steam_id(), item);
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "2571 unlock: updated attr=400 for item 0x%llx style_bit=%u and pushed SO update",
+                        static_cast<unsigned long long>(unlock_item_id),
+                        unlock_style_index
+                    );
+                    break;
+                }
+            }
+        }
+
+        // Step 2: Consume the consumable item (delete from inventory + push SO Destroy)
+        // This is required so the client sees the tool disappear, confirming the operation.
+        if (consumable_item_id != 0) {
+            // Remove from items vector and push SO Destroy
+            for (auto it = items.begin(); it != items.end(); ++it) {
+                if (it->id == consumable_item_id) {
+                    items.erase(it);
+                    callback_item_deleted(settings->get_local_steam_id(), consumable_item_id);
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "2571 unlock: consumed item 0x%llx (SO Destroy pushed)",
+                        static_cast<unsigned long long>(consumable_item_id)
+                    );
+                    break;
+                }
+            }
+        }
+
+        // Step 3: Build and send 2572 response
         std::string resp_body;
         GBE_AppendProtoVarIntField(resp_body, 1u, 0u); // k_UnlockStyle_Succeeded
         if (unlock_item_id != 0)
@@ -13100,48 +13162,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             unlock_style_index
         );
         push_incoming_now(GBE_kDotaUnlockItemStyleResponse | GBE_kProtoMask, response_message);
-
-        // After replying 2572, update item's attr 400 (unlocked styles bitmask)
-        // and push SO update so the client's local cache reflects the unlock.
-        if (unlock_item_id != 0 && unlock_style_index != 255u) {
-            for (Econ_Item &item : items) {
-                if (item.id == unlock_item_id) {
-                    // Find or create attr 400
-                    bool found_attr = false;
-                    for (auto &attr : item.attributes) {
-                        if (attr.def == 400u) {
-                            // Ensure the style bit is set
-                            uint32_t current_val = 0;
-                            if (attr.value_bytes.size() >= 4) {
-                                memcpy(&current_val, attr.value_bytes.data(), 4);
-                            }
-                            current_val |= (1u << unlock_style_index);
-                            attr.value_bytes.assign(reinterpret_cast<const char *>(&current_val), 4);
-                            found_attr = true;
-                            break;
-                        }
-                    }
-                    if (!found_attr) {
-                        // Item didn't have attr 400 yet -- add it with all styles unlocked
-                        Econ_Item_Attribute unlock_attr;
-                        unlock_attr.def = 400u;
-                        uint32_t val = 0xFFFFFFFFu; // unlock all styles
-                        unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&val), 4);
-                        unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
-                        item.attributes.push_back(unlock_attr);
-                    }
-                    // Push SO update to client
-                    callback_item_updated(settings->get_local_steam_id(), item);
-                    GBE_GC_DebugLog(
-                        "GC_DOTA_DIRECT",
-                        "2571 unlock: updated attr=400 for item 0x%llx style_bit=%u and pushed SO update",
-                        static_cast<unsigned long long>(unlock_item_id),
-                        unlock_style_index
-                    );
-                    break;
-                }
-            }
-        }
 
         return true;
     }
