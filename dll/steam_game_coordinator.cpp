@@ -100,6 +100,8 @@ static constexpr uint32 GBE_kDotaAddSocket = 1087u;
 static constexpr uint32 GBE_kDotaAddSocketResponse = 1090u;
 static constexpr uint32 GBE_kDotaSetItemStyle = 2577u;
 static constexpr uint32 GBE_kDotaSetItemStyleResponse = 2578u;
+static constexpr uint32 GBE_kDotaUnlockItemStyle = 2571u;
+static constexpr uint32 GBE_kDotaUnlockItemStyleResponse = 2572u;
 static constexpr size_t GBE_kDotaWelcomeInnerBodyOffset = 48u;
 static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
 static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
@@ -13057,6 +13059,48 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         );
 
         return GBE_HandleDotaAddSocketRequest(body, body_size, has_source_job, source_job);
+    }
+
+    // Handle k_EMsgClientToGCUnlockItemStyle (2571) -> reply 2572
+    // In LAN mode all styles are unlocked, so always reply with success.
+    // Proto: CMsgClientToGCUnlockItemStyle { optional uint64 item_to_unlock = 1; optional uint32 style_index = 2 [default = 255]; repeated uint64 consumable_item_ids = 3; }
+    // Proto: CMsgClientToGCUnlockItemStyleResponse { optional EUnlockStyle response = 1 [default = k_UnlockStyle_Succeeded]; optional uint64 item_id = 2; optional uint32 style_index = 3 [default = 255]; }
+    if (request_emsg == GBE_kDotaUnlockItemStyle) {
+        uint64 unlock_item_id = 0;
+        uint32 unlock_style_index = 255u;
+        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), unlock_item_id);
+        GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 2u), unlock_style_index);
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "received direct 2571 UnlockItemStyle source_job=%llu item_id=0x%llx style_index=%u body_size=%zu",
+            static_cast<unsigned long long>(source_job),
+            static_cast<unsigned long long>(unlock_item_id),
+            unlock_style_index,
+            body_size
+        );
+
+        // Build 2572 response: field 1 varint = 0 (Succeeded), field 2 varint = item_id, field 3 varint = style_index
+        std::string resp_body;
+        GBE_AppendProtoVarIntField(resp_body, 1u, 0u); // k_UnlockStyle_Succeeded
+        if (unlock_item_id != 0)
+            GBE_AppendProtoVarIntField(resp_body, 2u, unlock_item_id);
+        if (unlock_style_index != 255u)
+            GBE_AppendProtoVarIntField(resp_body, 3u, unlock_style_index);
+
+        std::string response_message;
+        GBE_BuildDotaJobReplyOrZeroHeaderPayload(GBE_kDotaUnlockItemStyleResponse, has_source_job, source_job, resp_body, response_message);
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=2571 resp=2572 source_job=%llu size=%zu note=unlock style success item_id=0x%llx style_index=%u",
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            static_cast<unsigned long long>(unlock_item_id),
+            unlock_style_index
+        );
+        push_incoming_now(GBE_kDotaUnlockItemStyleResponse | GBE_kProtoMask, response_message);
+        return true;
     }
 
     // Handle k_EMsgClientToGCSetItemStyle (2577) -> reply 2578
