@@ -98,6 +98,8 @@ static constexpr uint32 GBE_kDotaLobbyListResponse = 8012u;
 static constexpr uint32 GBE_kDotaSOUpdateMultiple = 6146u;
 static constexpr uint32 GBE_kDotaAddSocket = 1087u;
 static constexpr uint32 GBE_kDotaAddSocketResponse = 1090u;
+static constexpr uint32 GBE_kDotaSetItemStyle = 2577u;
+static constexpr uint32 GBE_kDotaSetItemStyleResponse = 2578u;
 static constexpr size_t GBE_kDotaWelcomeInnerBodyOffset = 48u;
 static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
 static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
@@ -13057,6 +13059,75 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return GBE_HandleDotaAddSocketRequest(body, body_size, has_source_job, source_job);
     }
 
+    // Handle k_EMsgClientToGCSetItemStyle (2577) -> reply 2578
+    // Proto: CMsgClientToGCSetItemStyle { optional uint64 item_id = 1; optional uint32 style_index = 2 [default = 255]; }
+    // Proto: CMsgClientToGCSetItemStyleResponse { optional ESetStyle response = 1 [default = k_SetStyle_Succeeded]; }
+    if (request_emsg == GBE_kDotaSetItemStyle) {
+        uint64 style_item_id = 0;
+        uint32 style_index = 255u;
+        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), style_item_id);
+        GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 2u), style_index);
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "received direct 2577 SetItemStyle source_job=%llu item_id=0x%llx style_index=%u body_size=%zu",
+            static_cast<unsigned long long>(source_job),
+            static_cast<unsigned long long>(style_item_id),
+            style_index,
+            body_size
+        );
+
+        bool found = false;
+        if (style_item_id != 0 && style_index != 255u) {
+            for (Econ_Item &item : items) {
+                if (item.id != style_item_id)
+                    continue;
+                item.style = static_cast<uint8>(style_index);
+                found = true;
+
+                // Push SO update (emsg=21) so the client immediately sees the style change
+                callback_item_updated(settings->get_local_steam_id(), item);
+
+                // Forward style change to server GC if active
+                if (gc_profile == GC_PROFILE_DOTA2 && !is_server) {
+                    Steam_Client *steam_client = get_steam_client();
+                    Steam_Game_Coordinator *server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
+                    if (server_gc && server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id)) {
+                        GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, settings->get_local_steam_id(), items, true, "set_item_style_forward");
+                    }
+                }
+
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "applied style: item_id=0x%llx new_style=%u",
+                    static_cast<unsigned long long>(style_item_id),
+                    style_index
+                );
+                break;
+            }
+            if (found)
+                save_items_to_file();
+        }
+
+        // Build 2578 response: field 1 varint = 0 (k_SetStyle_Succeeded)
+        std::string resp_body;
+        GBE_AppendProtoVarIntField(resp_body, 1u, 0u);
+
+        std::string response_message;
+        GBE_BuildDotaJobReplyOrZeroHeaderPayload(GBE_kDotaSetItemStyleResponse, has_source_job, source_job, resp_body, response_message);
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=2577 resp=2578 source_job=%llu size=%zu found=%d style_index=%u",
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            (int)found,
+            style_index
+        );
+        push_incoming_now(GBE_kDotaSetItemStyleResponse | GBE_kProtoMask, response_message);
+        return true;
+    }
+
     const uint8 *template_bytes = nullptr;
     size_t template_size = 0;
     const char *template_hex = nullptr;
@@ -14251,7 +14322,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     // containing updated CSOEconItem with new equipped_state) THEN msg 2570.
     if (request_emsg == 2569u) {
         // Parse the repeated equips (field 1, length-delimited sub-messages)
-        struct EquipOp { uint64_t item_id; uint32_t new_class; uint32_t new_slot; };
+        struct EquipOp { uint64_t item_id; uint32_t new_class; uint32_t new_slot; uint32_t style_index; };
         std::vector<EquipOp> equip_ops;
         {
             size_t offset = 0;
@@ -14269,7 +14340,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 if (offset + sub_len > body_size) break;
                 const uint8_t *sub = body + offset;
                 size_t sub_off = 0;
-                EquipOp op{0, 0, 0};
+                EquipOp op{0, 0, 0, 255};
                 while (sub_off < sub_len) {
                     uint8_t tag = sub[sub_off++];
                     uint32_t field_num = tag >> 3;
@@ -14286,6 +14357,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         if (field_num == 1) op.item_id = val;
                         else if (field_num == 2) op.new_class = (uint32_t)val;
                         else if (field_num == 3) op.new_slot = (uint32_t)val;
+                        else if (field_num == 4) op.style_index = (uint32_t)val;
                     } else {
                         break;
                     }
@@ -14303,6 +14375,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             for (Econ_Item &item : items) {
                 if (op.item_id != UINT64_MAX && op.item_id != 0 && item.id == op.item_id) {
                     item.equip_states.insert_or_assign(op.new_class, op.new_slot);
+                    if (op.style_index != 255u)
+                        item.style = static_cast<uint8>(op.style_index);
                     modified_item_ids.insert(item.id);
                     found_target = true;
                 } else {
@@ -14315,11 +14389,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             }
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
-                "equip op[%zu]: item_id=0x%llx (%llu) new_class=%u new_slot=%u found=%d items_count=%zu",
+                "equip op[%zu]: item_id=0x%llx (%llu) new_class=%u new_slot=%u style_index=%u found=%d items_count=%zu",
                 ei,
                 static_cast<unsigned long long>(op.item_id),
                 static_cast<unsigned long long>(op.item_id),
                 op.new_class, op.new_slot,
+                op.style_index,
                 (int)found_target,
                 items.size()
             );
