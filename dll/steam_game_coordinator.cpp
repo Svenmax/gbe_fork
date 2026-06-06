@@ -96,6 +96,12 @@ static constexpr uint32 GBE_kDotaFindTopSourceTVGamesResponse = 8010u;
 static constexpr uint32 GBE_kDotaLobbyList = 8011u;
 static constexpr uint32 GBE_kDotaLobbyListResponse = 8012u;
 static constexpr uint32 GBE_kDotaSOUpdateMultiple = 6146u;
+static constexpr uint32 GBE_kDotaAddSocket = 1087u;
+static constexpr uint32 GBE_kDotaAddSocketResponse = 1090u;
+static constexpr uint32 GBE_kDotaSetItemStyle = 2577u;
+static constexpr uint32 GBE_kDotaSetItemStyleResponse = 2578u;
+static constexpr uint32 GBE_kDotaUnlockItemStyle = 2571u;
+static constexpr uint32 GBE_kDotaUnlockItemStyleResponse = 2572u;
 static constexpr size_t GBE_kDotaWelcomeInnerBodyOffset = 48u;
 static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
 static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
@@ -8607,13 +8613,14 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 proto_item.set_contains_equipped_state(false);
                 proto_item.set_contains_equipped_state_v2(false);
 
-                // Add attr=400 only for items that actually have multiple styles
-                // (detected by VPK parser). Adding it to all items causes the client
-                // to display wrong cosmetics in-game.
-                if (def.num_styles > 1) {
+                // Add attr=400 (unlocked styles bitmask) to ALL items unconditionally.
+                // Setting 0xFFFFFFFF ensures all styles are unlocked from the start,
+                // so the client never shows "locked" UI for any style variant.
+                // For single-style items this is harmless (style 0 is always available).
+                {
                     auto *attr = proto_item.add_attribute();
                     attr->set_def_index(400u);
-                    uint32_t all_unlocked = (1u << def.num_styles) - 1u;
+                    uint32_t all_unlocked = 0xFFFFFFFFu;
                     std::string val_bytes(reinterpret_cast<const char *>(&all_unlocked), 4);
                     attr->set_value_bytes(val_bytes);
                 }
@@ -8634,11 +8641,11 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 mem_item.original_id = item_id;
                 mem_item.style = 0;
 
-                // Add style unlock attr to in-memory item too
-                if (def.num_styles > 1) {
+                // Add style unlock attr to in-memory item (all items get attr 400)
+                {
                     Econ_Item_Attribute unlock_attr;
                     unlock_attr.def = 400u;
-                    uint32_t all_unlocked = (1u << def.num_styles) - 1u;
+                    uint32_t all_unlocked = 0xFFFFFFFFu;
                     unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&all_unlocked), 4);
                     unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
                     mem_item.attributes.push_back(unlock_attr);
@@ -8699,26 +8706,35 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
             GBE_GC_DebugLog("GC_DOTA_ITEMS", "injected %zu CSOEconItem entries from %zu unique defs (skipped %zu existing)",
                 injected_count, vpk_item_defs.size(), existing_defs.size());
 
-            // Patch existing items that already have attr=400: ensure all style bits are set.
-            // Do NOT add attr=400 to items that don't have it -- this breaks cosmetic display.
+            // Ensure ALL existing items have attr=400 with all bits set.
+            // Items loaded from items.json may or may not already have attr=400.
             {
                 size_t patched_count = 0;
+                uint32_t all_unlocked = 0xFFFFFFFFu;
                 for (Econ_Item &item : items) {
+                    bool found = false;
                     for (auto &attr : item.attributes) {
                         if (attr.def == 400u) {
-                            // Ensure all bits are set to unlock all styles
-                            uint32_t all_unlocked = 0xFFFFFFFFu;
                             if (attr.value_bytes.size() < 4 ||
                                 memcmp(attr.value_bytes.data(), &all_unlocked, 4) != 0) {
                                 attr.value_bytes.assign(reinterpret_cast<const char *>(&all_unlocked), 4);
                                 patched_count++;
                             }
+                            found = true;
                             break;
                         }
                     }
+                    if (!found) {
+                        Econ_Item_Attribute unlock_attr;
+                        unlock_attr.def = 400u;
+                        unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&all_unlocked), 4);
+                        unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+                        item.attributes.push_back(unlock_attr);
+                        patched_count++;
+                    }
                 }
                 if (patched_count > 0) {
-                    GBE_GC_DebugLog("GC_DOTA_ITEMS", "patched %zu existing items attr=400 -> all_bits_set", patched_count);
+                    GBE_GC_DebugLog("GC_DOTA_ITEMS", "ensured attr=400 on %zu items (all styles unlocked)", patched_count);
                 }
             }
         }
@@ -8858,13 +8874,8 @@ std::string Steam_Game_Coordinator::item_to_gcprotobuf(const Econ_Item &item, CS
         proto_equip->set_new_slot(slot_id);
     }
 
-    // Dota 2: inject attr=400 ("unlocked styles") ONLY if the item already has it
-    // in its attributes (from items.json). Do NOT add it unconditionally -- setting
-    // attr=400=0xFFFFFFFF on items without multiple styles causes the client to
-    // display wrong cosmetics in-game.
-    bool has_attr_400 = false;
+    // Serialize all item attributes (including attr=400 for style unlock)
     for (const Econ_Item_Attribute &attr : item.attributes) {
-        if (attr.def == 400u) has_attr_400 = true;
         auto proto_attr = proto_item.add_attribute();
         proto_attr->set_def_index(attr.def);
         if (gc_version < 20130319 || is_portal2) {
@@ -9651,6 +9662,12 @@ const std::vector<Econ_Item> &Steam_Game_Coordinator::load_items_from_file()
                         std::string value = attr.value("value_string", std::string());
                         new_attr.value_bytes = value + '\0';
                         new_attr.value = 0.0f;
+                    } else if (attr.contains("value_bytes_hex")) {
+                        new_attr.type = Econ_Item_Attribute::ATTR_TYPE_STRING;
+                        std::string hex = attr.value("value_bytes_hex", std::string());
+                        if (!GBE_DecodeHexString(hex.c_str(), new_attr.value_bytes))
+                            continue;
+                        new_attr.value = 0.0f;
                     } else {
                         continue;
                     }
@@ -9733,8 +9750,22 @@ void Steam_Game_Coordinator::save_items_to_file()
                     break;
                 }
                 case Econ_Item_Attribute::ATTR_TYPE_STRING: {
-                    const char *value = attr.value_bytes.c_str();
-                    json_attr["value_string"] = value;
+                    const bool has_trailing_nul = !attr.value_bytes.empty() && attr.value_bytes.back() == '\0';
+                    const size_t text_size = has_trailing_nul ? attr.value_bytes.size() - 1u : attr.value_bytes.size();
+                    bool printable_text = true;
+                    for (size_t i = 0; i < text_size; ++i) {
+                        const unsigned char ch = static_cast<unsigned char>(attr.value_bytes[i]);
+                        if (ch == 0 || !std::isprint(ch)) {
+                            printable_text = false;
+                            break;
+                        }
+                    }
+
+                    if (printable_text) {
+                        json_attr["value_string"] = attr.value_bytes.substr(0, text_size);
+                    } else {
+                        json_attr["value_bytes_hex"] = GBE_FormatHex(reinterpret_cast<const uint8 *>(attr.value_bytes.data()), attr.value_bytes.size());
+                    }
                     break;
                 }
             }
@@ -13023,6 +13054,211 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return GBE_HandleDotaDestroyLobbyRequest(source_job, has_source_job, false, nullptr);
     }
 
+    if (request_emsg == GBE_kDotaAddSocket) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "received direct 1087 AddSocket source_job=%llu body_size=%zu body_prefix=%s",
+            static_cast<unsigned long long>(source_job),
+            body_size,
+            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+        );
+
+        return GBE_HandleDotaAddSocketRequest(body, body_size, has_source_job, source_job);
+    }
+
+    // Handle k_EMsgClientToGCUnlockItemStyle (2571) -> reply 2572
+    // In LAN mode all styles are unlocked, so always reply with success.
+    // Proto: CMsgClientToGCUnlockItemStyle { optional uint64 item_to_unlock = 1; optional uint32 style_index = 2 [default = 255]; repeated uint64 consumable_item_ids = 3; }
+    // Proto: CMsgClientToGCUnlockItemStyleResponse { optional EUnlockStyle response = 1 [default = k_UnlockStyle_Succeeded]; optional uint64 item_id = 2; optional uint32 style_index = 3 [default = 255]; }
+    if (request_emsg == GBE_kDotaUnlockItemStyle) {
+        uint64 unlock_item_id = 0;
+        uint32 unlock_style_index = 255u;
+        uint64 consumable_item_id = 0;
+        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), unlock_item_id);
+        GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 2u), unlock_style_index);
+        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 3u), consumable_item_id);
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "received direct 2571 UnlockItemStyle source_job=%llu item_id=0x%llx style_index=%u consumable=0x%llx body_size=%zu",
+            static_cast<unsigned long long>(source_job),
+            static_cast<unsigned long long>(unlock_item_id),
+            unlock_style_index,
+            static_cast<unsigned long long>(consumable_item_id),
+            body_size
+        );
+
+        // Step 1: Update item's attr 400 (unlocked styles bitmask) BEFORE replying
+        if (unlock_item_id != 0 && unlock_style_index != 255u) {
+            for (Econ_Item &item : items) {
+                if (item.id == unlock_item_id) {
+                    // Also update item.style to the requested style
+                    item.style = static_cast<uint8>(unlock_style_index);
+                    // Find or create attr 400
+                    bool found_attr = false;
+                    for (auto &attr : item.attributes) {
+                        if (attr.def == 400u) {
+                            uint32_t current_val = 0;
+                            if (attr.value_bytes.size() >= 4) {
+                                memcpy(&current_val, attr.value_bytes.data(), 4);
+                            }
+                            current_val |= (1u << unlock_style_index);
+                            attr.value_bytes.assign(reinterpret_cast<const char *>(&current_val), 4);
+                            found_attr = true;
+                            break;
+                        }
+                    }
+                    if (!found_attr) {
+                        Econ_Item_Attribute unlock_attr;
+                        unlock_attr.def = 400u;
+                        uint32_t val = 0xFFFFFFFFu; // unlock all styles in LAN
+                        unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&val), 4);
+                        unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+                        item.attributes.push_back(unlock_attr);
+                    }
+                    // Push SO update immediately (emsg=22 CMsgSOSingleObject) via push_incoming_now
+                    {
+                        uint32 msg_type_so = ESOMsg::k_ESOMsg_Update | protobuf_mask;
+                        std::string so_message = build_protomsg_header(msg_type_so);
+                        CMsgSOSingleObject so_msg;
+                        so_msg.set_owner(settings->get_local_steam_id().ConvertToUint64());
+                        so_msg.set_type_id(1);
+                        so_msg.set_object_data(item_to_gcprotobuf(item, settings->get_local_steam_id()));
+                        so_msg.AppendToString(&so_message);
+                        push_incoming_now(msg_type_so, so_message);
+                    }
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "2571 unlock: updated attr=400 for item 0x%llx style_bit=%u and pushed SO update (immediate)",
+                        static_cast<unsigned long long>(unlock_item_id),
+                        unlock_style_index
+                    );
+                    break;
+                }
+            }
+        }
+
+        // Step 2: Consume the consumable item (delete from inventory + push SO Destroy immediately)
+        if (consumable_item_id != 0) {
+            for (auto it = items.begin(); it != items.end(); ++it) {
+                if (it->id == consumable_item_id) {
+                    items.erase(it);
+                    // Push SO Destroy immediately (emsg=24 CMsgSOSingleObject)
+                    {
+                        uint32 msg_type_del = ESOMsg::k_ESOMsg_Destroy | protobuf_mask;
+                        std::string del_message = build_protomsg_header(msg_type_del);
+                        CMsgSOSingleObject del_msg;
+                        del_msg.set_owner(settings->get_local_steam_id().ConvertToUint64());
+                        del_msg.set_type_id(1);
+                        CSOEconItem del_proto_item;
+                        del_proto_item.set_id(consumable_item_id);
+                        del_msg.set_object_data(del_proto_item.SerializeAsString());
+                        del_msg.AppendToString(&del_message);
+                        push_incoming_now(msg_type_del, del_message);
+                    }
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "2571 unlock: consumed item 0x%llx (SO Destroy pushed immediate)",
+                        static_cast<unsigned long long>(consumable_item_id)
+                    );
+                    break;
+                }
+            }
+        }
+
+        // Step 3: Build and send 2572 response
+        std::string resp_body;
+        GBE_AppendProtoVarIntField(resp_body, 1u, 0u); // k_UnlockStyle_Succeeded
+        if (unlock_item_id != 0)
+            GBE_AppendProtoVarIntField(resp_body, 2u, unlock_item_id);
+        if (unlock_style_index != 255u)
+            GBE_AppendProtoVarIntField(resp_body, 3u, unlock_style_index);
+
+        std::string response_message;
+        GBE_BuildDotaJobReplyOrZeroHeaderPayload(GBE_kDotaUnlockItemStyleResponse, has_source_job, source_job, resp_body, response_message);
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=2571 resp=2572 source_job=%llu size=%zu note=unlock style success item_id=0x%llx style_index=%u",
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            static_cast<unsigned long long>(unlock_item_id),
+            unlock_style_index
+        );
+        push_incoming_now(GBE_kDotaUnlockItemStyleResponse | GBE_kProtoMask, response_message);
+
+        return true;
+    }
+
+    // Handle k_EMsgClientToGCSetItemStyle (2577) -> reply 2578
+    // Proto: CMsgClientToGCSetItemStyle { optional uint64 item_id = 1; optional uint32 style_index = 2 [default = 255]; }
+    // Proto: CMsgClientToGCSetItemStyleResponse { optional ESetStyle response = 1 [default = k_SetStyle_Succeeded]; }
+    if (request_emsg == GBE_kDotaSetItemStyle) {
+        uint64 style_item_id = 0;
+        uint32 style_index = 255u;
+        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), style_item_id);
+        GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 2u), style_index);
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "received direct 2577 SetItemStyle source_job=%llu item_id=0x%llx style_index=%u body_size=%zu",
+            static_cast<unsigned long long>(source_job),
+            static_cast<unsigned long long>(style_item_id),
+            style_index,
+            body_size
+        );
+
+        bool found = false;
+        if (style_item_id != 0 && style_index != 255u) {
+            for (Econ_Item &item : items) {
+                if (item.id != style_item_id)
+                    continue;
+                item.style = static_cast<uint8>(style_index);
+                found = true;
+
+                // Push SO update (emsg=21) so the client immediately sees the style change
+                callback_item_updated(settings->get_local_steam_id(), item);
+
+                // Forward style change to server GC if active
+                if (gc_profile == GC_PROFILE_DOTA2 && !is_server) {
+                    Steam_Client *steam_client = get_steam_client();
+                    Steam_Game_Coordinator *server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
+                    if (server_gc && server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id)) {
+                        GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, settings->get_local_steam_id(), items, true, "set_item_style_forward");
+                    }
+                }
+
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "applied style: item_id=0x%llx new_style=%u",
+                    static_cast<unsigned long long>(style_item_id),
+                    style_index
+                );
+                break;
+            }
+            if (found)
+                save_items_to_file();
+        }
+
+        // Build 2578 response: field 1 varint = 0 (k_SetStyle_Succeeded)
+        std::string resp_body;
+        GBE_AppendProtoVarIntField(resp_body, 1u, 0u);
+
+        std::string response_message;
+        GBE_BuildDotaJobReplyOrZeroHeaderPayload(GBE_kDotaSetItemStyleResponse, has_source_job, source_job, resp_body, response_message);
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=2577 resp=2578 source_job=%llu size=%zu found=%d style_index=%u",
+            static_cast<unsigned long long>(source_job),
+            response_message.size(),
+            (int)found,
+            style_index
+        );
+        push_incoming_now(GBE_kDotaSetItemStyleResponse | GBE_kProtoMask, response_message);
+        return true;
+    }
+
     const uint8 *template_bytes = nullptr;
     size_t template_size = 0;
     const char *template_hex = nullptr;
@@ -14217,7 +14453,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     // containing updated CSOEconItem with new equipped_state) THEN msg 2570.
     if (request_emsg == 2569u) {
         // Parse the repeated equips (field 1, length-delimited sub-messages)
-        struct EquipOp { uint64_t item_id; uint32_t new_class; uint32_t new_slot; };
+        struct EquipOp { uint64_t item_id; uint32_t new_class; uint32_t new_slot; uint32_t style_index; };
         std::vector<EquipOp> equip_ops;
         {
             size_t offset = 0;
@@ -14235,7 +14471,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 if (offset + sub_len > body_size) break;
                 const uint8_t *sub = body + offset;
                 size_t sub_off = 0;
-                EquipOp op{0, 0, 0};
+                EquipOp op{0, 0, 0, 255};
                 while (sub_off < sub_len) {
                     uint8_t tag = sub[sub_off++];
                     uint32_t field_num = tag >> 3;
@@ -14252,6 +14488,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         if (field_num == 1) op.item_id = val;
                         else if (field_num == 2) op.new_class = (uint32_t)val;
                         else if (field_num == 3) op.new_slot = (uint32_t)val;
+                        else if (field_num == 4) op.style_index = (uint32_t)val;
                     } else {
                         break;
                     }
@@ -14269,6 +14506,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             for (Econ_Item &item : items) {
                 if (op.item_id != UINT64_MAX && op.item_id != 0 && item.id == op.item_id) {
                     item.equip_states.insert_or_assign(op.new_class, op.new_slot);
+                    if (op.style_index != 255u)
+                        item.style = static_cast<uint8>(op.style_index);
                     modified_item_ids.insert(item.id);
                     found_target = true;
                 } else {
@@ -14281,11 +14520,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             }
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
-                "equip op[%zu]: item_id=0x%llx (%llu) new_class=%u new_slot=%u found=%d items_count=%zu",
+                "equip op[%zu]: item_id=0x%llx (%llu) new_class=%u new_slot=%u style_index=%u found=%d items_count=%zu",
                 ei,
                 static_cast<unsigned long long>(op.item_id),
                 static_cast<unsigned long long>(op.item_id),
                 op.new_class, op.new_slot,
+                op.style_index,
                 (int)found_target,
                 items.size()
             );
@@ -17846,6 +18086,141 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDestroyLobbyRequest(uint64 request_jo
         static_cast<unsigned long long>(request_job_id),
         has_request_job ? 1 : 0
     );
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaAddSocketRequest(const uint8 *body, size_t body_size, bool has_request_job, uint64 request_job_id)
+{
+    if (is_server || !body || body_size == 0)
+        return false;
+
+    uint64 field1_item_id = 0;
+    uint64 field2_item_id = 0;
+    uint64 subject_item_id = 0;
+    uint64 tool_item_id = 0;
+    uint32 socket_index = 0;
+
+    size_t pos = 0;
+    while (pos < body_size) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(body, body_size, pos, field_number, wire_type, field_offset, value_offset, value_size, field_end))
+            break;
+
+        if (wire_type != 0u)
+            continue;
+
+        uint64 value = 0;
+        size_t tmp = value_offset;
+        if (!GBE_ReadVarUint64(body, body_size, tmp, value))
+            continue;
+
+        if (field_number == 1u)
+            field1_item_id = value;
+        else if (field_number == 2u)
+            field2_item_id = value;
+        else if (field_number == 3u)
+            socket_index = static_cast<uint32>(value);
+    }
+
+    tool_item_id = field1_item_id;
+    subject_item_id = field2_item_id;
+
+    Econ_Item *subject_item = nullptr;
+    bool found_tool = (tool_item_id == 0);
+    for (Econ_Item &item : items) {
+        if (item.id == subject_item_id)
+            subject_item = &item;
+        if (item.id == tool_item_id)
+            found_tool = true;
+    }
+
+    if (!subject_item && field1_item_id != 0) {
+        for (Econ_Item &item : items) {
+            if (item.id == field1_item_id) {
+                subject_item = &item;
+                subject_item_id = field1_item_id;
+                tool_item_id = field2_item_id;
+                found_tool = (tool_item_id == 0);
+                for (const Econ_Item &tool_candidate : items) {
+                    if (tool_candidate.id == tool_item_id) {
+                        found_tool = true;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    uint32 result = 0u;
+    uint32 socket_attr_def = 0u;
+    if (!subject_item) {
+        result = 1u;
+    } else {
+        static const uint32 kKnownDotaEmptySocketAttrs[] = { 179u, 180u, 181u, 182u, 183u, 184u, 185u, 186u };
+
+        for (uint32 known_attr : kKnownDotaEmptySocketAttrs) {
+            bool used = false;
+            for (const Econ_Item_Attribute &attr : subject_item->attributes) {
+                if (attr.def == known_attr) {
+                    used = true;
+                    break;
+                }
+            }
+            if (!used) {
+                socket_attr_def = known_attr;
+                break;
+            }
+        }
+
+        if (socket_attr_def == 0u) {
+            result = 1u;
+        } else {
+            Econ_Item_Attribute socket_attr{};
+            socket_attr.def = socket_attr_def;
+            socket_attr.type = Econ_Item_Attribute::ATTR_TYPE_STRING;
+            socket_attr.value = 0.0f;
+            std::string socket_payload;
+            GBE_AppendProtoVarIntField(socket_payload, 1u, subject_item_id);
+            GBE_AppendProtoVarIntField(socket_payload, 2u, socket_attr_def);
+            GBE_AppendProtoBytesField(socket_attr.value_bytes, 1u, socket_payload);
+            subject_item->attributes.push_back(socket_attr);
+
+            save_items_to_file();
+            callback_item_updated(settings->get_local_steam_id(), *subject_item);
+        }
+    }
+
+    std::string response_body;
+    GBE_AppendProtoVarIntField(response_body, 1u, result);
+    if (subject_item_id != 0)
+        GBE_AppendProtoVarIntField(response_body, 2u, subject_item_id);
+    if (socket_attr_def != 0u)
+        GBE_AppendProtoVarIntField(response_body, 3u, socket_attr_def);
+
+    std::string response_message;
+    GBE_BuildDotaJobReplyOrZeroHeaderPayload(GBE_kDotaAddSocketResponse, has_request_job, request_job_id, response_body, response_message);
+    push_incoming_now(GBE_kDotaAddSocketResponse | GBE_kProtoMask, response_message);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "add socket req=1087 resp=1090 result=%u subject_item=0x%llx tool_item=0x%llx found_subject=%u found_tool=%u socket_index=%u attr_def=%u source_job=%llu size=%zu",
+        result,
+        static_cast<unsigned long long>(subject_item_id),
+        static_cast<unsigned long long>(tool_item_id),
+        subject_item ? 1u : 0u,
+        found_tool ? 1u : 0u,
+        socket_index,
+        socket_attr_def,
+        static_cast<unsigned long long>(request_job_id),
+        response_message.size()
+    );
+
     return true;
 }
 
