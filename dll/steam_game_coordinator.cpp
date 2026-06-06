@@ -13160,50 +13160,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 }
             }
         }
-                            current_val |= (1u << unlock_style_index);
-                            attr.value_bytes.assign(reinterpret_cast<const char *>(&current_val), 4);
-                            found_attr = true;
-                            break;
-                        }
-                    }
-                    if (!found_attr) {
-                        Econ_Item_Attribute unlock_attr;
-                        unlock_attr.def = 400u;
-                        uint32_t val = 0xFFFFFFFFu; // unlock all styles in LAN
-                        unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&val), 4);
-                        unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
-                        item.attributes.push_back(unlock_attr);
-                    }
-                    // Push SO update for the target item
-                    callback_item_updated(settings->get_local_steam_id(), item);
-                    GBE_GC_DebugLog(
-                        "GC_DOTA_DIRECT",
-                        "2571 unlock: updated attr=400 for item 0x%llx style_bit=%u and pushed SO update",
-                        static_cast<unsigned long long>(unlock_item_id),
-                        unlock_style_index
-                    );
-                    break;
-                }
-            }
-        }
-
-        // Step 2: Consume the consumable item (delete from inventory + push SO Destroy)
-        // This is required so the client sees the tool disappear, confirming the operation.
-        if (consumable_item_id != 0) {
-            // Remove from items vector and push SO Destroy
-            for (auto it = items.begin(); it != items.end(); ++it) {
-                if (it->id == consumable_item_id) {
-                    items.erase(it);
-                    callback_item_deleted(settings->get_local_steam_id(), consumable_item_id);
-                    GBE_GC_DebugLog(
-                        "GC_DOTA_DIRECT",
-                        "2571 unlock: consumed item 0x%llx (SO Destroy pushed)",
-                        static_cast<unsigned long long>(consumable_item_id)
-                    );
-                    break;
-                }
-            }
-        }
 
         // Step 3: Build and send 2572 response
         std::string resp_body;
