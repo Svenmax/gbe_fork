@@ -13111,6 +13111,69 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
                         item.attributes.push_back(unlock_attr);
                     }
+                    // Push SO update immediately (emsg=22 CMsgSOSingleObject) via push_incoming_now
+                    {
+                        uint32 msg_type_so = ESOMsg::k_ESOMsg_Update | protobuf_mask;
+                        std::string so_message = build_protomsg_header(msg_type_so);
+                        CMsgSOSingleObject so_msg;
+                        so_msg.set_owner(settings->get_local_steam_id().ConvertToUint64());
+                        so_msg.set_type_id(1);
+                        so_msg.set_object_data(item_to_gcprotobuf(item, settings->get_local_steam_id()));
+                        so_msg.AppendToString(&so_message);
+                        push_incoming_now(msg_type_so, so_message);
+                    }
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "2571 unlock: updated attr=400 for item 0x%llx style_bit=%u and pushed SO update (immediate)",
+                        static_cast<unsigned long long>(unlock_item_id),
+                        unlock_style_index
+                    );
+                    break;
+                }
+            }
+        }
+
+        // Step 2: Consume the consumable item (delete from inventory + push SO Destroy immediately)
+        if (consumable_item_id != 0) {
+            for (auto it = items.begin(); it != items.end(); ++it) {
+                if (it->id == consumable_item_id) {
+                    items.erase(it);
+                    // Push SO Destroy immediately (emsg=24 CMsgSOSingleObject)
+                    {
+                        uint32 msg_type_del = ESOMsg::k_ESOMsg_Destroy | protobuf_mask;
+                        std::string del_message = build_protomsg_header(msg_type_del);
+                        CMsgSOSingleObject del_msg;
+                        del_msg.set_owner(settings->get_local_steam_id().ConvertToUint64());
+                        del_msg.set_type_id(1);
+                        CSOEconItem del_proto_item;
+                        del_proto_item.set_id(consumable_item_id);
+                        del_msg.set_object_data(del_proto_item.SerializeAsString());
+                        del_msg.AppendToString(&del_message);
+                        push_incoming_now(msg_type_del, del_message);
+                    }
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "2571 unlock: consumed item 0x%llx (SO Destroy pushed immediate)",
+                        static_cast<unsigned long long>(consumable_item_id)
+                    );
+                    break;
+                }
+            }
+        }
+                            current_val |= (1u << unlock_style_index);
+                            attr.value_bytes.assign(reinterpret_cast<const char *>(&current_val), 4);
+                            found_attr = true;
+                            break;
+                        }
+                    }
+                    if (!found_attr) {
+                        Econ_Item_Attribute unlock_attr;
+                        unlock_attr.def = 400u;
+                        uint32_t val = 0xFFFFFFFFu; // unlock all styles in LAN
+                        unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&val), 4);
+                        unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+                        item.attributes.push_back(unlock_attr);
+                    }
                     // Push SO update for the target item
                     callback_item_updated(settings->get_local_steam_id(), item);
                     GBE_GC_DebugLog(
