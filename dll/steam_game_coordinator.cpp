@@ -96,6 +96,8 @@ static constexpr uint32 GBE_kDotaFindTopSourceTVGamesResponse = 8010u;
 static constexpr uint32 GBE_kDotaLobbyList = 8011u;
 static constexpr uint32 GBE_kDotaLobbyListResponse = 8012u;
 static constexpr uint32 GBE_kDotaSOUpdateMultiple = 6146u;
+static constexpr uint32 GBE_kDotaAddSocket = 1087u;
+static constexpr uint32 GBE_kDotaAddSocketResponse = 1090u;
 static constexpr size_t GBE_kDotaWelcomeInnerBodyOffset = 48u;
 static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
 static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
@@ -9651,6 +9653,12 @@ const std::vector<Econ_Item> &Steam_Game_Coordinator::load_items_from_file()
                         std::string value = attr.value("value_string", std::string());
                         new_attr.value_bytes = value + '\0';
                         new_attr.value = 0.0f;
+                    } else if (attr.contains("value_bytes_hex")) {
+                        new_attr.type = Econ_Item_Attribute::ATTR_TYPE_STRING;
+                        std::string hex = attr.value("value_bytes_hex", std::string());
+                        if (!GBE_DecodeHexString(hex.c_str(), new_attr.value_bytes))
+                            continue;
+                        new_attr.value = 0.0f;
                     } else {
                         continue;
                     }
@@ -9733,8 +9741,22 @@ void Steam_Game_Coordinator::save_items_to_file()
                     break;
                 }
                 case Econ_Item_Attribute::ATTR_TYPE_STRING: {
-                    const char *value = attr.value_bytes.c_str();
-                    json_attr["value_string"] = value;
+                    const bool has_trailing_nul = !attr.value_bytes.empty() && attr.value_bytes.back() == '\0';
+                    const size_t text_size = has_trailing_nul ? attr.value_bytes.size() - 1u : attr.value_bytes.size();
+                    bool printable_text = true;
+                    for (size_t i = 0; i < text_size; ++i) {
+                        const unsigned char ch = static_cast<unsigned char>(attr.value_bytes[i]);
+                        if (ch == 0 || !std::isprint(ch)) {
+                            printable_text = false;
+                            break;
+                        }
+                    }
+
+                    if (printable_text) {
+                        json_attr["value_string"] = attr.value_bytes.substr(0, text_size);
+                    } else {
+                        json_attr["value_bytes_hex"] = GBE_FormatHex(reinterpret_cast<const uint8 *>(attr.value_bytes.data()), attr.value_bytes.size());
+                    }
                     break;
                 }
             }
@@ -13021,6 +13043,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         );
 
         return GBE_HandleDotaDestroyLobbyRequest(source_job, has_source_job, false, nullptr);
+    }
+
+    if (request_emsg == GBE_kDotaAddSocket) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "received direct 1087 AddSocket source_job=%llu body_size=%zu body_prefix=%s",
+            static_cast<unsigned long long>(source_job),
+            body_size,
+            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+        );
+
+        return GBE_HandleDotaAddSocketRequest(body, body_size, has_source_job, source_job);
     }
 
     const uint8 *template_bytes = nullptr;
@@ -17846,6 +17880,141 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDestroyLobbyRequest(uint64 request_jo
         static_cast<unsigned long long>(request_job_id),
         has_request_job ? 1 : 0
     );
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaAddSocketRequest(const uint8 *body, size_t body_size, bool has_request_job, uint64 request_job_id)
+{
+    if (is_server || !body || body_size == 0)
+        return false;
+
+    uint64 field1_item_id = 0;
+    uint64 field2_item_id = 0;
+    uint64 subject_item_id = 0;
+    uint64 tool_item_id = 0;
+    uint32 socket_index = 0;
+
+    size_t pos = 0;
+    while (pos < body_size) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(body, body_size, pos, field_number, wire_type, field_offset, value_offset, value_size, field_end))
+            break;
+
+        if (wire_type != 0u)
+            continue;
+
+        uint64 value = 0;
+        size_t tmp = value_offset;
+        if (!GBE_ReadVarUint64(body, body_size, tmp, value))
+            continue;
+
+        if (field_number == 1u)
+            field1_item_id = value;
+        else if (field_number == 2u)
+            field2_item_id = value;
+        else if (field_number == 3u)
+            socket_index = static_cast<uint32>(value);
+    }
+
+    tool_item_id = field1_item_id;
+    subject_item_id = field2_item_id;
+
+    Econ_Item *subject_item = nullptr;
+    bool found_tool = (tool_item_id == 0);
+    for (Econ_Item &item : items) {
+        if (item.id == subject_item_id)
+            subject_item = &item;
+        if (item.id == tool_item_id)
+            found_tool = true;
+    }
+
+    if (!subject_item && field1_item_id != 0) {
+        for (Econ_Item &item : items) {
+            if (item.id == field1_item_id) {
+                subject_item = &item;
+                subject_item_id = field1_item_id;
+                tool_item_id = field2_item_id;
+                found_tool = (tool_item_id == 0);
+                for (const Econ_Item &tool_candidate : items) {
+                    if (tool_candidate.id == tool_item_id) {
+                        found_tool = true;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    uint32 result = 0u;
+    uint32 socket_attr_def = 0u;
+    if (!subject_item) {
+        result = 1u;
+    } else {
+        static const uint32 kKnownDotaEmptySocketAttrs[] = { 179u, 180u, 181u, 182u, 183u, 184u, 185u, 186u };
+
+        for (uint32 known_attr : kKnownDotaEmptySocketAttrs) {
+            bool used = false;
+            for (const Econ_Item_Attribute &attr : subject_item->attributes) {
+                if (attr.def == known_attr) {
+                    used = true;
+                    break;
+                }
+            }
+            if (!used) {
+                socket_attr_def = known_attr;
+                break;
+            }
+        }
+
+        if (socket_attr_def == 0u) {
+            result = 1u;
+        } else {
+            Econ_Item_Attribute socket_attr{};
+            socket_attr.def = socket_attr_def;
+            socket_attr.type = Econ_Item_Attribute::ATTR_TYPE_STRING;
+            socket_attr.value = 0.0f;
+            std::string socket_payload;
+            GBE_AppendProtoVarIntField(socket_payload, 1u, subject_item_id);
+            GBE_AppendProtoVarIntField(socket_payload, 2u, socket_attr_def);
+            GBE_AppendProtoBytesField(socket_attr.value_bytes, 1u, socket_payload);
+            subject_item->attributes.push_back(socket_attr);
+
+            save_items_to_file();
+            callback_item_updated(settings->get_local_steam_id(), *subject_item);
+        }
+    }
+
+    std::string response_body;
+    GBE_AppendProtoVarIntField(response_body, 1u, result);
+    if (subject_item_id != 0)
+        GBE_AppendProtoVarIntField(response_body, 2u, subject_item_id);
+    if (socket_attr_def != 0u)
+        GBE_AppendProtoVarIntField(response_body, 3u, socket_attr_def);
+
+    std::string response_message;
+    GBE_BuildDotaJobReplyOrZeroHeaderPayload(GBE_kDotaAddSocketResponse, has_request_job, request_job_id, response_body, response_message);
+    push_incoming_now(GBE_kDotaAddSocketResponse | GBE_kProtoMask, response_message);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "add socket req=1087 resp=1090 result=%u subject_item=0x%llx tool_item=0x%llx found_subject=%u found_tool=%u socket_index=%u attr_def=%u source_job=%llu size=%zu",
+        result,
+        static_cast<unsigned long long>(subject_item_id),
+        static_cast<unsigned long long>(tool_item_id),
+        subject_item ? 1u : 0u,
+        found_tool ? 1u : 0u,
+        socket_index,
+        socket_attr_def,
+        static_cast<unsigned long long>(request_job_id),
+        response_message.size()
+    );
+
     return true;
 }
 
