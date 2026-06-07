@@ -10210,6 +10210,7 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl(
     bool rewrite_runtime_fields,
     bool rewrite_2015,
     uint32 extra_startup_account_id,
+    const GBE_DotaCustomGameDetails *custom_game,
     std::string &message)
 {
     if (steam_id == 0 || account_id == 0 || lobby_id == 0)
@@ -10267,7 +10268,8 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl(
         members,
         rewrite_2015,
         extra_startup_account_id,
-        pass_key);
+        pass_key,
+        custom_game);
 }
 
 bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &player_name, std::string &message)
@@ -10316,8 +10318,8 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTem
         false,
         false,
         owner_account_id,
-        message,
-        &lobby.custom_game);
+        &lobby.custom_game,
+        message);
 }
 
 static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
@@ -10354,6 +10356,7 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
     const std::string &broadcast_language_code,
     const std::string &pass_key,
     uint32 extra_startup_account_id,
+    const GBE_DotaCustomGameDetails *custom_game,
     std::string &message)
 {
     if (steam_id == 0 || lobby_id == 0)
@@ -10393,7 +10396,8 @@ static bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
         broadcast_language_code,
         pass_key,
         extra_startup_account_id,
-        message);
+        message,
+        custom_game);
 }
 
 bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const std::string &player_name, std::string &message)
@@ -10444,8 +10448,8 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPay
         lobby.broadcast_language_code,
         lobby.pass_key,
         owner_account_id,
-        message,
-        &lobby.custom_game);
+        &lobby.custom_game,
+        message);
 }
 
 bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message)
