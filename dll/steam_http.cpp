@@ -108,13 +108,14 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
             item["votes_down"] = mod.votesDown;
             item["score"] = mod.score;
             item["success"] = true;
-            item["game_modes"] = nlohmann::json::array({{
-                {"id", mod.id},
-                {"name", addon_name},
-                {"map_name", map_name},
-                {"min_players", 1},
-                {"max_players", 10}
-            }});
+            nlohmann::json game_mode = nlohmann::json::object();
+            game_mode["id"] = mod.id;
+            game_mode["name"] = addon_name;
+            game_mode["map_name"] = map_name;
+            game_mode["min_players"] = 1;
+            game_mode["max_players"] = 10;
+            item["game_modes"] = nlohmann::json::array();
+            item["game_modes"].push_back(std::move(game_mode));
             custom_games.push_back(std::move(item));
         }
     }

@@ -71,14 +71,20 @@ static bool GBE_DotaIsLocalAddonFolder(const std::string &addon_path)
 
 static std::string GBE_DotaLocalAddonMapName(const std::string &addon_path, const std::string &fallback)
 {
-    const std::string maps_path = addon_path + PATH_SEPARATOR + "maps";
-    const std::vector<std::string> map_files = Local_Storage::get_filenames_path(maps_path);
-    for (const std::string &map_file : map_files) {
-        const std::filesystem::path map_path = std::filesystem::u8path(map_file);
-        const std::string extension = common_helpers::ascii_to_lowercase(map_path.extension().u8string());
-        if (extension == ".vmap" || extension == ".vmap_c" || extension == ".bsp" || extension == ".vpk")
-            return map_path.stem().u8string();
-    }
+    const std::filesystem::path maps_path = std::filesystem::u8path(addon_path) / "maps";
+    try {
+        if (common_helpers::dir_exist(maps_path)) {
+            for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(maps_path, std::filesystem::directory_options::follow_directory_symlink)) {
+                if (!std::filesystem::is_regular_file(dir_entry))
+                    continue;
+
+                const std::filesystem::path map_path = dir_entry.path();
+                const std::string extension = common_helpers::ascii_to_lowercase(map_path.extension().u8string());
+                if (extension == ".vmap" || extension == ".vmap_c" || extension == ".bsp" || extension == ".vpk")
+                    return map_path.stem().u8string();
+            }
+        }
+    } catch (...) { }
 
     return fallback;
 }
@@ -208,11 +214,11 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
                 mod.acceptedForUse = true;
                 mod.workshopItemURL = "file://" + addon_path;
                 mod.tags = "Dota,Custom Game,Local Addon";
-                mod.metadata = nlohmann::json({
-                    {"addon_name", addon_folder},
-                    {"map_name", map_name},
-                    {"launch_command", "dota_launch_custom_game " + addon_folder + " " + map_name}
-                }).dump();
+                nlohmann::json metadata = nlohmann::json::object();
+                metadata["addon_name"] = addon_folder;
+                metadata["map_name"] = map_name;
+                metadata["launch_command"] = "dota_launch_custom_game " + addon_folder + " " + map_name;
+                mod.metadata = metadata.dump();
 
                 const std::vector<std::string> primary_files = Local_Storage::get_filenames_path(mod.path);
                 if (!primary_files.empty()) mod.primaryFileName = primary_files[0];

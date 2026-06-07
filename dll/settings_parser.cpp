@@ -1363,14 +1363,20 @@ static bool is_dota_local_addon_folder(const std::string &addon_path)
 
 static std::string dota_local_addon_map_name(const std::string &addon_path, const std::string &fallback)
 {
-    const std::string maps_path = addon_path + PATH_SEPARATOR + "maps";
-    const std::vector<std::string> map_files = Local_Storage::get_filenames_path(maps_path);
-    for (const std::string &map_file : map_files) {
-        const std::filesystem::path map_path = std::filesystem::u8path(map_file);
-        const std::string extension = common_helpers::ascii_to_lowercase(map_path.extension().u8string());
-        if (extension == ".vmap" || extension == ".vmap_c" || extension == ".bsp" || extension == ".vpk")
-            return map_path.stem().u8string();
-    }
+    const std::filesystem::path maps_path = std::filesystem::u8path(addon_path) / "maps";
+    try {
+        if (common_helpers::dir_exist(maps_path)) {
+            for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(maps_path, std::filesystem::directory_options::follow_directory_symlink)) {
+                if (!std::filesystem::is_regular_file(dir_entry))
+                    continue;
+
+                const std::filesystem::path map_path = dir_entry.path();
+                const std::string extension = common_helpers::ascii_to_lowercase(map_path.extension().u8string());
+                if (extension == ".vmap" || extension == ".vmap_c" || extension == ".bsp" || extension == ".vpk")
+                    return map_path.stem().u8string();
+            }
+        }
+    } catch (...) { }
 
     return fallback;
 }
