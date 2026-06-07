@@ -1361,8 +1361,23 @@ static bool is_dota_local_addon_folder(const std::string &addon_path)
         || common_helpers::dir_exist(root / "scripts");
 }
 
+static std::string dota_local_addon_map_name(const std::string &addon_path, const std::string &fallback)
+{
+    const std::string maps_path = addon_path + PATH_SEPARATOR + "maps";
+    const std::vector<std::string> map_files = Local_Storage::get_filenames_path(maps_path);
+    for (const std::string &map_file : map_files) {
+        const std::filesystem::path map_path = std::filesystem::u8path(map_file);
+        const std::string extension = common_helpers::ascii_to_lowercase(map_path.extension().u8string());
+        if (extension == ".vmap" || extension == ".vmap_c" || extension == ".bsp" || extension == ".vpk")
+            return map_path.stem().u8string();
+    }
+
+    return fallback;
+}
+
 static Mod_entry make_dota_detected_mod(class Settings *settings_client, PublishedFileId_t mod_id, const std::string &title, const std::string &path, bool local_addon)
 {
+    const std::string map_name = local_addon ? dota_local_addon_map_name(path, title) : std::string();
     Mod_entry new_mod;
     new_mod.id = mod_id;
     new_mod.title = title;
@@ -1383,6 +1398,14 @@ static Mod_entry make_dota_detected_mod(class Settings *settings_client, Publish
     new_mod.votesUp = (uint32)500;
     new_mod.votesDown = (uint32)12;
     new_mod.score = 0.97f;
+    if (local_addon) {
+        nlohmann::json metadata = nlohmann::json::object();
+        metadata["addon_name"] = title;
+        metadata["map_name"] = map_name;
+        metadata["launch_command"] = "dota_launch_custom_game " + title + " " + map_name;
+        new_mod.metadata = metadata.dump();
+        new_mod.tags = "Dota,Custom Game,Local Addon";
+    }
 
     const std::vector<std::string> mod_primary_files = Local_Storage::get_filenames_path(new_mod.path);
     new_mod.primaryFileName = mod_primary_files.empty() ? std::string() : mod_primary_files[0];

@@ -61,6 +61,18 @@ bool GBE_IsDotaPopularGamesHTTPURL(const std::string &url)
     return url.find("/ICustomGames/GetPopularGames/") != std::string::npos;
 }
 
+std::string GBE_DotaModMetadataValue(const Mod_entry &mod, const char *key, const std::string &fallback)
+{
+    if (mod.metadata.empty()) return fallback;
+
+    try {
+        nlohmann::json metadata = nlohmann::json::parse(mod.metadata);
+        return metadata.value(key, fallback);
+    } catch (...) {
+        return fallback;
+    }
+}
+
 std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const std::string &url)
 {
     nlohmann::json custom_games = nlohmann::json::array();
@@ -68,6 +80,8 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
     if (settings) {
         for (PublishedFileId_t mod_id : settings->modSet()) {
             Mod_entry mod = settings->getMod(mod_id);
+            const std::string addon_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);
+            const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", addon_name);
             if (GBE_IsDotaPopularGamesHTTPURL(url)) {
                 custom_games.push_back({{"id", std::to_string(mod.id)}});
                 continue;
@@ -80,6 +94,9 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
             item["title"] = mod.title;
             item["name"] = mod.title;
             item["description"] = mod.description;
+            item["custom_game_mode"] = addon_name;
+            item["map_name"] = map_name;
+            item["launch_command"] = "dota_launch_custom_game " + addon_name + " " + map_name;
             item["file_url"] = mod.workshopItemURL;
             item["preview_url"] = mod.previewURL;
             item["install_path"] = mod.path;
@@ -91,6 +108,13 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
             item["votes_down"] = mod.votesDown;
             item["score"] = mod.score;
             item["success"] = true;
+            item["game_modes"] = nlohmann::json::array({{
+                {"id", mod.id},
+                {"name", addon_name},
+                {"map_name", map_name},
+                {"min_players", 1},
+                {"max_players", 10}
+            }});
             custom_games.push_back(std::move(item));
         }
     }

@@ -69,6 +69,20 @@ static bool GBE_DotaIsLocalAddonFolder(const std::string &addon_path)
         || common_helpers::dir_exist(root / "scripts");
 }
 
+static std::string GBE_DotaLocalAddonMapName(const std::string &addon_path, const std::string &fallback)
+{
+    const std::string maps_path = addon_path + PATH_SEPARATOR + "maps";
+    const std::vector<std::string> map_files = Local_Storage::get_filenames_path(maps_path);
+    for (const std::string &map_file : map_files) {
+        const std::filesystem::path map_path = std::filesystem::u8path(map_file);
+        const std::string extension = common_helpers::ascii_to_lowercase(map_path.extension().u8string());
+        if (extension == ".vmap" || extension == ".vmap_c" || extension == ".bsp" || extension == ".vpk")
+            return map_path.stem().u8string();
+    }
+
+    return fallback;
+}
+
 static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc_Remote_Storage_Bridge *ugc_bridge)
 {
     if (!settings || !ugc_bridge || settings->get_local_game_id().AppID() != 570u) return;
@@ -179,6 +193,7 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
 
             const PublishedFileId_t addon_id = GBE_DotaLocalAddonPublishedFileId(addon_path);
             if (!settings->isModInstalled(addon_id)) {
+                const std::string map_name = GBE_DotaLocalAddonMapName(addon_path, addon_folder);
                 Mod_entry mod{};
                 mod.id = addon_id;
                 mod.title = addon_folder;
@@ -192,6 +207,12 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
                 mod.visibility = k_ERemoteStoragePublishedFileVisibilityPublic;
                 mod.acceptedForUse = true;
                 mod.workshopItemURL = "file://" + addon_path;
+                mod.tags = "Dota,Custom Game,Local Addon";
+                mod.metadata = nlohmann::json({
+                    {"addon_name", addon_folder},
+                    {"map_name", map_name},
+                    {"launch_command", "dota_launch_custom_game " + addon_folder + " " + map_name}
+                }).dump();
 
                 const std::vector<std::string> primary_files = Local_Storage::get_filenames_path(mod.path);
                 if (!primary_files.empty()) mod.primaryFileName = primary_files[0];
