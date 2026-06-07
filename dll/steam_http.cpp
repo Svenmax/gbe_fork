@@ -43,6 +43,24 @@ bool GBE_IsSDRConfigURL(const std::string &url)
         && (url.find("api.steampowered.com") != std::string::npos || url.find("api.steamchina.com") != std::string::npos);
 }
 
+bool GBE_IsDotaCustomGamesHTTPURL(const std::string &url)
+{
+    if (url.find("570") == std::string::npos && url.find("dota") == std::string::npos && url.find("DOTA") == std::string::npos)
+        return false;
+
+    return url.find("custom") != std::string::npos
+        || url.find("Custom") != std::string::npos
+        || url.find("arcade") != std::string::npos
+        || url.find("Arcade") != std::string::npos
+        || url.find("lobbies") != std::string::npos
+        || url.find("Lobbies") != std::string::npos;
+}
+
+const char *GBE_GetOfflineDotaCustomGamesJSON()
+{
+    return "{\"success\":true,\"result\":{\"success\":true,\"results\":[],\"lobbies\":[],\"custom_games\":[],\"popular_custom_games\":[]},\"results\":[],\"lobbies\":[],\"custom_games\":[],\"popular_custom_games\":[]}";
+}
+
 void GBE_LogHTTPTrace(const char *scope, HTTPRequestHandle handle, const std::string &url, size_t response_size)
 {
     FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
@@ -220,6 +238,11 @@ HTTPRequestHandle Steam_HTTP::CreateHTTPRequest( EHTTPMethod eHTTPRequestMethod,
         if (GBE_IsSDRConfigURL(request.url)) {
             request.response = GBE_GetOfflineSDRConfigJSON();
             GBE_LogHTTPTrace("HTTP_SDR_CONFIG_CREATE", request.handle, request.url, request.response.size());
+        } else if (GBE_IsDotaCustomGamesHTTPURL(request.url)) {
+            request.response = GBE_GetOfflineDotaCustomGamesJSON();
+            GBE_LogHTTPTrace("HTTP_DOTA_CUSTOM_CREATE", request.handle, request.url, request.response.size());
+        } else {
+            GBE_LogHTTPTrace("HTTP_CREATE", request.handle, request.url, request.response.size());
         }
     } else if (file_index > 0) {
         PRINT_DEBUG("URL is a filepath");
@@ -544,6 +567,11 @@ bool Steam_HTTP::SendHTTPRequest( HTTPRequestHandle hRequest, SteamAPICall_t *pC
         request->response = GBE_GetOfflineSDRConfigJSON();
         GBE_LogHTTPTrace("HTTP_SDR_CONFIG_SEND", request->handle, request->url, request->response.size());
         GBE_PostNetworkingSocketsConfigUpdated(callbacks, *request);
+    } else if (GBE_IsDotaCustomGamesHTTPURL(request->url)) {
+        request->response = GBE_GetOfflineDotaCustomGamesJSON();
+        GBE_LogHTTPTrace("HTTP_DOTA_CUSTOM_SEND", request->handle, request->url, request->response.size());
+    } else {
+        GBE_LogHTTPTrace("HTTP_SEND", request->handle, request->url, request->response.size());
     }
 
     switch (request->protocol)
