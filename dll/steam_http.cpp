@@ -81,6 +81,7 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
         for (PublishedFileId_t mod_id : settings->modSet()) {
             Mod_entry mod = settings->getMod(mod_id);
             const std::string addon_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);
+            const std::string display_name = GBE_DotaModMetadataValue(mod, "display_name", mod.title);
             const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", addon_name);
             if (GBE_IsDotaPopularGamesHTTPURL(url)) {
                 custom_games.push_back({{"id", std::to_string(mod.id)}});
@@ -89,13 +90,20 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
 
             nlohmann::json item = nlohmann::json::object();
             item["id"] = mod.id;
+            item["id_str"] = std::to_string(mod.id);
+            item["appid"] = 570;
             item["publishedfileid"] = mod.id;
+            item["published_file_id"] = std::to_string(mod.id);
             item["consumer_app_id"] = 570;
             item["title"] = mod.title;
-            item["name"] = mod.title;
+            item["name"] = display_name;
+            item["display_name"] = display_name;
             item["description"] = mod.description;
+            item["addon_name"] = addon_name;
             item["custom_game_mode"] = addon_name;
+            item["custom_game_mode_name"] = display_name;
             item["map_name"] = map_name;
+            item["custom_map_name"] = map_name;
             item["launch_command"] = "dota_launch_custom_game " + addon_name + " " + map_name;
             item["file_url"] = mod.workshopItemURL;
             item["preview_url"] = mod.previewURL;
@@ -110,8 +118,12 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
             item["success"] = true;
             nlohmann::json game_mode = nlohmann::json::object();
             game_mode["id"] = mod.id;
-            game_mode["name"] = addon_name;
+            game_mode["custom_game_id"] = mod.id;
+            game_mode["name"] = display_name;
+            game_mode["addon_name"] = addon_name;
+            game_mode["custom_game_mode"] = addon_name;
             game_mode["map_name"] = map_name;
+            game_mode["custom_map_name"] = map_name;
             game_mode["min_players"] = 1;
             game_mode["max_players"] = 10;
             item["game_modes"] = nlohmann::json::array();

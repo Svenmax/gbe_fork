@@ -88,6 +88,7 @@ static constexpr uint32 GBE_kDotaJoinableCustomGameModesRequest = 7466u;
 static constexpr uint32 GBE_kDotaJoinableCustomGameModesResponse = 7467u;
 static constexpr uint32 GBE_kDotaJoinableCustomLobbiesRequest = 7468u;
 static constexpr uint32 GBE_kDotaJoinableCustomLobbiesResponse = 7469u;
+static constexpr uint32 GBE_kDotaTopCustomGamesList = 8024u;
 static constexpr uint32 GBE_kDotaLeaveChatChannel = 7272u;
 static constexpr uint32 GBE_kDotaChatMessage = 7273u;
 static constexpr uint32 GBE_kDotaPracticeLobbyJoinBroadcastChannel = 7149u;
@@ -5938,6 +5939,29 @@ static bool GBE_BuildDotaJobReplyOrZeroHeaderPayload(uint32 emsg, bool has_reque
         return GBE_BuildDotaJobReplyPayload(emsg, request_job_id, body, message);
 
     return GBE_BuildDotaZeroHeaderPayload(emsg, body, message);
+}
+
+static bool GBE_BuildDotaTopCustomGamesListPayload(class Settings *settings, std::string &message, size_t &game_count)
+{
+    game_count = 0;
+    std::string body;
+    uint64 game_of_the_day = 0ull;
+
+    if (settings) {
+        for (PublishedFileId_t mod_id : settings->modSet()) {
+            if (mod_id == 0ull || mod_id == k_PublishedFileIdInvalid)
+                continue;
+            if (game_of_the_day == 0ull)
+                game_of_the_day = mod_id;
+            GBE_AppendProtoVarIntField(body, 1u, mod_id);
+            ++game_count;
+        }
+    }
+
+    if (game_of_the_day != 0ull)
+        GBE_AppendProtoVarIntField(body, 2u, game_of_the_day);
+
+    return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaTopCustomGamesList, body, message);
 }
 
 static std::string GBE_BuildDotaPracticeLobbyListEntryBody(
@@ -19451,6 +19475,18 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
     );
 
     push_incoming_now((direct_message ? GBE_kEMsgGCClientWelcome : GBE_kEMsgClientFromGC) | GBE_kProtoMask, welcome_message);
+
+    std::string top_custom_games_message;
+    size_t top_custom_games_count = 0;
+    if (GBE_BuildDotaTopCustomGamesListPayload(settings, top_custom_games_message, top_custom_games_count)) {
+        push_incoming_now(GBE_kDotaTopCustomGamesList | GBE_kProtoMask, top_custom_games_message);
+        GBE_GC_DebugLog(
+            "GC_DOTA_CUSTOM_GAMES",
+            "queued top custom games list count=%zu direct=%d",
+            top_custom_games_count,
+            direct_message ? 1 : 0);
+    }
+
     if (direct_message)
         GBE_PushDotaLoginSyncMessages();
     return true;
