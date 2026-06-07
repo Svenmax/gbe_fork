@@ -1306,6 +1306,102 @@ static void try_detect_mods_folder(class Settings *settings_client, Settings *se
     }
 }
 
+static std::string parent_path_or_empty(const std::string &path)
+{
+    if (path.empty())
+        return std::string();
+
+    size_t separator = path.find_last_of("/\\");
+    if (separator == std::string::npos)
+        return std::string();
+    return path.substr(0, separator);
+}
+
+static bool parse_numeric_mod_folder_id(const std::string &folder_name, PublishedFileId_t &mod_id)
+{
+    if (folder_name.empty())
+        return false;
+
+    try {
+        size_t consumed = 0;
+        const unsigned long long parsed = std::stoull(folder_name, &consumed, 10);
+        if (consumed != folder_name.size() || parsed == 0ull)
+            return false;
+        mod_id = static_cast<PublishedFileId_t>(parsed);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+static void try_detect_dota_workshop_mods(class Settings *settings_client, Settings *settings_server)
+{
+    static constexpr AppId_t dota_app_id = 570u;
+
+    std::string app_install_path;
+    if (!settings_client->getAppInstallPath(dota_app_id, app_install_path) || app_install_path.empty()) {
+        PRINT_DEBUG("Dota2 workshop autodetect skipped: no app::paths entry for appid 570");
+        return;
+    }
+
+    std::vector<std::string> candidate_roots;
+    std::string cursor = canonical_path(app_install_path);
+    for (int depth = 0; depth < 5 && !cursor.empty(); ++depth) {
+        candidate_roots.push_back(cursor + PATH_SEPARATOR + "workshop" + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "570");
+        cursor = parent_path_or_empty(cursor);
+    }
+
+    for (const std::string &candidate_root : candidate_roots) {
+        const std::vector<std::string> workshop_folders = Local_Storage::get_folders_path(candidate_root);
+        if (workshop_folders.empty())
+            continue;
+
+        PRINT_DEBUG("Dota2 workshop autodetect scanning: '%s'", candidate_root.c_str());
+        bool added_any_mod = false;
+        for (const std::string &workshop_folder : workshop_folders) {
+            PublishedFileId_t workshop_id = 0;
+            if (!parse_numeric_mod_folder_id(workshop_folder, workshop_id))
+                continue;
+            if (settings_client->isModInstalled(workshop_id))
+                continue;
+
+            Mod_entry new_mod;
+            new_mod.id = workshop_id;
+            new_mod.title = workshop_folder;
+            new_mod.path = candidate_root + PATH_SEPARATOR + workshop_folder;
+            new_mod.fileType = k_EWorkshopFileTypeCommunity;
+            new_mod.description = "auto-detected Dota2 workshop mod #" + workshop_folder;
+            new_mod.steamIDOwner = settings_client->get_local_steam_id().ConvertToUint64();
+            new_mod.timeCreated = (uint32)three_week_ago_epoch;
+            new_mod.timeUpdated = (uint32)two_week_ago_epoch;
+            new_mod.timeAddedToUserList = (uint32)one_week_ago_epoch;
+            new_mod.visibility = k_ERemoteStoragePublishedFileVisibilityPublic;
+            new_mod.acceptedForUse = true;
+            new_mod.workshopItemURL = "https://steamcommunity.com/sharedfiles/filedetails/?id=" + workshop_folder;
+            new_mod.votesUp = (uint32)500;
+            new_mod.votesDown = (uint32)12;
+            new_mod.score = 0.97f;
+
+            const std::vector<std::string> mod_primary_files = Local_Storage::get_filenames_path(new_mod.path);
+            new_mod.primaryFileName = mod_primary_files.empty() ? std::string() : mod_primary_files[0];
+            new_mod.primaryFileSize = (int32)get_file_size_safe(new_mod.primaryFileName, new_mod.path);
+            new_mod.total_files_sizes = new_mod.primaryFileSize;
+
+            settings_client->addMod(new_mod.id, new_mod.title, new_mod.path);
+            settings_server->addMod(new_mod.id, new_mod.title, new_mod.path);
+            settings_client->addModDetails(new_mod.id, new_mod);
+            settings_server->addModDetails(new_mod.id, new_mod);
+            added_any_mod = true;
+            PRINT_DEBUG("  auto-detected Dota2 workshop mod '%s' at '%s'", workshop_folder.c_str(), new_mod.path.c_str());
+        }
+
+        if (added_any_mod)
+            return;
+    }
+
+    PRINT_DEBUG("Dota2 workshop autodetect found no workshop/content/570 entries from app path '%s'", app_install_path.c_str());
+}
+
 static void parse_mods_folder(class Settings *settings_client, Settings *settings_server, class Local_Storage *local_storage)
 {
     std::string mods_folder = Local_Storage::get_game_settings_path() + "mods";
@@ -1319,6 +1415,9 @@ static void parse_mods_folder(class Settings *settings_client, Settings *setting
         PRINT_DEBUG("Failed to load mods.json, attempting to auto detect mods folder");
         try_detect_mods_folder(settings_client, settings_server, mods_folder);
     }
+
+    if (settings_client->modSet().empty() && settings_client->get_local_game_id().AppID() == 570u)
+        try_detect_dota_workshop_mods(settings_client, settings_server);
 
 }
 
