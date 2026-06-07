@@ -1371,7 +1371,7 @@ static std::string dota_local_addon_map_name(const std::string &addon_path, cons
                     continue;
 
                 const std::filesystem::path map_path = dir_entry.path();
-                const std::string extension = common_helpers::ascii_to_lowercase(map_path.extension().u8string());
+                const std::string extension = common_helpers::to_lower(map_path.extension().u8string());
                 if (extension == ".vmap" || extension == ".vmap_c" || extension == ".bsp" || extension == ".vpk")
                     return map_path.stem().u8string();
             }
