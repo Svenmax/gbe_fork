@@ -1338,17 +1338,36 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
 {
     static constexpr AppId_t dota_app_id = 570u;
 
+    std::vector<std::string> seed_paths;
+
     std::string app_install_path;
-    if (!settings_client->getAppInstallPath(dota_app_id, app_install_path) || app_install_path.empty()) {
-        PRINT_DEBUG("Dota2 workshop autodetect skipped: no app::paths entry for appid 570");
+    if (settings_client->getAppInstallPath(dota_app_id, app_install_path) && !app_install_path.empty())
+        seed_paths.push_back(canonical_path(app_install_path));
+
+    const std::string program_path = canonical_path(get_full_program_path());
+    if (!program_path.empty())
+        seed_paths.push_back(program_path);
+
+    if (seed_paths.empty()) {
+        PRINT_DEBUG("Dota2 workshop autodetect skipped: no app::paths entry and no program path for appid 570");
         return;
     }
 
     std::vector<std::string> candidate_roots;
-    std::string cursor = canonical_path(app_install_path);
-    for (int depth = 0; depth < 5 && !cursor.empty(); ++depth) {
-        candidate_roots.push_back(cursor + PATH_SEPARATOR + "workshop" + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "570");
-        cursor = parent_path_or_empty(cursor);
+    std::set<std::string> seen_roots;
+    for (const std::string &seed_path : seed_paths) {
+        std::string cursor = seed_path;
+        for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
+            const std::string workshop_content_root = cursor + PATH_SEPARATOR + "workshop" + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "570";
+            if (seen_roots.insert(workshop_content_root).second)
+                candidate_roots.push_back(workshop_content_root);
+
+            const std::string steamapps_workshop_content_root = cursor + PATH_SEPARATOR + "steamapps" + PATH_SEPARATOR + "workshop" + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "570";
+            if (seen_roots.insert(steamapps_workshop_content_root).second)
+                candidate_roots.push_back(steamapps_workshop_content_root);
+
+            cursor = parent_path_or_empty(cursor);
+        }
     }
 
     for (const std::string &candidate_root : candidate_roots) {
@@ -1399,7 +1418,11 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
             return;
     }
 
-    PRINT_DEBUG("Dota2 workshop autodetect found no workshop/content/570 entries from app path '%s'", app_install_path.c_str());
+    PRINT_DEBUG(
+        "Dota2 workshop autodetect found no workshop/content/570 entries from %zu seed path(s), first='%s'",
+        seed_paths.size(),
+        seed_paths.empty() ? "" : seed_paths[0].c_str()
+    );
 }
 
 static void parse_mods_folder(class Settings *settings_client, Settings *settings_server, class Local_Storage *local_storage)
