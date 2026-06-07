@@ -11942,6 +11942,62 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
     return snapshots;
 }
 
+std::string Steam_Game_Coordinator::GBE_BuildDotaJoinableCustomLobbiesHTTPJSON(uint64 requested_custom_game_id)
+{
+    nlohmann::json response = nlohmann::json::object();
+    response["lobbies"] = nlohmann::json::array();
+
+    std::vector<GBE_LocalLobby> lobbies = GBE_GetDotaGenericLobbySnapshots("http_joinable_custom_lobbies");
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0ull)
+        lobbies.push_back(GBE_local_lobby);
+
+    std::vector<uint64> seen_lobby_ids;
+    for (const GBE_LocalLobby &lobby : lobbies) {
+        if (!lobby.active || lobby.lobby_id == 0ull || lobby.custom_game.game_id == 0ull)
+            continue;
+        if (requested_custom_game_id != 0ull && requested_custom_game_id != lobby.custom_game.game_id)
+            continue;
+        if (std::find(seen_lobby_ids.begin(), seen_lobby_ids.end(), lobby.lobby_id) != seen_lobby_ids.end())
+            continue;
+
+        const uint32 member_count = static_cast<uint32>(lobby.members.empty() ? 1u : lobby.members.size());
+        const uint32 max_players = lobby.custom_game.max_players != 0u ? lobby.custom_game.max_players : 10u;
+        const uint32 min_players = lobby.custom_game.min_players != 0u ? lobby.custom_game.min_players : 1u;
+        const uint32 leader_account_id = lobby.owner_account_id != 0u
+            ? lobby.owner_account_id
+            : (settings ? settings->get_local_steam_id().GetAccountID() : 0u);
+        const std::string leader_name = lobby.owner_name.empty()
+            ? (settings ? std::string(settings->get_local_name()) : std::string("Lobby Host"))
+            : lobby.owner_name;
+        const std::string room_name = lobby.room_name.empty() ? std::string("Lobby") : lobby.room_name;
+        const std::string custom_map_name = lobby.custom_game.map_name.empty() ? lobby.custom_game.mode : lobby.custom_game.map_name;
+        const uint32 lobby_creation_time = lobby.game_start_time != 0u ? lobby.game_start_time : static_cast<uint32>(std::time(nullptr));
+
+        nlohmann::json item = nlohmann::json::object();
+        item["lobby_id"] = std::to_string(lobby.lobby_id);
+        item["custom_game_id"] = std::to_string(lobby.custom_game.game_id);
+        item["member_count"] = member_count;
+        item["leader_account_id"] = leader_account_id;
+        item["leader_name"] = leader_name;
+        item["custom_map_name"] = custom_map_name;
+        item["max_player_count"] = max_players;
+        item["server_region"] = lobby.server_region;
+        item["has_pass_key"] = !lobby.pass_key.empty();
+        item["lobby_creation_time"] = lobby_creation_time;
+        item["custom_game_timestamp"] = lobby.custom_game.timestamp;
+        item["custom_game_crc"] = std::to_string(lobby.custom_game.crc);
+        item["min_player_count"] = min_players;
+        item["penalties_enabled"] = lobby.custom_game.penalties;
+        item["name"] = room_name;
+        item["custom_game_mode"] = lobby.custom_game.mode;
+        item["lan_host_ping_location"] = lobby.lan_host_ping_location;
+        response["lobbies"].push_back(std::move(item));
+        seen_lobby_ids.push_back(lobby.lobby_id);
+    }
+
+    return response.dump();
+}
+
 bool Steam_Game_Coordinator::GBE_FindDotaGenericLobbyByDotaLobbyId(uint64 dota_lobby_id, CSteamID &generic_lobby_id, GBE_LocalLobby *lobby_snapshot, const char *reason)
 {
     const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots(reason ? reason : "find_generic_by_dota_lobby_id");

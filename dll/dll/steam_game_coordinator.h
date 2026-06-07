@@ -324,6 +324,7 @@ public:
     void initialize_gc();
     void shutdown_gc();
     void GBE_MaybePrimeDotaServerWelcomeFromCache(const char *reason);
+    std::string GBE_BuildDotaJoinableCustomLobbiesHTTPJSON(uint64 requested_custom_game_id);
 
     // Returns true if the server GC has an active lobby matching the given lobby_id.
     // Used by client GC to detect HOST scenario and avoid running PLAYER PostGame cleanup.
