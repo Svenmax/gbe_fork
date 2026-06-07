@@ -1381,6 +1381,129 @@ static std::string dota_local_addon_map_name(const std::string &addon_path, cons
     return fallback;
 }
 
+static bool dota_is_map_resource_path(const std::filesystem::path &path)
+{
+    const std::string extension = common_helpers::to_lower(path.extension().u8string());
+    if (extension != ".vmap" && extension != ".vmap_c" && extension != ".bsp")
+        return false;
+
+    const std::string generic_path = common_helpers::to_lower(path.generic_u8string());
+    return generic_path.find("maps/") != std::string::npos || generic_path.find("maps\\") != std::string::npos;
+}
+
+static std::string dota_read_vpk_cstring(std::ifstream &input)
+{
+    std::string value;
+    char ch = 0;
+    while (input.read(&ch, 1) && ch != '\0')
+        value.push_back(ch);
+    return value;
+}
+
+static bool dota_read_vpk_uint16(std::ifstream &input, uint16 &value)
+{
+    unsigned char bytes[2]{};
+    if (!input.read(reinterpret_cast<char *>(bytes), sizeof(bytes)))
+        return false;
+    value = static_cast<uint16>(bytes[0] | (bytes[1] << 8));
+    return true;
+}
+
+static bool dota_read_vpk_uint32(std::ifstream &input, uint32 &value)
+{
+    unsigned char bytes[4]{};
+    if (!input.read(reinterpret_cast<char *>(bytes), sizeof(bytes)))
+        return false;
+    value = static_cast<uint32>(bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24));
+    return true;
+}
+
+static std::string dota_map_name_from_vpk(const std::filesystem::path &vpk_path)
+{
+    std::ifstream input(vpk_path, std::ios::binary);
+    if (!input.is_open())
+        return {};
+
+    uint32 signature = 0;
+    uint32 version = 0;
+    uint32 tree_size = 0;
+    if (!dota_read_vpk_uint32(input, signature) || !dota_read_vpk_uint32(input, version) || !dota_read_vpk_uint32(input, tree_size))
+        return {};
+    if (signature != 0x55aa1234u || tree_size == 0u)
+        return {};
+    if (version >= 2u) {
+        uint32 ignored = 0;
+        for (int i = 0; i < 4; ++i) {
+            if (!dota_read_vpk_uint32(input, ignored))
+                return {};
+        }
+    }
+
+    while (input.good()) {
+        const std::string extension = dota_read_vpk_cstring(input);
+        if (extension.empty())
+            break;
+
+        while (input.good()) {
+            const std::string path = dota_read_vpk_cstring(input);
+            if (path.empty())
+                break;
+
+            while (input.good()) {
+                const std::string filename = dota_read_vpk_cstring(input);
+                if (filename.empty())
+                    break;
+
+                uint32 crc = 0;
+                uint16 preload_bytes = 0;
+                uint16 archive_index = 0;
+                uint32 offset = 0;
+                uint32 length = 0;
+                uint16 terminator = 0;
+                if (!dota_read_vpk_uint32(input, crc) || !dota_read_vpk_uint16(input, preload_bytes) || !dota_read_vpk_uint16(input, archive_index) || !dota_read_vpk_uint32(input, offset) || !dota_read_vpk_uint32(input, length) || !dota_read_vpk_uint16(input, terminator))
+                    return {};
+
+                if (preload_bytes > 0)
+                    input.seekg(preload_bytes, std::ios::cur);
+
+                const std::string full_path = path + "/" + filename + "." + extension;
+                const std::filesystem::path resource_path = std::filesystem::u8path(full_path);
+                if (dota_is_map_resource_path(resource_path))
+                    return resource_path.stem().u8string();
+            }
+        }
+    }
+
+    return {};
+}
+
+static std::string dota_workshop_mod_map_name(const std::string &mod_path, const std::string &fallback)
+{
+    try {
+        const std::filesystem::path root = std::filesystem::u8path(mod_path);
+        if (common_helpers::dir_exist(root)) {
+            for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+                if (!std::filesystem::is_regular_file(dir_entry))
+                    continue;
+                if (dota_is_map_resource_path(dir_entry.path()))
+                    return dir_entry.path().stem().u8string();
+            }
+            for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+                if (!std::filesystem::is_regular_file(dir_entry))
+                    continue;
+                const std::string extension = common_helpers::to_lower(dir_entry.path().extension().u8string());
+                if (extension != ".vpk")
+                    continue;
+                std::string map_name = dota_map_name_from_vpk(dir_entry.path());
+                if (!map_name.empty())
+                    return map_name;
+            }
+        }
+    } catch (...) { }
+
+    return fallback;
+}
+
 static std::string dota_extract_addoninfo_value(const std::string &line, const std::string &key)
 {
     const std::string lower_line = common_helpers::to_lower(line);
@@ -1440,7 +1563,7 @@ static std::string dota_local_addon_display_name(const std::string &addon_path, 
 
 static Mod_entry make_dota_detected_mod(class Settings *settings_client, PublishedFileId_t mod_id, const std::string &title, const std::string &path, bool local_addon)
 {
-    const std::string map_name = local_addon ? dota_local_addon_map_name(path, title) : std::string();
+    const std::string map_name = local_addon ? dota_local_addon_map_name(path, title) : dota_workshop_mod_map_name(path, std::string());
     const std::string display_name = local_addon ? dota_local_addon_display_name(path, title) : title;
     Mod_entry new_mod;
     new_mod.id = mod_id;
@@ -1462,14 +1585,14 @@ static Mod_entry make_dota_detected_mod(class Settings *settings_client, Publish
     new_mod.votesUp = (uint32)500;
     new_mod.votesDown = (uint32)12;
     new_mod.score = 0.97f;
-    if (local_addon) {
+    if (local_addon || !map_name.empty()) {
         nlohmann::json metadata = nlohmann::json::object();
         metadata["addon_name"] = title;
         metadata["display_name"] = display_name;
         metadata["map_name"] = map_name;
         metadata["launch_command"] = "dota_launch_custom_game " + title + " " + map_name;
         new_mod.metadata = metadata.dump();
-        new_mod.tags = "Dota,Custom Game,Local Addon";
+        new_mod.tags = local_addon ? "Dota,Custom Game,Local Addon" : "Dota,Custom Game,Workshop";
     }
 
     const std::vector<std::string> mod_primary_files = Local_Storage::get_filenames_path(new_mod.path);
@@ -1536,7 +1659,7 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
             settings_client->addModDetails(new_mod.id, new_mod);
             settings_server->addModDetails(new_mod.id, new_mod);
             added_any_mod = true;
-            PRINT_DEBUG("  auto-detected Dota2 workshop mod '%s' at '%s'", workshop_folder.c_str(), new_mod.path.c_str());
+            PRINT_DEBUG("  auto-detected Dota2 workshop mod '%s' map='%s' at '%s'", workshop_folder.c_str(), dota_workshop_mod_map_name(new_mod.path, "").c_str(), new_mod.path.c_str());
         }
 
         if (added_any_mod)

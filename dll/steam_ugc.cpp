@@ -91,6 +91,110 @@ static std::string GBE_DotaLocalAddonMapName(const std::string &addon_path, cons
     return fallback;
 }
 
+static bool GBE_DotaIsMapResourcePath(const std::filesystem::path &path)
+{
+    const std::string extension = common_helpers::to_lower(path.extension().u8string());
+    if (extension != ".vmap" && extension != ".vmap_c" && extension != ".bsp") return false;
+
+    const std::string generic_path = common_helpers::to_lower(path.generic_u8string());
+    return generic_path.find("maps/") != std::string::npos || generic_path.find("maps\\") != std::string::npos;
+}
+
+static std::string GBE_DotaReadVpkCString(std::ifstream &input)
+{
+    std::string value;
+    char ch = 0;
+    while (input.read(&ch, 1) && ch != '\0') value.push_back(ch);
+    return value;
+}
+
+static bool GBE_DotaReadVpkUint16(std::ifstream &input, uint16 &value)
+{
+    unsigned char bytes[2]{};
+    if (!input.read(reinterpret_cast<char *>(bytes), sizeof(bytes))) return false;
+    value = static_cast<uint16>(bytes[0] | (bytes[1] << 8));
+    return true;
+}
+
+static bool GBE_DotaReadVpkUint32(std::ifstream &input, uint32 &value)
+{
+    unsigned char bytes[4]{};
+    if (!input.read(reinterpret_cast<char *>(bytes), sizeof(bytes))) return false;
+    value = static_cast<uint32>(bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24));
+    return true;
+}
+
+static std::string GBE_DotaMapNameFromVpk(const std::filesystem::path &vpk_path)
+{
+    std::ifstream input(vpk_path, std::ios::binary);
+    if (!input.is_open()) return {};
+
+    uint32 signature = 0;
+    uint32 version = 0;
+    uint32 tree_size = 0;
+    if (!GBE_DotaReadVpkUint32(input, signature) || !GBE_DotaReadVpkUint32(input, version) || !GBE_DotaReadVpkUint32(input, tree_size)) return {};
+    if (signature != 0x55aa1234u || tree_size == 0u) return {};
+    if (version >= 2u) {
+        uint32 ignored = 0;
+        for (int i = 0; i < 4; ++i) {
+            if (!GBE_DotaReadVpkUint32(input, ignored)) return {};
+        }
+    }
+
+    while (input.good()) {
+        const std::string extension = GBE_DotaReadVpkCString(input);
+        if (extension.empty()) break;
+
+        while (input.good()) {
+            const std::string path = GBE_DotaReadVpkCString(input);
+            if (path.empty()) break;
+
+            while (input.good()) {
+                const std::string filename = GBE_DotaReadVpkCString(input);
+                if (filename.empty()) break;
+
+                uint32 crc = 0;
+                uint16 preload_bytes = 0;
+                uint16 archive_index = 0;
+                uint32 offset = 0;
+                uint32 length = 0;
+                uint16 terminator = 0;
+                if (!GBE_DotaReadVpkUint32(input, crc) || !GBE_DotaReadVpkUint16(input, preload_bytes) || !GBE_DotaReadVpkUint16(input, archive_index) || !GBE_DotaReadVpkUint32(input, offset) || !GBE_DotaReadVpkUint32(input, length) || !GBE_DotaReadVpkUint16(input, terminator)) return {};
+
+                if (preload_bytes > 0) input.seekg(preload_bytes, std::ios::cur);
+
+                const std::string full_path = path + "/" + filename + "." + extension;
+                const std::filesystem::path resource_path = std::filesystem::u8path(full_path);
+                if (GBE_DotaIsMapResourcePath(resource_path)) return resource_path.stem().u8string();
+            }
+        }
+    }
+
+    return {};
+}
+
+static std::string GBE_DotaWorkshopModMapName(const std::string &mod_path, const std::string &fallback)
+{
+    try {
+        const std::filesystem::path root = std::filesystem::u8path(mod_path);
+        if (common_helpers::dir_exist(root)) {
+            for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+                if (!std::filesystem::is_regular_file(dir_entry)) continue;
+                if (GBE_DotaIsMapResourcePath(dir_entry.path())) return dir_entry.path().stem().u8string();
+            }
+            for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+                if (!std::filesystem::is_regular_file(dir_entry)) continue;
+                const std::string extension = common_helpers::to_lower(dir_entry.path().extension().u8string());
+                if (extension != ".vpk") continue;
+                std::string map_name = GBE_DotaMapNameFromVpk(dir_entry.path());
+                if (!map_name.empty()) return map_name;
+            }
+        }
+    } catch (...) { }
+
+    return fallback;
+}
+
 static std::string GBE_DotaExtractAddonInfoValue(const std::string &line, const std::string &key)
 {
     const std::string lower_line = common_helpers::to_lower(line);
@@ -211,6 +315,7 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
 
             const std::string mod_path = candidate_root + PATH_SEPARATOR + workshop_folder;
             if (!settings->isModInstalled(workshop_id)) {
+                const std::string map_name = GBE_DotaWorkshopModMapName(mod_path, std::string());
                 Mod_entry mod{};
                 mod.id = workshop_id;
                 mod.title = workshop_folder;
@@ -227,6 +332,15 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
                 mod.votesUp = 500u;
                 mod.votesDown = 12u;
                 mod.score = 0.97f;
+                if (!map_name.empty()) {
+                    mod.tags = "Dota,Custom Game,Workshop";
+                    nlohmann::json metadata = nlohmann::json::object();
+                    metadata["addon_name"] = workshop_folder;
+                    metadata["display_name"] = workshop_folder;
+                    metadata["map_name"] = map_name;
+                    metadata["launch_command"] = "dota_launch_custom_game " + workshop_folder + " " + map_name;
+                    mod.metadata = metadata.dump();
+                }
 
                 const std::vector<std::string> primary_files = Local_Storage::get_filenames_path(mod.path);
                 if (!primary_files.empty()) mod.primaryFileName = primary_files[0];
