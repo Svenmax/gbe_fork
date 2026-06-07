@@ -143,20 +143,25 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
     }
 
     nlohmann::json response = nlohmann::json::object();
-    response["success"] = true;
-    response["results"] = custom_games;
     response["lobbies"] = nlohmann::json::array();
-    response["custom_games"] = custom_games;
-    response["popular_custom_games"] = custom_games;
-    response["result"] = {
-        {"success", true},
-        {"results", custom_games},
-        {"lobbies", nlohmann::json::array()},
-        {"custom_games", custom_games},
-        {"popular_custom_games", custom_games}
-    };
 
     return response.dump();
+}
+
+void GBE_SetDotaCustomGamesHTTPResponse(struct Steam_Http_Request &request, class Settings *settings)
+{
+    request.response = GBE_GetOfflineDotaCustomGamesJSON(settings, request.url);
+    request.headers["Content-Type"] = "application/json; charset=utf-8";
+}
+
+std::map<std::string, std::string>::const_iterator GBE_FindHTTPHeaderCaseInsensitive(
+    const std::map<std::string, std::string> &headers,
+    const char *name
+)
+{
+    return std::find_if(headers.begin(), headers.end(), [name](const auto &header) {
+        return common_helpers::str_cmp_insensitive(header.first.c_str(), name);
+    });
 }
 
 void GBE_LogHTTPTrace(const char *scope, HTTPRequestHandle handle, const std::string &url, size_t response_size)
@@ -337,7 +342,7 @@ HTTPRequestHandle Steam_HTTP::CreateHTTPRequest( EHTTPMethod eHTTPRequestMethod,
             request.response = GBE_GetOfflineSDRConfigJSON();
             GBE_LogHTTPTrace("HTTP_SDR_CONFIG_CREATE", request.handle, request.url, request.response.size());
         } else if (GBE_IsDotaCustomGamesHTTPURL(request.url)) {
-            request.response = GBE_GetOfflineDotaCustomGamesJSON(settings, request.url);
+            GBE_SetDotaCustomGamesHTTPResponse(request, settings);
             GBE_LogHTTPTrace("HTTP_DOTA_CUSTOM_CREATE", request.handle, request.url, request.response.size());
         } else {
             GBE_LogHTTPTrace("HTTP_CREATE", request.handle, request.url, request.response.size());
@@ -666,7 +671,7 @@ bool Steam_HTTP::SendHTTPRequest( HTTPRequestHandle hRequest, SteamAPICall_t *pC
         GBE_LogHTTPTrace("HTTP_SDR_CONFIG_SEND", request->handle, request->url, request->response.size());
         GBE_PostNetworkingSocketsConfigUpdated(callbacks, *request);
     } else if (GBE_IsDotaCustomGamesHTTPURL(request->url)) {
-        request->response = GBE_GetOfflineDotaCustomGamesJSON(settings, request->url);
+        GBE_SetDotaCustomGamesHTTPResponse(*request, settings);
         GBE_LogHTTPTrace("HTTP_DOTA_CUSTOM_SEND", request->handle, request->url, request->response.size());
     } else {
         GBE_LogHTTPTrace("HTTP_SEND", request->handle, request->url, request->response.size());
@@ -812,7 +817,7 @@ bool Steam_HTTP::GetHTTPResponseHeaderSize( HTTPRequestHandle hRequest, const ch
     if (!request) {
         return false;
     }
-    const auto hdr = request->headers.find(pchHeaderName);
+    const auto hdr = GBE_FindHTTPHeaderCaseInsensitive(request->headers, pchHeaderName);
     if (request->headers.end() == hdr) return false;
 
     if (unResponseHeaderSize) *unResponseHeaderSize = (uint32)hdr->second.size();
@@ -834,7 +839,7 @@ bool Steam_HTTP::GetHTTPResponseHeaderValue( HTTPRequestHandle hRequest, const c
     if (!request) {
         return false;
     }
-    const auto hdr = request->headers.find(pchHeaderName);
+    const auto hdr = GBE_FindHTTPHeaderCaseInsensitive(request->headers, pchHeaderName);
     if (request->headers.end() == hdr) return false;
     PRINT_DEBUG("  required header buffer size = %zu", hdr->second.size());
 
