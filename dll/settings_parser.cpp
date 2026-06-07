@@ -1334,6 +1334,63 @@ static bool parse_numeric_mod_folder_id(const std::string &folder_name, Publishe
     }
 }
 
+static PublishedFileId_t make_dota_local_addon_mod_id(const std::string &addon_path)
+{
+    constexpr uint64 base_id = 5700000000000000000ull;
+    constexpr uint64 hash_range = 1000000000000000000ull;
+    uint64 hash = 14695981039346656037ull;
+
+    for (unsigned char ch : canonical_path(addon_path)) {
+        hash ^= ch;
+        hash *= 1099511628211ull;
+    }
+
+    PublishedFileId_t id = static_cast<PublishedFileId_t>(base_id + (hash % hash_range));
+    return id == k_PublishedFileIdInvalid ? base_id + 1ull : id;
+}
+
+static bool is_dota_local_addon_folder(const std::string &addon_path)
+{
+    if (addon_path.empty())
+        return false;
+
+    const std::filesystem::path root = std::filesystem::u8path(addon_path);
+    return common_helpers::file_exist(root / "addoninfo.txt")
+        || common_helpers::file_exist(root / "addoninfo.gi")
+        || common_helpers::dir_exist(root / "maps")
+        || common_helpers::dir_exist(root / "scripts");
+}
+
+static Mod_entry make_dota_detected_mod(class Settings *settings_client, PublishedFileId_t mod_id, const std::string &title, const std::string &path, bool local_addon)
+{
+    Mod_entry new_mod;
+    new_mod.id = mod_id;
+    new_mod.title = title;
+    new_mod.path = path;
+    new_mod.fileType = k_EWorkshopFileTypeCommunity;
+    new_mod.description = local_addon
+        ? "auto-detected Dota2 local addon " + title
+        : "auto-detected Dota2 workshop mod #" + title;
+    new_mod.steamIDOwner = settings_client->get_local_steam_id().ConvertToUint64();
+    new_mod.timeCreated = (uint32)three_week_ago_epoch;
+    new_mod.timeUpdated = (uint32)two_week_ago_epoch;
+    new_mod.timeAddedToUserList = (uint32)one_week_ago_epoch;
+    new_mod.visibility = k_ERemoteStoragePublishedFileVisibilityPublic;
+    new_mod.acceptedForUse = true;
+    new_mod.workshopItemURL = local_addon
+        ? "file://" + path
+        : "https://steamcommunity.com/sharedfiles/filedetails/?id=" + title;
+    new_mod.votesUp = (uint32)500;
+    new_mod.votesDown = (uint32)12;
+    new_mod.score = 0.97f;
+
+    const std::vector<std::string> mod_primary_files = Local_Storage::get_filenames_path(new_mod.path);
+    new_mod.primaryFileName = mod_primary_files.empty() ? std::string() : mod_primary_files[0];
+    new_mod.primaryFileSize = (int32)get_file_size_safe(new_mod.primaryFileName, new_mod.path);
+    new_mod.total_files_sizes = new_mod.primaryFileSize;
+    return new_mod;
+}
+
 static void try_detect_dota_workshop_mods(class Settings *settings_client, Settings *settings_server)
 {
     static constexpr AppId_t dota_app_id = 570u;
@@ -1384,27 +1441,7 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
             if (settings_client->isModInstalled(workshop_id))
                 continue;
 
-            Mod_entry new_mod;
-            new_mod.id = workshop_id;
-            new_mod.title = workshop_folder;
-            new_mod.path = candidate_root + PATH_SEPARATOR + workshop_folder;
-            new_mod.fileType = k_EWorkshopFileTypeCommunity;
-            new_mod.description = "auto-detected Dota2 workshop mod #" + workshop_folder;
-            new_mod.steamIDOwner = settings_client->get_local_steam_id().ConvertToUint64();
-            new_mod.timeCreated = (uint32)three_week_ago_epoch;
-            new_mod.timeUpdated = (uint32)two_week_ago_epoch;
-            new_mod.timeAddedToUserList = (uint32)one_week_ago_epoch;
-            new_mod.visibility = k_ERemoteStoragePublishedFileVisibilityPublic;
-            new_mod.acceptedForUse = true;
-            new_mod.workshopItemURL = "https://steamcommunity.com/sharedfiles/filedetails/?id=" + workshop_folder;
-            new_mod.votesUp = (uint32)500;
-            new_mod.votesDown = (uint32)12;
-            new_mod.score = 0.97f;
-
-            const std::vector<std::string> mod_primary_files = Local_Storage::get_filenames_path(new_mod.path);
-            new_mod.primaryFileName = mod_primary_files.empty() ? std::string() : mod_primary_files[0];
-            new_mod.primaryFileSize = (int32)get_file_size_safe(new_mod.primaryFileName, new_mod.path);
-            new_mod.total_files_sizes = new_mod.primaryFileSize;
+            Mod_entry new_mod = make_dota_detected_mod(settings_client, workshop_id, workshop_folder, candidate_root + PATH_SEPARATOR + workshop_folder, false);
 
             settings_client->addMod(new_mod.id, new_mod.title, new_mod.path);
             settings_server->addMod(new_mod.id, new_mod.title, new_mod.path);
@@ -1415,11 +1452,61 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
         }
 
         if (added_any_mod)
-            return;
+            break;
     }
 
+    std::vector<std::string> local_addon_roots;
+    std::set<std::string> seen_addon_roots;
+    for (const std::string &seed_path : seed_paths) {
+        std::string cursor = seed_path;
+        for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
+            const std::string game_addons_root = cursor + PATH_SEPARATOR + "game" + PATH_SEPARATOR + "dota_addons";
+            if (seen_addon_roots.insert(game_addons_root).second)
+                local_addon_roots.push_back(game_addons_root);
+
+            const std::string direct_addons_root = cursor + PATH_SEPARATOR + "dota_addons";
+            if (seen_addon_roots.insert(direct_addons_root).second)
+                local_addon_roots.push_back(direct_addons_root);
+
+            const std::string legacy_addons_root = cursor + PATH_SEPARATOR + "dota" + PATH_SEPARATOR + "addons";
+            if (seen_addon_roots.insert(legacy_addons_root).second)
+                local_addon_roots.push_back(legacy_addons_root);
+
+            cursor = parent_path_or_empty(cursor);
+        }
+    }
+
+    bool added_any_local_addon = false;
+    for (const std::string &addon_root : local_addon_roots) {
+        const std::vector<std::string> addon_folders = Local_Storage::get_folders_path(addon_root);
+        if (addon_folders.empty())
+            continue;
+
+        PRINT_DEBUG("Dota2 local addon autodetect scanning: '%s'", addon_root.c_str());
+        for (const std::string &addon_folder : addon_folders) {
+            const std::string addon_path = addon_root + PATH_SEPARATOR + addon_folder;
+            if (!is_dota_local_addon_folder(addon_path))
+                continue;
+
+            const PublishedFileId_t addon_id = make_dota_local_addon_mod_id(addon_path);
+            if (settings_client->isModInstalled(addon_id))
+                continue;
+
+            Mod_entry new_mod = make_dota_detected_mod(settings_client, addon_id, addon_folder, addon_path, true);
+            settings_client->addMod(new_mod.id, new_mod.title, new_mod.path);
+            settings_server->addMod(new_mod.id, new_mod.title, new_mod.path);
+            settings_client->addModDetails(new_mod.id, new_mod);
+            settings_server->addModDetails(new_mod.id, new_mod);
+            added_any_local_addon = true;
+            PRINT_DEBUG("  auto-detected Dota2 local addon '%s' at '%s' id=%llu", addon_folder.c_str(), new_mod.path.c_str(), new_mod.id);
+        }
+    }
+
+    if (added_any_local_addon)
+        return;
+
     PRINT_DEBUG(
-        "Dota2 workshop autodetect found no workshop/content/570 entries from %zu seed path(s), first='%s'",
+        "Dota2 workshop/local addon autodetect found no entries from %zu seed path(s), first='%s'",
         seed_paths.size(),
         seed_paths.empty() ? "" : seed_paths[0].c_str()
     );

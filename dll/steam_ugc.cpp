@@ -43,6 +43,32 @@ static bool GBE_DotaParseWorkshopId(const std::string &folder_name, PublishedFil
     }
 }
 
+static PublishedFileId_t GBE_DotaLocalAddonPublishedFileId(const std::string &addon_path)
+{
+    constexpr uint64 base_id = 5700000000000000000ull;
+    constexpr uint64 hash_range = 1000000000000000000ull;
+    uint64 hash = 14695981039346656037ull;
+
+    for (unsigned char ch : canonical_path(addon_path)) {
+        hash ^= ch;
+        hash *= 1099511628211ull;
+    }
+
+    PublishedFileId_t id = static_cast<PublishedFileId_t>(base_id + (hash % hash_range));
+    return id == k_PublishedFileIdInvalid ? base_id + 1ull : id;
+}
+
+static bool GBE_DotaIsLocalAddonFolder(const std::string &addon_path)
+{
+    if (addon_path.empty()) return false;
+
+    const std::filesystem::path root = std::filesystem::u8path(addon_path);
+    return common_helpers::file_exist(root / "addoninfo.txt")
+        || common_helpers::file_exist(root / "addoninfo.gi")
+        || common_helpers::dir_exist(root / "maps")
+        || common_helpers::dir_exist(root / "scripts");
+}
+
 static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc_Remote_Storage_Bridge *ugc_bridge)
 {
     if (!settings || !ugc_bridge || settings->get_local_game_id().AppID() != 570u) return;
@@ -63,6 +89,29 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
             cursor = GBE_DotaWorkshopParentPath(cursor);
         }
     }
+
+    std::vector<std::string> local_addon_roots;
+    std::set<std::string> seen_addon_roots;
+    const auto add_local_addon_roots = [&](const std::string &seed_path) {
+        if (seed_path.empty()) return;
+
+        std::string cursor = canonical_path(seed_path);
+        for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
+            const std::string game_addons_root = cursor + PATH_SEPARATOR + "game" + PATH_SEPARATOR + "dota_addons";
+            if (seen_addon_roots.insert(game_addons_root).second) local_addon_roots.push_back(game_addons_root);
+
+            const std::string direct_addons_root = cursor + PATH_SEPARATOR + "dota_addons";
+            if (seen_addon_roots.insert(direct_addons_root).second) local_addon_roots.push_back(direct_addons_root);
+
+            const std::string legacy_addons_root = cursor + PATH_SEPARATOR + "dota" + PATH_SEPARATOR + "addons";
+            if (seen_addon_roots.insert(legacy_addons_root).second) local_addon_roots.push_back(legacy_addons_root);
+
+            cursor = GBE_DotaWorkshopParentPath(cursor);
+        }
+    };
+
+    add_local_addon_roots(app_install_path);
+    add_local_addon_roots(get_full_program_path());
 
     std::string cursor = canonical_path(get_full_program_path());
     for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
@@ -118,7 +167,45 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
         if (added > 0) break;
     }
 
-    PRINT_DEBUG("[DOTA_UGC] workshop ensure complete candidates=%zu added=%zu subscribed=%zu", candidate_roots.size(), added, ugc_bridge->subbed_mods_count());
+    size_t local_added = 0;
+    for (const std::string &addon_root : local_addon_roots) {
+        const std::vector<std::string> addon_folders = Local_Storage::get_folders_path(addon_root);
+        if (addon_folders.empty()) continue;
+
+        PRINT_DEBUG("[DOTA_UGC] scanning local addon root '%s' folders=%zu", addon_root.c_str(), addon_folders.size());
+        for (const std::string &addon_folder : addon_folders) {
+            const std::string addon_path = addon_root + PATH_SEPARATOR + addon_folder;
+            if (!GBE_DotaIsLocalAddonFolder(addon_path)) continue;
+
+            const PublishedFileId_t addon_id = GBE_DotaLocalAddonPublishedFileId(addon_path);
+            if (!settings->isModInstalled(addon_id)) {
+                Mod_entry mod{};
+                mod.id = addon_id;
+                mod.title = addon_folder;
+                mod.path = addon_path;
+                mod.fileType = k_EWorkshopFileTypeCommunity;
+                mod.description = "auto-detected Dota2 local addon " + addon_folder;
+                mod.steamIDOwner = settings->get_local_steam_id().ConvertToUint64();
+                mod.timeCreated = 1554997000u;
+                mod.timeUpdated = 1555601800u;
+                mod.timeAddedToUserList = 1556206600u;
+                mod.visibility = k_ERemoteStoragePublishedFileVisibilityPublic;
+                mod.acceptedForUse = true;
+                mod.workshopItemURL = "file://" + addon_path;
+
+                const std::vector<std::string> primary_files = Local_Storage::get_filenames_path(mod.path);
+                if (!primary_files.empty()) mod.primaryFileName = primary_files[0];
+
+                settings->addMod(mod.id, mod.title, mod.path);
+                settings->addModDetails(mod.id, mod);
+                ++local_added;
+            }
+
+            ugc_bridge->add_subbed_mod(addon_id);
+        }
+    }
+
+    PRINT_DEBUG("[DOTA_UGC] workshop ensure complete candidates=%zu added=%zu local_roots=%zu local_added=%zu subscribed=%zu", candidate_roots.size(), added, local_addon_roots.size(), local_added, ugc_bridge->subbed_mods_count());
 }
 
 UGCQueryHandle_t Steam_UGC::new_ugc_query(EQueryType query_type, bool return_all_subscribed, uint32 page, bool next_cursor, const std::set<PublishedFileId_t> &return_only)
