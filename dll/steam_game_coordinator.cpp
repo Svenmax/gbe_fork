@@ -6825,6 +6825,22 @@ static bool GBE_BuildDotaDestroyLobbyResponsePayload(uint64 request_job_id, std:
     return GBE_BuildDotaJobReplyPayload(GBE_kDotaDestroyLobbyResponse, request_job_id, body, message);
 }
 
+static bool GBE_BuildDotaReadyUpStatusPayload(
+    bool has_request_job,
+    uint64 request_job_id,
+    uint64 lobby_id,
+    uint32 state,
+    bool accepted,
+    std::string &message)
+{
+    std::string body;
+    if (lobby_id != 0)
+        GBE_AppendProtoVarIntField(body, 1u, lobby_id);
+    GBE_AppendProtoVarIntField(body, 4u, state);
+    GBE_AppendProtoVarIntField(body, 6u, accepted ? 1u : 0u);
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7170u, has_request_job, request_job_id, body, message);
+}
+
 static void GBE_BuildDotaPracticeLobbySOObjectData(
     uint64 steam_id,
     uint64 lobby_id,
@@ -13094,6 +13110,30 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return GBE_HandleDotaPracticeLobbyLaunchRequest(false, nullptr, has_source_job, source_job);
     }
 
+    if (request_emsg == 7070u) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Received direct 7070 source_job=%llu body_size=%zu body_prefix=%s",
+            static_cast<unsigned long long>(source_job),
+            body_size,
+            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+        );
+
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+            std::string response_7170;
+            if (GBE_BuildDotaReadyUpStatusPayload(has_source_job, source_job, GBE_local_lobby.lobby_id, 0u, true, response_7170))
+                push_incoming_now(7170u | GBE_kProtoMask, response_7170);
+
+            if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u) {
+                GBE_local_lobby.state = 2u;
+                GBE_local_lobby.game_state = 0u;
+                GBE_PublishSharedDotaLobbyState("7070_ready_up_status");
+                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "7070_ready_up_status");
+            }
+        }
+        return true;
+    }
+
     if (request_emsg == GBE_kDotaPracticeLobbySetDetails) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
@@ -13108,6 +13148,74 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             false,
             nullptr
         );
+    }
+
+    if (request_emsg == 8052u) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Received direct 8052 source_job=%llu body_size=%zu body_prefix=%s",
+            static_cast<unsigned long long>(source_job),
+            body_size,
+            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+        );
+
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+            uint64 lobby_id = 0;
+            uint64 custom_game_id = 0;
+            uint64 start_time = 0;
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), lobby_id);
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2u), custom_game_id);
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 4u), start_time);
+
+            if (lobby_id == 0 || lobby_id == GBE_local_lobby.lobby_id) {
+                if (custom_game_id != 0)
+                    GBE_local_lobby.custom_game.game_id = custom_game_id;
+                if (start_time != 0)
+                    GBE_local_lobby.game_start_time = static_cast<uint32>(start_time);
+                if (GBE_local_lobby.state < 2u)
+                    GBE_local_lobby.state = 2u;
+                GBE_PublishSharedDotaLobbyState("8052_started_loading");
+                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "8052_started_loading");
+            }
+        }
+        return true;
+    }
+
+    if (request_emsg == 8053u) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Received direct 8053 source_job=%llu body_size=%zu body_prefix=%s",
+            static_cast<unsigned long long>(source_job),
+            body_size,
+            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+        );
+
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+            uint64 lobby_id = 0;
+            uint64 loading_duration = 0;
+            uint64 result_code = 0;
+            uint64 signon_states = 0;
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), lobby_id);
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2u), loading_duration);
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 3u), result_code);
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 5u), signon_states);
+
+            if (lobby_id == 0 || lobby_id == GBE_local_lobby.lobby_id) {
+                if (GBE_local_lobby.state < 2u)
+                    GBE_local_lobby.state = 2u;
+                GBE_PublishSharedDotaLobbyState("8053_finished_loading");
+                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "8053_finished_loading");
+                GBE_GC_DebugLog(
+                    "GC_DOTA_LOBBY",
+                    "[LOBBY] Applied direct 8053 lobby_id=%llu loading_duration=%llu result_code=%llu signon_states=%llu",
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    static_cast<unsigned long long>(loading_duration),
+                    static_cast<unsigned long long>(result_code),
+                    static_cast<unsigned long long>(signon_states)
+                );
+            }
+        }
+        return true;
     }
 
     if (request_emsg == GBE_kDotaPracticeLobbySetTeamSlot) {
@@ -18716,6 +18824,34 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         return GBE_HandleDotaPracticeLobbyLaunchRequest(true, &context.outer_session_field_raw, context.has_request_job, context.request_job_id);
     }
 
+    if (context.inner_emsg == 7070u) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Received wrapped 7070 has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
+            context.has_request_job ? 1 : 0,
+            static_cast<unsigned long long>(context.request_job_id),
+            context.outer_session_field_raw.size(),
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
+        );
+
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+            std::string response_7170;
+            if (GBE_BuildDotaReadyUpStatusPayload(context.has_request_job, context.request_job_id, GBE_local_lobby.lobby_id, 0u, true, response_7170)) {
+                std::string wrapped_7170;
+                if (GBE_BuildWrappedDotaReplayMessage(response_7170, context.outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_7170))
+                    push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_7170);
+            }
+
+            if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u) {
+                GBE_local_lobby.state = 2u;
+                GBE_local_lobby.game_state = 0u;
+                GBE_PublishSharedDotaLobbyState("7070_wrapped_ready_up_status");
+                GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, "7070_wrapped_ready_up_status");
+            }
+        }
+        return true;
+    }
+
     if (context.inner_emsg == GBE_kDotaPracticeLobbyKick) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
@@ -18784,6 +18920,80 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
             true,
             &context.outer_session_field_raw
         );
+    }
+
+    if (context.inner_emsg == 8052u) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Received wrapped 8052 has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
+            context.has_request_job ? 1 : 0,
+            static_cast<unsigned long long>(context.request_job_id),
+            context.outer_session_field_raw.size(),
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
+        );
+
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+            const uint8 *body = reinterpret_cast<const uint8 *>(context.inner_body_raw.data());
+            const size_t body_size = context.inner_body_raw.size();
+            uint64 lobby_id = 0;
+            uint64 custom_game_id = 0;
+            uint64 start_time = 0;
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), lobby_id);
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2u), custom_game_id);
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 4u), start_time);
+
+            if (lobby_id == 0 || lobby_id == GBE_local_lobby.lobby_id) {
+                if (custom_game_id != 0)
+                    GBE_local_lobby.custom_game.game_id = custom_game_id;
+                if (start_time != 0)
+                    GBE_local_lobby.game_start_time = static_cast<uint32>(start_time);
+                if (GBE_local_lobby.state < 2u)
+                    GBE_local_lobby.state = 2u;
+                GBE_PublishSharedDotaLobbyState("8052_wrapped_started_loading");
+                GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, "8052_wrapped_started_loading");
+            }
+        }
+        return true;
+    }
+
+    if (context.inner_emsg == 8053u) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Received wrapped 8053 has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
+            context.has_request_job ? 1 : 0,
+            static_cast<unsigned long long>(context.request_job_id),
+            context.outer_session_field_raw.size(),
+            GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
+        );
+
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+            const uint8 *body = reinterpret_cast<const uint8 *>(context.inner_body_raw.data());
+            const size_t body_size = context.inner_body_raw.size();
+            uint64 lobby_id = 0;
+            uint64 loading_duration = 0;
+            uint64 result_code = 0;
+            uint64 signon_states = 0;
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), lobby_id);
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2u), loading_duration);
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 3u), result_code);
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 5u), signon_states);
+
+            if (lobby_id == 0 || lobby_id == GBE_local_lobby.lobby_id) {
+                if (GBE_local_lobby.state < 2u)
+                    GBE_local_lobby.state = 2u;
+                GBE_PublishSharedDotaLobbyState("8053_wrapped_finished_loading");
+                GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, "8053_wrapped_finished_loading");
+                GBE_GC_DebugLog(
+                    "GC_DOTA_LOBBY",
+                    "[LOBBY] Applied wrapped 8053 lobby_id=%llu loading_duration=%llu result_code=%llu signon_states=%llu",
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    static_cast<unsigned long long>(loading_duration),
+                    static_cast<unsigned long long>(result_code),
+                    static_cast<unsigned long long>(signon_states)
+                );
+            }
+        }
+        return true;
     }
 
     if (context.inner_emsg == GBE_kDotaLeaveChatChannel) {
