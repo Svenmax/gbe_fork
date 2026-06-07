@@ -84,6 +84,10 @@ static constexpr uint32 GBE_kDotaPopup = 7102u;
 static constexpr uint32 GBE_kDotaFriendPracticeLobbyListRequest = 7111u;
 static constexpr uint32 GBE_kDotaFriendPracticeLobbyListResponse = 7112u;
 static constexpr uint32 GBE_kDotaPracticeLobbyJoinResponse = 7113u;
+static constexpr uint32 GBE_kDotaJoinableCustomGameModesRequest = 7466u;
+static constexpr uint32 GBE_kDotaJoinableCustomGameModesResponse = 7467u;
+static constexpr uint32 GBE_kDotaJoinableCustomLobbiesRequest = 7468u;
+static constexpr uint32 GBE_kDotaJoinableCustomLobbiesResponse = 7469u;
 static constexpr uint32 GBE_kDotaLeaveChatChannel = 7272u;
 static constexpr uint32 GBE_kDotaChatMessage = 7273u;
 static constexpr uint32 GBE_kDotaPracticeLobbyJoinBroadcastChannel = 7149u;
@@ -15096,6 +15100,113 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             // CMsgPlayerConductScorecardRequest -> suppress (don't reply)
             // Not replying prevents misleading conduct scorecard popup.
             GBE_GC_DebugLog("GC_DOTA_DIRECT", "conduct scorecard request suppressed source_job=%llu", static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case GBE_kDotaJoinableCustomGameModesRequest: {
+            const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("7466_joinable_custom_modes");
+            std::vector<uint64> seen_game_ids;
+            std::string response_body;
+
+            auto append_mode = [&](uint64 custom_game_id, uint32 member_count) {
+                if (custom_game_id == 0ull)
+                    return;
+                if (std::find(seen_game_ids.begin(), seen_game_ids.end(), custom_game_id) != seen_game_ids.end())
+                    return;
+
+                std::string entry;
+                GBE_AppendProtoVarIntField(entry, 1u, custom_game_id);
+                GBE_AppendProtoVarIntField(entry, 2u, 1u);
+                GBE_AppendProtoVarIntField(entry, 3u, member_count == 0u ? 1u : member_count);
+                GBE_AppendProtoBytesField(response_body, 1u, entry);
+                seen_game_ids.push_back(custom_game_id);
+            };
+
+            for (const GBE_LocalLobby &snapshot : snapshots) {
+                if (!snapshot.active)
+                    continue;
+                append_mode(snapshot.custom_game.game_id, static_cast<uint32>(snapshot.members.size()));
+            }
+            if (GBE_local_lobby.active)
+                append_mode(GBE_local_lobby.custom_game.game_id, static_cast<uint32>(GBE_local_lobby.members.size()));
+            if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.active)
+                append_mode(GBE_shared_dota_lobby_state.custom_game.game_id, static_cast<uint32>(GBE_shared_dota_lobby_state.members.size()));
+
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(
+                GBE_kDotaJoinableCustomGameModesResponse,
+                has_source_job,
+                source_job,
+                response_body,
+                response_message);
+            push_incoming_now(GBE_kDotaJoinableCustomGameModesResponse | GBE_kProtoMask, response_message);
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "joinable custom game modes -> response modes=%zu source_job=%llu",
+                seen_game_ids.size(),
+                static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case GBE_kDotaJoinableCustomLobbiesRequest: {
+            uint64 requested_custom_game_id = 0ull;
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2), requested_custom_game_id);
+
+            std::vector<GBE_LocalLobby> lobbies = GBE_GetDotaGenericLobbySnapshots("7468_joinable_custom_lobbies");
+            if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0ull)
+                lobbies.push_back(GBE_local_lobby);
+
+            std::vector<uint64> seen_lobby_ids;
+            std::string response_body;
+            for (const GBE_LocalLobby &lobby : lobbies) {
+                if (!lobby.active || lobby.lobby_id == 0ull || lobby.custom_game.game_id == 0ull)
+                    continue;
+                if (requested_custom_game_id != 0ull && lobby.custom_game.game_id != requested_custom_game_id)
+                    continue;
+                if (std::find(seen_lobby_ids.begin(), seen_lobby_ids.end(), lobby.lobby_id) != seen_lobby_ids.end())
+                    continue;
+
+                const uint32 member_count = static_cast<uint32>(lobby.members.empty() ? 1u : lobby.members.size());
+                const uint32 max_players = lobby.custom_game.max_players != 0u ? lobby.custom_game.max_players : 10u;
+                std::string entry;
+                GBE_AppendProtoFixed64Field(entry, 1u, lobby.lobby_id);
+                GBE_AppendProtoVarIntField(entry, 2u, lobby.custom_game.game_id);
+                GBE_AppendProtoBytesField(entry, 3u, lobby.room_name.empty() ? std::string("Lobby") : lobby.room_name);
+                GBE_AppendProtoVarIntField(entry, 4u, member_count);
+                GBE_AppendProtoVarIntField(entry, 5u, lobby.owner_account_id != 0u ? lobby.owner_account_id : settings->get_local_steam_id().GetAccountID());
+                GBE_AppendProtoBytesField(entry, 6u, lobby.owner_name.empty() ? std::string(settings->get_local_name()) : lobby.owner_name);
+                if (!lobby.custom_game.map_name.empty())
+                    GBE_AppendProtoBytesField(entry, 7u, lobby.custom_game.map_name);
+                GBE_AppendProtoVarIntField(entry, 8u, max_players);
+                GBE_AppendProtoVarIntField(entry, 9u, lobby.server_region);
+                GBE_AppendProtoVarIntField(entry, 11u, lobby.pass_key.empty() ? 0u : 1u);
+                if (!lobby.lan_host_ping_location.empty())
+                    GBE_AppendProtoBytesField(entry, 12u, lobby.lan_host_ping_location);
+                GBE_AppendProtoVarIntField(entry, 13u, static_cast<uint32>(std::time(nullptr)));
+                if (lobby.custom_game.timestamp != 0u)
+                    GBE_AppendProtoVarIntField(entry, 14u, lobby.custom_game.timestamp);
+                if (lobby.custom_game.crc != 0ull)
+                    GBE_AppendProtoFixed64Field(entry, 15u, lobby.custom_game.crc);
+                if (lobby.custom_game.min_players != 0u)
+                    GBE_AppendProtoVarIntField(entry, 16u, lobby.custom_game.min_players);
+                GBE_AppendProtoVarIntField(entry, 17u, lobby.custom_game.penalties ? 1u : 0u);
+
+                GBE_AppendProtoBytesField(response_body, 1u, entry);
+                seen_lobby_ids.push_back(lobby.lobby_id);
+            }
+
+            std::string response_message;
+            GBE_BuildDotaJobReplyOrZeroHeaderPayload(
+                GBE_kDotaJoinableCustomLobbiesResponse,
+                has_source_job,
+                source_job,
+                response_body,
+                response_message);
+            push_incoming_now(GBE_kDotaJoinableCustomLobbiesResponse | GBE_kProtoMask, response_message);
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "joinable custom lobbies -> response requested_game_id=%llu lobbies=%zu source_job=%llu",
+                static_cast<unsigned long long>(requested_custom_game_id),
+                seen_lobby_ids.size(),
+                static_cast<unsigned long long>(source_job));
             return true;
         }
         case GBE_kDotaFindTopSourceTVGames: {
