@@ -6841,6 +6841,15 @@ static bool GBE_BuildDotaReadyUpStatusPayload(
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7170u, has_request_job, request_job_id, body, message);
 }
 
+static bool GBE_HasDotaCustomGameDetails(const GBE_DotaCustomGameDetails &custom_game)
+{
+    return !custom_game.mode.empty() ||
+        !custom_game.map_name.empty() ||
+        custom_game.game_id != 0ull ||
+        custom_game.crc != 0ull ||
+        custom_game.timestamp != 0u;
+}
+
 static void GBE_BuildDotaPracticeLobbySOObjectData(
     uint64 steam_id,
     uint64 lobby_id,
@@ -13119,7 +13128,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_FormatHexPrefix(body, body_size, 48).c_str()
         );
 
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
             std::string response_7170;
             if (GBE_BuildDotaReadyUpStatusPayload(has_source_job, source_job, GBE_local_lobby.lobby_id, 0u, true, response_7170))
                 push_incoming_now(7170u | GBE_kProtoMask, response_7170);
@@ -13159,7 +13168,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_FormatHexPrefix(body, body_size, 48).c_str()
         );
 
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
             uint64 lobby_id = 0;
             uint64 custom_game_id = 0;
             uint64 start_time = 0;
@@ -13190,7 +13199,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_FormatHexPrefix(body, body_size, 48).c_str()
         );
 
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
             uint64 lobby_id = 0;
             uint64 loading_duration = 0;
             uint64 result_code = 0;
@@ -18834,7 +18843,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
         );
 
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
             std::string response_7170;
             if (GBE_BuildDotaReadyUpStatusPayload(context.has_request_job, context.request_job_id, GBE_local_lobby.lobby_id, 0u, true, response_7170)) {
                 std::string wrapped_7170;
@@ -18932,7 +18941,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
         );
 
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
             const uint8 *body = reinterpret_cast<const uint8 *>(context.inner_body_raw.data());
             const size_t body_size = context.inner_body_raw.size();
             uint64 lobby_id = 0;
@@ -18966,7 +18975,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
         );
 
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
             const uint8 *body = reinterpret_cast<const uint8 *>(context.inner_body_raw.data());
             const size_t body_size = context.inner_body_raw.size();
             uint64 lobby_id = 0;
