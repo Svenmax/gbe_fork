@@ -1381,12 +1381,70 @@ static std::string dota_local_addon_map_name(const std::string &addon_path, cons
     return fallback;
 }
 
+static std::string dota_extract_addoninfo_value(const std::string &line, const std::string &key)
+{
+    const std::string lower_line = common_helpers::to_lower(line);
+    const size_t key_pos = lower_line.find(key);
+    if (key_pos == std::string::npos)
+        return {};
+
+    std::vector<std::string> quoted_tokens;
+    for (size_t pos = 0; pos < line.size(); ) {
+        const size_t first_quote = line.find('"', pos);
+        if (first_quote == std::string::npos)
+            break;
+        const size_t second_quote = line.find('"', first_quote + 1);
+        if (second_quote == std::string::npos)
+            break;
+        quoted_tokens.push_back(line.substr(first_quote + 1, second_quote - first_quote - 1));
+        pos = second_quote + 1;
+    }
+    if (quoted_tokens.size() >= 2 && common_helpers::to_lower(quoted_tokens[0]) == key)
+        return quoted_tokens[1];
+    if (!quoted_tokens.empty() && key_pos < line.find('"')) {
+        return quoted_tokens[0];
+    }
+
+    size_t value_pos = line.find('=', key_pos + key.size());
+    if (value_pos == std::string::npos)
+        value_pos = key_pos + key.size();
+    std::string value = common_helpers::string_strip(line.substr(value_pos + 1));
+    if (!value.empty() && value.front() == '"')
+        value.erase(value.begin());
+    if (!value.empty() && value.back() == '"')
+        value.pop_back();
+    return common_helpers::string_strip(value);
+}
+
+static std::string dota_local_addon_display_name(const std::string &addon_path, const std::string &fallback)
+{
+    static constexpr const char *addoninfo_files[] = { "addoninfo.txt", "addoninfo.gi" };
+    static constexpr const char *title_keys[] = { "addontitle", "addon_title", "title", "name" };
+
+    for (const char *addoninfo_file : addoninfo_files) {
+        std::ifstream input(std::filesystem::u8path(addon_path) / addoninfo_file);
+        if (!input.is_open())
+            continue;
+
+        for (std::string line; std::getline(input, line); ) {
+            for (const char *title_key : title_keys) {
+                std::string value = dota_extract_addoninfo_value(line, title_key);
+                if (!value.empty())
+                    return value;
+            }
+        }
+    }
+
+    return fallback;
+}
+
 static Mod_entry make_dota_detected_mod(class Settings *settings_client, PublishedFileId_t mod_id, const std::string &title, const std::string &path, bool local_addon)
 {
     const std::string map_name = local_addon ? dota_local_addon_map_name(path, title) : std::string();
+    const std::string display_name = local_addon ? dota_local_addon_display_name(path, title) : title;
     Mod_entry new_mod;
     new_mod.id = mod_id;
-    new_mod.title = title;
+    new_mod.title = display_name;
     new_mod.path = path;
     new_mod.fileType = k_EWorkshopFileTypeCommunity;
     new_mod.description = local_addon
@@ -1407,6 +1465,7 @@ static Mod_entry make_dota_detected_mod(class Settings *settings_client, Publish
     if (local_addon) {
         nlohmann::json metadata = nlohmann::json::object();
         metadata["addon_name"] = title;
+        metadata["display_name"] = display_name;
         metadata["map_name"] = map_name;
         metadata["launch_command"] = "dota_launch_custom_game " + title + " " + map_name;
         new_mod.metadata = metadata.dump();
@@ -1497,6 +1556,10 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
             if (seen_addon_roots.insert(direct_addons_root).second)
                 local_addon_roots.push_back(direct_addons_root);
 
+            const std::string content_addons_root = cursor + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "dota_addons";
+            if (seen_addon_roots.insert(content_addons_root).second)
+                local_addon_roots.push_back(content_addons_root);
+
             const std::string legacy_addons_root = cursor + PATH_SEPARATOR + "dota" + PATH_SEPARATOR + "addons";
             if (seen_addon_roots.insert(legacy_addons_root).second)
                 local_addon_roots.push_back(legacy_addons_root);
@@ -1527,7 +1590,7 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
             settings_client->addModDetails(new_mod.id, new_mod);
             settings_server->addModDetails(new_mod.id, new_mod);
             added_any_local_addon = true;
-            PRINT_DEBUG("  auto-detected Dota2 local addon '%s' at '%s' id=%llu", addon_folder.c_str(), new_mod.path.c_str(), new_mod.id);
+            PRINT_DEBUG("  auto-detected Dota2 local addon '%s' map='%s' at '%s' id=%llu", addon_folder.c_str(), dota_local_addon_map_name(addon_path, addon_folder).c_str(), new_mod.path.c_str(), new_mod.id);
         }
     }
 
