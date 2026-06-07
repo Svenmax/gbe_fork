@@ -16,8 +16,13 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/steam_http.h"
+#include "dll/dll.h"
 
+#include <array>
+#include <cctype>
 #include <cstdio>
+#include <ctime>
+#include <unordered_set>
 
 #include "steam/isteamnetworkingsocketsserialized.h"
 
@@ -71,6 +76,36 @@ std::string GBE_DotaModMetadataValue(const Mod_entry &mod, const char *key, cons
     } catch (...) {
         return fallback;
     }
+}
+
+uint64 GBE_ParseDotaCustomGameIdFromHTTPURL(const std::string &url)
+{
+    const std::array<std::string, 3> keys = {
+        "custom_game_id=",
+        "custom_game_mode=",
+        "game_id=",
+    };
+
+    for (const std::string &key : keys) {
+        const size_t key_pos = url.find(key);
+        if (key_pos == std::string::npos)
+            continue;
+
+        const size_t value_begin = key_pos + key.size();
+        size_t value_end = value_begin;
+        while (value_end < url.size() && std::isdigit(static_cast<unsigned char>(url[value_end])))
+            ++value_end;
+
+        if (value_end > value_begin) {
+            try {
+                return static_cast<uint64>(std::stoull(url.substr(value_begin, value_end - value_begin)));
+            } catch (...) {
+                return 0ull;
+            }
+        }
+    }
+
+    return 0ull;
 }
 
 std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const std::string &url)
@@ -142,8 +177,61 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
         return response.dump();
     }
 
+    const uint64 requested_custom_game_id = GBE_ParseDotaCustomGameIdFromHTTPURL(url);
     nlohmann::json response = nlohmann::json::object();
     response["lobbies"] = nlohmann::json::array();
+
+    Steam_Client *steam_client = get_steam_client();
+    if (!steam_client || !steam_client->steam_game_coordinator)
+        return response.dump();
+
+    auto lobbies = steam_client->steam_game_coordinator->GBE_GetDotaGenericLobbySnapshots("http_joinable_custom_lobbies");
+    std::unordered_set<uint64> seen_lobby_ids;
+
+    auto append_lobby = [&](const auto &lobby) {
+        if (!lobby.active || lobby.lobby_id == 0ull || lobby.custom_game.game_id == 0ull)
+            return;
+        if (requested_custom_game_id != 0ull && requested_custom_game_id != lobby.custom_game.game_id)
+            return;
+        if (!seen_lobby_ids.insert(lobby.lobby_id).second)
+            return;
+
+        const uint32 member_count = static_cast<uint32>(lobby.members.empty() ? 1u : lobby.members.size());
+        const uint32 max_players = lobby.custom_game.max_players != 0u ? lobby.custom_game.max_players : 10u;
+        const uint32 min_players = lobby.custom_game.min_players != 0u ? lobby.custom_game.min_players : 1u;
+        const uint32 leader_account_id = lobby.owner_account_id != 0u
+            ? lobby.owner_account_id
+            : (settings ? settings->get_local_steam_id().GetAccountID() : 0u);
+        const std::string leader_name = lobby.owner_name.empty()
+            ? (settings ? std::string(settings->get_local_name()) : std::string("Lobby Host"))
+            : lobby.owner_name;
+        const std::string room_name = lobby.room_name.empty() ? std::string("Lobby") : lobby.room_name;
+        const std::string custom_map_name = lobby.custom_game.map_name.empty() ? lobby.custom_game.mode : lobby.custom_game.map_name;
+        const uint32 lobby_creation_time = lobby.game_start_time != 0u ? lobby.game_start_time : static_cast<uint32>(std::time(nullptr));
+
+        nlohmann::json item = nlohmann::json::object();
+        item["lobby_id"] = std::to_string(lobby.lobby_id);
+        item["custom_game_id"] = std::to_string(lobby.custom_game.game_id);
+        item["member_count"] = member_count;
+        item["leader_account_id"] = leader_account_id;
+        item["leader_name"] = leader_name;
+        item["custom_map_name"] = custom_map_name;
+        item["max_player_count"] = max_players;
+        item["server_region"] = lobby.server_region;
+        item["has_pass_key"] = !lobby.pass_key.empty();
+        item["lobby_creation_time"] = lobby_creation_time;
+        item["custom_game_timestamp"] = lobby.custom_game.timestamp;
+        item["custom_game_crc"] = std::to_string(lobby.custom_game.crc);
+        item["min_player_count"] = min_players;
+        item["penalties_enabled"] = lobby.custom_game.penalties;
+        item["name"] = room_name;
+        item["custom_game_mode"] = lobby.custom_game.mode;
+        item["lan_host_ping_location"] = lobby.lan_host_ping_location;
+        response["lobbies"].push_back(std::move(item));
+    };
+
+    for (const auto &lobby : lobbies)
+        append_lobby(lobby);
 
     return response.dump();
 }
