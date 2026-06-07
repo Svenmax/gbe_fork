@@ -18,6 +18,109 @@
 #include "dll/steam_ugc.h"
 #include "dll/dll.h"
 
+static std::string GBE_DotaWorkshopParentPath(const std::string &path)
+{
+    if (path.empty()) return {};
+
+    std::filesystem::path fs_path = std::filesystem::u8path(path);
+    std::filesystem::path parent = fs_path.parent_path();
+    if (parent.empty() || parent == fs_path) return {};
+    return canonical_path(parent.u8string());
+}
+
+static bool GBE_DotaParseWorkshopId(const std::string &folder_name, PublishedFileId_t &workshop_id)
+{
+    if (folder_name.empty()) return false;
+
+    try {
+        size_t consumed = 0;
+        const unsigned long long parsed = std::stoull(folder_name, &consumed, 10);
+        if (consumed != folder_name.size() || parsed == 0ull) return false;
+        workshop_id = static_cast<PublishedFileId_t>(parsed);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc_Remote_Storage_Bridge *ugc_bridge)
+{
+    if (!settings || !ugc_bridge || settings->get_local_game_id().AppID() != 570u) return;
+
+    std::vector<std::string> candidate_roots;
+    std::set<std::string> seen_roots;
+
+    std::string app_install_path;
+    if (settings->getAppInstallPath(570u, app_install_path) && !app_install_path.empty()) {
+        std::string cursor = canonical_path(app_install_path);
+        for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
+            const std::string root = cursor + PATH_SEPARATOR + "steamapps" + PATH_SEPARATOR + "workshop" + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "570";
+            if (seen_roots.insert(root).second) candidate_roots.push_back(root);
+
+            const std::string adjacent_root = cursor + PATH_SEPARATOR + "workshop" + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "570";
+            if (seen_roots.insert(adjacent_root).second) candidate_roots.push_back(adjacent_root);
+
+            cursor = GBE_DotaWorkshopParentPath(cursor);
+        }
+    }
+
+    std::string cursor = canonical_path(get_full_program_path());
+    for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
+        const std::string root = cursor + PATH_SEPARATOR + "steamapps" + PATH_SEPARATOR + "workshop" + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "570";
+        if (seen_roots.insert(root).second) candidate_roots.push_back(root);
+
+        const std::string adjacent_root = cursor + PATH_SEPARATOR + "workshop" + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "570";
+        if (seen_roots.insert(adjacent_root).second) candidate_roots.push_back(adjacent_root);
+
+        cursor = GBE_DotaWorkshopParentPath(cursor);
+    }
+
+    size_t added = 0;
+    for (const std::string &candidate_root : candidate_roots) {
+        const std::vector<std::string> workshop_folders = Local_Storage::get_folders_path(candidate_root);
+        if (workshop_folders.empty()) continue;
+
+        PRINT_DEBUG("[DOTA_UGC] scanning workshop root '%s' folders=%zu", candidate_root.c_str(), workshop_folders.size());
+        for (const std::string &workshop_folder : workshop_folders) {
+            PublishedFileId_t workshop_id = 0;
+            if (!GBE_DotaParseWorkshopId(workshop_folder, workshop_id)) continue;
+
+            const std::string mod_path = candidate_root + PATH_SEPARATOR + workshop_folder;
+            if (!settings->isModInstalled(workshop_id)) {
+                Mod_entry mod{};
+                mod.id = workshop_id;
+                mod.title = workshop_folder;
+                mod.path = mod_path;
+                mod.fileType = k_EWorkshopFileTypeCommunity;
+                mod.description = "auto-detected Dota2 workshop mod #" + workshop_folder;
+                mod.steamIDOwner = settings->get_local_steam_id().ConvertToUint64();
+                mod.timeCreated = 1554997000u;
+                mod.timeUpdated = 1555601800u;
+                mod.timeAddedToUserList = 1556206600u;
+                mod.visibility = k_ERemoteStoragePublishedFileVisibilityPublic;
+                mod.acceptedForUse = true;
+                mod.workshopItemURL = "https://steamcommunity.com/sharedfiles/filedetails/?id=" + workshop_folder;
+                mod.votesUp = 500u;
+                mod.votesDown = 12u;
+                mod.score = 0.97f;
+
+                const std::vector<std::string> primary_files = Local_Storage::get_filenames_path(mod.path);
+                if (!primary_files.empty()) mod.primaryFileName = primary_files[0];
+
+                settings->addMod(mod.id, mod.title, mod.path);
+                settings->addModDetails(mod.id, mod);
+                ++added;
+            }
+
+            ugc_bridge->add_subbed_mod(workshop_id);
+        }
+
+        if (added > 0) break;
+    }
+
+    PRINT_DEBUG("[DOTA_UGC] workshop ensure complete candidates=%zu added=%zu subscribed=%zu", candidate_roots.size(), added, ugc_bridge->subbed_mods_count());
+}
+
 UGCQueryHandle_t Steam_UGC::new_ugc_query(EQueryType query_type, bool return_all_subscribed, uint32 page, bool next_cursor, const std::set<PublishedFileId_t> &return_only)
 {
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
@@ -237,6 +340,8 @@ Steam_UGC::Steam_UGC(class Settings *settings, class Ugc_Remote_Storage_Bridge *
     this->local_storage = local_storage;
     this->callbacks = callbacks;
     this->callback_results = callback_results;
+
+    GBE_DotaEnsureWorkshopModsForUGC(settings, ugc_bridge);
 
     read_ugc_favorites();
 }
