@@ -39,6 +39,19 @@ struct GBE_DotaLobbyMemberState
     uint32 leaver_status{};  // 0=NONE, 1=DISCONNECTED, 5=ABANDONED, etc.
 };
 
+struct GBE_DotaCustomGameDetails
+{
+    std::string mode;
+    std::string map_name;
+    uint32 difficulty{};
+    uint64 game_id{};
+    uint32 min_players{};
+    uint32 max_players{};
+    uint64 crc{};
+    uint32 timestamp{};
+    bool penalties{};
+};
+
 class Steam_Game_Coordinator :
 public ISteamGameCoordinator
 {
@@ -119,6 +132,7 @@ public ISteamGameCoordinator
         uint32 bot_difficulty_dire{};
         uint64 bot_radiant{};
         uint64 bot_dire{};
+        GBE_DotaCustomGameDetails custom_game;
         uint32 state{};
         uint32 game_state{};
         uint64 match_id{};
