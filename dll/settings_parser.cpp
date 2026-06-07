@@ -1336,8 +1336,8 @@ static bool parse_numeric_mod_folder_id(const std::string &folder_name, Publishe
 
 static PublishedFileId_t make_dota_local_addon_mod_id(const std::string &addon_path)
 {
-    constexpr uint64 base_id = 5700000000000000000ull;
-    constexpr uint64 hash_range = 1000000000000000000ull;
+    constexpr uint64 base_id = 570000000ull;
+    constexpr uint64 hash_range = 3000000000ull;
     uint64 hash = 14695981039346656037ull;
 
     for (unsigned char ch : canonical_path(addon_path)) {

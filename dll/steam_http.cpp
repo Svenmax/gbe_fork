@@ -56,13 +56,23 @@ bool GBE_IsDotaCustomGamesHTTPURL(const std::string &url)
         || url.find("Lobbies") != std::string::npos;
 }
 
-std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings)
+bool GBE_IsDotaPopularGamesHTTPURL(const std::string &url)
+{
+    return url.find("/ICustomGames/GetPopularGames/") != std::string::npos;
+}
+
+std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const std::string &url)
 {
     nlohmann::json custom_games = nlohmann::json::array();
 
     if (settings) {
         for (PublishedFileId_t mod_id : settings->modSet()) {
             Mod_entry mod = settings->getMod(mod_id);
+            if (GBE_IsDotaPopularGamesHTTPURL(url)) {
+                custom_games.push_back({{"id", std::to_string(mod.id)}});
+                continue;
+            }
+
             nlohmann::json item = nlohmann::json::object();
             item["id"] = mod.id;
             item["publishedfileid"] = mod.id;
@@ -83,6 +93,16 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings)
             item["success"] = true;
             custom_games.push_back(std::move(item));
         }
+    }
+
+    if (GBE_IsDotaPopularGamesHTTPURL(url)) {
+        nlohmann::json response = nlohmann::json::object();
+        response["result"] = {
+            {"custom_games", custom_games},
+            {"item_count", custom_games.size()},
+            {"success", true}
+        };
+        return response.dump();
     }
 
     nlohmann::json response = nlohmann::json::object();
@@ -280,7 +300,7 @@ HTTPRequestHandle Steam_HTTP::CreateHTTPRequest( EHTTPMethod eHTTPRequestMethod,
             request.response = GBE_GetOfflineSDRConfigJSON();
             GBE_LogHTTPTrace("HTTP_SDR_CONFIG_CREATE", request.handle, request.url, request.response.size());
         } else if (GBE_IsDotaCustomGamesHTTPURL(request.url)) {
-            request.response = GBE_GetOfflineDotaCustomGamesJSON(settings);
+            request.response = GBE_GetOfflineDotaCustomGamesJSON(settings, request.url);
             GBE_LogHTTPTrace("HTTP_DOTA_CUSTOM_CREATE", request.handle, request.url, request.response.size());
         } else {
             GBE_LogHTTPTrace("HTTP_CREATE", request.handle, request.url, request.response.size());
@@ -609,7 +629,7 @@ bool Steam_HTTP::SendHTTPRequest( HTTPRequestHandle hRequest, SteamAPICall_t *pC
         GBE_LogHTTPTrace("HTTP_SDR_CONFIG_SEND", request->handle, request->url, request->response.size());
         GBE_PostNetworkingSocketsConfigUpdated(callbacks, *request);
     } else if (GBE_IsDotaCustomGamesHTTPURL(request->url)) {
-        request->response = GBE_GetOfflineDotaCustomGamesJSON(settings);
+        request->response = GBE_GetOfflineDotaCustomGamesJSON(settings, request->url);
         GBE_LogHTTPTrace("HTTP_DOTA_CUSTOM_SEND", request->handle, request->url, request->response.size());
     } else {
         GBE_LogHTTPTrace("HTTP_SEND", request->handle, request->url, request->response.size());

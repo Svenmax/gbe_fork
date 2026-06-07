@@ -45,8 +45,8 @@ static bool GBE_DotaParseWorkshopId(const std::string &folder_name, PublishedFil
 
 static PublishedFileId_t GBE_DotaLocalAddonPublishedFileId(const std::string &addon_path)
 {
-    constexpr uint64 base_id = 5700000000000000000ull;
-    constexpr uint64 hash_range = 1000000000000000000ull;
+    constexpr uint64 base_id = 570000000ull;
+    constexpr uint64 hash_range = 3000000000ull;
     uint64 hash = 14695981039346656037ull;
 
     for (unsigned char ch : canonical_path(addon_path)) {
