@@ -1439,8 +1439,11 @@ static void parse_mods_folder(class Settings *settings_client, Settings *setting
         try_detect_mods_folder(settings_client, settings_server, mods_folder);
     }
 
-    if (settings_client->modSet().empty() && settings_client->get_local_game_id().AppID() == 570u)
+    if (settings_client->get_local_game_id().AppID() == 570u) {
+        PRINT_DEBUG("Dota2 workshop autodetect pre-scan mod count: %zu", settings_client->modSet().size());
         try_detect_dota_workshop_mods(settings_client, settings_server);
+        PRINT_DEBUG("Dota2 workshop autodetect post-scan mod count: %zu", settings_client->modSet().size());
+    }
 
 }
 
