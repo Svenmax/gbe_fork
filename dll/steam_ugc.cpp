@@ -315,7 +315,7 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
 
             const std::string mod_path = candidate_root + PATH_SEPARATOR + workshop_folder;
             if (!settings->isModInstalled(workshop_id)) {
-                const std::string map_name = GBE_DotaWorkshopModMapName(mod_path, std::string());
+                const std::string map_name = GBE_DotaWorkshopModMapName(mod_path, "dota");
                 Mod_entry mod{};
                 mod.id = workshop_id;
                 mod.title = workshop_folder;

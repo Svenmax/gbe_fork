@@ -1563,7 +1563,7 @@ static std::string dota_local_addon_display_name(const std::string &addon_path, 
 
 static Mod_entry make_dota_detected_mod(class Settings *settings_client, PublishedFileId_t mod_id, const std::string &title, const std::string &path, bool local_addon)
 {
-    const std::string map_name = local_addon ? dota_local_addon_map_name(path, title) : dota_workshop_mod_map_name(path, std::string());
+    const std::string map_name = local_addon ? dota_local_addon_map_name(path, title) : dota_workshop_mod_map_name(path, "dota");
     const std::string display_name = local_addon ? dota_local_addon_display_name(path, title) : title;
     Mod_entry new_mod;
     new_mod.id = mod_id;
