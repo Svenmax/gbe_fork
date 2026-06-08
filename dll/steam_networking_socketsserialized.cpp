@@ -87,7 +87,9 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_SEND_RENDEZVOUS", settings->get_local_steam_id().ConvertToUint64(), steamIDRemote.ConvertToUint64(), unConnectionIDSrc, cbRendezvous);
+    const uint64 local_id = settings->get_local_steam_id().ConvertToUint64();
+    const uint64 remote_id = steamIDRemote.ConvertToUint64();
+    GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_SEND_RENDEZVOUS", local_id, remote_id, unConnectionIDSrc, cbRendezvous);
 
     // --- Dota 2 LAN reconnect / initial connect interception ---
     // When Dota tries to connect via P2P relay using the server's SteamID,
@@ -106,36 +108,72 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
     //   4. One-shot per connection_id to avoid firing repeatedly
     {
         GBE_DotaReconnectContext ctx{};
-        if (GBE_GetDotaReconnectContext(&ctx) &&
-            steamIDRemote.ConvertToUint64() == ctx.server_id &&
-            ctx.game_state >= 2 &&
-            ctx.connect[0] != '\0')
-        {
-            // One-shot: use eligible flag to avoid firing more than once per P2P attempt.
-            // The flag is set to true by default (always eligible) and cleared after firing.
-            // GetAuthSessionTicket resets it to true (new connection established).
-            // CancelAuthTicket also sets it to true (disconnect, ready for reconnect).
+        const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
+        const bool remote_matches = has_ctx && remote_id == ctx.server_id;
+        const bool state_ready = has_ctx && ctx.game_state >= 2;
+        const bool has_connect = has_ctx && ctx.connect[0] != '\0';
+        const bool eligible_before = GBE_dota_reconnect_eligible.load();
+        GBE_ReconnectLog(
+            "GBE_RECONNECT_DIAG",
+            "SendP2PRendezvous gate local_id=%llu remote_id=%llu connection_id=%u size=%u has_ctx=%u server_id=%llu game_state=%u remote_matches=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s",
+            (unsigned long long)local_id,
+            (unsigned long long)remote_id,
+            unConnectionIDSrc,
+            cbRendezvous,
+            has_ctx ? 1u : 0u,
+            (unsigned long long)ctx.server_id,
+            ctx.game_state,
+            remote_matches ? 1u : 0u,
+            state_ready ? 1u : 0u,
+            has_connect ? 1u : 0u,
+            eligible_before ? 1u : 0u,
+            ctx.connect
+        );
+        if (remote_matches && state_ready && has_connect) {
             bool expected = true;
             if (GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false)) {
                 GBE_ReconnectLog("GBE_RECONNECT",
                     "Intercepted SendP2PRendezvous: remote_id=%llu matches server_id=%llu, firing GameServerChangeRequested_t endpoint=%s",
-                    (unsigned long long)steamIDRemote.ConvertToUint64(),
+                    (unsigned long long)remote_id,
                     (unsigned long long)ctx.server_id,
                     ctx.connect);
 
-                // Fire GameServerChangeRequested_t with LAN IP
                 GameServerChangeRequested_t server_change{};
                 std::strncpy(server_change.m_rgchServer, ctx.connect, sizeof(server_change.m_rgchServer) - 1);
                 server_change.m_rgchServer[sizeof(server_change.m_rgchServer) - 1] = '\0';
                 callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0);
+                GBE_ReconnectLog(
+                    "GBE_RECONNECT_DIAG",
+                    "queued callback id=%d type=GameServerChangeRequested delay=0.00 source=SendP2PRendezvous remote_id=%llu connection_id=%u endpoint=%s",
+                    server_change.k_iCallback,
+                    (unsigned long long)remote_id,
+                    unConnectionIDSrc,
+                    ctx.connect
+                );
 
-                // Also fire GameRichPresenceJoinRequested_t for belt-and-suspenders
                 std::string connect_command = std::string("+connect ") + ctx.connect;
                 GameRichPresenceJoinRequested_t rich_join{};
                 rich_join.m_steamIDFriend = CSteamID(static_cast<uint64>(ctx.owner_steam_id));
                 std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
                 rich_join.m_rgchConnect[sizeof(rich_join.m_rgchConnect) - 1] = '\0';
                 callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
+                GBE_ReconnectLog(
+                    "GBE_RECONNECT_DIAG",
+                    "queued callback id=%d type=GameRichPresenceJoinRequested delay=0.25 source=SendP2PRendezvous remote_id=%llu connection_id=%u command=%s owner=%llu",
+                    rich_join.k_iCallback,
+                    (unsigned long long)remote_id,
+                    unConnectionIDSrc,
+                    connect_command.c_str(),
+                    (unsigned long long)ctx.owner_steam_id
+                );
+            } else {
+                GBE_ReconnectLog(
+                    "GBE_RECONNECT_DIAG",
+                    "skipped intercept source=SendP2PRendezvous reason=not_eligible remote_id=%llu connection_id=%u endpoint=%s",
+                    (unsigned long long)remote_id,
+                    unConnectionIDSrc,
+                    ctx.connect
+                );
             }
         }
     }

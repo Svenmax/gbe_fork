@@ -19835,11 +19835,41 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     std::strncpy(server_change.m_rgchServer, endpoint.c_str(), sizeof(server_change.m_rgchServer) - 1);
     callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0);
 
+    GBE_GC_DebugLog(
+        "GC_DOTA_CONNECT_DIAG",
+        "queued callback id=%d type=GameServerChangeRequested delay=0.00 reason=%s lobby_id=%llu match_id=%llu owner=%llu local=%llu state=%u game_state=%u endpoint=%s server_id=%llu",
+        server_change.k_iCallback,
+        reason ? reason : "unknown",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        static_cast<unsigned long long>(owner_steam_id),
+        static_cast<unsigned long long>(local_steam_id),
+        GBE_local_lobby.state,
+        GBE_local_lobby.game_state,
+        endpoint.c_str(),
+        static_cast<unsigned long long>(GBE_local_lobby.server_steam_id)
+    );
+
     const std::string connect_command = std::string("+connect ") + endpoint;
     GameRichPresenceJoinRequested_t rich_join{};
     rich_join.m_steamIDFriend = CSteamID(owner_steam_id);
     std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
     callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_CONNECT_DIAG",
+        "queued callback id=%d type=GameRichPresenceJoinRequested delay=0.25 reason=%s lobby_id=%llu match_id=%llu owner=%llu local=%llu state=%u game_state=%u command=%s server_id=%llu",
+        rich_join.k_iCallback,
+        reason ? reason : "unknown",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        static_cast<unsigned long long>(owner_steam_id),
+        static_cast<unsigned long long>(local_steam_id),
+        GBE_local_lobby.state,
+        GBE_local_lobby.game_state,
+        connect_command.c_str(),
+        static_cast<unsigned long long>(GBE_local_lobby.server_steam_id)
+    );
 
     GBE_last_dota_direct_connect_callback_signature = signature;
     GBE_GC_DebugLog(
