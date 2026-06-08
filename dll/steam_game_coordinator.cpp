@@ -316,6 +316,8 @@ static bool GBE_pending_dota_normal_signout_finalize_after_25 = false;
 static uint64 GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
 static GBE_DotaLootListData GBE_vpk_loot_data;
 
+static std::string GBE_GetDotaPracticeLobbyFirstConnectEndpoint(const std::string &connect);
+
 // --- Dota reconnect shared state ---
 std::atomic<bool> GBE_dota_reconnect_eligible{true};
 
@@ -331,7 +333,8 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
         GBE_shared_dota_lobby_state.server_id != 0) {
         out->server_id = GBE_shared_dota_lobby_state.server_id;
         out->game_state = GBE_shared_dota_lobby_state.game_state;
-        std::strncpy(out->connect, GBE_shared_dota_lobby_state.connect.c_str(), sizeof(out->connect) - 1);
+        const std::string endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_shared_dota_lobby_state.connect);
+        std::strncpy(out->connect, endpoint.c_str(), sizeof(out->connect) - 1);
         out->connect[sizeof(out->connect) - 1] = '\0';
         out->owner_steam_id = GBE_shared_dota_lobby_state.owner_steam_id;
         return true;
@@ -457,9 +460,34 @@ static std::string GBE_NormalizeDotaPracticeLobbyConnect(const std::string &conn
     return connect.substr(first, last == std::string::npos ? std::string::npos : last - first);
 }
 
+static std::string GBE_NormalizeDotaPracticeLobbyConnectPair(const std::string &connect)
+{
+    const std::string first_endpoint = GBE_NormalizeDotaPracticeLobbyConnect(connect);
+    if (first_endpoint.empty())
+        return std::string();
+
+    const size_t first = connect.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos)
+        return first_endpoint;
+
+    const size_t second_start = connect.find_first_not_of(" \t\r\n", first + first_endpoint.size());
+    if (second_start == std::string::npos)
+        return first_endpoint + " " + first_endpoint;
+
+    const size_t second_end = connect.find_first_of(" \t\r\n", second_start);
+    const std::string second_endpoint = connect.substr(second_start, second_end == std::string::npos ? std::string::npos : second_end - second_start);
+    if (second_endpoint.empty())
+        return first_endpoint + " " + first_endpoint;
+
+    return first_endpoint + " " + second_endpoint;
+}
+
 static std::string GBE_BuildDotaPracticeLobbyConnectPair(const std::string &endpoint)
 {
-    return GBE_NormalizeDotaPracticeLobbyConnect(endpoint);
+    const std::string normalized_endpoint = GBE_NormalizeDotaPracticeLobbyConnect(endpoint);
+    if (normalized_endpoint.empty())
+        return std::string();
+    return normalized_endpoint + " " + normalized_endpoint;
 }
 
 static std::string GBE_FormatDotaPracticeLobbyLoopbackConnect()
@@ -475,10 +503,10 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromEndpoint(const char *en
     return GBE_BuildDotaPracticeLobbyConnectPair(endpoint);
 }
 
-static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
+static std::string GBE_FormatDotaPracticeLobbyEndpointFromIp(uint32 ip, uint32 port)
 {
     if (ip == 0)
-        return GBE_FormatDotaPracticeLobbyLoopbackConnect();
+        return std::string();
 
     const uint32 octet1 = (ip >> 24) & 0xFFu;
     const uint32 octet2 = (ip >> 16) & 0xFFu;
@@ -489,14 +517,39 @@ static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
     std::snprintf(
         endpoint,
         sizeof(endpoint),
-        "%u.%u.%u.%u:27015",
+        "%u.%u.%u.%u:%u",
         octet1,
         octet2,
         octet3,
-        octet4
+        octet4,
+        port == 0u ? 27015u : port
     );
 
-    return GBE_FormatDotaPracticeLobbyConnectFromEndpoint(endpoint);
+    return GBE_NormalizeDotaPracticeLobbyConnect(endpoint);
+}
+
+static std::string GBE_FormatDotaPracticeLobbyConnectFromIps(uint32 public_ip, uint32 private_ip, uint32 port)
+{
+    if (public_ip == 0u && private_ip == 0u)
+        return GBE_FormatDotaPracticeLobbyLoopbackConnect();
+
+    if (public_ip == 0u)
+        public_ip = private_ip;
+    if (private_ip == 0u)
+        private_ip = public_ip;
+
+    const std::string public_endpoint = GBE_FormatDotaPracticeLobbyEndpointFromIp(public_ip, port);
+    const std::string private_endpoint = GBE_FormatDotaPracticeLobbyEndpointFromIp(private_ip, port);
+    if (public_endpoint.empty())
+        return GBE_BuildDotaPracticeLobbyConnectPair(private_endpoint);
+    if (private_endpoint.empty())
+        return GBE_BuildDotaPracticeLobbyConnectPair(public_endpoint);
+    return public_endpoint + " " + private_endpoint;
+}
+
+static std::string GBE_FormatDotaPracticeLobbyConnectFromIp(uint32 ip)
+{
+    return GBE_FormatDotaPracticeLobbyConnectFromIps(ip, ip, 27015u);
 }
 
 static uint32 GBE_ParseDotaPracticeLobbyConnectIPv4(const std::string &connect)
@@ -4838,7 +4891,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
         if (field_number == 5u && wire_type == 2u) {
             saw_connect = true;
             if (rewrite_runtime_fields) {
-                GBE_AppendProtoBytesField(output, 5u, GBE_NormalizeDotaPracticeLobbyConnect(connect));
+                GBE_AppendProtoBytesField(output, 5u, GBE_NormalizeDotaPracticeLobbyConnectPair(connect));
             } else {
                 output.append(input.data() + field_offset, field_end - field_offset);
             }
@@ -4999,7 +5052,7 @@ static bool GBE_RewriteDotaLobbyTemplateObject2004(
     if (rewrite_runtime_fields && !saw_state)
         GBE_AppendProtoVarIntField(output, 4u, lobby_state);
     if (rewrite_runtime_fields && !saw_connect && !connect.empty())
-        GBE_AppendProtoBytesField(output, 5u, GBE_NormalizeDotaPracticeLobbyConnect(connect));
+        GBE_AppendProtoBytesField(output, 5u, GBE_NormalizeDotaPracticeLobbyConnectPair(connect));
     if (rewrite_runtime_fields && !saw_server_id && server_id != 0)
         GBE_AppendProtoFixed64Field(output, 6u, server_id);
     if (!saw_lan)
@@ -6970,7 +7023,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
 
     GBE_BuildDotaServerStaticLobbyObject2016(extra_startup_account_id, steam_id, game_mode, effective_members, object_2016);
 
-    const std::string normalized_connect = GBE_NormalizeDotaPracticeLobbyConnect(connect);
+    const std::string normalized_connect = GBE_NormalizeDotaPracticeLobbyConnectPair(connect);
 
     object_2004.clear();
     GBE_AppendProtoVarIntField(object_2004, 1, lobby_id);
@@ -10885,7 +10938,7 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                     GBE_local_lobby.server_id = generic_server_id;
 
                 if (!generic_connect.empty())
-                    GBE_local_lobby.connect = GBE_NormalizeDotaPracticeLobbyConnect(generic_connect);
+                    GBE_local_lobby.connect = GBE_NormalizeDotaPracticeLobbyConnectPair(generic_connect);
                 if (!generic_game_start_time_raw.empty())
                     GBE_local_lobby.game_start_time = GBE_ParseUint32OrZero(generic_game_start_time_raw.c_str());
                 if (!generic_allow_cheats_raw.empty())
@@ -11181,7 +11234,8 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
         GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
         GBE_recent_dota_reconnect_context.server_id = GBE_local_lobby.server_id;
         GBE_recent_dota_reconnect_context.game_state = GBE_local_lobby.game_state;
-        std::strncpy(GBE_recent_dota_reconnect_context.connect, GBE_local_lobby.connect.c_str(), sizeof(GBE_recent_dota_reconnect_context.connect) - 1);
+        const std::string endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect);
+        std::strncpy(GBE_recent_dota_reconnect_context.connect, endpoint.c_str(), sizeof(GBE_recent_dota_reconnect_context.connect) - 1);
         GBE_recent_dota_reconnect_context.connect[sizeof(GBE_recent_dota_reconnect_context.connect) - 1] = '\0';
         GBE_recent_dota_reconnect_context.owner_steam_id = GBE_local_lobby.owner_steam_id;
         GBE_ReconnectLog(
@@ -11836,7 +11890,7 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyStateKey, std::to_string(GBE_local_lobby.state).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStateKey, std::to_string(GBE_local_lobby.game_state).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey, std::to_string(GBE_local_lobby.match_id).c_str());
-    const std::string normalized_connect = GBE_NormalizeDotaPracticeLobbyConnect(GBE_local_lobby.connect);
+    const std::string normalized_connect = GBE_NormalizeDotaPracticeLobbyConnectPair(GBE_local_lobby.connect);
     GBE_local_lobby.connect = normalized_connect;
     if (GBE_local_lobby.match_id == 0) {
         GBE_local_lobby.server_id = 0ull;
@@ -11941,7 +11995,7 @@ std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_
         snapshot.match_id = GBE_ParseUint64OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey));
         const std::string generic_server_id_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey);
         snapshot.server_id = GBE_ParseUint64OrZero(generic_server_id_raw.c_str());
-        snapshot.connect = GBE_NormalizeDotaPracticeLobbyConnect(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyConnectKey));
+        snapshot.connect = GBE_NormalizeDotaPracticeLobbyConnectPair(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyConnectKey));
         snapshot.game_start_time = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStartTimeKey));
         if (snapshot.state == 0u)
             snapshot.state = 1u;
@@ -12272,7 +12326,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             GBE_local_lobby.owner_steam_id = GBE_shared_dota_lobby_state.owner_steam_id;
             GBE_local_lobby.owner_account_id = GBE_shared_dota_lobby_state.owner_account_id;
             GBE_local_lobby.owner_name = GBE_shared_dota_lobby_state.owner_name;
-            GBE_local_lobby.connect = GBE_NormalizeDotaPracticeLobbyConnect(GBE_shared_dota_lobby_state.connect);
+            GBE_local_lobby.connect = GBE_NormalizeDotaPracticeLobbyConnectPair(GBE_shared_dota_lobby_state.connect);
             GBE_local_lobby.game_start_time = GBE_shared_dota_lobby_state.game_start_time;
             GBE_local_lobby.owner_team = GBE_shared_dota_lobby_state.owner_team;
             GBE_local_lobby.owner_slot = GBE_shared_dota_lobby_state.owner_slot;
@@ -12326,7 +12380,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             changed = true;
         }
 
-        const std::string shared_connect = GBE_NormalizeDotaPracticeLobbyConnect(GBE_shared_dota_lobby_state.connect);
+        const std::string shared_connect = GBE_NormalizeDotaPracticeLobbyConnectPair(GBE_shared_dota_lobby_state.connect);
         if (!shared_connect.empty() && GBE_local_lobby.connect != shared_connect) {
             GBE_local_lobby.connect = shared_connect;
             changed = true;
@@ -12567,7 +12621,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
     GBE_local_lobby.owner_steam_id = GBE_shared_dota_lobby_state.owner_steam_id;
     GBE_local_lobby.owner_account_id = GBE_shared_dota_lobby_state.owner_account_id;
     GBE_local_lobby.owner_name = GBE_shared_dota_lobby_state.owner_name;
-    GBE_local_lobby.connect = GBE_NormalizeDotaPracticeLobbyConnect(GBE_shared_dota_lobby_state.connect);
+    GBE_local_lobby.connect = GBE_NormalizeDotaPracticeLobbyConnectPair(GBE_shared_dota_lobby_state.connect);
     GBE_local_lobby.game_start_time = GBE_shared_dota_lobby_state.game_start_time;
     GBE_local_lobby.owner_team = GBE_shared_dota_lobby_state.owner_team;
     GBE_local_lobby.owner_slot = GBE_shared_dota_lobby_state.owner_slot;
@@ -12845,7 +12899,7 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscri
     const uint32 owner_account_id = lobby.owner_account_id != 0 ? lobby.owner_account_id : GBE_GetDotaLobbyOwnerAccountId();
     const bool launch_started = lobby.match_id != 0;
     const std::string effective_player_name = player_name.empty() ? GBE_GetDotaLobbyOwnerName() : player_name;
-    const std::string effective_connect = GBE_NormalizeDotaPracticeLobbyConnect(lobby.connect);
+    const std::string effective_connect = GBE_NormalizeDotaPracticeLobbyConnectPair(lobby.connect);
     uint64 effective_server_id = 0ull;
     if (preserve_server_id && launch_started) {
         effective_server_id = lobby.server_id;
@@ -12912,7 +12966,7 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
     const uint64 owner_steam_id = lobby.owner_steam_id != 0 ? lobby.owner_steam_id : GBE_GetDotaLobbyOwnerSteamId();
     const uint32 owner_account_id = lobby.owner_account_id != 0 ? lobby.owner_account_id : GBE_GetDotaLobbyOwnerAccountId();
     const std::string effective_player_name = player_name.empty() ? GBE_GetDotaLobbyOwnerName() : player_name;
-    const std::string effective_connect = GBE_NormalizeDotaPracticeLobbyConnect(lobby.connect);
+    const std::string effective_connect = GBE_NormalizeDotaPracticeLobbyConnectPair(lobby.connect);
     const uint32 startup_account_id = GBE_GetDotaPracticeLobbyStartupAccountIdForState(owner_account_id, lobby.state, lobby.game_state);
     uint64 effective_server_id = 0ull;
     if (preserve_server_id && lobby.match_id != 0) {
@@ -14873,8 +14927,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             }
         }
 
-        const uint32 connect_ip = public_ip != 0 ? public_ip : private_ip;
-        const std::string runtime_connect = GBE_FormatDotaPracticeLobbyConnectFromIp(connect_ip);
+        const std::string runtime_connect = GBE_FormatDotaPracticeLobbyConnectFromIps(public_ip, private_ip, server_port);
         // 4508 reports the engine's actual listen address — always prefer it over
         // the peer-announce-derived getOwnIP() that was used at launch time.
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
