@@ -13346,7 +13346,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     GBE_local_lobby.custom_game.game_id = custom_game_id;
                 if (start_time != 0)
                     GBE_local_lobby.game_start_time = static_cast<uint32>(start_time);
-                GBE_PublishSharedDotaLobbyState("8052_started_loading");
+                GBE_local_lobby.state = 2u;
+                if (GBE_local_lobby.game_state < 2u)
+                    GBE_local_lobby.game_state = 2u;
                 if (GBE_TryAdvanceDotaLaunchToRun("custom game 8052 started loading", request_emsg, source_job, "8052_started_loading", 2u)) {
                     GBE_GC_DebugLog(
                         "GC_DOTA_LOBBY",
@@ -13358,6 +13360,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                         GBE_local_lobby.game_state
                     );
                 } else {
+                    GBE_PublishSharedDotaLobbyState("8052_started_loading");
                     GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "8052_started_loading");
                 }
             }
@@ -19266,9 +19269,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
                     GBE_local_lobby.custom_game.game_id = custom_game_id;
                 if (start_time != 0)
                     GBE_local_lobby.game_start_time = static_cast<uint32>(start_time);
-                GBE_PublishSharedDotaLobbyState("8052_wrapped_started_loading");
-                if (!GBE_TryAdvanceDotaLaunchToRun("custom game wrapped 8052 started loading", context.inner_emsg, context.request_job_id, "8052_wrapped_started_loading", 2u))
+                GBE_local_lobby.state = 2u;
+                if (GBE_local_lobby.game_state < 2u)
+                    GBE_local_lobby.game_state = 2u;
+                if (!GBE_TryAdvanceDotaLaunchToRun("custom game wrapped 8052 started loading", context.inner_emsg, context.request_job_id, "8052_wrapped_started_loading", 2u)) {
+                    GBE_PublishSharedDotaLobbyState("8052_wrapped_started_loading");
                     GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, "8052_wrapped_started_loading");
+                }
             }
         }
         return true;
