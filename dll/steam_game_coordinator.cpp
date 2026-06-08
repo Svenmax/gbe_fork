@@ -10835,10 +10835,36 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                 const std::string generic_bot_difficulty_dire_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyBotDifficultyDireKey);
                 const std::string generic_bot_radiant_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyBotRadiantKey);
                 const std::string generic_bot_dire_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyBotDireKey);
-                if (!generic_lobby_state_raw.empty())
-                    GBE_local_lobby.state = GBE_ParseUint32OrZero(generic_lobby_state_raw.c_str());
-                if (!generic_lobby_game_state_raw.empty())
-                    GBE_local_lobby.game_state = GBE_ParseUint32OrZero(generic_lobby_game_state_raw.c_str());
+                if (!generic_lobby_state_raw.empty()) {
+                    const uint32 generic_lobby_state = GBE_ParseUint32OrZero(generic_lobby_state_raw.c_str());
+                    const bool stale_launch_regression =
+                        generic_lobby_state < GBE_local_lobby.state &&
+                        GBE_local_lobby.match_id != 0ull &&
+                        GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced;
+                    if (stale_launch_regression) {
+                        GBE_GC_DebugLog(
+                            "GC_DOTA_LOBBY",
+                            "[LOBBY] Ignored stale generic lobby state reason=%s lobby_id=%llu generic_lobby_id=%llu local_state=%u generic_state=%u launch_phase=%s",
+                            reason ? reason : "capture_current_lobby_state",
+                            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                            static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+                            GBE_local_lobby.state,
+                            generic_lobby_state,
+                            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
+                        );
+                    } else {
+                        GBE_local_lobby.state = generic_lobby_state;
+                    }
+                }
+                if (!generic_lobby_game_state_raw.empty()) {
+                    const uint32 generic_lobby_game_state = GBE_ParseUint32OrZero(generic_lobby_game_state_raw.c_str());
+                    const bool stale_launch_game_regression =
+                        generic_lobby_game_state < GBE_local_lobby.game_state &&
+                        GBE_local_lobby.match_id != 0ull &&
+                        GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced;
+                    if (!stale_launch_game_regression)
+                        GBE_local_lobby.game_state = generic_lobby_game_state;
+                }
                 const uint64 generic_match_id = GBE_ParseUint64OrZero(generic_match_id_raw.c_str());
                 if (!generic_match_id_raw.empty() && (generic_match_id != 0ull || GBE_local_lobby.match_id == 0ull))
                     GBE_local_lobby.match_id = generic_match_id;
@@ -11154,7 +11180,11 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
         GBE_local_lobby.connect.c_str()
     );
 
-    if (is_server)
+    const bool local_is_owner =
+        settings &&
+        GBE_local_lobby.owner_steam_id != 0ull &&
+        settings->get_local_steam_id().ConvertToUint64() == GBE_local_lobby.owner_steam_id;
+    if (is_server || (!is_server && local_is_owner && GBE_local_lobby.match_id != 0ull && GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced))
         GBE_PublishDotaPracticeLobbyMetadata(reason ? reason : "shared_lobby_state");
 }
 
