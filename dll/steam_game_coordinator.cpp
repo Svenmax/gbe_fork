@@ -17801,6 +17801,22 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false);
     GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState("#DOTA_RP_INIT", "SERVERSETUP", false, true, "7041_launch_init");
 
+    if (GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
+        GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseSetupSynced, "7041_custom_game_setup_synced");
+        if (GBE_TryAdvanceDotaLaunchToRun("custom game launch after 7041", GBE_kDotaPracticeLobbyLaunch, request_job_id, "7041_custom_game_launch_run")) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Queued custom game RUN after 7041 LobbyID=%llu match_id=%llu server_id=%llu custom_id=%llu custom_map=%s",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id),
+                GBE_local_lobby.custom_game.map_name.c_str()
+            );
+            return true;
+        }
+    }
+
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Deferring remaining 7041 launch follow-ups until server_id sync LobbyID=%llu match_id=%llu server_id=%llu",
@@ -19599,14 +19615,32 @@ void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const
     char lobby_value[512] = {};
     if (include_lobby) {
         const char *room_name = GBE_local_lobby.room_name.empty() ? "" : GBE_local_lobby.room_name.c_str();
-        std::snprintf(
-            lobby_value,
-            sizeof(lobby_value),
-            "lobby_id: %llu lobby_state: %s game_mode: DOTA_GAMEMODE_AP member_count: 1 max_member_count: 10 name: \"%s\" lobby_type: 1",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            lobby_state ? lobby_state : "SERVERSETUP",
-            room_name
-        );
+        const bool is_custom_game = GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game);
+        const uint32 max_member_count = is_custom_game && GBE_local_lobby.custom_game.max_players != 0u
+            ? GBE_local_lobby.custom_game.max_players
+            : 10u;
+        if (is_custom_game) {
+            std::snprintf(
+                lobby_value,
+                sizeof(lobby_value),
+                "lobby_id: %llu lobby_state: %s game_mode: DOTA_GAMEMODE_CUSTOM custom_game_id: %llu member_count: 1 max_member_count: %u name: \"%s\" lobby_type: 1",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                lobby_state ? lobby_state : "SERVERSETUP",
+                static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id),
+                max_member_count,
+                room_name
+            );
+        } else {
+            std::snprintf(
+                lobby_value,
+                sizeof(lobby_value),
+                "lobby_id: %llu lobby_state: %s game_mode: DOTA_GAMEMODE_AP member_count: 1 max_member_count: %u name: \"%s\" lobby_type: 1",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                lobby_state ? lobby_state : "SERVERSETUP",
+                max_member_count,
+                room_name
+            );
+        }
     }
 
     steam_client->steam_friends->SetRichPresence("status", status ? status : "");
