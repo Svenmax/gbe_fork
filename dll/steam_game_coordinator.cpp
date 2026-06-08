@@ -5901,11 +5901,16 @@ static bool GBE_BuildWrappedDotaReplayMessage(const std::string &inner_payload, 
     return true;
 }
 
-static bool GBE_BuildDotaPracticeLobbyResponsePayload(uint64 request_job_id, std::string &message)
+static bool GBE_BuildDotaPracticeLobbyResponsePayload(uint64 request_job_id, bool has_request_job, std::string &message)
 {
     message.assign(reinterpret_cast<const char *>(GBE_kDotaPracticeLobbyResponseTemplate), sizeof(GBE_kDotaPracticeLobbyResponseTemplate));
     if (message.size() != sizeof(GBE_kDotaPracticeLobbyResponseTemplate) || message.size() < 17)
         return false;
+
+    if (!has_request_job) {
+        const std::string body = message.substr(17);
+        return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaPracticeLobbyResponse, body, message);
+    }
 
     message[8] = static_cast<char>(0x59);
     std::memcpy(message.data() + 9, &request_job_id, sizeof(request_job_id));
@@ -13088,14 +13093,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             body_size,
             GBE_FormatHexPrefix(body, body_size, 48).c_str()
         );
-        if (!has_source_job) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing request job for direct 7038 create request");
-            return true;
-        }
-
         return GBE_HandleDotaPracticeLobbyCreateRequest(
             std::string(reinterpret_cast<const char *>(body), body_size),
             source_job,
+            has_source_job,
             false,
             nullptr
         );
@@ -16368,7 +16369,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     return true;
 }
 
-bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw)
+bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw)
 {
     ResetGCMemory("7038_create", true, true);
 
@@ -16443,8 +16444,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] State creating path=%s request_job=%llu NewLobbyID=%llu GenericLobbyID=%llu room=%s server_region=%u lan=%u lan_ping=%s mode=%u pass_len=%zu",
+        "[LOBBY] State creating path=%s has_job=%u request_job=%llu NewLobbyID=%llu GenericLobbyID=%llu room=%s server_region=%u lan=%u lan_ping=%s mode=%u pass_len=%zu",
         wrapped ? "wrapped" : "direct",
+        has_request_job ? 1u : 0u,
         static_cast<unsigned long long>(request_job_id),
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
@@ -16464,7 +16466,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     }
 
     std::string response_7055;
-    if (!GBE_BuildDotaPracticeLobbyResponsePayload(request_job_id, response_7055)) {
+    if (!GBE_BuildDotaPracticeLobbyResponsePayload(request_job_id, has_request_job, response_7055)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7055 payload for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
     }
@@ -16501,8 +16503,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_7055);
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Sent wrapped 7055 with NewLobbyID=%llu request_job=%llu size=%zu body_prefix=%s packet_prefix=%s",
+            "[LOBBY] Sent wrapped 7055 with NewLobbyID=%llu has_job=%u request_job=%llu size=%zu body_prefix=%s packet_prefix=%s",
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            has_request_job ? 1u : 0u,
             static_cast<unsigned long long>(request_job_id),
             wrapped_7055.size(),
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_7055.data()), response_7055.size(), 32).c_str(),
@@ -16523,8 +16526,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         push_incoming_now(GBE_kDotaPracticeLobbyResponse | GBE_kProtoMask, response_7055);
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Sent direct 7055 with NewLobbyID=%llu request_job=%llu size=%zu body_prefix=%s",
+            "[LOBBY] Sent direct 7055 with NewLobbyID=%llu has_job=%u request_job=%llu size=%zu body_prefix=%s",
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            has_request_job ? 1u : 0u,
             static_cast<unsigned long long>(request_job_id),
             response_7055.size(),
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(response_7055.data()), response_7055.size(), 32).c_str()
@@ -17971,7 +17975,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
 
     if (has_request_job) {
         std::string response_7055;
-        if (!GBE_BuildDotaPracticeLobbyResponsePayload(request_job_id, response_7055)) {
+        if (!GBE_BuildDotaPracticeLobbyResponsePayload(request_job_id, true, response_7055)) {
             GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7055 payload for 7047 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
             return true;
         }
@@ -18402,7 +18406,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequ
 
     if (has_request_job) {
         std::string response_7055;
-        if (!GBE_BuildDotaPracticeLobbyResponsePayload(request_job_id, response_7055)) {
+        if (!GBE_BuildDotaPracticeLobbyResponsePayload(request_job_id, true, response_7055)) {
             GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7055 payload for 7149 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
             return true;
         }
@@ -18789,14 +18793,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
             context.outer_session_field_raw.size()
         );
 
-        if (!context.has_request_job) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing request job for 7038 create request");
-            return true;
-        }
-
         return GBE_HandleDotaPracticeLobbyCreateRequest(
             context.inner_body_raw,
             context.request_job_id,
+            context.has_request_job,
             true,
             &context.outer_session_field_raw
         );
