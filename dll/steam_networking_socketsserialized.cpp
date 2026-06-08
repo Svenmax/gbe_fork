@@ -20,6 +20,8 @@
 
 #include <cstdio>
 #include <cstring>
+#include <algorithm>
+#include <string>
 
 namespace {
 
@@ -42,6 +44,28 @@ void GBE_LogSerializedNetSockTrace(const char *scope, uint64 local_id, uint64 re
     );
     std::fclose(file);
 }
+
+std::string GBE_FormatPayloadPrefix(const void *data, uint32 size)
+{
+    if (!data || size == 0)
+        return "";
+
+    const uint32 prefix_size = std::min<uint32>(size, 16u);
+    const unsigned char *bytes = static_cast<const unsigned char *>(data);
+    char buffer[(16u * 3u) + 1u] = {};
+    size_t offset = 0;
+    for (uint32 i = 0; i < prefix_size && offset < sizeof(buffer); ++i) {
+        const int written = std::snprintf(buffer + offset, sizeof(buffer) - offset, "%s%02X", i == 0 ? "" : " ", bytes[i]);
+        if (written <= 0)
+            break;
+        offset += static_cast<size_t>(written);
+    }
+    return buffer;
+}
+
+uint64 GBE_last_post_connection_state_server_id = 0;
+uint32 GBE_post_connection_state_retry_count = 0;
+uint32 GBE_last_post_connection_state_size = 0;
 
 }
 
@@ -275,7 +299,7 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    (void)pMsg;
+    const std::string payload_prefix = GBE_FormatPayloadPrefix(pMsg, cbMsg);
 
     GBE_DotaReconnectContext ctx{};
     const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
@@ -284,8 +308,9 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     const bool eligible_before = GBE_dota_reconnect_eligible.load();
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
-        "PostConnectionStateMsg gate size=%u has_ctx=%u server_id=%llu game_state=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s",
+        "PostConnectionStateMsg gate size=%u prefix=%s has_ctx=%u server_id=%llu game_state=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s",
         cbMsg,
+        payload_prefix.c_str(),
         has_ctx ? 1u : 0u,
         (unsigned long long)ctx.server_id,
         ctx.game_state,
@@ -298,11 +323,21 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     if (!state_ready || !has_connect)
         return;
 
-    bool expected = true;
-    if (!GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false)) {
+    if (GBE_last_post_connection_state_server_id != ctx.server_id) {
+        GBE_last_post_connection_state_server_id = ctx.server_id;
+        GBE_post_connection_state_retry_count = 0;
+        GBE_last_post_connection_state_size = 0;
+    }
+
+    ++GBE_post_connection_state_retry_count;
+    const bool size_changed = cbMsg != GBE_last_post_connection_state_size;
+    GBE_last_post_connection_state_size = cbMsg;
+    const bool should_queue = GBE_post_connection_state_retry_count == 1u || size_changed || (GBE_post_connection_state_retry_count % 10u) == 0u;
+    if (!should_queue) {
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
-            "skipped intercept source=PostConnectionStateMsg reason=not_eligible server_id=%llu endpoint=%s",
+            "skipped intercept source=PostConnectionStateMsg reason=retry_throttle retry=%u server_id=%llu endpoint=%s",
+            GBE_post_connection_state_retry_count,
             (unsigned long long)ctx.server_id,
             ctx.connect
         );
@@ -315,8 +350,9 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0);
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
-        "queued callback id=%d type=GameServerChangeRequested delay=0.00 source=PostConnectionStateMsg server_id=%llu endpoint=%s",
+        "queued callback id=%d type=GameServerChangeRequested delay=0.00 source=PostConnectionStateMsg retry=%u keep_eligible=1 server_id=%llu endpoint=%s",
         server_change.k_iCallback,
+        GBE_post_connection_state_retry_count,
         (unsigned long long)ctx.server_id,
         ctx.connect
     );
@@ -329,8 +365,9 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
-        "queued callback id=%d type=GameRichPresenceJoinRequested delay=0.25 source=PostConnectionStateMsg command=%s owner=%llu",
+        "queued callback id=%d type=GameRichPresenceJoinRequested delay=0.25 source=PostConnectionStateMsg retry=%u keep_eligible=1 command=%s owner=%llu",
         rich_join.k_iCallback,
+        GBE_post_connection_state_retry_count,
         connect_command.c_str(),
         (unsigned long long)ctx.owner_steam_id
     );
