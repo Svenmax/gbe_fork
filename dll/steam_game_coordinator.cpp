@@ -3871,7 +3871,30 @@ static bool GBE_ParseDotaPracticeLobbySetDetailsBody(const uint8 *body, size_t b
         request.custom_game_penalties = (value != 0);
     }
 
-    return request.has_lobby_id;
+    return request.has_lobby_id ||
+        request.has_room_name ||
+        request.has_server_region ||
+        request.has_lan ||
+        request.has_lan_host_ping_location ||
+        request.has_game_mode ||
+        request.has_bot_difficulty_radiant ||
+        request.has_allow_cheats ||
+        request.has_fill_with_bots ||
+        request.has_allow_spectating ||
+        request.has_pass_key ||
+        request.has_visibility ||
+        request.has_bot_difficulty_dire ||
+        request.has_bot_radiant ||
+        request.has_bot_dire ||
+        request.has_custom_game_mode ||
+        request.has_custom_map_name ||
+        request.has_custom_difficulty ||
+        request.has_custom_game_id ||
+        request.has_custom_min_players ||
+        request.has_custom_max_players ||
+        request.has_custom_game_crc ||
+        request.has_custom_game_timestamp ||
+        request.has_custom_game_penalties;
 }
 
 static bool GBE_ParseDotaPracticeLobbySetTeamSlotBody(const uint8 *body, size_t body_size, GBE_DotaPracticeLobbySetTeamSlotRequest &request)
@@ -16446,7 +16469,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] State creating path=%s has_job=%u request_job=%llu NewLobbyID=%llu GenericLobbyID=%llu room=%s server_region=%u lan=%u lan_ping=%s mode=%u pass_len=%zu",
+        "[LOBBY] State creating path=%s has_job=%u request_job=%llu NewLobbyID=%llu GenericLobbyID=%llu room=%s server_region=%u lan=%u lan_ping=%s mode=%u pass_len=%zu custom_id=%llu custom_mode=%s custom_map=%s custom_min=%u custom_max=%u",
         wrapped ? "wrapped" : "direct",
         has_request_job ? 1u : 0u,
         static_cast<unsigned long long>(request_job_id),
@@ -16457,7 +16480,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         GBE_local_lobby.lan ? 1u : 0u,
         GBE_local_lobby.lan_host_ping_location.c_str(),
         GBE_local_lobby.game_mode,
-        GBE_local_lobby.pass_key.size()
+        GBE_local_lobby.pass_key.size(),
+        static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id),
+        GBE_local_lobby.custom_game.mode.c_str(),
+        GBE_local_lobby.custom_game.map_name.c_str(),
+        GBE_local_lobby.custom_game.min_players,
+        GBE_local_lobby.custom_game.max_players
     );
 
     std::string response_24;
