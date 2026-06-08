@@ -17740,46 +17740,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
         return true;
     }
 
-    if (GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
-        const uint64 lobby_id = GBE_local_lobby.lobby_id;
-        std::string response_25;
-        if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for custom 7041 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
-            return true;
-        }
-
-        std::string outbound_message;
-        uint32 outbound_emsg = GBE_kDotaCacheUnsubscribed;
-        if (wrapped) {
-            if (!GBE_BuildWrappedDotaReplayMessage(response_25, *outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), outbound_message)) {
-                GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed wrapping 25 payload for custom 7041 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
-                return true;
-            }
-            outbound_emsg = GBE_kEMsgClientFromGC;
-        } else {
-            outbound_message = response_25;
-        }
-
-        GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7041_custom_game_cache_unsubscribe");
-        GBE_MarkDotaAbandonedLobbySuppressed(lobby_id, "7041_custom_game_cache_unsubscribe");
-        GBE_pending_reset_after_cache_unsubscribed = true;
-        GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
-
-        push_incoming_now(outbound_emsg | GBE_kProtoMask, outbound_message);
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Queued custom game cache unsubscribe after 7041 LobbyID=%llu custom_id=%llu custom_map=%s wrapped=%d has_request_job=%d request_job=%llu",
-            static_cast<unsigned long long>(lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id),
-            GBE_local_lobby.custom_game.map_name.c_str(),
-            wrapped ? 1 : 0,
-            has_request_job ? 1 : 0,
-            static_cast<unsigned long long>(request_job_id)
-        );
-        return true;
-    }
-
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
 
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
@@ -17840,6 +17800,22 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
 
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false);
     GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState("#DOTA_RP_INIT", "SERVERSETUP", false, true, "7041_launch_init");
+
+    if (GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
+        GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseSetupSynced, "7041_custom_game_setup_synced");
+        if (GBE_TryAdvanceDotaLaunchToRun("custom game launch after 7041", GBE_kDotaPracticeLobbyLaunch, request_job_id, "7041_custom_game_launch_run")) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Queued custom game RUN after 7041 LobbyID=%llu match_id=%llu server_id=%llu custom_id=%llu custom_map=%s",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id),
+                GBE_local_lobby.custom_game.map_name.c_str()
+            );
+            return true;
+        }
+    }
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
