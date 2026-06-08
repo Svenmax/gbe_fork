@@ -264,6 +264,39 @@ static std::string GBE_DotaModMetadataValue(const Mod_entry &mod, const char *ke
     }
 }
 
+static std::vector<std::pair<std::string, std::string>> GBE_DotaModKeyValueTags(const Mod_entry &mod)
+{
+    std::vector<std::pair<std::string, std::string>> tags;
+    auto add_tag = [&tags](const std::string &key, const std::string &value) {
+        if (!key.empty() && !value.empty()) tags.emplace_back(key, value);
+    };
+
+    const std::string addon_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);
+    const std::string display_name = GBE_DotaModMetadataValue(mod, "display_name", mod.title);
+    const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", addon_name);
+    add_tag("addon_name", addon_name);
+    add_tag("display_name", display_name);
+    add_tag("map_name", map_name);
+    add_tag("custom_map_name", map_name);
+    add_tag("custom_game_mode", addon_name);
+    add_tag("launch_command", "dota_launch_custom_game " + addon_name + " " + map_name);
+
+    if (!mod.metadata.empty()) {
+        try {
+            nlohmann::json metadata = nlohmann::json::parse(mod.metadata);
+            if (metadata.is_object()) {
+                for (auto it = metadata.begin(); it != metadata.end(); ++it) {
+                    if (it.value().is_string()) add_tag(it.key(), it.value().get<std::string>());
+                }
+            }
+        } catch (...) { }
+    }
+
+    std::sort(tags.begin(), tags.end(), [](const auto &left, const auto &right) { return left.first < right.first; });
+    tags.erase(std::unique(tags.begin(), tags.end(), [](const auto &left, const auto &right) { return left.first == right.first; }), tags.end());
+    return tags;
+}
+
 static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc_Remote_Storage_Bridge *ugc_bridge)
 {
     if (!settings || !ugc_bridge || settings->get_local_game_id().AppID() != 570u) return;
@@ -1042,10 +1075,12 @@ uint32 Steam_UGC::GetQueryUGCNumKeyValueTags( UGCQueryHandle_t handle, uint32 in
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (handle == k_UGCQueryHandleInvalid) return 0;
 
-    auto request = std::find_if(ugc_queries.begin(), ugc_queries.end(), [&handle](struct UGC_query const& item) { return item.handle == handle; });
-    if (ugc_queries.end() == request) return 0;
-    
-    return 0;
+    auto res = get_query_ugc(handle, index);
+    if (!res.has_value()) return 0;
+
+    auto key_value_tags = GBE_DotaModKeyValueTags(res.value());
+    PRINT_DEBUG("Steam_UGC:GetQueryUGCNumKeyValueTags: %u", static_cast<uint32>(key_value_tags.size()));
+    return static_cast<uint32>(key_value_tags.size());
 }
 
 
@@ -1054,11 +1089,21 @@ bool Steam_UGC::GetQueryUGCKeyValueTag( UGCQueryHandle_t handle, uint32 index, u
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (handle == k_UGCQueryHandleInvalid) return false;
+    if (!pchKey || !cchKeySize || !pchValue || !cchValueSize) return false;
 
-    auto request = std::find_if(ugc_queries.begin(), ugc_queries.end(), [&handle](struct UGC_query const& item) { return item.handle == handle; });
-    if (ugc_queries.end() == request) return false;
-    
-    return false;
+    auto res = get_query_ugc(handle, index);
+    if (!res.has_value()) return false;
+
+    auto key_value_tags = GBE_DotaModKeyValueTags(res.value());
+    if (keyValueTagIndex >= key_value_tags.size()) return false;
+
+    const auto &key_value = key_value_tags[keyValueTagIndex];
+    memset(pchKey, 0, cchKeySize);
+    memset(pchValue, 0, cchValueSize);
+    key_value.first.copy(pchKey, cchKeySize - 1);
+    key_value.second.copy(pchValue, cchValueSize - 1);
+    PRINT_DEBUG("Steam_UGC:GetQueryUGCKeyValueTag: [%u] '%s'='%s'", keyValueTagIndex, key_value.first.c_str(), key_value.second.c_str());
+    return true;
 }
 
 bool Steam_UGC::GetQueryUGCKeyValueTag( UGCQueryHandle_t handle, uint32 index, const char *pchKey, STEAM_OUT_STRING_COUNT(cchValueSize) char *pchValue, uint32 cchValueSize )
@@ -1066,11 +1111,19 @@ bool Steam_UGC::GetQueryUGCKeyValueTag( UGCQueryHandle_t handle, uint32 index, c
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (handle == k_UGCQueryHandleInvalid) return false;
+    if (!pchKey || !pchValue || !cchValueSize) return false;
 
-    auto request = std::find_if(ugc_queries.begin(), ugc_queries.end(), [&handle](struct UGC_query const& item) { return item.handle == handle; });
-    if (ugc_queries.end() == request) return false;
-    
-    return false;
+    auto res = get_query_ugc(handle, index);
+    if (!res.has_value()) return false;
+
+    auto key_value_tags = GBE_DotaModKeyValueTags(res.value());
+    auto tag = std::find_if(key_value_tags.begin(), key_value_tags.end(), [pchKey](const auto &item) { return item.first == pchKey; });
+    if (tag == key_value_tags.end()) return false;
+
+    memset(pchValue, 0, cchValueSize);
+    tag->second.copy(pchValue, cchValueSize - 1);
+    PRINT_DEBUG("Steam_UGC:GetQueryUGCKeyValueTag: '%s'='%s'", tag->first.c_str(), tag->second.c_str());
+    return true;
 }
 
 // TODO no public docs
