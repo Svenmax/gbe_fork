@@ -314,39 +314,40 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
             if (!GBE_DotaParseWorkshopId(workshop_folder, workshop_id)) continue;
 
             const std::string mod_path = candidate_root + PATH_SEPARATOR + workshop_folder;
-            if (!settings->isModInstalled(workshop_id)) {
-                const std::string map_name = GBE_DotaWorkshopModMapName(mod_path, "dota");
-                Mod_entry mod{};
-                mod.id = workshop_id;
-                mod.title = workshop_folder;
-                mod.path = mod_path;
-                mod.fileType = k_EWorkshopFileTypeCommunity;
-                mod.description = "auto-detected Dota2 workshop mod #" + workshop_folder;
-                mod.steamIDOwner = settings->get_local_steam_id().ConvertToUint64();
-                mod.timeCreated = 1554997000u;
-                mod.timeUpdated = 1555601800u;
-                mod.timeAddedToUserList = 1556206600u;
-                mod.visibility = k_ERemoteStoragePublishedFileVisibilityPublic;
-                mod.acceptedForUse = true;
-                mod.workshopItemURL = "https://steamcommunity.com/sharedfiles/filedetails/?id=" + workshop_folder;
-                mod.votesUp = 500u;
-                mod.votesDown = 12u;
-                mod.score = 0.97f;
-                if (!map_name.empty()) {
-                    mod.tags = "Dota,Custom Game,Workshop";
-                    nlohmann::json metadata = nlohmann::json::object();
-                    metadata["addon_name"] = workshop_folder;
-                    metadata["display_name"] = workshop_folder;
-                    metadata["map_name"] = map_name;
-                    metadata["launch_command"] = "dota_launch_custom_game " + workshop_folder + " " + map_name;
-                    mod.metadata = metadata.dump();
-                }
+            const std::string map_name = GBE_DotaWorkshopModMapName(mod_path, "dota");
+            Mod_entry mod{};
+            mod.id = workshop_id;
+            mod.title = workshop_folder;
+            mod.path = mod_path;
+            mod.fileType = k_EWorkshopFileTypeCommunity;
+            mod.description = "auto-detected Dota2 workshop mod #" + workshop_folder;
+            mod.steamIDOwner = settings->get_local_steam_id().ConvertToUint64();
+            mod.timeCreated = 1554997000u;
+            mod.timeUpdated = 1555601800u;
+            mod.timeAddedToUserList = 1556206600u;
+            mod.visibility = k_ERemoteStoragePublishedFileVisibilityPublic;
+            mod.acceptedForUse = true;
+            mod.workshopItemURL = "https://steamcommunity.com/sharedfiles/filedetails/?id=" + workshop_folder;
+            mod.votesUp = 500u;
+            mod.votesDown = 12u;
+            mod.score = 0.97f;
+            if (!map_name.empty()) {
+                mod.tags = "Dota,Custom Game,Workshop";
+                nlohmann::json metadata = nlohmann::json::object();
+                metadata["addon_name"] = workshop_folder;
+                metadata["display_name"] = workshop_folder;
+                metadata["map_name"] = map_name;
+                metadata["launch_command"] = "dota_launch_custom_game " + workshop_folder + " " + map_name;
+                mod.metadata = metadata.dump();
+            }
 
-                const std::vector<std::string> primary_files = Local_Storage::get_filenames_path(mod.path);
-                if (!primary_files.empty()) mod.primaryFileName = primary_files[0];
+            const std::vector<std::string> primary_files = Local_Storage::get_filenames_path(mod.path);
+            if (!primary_files.empty()) mod.primaryFileName = primary_files[0];
 
-                settings->addMod(mod.id, mod.title, mod.path);
-                settings->addModDetails(mod.id, mod);
+            const bool already_installed = settings->isModInstalled(workshop_id);
+            settings->addMod(mod.id, mod.title, mod.path);
+            settings->addModDetails(mod.id, mod);
+            if (!already_installed) {
                 ++added;
             }
 
@@ -367,35 +368,36 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
             if (!GBE_DotaIsLocalAddonFolder(addon_path)) continue;
 
             const PublishedFileId_t addon_id = GBE_DotaLocalAddonPublishedFileId(addon_path);
-            if (!settings->isModInstalled(addon_id)) {
-                const std::string map_name = GBE_DotaLocalAddonMapName(addon_path, addon_folder);
-                const std::string display_name = GBE_DotaLocalAddonDisplayName(addon_path, addon_folder);
-                Mod_entry mod{};
-                mod.id = addon_id;
-                mod.title = display_name;
-                mod.path = addon_path;
-                mod.fileType = k_EWorkshopFileTypeCommunity;
-                mod.description = "auto-detected Dota2 local addon " + addon_folder;
-                mod.steamIDOwner = settings->get_local_steam_id().ConvertToUint64();
-                mod.timeCreated = 1554997000u;
-                mod.timeUpdated = 1555601800u;
-                mod.timeAddedToUserList = 1556206600u;
-                mod.visibility = k_ERemoteStoragePublishedFileVisibilityPublic;
-                mod.acceptedForUse = true;
-                mod.workshopItemURL = "file://" + addon_path;
-                mod.tags = "Dota,Custom Game,Local Addon";
-                nlohmann::json metadata = nlohmann::json::object();
-                metadata["addon_name"] = addon_folder;
-                metadata["display_name"] = display_name;
-                metadata["map_name"] = map_name;
-                metadata["launch_command"] = "dota_launch_custom_game " + addon_folder + " " + map_name;
-                mod.metadata = metadata.dump();
+            const std::string map_name = GBE_DotaLocalAddonMapName(addon_path, addon_folder);
+            const std::string display_name = GBE_DotaLocalAddonDisplayName(addon_path, addon_folder);
+            Mod_entry mod{};
+            mod.id = addon_id;
+            mod.title = display_name;
+            mod.path = addon_path;
+            mod.fileType = k_EWorkshopFileTypeCommunity;
+            mod.description = "auto-detected Dota2 local addon " + addon_folder;
+            mod.steamIDOwner = settings->get_local_steam_id().ConvertToUint64();
+            mod.timeCreated = 1554997000u;
+            mod.timeUpdated = 1555601800u;
+            mod.timeAddedToUserList = 1556206600u;
+            mod.visibility = k_ERemoteStoragePublishedFileVisibilityPublic;
+            mod.acceptedForUse = true;
+            mod.workshopItemURL = "file://" + addon_path;
+            mod.tags = "Dota,Custom Game,Local Addon";
+            nlohmann::json metadata = nlohmann::json::object();
+            metadata["addon_name"] = addon_folder;
+            metadata["display_name"] = display_name;
+            metadata["map_name"] = map_name;
+            metadata["launch_command"] = "dota_launch_custom_game " + addon_folder + " " + map_name;
+            mod.metadata = metadata.dump();
 
-                const std::vector<std::string> primary_files = Local_Storage::get_filenames_path(mod.path);
-                if (!primary_files.empty()) mod.primaryFileName = primary_files[0];
+            const std::vector<std::string> primary_files = Local_Storage::get_filenames_path(mod.path);
+            if (!primary_files.empty()) mod.primaryFileName = primary_files[0];
 
-                settings->addMod(mod.id, mod.title, mod.path);
-                settings->addModDetails(mod.id, mod);
+            const bool already_installed = settings->isModInstalled(addon_id);
+            settings->addMod(mod.id, mod.title, mod.path);
+            settings->addModDetails(mod.id, mod);
+            if (!already_installed) {
                 ++local_added;
             }
 

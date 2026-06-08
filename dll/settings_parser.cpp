@@ -1644,12 +1644,10 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
             continue;
 
         PRINT_DEBUG("Dota2 workshop autodetect scanning: '%s'", candidate_root.c_str());
-        bool added_any_mod = false;
+        bool refreshed_any_mod = false;
         for (const std::string &workshop_folder : workshop_folders) {
             PublishedFileId_t workshop_id = 0;
             if (!parse_numeric_mod_folder_id(workshop_folder, workshop_id))
-                continue;
-            if (settings_client->isModInstalled(workshop_id))
                 continue;
 
             Mod_entry new_mod = make_dota_detected_mod(settings_client, workshop_id, workshop_folder, candidate_root + PATH_SEPARATOR + workshop_folder, false);
@@ -1658,11 +1656,11 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
             settings_server->addMod(new_mod.id, new_mod.title, new_mod.path);
             settings_client->addModDetails(new_mod.id, new_mod);
             settings_server->addModDetails(new_mod.id, new_mod);
-            added_any_mod = true;
+            refreshed_any_mod = true;
             PRINT_DEBUG("  auto-detected Dota2 workshop mod '%s' map='%s' at '%s'", workshop_folder.c_str(), dota_workshop_mod_map_name(new_mod.path, "").c_str(), new_mod.path.c_str());
         }
 
-        if (added_any_mod)
+        if (refreshed_any_mod)
             break;
     }
 
@@ -1691,7 +1689,7 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
         }
     }
 
-    bool added_any_local_addon = false;
+    bool refreshed_any_local_addon = false;
     for (const std::string &addon_root : local_addon_roots) {
         const std::vector<std::string> addon_folders = Local_Storage::get_folders_path(addon_root);
         if (addon_folders.empty())
@@ -1704,20 +1702,18 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
                 continue;
 
             const PublishedFileId_t addon_id = make_dota_local_addon_mod_id(addon_path);
-            if (settings_client->isModInstalled(addon_id))
-                continue;
 
             Mod_entry new_mod = make_dota_detected_mod(settings_client, addon_id, addon_folder, addon_path, true);
             settings_client->addMod(new_mod.id, new_mod.title, new_mod.path);
             settings_server->addMod(new_mod.id, new_mod.title, new_mod.path);
             settings_client->addModDetails(new_mod.id, new_mod);
             settings_server->addModDetails(new_mod.id, new_mod);
-            added_any_local_addon = true;
+            refreshed_any_local_addon = true;
             PRINT_DEBUG("  auto-detected Dota2 local addon '%s' map='%s' at '%s' id=%llu", addon_folder.c_str(), dota_local_addon_map_name(addon_path, addon_folder).c_str(), new_mod.path.c_str(), new_mod.id);
         }
     }
 
-    if (added_any_local_addon)
+    if (refreshed_any_local_addon)
         return;
 
     PRINT_DEBUG(
