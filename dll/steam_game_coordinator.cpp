@@ -17444,6 +17444,36 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     const bool ready_for_abandon_teardown =
         lobby_state == 2u &&
         lobby_game_state >= abandon_game_state_threshold;
+    const bool arcade_launch_failed_before_connect =
+        GBE_local_lobby.custom_game.game_id != 0ull &&
+        !wrapped &&
+        !GBE_local_lobby.owner_connected &&
+        lobby_state == 2u &&
+        lobby_game_state >= 2u &&
+        GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued;
+    if (arcade_launch_failed_before_connect) {
+        std::string response_25;
+        if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for arcade launch failed 7035 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
+            return true;
+        }
+
+        GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_arcade_launch_failed_before_connect");
+        GBE_pending_reset_after_cache_unsubscribed = true;
+        GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
+        GBE_MarkDotaAbandonedLobbySuppressed(lobby_id, "7035_arcade_launch_failed_before_connect");
+        push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Treated arcade launch 7035 before connect as failed launch. queued 25 and skipped postgame LobbyID=%llu state=%u game_state=%u launch_phase=%s",
+            static_cast<unsigned long long>(lobby_id),
+            lobby_state,
+            lobby_game_state,
+            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
+        );
+        return true;
+    }
     if (!ready_for_abandon_teardown) {
         if (treat_as_current_game_disconnect) {
             std::string response_25;
