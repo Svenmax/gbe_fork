@@ -275,6 +275,65 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    (void)pMsg;
+
+    GBE_DotaReconnectContext ctx{};
+    const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
+    const bool state_ready = has_ctx && ctx.game_state >= 2;
+    const bool has_connect = has_ctx && ctx.connect[0] != '\0';
+    const bool eligible_before = GBE_dota_reconnect_eligible.load();
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "PostConnectionStateMsg gate size=%u has_ctx=%u server_id=%llu game_state=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s",
+        cbMsg,
+        has_ctx ? 1u : 0u,
+        (unsigned long long)ctx.server_id,
+        ctx.game_state,
+        state_ready ? 1u : 0u,
+        has_connect ? 1u : 0u,
+        eligible_before ? 1u : 0u,
+        ctx.connect
+    );
+
+    if (!state_ready || !has_connect)
+        return;
+
+    bool expected = true;
+    if (!GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false)) {
+        GBE_ReconnectLog(
+            "GBE_RECONNECT_DIAG",
+            "skipped intercept source=PostConnectionStateMsg reason=not_eligible server_id=%llu endpoint=%s",
+            (unsigned long long)ctx.server_id,
+            ctx.connect
+        );
+        return;
+    }
+
+    GameServerChangeRequested_t server_change{};
+    std::strncpy(server_change.m_rgchServer, ctx.connect, sizeof(server_change.m_rgchServer) - 1);
+    server_change.m_rgchServer[sizeof(server_change.m_rgchServer) - 1] = '\0';
+    callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0);
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "queued callback id=%d type=GameServerChangeRequested delay=0.00 source=PostConnectionStateMsg server_id=%llu endpoint=%s",
+        server_change.k_iCallback,
+        (unsigned long long)ctx.server_id,
+        ctx.connect
+    );
+
+    std::string connect_command = std::string("+connect ") + ctx.connect;
+    GameRichPresenceJoinRequested_t rich_join{};
+    rich_join.m_steamIDFriend = CSteamID(static_cast<uint64>(ctx.owner_steam_id));
+    std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
+    rich_join.m_rgchConnect[sizeof(rich_join.m_rgchConnect) - 1] = '\0';
+    callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "queued callback id=%d type=GameRichPresenceJoinRequested delay=0.25 source=PostConnectionStateMsg command=%s owner=%llu",
+        rich_join.k_iCallback,
+        connect_command.c_str(),
+        (unsigned long long)ctx.owner_steam_id
+    );
 }
 
 bool Steam_Networking_Sockets_Serialized::GetSTUNServer(int dont_know, char *buf, unsigned int len)
