@@ -6884,14 +6884,14 @@ static bool GBE_BuildDotaReadyUpStatusPayload(
     uint64 request_job_id,
     uint64 lobby_id,
     uint32 state,
-    bool accepted,
+    uint32 local_ready_state,
     std::string &message)
 {
     std::string body;
     if (lobby_id != 0)
-        GBE_AppendProtoVarIntField(body, 1u, lobby_id);
+        GBE_AppendProtoFixed64Field(body, 1u, lobby_id);
     GBE_AppendProtoVarIntField(body, 4u, state);
-    GBE_AppendProtoVarIntField(body, 6u, accepted ? 1u : 0u);
+    GBE_AppendProtoVarIntField(body, 6u, local_ready_state);
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7170u, has_request_job, request_job_id, body, message);
 }
 
@@ -13267,15 +13267,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         );
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
+            uint32 ready_state = 0u;
+            GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 1u), ready_state);
             std::string response_7170;
-            if (GBE_BuildDotaReadyUpStatusPayload(has_source_job, source_job, GBE_local_lobby.lobby_id, 0u, true, response_7170))
+            if (GBE_BuildDotaReadyUpStatusPayload(has_source_job, source_job, GBE_local_lobby.lobby_id, 0u, ready_state != 0u ? ready_state : 1u, response_7170))
                 push_incoming_now(7170u | GBE_kProtoMask, response_7170);
 
             if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u) {
-                GBE_local_lobby.state = 2u;
-                GBE_local_lobby.game_state = 0u;
-                GBE_PublishSharedDotaLobbyState("7070_ready_up_status");
-                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "7070_ready_up_status");
+                GBE_TryAdvanceDotaLaunchToRun("custom game 7070 accepted during setup", request_emsg, source_job, "7070_ready_up_status", 2u);
+            } else if (ready_state == 1u && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state < 2u && GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
+                GBE_local_lobby.game_state = 2u;
+                GBE_PublishSharedDotaLobbyState("7070_ready_up_run_ack");
+                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "7070_ready_up_run_ack");
             }
         }
         return true;
@@ -17989,7 +17992,7 @@ bool Steam_Game_Coordinator::GBE_SendDotaCustomGameLaunchSetupFlow(bool wrapped,
         return false;
 
     std::string response_7170;
-    if (!GBE_BuildDotaReadyUpStatusPayload(has_request_job, request_job_id, GBE_local_lobby.lobby_id, 0u, true, response_7170)) {
+    if (!GBE_BuildDotaReadyUpStatusPayload(has_request_job, request_job_id, GBE_local_lobby.lobby_id, 0u, 1u, response_7170)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building custom game 7170 after 7041 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return false;
     }
@@ -19119,18 +19122,21 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         );
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
+            uint32 ready_state = 0u;
+            GBE_ExtractProtoFieldUint32(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 1u), ready_state);
             std::string response_7170;
-            if (GBE_BuildDotaReadyUpStatusPayload(context.has_request_job, context.request_job_id, GBE_local_lobby.lobby_id, 0u, true, response_7170)) {
+            if (GBE_BuildDotaReadyUpStatusPayload(context.has_request_job, context.request_job_id, GBE_local_lobby.lobby_id, 0u, ready_state != 0u ? ready_state : 1u, response_7170)) {
                 std::string wrapped_7170;
                 if (GBE_BuildWrappedDotaReplayMessage(response_7170, context.outer_session_field_raw, settings->get_local_steam_id().ConvertToUint64(), wrapped_7170))
                     push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_7170);
             }
 
             if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u) {
-                GBE_local_lobby.state = 2u;
-                GBE_local_lobby.game_state = 0u;
-                GBE_PublishSharedDotaLobbyState("7070_wrapped_ready_up_status");
-                GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, "7070_wrapped_ready_up_status");
+                GBE_TryAdvanceDotaLaunchToRun("custom game wrapped 7070 accepted during setup", context.inner_emsg, context.request_job_id, "7070_wrapped_ready_up_status", 2u);
+            } else if (ready_state == 1u && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state < 2u && GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
+                GBE_local_lobby.game_state = 2u;
+                GBE_PublishSharedDotaLobbyState("7070_wrapped_ready_up_run_ack");
+                GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, "7070_wrapped_ready_up_run_ack");
             }
         }
         return true;
