@@ -12694,6 +12694,21 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
         return;
     }
 
+    if (GBE_HasDotaCustomGameDetails(lobby.custom_game) &&
+        lobby.match_id != 0ull &&
+        lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipped replaying current private lobby snapshot during arcade run reason=%s lobby_id=%llu state=%u game_state=%u launch_phase=%s",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(lobby.lobby_id),
+            lobby.state,
+            lobby.game_state,
+            GBE_DescribeDotaLaunchPhase(lobby.launch_phase)
+        );
+        return;
+    }
+
     const bool ready_for_private_lobby_snapshot =
         lobby.state == 2u &&
         lobby.game_state >= 2u;
