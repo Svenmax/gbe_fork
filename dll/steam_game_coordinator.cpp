@@ -19928,6 +19928,21 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
         GBE_local_lobby.game_state >= 2u;
 
     if (engine_owns_rich_presence) {
+        if (GBE_local_lobby.custom_game.game_id != 0ull) {
+            Steam_Client *steam_client = get_steam_client();
+            const std::string endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect);
+            if (steam_client && steam_client->steam_friends && !endpoint.empty()) {
+                const std::string connect_command = std::string("+connect ") + endpoint;
+                steam_client->steam_friends->SetRichPresence("connect", connect_command.c_str());
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "refreshed arcade active-match connect rich presence reason=%s lobby_id=%llu endpoint=%s",
+                    reason ? reason : "unknown",
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    endpoint.c_str()
+                );
+            }
+        }
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipping rich presence update (engine owns it during active match) reason=%s lobby_id=%llu state=%u game_state=%u",
