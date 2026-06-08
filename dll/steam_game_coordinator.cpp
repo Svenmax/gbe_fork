@@ -10838,6 +10838,7 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                 if (!generic_lobby_state_raw.empty()) {
                     const uint32 generic_lobby_state = GBE_ParseUint32OrZero(generic_lobby_state_raw.c_str());
                     const bool stale_launch_regression =
+                        GBE_local_lobby.custom_game.game_id != 0ull &&
                         generic_lobby_state < GBE_local_lobby.state &&
                         GBE_local_lobby.match_id != 0ull &&
                         GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced;
@@ -10859,6 +10860,7 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                 if (!generic_lobby_game_state_raw.empty()) {
                     const uint32 generic_lobby_game_state = GBE_ParseUint32OrZero(generic_lobby_game_state_raw.c_str());
                     const bool stale_launch_game_regression =
+                        GBE_local_lobby.custom_game.game_id != 0ull &&
                         generic_lobby_game_state < GBE_local_lobby.game_state &&
                         GBE_local_lobby.match_id != 0ull &&
                         GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced;
@@ -11184,7 +11186,7 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
         settings &&
         GBE_local_lobby.owner_steam_id != 0ull &&
         settings->get_local_steam_id().ConvertToUint64() == GBE_local_lobby.owner_steam_id;
-    if (is_server || (!is_server && local_is_owner && GBE_local_lobby.match_id != 0ull && GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced))
+    if (is_server || (!is_server && local_is_owner && GBE_local_lobby.custom_game.game_id != 0ull && GBE_local_lobby.match_id != 0ull && GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced))
         GBE_PublishDotaPracticeLobbyMetadata(reason ? reason : "shared_lobby_state");
 }
 
