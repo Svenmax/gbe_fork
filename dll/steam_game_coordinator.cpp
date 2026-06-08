@@ -6904,6 +6904,16 @@ static bool GBE_HasDotaCustomGameDetails(const GBE_DotaCustomGameDetails &custom
         custom_game.timestamp != 0u;
 }
 
+static bool GBE_IsDotaCustomReadyUpLaunchState(const Steam_Game_Coordinator::GBE_LocalLobby &lobby)
+{
+    return lobby.active &&
+        lobby.lobby_id != 0ull &&
+        lobby.state == 4u &&
+        lobby.game_state == 0u &&
+        lobby.launch_phase == GBE_kDotaLaunchPhaseRequested &&
+        (GBE_HasDotaCustomGameDetails(lobby.custom_game) || lobby.match_id != 0ull || lobby.server_id != 0ull || !lobby.connect.empty());
+}
+
 static void GBE_BuildDotaPracticeLobbySOObjectData(
     uint64 steam_id,
     uint64 lobby_id,
@@ -13290,15 +13300,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_FormatHexPrefix(body, body_size, 48).c_str()
         );
 
-        const bool custom_readyup_context =
-            GBE_local_lobby.active &&
-            GBE_local_lobby.lobby_id != 0 &&
-            (GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) ||
-                GBE_HasDotaCustomGameDetails(GBE_shared_dota_lobby_state.custom_game) ||
-                (GBE_local_lobby.match_id != 0ull && GBE_local_lobby.state == 4u && GBE_local_lobby.game_state == 0u && GBE_local_lobby.launch_phase == GBE_kDotaLaunchPhaseRequested));
+        const bool shared_readyup_context =
+            GBE_shared_dota_lobby_state.valid &&
+            GBE_IsDotaCustomReadyUpLaunchState(GBE_shared_dota_lobby_state) &&
+            (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0ull || GBE_local_lobby.lobby_id == GBE_shared_dota_lobby_state.lobby_id);
+        const bool custom_readyup_context = GBE_IsDotaCustomReadyUpLaunchState(GBE_local_lobby) || shared_readyup_context;
         if (custom_readyup_context) {
-            if (!GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) && GBE_HasDotaCustomGameDetails(GBE_shared_dota_lobby_state.custom_game))
-                GBE_local_lobby.custom_game = GBE_shared_dota_lobby_state.custom_game;
+            if (shared_readyup_context && !GBE_IsDotaCustomReadyUpLaunchState(GBE_local_lobby)) {
+                GBE_local_lobby = GBE_shared_dota_lobby_state;
+                GBE_GC_DebugLog(
+                    "GC_DOTA_LOBBY",
+                    "[LOBBY] Adopted shared custom READYUP before direct 7070 lobby_id=%llu state=%u game_state=%u launch_phase=%s custom_id=%llu",
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
+                    static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id)
+                );
+            }
             uint32 ready_state = 0u;
             GBE_ExtractProtoFieldUint32(body, body_size, GBE_FindProtoField(body, body_size, 1u), ready_state);
             if (GBE_local_lobby.state == 4u && GBE_local_lobby.game_state == 0u && GBE_local_lobby.launch_phase == GBE_kDotaLaunchPhaseRequested) {
@@ -19177,15 +19196,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
         );
 
-        const bool custom_readyup_context =
-            GBE_local_lobby.active &&
-            GBE_local_lobby.lobby_id != 0 &&
-            (GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) ||
-                GBE_HasDotaCustomGameDetails(GBE_shared_dota_lobby_state.custom_game) ||
-                (GBE_local_lobby.match_id != 0ull && GBE_local_lobby.state == 4u && GBE_local_lobby.game_state == 0u && GBE_local_lobby.launch_phase == GBE_kDotaLaunchPhaseRequested));
+        const bool shared_readyup_context =
+            GBE_shared_dota_lobby_state.valid &&
+            GBE_IsDotaCustomReadyUpLaunchState(GBE_shared_dota_lobby_state) &&
+            (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0ull || GBE_local_lobby.lobby_id == GBE_shared_dota_lobby_state.lobby_id);
+        const bool custom_readyup_context = GBE_IsDotaCustomReadyUpLaunchState(GBE_local_lobby) || shared_readyup_context;
         if (custom_readyup_context) {
-            if (!GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) && GBE_HasDotaCustomGameDetails(GBE_shared_dota_lobby_state.custom_game))
-                GBE_local_lobby.custom_game = GBE_shared_dota_lobby_state.custom_game;
+            if (shared_readyup_context && !GBE_IsDotaCustomReadyUpLaunchState(GBE_local_lobby)) {
+                GBE_local_lobby = GBE_shared_dota_lobby_state;
+                GBE_GC_DebugLog(
+                    "GC_DOTA_LOBBY",
+                    "[LOBBY] Adopted shared custom READYUP before wrapped 7070 lobby_id=%llu state=%u game_state=%u launch_phase=%s custom_id=%llu",
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
+                    static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id)
+                );
+            }
             uint32 ready_state = 0u;
             GBE_ExtractProtoFieldUint32(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), GBE_FindProtoField(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 1u), ready_state);
             if (GBE_local_lobby.state == 4u && GBE_local_lobby.game_state == 0u && GBE_local_lobby.launch_phase == GBE_kDotaLaunchPhaseRequested) {
