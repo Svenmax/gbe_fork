@@ -1612,6 +1612,19 @@ static Mod_entry make_dota_detected_mod(class Settings *settings_client, Publish
     return new_mod;
 }
 
+static std::string dota_mod_metadata_value(const Mod_entry &mod, const char *key, const std::string &fallback)
+{
+    if (mod.metadata.empty())
+        return fallback;
+
+    try {
+        nlohmann::json metadata = nlohmann::json::parse(mod.metadata);
+        return metadata.value(key, fallback);
+    } catch (...) {
+        return fallback;
+    }
+}
+
 static void try_detect_dota_workshop_mods(class Settings *settings_client, Settings *settings_server)
 {
     static constexpr AppId_t dota_app_id = 570u;
@@ -1672,7 +1685,7 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
             settings_client->addModDetails(new_mod.id, new_mod);
             settings_server->addModDetails(new_mod.id, new_mod);
             refreshed_any_mod = true;
-            PRINT_DEBUG("  auto-detected Dota2 workshop mod '%s' map='%s' at '%s'", workshop_folder.c_str(), dota_workshop_mod_map_name(new_mod.path, "").c_str(), new_mod.path.c_str());
+            PRINT_DEBUG("  auto-detected Dota2 workshop mod '%s' map='%s' at '%s'", workshop_folder.c_str(), dota_mod_metadata_value(new_mod, "map_name", "").c_str(), new_mod.path.c_str());
         }
 
         if (refreshed_any_mod)

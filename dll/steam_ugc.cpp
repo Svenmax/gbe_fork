@@ -252,6 +252,18 @@ static std::string GBE_DotaLocalAddonDisplayName(const std::string &addon_path, 
     return fallback;
 }
 
+static std::string GBE_DotaModMetadataValue(const Mod_entry &mod, const char *key, const std::string &fallback)
+{
+    if (mod.metadata.empty()) return fallback;
+
+    try {
+        nlohmann::json metadata = nlohmann::json::parse(mod.metadata);
+        return metadata.value(key, fallback);
+    } catch (...) {
+        return fallback;
+    }
+}
+
 static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc_Remote_Storage_Bridge *ugc_bridge)
 {
     if (!settings || !ugc_bridge || settings->get_local_game_id().AppID() != 570u) return;
@@ -355,6 +367,7 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
             const bool already_installed = settings->isModInstalled(workshop_id);
             settings->addMod(mod.id, mod.title, mod.path);
             settings->addModDetails(mod.id, mod);
+            PRINT_DEBUG("[DOTA_UGC] auto-detected workshop mod '%s' map='%s' path='%s'", workshop_folder.c_str(), GBE_DotaModMetadataValue(mod, "map_name", "").c_str(), mod.path.c_str());
             if (!already_installed) {
                 ++added;
             }
