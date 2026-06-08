@@ -16,6 +16,10 @@ on:
         required: false
         type: string
         default: '["debug","release"]'
+      emu_build_sha:
+        required: false
+        type: string
+        default: ""
   workflow_dispatch:
     # allows manual trigger
     inputs:
@@ -112,7 +116,7 @@ jobs:
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: |
-          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --genproto --emubuild=${{ github.sha }} --dosstub --winrsrc --winsign --os=windows vs2026
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --genproto --emubuild=${{ inputs.emu_build_sha || github.sha }} --dosstub --winrsrc --winsign --os=windows vs2026
 
       # build target
       - name: "Build target"
@@ -125,7 +129,7 @@ jobs:
       - name: "Upload target package"
         uses: actions/upload-artifact@v7
         with:
-          name: "emu-win-${{ matrix.prj }}-${{ matrix.cfg }}-${{ matrix.arch }}-${{ github.sha }}"
+          name: "emu-win-${{ matrix.prj }}-${{ matrix.cfg }}-${{ matrix.arch }}-${{ inputs.emu_build_sha || github.sha }}"
           path: "build/win"
           if-no-files-found: "error"
           compression-level: 9
