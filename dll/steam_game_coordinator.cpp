@@ -5901,6 +5901,8 @@ static bool GBE_BuildWrappedDotaReplayMessage(const std::string &inner_payload, 
     return true;
 }
 
+static bool GBE_BuildDotaZeroHeaderPayload(uint32 emsg, const std::string &body, std::string &message);
+
 static bool GBE_BuildDotaPracticeLobbyResponsePayload(uint64 request_job_id, bool has_request_job, std::string &message)
 {
     message.assign(reinterpret_cast<const char *>(GBE_kDotaPracticeLobbyResponseTemplate), sizeof(GBE_kDotaPracticeLobbyResponseTemplate));
