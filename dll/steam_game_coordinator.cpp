@@ -19847,7 +19847,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
         GBE_local_lobby.state,
         GBE_local_lobby.game_state,
         endpoint.c_str(),
-        static_cast<unsigned long long>(GBE_local_lobby.server_steam_id)
+        static_cast<unsigned long long>(GBE_local_lobby.server_id)
     );
 
     const std::string connect_command = std::string("+connect ") + endpoint;
@@ -19868,7 +19868,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
         GBE_local_lobby.state,
         GBE_local_lobby.game_state,
         connect_command.c_str(),
-        static_cast<unsigned long long>(GBE_local_lobby.server_steam_id)
+        static_cast<unsigned long long>(GBE_local_lobby.server_id)
     );
 
     GBE_last_dota_direct_connect_callback_signature = signature;
