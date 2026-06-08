@@ -19757,7 +19757,8 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
 
     const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
     const uint64 owner_steam_id = GBE_local_lobby.owner_steam_id != 0 ? GBE_local_lobby.owner_steam_id : GBE_GetDotaLobbyOwnerSteamId();
-    if (local_steam_id != 0ull && owner_steam_id != 0ull && local_steam_id == owner_steam_id) {
+    const bool arcade_custom_launch = GBE_local_lobby.custom_game.game_id != 0ull;
+    if (!arcade_custom_launch && local_steam_id != 0ull && owner_steam_id != 0ull && local_steam_id == owner_steam_id) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipping owner direct connect callback reason=%s lobby_id=%llu endpoint=%s owner=%llu",
@@ -19770,7 +19771,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     }
 
     const uint32 local_ip = network ? network->getOwnIP() : 0u;
-    if (local_ip != 0u && local_ip == endpoint_ip) {
+    if (!arcade_custom_launch && local_ip != 0u && local_ip == endpoint_ip) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipping self-IP direct connect callback reason=%s lobby_id=%llu endpoint=%s local_ip=%s",
