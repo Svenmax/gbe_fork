@@ -10790,7 +10790,7 @@ void Steam_Game_Coordinator::GBE_MarkDotaLaunchPhase(uint32 phase, const char *r
     );
 }
 
-bool Steam_Game_Coordinator::GBE_TryAdvanceDotaLaunchToRun(const char *note, uint32 trigger_emsg, uint64 source_job, const char *reason)
+bool Steam_Game_Coordinator::GBE_TryAdvanceDotaLaunchToRun(const char *note, uint32 trigger_emsg, uint64 source_job, const char *reason, uint32 next_game_state)
 {
     if (!GBE_HasDotaLaunchServerSetupSync())
         return false;
@@ -10805,7 +10805,7 @@ bool Steam_Game_Coordinator::GBE_TryAdvanceDotaLaunchToRun(const char *note, uin
         trigger_emsg,
         source_job,
         2u,
-        0u);
+        next_game_state);
 }
 
 bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason, GBE_LocalLobby &snapshot, bool restore_shared)
@@ -17835,7 +17835,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
 
     if (GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
         GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseSetupSynced, "7041_custom_game_setup_synced");
-        if (GBE_TryAdvanceDotaLaunchToRun("custom game launch after 7041", GBE_kDotaPracticeLobbyLaunch, request_job_id, "7041_custom_game_launch_run")) {
+        if (GBE_TryAdvanceDotaLaunchToRun("custom game launch after 7041", GBE_kDotaPracticeLobbyLaunch, request_job_id, "7041_custom_game_launch_run", 2u)) {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Queued custom game RUN after 7041 LobbyID=%llu match_id=%llu server_id=%llu custom_id=%llu custom_map=%s",

@@ -250,7 +250,7 @@ public ISteamGameCoordinator
     bool GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state, double delay = 0.0);
     bool GBE_HasDotaLaunchServerSetupSync() const;
     void GBE_MarkDotaLaunchPhase(uint32 phase, const char *reason);
-    bool GBE_TryAdvanceDotaLaunchToRun(const char *note, uint32 trigger_emsg, uint64 source_job, const char *reason);
+    bool GBE_TryAdvanceDotaLaunchToRun(const char *note, uint32 trigger_emsg, uint64 source_job, const char *reason, uint32 next_game_state = 0u);
     void GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason);
     void GBE_PublishSharedDotaLobbyState(const char *reason);
     bool GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(const char *reason);
