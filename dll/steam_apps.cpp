@@ -588,9 +588,30 @@ SteamAPICall_t Steam_Apps::GetFileDetails( const char* pszFileName )
 // If game was already running and launched again, the NewUrlLaunchParameters_t will be fired.
 int Steam_Apps::GetLaunchCommandLine( char *pszCommandLine, int cubCommandLine )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("%p %i", pszCommandLine, cubCommandLine);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return 0;
+    if (launch_command_line.empty())
+        return 0;
+
+    if (pszCommandLine && cubCommandLine > 0) {
+        std::snprintf(pszCommandLine, static_cast<size_t>(cubCommandLine), "%s", launch_command_line.c_str());
+    }
+
+    GBE_LogDotaAppsTrace("DOTA_APPS_LAUNCH_COMMAND_READ", settings->get_local_game_id().AppID(), launch_command_line);
+    return static_cast<int>(launch_command_line.size()) + 1;
+}
+
+void Steam_Apps::QueueLaunchCommandLine( const char *command_line )
+{
+    PRINT_DEBUG("%s", command_line ? command_line : "NULL");
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    launch_command_line = command_line ? command_line : "";
+
+    GBE_LogDotaAppsTrace("DOTA_APPS_LAUNCH_COMMAND_QUEUED", settings->get_local_game_id().AppID(), launch_command_line);
+    if (!launch_command_line.empty() && callbacks) {
+        NewUrlLaunchParameters_t data{};
+        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
+    }
 }
 
 // Check if user borrowed this game via Family Sharing, If true, call GetAppOwner() to get the lender SteamID

@@ -19871,6 +19871,21 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
         static_cast<unsigned long long>(GBE_local_lobby.server_id)
     );
 
+    if (arcade_custom_launch) {
+        Steam_Client *steam_client = get_steam_client();
+        if (steam_client && steam_client->steam_apps) {
+            steam_client->steam_apps->QueueLaunchCommandLine(connect_command.c_str());
+            GBE_GC_DebugLog(
+                "GC_DOTA_CONNECT_DIAG",
+                "queued launch command line reason=%s lobby_id=%llu match_id=%llu command=%s",
+                reason ? reason : "unknown",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                connect_command.c_str()
+            );
+        }
+    }
+
     GBE_last_dota_direct_connect_callback_signature = signature;
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
