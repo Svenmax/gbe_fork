@@ -1571,10 +1571,25 @@ static std::string dota_local_addon_display_name(const std::string &addon_path, 
     return fallback;
 }
 
+static std::string dota_workshop_display_name(const std::string &mod_path, const std::string &fallback)
+{
+    std::ifstream input(std::filesystem::u8path(mod_path) / "publish_data");
+    if (!input.is_open())
+        return fallback;
+
+    for (std::string line; std::getline(input, line); ) {
+        std::string value = dota_extract_addoninfo_value(line, "title");
+        if (!value.empty())
+            return value;
+    }
+
+    return fallback;
+}
+
 static Mod_entry make_dota_detected_mod(class Settings *settings_client, PublishedFileId_t mod_id, const std::string &title, const std::string &path, bool local_addon)
 {
     const std::string map_name = local_addon ? dota_local_addon_map_name(path, title) : dota_workshop_mod_map_name(path, "dota");
-    const std::string display_name = local_addon ? dota_local_addon_display_name(path, title) : title;
+    const std::string display_name = local_addon ? dota_local_addon_display_name(path, title) : dota_workshop_display_name(path, title);
     Mod_entry new_mod;
     new_mod.id = mod_id;
     new_mod.title = display_name;
@@ -1602,6 +1617,7 @@ static Mod_entry make_dota_detected_mod(class Settings *settings_client, Publish
         metadata["map_name"] = map_name;
         metadata["launch_command"] = "dota_launch_custom_game " + title + " " + map_name;
         new_mod.metadata = metadata.dump();
+        new_mod.description = new_mod.metadata;
         new_mod.tags = local_addon ? "Dota,Custom Game,Local Addon" : "Dota,Custom Game,Workshop";
     }
 

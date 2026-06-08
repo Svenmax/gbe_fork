@@ -252,6 +252,19 @@ static std::string GBE_DotaLocalAddonDisplayName(const std::string &addon_path, 
     return fallback;
 }
 
+static std::string GBE_DotaWorkshopDisplayName(const std::string &mod_path, const std::string &fallback)
+{
+    std::ifstream input(std::filesystem::u8path(mod_path) / "publish_data");
+    if (!input.is_open()) return fallback;
+
+    for (std::string line; std::getline(input, line); ) {
+        std::string value = GBE_DotaExtractAddonInfoValue(line, "title");
+        if (!value.empty()) return value;
+    }
+
+    return fallback;
+}
+
 static std::string GBE_DotaModMetadataValue(const Mod_entry &mod, const char *key, const std::string &fallback)
 {
     if (mod.metadata.empty()) return fallback;
@@ -368,9 +381,10 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
 
             const std::string mod_path = candidate_root + PATH_SEPARATOR + workshop_folder;
             const std::string map_name = GBE_DotaWorkshopModMapName(mod_path, "dota");
+            const std::string display_name = GBE_DotaWorkshopDisplayName(mod_path, workshop_folder);
             Mod_entry mod{};
             mod.id = workshop_id;
-            mod.title = workshop_folder;
+            mod.title = display_name;
             mod.path = mod_path;
             mod.fileType = k_EWorkshopFileTypeCommunity;
             mod.description = "auto-detected Dota2 workshop mod #" + workshop_folder;
@@ -388,10 +402,11 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
                 mod.tags = "Dota,Custom Game,Workshop";
                 nlohmann::json metadata = nlohmann::json::object();
                 metadata["addon_name"] = workshop_folder;
-                metadata["display_name"] = workshop_folder;
+                metadata["display_name"] = display_name;
                 metadata["map_name"] = map_name;
                 metadata["launch_command"] = "dota_launch_custom_game " + workshop_folder + " " + map_name;
                 mod.metadata = metadata.dump();
+                mod.description = mod.metadata;
             }
 
             const std::vector<std::string> primary_files = Local_Storage::get_filenames_path(mod.path);
@@ -444,6 +459,7 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
             metadata["map_name"] = map_name;
             metadata["launch_command"] = "dota_launch_custom_game " + addon_folder + " " + map_name;
             mod.metadata = metadata.dump();
+            mod.description = mod.metadata;
 
             const std::vector<std::string> primary_files = Local_Storage::get_filenames_path(mod.path);
             if (!primary_files.empty()) mod.primaryFileName = primary_files[0];
@@ -553,7 +569,10 @@ void Steam_UGC::set_details(PublishedFileId_t id, SteamUGCDetails_t *pDetails, I
             auto copied_chars = mod.primaryFileName.copy(pDetails->m_pchFileName, sizeof(pDetails->m_pchFileName) - 1);
             pDetails->m_pchFileName[copied_chars] = 0;
 
-            copied_chars = mod.description.copy(pDetails->m_rgchDescription, sizeof(pDetails->m_rgchDescription) - 1);
+            const std::string details_description = settings->get_local_game_id().AppID() == 570u && !mod.metadata.empty()
+                ? mod.metadata
+                : mod.description;
+            copied_chars = details_description.copy(pDetails->m_rgchDescription, sizeof(pDetails->m_rgchDescription) - 1);
             pDetails->m_rgchDescription[copied_chars] = 0;
 
             copied_chars = mod.tags.copy(pDetails->m_rgchTags, sizeof(pDetails->m_rgchTags) - 1);
