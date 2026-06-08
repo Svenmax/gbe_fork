@@ -227,22 +227,7 @@ SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     struct SteamNetworkingSocketsCert_t data = {};
-    GBE_DotaReconnectContext ctx{};
-    const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
-    const bool state_ready = has_ctx && ctx.game_state >= 2;
-    const bool has_connect = has_ctx && ctx.connect[0] != '\0';
-    data.m_eResult = (state_ready && has_connect) ? k_EResultOK : k_EResultNoConnection;
-    GBE_ReconnectLog(
-        "GBE_RECONNECT_DIAG",
-        "GetCertAsync result=%d has_ctx=%u server_id=%llu game_state=%u state_ready=%u has_connect=%u endpoint=%s",
-        data.m_eResult,
-        has_ctx ? 1u : 0u,
-        (unsigned long long)ctx.server_id,
-        ctx.game_state,
-        state_ready ? 1u : 0u,
-        has_connect ? 1u : 0u,
-        ctx.connect
-    );
+    data.m_eResult = k_EResultNoConnection;
 
     auto ret = callback_results->addCallResult(data.k_iCallback, &data, sizeof(data));
     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));

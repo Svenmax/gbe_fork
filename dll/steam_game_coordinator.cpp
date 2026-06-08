@@ -6237,32 +6237,6 @@ static bool GBE_BuildDota4524ResponsePayload(bool has_request_job, uint64 reques
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(4524u, has_request_job, request_job_id, body, message);
 }
 
-static bool GBE_BuildDotaChatMemberCountResponsePayload(const uint8 *request_body, size_t request_body_size, bool has_request_job, uint64 request_job_id, std::string &message)
-{
-    std::string channel_name;
-    uint64 channel_type = 0;
-    GBE_ExtractProtoFieldBytes(request_body, request_body_size, GBE_FindProtoField(request_body, request_body_size, 1u), channel_name);
-    GBE_ExtractProtoFieldUint64(request_body, request_body_size, GBE_FindProtoField(request_body, request_body_size, 2u), channel_type);
-
-    std::string body;
-    if (!channel_name.empty())
-        GBE_AppendProtoBytesField(body, 1u, channel_name);
-    GBE_AppendProtoVarIntField(body, 2u, channel_type);
-    GBE_AppendProtoVarIntField(body, 3u, 0u);
-    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(8049u, has_request_job, request_job_id, body, message);
-}
-
-static bool GBE_BuildDotaFriendsPlayedCustomGameResponsePayload(const uint8 *request_body, size_t request_body_size, bool has_request_job, uint64 request_job_id, std::string &message)
-{
-    uint64 custom_game_id = 0;
-    GBE_ExtractProtoFieldUint64(request_body, request_body_size, GBE_FindProtoField(request_body, request_body_size, 1u), custom_game_id);
-
-    std::string body;
-    if (custom_game_id != 0)
-        GBE_AppendProtoVarIntField(body, 1u, custom_game_id);
-    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(8021u, has_request_job, request_job_id, body, message);
-}
-
 static bool GBE_BuildDotaGameMatchSignOutPermissionResponsePayload(bool has_request_job, uint64 request_job_id, std::string &message)
 {
     std::string body;
@@ -13872,55 +13846,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "4523->4524 minimal upload_rate_modifier=1.0"
         );
         push_incoming_now(4524u | GBE_kProtoMask, response_message);
-        return true;
-    }
-
-    if (request_emsg == 8048) {
-        std::string channel_name;
-        uint64 channel_type = 0;
-        GBE_ExtractProtoFieldBytes(body, body_size, GBE_FindProtoField(body, body_size, 1u), channel_name);
-        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2u), channel_type);
-
-        std::string response_message;
-        if (!GBE_BuildDotaChatMemberCountResponsePayload(body, body_size, has_source_job, source_job, response_message)) {
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 8049u);
-            return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=chat member count channel=%s type=%llu count=0",
-            request_emsg,
-            8049u,
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            channel_name.c_str(),
-            static_cast<unsigned long long>(channel_type)
-        );
-        push_incoming_now(8049u | GBE_kProtoMask, response_message);
-        return true;
-    }
-
-    if (request_emsg == 8020) {
-        uint64 custom_game_id = 0;
-        GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), custom_game_id);
-
-        std::string response_message;
-        if (!GBE_BuildDotaFriendsPlayedCustomGameResponsePayload(body, body_size, has_source_job, source_job, response_message)) {
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 8021u);
-            return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=friends played custom game id=%llu accounts=0",
-            request_emsg,
-            8021u,
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            static_cast<unsigned long long>(custom_game_id)
-        );
-        push_incoming_now(8021u | GBE_kProtoMask, response_message);
         return true;
     }
 
