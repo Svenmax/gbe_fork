@@ -535,6 +535,43 @@ std::vector<std::string> Steam_UGC::get_query_ugc_tags(UGCQueryHandle_t handle, 
 
 }
 
+static uint64 GBE_UGCStatisticValue(const Mod_entry &mod, EItemStatistic eStatType)
+{
+    switch (eStatType) {
+        case k_EItemStatistic_NumSubscriptions:
+        case k_EItemStatistic_NumUniqueSubscriptions:
+            return mod.votesUp;
+
+        case k_EItemStatistic_NumFavorites:
+        case k_EItemStatistic_NumUniqueFavorites:
+            return std::max<uint32>(1u, mod.votesUp / 10u);
+
+        case k_EItemStatistic_NumFollowers:
+        case k_EItemStatistic_NumUniqueFollowers:
+            return std::max<uint32>(1u, mod.votesUp / 20u);
+
+        case k_EItemStatistic_NumUniqueWebsiteViews:
+            return std::max<uint32>(1u, mod.votesUp + mod.votesDown);
+
+        case k_EItemStatistic_ReportScore:
+            return static_cast<uint64>(std::max(0.0f, mod.score) * 100000.0f);
+
+        case k_EItemStatistic_NumSecondsPlayed:
+        case k_EItemStatistic_NumSecondsPlayedDuringTimePeriod:
+            return static_cast<uint64>(std::max<uint32>(1u, mod.votesUp)) * 60ull;
+
+        case k_EItemStatistic_NumPlaytimeSessions:
+        case k_EItemStatistic_NumPlaytimeSessionsDuringTimePeriod:
+            return std::max<uint32>(1u, mod.votesUp / 5u);
+
+        case k_EItemStatistic_NumComments:
+            return std::max<uint32>(1u, mod.votesDown);
+
+        default:
+            return 0ull;
+    }
+}
+
 void Steam_UGC::set_details(PublishedFileId_t id, SteamUGCDetails_t *pDetails, IUgcItfVersion ver)
 {
     if (pDetails) {
@@ -1029,26 +1066,33 @@ bool Steam_UGC::GetQueryUGCChildren( UGCQueryHandle_t handle, uint32 index, Publ
 
 bool Steam_UGC::GetQueryUGCStatistic( UGCQueryHandle_t handle, uint32 index, EItemStatistic eStatType, uint64 *pStatValue )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("%llu %u %i %p", handle, index, static_cast<int>(eStatType), pStatValue);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (handle == k_UGCQueryHandleInvalid) return false;
+    if (!pStatValue) return false;
 
-    auto request = std::find_if(ugc_queries.begin(), ugc_queries.end(), [&handle](struct UGC_query const& item) { return item.handle == handle; });
-    if (ugc_queries.end() == request) return false;
-    
-    return false;
+    auto res = get_query_ugc(handle, index);
+    if (!res.has_value()) return false;
+
+    *pStatValue = GBE_UGCStatisticValue(res.value(), eStatType);
+    PRINT_DEBUG("Steam_UGC:GetQueryUGCStatistic: file=%llu stat=%i value=%llu", res.value().id, static_cast<int>(eStatType), *pStatValue);
+    return true;
 }
 
 bool Steam_UGC::GetQueryUGCStatistic( UGCQueryHandle_t handle, uint32 index, EItemStatistic eStatType, uint32 *pStatValue )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("%llu %u %i %p", handle, index, static_cast<int>(eStatType), pStatValue);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (handle == k_UGCQueryHandleInvalid) return false;
+    if (!pStatValue) return false;
 
-    auto request = std::find_if(ugc_queries.begin(), ugc_queries.end(), [&handle](struct UGC_query const& item) { return item.handle == handle; });
-    if (ugc_queries.end() == request) return false;
-    
-    return false;
+    auto res = get_query_ugc(handle, index);
+    if (!res.has_value()) return false;
+
+    const uint64 stat_value = GBE_UGCStatisticValue(res.value(), eStatType);
+    *pStatValue = stat_value > UINT32_MAX ? UINT32_MAX : static_cast<uint32>(stat_value);
+    PRINT_DEBUG("Steam_UGC:GetQueryUGCStatistic: file=%llu stat=%i value=%u", res.value().id, static_cast<int>(eStatType), *pStatValue);
+    return true;
 }
 
 uint32 Steam_UGC::GetQueryUGCNumAdditionalPreviews( UGCQueryHandle_t handle, uint32 index )
