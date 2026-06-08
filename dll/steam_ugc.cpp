@@ -30,6 +30,13 @@ static std::string GBE_DotaWorkshopParentPath(const std::string &path)
     return canonical_path(parent.u8string());
 }
 
+static void GBE_DotaAppendUniqueSeedPath(std::vector<std::string> &seed_paths, std::set<std::string> &seen_paths, const std::string &path)
+{
+    const std::string normalized = canonical_path(path);
+    if (normalized.empty()) return;
+    if (seen_paths.insert(normalized).second) seed_paths.push_back(normalized);
+}
+
 static bool GBE_DotaParseWorkshopId(const std::string &folder_name, PublishedFileId_t &workshop_id)
 {
     if (folder_name.empty()) return false;
@@ -249,12 +256,24 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
 {
     if (!settings || !ugc_bridge || settings->get_local_game_id().AppID() != 570u) return;
 
+    std::vector<std::string> seed_paths;
+    std::set<std::string> seen_seed_paths;
+
+    std::string app_install_path;
+    if (settings->getAppInstallPath(570u, app_install_path) && !app_install_path.empty())
+        GBE_DotaAppendUniqueSeedPath(seed_paths, seen_seed_paths, app_install_path);
+
+    const std::string steam_path = get_env_variable("SteamPath");
+    if (!steam_path.empty())
+        GBE_DotaAppendUniqueSeedPath(seed_paths, seen_seed_paths, steam_path);
+
+    GBE_DotaAppendUniqueSeedPath(seed_paths, seen_seed_paths, get_full_program_path());
+
     std::vector<std::string> candidate_roots;
     std::set<std::string> seen_roots;
 
-    std::string app_install_path;
-    if (settings->getAppInstallPath(570u, app_install_path) && !app_install_path.empty()) {
-        std::string cursor = canonical_path(app_install_path);
+    for (const std::string &seed_path : seed_paths) {
+        std::string cursor = canonical_path(seed_path);
         for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
             const std::string root = cursor + PATH_SEPARATOR + "steamapps" + PATH_SEPARATOR + "workshop" + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "570";
             if (seen_roots.insert(root).second) candidate_roots.push_back(root);
@@ -289,19 +308,8 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
         }
     };
 
-    add_local_addon_roots(app_install_path);
-    add_local_addon_roots(get_full_program_path());
-
-    std::string cursor = canonical_path(get_full_program_path());
-    for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
-        const std::string root = cursor + PATH_SEPARATOR + "steamapps" + PATH_SEPARATOR + "workshop" + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "570";
-        if (seen_roots.insert(root).second) candidate_roots.push_back(root);
-
-        const std::string adjacent_root = cursor + PATH_SEPARATOR + "workshop" + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "570";
-        if (seen_roots.insert(adjacent_root).second) candidate_roots.push_back(adjacent_root);
-
-        cursor = GBE_DotaWorkshopParentPath(cursor);
-    }
+    for (const std::string &seed_path : seed_paths)
+        add_local_addon_roots(seed_path);
 
     size_t added = 0;
     for (const std::string &candidate_root : candidate_roots) {

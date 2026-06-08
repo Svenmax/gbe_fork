@@ -1317,6 +1317,16 @@ static std::string parent_path_or_empty(const std::string &path)
     return path.substr(0, separator);
 }
 
+static void append_unique_seed_path(std::vector<std::string> &seed_paths, std::set<std::string> &seen_paths, const std::string &path)
+{
+    const std::string normalized = canonical_path(path);
+    if (normalized.empty())
+        return;
+
+    if (seen_paths.insert(normalized).second)
+        seed_paths.push_back(normalized);
+}
+
 static bool parse_numeric_mod_folder_id(const std::string &folder_name, PublishedFileId_t &mod_id)
 {
     if (folder_name.empty())
@@ -1607,14 +1617,19 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
     static constexpr AppId_t dota_app_id = 570u;
 
     std::vector<std::string> seed_paths;
+    std::set<std::string> seen_seed_paths;
 
     std::string app_install_path;
     if (settings_client->getAppInstallPath(dota_app_id, app_install_path) && !app_install_path.empty())
-        seed_paths.push_back(canonical_path(app_install_path));
+        append_unique_seed_path(seed_paths, seen_seed_paths, app_install_path);
+
+    const std::string steam_path = get_env_variable("SteamPath");
+    if (!steam_path.empty())
+        append_unique_seed_path(seed_paths, seen_seed_paths, steam_path);
 
     const std::string program_path = canonical_path(get_full_program_path());
     if (!program_path.empty())
-        seed_paths.push_back(program_path);
+        append_unique_seed_path(seed_paths, seen_seed_paths, program_path);
 
     if (seed_paths.empty()) {
         PRINT_DEBUG("Dota2 workshop autodetect skipped: no app::paths entry and no program path for appid 570");
