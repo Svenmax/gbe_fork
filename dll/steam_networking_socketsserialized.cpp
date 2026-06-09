@@ -186,6 +186,108 @@ std::string GBE_FormatSerializedPayloadFields(const void *data, uint32 size)
     return fields;
 }
 
+std::string GBE_SanitizeSerializedLogString(const void *data, uint32 size)
+{
+    if (!data || size == 0)
+        return "";
+
+    const auto *bytes = static_cast<const uint8_t *>(data);
+    std::string sanitized;
+    sanitized.reserve(std::min<uint32>(size, 48u));
+    for (uint32 i = 0; i < size && i < 48u; ++i) {
+        const unsigned char byte = bytes[i];
+        sanitized.push_back(byte >= 32u && byte <= 126u ? static_cast<char>(byte) : '.');
+    }
+    if (size > 48u)
+        sanitized += "...";
+    return sanitized;
+}
+
+std::string GBE_FormatSerializedStateDetails(const void *data, uint32 size)
+{
+    if (!data || size < 5)
+        return "";
+
+    const auto *bytes = static_cast<const uint8_t *>(data);
+    uint32 offset = 0;
+    std::string details;
+    while (offset < size) {
+        uint64 key = 0;
+        uint32 shift = 0;
+        while (offset < size && shift < 64) {
+            const uint8_t byte = bytes[offset++];
+            key |= static_cast<uint64>(byte & 0x7f) << shift;
+            if ((byte & 0x80) == 0)
+                break;
+            shift += 7;
+        }
+
+        const uint32 field_number = static_cast<uint32>(key >> 3);
+        const uint32 wire_type = static_cast<uint32>(key & 0x7);
+        char field[128] = {};
+
+        if (wire_type == 0) {
+            uint64 value = 0;
+            shift = 0;
+            while (offset < size) {
+                const uint8_t byte = bytes[offset++];
+                value |= static_cast<uint64>(byte & 0x7f) << shift;
+                if ((byte & 0x80) == 0)
+                    break;
+                shift += 7;
+            }
+            if (field_number == 2u || field_number == 10u || field_number == 12u || field_number == 14u || field_number == 20u) {
+                std::snprintf(field, sizeof(field), "f%u=%llu", field_number, (unsigned long long)value);
+            }
+        } else if (wire_type == 1) {
+            if (offset + 8 > size)
+                return details;
+            uint64 value = 0;
+            std::memcpy(&value, bytes + offset, sizeof(value));
+            offset += 8;
+            if (field_number == 3u) {
+                std::snprintf(field, sizeof(field), "f%u_fixed64=%llu", field_number, (unsigned long long)value);
+            }
+        } else if (wire_type == 2) {
+            uint64 length = 0;
+            shift = 0;
+            while (offset < size && shift < 64) {
+                const uint8_t byte = bytes[offset++];
+                length |= static_cast<uint64>(byte & 0x7f) << shift;
+                if ((byte & 0x80) == 0)
+                    break;
+                shift += 7;
+            }
+            if (length > size - offset)
+                return details;
+            if (field_number == 4u || field_number == 15u || field_number == 16u || field_number == 23u) {
+                const std::string text = GBE_SanitizeSerializedLogString(bytes + offset, static_cast<uint32>(length));
+                std::snprintf(field, sizeof(field), "f%u_len=%llu_text=%s", field_number, (unsigned long long)length, text.c_str());
+            }
+            offset += static_cast<uint32>(length);
+        } else if (wire_type == 5) {
+            if (offset + 4 > size)
+                return details;
+            uint32 value = 0;
+            std::memcpy(&value, bytes + offset, sizeof(value));
+            offset += 4;
+            if (field_number == 3u) {
+                std::snprintf(field, sizeof(field), "f%u_fixed32=%u", field_number, value);
+            }
+        } else {
+            return details;
+        }
+
+        if (field[0] != '\0') {
+            if (!details.empty())
+                details += " ";
+            details += field;
+        }
+    }
+
+    return details;
+}
+
 uint64 GBE_last_post_connection_state_server_id = 0;
 uint32 GBE_post_connection_state_retry_count = 0;
 uint32 GBE_last_post_connection_state_size = 0;
@@ -612,6 +714,7 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     const std::string payload_prefix = GBE_FormatPayloadPrefix(pMsg, cbMsg);
     const std::string payload_fields = GBE_FormatSerializedPayloadFields(pMsg, cbMsg);
+    const std::string payload_details = GBE_FormatSerializedStateDetails(pMsg, cbMsg);
 
     if (GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsConfigUpdated_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsConfigUpdated") ||
         GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsCert_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsCert") ||
@@ -628,10 +731,11 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     const bool eligible_before = GBE_dota_reconnect_eligible.load();
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
-        "PostConnectionStateMsg gate size=%u prefix=%s fields=%s has_ctx=%u server_id=%llu game_state=%u custom_game_id=%llu arcade=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s",
+        "PostConnectionStateMsg gate size=%u prefix=%s fields=%s details=%s has_ctx=%u server_id=%llu game_state=%u custom_game_id=%llu arcade=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s",
         cbMsg,
         payload_prefix.c_str(),
         payload_fields.c_str(),
+        payload_details.c_str(),
         has_ctx ? 1u : 0u,
         (unsigned long long)ctx.server_id,
         ctx.game_state,
@@ -700,13 +804,14 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
 
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
-        "skipped synthetic callback id=%d source=PostConnectionStateMsg reason=outgoing_state_blob_queue_engine_once retry=%u server_id=%llu size=%u prefix=%s fields=%s",
+        "skipped synthetic callback id=%d source=PostConnectionStateMsg reason=outgoing_state_blob_queue_engine_once retry=%u server_id=%llu size=%u prefix=%s fields=%s details=%s",
         SteamNetworkingSocketsRecvP2PRendezvous_t::k_iCallback,
         GBE_post_connection_state_retry_count,
         (unsigned long long)ctx.server_id,
         cbMsg,
         payload_prefix.c_str(),
-        payload_fields.c_str()
+        payload_fields.c_str(),
+        payload_details.c_str()
     );
 
     GameServerChangeRequested_t server_change{};
