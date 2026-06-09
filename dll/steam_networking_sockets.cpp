@@ -155,6 +155,10 @@ HSteamNetConnection Steam_Networking_Sockets::new_connect_socket(SteamNetworking
     socket.remote_identity = remote_identity;
     socket.virtual_port = virtual_port;
     socket.real_port = real_port;
+    if (const SteamNetworkingIPAddr *ip_addr = remote_identity.GetIPAddr()) {
+        socket.remote_ipv4 = ip_addr->GetIPv4();
+        socket.remote_port = ip_addr->m_port;
+    }
     socket.listen_socket_id = listen_socket_id;
     socket.remote_id = remote_id;
     socket.status = status;
@@ -269,7 +273,9 @@ void Steam_Networking_Sockets::set_steamnetconnectioninfo(std::map<HSteamNetConn
     pInfo->m_nUserData = connect_socket->second.user_data;
     pInfo->m_hListenSocket = connect_socket->second.listen_socket_id;
     pInfo->m_addrRemote.Clear(); //TODO
-    if (connect_socket->second.real_port != SNS_DISABLED_PORT) {
+    if (connect_socket->second.remote_ipv4 && connect_socket->second.remote_port) {
+        pInfo->m_addrRemote.SetIPv4(connect_socket->second.remote_ipv4, connect_socket->second.remote_port);
+    } else if (connect_socket->second.real_port != SNS_DISABLED_PORT) {
         pInfo->m_addrRemote.SetIPv4(network->getIP(connect_socket->second.remote_identity.GetSteamID()), connect_socket->second.real_port);
     }
 
@@ -289,7 +295,10 @@ void Steam_Networking_Sockets::set_steamnetconnectioninfo_001(std::map<HSteamNet
     pInfo->m_steamIDRemote = connect_socket->second.remote_identity.GetSteamID();
     pInfo->m_nUserData = connect_socket->second.user_data;
     pInfo->m_hListenSocket = connect_socket->second.listen_socket_id;
-    if (connect_socket->second.real_port != SNS_DISABLED_PORT) {
+    if (connect_socket->second.remote_ipv4 && connect_socket->second.remote_port) {
+        pInfo->m_unIPRemote = connect_socket->second.remote_ipv4;
+        pInfo->m_unPortRemote = connect_socket->second.remote_port;
+    } else if (connect_socket->second.real_port != SNS_DISABLED_PORT) {
         pInfo->m_unIPRemote = network->getIP(connect_socket->second.remote_identity.GetSteamID());
         pInfo->m_unPortRemote = connect_socket->second.real_port;
     }
@@ -312,6 +321,7 @@ void Steam_Networking_Sockets::launch_callback(HSteamNetConnection m_hConn, enum
     data.m_hConn = connect_socket->first;
     data.m_eOldState = convert_status(old_status);
     set_steamnetconnectioninfo(connect_socket, &data.m_info);
+    GBE_LogNetSockTrace("NETSOCK_STATUS_CALLBACK", this, settings->get_local_steam_id().ConvertToUint64(), connect_socket->second.remote_identity.GetSteamID64(), connect_socket->second.virtual_port, data.m_info.m_addrRemote.m_port, connect_socket->second.status, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
 }
 

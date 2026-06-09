@@ -47,6 +47,8 @@ struct Connect_Socket {
 
     int virtual_port{};
     int real_port{};
+    uint32 remote_ipv4{};
+    uint16 remote_port{};
 
     SteamNetworkingIdentity remote_identity{};
     HSteamNetConnection remote_id{};
