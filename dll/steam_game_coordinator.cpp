@@ -18037,6 +18037,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
         1u,
         0u
     );
+    GBE_MaybeQueueDotaPracticeLobbySteamAuthAck("7041_serversetup", has_request_job ? request_job_id : 0ull);
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -18176,6 +18177,7 @@ bool Steam_Game_Coordinator::GBE_SendDotaCustomGameLaunchSetupFlow(bool wrapped,
         return false;
 
     GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseSetupSynced, "7041_custom_game_serversetup_synced");
+    GBE_MaybeQueueDotaPracticeLobbySteamAuthAck("7041_custom_game_serversetup", has_request_job ? request_job_id : 0ull);
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Sent custom game launch setup flow after 7041 path=%s has_request_job=%d request_job=%llu LobbyID=%llu match_id=%llu server_id=%llu custom_id=%llu custom_map=%s",
@@ -19927,6 +19929,81 @@ bool Steam_Game_Coordinator::GBE_ShouldTrackDotaPracticeLobbyLateSteamChain() co
     return
         GBE_local_lobby.active &&
         GBE_local_lobby.lobby_id != 0;
+}
+
+bool Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbySteamAuthAck(const char *reason, uint64 request_job_id)
+{
+    if (gc_profile != GC_PROFILE_DOTA2 || settings->get_local_game_id().AppID() != GBE_kDotaAppId)
+        return false;
+
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.match_id == 0)
+        return false;
+
+    if (GBE_local_lobby.state != 1u || GBE_local_lobby.game_state != 0u)
+        return false;
+
+    if (GBE_local_lobby.launch_steam_auth_ack_queued)
+        return false;
+
+    const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
+    const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId() != 0ull ? GBE_GetDotaLobbyOwnerSteamId() : steam_id;
+    const uint32 message_sequence = GBE_local_lobby.launch_steam_auth_message_sequence != 0u
+        ? GBE_local_lobby.launch_steam_auth_message_sequence
+        : 1u;
+    uint32 ticket_crc = GBE_local_lobby.launch_steam_auth_ticket_crc;
+    if (ticket_crc == 0u) {
+        uint64 seed = steam_id ^ (GBE_local_lobby.match_id << 1) ^ (GBE_local_lobby.server_id << 7) ^ 0x4409f3a5u;
+        ticket_crc = static_cast<uint32>(seed) ^ static_cast<uint32>(seed >> 32);
+        if (ticket_crc == 0u)
+            ticket_crc = 1u;
+        GBE_local_lobby.launch_steam_auth_ticket_crc = ticket_crc;
+    }
+    GBE_local_lobby.launch_steam_auth_message_sequence = message_sequence;
+
+    std::string auth_complete_body;
+    GBE_AppendProtoFixed64Field(auth_complete_body, 1u, steam_id);
+    GBE_AppendProtoFixed64Field(auth_complete_body, 2u, GBE_kDotaAppId);
+    GBE_AppendProtoVarIntField(auth_complete_body, 3u, 3u);
+    GBE_AppendProtoVarIntField(auth_complete_body, 4u, 0u);
+    GBE_AppendProtoVarIntField(auth_complete_body, 6u, ticket_crc);
+    GBE_AppendProtoFixed64Field(auth_complete_body, 8u, owner_steam_id);
+
+    std::string auth_complete_message = build_protomsg_header(GBE_kSteamTicketAuthComplete | GBE_kProtoMask, request_job_id, k_GIDNil);
+    auth_complete_message.append(auth_complete_body);
+
+    std::string auth_ack_body;
+    GBE_AppendProtoVarIntField(auth_ack_body, 1u, ticket_crc);
+    GBE_AppendProtoVarIntField(auth_ack_body, 2u, GBE_kDotaAppId);
+    GBE_AppendProtoVarIntField(auth_ack_body, 3u, message_sequence);
+
+    std::string auth_ack_message = build_protomsg_header(5575u | GBE_kProtoMask, request_job_id, k_GIDNil);
+    auth_ack_message.append(auth_ack_body);
+
+    GBE_local_lobby.launch_steam_auth_ack_queued = true;
+    GBE_PublishSharedDotaLobbyState(reason ? reason : "steam_auth_ack");
+
+    push_incoming_now(GBE_kSteamTicketAuthComplete | GBE_kProtoMask, auth_complete_message);
+    push_incoming_now(5575u | GBE_kProtoMask, auth_ack_message);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_AUTH",
+        "queued synthetic steam auth ack reason=%s request_job=%llu ticket_crc=%u sequence=%u steam_id=%llu owner_steam_id=%llu lobby_id=%llu match_id=%llu server_id=%llu state=%u game_state=%u sizes=%zu/%zu",
+        reason ? reason : "unknown",
+        static_cast<unsigned long long>(request_job_id),
+        ticket_crc,
+        message_sequence,
+        static_cast<unsigned long long>(steam_id),
+        static_cast<unsigned long long>(owner_steam_id),
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        static_cast<unsigned long long>(GBE_local_lobby.server_id),
+        GBE_local_lobby.state,
+        GBE_local_lobby.game_state,
+        auth_complete_message.size(),
+        auth_ack_message.size()
+    );
+
+    return true;
 }
 
 void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *status, const char *lobby_state, bool include_party, bool include_lobby)
