@@ -559,7 +559,7 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
 
             const std::string mod_path = candidate_root + PATH_SEPARATOR + workshop_folder;
             const std::string detected_name = GBE_DotaWorkshopDisplayName(mod_path, workshop_folder);
-            const std::optional<GBE_DotaWorkshopOnlineDetails> online_details = !settings->disable_networking
+            const std::optional<GBE_DotaWorkshopOnlineDetails> online_details = !settings->disable_networking && settings->download_steamhttp_requests
                 ? GBE_DotaFetchWorkshopOnlineDetails(workshop_folder)
                 : std::nullopt;
             const std::string display_name = GBE_DotaIsReadableAddonName(detected_name)
