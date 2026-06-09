@@ -218,6 +218,13 @@ static bool GBE_DotaIsReadableAddonName(const std::string &value)
         && value != "thumbnail";
 }
 
+static std::string GBE_DotaWorkshopFallbackDisplayName(const std::string &workshop_id)
+{
+    if (GBE_DotaIsNumericString(workshop_id))
+        return "Workshop " + workshop_id;
+    return workshop_id;
+}
+
 static std::string GBE_DotaExtractAddonInfoValue(const std::string &line, const std::string &key);
 
 static std::string GBE_DotaWorkshopFileStemName(const std::string &mod_path)
@@ -459,8 +466,9 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
             if (!GBE_DotaParseWorkshopId(workshop_folder, workshop_id)) continue;
 
             const std::string mod_path = candidate_root + PATH_SEPARATOR + workshop_folder;
-            const std::string display_name = GBE_DotaWorkshopDisplayName(mod_path, workshop_folder);
-            const std::string map_name = GBE_DotaWorkshopModMapName(mod_path, display_name);
+            const std::string detected_name = GBE_DotaWorkshopDisplayName(mod_path, workshop_folder);
+            const std::string display_name = GBE_DotaIsReadableAddonName(detected_name) ? detected_name : GBE_DotaWorkshopFallbackDisplayName(workshop_folder);
+            const std::string map_name = GBE_DotaWorkshopModMapName(mod_path, workshop_folder);
             Mod_entry mod{};
             mod.id = workshop_id;
             mod.title = display_name;
@@ -480,7 +488,7 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
             if (!map_name.empty()) {
                 mod.tags = "Dota,Custom Game,Workshop";
                 nlohmann::json metadata = nlohmann::json::object();
-                metadata["addon_name"] = display_name;
+                metadata["addon_name"] = workshop_folder;
                 metadata["display_name"] = display_name;
                 metadata["map_name"] = map_name;
                 metadata["launch_command"] = "dota_launch_custom_game " + workshop_folder + " " + map_name;
@@ -666,6 +674,10 @@ static std::string GBE_DotaReadableModTitle(const Mod_entry &mod)
 
     const std::string file_stem = GBE_DotaWorkshopFileStemName(mod.path);
     if (GBE_DotaIsReadableAddonName(file_stem)) return file_stem;
+
+    if (GBE_DotaIsNumericString(addon_name)) return GBE_DotaWorkshopFallbackDisplayName(addon_name);
+
+    if (GBE_DotaIsNumericString(mod.title)) return GBE_DotaWorkshopFallbackDisplayName(mod.title);
 
     return mod.title;
 }

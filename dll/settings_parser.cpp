@@ -1530,6 +1530,13 @@ static bool dota_is_readable_addon_name(const std::string &value)
         && value != "thumbnail";
 }
 
+static std::string dota_workshop_fallback_display_name(const std::string &workshop_id)
+{
+    if (dota_is_numeric_string(workshop_id))
+        return "Workshop " + workshop_id;
+    return workshop_id;
+}
+
 static std::string dota_extract_addoninfo_value(const std::string &line, const std::string &key);
 
 static std::string dota_workshop_file_stem_name(const std::string &mod_path)
@@ -1675,8 +1682,10 @@ static std::string dota_workshop_display_name(const std::string &mod_path, const
 static Mod_entry make_dota_detected_mod(class Settings *settings_client, PublishedFileId_t mod_id, const std::string &title, const std::string &path, bool local_addon)
 {
     const std::string detected_name = local_addon ? title : dota_workshop_display_name(path, title);
-    const std::string map_name = local_addon ? dota_local_addon_map_name(path, title) : dota_workshop_mod_map_name(path, detected_name);
-    const std::string display_name = local_addon ? dota_local_addon_display_name(path, title) : dota_workshop_display_name(path, title);
+    const std::string map_name = local_addon ? dota_local_addon_map_name(path, title) : dota_workshop_mod_map_name(path, title);
+    const std::string display_name = local_addon
+        ? dota_local_addon_display_name(path, title)
+        : (dota_is_readable_addon_name(detected_name) ? detected_name : dota_workshop_fallback_display_name(title));
     Mod_entry new_mod;
     new_mod.id = mod_id;
     new_mod.title = display_name;
@@ -1699,7 +1708,7 @@ static Mod_entry make_dota_detected_mod(class Settings *settings_client, Publish
     new_mod.score = 0.97f;
     if (local_addon || !map_name.empty()) {
         nlohmann::json metadata = nlohmann::json::object();
-        metadata["addon_name"] = local_addon ? title : detected_name;
+        metadata["addon_name"] = title;
         metadata["display_name"] = display_name;
         metadata["map_name"] = map_name;
         metadata["launch_command"] = "dota_launch_custom_game " + title + " " + map_name;

@@ -81,6 +81,13 @@ bool GBE_DotaStringIsUnsignedInteger(const std::string &value)
     return !value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; });
 }
 
+std::string GBE_DotaWorkshopFallbackDisplayName(const std::string &workshop_id)
+{
+    if (GBE_DotaStringIsUnsignedInteger(workshop_id))
+        return "Workshop " + workshop_id;
+    return workshop_id;
+}
+
 bool GBE_DotaIsReadableCustomGameName(const std::string &value)
 {
     return !value.empty()
@@ -126,6 +133,12 @@ std::string GBE_DotaModReadableName(const Mod_entry &mod)
         if (GBE_DotaIsReadableCustomGameName(stem))
             return stem;
     }
+
+    if (GBE_DotaStringIsUnsignedInteger(addon_name))
+        return GBE_DotaWorkshopFallbackDisplayName(addon_name);
+
+    if (GBE_DotaStringIsUnsignedInteger(mod.title))
+        return GBE_DotaWorkshopFallbackDisplayName(mod.title);
 
     return display_name;
 }
