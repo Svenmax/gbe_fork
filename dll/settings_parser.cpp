@@ -1514,6 +1514,85 @@ static std::string dota_workshop_mod_map_name(const std::string &mod_path, const
     return fallback;
 }
 
+static bool dota_is_numeric_string(const std::string &value)
+{
+    return !value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; });
+}
+
+static bool dota_is_readable_addon_name(const std::string &value)
+{
+    return !value.empty()
+        && !dota_is_numeric_string(value)
+        && value != "dota"
+        && value != "publish_data"
+        && value != "addoninfo"
+        && value != "preview"
+        && value != "thumbnail";
+}
+
+static std::string dota_extract_addoninfo_value(const std::string &line, const std::string &key);
+
+static std::string dota_workshop_file_stem_name(const std::string &mod_path)
+{
+    try {
+        const std::filesystem::path root = std::filesystem::u8path(mod_path);
+        if (!common_helpers::dir_exist(root))
+            return {};
+
+        for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+            if (!std::filesystem::is_regular_file(dir_entry))
+                continue;
+
+            const std::string extension = common_helpers::to_lower(dir_entry.path().extension().u8string());
+            if (extension != ".vpk" && extension != ".vmap" && extension != ".vmap_c" && extension != ".bsp")
+                continue;
+
+            const std::string stem = dir_entry.path().stem().u8string();
+            if (dota_is_readable_addon_name(stem))
+                return stem;
+        }
+    } catch (...) { }
+
+    return {};
+}
+
+static std::string dota_workshop_manifest_title(const std::string &mod_path, const std::string &workshop_id)
+{
+    if (workshop_id.empty())
+        return {};
+
+    try {
+        std::filesystem::path cursor = std::filesystem::u8path(mod_path);
+        for (int depth = 0; depth < 6 && !cursor.empty(); ++depth) {
+            const std::filesystem::path manifest_path = cursor / "appworkshop_570.acf";
+            if (common_helpers::file_exist(manifest_path)) {
+                std::ifstream input(manifest_path);
+                bool in_item = false;
+                int block_depth = 0;
+                for (std::string line; std::getline(input, line); ) {
+                    const std::string stripped = common_helpers::string_strip(line);
+                    if (stripped.find('"' + workshop_id + '"') != std::string::npos) {
+                        in_item = true;
+                        block_depth = 0;
+                    }
+                    if (in_item) {
+                        std::string title = dota_extract_addoninfo_value(stripped, "title");
+                        if (dota_is_readable_addon_name(title))
+                            return title;
+                        block_depth += static_cast<int>(std::count(stripped.begin(), stripped.end(), '{'));
+                        block_depth -= static_cast<int>(std::count(stripped.begin(), stripped.end(), '}'));
+                        if (block_depth < 0 || (block_depth == 0 && stripped.find('}') != std::string::npos))
+                            in_item = false;
+                    }
+                }
+            }
+            cursor = cursor.parent_path();
+        }
+    } catch (...) { }
+
+    return {};
+}
+
 static std::string dota_extract_addoninfo_value(const std::string &line, const std::string &key)
 {
     const std::string lower_line = common_helpers::to_lower(line);
@@ -1573,22 +1652,30 @@ static std::string dota_local_addon_display_name(const std::string &addon_path, 
 
 static std::string dota_workshop_display_name(const std::string &mod_path, const std::string &fallback)
 {
+    const std::string manifest_title = dota_workshop_manifest_title(mod_path, fallback);
+    if (!manifest_title.empty())
+        return manifest_title;
+
     std::ifstream input(std::filesystem::u8path(mod_path) / "publish_data");
-    if (!input.is_open())
-        return fallback;
+    if (!input.is_open()) {
+        const std::string file_stem = dota_workshop_file_stem_name(mod_path);
+        return file_stem.empty() ? fallback : file_stem;
+    }
 
     for (std::string line; std::getline(input, line); ) {
         std::string value = dota_extract_addoninfo_value(line, "title");
-        if (!value.empty())
+        if (dota_is_readable_addon_name(value))
             return value;
     }
 
-    return fallback;
+    const std::string file_stem = dota_workshop_file_stem_name(mod_path);
+    return file_stem.empty() ? fallback : file_stem;
 }
 
 static Mod_entry make_dota_detected_mod(class Settings *settings_client, PublishedFileId_t mod_id, const std::string &title, const std::string &path, bool local_addon)
 {
-    const std::string map_name = local_addon ? dota_local_addon_map_name(path, title) : dota_workshop_mod_map_name(path, "dota");
+    const std::string detected_name = local_addon ? title : dota_workshop_display_name(path, title);
+    const std::string map_name = local_addon ? dota_local_addon_map_name(path, title) : dota_workshop_mod_map_name(path, detected_name);
     const std::string display_name = local_addon ? dota_local_addon_display_name(path, title) : dota_workshop_display_name(path, title);
     Mod_entry new_mod;
     new_mod.id = mod_id;
@@ -1612,7 +1699,7 @@ static Mod_entry make_dota_detected_mod(class Settings *settings_client, Publish
     new_mod.score = 0.97f;
     if (local_addon || !map_name.empty()) {
         nlohmann::json metadata = nlohmann::json::object();
-        metadata["addon_name"] = title;
+        metadata["addon_name"] = local_addon ? title : detected_name;
         metadata["display_name"] = display_name;
         metadata["map_name"] = map_name;
         metadata["launch_command"] = "dota_launch_custom_game " + title + " " + map_name;
@@ -1701,7 +1788,7 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
             settings_client->addModDetails(new_mod.id, new_mod);
             settings_server->addModDetails(new_mod.id, new_mod);
             refreshed_any_mod = true;
-            PRINT_DEBUG("  auto-detected Dota2 workshop mod '%s' map='%s' at '%s'", workshop_folder.c_str(), dota_mod_metadata_value(new_mod, "map_name", "").c_str(), new_mod.path.c_str());
+            PRINT_DEBUG("  auto-detected Dota2 workshop mod '%s' title='%s' map='%s' at '%s'", workshop_folder.c_str(), new_mod.title.c_str(), dota_mod_metadata_value(new_mod, "map_name", "").c_str(), new_mod.path.c_str());
         }
 
         if (refreshed_any_mod)
