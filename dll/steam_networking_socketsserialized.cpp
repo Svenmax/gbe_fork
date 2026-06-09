@@ -189,6 +189,8 @@ std::string GBE_FormatSerializedPayloadFields(const void *data, uint32 size)
 uint64 GBE_last_post_connection_state_server_id = 0;
 uint32 GBE_post_connection_state_retry_count = 0;
 uint32 GBE_last_post_connection_state_size = 0;
+uint64 GBE_last_post_connection_state_callback_server_id = 0;
+std::string GBE_last_post_connection_state_callback_endpoint;
 uint64 GBE_last_direct_connect_server_id = 0;
 std::string GBE_last_direct_connect_endpoint;
 
@@ -648,6 +650,8 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         GBE_last_post_connection_state_server_id = ctx.server_id;
         GBE_post_connection_state_retry_count = 0;
         GBE_last_post_connection_state_size = 0;
+        GBE_last_post_connection_state_callback_server_id = 0;
+        GBE_last_post_connection_state_callback_endpoint.clear();
     }
 
     const std::string endpoint(ctx.connect);
@@ -681,12 +685,13 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     ++GBE_post_connection_state_retry_count;
     const bool size_changed = cbMsg != GBE_last_post_connection_state_size;
     GBE_last_post_connection_state_size = cbMsg;
-    const bool should_queue = GBE_post_connection_state_retry_count == 1u || size_changed || (GBE_post_connection_state_retry_count % 10u) == 0u;
-    if (!should_queue) {
+    if (GBE_last_post_connection_state_callback_server_id == ctx.server_id &&
+        GBE_last_post_connection_state_callback_endpoint == endpoint) {
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
-            "skipped intercept source=PostConnectionStateMsg reason=retry_throttle retry=%u server_id=%llu endpoint=%s",
+            "skipped engine callback source=PostConnectionStateMsg reason=already_queued retry=%u size_changed=%u server_id=%llu endpoint=%s",
             GBE_post_connection_state_retry_count,
+            size_changed ? 1u : 0u,
             (unsigned long long)ctx.server_id,
             ctx.connect
         );
@@ -695,7 +700,7 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
 
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
-        "skipped synthetic callback id=%d source=PostConnectionStateMsg reason=outgoing_state_blob retry=%u server_id=%llu size=%u prefix=%s fields=%s",
+        "skipped synthetic callback id=%d source=PostConnectionStateMsg reason=outgoing_state_blob_queue_engine_once retry=%u server_id=%llu size=%u prefix=%s fields=%s",
         SteamNetworkingSocketsRecvP2PRendezvous_t::k_iCallback,
         GBE_post_connection_state_retry_count,
         (unsigned long long)ctx.server_id,
@@ -708,9 +713,11 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     std::strncpy(server_change.m_rgchServer, ctx.connect, sizeof(server_change.m_rgchServer) - 1);
     server_change.m_rgchServer[sizeof(server_change.m_rgchServer) - 1] = '\0';
     callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0);
+    GBE_last_post_connection_state_callback_server_id = ctx.server_id;
+    GBE_last_post_connection_state_callback_endpoint = endpoint;
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
-        "queued callback id=%d type=GameServerChangeRequested delay=0.00 source=PostConnectionStateMsg retry=%u keep_eligible=1 server_id=%llu endpoint=%s",
+        "queued callback id=%d type=GameServerChangeRequested delay=0.00 source=PostConnectionStateMsg retry=%u once=1 server_id=%llu endpoint=%s",
         server_change.k_iCallback,
         GBE_post_connection_state_retry_count,
         (unsigned long long)ctx.server_id,
@@ -725,7 +732,7 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
-        "queued callback id=%d type=GameRichPresenceJoinRequested delay=0.25 source=PostConnectionStateMsg retry=%u keep_eligible=1 command=%s owner=%llu",
+        "queued callback id=%d type=GameRichPresenceJoinRequested delay=0.25 source=PostConnectionStateMsg retry=%u once=1 command=%s owner=%llu",
         rich_join.k_iCallback,
         GBE_post_connection_state_retry_count,
         connect_command.c_str(),
