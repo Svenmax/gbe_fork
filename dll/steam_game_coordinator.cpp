@@ -17684,6 +17684,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
     const uint32 lobby_state = GBE_local_lobby.state;
     const uint32 lobby_game_state = GBE_local_lobby.game_state;
+    const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
+    const bool local_is_owner = local_steam_id != 0ull && local_steam_id == GBE_local_lobby.owner_steam_id;
     const bool treat_as_current_game_disconnect =
         is_server &&
         GBE_local_lobby.owner_connected &&
@@ -17710,7 +17712,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     const bool arcade_loaded_engine_7035 =
         GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) &&
         !wrapped &&
-        !GBE_local_lobby.owner_connected &&
+        !is_server &&
+        local_is_owner &&
         lobby_state == 2u &&
         lobby_game_state >= 2u &&
         GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseLoaded;
