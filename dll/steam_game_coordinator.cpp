@@ -588,6 +588,19 @@ static std::string GBE_GetDotaPracticeLobbyFirstConnectEndpoint(const std::strin
     return GBE_NormalizeDotaPracticeLobbyConnect(connect);
 }
 
+static std::string GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(const std::string &connect, uint64 local_steam_id, uint64 owner_steam_id)
+{
+    const std::string endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(connect);
+    if (endpoint.empty() || local_steam_id == 0ull || local_steam_id != owner_steam_id)
+        return endpoint;
+
+    const size_t port_pos = endpoint.rfind(':');
+    if (port_pos == std::string::npos || port_pos + 1 >= endpoint.size())
+        return endpoint;
+
+    return std::string("127.0.0.1") + endpoint.substr(port_pos);
+}
+
 static uint64 GBE_BuildDotaPracticeLobbyIpServerId(uint32 ip)
 {
     if (ip == 0u)
@@ -20141,9 +20154,15 @@ void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const
         snprintf(key, sizeof(key), "EventLevel_%d", eid);
         steam_client->steam_friends->SetRichPresence(key, "1");
     }
-    const std::string direct_connect_endpoint = include_party
+    const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
+    const uint64 owner_steam_id = GBE_local_lobby.owner_steam_id != 0 ? GBE_local_lobby.owner_steam_id : GBE_GetDotaLobbyOwnerSteamId();
+    const bool arcade_custom_launch = GBE_local_lobby.custom_game.game_id != 0ull;
+    const std::string direct_connect_raw_endpoint = include_party
         ? GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect)
         : std::string();
+    const std::string direct_connect_endpoint = arcade_custom_launch
+        ? GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(direct_connect_raw_endpoint, local_steam_id, owner_steam_id)
+        : direct_connect_raw_endpoint;
     if (!direct_connect_endpoint.empty()) {
         const std::string connect_command = std::string("+connect ") + direct_connect_endpoint;
         steam_client->steam_friends->SetRichPresence("connect", connect_command.c_str());
@@ -20163,13 +20182,15 @@ void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
-        "updated local launch rich presence status=%s lobby_state=%s include_party=%u include_lobby=%u lobby_id=%llu connect=%s",
+        "updated local launch rich presence status=%s lobby_state=%s include_party=%u include_lobby=%u lobby_id=%llu connect=%s connect_raw=%s local_is_owner=%u",
         status ? status : "",
         lobby_state ? lobby_state : "",
         include_party ? 1u : 0u,
         include_lobby ? 1u : 0u,
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        direct_connect_endpoint.c_str()
+        direct_connect_endpoint.c_str(),
+        direct_connect_raw_endpoint.c_str(),
+        local_steam_id != 0ull && local_steam_id == owner_steam_id ? 1u : 0u
     );
 }
 
@@ -20207,9 +20228,9 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     if (GBE_local_lobby.state != 2u || GBE_local_lobby.match_id == 0)
         return;
 
-    const std::string endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect);
-    const uint32 endpoint_ip = GBE_ParseDotaPracticeLobbyConnectIPv4(endpoint);
-    if (endpoint.empty() || endpoint_ip == 0u)
+    const std::string raw_endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect);
+    const uint32 endpoint_ip = GBE_ParseDotaPracticeLobbyConnectIPv4(raw_endpoint);
+    if (raw_endpoint.empty() || endpoint_ip == 0u)
         return;
 
     const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
@@ -20217,6 +20238,8 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     const bool arcade_custom_launch = GBE_local_lobby.custom_game.game_id != 0ull;
     if (!arcade_custom_launch)
         return;
+
+    const std::string endpoint = GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(raw_endpoint, local_steam_id, owner_steam_id);
 
     std::string signature;
     signature.reserve(96);
@@ -20242,16 +20265,18 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
 
     GBE_GC_DebugLog(
         "GC_DOTA_CONNECT_DIAG",
-        "queued callback id=%d type=GameServerChangeRequested delay=0.00 reason=%s lobby_id=%llu match_id=%llu owner=%llu local=%llu state=%u game_state=%u endpoint=%s server_id=%llu",
+        "queued callback id=%d type=GameServerChangeRequested delay=0.00 reason=%s lobby_id=%llu match_id=%llu owner=%llu local=%llu local_is_owner=%u state=%u game_state=%u endpoint=%s endpoint_raw=%s server_id=%llu",
         server_change.k_iCallback,
         reason ? reason : "unknown",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         static_cast<unsigned long long>(GBE_local_lobby.match_id),
         static_cast<unsigned long long>(owner_steam_id),
         static_cast<unsigned long long>(local_steam_id),
+        local_steam_id != 0ull && local_steam_id == owner_steam_id ? 1u : 0u,
         GBE_local_lobby.state,
         GBE_local_lobby.game_state,
         endpoint.c_str(),
+        raw_endpoint.c_str(),
         static_cast<unsigned long long>(GBE_local_lobby.server_id)
     );
 
@@ -20294,12 +20319,14 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     GBE_last_dota_direct_connect_callback_signature = signature;
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
-        "queued direct connect callbacks reason=%s lobby_id=%llu match_id=%llu endpoint=%s command=%s",
+        "queued direct connect callbacks reason=%s lobby_id=%llu match_id=%llu endpoint=%s endpoint_raw=%s command=%s local_is_owner=%u",
         reason ? reason : "unknown",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         static_cast<unsigned long long>(GBE_local_lobby.match_id),
         endpoint.c_str(),
-        connect_command.c_str()
+        raw_endpoint.c_str(),
+        connect_command.c_str(),
+        local_steam_id != 0ull && local_steam_id == owner_steam_id ? 1u : 0u
     );
 }
 
