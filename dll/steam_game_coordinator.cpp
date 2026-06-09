@@ -7048,6 +7048,26 @@ static std::string GBE_DotaModMetadataValueForGC(const Mod_entry &mod, const cha
     }
 }
 
+static bool GBE_DotaStringIsUnsignedInteger(const std::string &value)
+{
+    return !value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; });
+}
+
+static void GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(class Settings *settings, GBE_DotaCustomGameDetails &custom_game)
+{
+    if (!settings || custom_game.game_id == 0ull || !settings->isModInstalled(static_cast<PublishedFileId_t>(custom_game.game_id)))
+        return;
+
+    Mod_entry mod = settings->getMod(static_cast<PublishedFileId_t>(custom_game.game_id));
+    const std::string addon_name = GBE_DotaModMetadataValueForGC(mod, "addon_name", mod.title);
+    const std::string metadata_map_name = GBE_DotaModMetadataValueForGC(mod, "map_name", addon_name);
+
+    if (!addon_name.empty() && (custom_game.mode.empty() || GBE_DotaStringIsUnsignedInteger(custom_game.mode)))
+        custom_game.mode = addon_name;
+    if (!metadata_map_name.empty() && (custom_game.map_name.empty() || custom_game.map_name == "dota" || GBE_DotaStringIsUnsignedInteger(custom_game.map_name)))
+        custom_game.map_name = metadata_map_name;
+}
+
 static std::string GBE_DotaCustomGameDisplayName(class Settings *settings, const GBE_DotaCustomGameDetails &custom_game, const std::string &fallback)
 {
     if (settings && custom_game.game_id != 0ull && settings->isModInstalled(static_cast<PublishedFileId_t>(custom_game.game_id))) {
@@ -16775,6 +16795,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
             if (details.has_pass_key)
                 GBE_local_lobby.pass_key = details.pass_key;
             GBE_ApplyDotaCustomGameDetailsRequest(details, GBE_local_lobby.custom_game);
+            GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, GBE_local_lobby.custom_game);
         }
 
         if (request.has_pass_key && GBE_local_lobby.pass_key.empty())
@@ -18385,6 +18406,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
     if (request.has_bot_dire)
         GBE_local_lobby.bot_dire = request.bot_dire;
     GBE_ApplyDotaCustomGameDetailsRequest(request, GBE_local_lobby.custom_game);
+    GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, GBE_local_lobby.custom_game);
     GBE_PublishSharedDotaLobbyState("7046_set_details");
     GBE_PublishDotaPracticeLobbyMetadata("7046_set_details");
 
