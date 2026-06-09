@@ -76,6 +76,60 @@ std::string GBE_DotaModMetadataValue(const Mod_entry &mod, const char *key, cons
     }
 }
 
+bool GBE_DotaStringIsUnsignedInteger(const std::string &value)
+{
+    return !value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; });
+}
+
+bool GBE_DotaIsReadableCustomGameName(const std::string &value)
+{
+    return !value.empty()
+        && !GBE_DotaStringIsUnsignedInteger(value)
+        && value != "dota"
+        && value != "publish_data"
+        && value != "addoninfo"
+        && value != "preview"
+        && value != "thumbnail";
+}
+
+std::string GBE_DotaFileStem(const std::string &filename)
+{
+    size_t begin = filename.find_last_of("/\\");
+    begin = begin == std::string::npos ? 0u : begin + 1u;
+    size_t end = filename.find_last_of('.');
+    if (end == std::string::npos || end < begin)
+        end = filename.size();
+    return filename.substr(begin, end - begin);
+}
+
+std::string GBE_DotaModReadableName(const Mod_entry &mod)
+{
+    const std::string display_name = GBE_DotaModMetadataValue(mod, "display_name", mod.title);
+    if (GBE_DotaIsReadableCustomGameName(display_name))
+        return display_name;
+
+    const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", "");
+    if (GBE_DotaIsReadableCustomGameName(map_name))
+        return map_name;
+
+    const std::string addon_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);
+    if (GBE_DotaIsReadableCustomGameName(addon_name))
+        return addon_name;
+
+    const std::string primary_file_stem = GBE_DotaFileStem(mod.primaryFileName);
+    if (GBE_DotaIsReadableCustomGameName(primary_file_stem))
+        return primary_file_stem;
+
+    const std::vector<std::string> files = Local_Storage::get_filenames_path(mod.path);
+    for (const std::string &file : files) {
+        const std::string stem = GBE_DotaFileStem(file);
+        if (GBE_DotaIsReadableCustomGameName(stem))
+            return stem;
+    }
+
+    return display_name;
+}
+
 uint64 GBE_ParseDotaCustomGameIdFromHTTPURL(const std::string &url)
 {
     const std::array<std::string, 3> keys = {
@@ -114,14 +168,18 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
         for (PublishedFileId_t mod_id : settings->modSet()) {
             Mod_entry mod = settings->getMod(mod_id);
             const std::string addon_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);
-            const std::string display_name = GBE_DotaModMetadataValue(mod, "display_name", mod.title);
+            const std::string display_name = GBE_DotaModReadableName(mod);
+            const std::string mode_name = GBE_DotaIsReadableCustomGameName(addon_name) ? addon_name : display_name;
             const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", addon_name);
             if (GBE_IsDotaPopularGamesHTTPURL(url)) {
                 custom_games.push_back({
                     {"id", std::to_string(mod.id)},
-                    {"title", mod.title},
+                    {"title", display_name},
                     {"name", display_name},
                     {"display_name", display_name},
+                    {"addon_name", addon_name},
+                    {"custom_game_mode", mode_name},
+                    {"custom_game_mode_name", display_name},
                     {"map_name", map_name},
                     {"custom_map_name", map_name}
                 });
@@ -135,12 +193,12 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
             item["publishedfileid"] = mod.id;
             item["published_file_id"] = std::to_string(mod.id);
             item["consumer_app_id"] = 570;
-            item["title"] = mod.title;
+            item["title"] = display_name;
             item["name"] = display_name;
             item["display_name"] = display_name;
             item["description"] = mod.description;
             item["addon_name"] = addon_name;
-            item["custom_game_mode"] = addon_name;
+            item["custom_game_mode"] = mode_name;
             item["custom_game_mode_name"] = display_name;
             item["map_name"] = map_name;
             item["custom_map_name"] = map_name;
@@ -161,7 +219,7 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
             game_mode["custom_game_id"] = mod.id;
             game_mode["name"] = display_name;
             game_mode["addon_name"] = addon_name;
-            game_mode["custom_game_mode"] = addon_name;
+            game_mode["custom_game_mode"] = mode_name;
             game_mode["map_name"] = map_name;
             game_mode["custom_map_name"] = map_name;
             game_mode["min_players"] = 1;

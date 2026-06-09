@@ -7053,6 +7053,11 @@ static bool GBE_DotaStringIsUnsignedInteger(const std::string &value)
     return !value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; });
 }
 
+static bool GBE_DotaIsReadableCustomGameName(const std::string &value)
+{
+    return !value.empty() && !GBE_DotaStringIsUnsignedInteger(value) && value != "dota";
+}
+
 static void GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(class Settings *settings, GBE_DotaCustomGameDetails &custom_game)
 {
     if (!settings || custom_game.game_id == 0ull || !settings->isModInstalled(static_cast<PublishedFileId_t>(custom_game.game_id)))
@@ -7062,9 +7067,9 @@ static void GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(class Settings *s
     const std::string addon_name = GBE_DotaModMetadataValueForGC(mod, "addon_name", mod.title);
     const std::string metadata_map_name = GBE_DotaModMetadataValueForGC(mod, "map_name", addon_name);
 
-    if (!addon_name.empty() && (custom_game.mode.empty() || GBE_DotaStringIsUnsignedInteger(custom_game.mode)))
+    if (GBE_DotaIsReadableCustomGameName(addon_name) && (custom_game.mode.empty() || GBE_DotaStringIsUnsignedInteger(custom_game.mode)))
         custom_game.mode = addon_name;
-    if (!metadata_map_name.empty() && (custom_game.map_name.empty() || custom_game.map_name == "dota" || GBE_DotaStringIsUnsignedInteger(custom_game.map_name)))
+    if (GBE_DotaIsReadableCustomGameName(metadata_map_name) && (custom_game.map_name.empty() || custom_game.map_name == "dota" || GBE_DotaStringIsUnsignedInteger(custom_game.map_name)))
         custom_game.map_name = metadata_map_name;
 }
 
@@ -7073,15 +7078,19 @@ static std::string GBE_DotaCustomGameDisplayName(class Settings *settings, const
     if (settings && custom_game.game_id != 0ull && settings->isModInstalled(static_cast<PublishedFileId_t>(custom_game.game_id))) {
         Mod_entry mod = settings->getMod(static_cast<PublishedFileId_t>(custom_game.game_id));
         std::string display_name = GBE_DotaModMetadataValueForGC(mod, "display_name", mod.title);
-        if (display_name.empty())
-            display_name = GBE_DotaModMetadataValueForGC(mod, "addon_name", mod.title);
-        if (!display_name.empty())
+        if (GBE_DotaIsReadableCustomGameName(display_name))
+            return display_name;
+        display_name = GBE_DotaModMetadataValueForGC(mod, "map_name", "");
+        if (GBE_DotaIsReadableCustomGameName(display_name))
+            return display_name;
+        display_name = GBE_DotaModMetadataValueForGC(mod, "addon_name", mod.title);
+        if (GBE_DotaIsReadableCustomGameName(display_name))
             return display_name;
     }
 
-    if (!custom_game.map_name.empty())
+    if (GBE_DotaIsReadableCustomGameName(custom_game.map_name))
         return custom_game.map_name;
-    if (!custom_game.mode.empty())
+    if (GBE_DotaIsReadableCustomGameName(custom_game.mode))
         return custom_game.mode;
     return fallback.empty() ? std::string("Lobby") : fallback;
 }
