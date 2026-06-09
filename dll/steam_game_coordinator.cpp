@@ -107,6 +107,9 @@ static constexpr uint32 GBE_kDotaSetItemStyle = 2577u;
 static constexpr uint32 GBE_kDotaSetItemStyleResponse = 2578u;
 static constexpr uint32 GBE_kDotaUnlockItemStyle = 2571u;
 static constexpr uint32 GBE_kDotaUnlockItemStyleResponse = 2572u;
+
+std::string GBE_DotaModMetadataValue(const Mod_entry &mod, const char *key, const std::string &fallback);
+
 static constexpr size_t GBE_kDotaWelcomeInnerBodyOffset = 48u;
 static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
 static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
@@ -7035,6 +7038,24 @@ static bool GBE_HasDotaCustomGameDetails(const GBE_DotaCustomGameDetails &custom
         custom_game.timestamp != 0u;
 }
 
+static std::string GBE_DotaCustomGameDisplayName(class Settings *settings, const GBE_DotaCustomGameDetails &custom_game, const std::string &fallback)
+{
+    if (settings && custom_game.game_id != 0ull && settings->isModInstalled(static_cast<PublishedFileId_t>(custom_game.game_id))) {
+        Mod_entry mod = settings->getMod(static_cast<PublishedFileId_t>(custom_game.game_id));
+        std::string display_name = GBE_DotaModMetadataValue(mod, "display_name", mod.title);
+        if (display_name.empty())
+            display_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);
+        if (!display_name.empty())
+            return display_name;
+    }
+
+    if (!custom_game.map_name.empty())
+        return custom_game.map_name;
+    if (!custom_game.mode.empty())
+        return custom_game.mode;
+    return fallback.empty() ? std::string("Lobby") : fallback;
+}
+
 static void GBE_BuildDotaPracticeLobbySOObjectData(
     uint64 steam_id,
     uint64 lobby_id,
@@ -12224,6 +12245,7 @@ std::string Steam_Game_Coordinator::GBE_BuildDotaJoinableCustomLobbiesHTTPJSON(u
             ? (settings ? std::string(settings->get_local_name()) : std::string("Lobby Host"))
             : lobby.owner_name;
         const std::string room_name = lobby.room_name.empty() ? std::string("Lobby") : lobby.room_name;
+        const std::string display_name = GBE_DotaCustomGameDisplayName(settings, lobby.custom_game, room_name);
         const std::string custom_map_name = lobby.custom_game.map_name.empty() ? lobby.custom_game.mode : lobby.custom_game.map_name;
         const uint32 lobby_creation_time = lobby.game_start_time != 0u ? lobby.game_start_time : static_cast<uint32>(std::time(nullptr));
 
@@ -12242,8 +12264,12 @@ std::string Steam_Game_Coordinator::GBE_BuildDotaJoinableCustomLobbiesHTTPJSON(u
         item["custom_game_crc"] = std::to_string(lobby.custom_game.crc);
         item["min_player_count"] = min_players;
         item["penalties_enabled"] = lobby.custom_game.penalties;
-        item["name"] = room_name;
+        item["name"] = display_name;
+        item["display_name"] = display_name;
+        item["title"] = display_name;
+        item["room_name"] = room_name;
         item["custom_game_mode"] = lobby.custom_game.mode;
+        item["custom_game_mode_name"] = display_name;
         item["lan_host_ping_location"] = lobby.lan_host_ping_location;
         response["lobbies"].push_back(std::move(item));
         seen_lobby_ids.push_back(lobby.lobby_id);
@@ -15676,10 +15702,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
                 const uint32 member_count = static_cast<uint32>(lobby.members.empty() ? 1u : lobby.members.size());
                 const uint32 max_players = lobby.custom_game.max_players != 0u ? lobby.custom_game.max_players : 10u;
+                const std::string room_name = lobby.room_name.empty() ? std::string("Lobby") : lobby.room_name;
+                const std::string display_name = GBE_DotaCustomGameDisplayName(settings, lobby.custom_game, room_name);
                 std::string entry;
                 GBE_AppendProtoFixed64Field(entry, 1u, lobby.lobby_id);
                 GBE_AppendProtoVarIntField(entry, 2u, lobby.custom_game.game_id);
-                GBE_AppendProtoBytesField(entry, 3u, lobby.room_name.empty() ? std::string("Lobby") : lobby.room_name);
+                GBE_AppendProtoBytesField(entry, 3u, display_name);
                 GBE_AppendProtoVarIntField(entry, 4u, member_count);
                 GBE_AppendProtoVarIntField(entry, 5u, lobby.owner_account_id != 0u ? lobby.owner_account_id : settings->get_local_steam_id().GetAccountID());
                 GBE_AppendProtoBytesField(entry, 6u, lobby.owner_name.empty() ? std::string(settings->get_local_name()) : lobby.owner_name);
@@ -17714,17 +17742,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         !wrapped &&
         !is_server &&
         local_is_owner &&
+        GBE_local_lobby.owner_connected &&
         lobby_state == 2u &&
         lobby_game_state >= 2u &&
         GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseLoaded;
     if (arcade_loaded_engine_7035) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
-            "[LOBBY] Ignoring arcade direct 7035 after finished loading LobbyID=%llu state=%u game_state=%u launch_phase=%s",
+            "[LOBBY] Ignoring arcade direct 7035 while loaded owner is still connected LobbyID=%llu state=%u game_state=%u launch_phase=%s owner_connected=%u",
             static_cast<unsigned long long>(lobby_id),
             lobby_state,
             lobby_game_state,
-            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
+            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
+            GBE_local_lobby.owner_connected ? 1u : 0u
         );
         return true;
     }
