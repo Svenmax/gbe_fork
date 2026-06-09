@@ -18259,28 +18259,6 @@ bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyLaunchMessage(uint32 inner
 
 bool Steam_Game_Coordinator::GBE_SendDotaCustomGameLaunchSetupFlow(bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id)
 {
-    GBE_local_lobby.state = 4u;
-    GBE_local_lobby.game_state = 0u;
-    GBE_PublishSharedDotaLobbyState("7041_custom_game_readyup");
-
-    std::string readyup_26;
-    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, GBE_local_lobby.owner_name, readyup_26, true)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building custom game READYUP 26 after 7041 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
-        return false;
-    }
-
-    if (!GBE_SendDotaPracticeLobbyLaunchMessage(GBE_kDotaPracticeLobbyDetailsUpdate, readyup_26, wrapped, outer_session_field_raw, "7041_custom_game_readyup", true, 4u, 0u))
-        return false;
-
-    std::string response_7170;
-    if (!GBE_BuildDotaReadyUpStatusPayload(has_request_job, request_job_id, GBE_local_lobby.lobby_id, 0u, 1u, response_7170)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building custom game 7170 after 7041 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
-        return false;
-    }
-
-    if (!GBE_SendDotaPracticeLobbyLaunchMessage(7170u, response_7170, wrapped, outer_session_field_raw, "7041_custom_game_7170"))
-        return false;
-
     GBE_local_lobby.state = 1u;
     GBE_local_lobby.game_state = 0u;
     GBE_PublishSharedDotaLobbyState("7041_custom_game_serversetup");
