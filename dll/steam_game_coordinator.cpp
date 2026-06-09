@@ -11499,7 +11499,23 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
             reason ? reason : "generic_lobby_members_changed"
         );
     }
-    if (!is_server && !host_has_active_server_gc && previous_state < 3u && GBE_local_lobby.state >= 3u && GBE_local_lobby.lobby_id != 0) {
+    const bool arcade_active_match =
+        GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) &&
+        GBE_local_lobby.match_id != 0ull &&
+        GBE_local_lobby.game_state >= 2u &&
+        GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued;
+    if (!is_server && !host_has_active_server_gc && arcade_active_match && previous_state < 3u && GBE_local_lobby.state >= 3u) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Skipping PLAYER PostGame cleanup during arcade active match LobbyID=%llu state=%u game_state=%u launch_phase=%s reason=%s",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
+            reason ? reason : "generic_lobby_members_changed"
+        );
+    }
+    if (!is_server && !host_has_active_server_gc && !arcade_active_match && previous_state < 3u && GBE_local_lobby.state >= 3u && GBE_local_lobby.lobby_id != 0) {
         const uint64 cleaning_lobby_id = GBE_local_lobby.lobby_id;
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
