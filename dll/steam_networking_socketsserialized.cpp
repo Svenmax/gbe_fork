@@ -645,12 +645,16 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     if (direct_sockets && (GBE_last_direct_connect_server_id != ctx.server_id || GBE_last_direct_connect_endpoint != endpoint)) {
         SteamNetworkingIPAddr address{};
         if (GBE_ParseIPv4Endpoint(endpoint, &address)) {
-            const HSteamNetConnection connection = direct_sockets->ConnectByIPAddress(address);
+            SteamNetworkingConfigValue_t options[3] = {};
+            options[0].SetInt32(k_ESteamNetworkingConfig_IP_AllowWithoutAuth, 2);
+            options[1].SetInt32(k_ESteamNetworkingConfig_IPLocalHost_AllowWithoutAuth, 2);
+            options[2].SetInt32(k_ESteamNetworkingConfig_Unencrypted, 2);
+            const HSteamNetConnection connection = direct_sockets->ConnectByIPAddress(address, 3, options);
             GBE_last_direct_connect_server_id = ctx.server_id;
             GBE_last_direct_connect_endpoint = endpoint;
             GBE_ReconnectLog(
                 "GBE_RECONNECT_DIAG",
-                "direct ConnectByIPAddress source=PostConnectionStateMsg server_id=%llu endpoint=%s connection=%u",
+                "direct ConnectByIPAddress source=PostConnectionStateMsg server_id=%llu endpoint=%s connection=%u options=IP_AllowWithoutAuth:2,IPLocalHost_AllowWithoutAuth:2,Unencrypted:2",
                 (unsigned long long)ctx.server_id,
                 endpoint.c_str(),
                 connection

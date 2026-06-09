@@ -61,6 +61,24 @@ static void GBE_LogNetSockTrace(const char *scope, const void *self, uint64 loca
     std::fclose(file);
 }
 
+static void GBE_LogNetSockOptionsTrace(const char *scope, const void *self, int nOptions, const SteamNetworkingConfigValue_t *pOptions)
+{
+    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (!file)
+        return;
+
+    std::fprintf(file, "[%s] self=%p count=%d", scope ? scope : "NETSOCK_OPTIONS", self, nOptions);
+    for (int i = 0; i < nOptions && pOptions; ++i) {
+        if (pOptions[i].m_eDataType == k_ESteamNetworkingConfig_Int32) {
+            std::fprintf(file, " option[%d]=%d:%d", i, (int)pOptions[i].m_eValue, (int)pOptions[i].m_val.m_int32);
+        } else {
+            std::fprintf(file, " option[%d]=%d:type%d", i, (int)pOptions[i].m_eValue, (int)pOptions[i].m_eDataType);
+        }
+    }
+    std::fprintf(file, "\n");
+    std::fclose(file);
+}
+
 
 void Steam_Networking_Sockets::steam_callback(void *object, Common_Message *msg)
 {
@@ -446,6 +464,7 @@ HSteamNetConnection Steam_Networking_Sockets::ConnectByIPAddress( const SteamNet
     PRINT_DEBUG("%X", address.GetIPv4());
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     GBE_LogNetSockTrace("NETSOCK_CONNECT_BY_IP", this, settings->get_local_steam_id().ConvertToUint64(), 0, SNS_DISABLED_PORT, address.m_port, CONNECT_SOCKET_CONNECTING, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
+    GBE_LogNetSockOptionsTrace("NETSOCK_CONNECT_BY_IP_OPTIONS", this, nOptions, pOptions);
     SteamNetworkingIdentity ip_id;
     ip_id.SetIPAddr(address);
     HSteamNetConnection socket = new_connect_socket(ip_id, SNS_DISABLED_PORT, address.m_port);
