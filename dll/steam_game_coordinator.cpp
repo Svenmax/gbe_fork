@@ -8485,8 +8485,29 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         }
     }
 
+    const uint32 previous_state = GBE_local_lobby.state;
+    const uint32 previous_game_state = GBE_local_lobby.game_state;
+    uint32 next_game_state = message.lobby_game_state;
+    if (gc_profile == GC_PROFILE_DOTA2 &&
+        GBE_local_lobby.active &&
+        previous_state == 2u &&
+        message.lobby_state == 2u &&
+        previous_game_state > 0u &&
+        next_game_state == 0u) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "preserving monotonic launch game_state on queued apply msg=%u state=%u previous_game_state=%u queued_game_state=%u lobby_id=%llu",
+            GBE_GC_MaskedEMsg(message.msg_type),
+            message.lobby_state,
+            previous_game_state,
+            next_game_state,
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+        );
+        next_game_state = previous_game_state;
+    }
+
     GBE_local_lobby.state = message.lobby_state;
-    GBE_local_lobby.game_state = message.lobby_game_state;
+    GBE_local_lobby.game_state = next_game_state;
 
     if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
         if (GBE_local_lobby.launch_phase < GBE_kDotaLaunchPhaseSetupSynced)
