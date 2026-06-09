@@ -22,12 +22,20 @@
 
 namespace {
 
+constexpr uint32 GBE_kDotaAppId = 570u;
+constexpr int GBE_kDotaArcadePort = 27015;
+
 void GBE_SetNetworkingErrMsg(SteamNetworkingErrMsg &errMsg, const char *message)
 {
     if (!message)
         message = "";
     std::strncpy(errMsg, message, k_cchMaxSteamNetworkingErrMsg - 1);
     errMsg[k_cchMaxSteamNetworkingErrMsg - 1] = '\0';
+}
+
+bool GBE_IsDotaArcadeIPListen(int virtual_port, int real_port)
+{
+    return virtual_port == -1 && real_port == GBE_kDotaArcadePort;
 }
 
 }
@@ -205,7 +213,7 @@ HSteamListenSocket Steam_Networking_Sockets::new_listen_socket(int nSteamConnect
     if (socket_id == k_HSteamListenSocket_Invalid) ++socket_id;
     CSteamID steam_id = settings->get_local_steam_id();
 
-    auto conn = std::find_if(sbcs->listen_sockets.begin(), sbcs->listen_sockets.end(), [&nSteamConnectVirtualPort,&steam_id](struct Listen_Socket const& conn) { return conn.virtual_port == nSteamConnectVirtualPort && conn.created_by == steam_id;});
+    auto conn = std::find_if(sbcs->listen_sockets.begin(), sbcs->listen_sockets.end(), [&nSteamConnectVirtualPort,&real_port,&steam_id](struct Listen_Socket const& conn) { return conn.virtual_port == nSteamConnectVirtualPort && conn.real_port == real_port && conn.created_by == steam_id;});
     if (conn != sbcs->listen_sockets.end()) return k_HSteamListenSocket_Invalid;
 
     struct Listen_Socket listen_socket;
@@ -305,6 +313,9 @@ Steam_Networking_Sockets::Steam_Networking_Sockets(class Settings *settings, cla
     this->run_every_runcb->add(&Steam_Networking_Sockets::steam_run_every_runcb, this);
 
     GBE_LogNetSockTrace("NETSOCK_CTOR", this, settings->get_local_steam_id().ConvertToUint64(), 0, 0, settings->get_port(), 0, sbcs != nullptr ? 1 : 0);
+    if (sbcs != nullptr && settings->get_local_game_id().AppID() == GBE_kDotaAppId) {
+        new_listen_socket(SNS_DISABLED_PORT, GBE_kDotaArcadePort);
+    }
 
 }
 
@@ -2201,7 +2212,7 @@ void Steam_Networking_Sockets::Callback(Common_Message *msg)
             uint64 dest_id = msg->dest_id();
             std::vector<Listen_Socket>::iterator conn;
             if (virtual_port == SNS_DISABLED_PORT) {
-                conn = std::find_if(sbcs->listen_sockets.begin(), sbcs->listen_sockets.end(), [&real_port,&dest_id](struct Listen_Socket const& conn) { return conn.real_port == real_port && dest_id == conn.created_by.ConvertToUint64();});
+                conn = std::find_if(sbcs->listen_sockets.begin(), sbcs->listen_sockets.end(), [&real_port,&dest_id](struct Listen_Socket const& conn) { return conn.real_port == real_port && (dest_id == 0 || dest_id == conn.created_by.ConvertToUint64());});
             } else {
                 conn = std::find_if(sbcs->listen_sockets.begin(), sbcs->listen_sockets.end(), [&virtual_port,&dest_id](struct Listen_Socket const& conn) { return conn.virtual_port == virtual_port && dest_id == conn.created_by.ConvertToUint64();});
             }
@@ -2214,6 +2225,15 @@ void Steam_Networking_Sockets::Callback(Common_Message *msg)
                     HSteamNetConnection new_connection = new_connect_socket(identity, virtual_port, real_port, CONNECT_SOCKET_NOT_ACCEPTED, conn->socket_id, static_cast<HSteamNetConnection>(msg->networking_sockets().connection_id_from()));
                     GBE_LogNetSockTrace("NETSOCK_RX_CONNECTION_REQUEST", this, settings->get_local_steam_id().ConvertToUint64(), msg->source_id(), virtual_port, real_port, CONNECT_SOCKET_NOT_ACCEPTED, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
                     launch_callback(new_connection, CONNECT_SOCKET_NO_CONNECTION);
+                    if (settings->get_local_game_id().AppID() == GBE_kDotaAppId && GBE_IsDotaArcadeIPListen(virtual_port, real_port) && sbcs != nullptr && sbcs->used > 0) {
+                        auto accepted_socket = sbcs->connect_sockets.find(new_connection);
+                        if (accepted_socket != sbcs->connect_sockets.end()) {
+                            accepted_socket->second.status = CONNECT_SOCKET_CONNECTED;
+                            GBE_LogNetSockTrace("NETSOCK_AUTO_ACCEPT_CONNECTION", this, settings->get_local_steam_id().ConvertToUint64(), msg->source_id(), virtual_port, real_port, CONNECT_SOCKET_CONNECTED, 1);
+                            send_packet_new_connection(new_connection);
+                            launch_callback(new_connection, CONNECT_SOCKET_NOT_ACCEPTED);
+                        }
+                    }
                 }
             } else {
                 GBE_LogNetSockTrace("NETSOCK_RX_CONNECTION_REQUEST_NO_LISTENER", this, settings->get_local_steam_id().ConvertToUint64(), msg->source_id(), virtual_port, real_port, CONNECT_SOCKET_NO_CONNECTION, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
