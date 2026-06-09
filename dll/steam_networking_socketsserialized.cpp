@@ -32,6 +32,44 @@ namespace {
 
 constexpr int GBE_kSerializedRendezvousPort = -5434;
 
+template <typename T>
+const T *GBE_AsSerializedCallbackPayload(const void *data, uint32 size)
+{
+    if (!data)
+        return nullptr;
+
+    if (size == sizeof(T))
+        return static_cast<const T *>(data);
+
+    if (size == sizeof(int) + sizeof(T)) {
+        const auto *bytes = static_cast<const uint8_t *>(data);
+        int callback_id = 0;
+        std::memcpy(&callback_id, bytes, sizeof(callback_id));
+        if (callback_id == T::k_iCallback)
+            return reinterpret_cast<const T *>(bytes + sizeof(callback_id));
+    }
+
+    return nullptr;
+}
+
+template <typename T>
+bool GBE_PostSerializedCallbackPayload(SteamCallBacks *callbacks, const void *data, uint32 size, const char *name)
+{
+    const T *payload = GBE_AsSerializedCallbackPayload<T>(data, size);
+    if (!payload)
+        return false;
+
+    callbacks->addCBResult(T::k_iCallback, const_cast<T *>(payload), sizeof(T));
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "queued serialized callback id=%d type=%s size=%u",
+        T::k_iCallback,
+        name ? name : "unknown",
+        size
+    );
+    return true;
+}
+
 void GBE_LogSerializedNetSockTrace(const char *scope, uint64 local_id, uint64 remote_id, uint32 connection_id, uint32 size_or_reason)
 {
     FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
@@ -486,6 +524,13 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     const std::string payload_prefix = GBE_FormatPayloadPrefix(pMsg, cbMsg);
 
+    if (GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsConfigUpdated_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsConfigUpdated") ||
+        GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsCert_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsCert") ||
+        GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsRecvP2PFailure_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsRecvP2PFailure") ||
+        GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsRecvP2PRendezvous_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsRecvP2PRendezvous")) {
+        return;
+    }
+
     GBE_DotaReconnectContext ctx{};
     const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
     const bool state_ready = has_ctx && ctx.game_state >= 2;
@@ -551,6 +596,25 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
             ctx.connect
         );
         return;
+    }
+
+    if (pMsg && cbMsg > 0 && cbMsg <= sizeof(SteamNetworkingSocketsRecvP2PRendezvous_t::m_MsgRendezvous)) {
+        SteamNetworkingSocketsRecvP2PRendezvous_t rendezvous{};
+        rendezvous.steamIDRemote = ctx.server_id;
+        rendezvous.unConnectionIDSrc = 0;
+        rendezvous.m_cbRendezvous = cbMsg;
+        std::memcpy(rendezvous.m_MsgRendezvous, pMsg, cbMsg);
+        callbacks->addCBResult(rendezvous.k_iCallback, &rendezvous, sizeof(rendezvous));
+        GBE_ReconnectLog(
+            "GBE_RECONNECT_DIAG",
+            "queued callback id=%d type=SteamNetworkingSocketsRecvP2PRendezvous source=PostConnectionStateMsg retry=%u server_id=%llu connection_id=%u size=%u prefix=%s",
+            rendezvous.k_iCallback,
+            GBE_post_connection_state_retry_count,
+            (unsigned long long)ctx.server_id,
+            rendezvous.unConnectionIDSrc,
+            cbMsg,
+            payload_prefix.c_str()
+        );
     }
 
     GameServerChangeRequested_t server_change{};
