@@ -11900,8 +11900,8 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyStateKey, std::to_string(GBE_local_lobby.state).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStateKey, std::to_string(GBE_local_lobby.game_state).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey, std::to_string(GBE_local_lobby.match_id).c_str());
-    const std::string normalized_connect = GBE_FormatDotaPracticeLobbyConnectForCustomGame(GBE_local_lobby.connect, &GBE_local_lobby.custom_game);
-    GBE_local_lobby.connect = GBE_NormalizeDotaPracticeLobbyConnect(GBE_local_lobby.connect);
+    const std::string normalized_connect = GBE_NormalizeDotaPracticeLobbyConnect(GBE_local_lobby.connect);
+    GBE_local_lobby.connect = normalized_connect;
     if (GBE_local_lobby.match_id == 0) {
         GBE_local_lobby.server_id = 0ull;
     }
