@@ -359,6 +359,7 @@ enum : uint32 {
     GBE_kDotaLaunchPhaseRequested = 1u,
     GBE_kDotaLaunchPhaseSetupSynced = 2u,
     GBE_kDotaLaunchPhaseRunQueued = 3u,
+    GBE_kDotaLaunchPhaseLoaded = 4u,
 };
 
 static const char *GBE_DescribeDotaLaunchPhase(uint32 phase)
@@ -370,6 +371,8 @@ static const char *GBE_DescribeDotaLaunchPhase(uint32 phase)
             return "serversetup_synced";
         case GBE_kDotaLaunchPhaseRunQueued:
             return "run_queued";
+        case GBE_kDotaLaunchPhaseLoaded:
+            return "loaded";
         default:
             return "none";
     }
@@ -13531,6 +13534,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 } else if (GBE_local_lobby.state < 2u) {
                     GBE_local_lobby.state = 2u;
                 }
+                GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseLoaded, "8053_finished_loading");
                 GBE_PublishSharedDotaLobbyState("8053_finished_loading");
                 GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "8053_finished_loading");
                 GBE_GC_DebugLog(
@@ -17632,7 +17636,26 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         !GBE_local_lobby.owner_connected &&
         lobby_state == 2u &&
         lobby_game_state >= 2u &&
-        GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued;
+        GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued &&
+        GBE_local_lobby.launch_phase < GBE_kDotaLaunchPhaseLoaded;
+    const bool arcade_loaded_engine_7035 =
+        GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) &&
+        !wrapped &&
+        !GBE_local_lobby.owner_connected &&
+        lobby_state == 2u &&
+        lobby_game_state >= 2u &&
+        GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseLoaded;
+    if (arcade_loaded_engine_7035) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Ignoring arcade direct 7035 after finished loading LobbyID=%llu state=%u game_state=%u launch_phase=%s",
+            static_cast<unsigned long long>(lobby_id),
+            lobby_state,
+            lobby_game_state,
+            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
+        );
+        return true;
+    }
     if (arcade_launch_failed_before_connect && GBE_local_lobby.game_start_time != 0u) {
         const uint32 now = static_cast<uint32>(std::time(nullptr));
         if (now <= GBE_local_lobby.game_start_time + 5u) {
