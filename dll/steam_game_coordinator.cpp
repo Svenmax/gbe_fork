@@ -17604,12 +17604,28 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         lobby_state == 2u &&
         lobby_game_state >= abandon_game_state_threshold;
     const bool arcade_launch_failed_before_connect =
-        GBE_local_lobby.custom_game.game_id != 0ull &&
+        GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) &&
         !wrapped &&
         !GBE_local_lobby.owner_connected &&
         lobby_state == 2u &&
         lobby_game_state >= 2u &&
         GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued;
+    if (arcade_launch_failed_before_connect && GBE_local_lobby.game_start_time != 0u) {
+        const uint32 now = static_cast<uint32>(std::time(nullptr));
+        if (now <= GBE_local_lobby.game_start_time + 5u) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Ignoring early arcade direct 7035 during launch grace window LobbyID=%llu state=%u game_state=%u launch_phase=%s start_time=%u now=%u",
+                static_cast<unsigned long long>(lobby_id),
+                lobby_state,
+                lobby_game_state,
+                GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
+                GBE_local_lobby.game_start_time,
+                now
+            );
+            return true;
+        }
+    }
     if (arcade_launch_failed_before_connect) {
         std::string response_25;
         if (!GBE_BuildDotaLobbyCacheUnsubscribedPayload(lobby_id, response_25)) {
