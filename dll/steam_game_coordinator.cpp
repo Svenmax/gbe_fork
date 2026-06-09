@@ -19939,6 +19939,9 @@ bool Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbySteamAuthAck(const c
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.match_id == 0)
         return false;
 
+    if (!GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game))
+        return false;
+
     if (GBE_local_lobby.state != 1u || GBE_local_lobby.game_state != 0u)
         return false;
 
