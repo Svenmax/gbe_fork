@@ -18,27 +18,7 @@
 #include "dll/steam_ugc.h"
 #include "dll/dll.h"
 
-#include <curl/curl.h>
 #include <fstream>
-
-struct GBE_DotaWorkshopOnlineDetails {
-    std::string title{};
-    std::string description{};
-    std::string preview_url{};
-    uint32 time_created{};
-    uint32 time_updated{};
-    uint32 subscriptions{};
-    uint32 favorited{};
-    float score{};
-};
-
-static size_t GBE_DotaCurlWriteString(char *ptr, size_t size, size_t nmemb, void *userdata)
-{
-    const size_t bytes = size * nmemb;
-    if (userdata && ptr && bytes)
-        static_cast<std::string *>(userdata)->append(ptr, bytes);
-    return bytes;
-}
 
 static std::string GBE_DotaWorkshopParentPath(const std::string &path)
 {
@@ -245,79 +225,103 @@ static std::string GBE_DotaWorkshopFallbackDisplayName(const std::string &worksh
     return workshop_id;
 }
 
-static std::optional<GBE_DotaWorkshopOnlineDetails> GBE_DotaFetchWorkshopOnlineDetails(const std::string &workshop_id)
+static std::string GBE_DotaExtractAddonInfoValue(const std::string &line, const std::string &key);
+
+static void GBE_DotaAddUniquePath(std::vector<std::filesystem::path> &paths, std::set<std::string> &seen, const std::filesystem::path &path)
 {
-    if (!GBE_DotaIsNumericString(workshop_id)) return std::nullopt;
-
-    static std::map<std::string, std::optional<GBE_DotaWorkshopOnlineDetails>> cache;
-    auto cached = cache.find(workshop_id);
-    if (cached != cache.end()) return cached->second;
-
-    CURL *curl = curl_easy_init();
-    if (!curl) {
-        cache[workshop_id] = std::nullopt;
-        return std::nullopt;
-    }
-
-    std::string response;
-    const std::string post_fields = "itemcount=1&publishedfileids%5B0%5D=" + workshop_id;
-
-    curl_easy_setopt(curl, CURLOPT_URL, "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/");
-    curl_easy_setopt(curl, CURLOPT_POST, 1L);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_fields.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, GBE_DotaCurlWriteString);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 3L);
-    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-
-    const CURLcode result = curl_easy_perform(curl);
-    curl_easy_cleanup(curl);
-    if (result != CURLE_OK || response.empty()) {
-        PRINT_DEBUG("[DOTA_UGC] workshop details fetch failed id='%s' curl=%i", workshop_id.c_str(), static_cast<int>(result));
-        cache[workshop_id] = std::nullopt;
-        return std::nullopt;
-    }
-
-    try {
-        const nlohmann::json root = nlohmann::json::parse(response);
-        const nlohmann::json &items = root.at("response").at("publishedfiledetails");
-        if (!items.is_array() || items.empty()) {
-            cache[workshop_id] = std::nullopt;
-            return std::nullopt;
-        }
-
-        const nlohmann::json &item = items.at(0);
-        if (item.value("result", 0) != 1) {
-            cache[workshop_id] = std::nullopt;
-            return std::nullopt;
-        }
-
-        GBE_DotaWorkshopOnlineDetails details{};
-        details.title = item.value("title", std::string{});
-        details.description = item.value("description", std::string{});
-        details.preview_url = item.value("preview_url", std::string{});
-        details.time_created = item.value("time_created", 0u);
-        details.time_updated = item.value("time_updated", 0u);
-        details.subscriptions = item.value("subscriptions", 0u);
-        details.favorited = item.value("favorited", 0u);
-        details.score = item.value("score", 0.0f);
-        if (!GBE_DotaIsReadableAddonName(details.title)) {
-            cache[workshop_id] = std::nullopt;
-            return std::nullopt;
-        }
-
-        PRINT_DEBUG("[DOTA_UGC] workshop details fetched id='%s' title='%s'", workshop_id.c_str(), details.title.c_str());
-        cache[workshop_id] = details;
-        return details;
-    } catch (...) {
-        PRINT_DEBUG("[DOTA_UGC] workshop details parse failed id='%s'", workshop_id.c_str());
-        cache[workshop_id] = std::nullopt;
-        return std::nullopt;
-    }
+    const std::string normalized = common_helpers::to_lower(path.u8string());
+    if (!normalized.empty() && seen.insert(normalized).second)
+        paths.push_back(path);
 }
 
-static std::string GBE_DotaExtractAddonInfoValue(const std::string &line, const std::string &key);
+static std::string GBE_DotaReadableTitleNearWorkshopId(const std::filesystem::path &path, const std::string &workshop_id)
+{
+    try {
+        if (!common_helpers::file_exist(path)) return {};
+        const auto file_size = std::filesystem::file_size(path);
+        if (file_size == 0 || file_size > 16u * 1024u * 1024u) return {};
+
+        std::ifstream input(path);
+        if (!input.is_open()) return {};
+
+        std::vector<std::string> recent_lines;
+        recent_lines.reserve(80);
+        bool near_item = false;
+        size_t remaining = 0;
+        for (std::string line; std::getline(input, line); ) {
+            const std::string stripped = common_helpers::string_strip(line);
+            if (stripped.find(workshop_id) != std::string::npos) {
+                for (const std::string &recent_line : recent_lines) {
+                    for (const char *key : { "title", "name", "display_name" }) {
+                        const std::string value = GBE_DotaExtractAddonInfoValue(recent_line, key);
+                        if (GBE_DotaIsReadableAddonName(value)) return value;
+                    }
+                }
+                near_item = true;
+                remaining = 160;
+            }
+
+            if (!near_item) {
+                recent_lines.push_back(stripped);
+                if (recent_lines.size() > 80) recent_lines.erase(recent_lines.begin());
+                continue;
+            }
+
+            for (const char *key : { "title", "name", "display_name" }) {
+                const std::string value = GBE_DotaExtractAddonInfoValue(stripped, key);
+                if (GBE_DotaIsReadableAddonName(value)) return value;
+            }
+
+            if (remaining == 0) {
+                near_item = false;
+                continue;
+            }
+            --remaining;
+            recent_lines.push_back(stripped);
+            if (recent_lines.size() > 80) recent_lines.erase(recent_lines.begin());
+        }
+    } catch (...) { }
+
+    return {};
+}
+
+static std::string GBE_DotaWorkshopCachedTitle(const std::string &mod_path, const std::string &workshop_id)
+{
+    if (workshop_id.empty()) return {};
+
+    std::vector<std::filesystem::path> candidates;
+    std::set<std::string> seen;
+
+    try {
+        std::filesystem::path cursor = std::filesystem::u8path(mod_path);
+        for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
+            GBE_DotaAddUniquePath(candidates, seen, cursor / "appworkshop_570.acf");
+            GBE_DotaAddUniquePath(candidates, seen, cursor / "workshop" / "appworkshop_570.acf");
+            GBE_DotaAddUniquePath(candidates, seen, cursor / "steamapps" / "workshop" / "appworkshop_570.acf");
+            GBE_DotaAddUniquePath(candidates, seen, cursor / "appcache" / "workshop" / "appworkshop_570.acf");
+            GBE_DotaAddUniquePath(candidates, seen, cursor / "appcache" / "workshop" / (workshop_id + ".acf"));
+            GBE_DotaAddUniquePath(candidates, seen, cursor / "appcache" / "workshop" / (workshop_id + ".json"));
+            cursor = cursor.parent_path();
+        }
+
+        const std::filesystem::path root = std::filesystem::u8path(mod_path);
+        if (common_helpers::dir_exist(root)) {
+            for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+                if (!std::filesystem::is_regular_file(dir_entry)) continue;
+                const std::string filename = common_helpers::to_lower(dir_entry.path().filename().u8string());
+                if (filename == "publish_data" || filename == "addoninfo.txt" || filename == "addoninfo.gi")
+                    GBE_DotaAddUniquePath(candidates, seen, dir_entry.path());
+            }
+        }
+
+        for (const auto &candidate : candidates) {
+            const std::string title = GBE_DotaReadableTitleNearWorkshopId(candidate, workshop_id);
+            if (GBE_DotaIsReadableAddonName(title)) return title;
+        }
+    } catch (...) { }
+
+    return {};
+}
 
 static std::string GBE_DotaWorkshopFileStemName(const std::string &mod_path)
 {
@@ -425,6 +429,9 @@ static std::string GBE_DotaLocalAddonDisplayName(const std::string &addon_path, 
 
 static std::string GBE_DotaWorkshopDisplayName(const std::string &mod_path, const std::string &fallback)
 {
+    const std::string cached_title = GBE_DotaWorkshopCachedTitle(mod_path, fallback);
+    if (!cached_title.empty()) return cached_title;
+
     const std::string manifest_title = GBE_DotaWorkshopManifestTitle(mod_path, fallback);
     if (!manifest_title.empty()) return manifest_title;
 
@@ -559,32 +566,26 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
 
             const std::string mod_path = candidate_root + PATH_SEPARATOR + workshop_folder;
             const std::string detected_name = GBE_DotaWorkshopDisplayName(mod_path, workshop_folder);
-            const std::optional<GBE_DotaWorkshopOnlineDetails> online_details = !settings->disable_networking && settings->download_steamhttp_requests
-                ? GBE_DotaFetchWorkshopOnlineDetails(workshop_folder)
-                : std::nullopt;
             const std::string display_name = GBE_DotaIsReadableAddonName(detected_name)
                 ? detected_name
-                : (online_details.has_value() ? online_details->title : GBE_DotaWorkshopFallbackDisplayName(workshop_folder));
+                : GBE_DotaWorkshopFallbackDisplayName(workshop_folder);
             const std::string map_name = GBE_DotaWorkshopModMapName(mod_path, workshop_folder);
             Mod_entry mod{};
             mod.id = workshop_id;
             mod.title = display_name;
             mod.path = mod_path;
             mod.fileType = k_EWorkshopFileTypeCommunity;
-            mod.description = online_details.has_value() && !online_details->description.empty()
-                ? online_details->description
-                : "auto-detected Dota2 workshop mod #" + workshop_folder;
+            mod.description = "auto-detected Dota2 workshop mod #" + workshop_folder;
             mod.steamIDOwner = settings->get_local_steam_id().ConvertToUint64();
-            mod.timeCreated = online_details.has_value() && online_details->time_created ? online_details->time_created : 1554997000u;
-            mod.timeUpdated = online_details.has_value() && online_details->time_updated ? online_details->time_updated : 1555601800u;
+            mod.timeCreated = 1554997000u;
+            mod.timeUpdated = 1555601800u;
             mod.timeAddedToUserList = 1556206600u;
             mod.visibility = k_ERemoteStoragePublishedFileVisibilityPublic;
             mod.acceptedForUse = true;
             mod.workshopItemURL = "https://steamcommunity.com/sharedfiles/filedetails/?id=" + workshop_folder;
-            mod.previewURL = online_details.has_value() ? online_details->preview_url : std::string{};
-            mod.votesUp = online_details.has_value() && online_details->subscriptions ? online_details->subscriptions : 500u;
+            mod.votesUp = 500u;
             mod.votesDown = 12u;
-            mod.score = online_details.has_value() && online_details->score > 0.0f ? online_details->score : 0.97f;
+            mod.score = 0.97f;
             if (!map_name.empty()) {
                 mod.tags = "Dota,Custom Game,Workshop";
                 nlohmann::json metadata = nlohmann::json::object();
