@@ -18,6 +18,7 @@
 #include "dll/steam_networking_socketsserialized.h"
 #include "dll/steam_networking_sockets.h"
 #include "dll/gbe_dota_reconnect_shared.h"
+#include "dll/steam_client.h"
 
 #include <cstdio>
 #include <cstdint>
@@ -186,6 +187,67 @@ std::string GBE_FormatSerializedPayloadFields(const void *data, uint32 size)
     return fields;
 }
 
+bool GBE_GetSerializedFixed32Field(const void *data, uint32 size, uint32 wanted_field, uint32 *out)
+{
+    if (!data || !out)
+        return false;
+
+    const auto *bytes = static_cast<const uint8_t *>(data);
+    uint32 offset = 0;
+    while (offset < size) {
+        uint64 key = 0;
+        uint32 shift = 0;
+        while (offset < size && shift < 64) {
+            const uint8_t byte = bytes[offset++];
+            key |= static_cast<uint64>(byte & 0x7f) << shift;
+            if ((byte & 0x80) == 0)
+                break;
+            shift += 7;
+        }
+
+        const uint32 field_number = static_cast<uint32>(key >> 3);
+        const uint32 wire_type = static_cast<uint32>(key & 0x7);
+        if (wire_type == 0) {
+            while (offset < size) {
+                const uint8_t byte = bytes[offset++];
+                if ((byte & 0x80) == 0)
+                    break;
+            }
+        } else if (wire_type == 1) {
+            if (offset + 8 > size)
+                return false;
+            offset += 8;
+        } else if (wire_type == 2) {
+            uint64 length = 0;
+            shift = 0;
+            while (offset < size && shift < 64) {
+                const uint8_t byte = bytes[offset++];
+                length |= static_cast<uint64>(byte & 0x7f) << shift;
+                if ((byte & 0x80) == 0)
+                    break;
+                shift += 7;
+            }
+            if (length > size - offset)
+                return false;
+            offset += static_cast<uint32>(length);
+        } else if (wire_type == 5) {
+            if (offset + 4 > size)
+                return false;
+            uint32 value = 0;
+            std::memcpy(&value, bytes + offset, sizeof(value));
+            offset += 4;
+            if (field_number == wanted_field) {
+                *out = value;
+                return true;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    return false;
+}
+
 uint64 GBE_last_post_connection_state_server_id = 0;
 uint32 GBE_post_connection_state_retry_count = 0;
 uint32 GBE_last_post_connection_state_size = 0;
@@ -330,6 +392,23 @@ bool GBE_ParseIPv4Endpoint(const std::string &endpoint, SteamNetworkingIPAddr *a
     const uint32 ip = static_cast<uint32>((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]);
     address->SetIPv4(ip, static_cast<uint16>(port));
     return true;
+}
+
+void GBE_SendSerializedRendezvous(Networking *network, uint64 local_id, uint64 remote_id, uint32 connection_id, const void *data, uint32 size)
+{
+    if (!network || remote_id == 0 || remote_id == local_id || !data || size == 0)
+        return;
+
+    Common_Message msg;
+    msg.set_source_id(local_id);
+    msg.set_dest_id(remote_id);
+    msg.set_allocated_networking_sockets(new Networking_Sockets);
+    msg.mutable_networking_sockets()->set_type(Networking_Sockets::DATA);
+    msg.mutable_networking_sockets()->set_real_port(GBE_kSerializedRendezvousPort);
+    msg.mutable_networking_sockets()->set_connection_id(connection_id);
+    msg.mutable_networking_sockets()->set_data(data, size);
+    network->sendTo(&msg, true);
+    GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_FORWARD_RENDEZVOUS", local_id, remote_id, connection_id, size);
 }
 
 }
@@ -693,6 +772,25 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         cbMsg,
         payload_prefix.c_str(),
         payload_fields.c_str()
+    );
+
+    uint32 rendezvous_connection_id = GBE_post_connection_state_retry_count;
+    (void)GBE_GetSerializedFixed32Field(pMsg, cbMsg, 3, &rendezvous_connection_id);
+    const uint64 local_id = settings->get_local_steam_id().ConvertToUint64();
+    uint64 rendezvous_remote_id = ctx.server_id;
+    Steam_Client *steam_client = get_steam_client();
+    if (steam_client && steam_client->settings_server) {
+        const uint64 local_server_id = steam_client->settings_server->get_local_steam_id().ConvertToUint64();
+        if (local_server_id != 0 && local_server_id != local_id)
+            rendezvous_remote_id = local_server_id;
+    }
+    GBE_SendSerializedRendezvous(
+        network,
+        local_id,
+        rendezvous_remote_id,
+        rendezvous_connection_id,
+        pMsg,
+        cbMsg
     );
 
     GameServerChangeRequested_t server_change{};
