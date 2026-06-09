@@ -106,6 +106,67 @@ std::string GBE_FormatPayloadPrefix(const void *data, uint32 size)
     return buffer;
 }
 
+uint32 GBE_ReadSerializedRendezvousConnectionID(const void *data, uint32 size)
+{
+    if (!data || size < 5)
+        return 0;
+
+    const auto *bytes = static_cast<const uint8_t *>(data);
+    uint32 offset = 0;
+    while (offset < size) {
+        uint64 key = 0;
+        uint32 shift = 0;
+        while (offset < size && shift < 64) {
+            const uint8_t byte = bytes[offset++];
+            key |= static_cast<uint64>(byte & 0x7f) << shift;
+            if ((byte & 0x80) == 0)
+                break;
+            shift += 7;
+        }
+
+        const uint32 field_number = static_cast<uint32>(key >> 3);
+        const uint32 wire_type = static_cast<uint32>(key & 0x7);
+        if (field_number == 3 && wire_type == 5 && offset + sizeof(uint32) <= size) {
+            uint32 connection_id = 0;
+            std::memcpy(&connection_id, bytes + offset, sizeof(connection_id));
+            return connection_id;
+        }
+
+        if (wire_type == 0) {
+            while (offset < size) {
+                const uint8_t byte = bytes[offset++];
+                if ((byte & 0x80) == 0)
+                    break;
+            }
+        } else if (wire_type == 1) {
+            if (offset + 8 > size)
+                return 0;
+            offset += 8;
+        } else if (wire_type == 2) {
+            uint64 length = 0;
+            shift = 0;
+            while (offset < size && shift < 64) {
+                const uint8_t byte = bytes[offset++];
+                length |= static_cast<uint64>(byte & 0x7f) << shift;
+                if ((byte & 0x80) == 0)
+                    break;
+                shift += 7;
+            }
+            if (length > size - offset)
+                return 0;
+            offset += static_cast<uint32>(length);
+        } else if (wire_type == 5) {
+            if (offset + 4 > size)
+                return 0;
+            offset += 4;
+        } else {
+            return 0;
+        }
+    }
+
+    return 0;
+}
+
 uint64 GBE_last_post_connection_state_server_id = 0;
 uint32 GBE_post_connection_state_retry_count = 0;
 uint32 GBE_last_post_connection_state_size = 0;
@@ -601,7 +662,7 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     if (pMsg && cbMsg > 0 && cbMsg <= sizeof(SteamNetworkingSocketsRecvP2PRendezvous_t::m_MsgRendezvous)) {
         SteamNetworkingSocketsRecvP2PRendezvous_t rendezvous{};
         rendezvous.steamIDRemote = ctx.server_id;
-        rendezvous.unConnectionIDSrc = 0;
+        rendezvous.unConnectionIDSrc = GBE_ReadSerializedRendezvousConnectionID(pMsg, cbMsg);
         rendezvous.m_cbRendezvous = cbMsg;
         std::memcpy(rendezvous.m_MsgRendezvous, pMsg, cbMsg);
         callbacks->addCBResult(rendezvous.k_iCallback, &rendezvous, sizeof(rendezvous));
