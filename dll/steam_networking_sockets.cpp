@@ -38,6 +38,14 @@ bool GBE_IsDotaArcadeIPListen(int virtual_port, int real_port)
     return virtual_port == -1 && real_port == GBE_kDotaArcadePort;
 }
 
+void GBE_DeleteSteamMessage001(SteamNetworkingMessage001_t *msg)
+{
+    if (msg) {
+        free(msg->m_pData);
+        delete msg;
+    }
+}
+
 }
 
 static void GBE_LogNetSockTrace(const char *scope, const void *self, uint64 local_id, uint64 remote_id, int virtual_port, int real_port, int status, int server_like)
@@ -1133,9 +1141,38 @@ EResult Steam_Networking_Sockets::GetConnectionRealTimeStatus( HSteamNetConnecti
 /// into some queue, etc), and you may call Release() from any thread.
 int Steam_Networking_Sockets::ReceiveMessagesOnConnection( HSteamNetConnection hConn, SteamNetworkingMessage001_t **ppOutMessages, int nMaxMessages )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("001 %u %i", hConn, nMaxMessages);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return -1;
+    if (!ppOutMessages || !nMaxMessages) return 0;
+
+    auto connect_socket = sbcs->connect_sockets.find(hConn);
+    if (connect_socket == sbcs->connect_sockets.end()) return 0;
+
+    int messages = 0;
+    while (messages < nMaxMessages && !connect_socket->second.data.empty()) {
+        const Networking_Sockets &queued = connect_socket->second.data.top();
+        SteamNetworkingMessage001_t *pMsg = new SteamNetworkingMessage001_t();
+        *pMsg = {};
+        const unsigned long size = static_cast<unsigned long>(queued.data().size());
+        pMsg->m_pData = malloc(size);
+        pMsg->m_cbSize = size;
+        memcpy(pMsg->m_pData, queued.data().data(), size);
+        pMsg->m_conn = hConn;
+        pMsg->m_steamIDSender = connect_socket->second.remote_identity.GetSteamID();
+        pMsg->m_nConnUserData = connect_socket->second.user_data;
+        pMsg->m_usecTimeReceived = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - created).count();
+        pMsg->m_nMessageNumber = queued.message_number();
+        pMsg->m_pfnRelease = &GBE_DeleteSteamMessage001;
+        pMsg->m_nChannel = 0;
+        ppOutMessages[messages] = pMsg;
+        connect_socket->second.data.pop();
+        ++messages;
+    }
+
+    if (messages > 0) {
+        GBE_LogNetSockTrace("NETSOCK_RECV_DATA_001", this, settings->get_local_steam_id().ConvertToUint64(), connect_socket->second.remote_identity.GetSteamID64(), connect_socket->second.virtual_port, connect_socket->second.real_port, connect_socket->second.status, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
+    }
+    return messages;
 }
  
 
@@ -1149,9 +1186,43 @@ int Steam_Networking_Sockets::ReceiveMessagesOnConnection( HSteamNetConnection h
 /// messages is relevant!)
 int Steam_Networking_Sockets::ReceiveMessagesOnListenSocket( HSteamListenSocket hSocket, SteamNetworkingMessage001_t **ppOutMessages, int nMaxMessages )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("001 %u %i", hSocket, nMaxMessages);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return -1;
+    if (!ppOutMessages || !nMaxMessages) return 0;
+
+    int messages = 0;
+    auto socket_conn = std::begin(sbcs->connect_sockets);
+    while (socket_conn != std::end(sbcs->connect_sockets) && messages < nMaxMessages) {
+        if (socket_conn->second.listen_socket_id == hSocket) {
+            const int before_messages = messages;
+            while (messages < nMaxMessages && !socket_conn->second.data.empty()) {
+                const Networking_Sockets &queued = socket_conn->second.data.top();
+                SteamNetworkingMessage001_t *pMsg = new SteamNetworkingMessage001_t();
+                *pMsg = {};
+                const unsigned long size = static_cast<unsigned long>(queued.data().size());
+                pMsg->m_pData = malloc(size);
+                pMsg->m_cbSize = size;
+                memcpy(pMsg->m_pData, queued.data().data(), size);
+                pMsg->m_conn = socket_conn->first;
+                pMsg->m_steamIDSender = socket_conn->second.remote_identity.GetSteamID();
+                pMsg->m_nConnUserData = socket_conn->second.user_data;
+                pMsg->m_usecTimeReceived = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - created).count();
+                pMsg->m_nMessageNumber = queued.message_number();
+                pMsg->m_pfnRelease = &GBE_DeleteSteamMessage001;
+                pMsg->m_nChannel = 0;
+                ppOutMessages[messages] = pMsg;
+                socket_conn->second.data.pop();
+                ++messages;
+            }
+            if (messages > before_messages) {
+                GBE_LogNetSockTrace("NETSOCK_RECV_DATA_LISTEN_001", this, settings->get_local_steam_id().ConvertToUint64(), socket_conn->second.remote_identity.GetSteamID64(), socket_conn->second.virtual_port, socket_conn->second.real_port, socket_conn->second.status, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
+            }
+        }
+
+        ++socket_conn;
+    }
+
+    return messages;
 }
  
 
