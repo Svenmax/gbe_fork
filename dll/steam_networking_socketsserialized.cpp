@@ -26,6 +26,7 @@
 #include <string>
 #include <ctime>
 #include <vector>
+#include <cstdlib>
 
 namespace {
 
@@ -173,6 +174,44 @@ std::vector<uint8_t> GBE_BuildSerializedNetworkingCert(CSteamID steam_id, uint32
     GBE_AppendBytes(cert, 11, identity_binary.data(), identity_binary.size());
     GBE_AppendBytes(cert, 12, identity.data(), identity.size());
     return cert;
+}
+
+bool GBE_ParseIPv4Endpoint(const std::string &endpoint, SteamNetworkingIPAddr *address)
+{
+    if (!address)
+        return false;
+
+    const size_t port_pos = endpoint.find(':');
+    if (port_pos == std::string::npos)
+        return false;
+
+    unsigned long octets[4] = {};
+    size_t start = 0;
+    for (int i = 0; i < 4; ++i) {
+        const size_t end = endpoint.find(i == 3 ? ':' : '.', start);
+        if (end == std::string::npos || end <= start)
+            return false;
+
+        const std::string segment = endpoint.substr(start, end - start);
+        char *parse_end = nullptr;
+        octets[i] = std::strtoul(segment.c_str(), &parse_end, 10);
+        if (!parse_end || *parse_end != '\0' || octets[i] > 255)
+            return false;
+
+        start = end + 1;
+    }
+
+    if (start != port_pos + 1)
+        return false;
+
+    char *port_end = nullptr;
+    const unsigned long port = std::strtoul(endpoint.c_str() + port_pos + 1, &port_end, 10);
+    if (!port_end || *port_end != '\0' || port == 0 || port > 65535)
+        return false;
+
+    const uint32 ip = static_cast<uint32>((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]);
+    address->SetIPv4(ip, static_cast<uint16>(port));
+    return true;
 }
 
 }
@@ -478,7 +517,7 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     const std::string endpoint(ctx.connect);
     if (direct_sockets && (GBE_last_direct_connect_server_id != ctx.server_id || GBE_last_direct_connect_endpoint != endpoint)) {
         SteamNetworkingIPAddr address{};
-        if (address.ParseString(endpoint.c_str())) {
+        if (GBE_ParseIPv4Endpoint(endpoint, &address)) {
             const HSteamNetConnection connection = direct_sockets->ConnectByIPAddress(address);
             GBE_last_direct_connect_server_id = ctx.server_id;
             GBE_last_direct_connect_endpoint = endpoint;
