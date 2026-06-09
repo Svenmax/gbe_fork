@@ -108,8 +108,6 @@ static constexpr uint32 GBE_kDotaSetItemStyleResponse = 2578u;
 static constexpr uint32 GBE_kDotaUnlockItemStyle = 2571u;
 static constexpr uint32 GBE_kDotaUnlockItemStyleResponse = 2572u;
 
-std::string GBE_DotaModMetadataValue(const Mod_entry &mod, const char *key, const std::string &fallback);
-
 static constexpr size_t GBE_kDotaWelcomeInnerBodyOffset = 48u;
 static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
 static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
@@ -7038,13 +7036,25 @@ static bool GBE_HasDotaCustomGameDetails(const GBE_DotaCustomGameDetails &custom
         custom_game.timestamp != 0u;
 }
 
+static std::string GBE_DotaModMetadataValueForGC(const Mod_entry &mod, const char *key, const std::string &fallback)
+{
+    if (mod.metadata.empty()) return fallback;
+
+    try {
+        nlohmann::json metadata = nlohmann::json::parse(mod.metadata);
+        return metadata.value(key, fallback);
+    } catch (...) {
+        return fallback;
+    }
+}
+
 static std::string GBE_DotaCustomGameDisplayName(class Settings *settings, const GBE_DotaCustomGameDetails &custom_game, const std::string &fallback)
 {
     if (settings && custom_game.game_id != 0ull && settings->isModInstalled(static_cast<PublishedFileId_t>(custom_game.game_id))) {
         Mod_entry mod = settings->getMod(static_cast<PublishedFileId_t>(custom_game.game_id));
-        std::string display_name = GBE_DotaModMetadataValue(mod, "display_name", mod.title);
+        std::string display_name = GBE_DotaModMetadataValueForGC(mod, "display_name", mod.title);
         if (display_name.empty())
-            display_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);
+            display_name = GBE_DotaModMetadataValueForGC(mod, "addon_name", mod.title);
         if (!display_name.empty())
             return display_name;
     }
