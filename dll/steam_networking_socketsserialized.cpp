@@ -16,6 +16,7 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/steam_networking_socketsserialized.h"
+#include "dll/steam_networking_sockets.h"
 #include "dll/gbe_dota_reconnect_shared.h"
 
 #include <cstdio>
@@ -69,6 +70,8 @@ std::string GBE_FormatPayloadPrefix(const void *data, uint32 size)
 uint64 GBE_last_post_connection_state_server_id = 0;
 uint32 GBE_post_connection_state_retry_count = 0;
 uint32 GBE_last_post_connection_state_size = 0;
+uint64 GBE_last_direct_connect_server_id = 0;
+std::string GBE_last_direct_connect_endpoint;
 
 static constexpr uint8_t GBE_kSerializedPublicKey[32] = {
     0xd7, 0x5a, 0x98, 0x01, 0x82, 0xb1, 0x0a, 0xb7,
@@ -191,13 +194,14 @@ void Steam_Networking_Sockets_Serialized::steam_run_every_runcb(void *object)
     steam_networkingsockets->RunCallbacks();
 }
 
-Steam_Networking_Sockets_Serialized::Steam_Networking_Sockets_Serialized(class Settings *settings, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb)
+Steam_Networking_Sockets_Serialized::Steam_Networking_Sockets_Serialized(class Settings *settings, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, class Steam_Networking_Sockets *direct_sockets)
 {
     this->settings = settings;
     this->network = network;
     this->callback_results = callback_results;
     this->callbacks = callbacks;
     this->run_every_runcb = run_every_runcb;
+    this->direct_sockets = direct_sockets;
 
     this->network->setCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
     this->network->setCallback(CALLBACK_ID_NETWORKING_SOCKETS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
@@ -469,6 +473,30 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         GBE_last_post_connection_state_server_id = ctx.server_id;
         GBE_post_connection_state_retry_count = 0;
         GBE_last_post_connection_state_size = 0;
+    }
+
+    const std::string endpoint(ctx.connect);
+    if (direct_sockets && (GBE_last_direct_connect_server_id != ctx.server_id || GBE_last_direct_connect_endpoint != endpoint)) {
+        SteamNetworkingIPAddr address{};
+        if (address.ParseString(endpoint.c_str())) {
+            const HSteamNetConnection connection = direct_sockets->ConnectByIPAddress(address);
+            GBE_last_direct_connect_server_id = ctx.server_id;
+            GBE_last_direct_connect_endpoint = endpoint;
+            GBE_ReconnectLog(
+                "GBE_RECONNECT_DIAG",
+                "direct ConnectByIPAddress source=PostConnectionStateMsg server_id=%llu endpoint=%s connection=%u",
+                (unsigned long long)ctx.server_id,
+                endpoint.c_str(),
+                connection
+            );
+        } else {
+            GBE_ReconnectLog(
+                "GBE_RECONNECT_DIAG",
+                "skipped direct ConnectByIPAddress reason=parse_failed server_id=%llu endpoint=%s",
+                (unsigned long long)ctx.server_id,
+                endpoint.c_str()
+            );
+        }
     }
 
     ++GBE_post_connection_state_retry_count;
