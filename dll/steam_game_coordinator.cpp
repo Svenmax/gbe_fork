@@ -2990,6 +2990,47 @@ static bool GBE_ExtractProtoFieldBytes(const uint8 *data, size_t size, const GBE
     return true;
 }
 
+static std::string GBE_SanitizeProtoLogString(const std::string &value)
+{
+    std::string sanitized;
+    sanitized.reserve(value.size());
+    for (char ch : value) {
+        const unsigned char byte = static_cast<unsigned char>(ch);
+        sanitized.push_back(byte >= 32u && byte <= 126u ? ch : '.');
+    }
+    return sanitized;
+}
+
+struct GBE_Dota8053Result
+{
+    uint64 lobby_id{};
+    uint64 loading_duration{};
+    uint64 result_code{};
+    uint64 signon_states{};
+    std::string result_text;
+};
+
+static GBE_Dota8053Result GBE_ParseDota8053Result(const uint8 *body, size_t body_size)
+{
+    GBE_Dota8053Result result{};
+    GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), result.lobby_id);
+    GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2u), result.loading_duration);
+    GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 3u), result.result_code);
+    GBE_ExtractProtoFieldBytes(body, body_size, GBE_FindProtoField(body, body_size, 4u), result.result_text);
+    GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 5u), result.signon_states);
+    result.result_text = GBE_SanitizeProtoLogString(result.result_text);
+    return result;
+}
+
+static bool GBE_Dota8053IndicatesLoadFailure(const GBE_Dota8053Result &result)
+{
+    if (result.result_text.empty())
+        return false;
+    if (result.result_text.find("#GameUI_Disconnect") != std::string::npos)
+        return true;
+    return result.result_code != 1u;
+}
+
 static bool GBE_ExtractProtoPackedUint32Field(const uint8 *data, size_t size, const GBE_ProtoFieldView &view, std::vector<uint32> &values)
 {
     values.clear();
@@ -13517,16 +13558,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         );
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
-            uint64 lobby_id = 0;
-            uint64 loading_duration = 0;
-            uint64 result_code = 0;
-            uint64 signon_states = 0;
-            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), lobby_id);
-            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2u), loading_duration);
-            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 3u), result_code);
-            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 5u), signon_states);
+            const GBE_Dota8053Result load_result = GBE_ParseDota8053Result(body, body_size);
 
-            if (lobby_id == 0 || lobby_id == GBE_local_lobby.lobby_id) {
+            if (load_result.lobby_id == 0 || load_result.lobby_id == GBE_local_lobby.lobby_id) {
                 if (GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
                     GBE_local_lobby.state = 2u;
                     if (GBE_local_lobby.game_state < 2u)
@@ -13534,16 +13568,22 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 } else if (GBE_local_lobby.state < 2u) {
                     GBE_local_lobby.state = 2u;
                 }
-                GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseLoaded, "8053_finished_loading");
-                GBE_PublishSharedDotaLobbyState("8053_finished_loading");
-                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "8053_finished_loading");
+
+                const bool load_failed = GBE_Dota8053IndicatesLoadFailure(load_result);
+                const char *reason = load_failed ? "8053_load_failed" : "8053_finished_loading";
+                if (!load_failed)
+                    GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseLoaded, reason);
+                GBE_PublishSharedDotaLobbyState(reason);
+                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, reason);
                 GBE_GC_DebugLog(
                     "GC_DOTA_LOBBY",
-                    "[LOBBY] Applied direct 8053 lobby_id=%llu loading_duration=%llu result_code=%llu signon_states=%llu",
+                    "[LOBBY] Applied direct 8053 lobby_id=%llu loading_duration=%llu result_code=%llu signon_states=%llu load_failed=%u result_text=%s",
                     static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    static_cast<unsigned long long>(loading_duration),
-                    static_cast<unsigned long long>(result_code),
-                    static_cast<unsigned long long>(signon_states)
+                    static_cast<unsigned long long>(load_result.loading_duration),
+                    static_cast<unsigned long long>(load_result.result_code),
+                    static_cast<unsigned long long>(load_result.signon_states),
+                    load_failed ? 1u : 0u,
+                    load_result.result_text.c_str()
                 );
             }
         }
@@ -19470,16 +19510,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
             const uint8 *body = reinterpret_cast<const uint8 *>(context.inner_body_raw.data());
             const size_t body_size = context.inner_body_raw.size();
-            uint64 lobby_id = 0;
-            uint64 loading_duration = 0;
-            uint64 result_code = 0;
-            uint64 signon_states = 0;
-            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), lobby_id);
-            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 2u), loading_duration);
-            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 3u), result_code);
-            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 5u), signon_states);
+            const GBE_Dota8053Result load_result = GBE_ParseDota8053Result(body, body_size);
 
-            if (lobby_id == 0 || lobby_id == GBE_local_lobby.lobby_id) {
+            if (load_result.lobby_id == 0 || load_result.lobby_id == GBE_local_lobby.lobby_id) {
                 if (GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
                     GBE_local_lobby.state = 2u;
                     if (GBE_local_lobby.game_state < 2u)
@@ -19487,15 +19520,22 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
                 } else if (GBE_local_lobby.state < 2u) {
                     GBE_local_lobby.state = 2u;
                 }
-                GBE_PublishSharedDotaLobbyState("8053_wrapped_finished_loading");
-                GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, "8053_wrapped_finished_loading");
+
+                const bool load_failed = GBE_Dota8053IndicatesLoadFailure(load_result);
+                const char *reason = load_failed ? "8053_wrapped_load_failed" : "8053_wrapped_finished_loading";
+                if (!load_failed)
+                    GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseLoaded, reason);
+                GBE_PublishSharedDotaLobbyState(reason);
+                GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, reason);
                 GBE_GC_DebugLog(
                     "GC_DOTA_LOBBY",
-                    "[LOBBY] Applied wrapped 8053 lobby_id=%llu loading_duration=%llu result_code=%llu signon_states=%llu",
+                    "[LOBBY] Applied wrapped 8053 lobby_id=%llu loading_duration=%llu result_code=%llu signon_states=%llu load_failed=%u result_text=%s",
                     static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    static_cast<unsigned long long>(loading_duration),
-                    static_cast<unsigned long long>(result_code),
-                    static_cast<unsigned long long>(signon_states)
+                    static_cast<unsigned long long>(load_result.loading_duration),
+                    static_cast<unsigned long long>(load_result.result_code),
+                    static_cast<unsigned long long>(load_result.signon_states),
+                    load_failed ? 1u : 0u,
+                    load_result.result_text.c_str()
                 );
             }
         }

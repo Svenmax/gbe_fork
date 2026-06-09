@@ -913,10 +913,12 @@ void Steam_Networking_Sockets::SendMessages( int nMessages, SteamNetworkingMessa
         if (pMessages[i]) {
             auto connect_socket = sbcs->connect_sockets.find(pMessages[i]->m_conn);
             if (connect_socket == sbcs->connect_sockets.end()) {
+                GBE_LogNetSockTrace("NETSOCK_SEND_MESSAGES_INVALID", this, settings->get_local_steam_id().ConvertToUint64(), 0, 0, 0, CONNECT_SOCKET_NO_CONNECTION, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
                 result = k_EResultInvalidParam;
             } else if (connect_socket->second.status == CONNECT_SOCKET_CLOSED || connect_socket->second.status == CONNECT_SOCKET_TIMEDOUT) {
                 result = k_EResultNoConnection;
             } else if (connect_socket->second.status != CONNECT_SOCKET_CONNECTED && connect_socket->second.status != CONNECT_SOCKET_CONNECTING) {
+                GBE_LogNetSockTrace("NETSOCK_SEND_MESSAGES_BAD_STATE", this, settings->get_local_steam_id().ConvertToUint64(), connect_socket->second.remote_identity.GetSteamID64(), connect_socket->second.virtual_port, connect_socket->second.real_port, connect_socket->second.status, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
                 result = k_EResultInvalidState;
             } else {
                 Common_Message msg;
@@ -937,6 +939,7 @@ void Steam_Networking_Sockets::SendMessages( int nMessages, SteamNetworkingMessa
 
                 bool reliable = false;
                 if (pMessages[i]->m_nFlags & k_nSteamNetworkingSend_Reliable) reliable = true;
+                GBE_LogNetSockTrace("NETSOCK_SEND_MESSAGES_DATA", this, settings->get_local_steam_id().ConvertToUint64(), connect_socket->second.remote_identity.GetSteamID64(), connect_socket->second.virtual_port, connect_socket->second.real_port, connect_socket->second.status, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
                 if (network->sendTo(&msg, reliable)) {
                     out_number = message_number;
                     result = k_EResultOK;
@@ -954,8 +957,10 @@ void Steam_Networking_Sockets::SendMessages( int nMessages, SteamNetworkingMessa
             }
         }
 
-        pMessages[i]->m_pfnFreeData(pMessages[i]);
-        pMessages[i]->Release();
+        if (pMessages[i]) {
+            pMessages[i]->m_pfnFreeData(pMessages[i]);
+            pMessages[i]->Release();
+        }
     }
 }
 
@@ -1003,7 +1008,7 @@ int Steam_Networking_Sockets::ReceiveMessagesOnConnection( HSteamNetConnection h
 
     PRINT_DEBUG("messages %u", messages);
     auto connect_socket = sbcs->connect_sockets.find(hConn);
-    if (connect_socket != sbcs->connect_sockets.end()) {
+    if (messages > 0 && connect_socket != sbcs->connect_sockets.end()) {
         GBE_LogNetSockTrace("NETSOCK_RECV_DATA", this, settings->get_local_steam_id().ConvertToUint64(), connect_socket->second.remote_identity.GetSteamID64(), connect_socket->second.virtual_port, connect_socket->second.real_port, connect_socket->second.status, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
     }
     return messages;
@@ -1029,9 +1034,13 @@ int Steam_Networking_Sockets::ReceiveMessagesOnListenSocket( HSteamListenSocket 
     auto socket_conn = std::begin(sbcs->connect_sockets);
     while (socket_conn != std::end(sbcs->connect_sockets) && messages < nMaxMessages) {
         if (socket_conn->second.listen_socket_id == hSocket) {
+            const int before_messages = messages;
             while (messages < nMaxMessages && (msg = get_steam_message_connection(socket_conn->first))) {
                 ppOutMessages[messages] = msg;
                 ++messages;
+            }
+            if (messages > before_messages) {
+                GBE_LogNetSockTrace("NETSOCK_RECV_DATA_LISTEN", this, settings->get_local_steam_id().ConvertToUint64(), socket_conn->second.remote_identity.GetSteamID64(), socket_conn->second.virtual_port, socket_conn->second.real_port, socket_conn->second.status, sbcs != nullptr && sbcs->used > 0 ? 1 : 0);
             }
         }
 
