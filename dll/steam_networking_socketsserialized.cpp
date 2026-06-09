@@ -70,6 +70,49 @@ uint64 GBE_last_post_connection_state_server_id = 0;
 uint32 GBE_post_connection_state_retry_count = 0;
 uint32 GBE_last_post_connection_state_size = 0;
 
+static constexpr uint8_t GBE_kSerializedPublicKey[32] = {
+    0xd7, 0x5a, 0x98, 0x01, 0x82, 0xb1, 0x0a, 0xb7,
+    0xd5, 0x4b, 0xfe, 0xd3, 0xc9, 0x64, 0x07, 0x3a,
+    0x0e, 0xe1, 0x72, 0xf3, 0xda, 0xa6, 0x23, 0x25,
+    0xaf, 0x02, 0x1a, 0x68, 0xf7, 0x07, 0x51, 0x1a,
+};
+
+static constexpr uint8_t GBE_kSerializedPrivateKey[32] = {
+    0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60,
+    0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
+    0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19,
+    0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60,
+};
+
+int GBE_CopySerializedNetworkingJson(const char *json, void *buf, uint32 cbBuf)
+{
+    if (!json)
+        json = "{}";
+
+    const size_t required = std::strlen(json) + 1;
+    if (buf && cbBuf > 0) {
+        const size_t to_copy = std::min<size_t>(required, cbBuf);
+        std::memcpy(buf, json, to_copy);
+        reinterpret_cast<char *>(buf)[to_copy - 1] = '\0';
+    }
+
+    return static_cast<int>(required);
+}
+
+const char *GBE_GetSerializedNetworkingConfigJSON()
+{
+    return
+        "{\"revision\":1778707800,\"pops\":{"
+        "\"sgp\":{\"desc\":\"Singapore\",\"geo\":[103.83,1.28],\"partners\":3,\"tier\":0,"
+        "\"relays\":[{\"ipv4\":\"103.10.124.116\",\"port_range\":[27015,27060]}]}},"
+        "\"certs\":["
+        "\"Ii4IARIgSJbwDpn/07/GHiGMKio0Vh18VN3D/hKzQGh6n0Yx9qpF2uYEak3a6dB8KT6tfJIvitz8MkADsyKTi+VwxYwR6npnpWPd42q0AYGT5GY9Fje8AbrTFvsRwS6tNRX/1JQqpZZYhC/drdKjYcIPKUxa1KEgS/QO\","
+        "\"Ii4IARIgmuygThdRzmJo1WkALKHh+hstvCbTa06joAg603KCm4RF2uYEak3a6dB8KT6tfJIvitz8MkDiEksgJ+a351sr1F+N+GTvtboavJFRg/M2/x1B6Biro/BEgHskHZlIQJULbpvkDCvzBHBiZ+1L59hmdj32aucK\""
+        "],\"p2p_share_ip\":{\"default\":40,\"cn\":20,\"ru\":20},"
+        "\"relay_public_key\":\"5AC884C1045BA0FF44142AC8DCA51B8A98C8F1CB4FEE36284AFBE92FCF594932\","
+        "\"revoked_keys\":[\"11146342570456886677\"],\"typical_pings\":[],\"success\":true}";
+}
+
 void GBE_AppendVarint(std::vector<uint8_t> &out, uint64_t value)
 {
     while (value >= 0x80) {
@@ -103,13 +146,6 @@ void GBE_AppendBytes(std::vector<uint8_t> &out, uint32_t field, const void *data
 
 std::vector<uint8_t> GBE_BuildSerializedNetworkingCert(CSteamID steam_id, uint32 app_id)
 {
-    static constexpr uint8_t key_data[32] = {
-        0xd7, 0x5a, 0x98, 0x01, 0x82, 0xb1, 0x0a, 0xb7,
-        0xd5, 0x4b, 0xfe, 0xd3, 0xc9, 0x64, 0x07, 0x3a,
-        0x0e, 0xe1, 0x72, 0xf3, 0xda, 0xa6, 0x23, 0x25,
-        0xaf, 0x02, 0x1a, 0x68, 0xf7, 0x07, 0x51, 0x1a,
-    };
-
     const uint32 now = static_cast<uint32>(std::time(nullptr));
     const uint32 expiry = now + 24u * 60u * 60u;
     const uint64 steam_id64 = steam_id.ConvertToUint64();
@@ -122,7 +158,7 @@ std::vector<uint8_t> GBE_BuildSerializedNetworkingCert(CSteamID steam_id, uint32
     cert.reserve(128);
     GBE_AppendVarint(cert, (1u << 3) | 0u);
     GBE_AppendVarint(cert, 1);
-    GBE_AppendBytes(cert, 2, key_data, sizeof(key_data));
+    GBE_AppendBytes(cert, 2, GBE_kSerializedPublicKey, sizeof(GBE_kSerializedPublicKey));
     GBE_AppendVarint(cert, (4u << 3) | 1u);
     GBE_AppendFixed64(cert, steam_id64);
     GBE_AppendVarint(cert, (8u << 3) | 5u);
@@ -333,12 +369,9 @@ SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
             std::memcpy(data.m_certOrMsg, cert.data(), data.m_cbCert);
         }
 
-        static constexpr uint8_t private_key[32] = {
-            0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60,
-            0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
-            0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19,
-            0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60,
-        };
+        uint8_t private_key[sizeof(GBE_kSerializedPublicKey) + sizeof(GBE_kSerializedPrivateKey)] = {};
+        std::memcpy(private_key, GBE_kSerializedPublicKey, sizeof(GBE_kSerializedPublicKey));
+        std::memcpy(private_key + sizeof(GBE_kSerializedPublicKey), GBE_kSerializedPrivateKey, sizeof(GBE_kSerializedPrivateKey));
         data.m_cbPrivKey = sizeof(private_key);
         std::memcpy(data.m_privKey, private_key, sizeof(private_key));
     }
@@ -366,9 +399,15 @@ int Steam_Networking_Sockets_Serialized::GetNetworkConfigJSON( void *buf, uint32
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     (void)pszLauncherPartner;
-    if (buf && cbBuf > 0)
-        reinterpret_cast<char *>(buf)[0] = '\0';
-    return 0;
+    const int required = GBE_CopySerializedNetworkingJson(GBE_GetSerializedNetworkingConfigJSON(), buf, cbBuf);
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "GetNetworkConfigJSON cbBuf=%u required=%d partner=%s",
+        cbBuf,
+        required,
+        pszLauncherPartner ? pszLauncherPartner : ""
+    );
+    return required;
 }
 
 int Steam_Networking_Sockets_Serialized::GetNetworkConfigJSON( void *buf, uint32 cbBuf )
