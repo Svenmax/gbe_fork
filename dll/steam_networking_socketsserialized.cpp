@@ -521,6 +521,7 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
         const bool state_ready = has_ctx && ctx.game_state >= 2;
         const bool has_connect = has_ctx && ctx.connect[0] != '\0';
         const bool is_arcade_context = has_ctx && ctx.custom_game_id != 0ull;
+        const bool local_is_owner = local_id != 0ull && local_id == ctx.owner_steam_id;
         const bool eligible_before = GBE_dota_reconnect_eligible.load();
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
@@ -540,9 +541,9 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
             eligible_before ? 1u : 0u,
             selected_endpoint.c_str(),
             ctx.connect,
-            local_id != 0ull && local_id == ctx.owner_steam_id ? 1u : 0u
+            local_is_owner ? 1u : 0u
         );
-        if (is_arcade_context && remote_matches && state_ready && has_connect) {
+        if (is_arcade_context && remote_matches && state_ready && has_connect && !local_is_owner) {
             bool expected = true;
             if (GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false)) {
                 GBE_ReconnectLog("GBE_RECONNECT",
@@ -551,7 +552,7 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
                     (unsigned long long)ctx.server_id,
                     selected_endpoint.c_str(),
                     ctx.connect,
-                    local_id != 0ull && local_id == ctx.owner_steam_id ? 1u : 0u);
+                    local_is_owner ? 1u : 0u);
 
                 GameServerChangeRequested_t server_change{};
                 std::strncpy(server_change.m_rgchServer, selected_endpoint.c_str(), sizeof(server_change.m_rgchServer) - 1);
@@ -750,6 +751,7 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     const bool state_ready = has_ctx && ctx.game_state >= 2;
     const bool has_connect = has_ctx && ctx.connect[0] != '\0';
     const bool is_arcade_context = has_ctx && ctx.custom_game_id != 0ull;
+    const bool local_is_owner = local_id != 0ull && local_id == ctx.owner_steam_id;
     const bool eligible_before = GBE_dota_reconnect_eligible.load();
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
@@ -768,11 +770,22 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         eligible_before ? 1u : 0u,
         endpoint.c_str(),
         ctx.connect,
-        local_id != 0ull && local_id == ctx.owner_steam_id ? 1u : 0u
+        local_is_owner ? 1u : 0u
     );
 
     if (!is_arcade_context || !state_ready || !has_connect)
         return;
+
+    if (local_is_owner) {
+        GBE_ReconnectLog(
+            "GBE_RECONNECT_DIAG",
+            "skipping PostConnectionStateMsg direct connect for local arcade owner server_id=%llu endpoint=%s endpoint_raw=%s",
+            (unsigned long long)ctx.server_id,
+            endpoint.c_str(),
+            ctx.connect
+        );
+        return;
+    }
 
     if (GBE_last_post_connection_state_server_id != ctx.server_id) {
         GBE_last_post_connection_state_server_id = ctx.server_id;

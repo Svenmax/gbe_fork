@@ -20235,9 +20235,23 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
 
     const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
     const uint64 owner_steam_id = GBE_local_lobby.owner_steam_id != 0 ? GBE_local_lobby.owner_steam_id : GBE_GetDotaLobbyOwnerSteamId();
+    const bool local_is_owner = local_steam_id != 0ull && local_steam_id == owner_steam_id;
     const bool arcade_custom_launch = GBE_local_lobby.custom_game.game_id != 0ull;
     if (!arcade_custom_launch)
         return;
+
+    if (local_is_owner) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_CONNECT_DIAG",
+            "skipping direct connect callbacks for local arcade owner reason=%s lobby_id=%llu match_id=%llu endpoint_raw=%s server_id=%llu",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(GBE_local_lobby.match_id),
+            raw_endpoint.c_str(),
+            static_cast<unsigned long long>(GBE_local_lobby.server_id)
+        );
+        return;
+    }
 
     const std::string endpoint = GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(raw_endpoint, local_steam_id, owner_steam_id);
 
@@ -20272,7 +20286,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
         static_cast<unsigned long long>(GBE_local_lobby.match_id),
         static_cast<unsigned long long>(owner_steam_id),
         static_cast<unsigned long long>(local_steam_id),
-        local_steam_id != 0ull && local_steam_id == owner_steam_id ? 1u : 0u,
+        local_is_owner ? 1u : 0u,
         GBE_local_lobby.state,
         GBE_local_lobby.game_state,
         endpoint.c_str(),
@@ -20326,7 +20340,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
         endpoint.c_str(),
         raw_endpoint.c_str(),
         connect_command.c_str(),
-        local_steam_id != 0ull && local_steam_id == owner_steam_id ? 1u : 0u
+        local_is_owner ? 1u : 0u
     );
 }
 
