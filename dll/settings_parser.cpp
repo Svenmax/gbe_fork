@@ -24,6 +24,9 @@
 #include "dll/settings_parser_ufs.h"
 #include "dll/base64.h"
 
+#include <cctype>
+#include <sstream>
+
 
 constexpr const static char config_ini_app[]     = "configs.app.ini";
 constexpr const static char config_ini_main[]    = "configs.main.ini";
@@ -1428,6 +1431,82 @@ static bool dota_read_vpk_uint32(std::ifstream &input, uint32 &value)
     return true;
 }
 
+static bool dota_is_readable_addon_name(const std::string &value);
+static std::string dota_extract_addoninfo_value(const std::string &line, const std::string &key);
+
+static bool dota_is_vpk_metadata_text_file(const std::string &filename, const std::string &extension)
+{
+    const std::string lower_filename = common_helpers::to_lower(filename);
+    std::string lower_extension = common_helpers::to_lower(extension);
+    if (lower_extension == " ")
+        lower_extension.clear();
+    const std::string full_name = lower_extension.empty() ? lower_filename : lower_filename + "." + lower_extension;
+    return full_name == "publish_data" || full_name == "addoninfo.txt" || full_name == "addoninfo.gi";
+}
+
+static std::filesystem::path dota_vpk_archive_path(const std::filesystem::path &dir_vpk_path, uint16 archive_index)
+{
+    if (archive_index == 0x7fffu)
+        return dir_vpk_path;
+
+    std::string index = std::to_string(archive_index);
+    if (index.size() < 3)
+        index.insert(index.begin(), 3 - index.size(), '0');
+
+    std::string stem = dir_vpk_path.stem().u8string();
+    const std::string suffix = "_dir";
+    if (stem.size() >= suffix.size() && stem.compare(stem.size() - suffix.size(), suffix.size(), suffix) == 0)
+        stem.erase(stem.size() - suffix.size());
+
+    return dir_vpk_path.parent_path() / (stem + "_" + index + ".vpk");
+}
+
+static std::string dota_read_vpk_entry_text(const std::filesystem::path &vpk_path, std::ifstream &dir_input, uint16 archive_index, uint32 offset, uint32 length, const std::string &preload_data, std::streamoff inline_data_offset)
+{
+    static constexpr size_t max_text_bytes = 256u * 1024u;
+    std::string text = preload_data.substr(0, max_text_bytes);
+    if (length == 0 || text.size() >= max_text_bytes)
+        return text;
+
+    const size_t to_read = std::min<size_t>(length, max_text_bytes - text.size());
+    std::vector<char> buffer(to_read);
+
+    if (archive_index == 0x7fffu) {
+        const std::streampos original_pos = dir_input.tellg();
+        dir_input.seekg(inline_data_offset + static_cast<std::streamoff>(offset), std::ios::beg);
+        dir_input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        if (dir_input.gcount() > 0)
+            text.append(buffer.data(), static_cast<size_t>(dir_input.gcount()));
+        dir_input.clear();
+        dir_input.seekg(original_pos, std::ios::beg);
+        return text;
+    }
+
+    const std::filesystem::path archive_path = dota_vpk_archive_path(vpk_path, archive_index);
+    std::ifstream archive_input(archive_path, std::ios::binary);
+    if (!archive_input.is_open())
+        return text;
+    archive_input.seekg(offset, std::ios::beg);
+    archive_input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+    if (archive_input.gcount() > 0)
+        text.append(buffer.data(), static_cast<size_t>(archive_input.gcount()));
+    return text;
+}
+
+static std::string dota_title_from_metadata_text(const std::string &text)
+{
+    static constexpr const char *title_keys[] = { "addontitle", "addon_title", "title", "name", "display_name" };
+    std::istringstream input(text);
+    for (std::string line; std::getline(input, line); ) {
+        for (const char *title_key : title_keys) {
+            const std::string value = dota_extract_addoninfo_value(line, title_key);
+            if (dota_is_readable_addon_name(value))
+                return value;
+        }
+    }
+    return {};
+}
+
 static std::string dota_map_name_from_vpk(const std::filesystem::path &vpk_path)
 {
     std::ifstream input(vpk_path, std::ios::binary);
@@ -1480,6 +1559,73 @@ static std::string dota_map_name_from_vpk(const std::filesystem::path &vpk_path)
                 const std::filesystem::path resource_path = std::filesystem::u8path(full_path);
                 if (dota_is_map_resource_path(resource_path))
                     return resource_path.stem().u8string();
+            }
+        }
+    }
+
+    return {};
+}
+
+static std::string dota_title_from_vpk_metadata(const std::filesystem::path &vpk_path)
+{
+    std::ifstream input(vpk_path, std::ios::binary);
+    if (!input.is_open())
+        return {};
+
+    uint32 signature = 0;
+    uint32 version = 0;
+    uint32 tree_size = 0;
+    if (!dota_read_vpk_uint32(input, signature) || !dota_read_vpk_uint32(input, version) || !dota_read_vpk_uint32(input, tree_size))
+        return {};
+    if (signature != 0x55aa1234u || tree_size == 0u)
+        return {};
+    if (version >= 2u) {
+        uint32 ignored = 0;
+        for (int i = 0; i < 4; ++i) {
+            if (!dota_read_vpk_uint32(input, ignored))
+                return {};
+        }
+    }
+
+    const std::streamoff inline_data_offset = static_cast<std::streamoff>(input.tellg()) + static_cast<std::streamoff>(tree_size);
+    while (input.good()) {
+        const std::string extension = dota_read_vpk_cstring(input);
+        if (extension.empty())
+            break;
+
+        while (input.good()) {
+            const std::string path = dota_read_vpk_cstring(input);
+            if (path.empty())
+                break;
+
+            while (input.good()) {
+                const std::string filename = dota_read_vpk_cstring(input);
+                if (filename.empty())
+                    break;
+
+                uint32 crc = 0;
+                uint16 preload_bytes = 0;
+                uint16 archive_index = 0;
+                uint32 offset = 0;
+                uint32 length = 0;
+                uint16 terminator = 0;
+                if (!dota_read_vpk_uint32(input, crc) || !dota_read_vpk_uint16(input, preload_bytes) || !dota_read_vpk_uint16(input, archive_index) || !dota_read_vpk_uint32(input, offset) || !dota_read_vpk_uint32(input, length) || !dota_read_vpk_uint16(input, terminator))
+                    return {};
+
+                std::string preload_data;
+                if (preload_bytes > 0) {
+                    preload_data.resize(preload_bytes);
+                    if (!input.read(preload_data.data(), preload_data.size()))
+                        return {};
+                }
+
+                if (!dota_is_vpk_metadata_text_file(filename, extension))
+                    continue;
+
+                const std::string text = dota_read_vpk_entry_text(vpk_path, input, archive_index, offset, length, preload_data, inline_data_offset);
+                const std::string title = dota_title_from_metadata_text(text);
+                if (dota_is_readable_addon_name(title))
+                    return title;
             }
         }
     }
@@ -1669,6 +1815,31 @@ static std::string dota_workshop_file_stem_name(const std::string &mod_path)
     return {};
 }
 
+static std::string dota_workshop_vpk_metadata_title(const std::string &mod_path)
+{
+    try {
+        const std::filesystem::path root = std::filesystem::u8path(mod_path);
+        if (!common_helpers::dir_exist(root))
+            return {};
+
+        for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+            if (!std::filesystem::is_regular_file(dir_entry))
+                continue;
+            const std::string extension = common_helpers::to_lower(dir_entry.path().extension().u8string());
+            if (extension != ".vpk")
+                continue;
+
+            const std::string title = dota_title_from_vpk_metadata(dir_entry.path());
+            if (dota_is_readable_addon_name(title)) {
+                PRINT_DEBUG("[DOTA_UGC] extracted workshop title from VPK '%s': '%s'", dir_entry.path().u8string().c_str(), title.c_str());
+                return title;
+            }
+        }
+    } catch (...) { }
+
+    return {};
+}
+
 static std::string dota_workshop_manifest_title(const std::string &mod_path, const std::string &workshop_id)
 {
     if (workshop_id.empty())
@@ -1709,9 +1880,6 @@ static std::string dota_workshop_manifest_title(const std::string &mod_path, con
 static std::string dota_extract_addoninfo_value(const std::string &line, const std::string &key)
 {
     const std::string lower_line = common_helpers::to_lower(line);
-    const size_t key_pos = lower_line.find(key);
-    if (key_pos == std::string::npos)
-        return {};
 
     std::vector<std::string> quoted_tokens;
     for (size_t pos = 0; pos < line.size(); ) {
@@ -1726,6 +1894,16 @@ static std::string dota_extract_addoninfo_value(const std::string &line, const s
     }
     if (quoted_tokens.size() >= 2 && common_helpers::to_lower(quoted_tokens[0]) == key)
         return quoted_tokens[1];
+
+    const size_t key_pos = lower_line.find(key);
+    if (key_pos == std::string::npos)
+        return {};
+    const bool left_boundary = key_pos == 0 || (!std::isalnum(static_cast<unsigned char>(lower_line[key_pos - 1])) && lower_line[key_pos - 1] != '_');
+    const size_t key_end = key_pos + key.size();
+    const bool right_boundary = key_end >= lower_line.size() || (!std::isalnum(static_cast<unsigned char>(lower_line[key_end])) && lower_line[key_end] != '_');
+    if (!left_boundary || !right_boundary)
+        return {};
+
     if (!quoted_tokens.empty() && key_pos < line.find('"')) {
         return quoted_tokens[0];
     }
@@ -1772,6 +1950,10 @@ static std::string dota_workshop_display_name(const std::string &mod_path, const
     const std::string manifest_title = dota_workshop_manifest_title(mod_path, fallback);
     if (!manifest_title.empty())
         return manifest_title;
+
+    const std::string vpk_title = dota_workshop_vpk_metadata_title(mod_path);
+    if (!vpk_title.empty())
+        return vpk_title;
 
     std::ifstream input(std::filesystem::u8path(mod_path) / "publish_data");
     if (!input.is_open()) {
