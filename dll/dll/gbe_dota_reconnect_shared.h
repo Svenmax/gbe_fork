@@ -12,6 +12,7 @@
 struct GBE_DotaReconnectContext {
     uint64_t server_id;       // lobby server_steamid (AnonGameServer)
     uint32_t game_state;      // lobby game_state (2 = in-game, 3 = post-game)
+    uint64_t custom_game_id;  // arcade/custom game id; zero for ordinary practice lobby
     char connect[128];        // LAN endpoint e.g. "172.19.60.153:27015"
     uint64_t owner_steam_id;  // lobby owner for GameRichPresenceJoinRequested
 };

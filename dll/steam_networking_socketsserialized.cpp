@@ -402,10 +402,11 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
         const bool remote_matches = has_ctx && remote_id == ctx.server_id;
         const bool state_ready = has_ctx && ctx.game_state >= 2;
         const bool has_connect = has_ctx && ctx.connect[0] != '\0';
+        const bool is_arcade_context = has_ctx && ctx.custom_game_id != 0ull;
         const bool eligible_before = GBE_dota_reconnect_eligible.load();
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
-            "SendP2PRendezvous gate local_id=%llu remote_id=%llu connection_id=%u size=%u has_ctx=%u server_id=%llu game_state=%u remote_matches=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s",
+            "SendP2PRendezvous gate local_id=%llu remote_id=%llu connection_id=%u size=%u has_ctx=%u server_id=%llu game_state=%u custom_game_id=%llu arcade=%u remote_matches=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s",
             (unsigned long long)local_id,
             (unsigned long long)remote_id,
             unConnectionIDSrc,
@@ -413,13 +414,15 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
             has_ctx ? 1u : 0u,
             (unsigned long long)ctx.server_id,
             ctx.game_state,
+            (unsigned long long)ctx.custom_game_id,
+            is_arcade_context ? 1u : 0u,
             remote_matches ? 1u : 0u,
             state_ready ? 1u : 0u,
             has_connect ? 1u : 0u,
             eligible_before ? 1u : 0u,
             ctx.connect
         );
-        if (remote_matches && state_ready && has_connect) {
+        if (is_arcade_context && remote_matches && state_ready && has_connect) {
             bool expected = true;
             if (GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false)) {
                 GBE_ReconnectLog("GBE_RECONNECT",
@@ -521,7 +524,8 @@ SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
     const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
     const bool state_ready = has_ctx && ctx.game_state >= 2;
     const bool has_connect = has_ctx && ctx.connect[0] != '\0';
-    const bool cert_ready = state_ready && has_connect;
+    const bool is_arcade_context = has_ctx && ctx.custom_game_id != 0ull;
+    const bool cert_ready = is_arcade_context && state_ready && has_connect;
     data.m_eResult = cert_ready ? k_EResultOK : k_EResultNoConnection;
     if (cert_ready) {
         const auto cert = GBE_BuildSerializedNetworkingCert(settings->get_local_steam_id(), settings->get_local_game_id().AppID());
@@ -538,13 +542,15 @@ SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
     }
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
-        "GetCertAsync result=%d cert_size=%u privkey_size=%u has_ctx=%u server_id=%llu game_state=%u state_ready=%u has_connect=%u endpoint=%s",
+        "GetCertAsync result=%d cert_size=%u privkey_size=%u has_ctx=%u server_id=%llu game_state=%u custom_game_id=%llu arcade=%u state_ready=%u has_connect=%u endpoint=%s",
         data.m_eResult,
         data.m_cbCert,
         data.m_cbPrivKey,
         has_ctx ? 1u : 0u,
         (unsigned long long)ctx.server_id,
         ctx.game_state,
+        (unsigned long long)ctx.custom_game_id,
+        is_arcade_context ? 1u : 0u,
         state_ready ? 1u : 0u,
         has_connect ? 1u : 0u,
         ctx.connect
@@ -616,23 +622,26 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
     const bool state_ready = has_ctx && ctx.game_state >= 2;
     const bool has_connect = has_ctx && ctx.connect[0] != '\0';
+    const bool is_arcade_context = has_ctx && ctx.custom_game_id != 0ull;
     const bool eligible_before = GBE_dota_reconnect_eligible.load();
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
-        "PostConnectionStateMsg gate size=%u prefix=%s fields=%s has_ctx=%u server_id=%llu game_state=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s",
+        "PostConnectionStateMsg gate size=%u prefix=%s fields=%s has_ctx=%u server_id=%llu game_state=%u custom_game_id=%llu arcade=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s",
         cbMsg,
         payload_prefix.c_str(),
         payload_fields.c_str(),
         has_ctx ? 1u : 0u,
         (unsigned long long)ctx.server_id,
         ctx.game_state,
+        (unsigned long long)ctx.custom_game_id,
+        is_arcade_context ? 1u : 0u,
         state_ready ? 1u : 0u,
         has_connect ? 1u : 0u,
         eligible_before ? 1u : 0u,
         ctx.connect
     );
 
-    if (!state_ready || !has_connect)
+    if (!is_arcade_context || !state_ready || !has_connect)
         return;
 
     if (GBE_last_post_connection_state_server_id != ctx.server_id) {

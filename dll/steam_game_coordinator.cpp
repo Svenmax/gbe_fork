@@ -334,6 +334,7 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
         GBE_shared_dota_lobby_state.server_id != 0) {
         out->server_id = GBE_shared_dota_lobby_state.server_id;
         out->game_state = GBE_shared_dota_lobby_state.game_state;
+        out->custom_game_id = GBE_shared_dota_lobby_state.custom_game.game_id;
         const std::string endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_shared_dota_lobby_state.connect);
         std::strncpy(out->connect, endpoint.c_str(), sizeof(out->connect) - 1);
         out->connect[sizeof(out->connect) - 1] = '\0';
@@ -11265,6 +11266,7 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
         GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
         GBE_recent_dota_reconnect_context.server_id = GBE_local_lobby.server_id;
         GBE_recent_dota_reconnect_context.game_state = GBE_local_lobby.game_state;
+        GBE_recent_dota_reconnect_context.custom_game_id = GBE_local_lobby.custom_game.game_id;
         const std::string endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect);
         std::strncpy(GBE_recent_dota_reconnect_context.connect, endpoint.c_str(), sizeof(GBE_recent_dota_reconnect_context.connect) - 1);
         GBE_recent_dota_reconnect_context.connect[sizeof(GBE_recent_dota_reconnect_context.connect) - 1] = '\0';
@@ -20150,30 +20152,8 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
     const uint64 owner_steam_id = GBE_local_lobby.owner_steam_id != 0 ? GBE_local_lobby.owner_steam_id : GBE_GetDotaLobbyOwnerSteamId();
     const bool arcade_custom_launch = GBE_local_lobby.custom_game.game_id != 0ull;
-    if (!arcade_custom_launch && local_steam_id != 0ull && owner_steam_id != 0ull && local_steam_id == owner_steam_id) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "skipping owner direct connect callback reason=%s lobby_id=%llu endpoint=%s owner=%llu",
-            reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            endpoint.c_str(),
-            static_cast<unsigned long long>(owner_steam_id)
-        );
+    if (!arcade_custom_launch)
         return;
-    }
-
-    const uint32 local_ip = network ? network->getOwnIP() : 0u;
-    if (!arcade_custom_launch && local_ip != 0u && local_ip == endpoint_ip) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "skipping self-IP direct connect callback reason=%s lobby_id=%llu endpoint=%s local_ip=%s",
-            reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            endpoint.c_str(),
-            GBE_FormatIPv4(local_ip).c_str()
-        );
-        return;
-    }
 
     std::string signature;
     signature.reserve(96);

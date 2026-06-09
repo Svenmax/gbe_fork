@@ -44,9 +44,10 @@ static const char *GBE_FormatSteamUserDotaContext(char *buffer, size_t buffer_si
         std::snprintf(
             buffer,
             buffer_size,
-            "has_ctx=1 server_id=%llu game_state=%u owner=%llu endpoint=%s eligible=%u",
+            "has_ctx=1 server_id=%llu game_state=%u custom_game_id=%llu owner=%llu endpoint=%s eligible=%u",
             (unsigned long long)ctx.server_id,
             ctx.game_state,
+            (unsigned long long)ctx.custom_game_id,
             (unsigned long long)ctx.owner_steam_id,
             ctx.connect,
             GBE_dota_reconnect_eligible.load() ? 1u : 0u
