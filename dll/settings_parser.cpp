@@ -1925,56 +1925,8 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
             break;
     }
 
-    std::vector<std::string> local_addon_roots;
-    std::set<std::string> seen_addon_roots;
-    for (const std::string &seed_path : seed_paths) {
-        std::string cursor = seed_path;
-        for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
-            const std::string direct_addons_root = cursor + PATH_SEPARATOR + "dota_addons";
-            if (seen_addon_roots.insert(direct_addons_root).second)
-                local_addon_roots.push_back(direct_addons_root);
-
-            const std::string content_addons_root = cursor + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "dota_addons";
-            if (seen_addon_roots.insert(content_addons_root).second)
-                local_addon_roots.push_back(content_addons_root);
-
-            const std::string legacy_addons_root = cursor + PATH_SEPARATOR + "dota" + PATH_SEPARATOR + "addons";
-            if (seen_addon_roots.insert(legacy_addons_root).second)
-                local_addon_roots.push_back(legacy_addons_root);
-
-            cursor = parent_path_or_empty(cursor);
-        }
-    }
-
-    bool refreshed_any_local_addon = false;
-    for (const std::string &addon_root : local_addon_roots) {
-        const std::vector<std::string> addon_folders = Local_Storage::get_folders_path(addon_root);
-        if (addon_folders.empty())
-            continue;
-
-        PRINT_DEBUG("Dota2 local addon autodetect scanning: '%s'", addon_root.c_str());
-        for (const std::string &addon_folder : addon_folders) {
-            const std::string addon_path = addon_root + PATH_SEPARATOR + addon_folder;
-            if (!is_dota_local_addon_folder(addon_path))
-                continue;
-
-            const PublishedFileId_t addon_id = make_dota_local_addon_mod_id(addon_path);
-
-            Mod_entry new_mod = make_dota_detected_mod(settings_client, addon_id, addon_folder, addon_path, true);
-            settings_client->addMod(new_mod.id, new_mod.title, new_mod.path);
-            settings_server->addMod(new_mod.id, new_mod.title, new_mod.path);
-            settings_client->addModDetails(new_mod.id, new_mod);
-            settings_server->addModDetails(new_mod.id, new_mod);
-            refreshed_any_local_addon = true;
-            PRINT_DEBUG("  auto-detected Dota2 local addon '%s' map='%s' at '%s' id=%llu", addon_folder.c_str(), dota_local_addon_map_name(addon_path, addon_folder).c_str(), new_mod.path.c_str(), new_mod.id);
-        }
-    }
-
-    if (refreshed_any_local_addon)
-        return;
-
     PRINT_DEBUG(
-        "Dota2 workshop/local addon autodetect found no entries from %zu seed path(s), first='%s'",
+        "Dota2 workshop autodetect found no entries from %zu seed path(s), first='%s'",
         seed_paths.size(),
         seed_paths.empty() ? "" : seed_paths[0].c_str()
     );
