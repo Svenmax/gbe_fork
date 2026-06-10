@@ -13554,7 +13554,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             GBE_FormatHexPrefix(body, body_size, 48).c_str()
         );
 
-        return GBE_HandleDotaPracticeLobbyLaunchRequest(false, nullptr, has_source_job, source_job);
+        return GBE_HandleDotaPracticeLobbyLaunchRequest(
+            std::string(reinterpret_cast<const char *>(body), body_size),
+            false,
+            nullptr,
+            has_source_job,
+            source_job
+        );
     }
 
     if (request_emsg == 7070u) {
@@ -16754,6 +16760,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
 
     GBE_local_lobby = GBE_LocalLobby{};
     GBE_local_lobby.active = true;
+    GBE_local_lobby.created = std::chrono::high_resolution_clock::now();
     GBE_local_lobby.lobby_id = GBE_GenerateDotaLobbyId();
     GBE_local_lobby.lan = true;
     GBE_local_lobby.fill_with_bots = true;
@@ -18153,7 +18160,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
     return true;
 }
 
-bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id)
+bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id)
 {
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7041 because no local lobby is active");
@@ -18162,6 +18169,32 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapp
 
     if (wrapped && !outer_session_field_raw) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for 7041 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        return true;
+    }
+
+    const double seconds_since_create = GBE_local_lobby.created == std::chrono::high_resolution_clock::time_point{}
+        ? 999.0
+        : std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - GBE_local_lobby.created).count();
+    const bool early_arcade_create_launch =
+        GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) &&
+        GBE_local_lobby.state == 0u &&
+        GBE_local_lobby.game_state == 0u &&
+        GBE_local_lobby.match_id == 0ull &&
+        GBE_local_lobby.launch_phase == GBE_kDotaLaunchPhaseNone &&
+        !GBE_local_lobby.ignored_early_arcade_launch &&
+        !has_request_job &&
+        request_body.size() <= 3u &&
+        seconds_since_create <= 2.0;
+    if (early_arcade_create_launch) {
+        GBE_local_lobby.ignored_early_arcade_launch = true;
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Ignoring early arcade 7041 during lobby creation LobbyID=%llu custom_id=%llu body_size=%zu age=%.3f",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id),
+            request_body.size(),
+            seconds_since_create
+        );
         return true;
     }
 
@@ -19439,7 +19472,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
             GBE_FormatHexPrefix(reinterpret_cast<const uint8 *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
         );
 
-        return GBE_HandleDotaPracticeLobbyLaunchRequest(true, &context.outer_session_field_raw, context.has_request_job, context.request_job_id);
+        return GBE_HandleDotaPracticeLobbyLaunchRequest(context.inner_body_raw, true, &context.outer_session_field_raw, context.has_request_job, context.request_job_id);
     }
 
     if (context.inner_emsg == 7070u) {
