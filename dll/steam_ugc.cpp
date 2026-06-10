@@ -544,9 +544,6 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
 
         std::string cursor = canonical_path(seed_path);
         for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
-            const std::string game_addons_root = cursor + PATH_SEPARATOR + "game" + PATH_SEPARATOR + "dota_addons";
-            if (seen_addon_roots.insert(game_addons_root).second) local_addon_roots.push_back(game_addons_root);
-
             const std::string direct_addons_root = cursor + PATH_SEPARATOR + "dota_addons";
             if (seen_addon_roots.insert(direct_addons_root).second) local_addon_roots.push_back(direct_addons_root);
 

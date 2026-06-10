@@ -1930,10 +1930,6 @@ static void try_detect_dota_workshop_mods(class Settings *settings_client, Setti
     for (const std::string &seed_path : seed_paths) {
         std::string cursor = seed_path;
         for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
-            const std::string game_addons_root = cursor + PATH_SEPARATOR + "game" + PATH_SEPARATOR + "dota_addons";
-            if (seen_addon_roots.insert(game_addons_root).second)
-                local_addon_roots.push_back(game_addons_root);
-
             const std::string direct_addons_root = cursor + PATH_SEPARATOR + "dota_addons";
             if (seen_addon_roots.insert(direct_addons_root).second)
                 local_addon_roots.push_back(direct_addons_root);
