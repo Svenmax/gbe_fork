@@ -20,6 +20,7 @@
 
 #include "base.h"
 #include "econ_item.h"
+#include "gbe_dota_reconnect_shared.h"
 
 class Steam_User_Items;
 class Steam_GameServer_Items;
@@ -333,6 +334,7 @@ public:
 
     void initialize_gc();
     void shutdown_gc();
+    bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64 local_steam_id, GBE_DotaReconnectContext *out);
     void GBE_MaybePrimeDotaServerWelcomeFromCache(const char *reason);
     std::string GBE_BuildDotaJoinableCustomLobbiesHTTPJSON(uint64 requested_custom_game_id);
 

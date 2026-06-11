@@ -744,9 +744,11 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         return;
     }
 
-    GBE_DotaReconnectContext ctx{};
-    const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
     const uint64 local_id = settings->get_local_steam_id().ConvertToUint64();
+    GBE_DotaReconnectContext ctx{};
+    bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
+    if (!has_ctx)
+        has_ctx = GBE_TryRecoverDotaReconnectContextFromGenericLobbies(local_id, &ctx);
     const std::string endpoint = GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(ctx.connect, local_id, ctx.owner_steam_id);
     const bool state_ready = has_ctx && GBE_DotaReconnectContextIsStarted(ctx);
     const bool has_connect = has_ctx && ctx.connect[0] != '\0';

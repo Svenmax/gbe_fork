@@ -358,6 +358,15 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
 
     return false;
 }
+
+bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64_t local_steam_id, GBE_DotaReconnectContext *out)
+{
+    Steam_Client *steam_client = get_steam_client();
+    if (!steam_client || !steam_client->steam_game_coordinator)
+        return false;
+
+    return steam_client->steam_game_coordinator->GBE_TryRecoverDotaReconnectContextFromGenericLobbies(local_steam_id, out);
+}
 // --- End Dota reconnect shared state ---
 
 enum : uint32 {
@@ -12256,6 +12265,59 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     );
 }
 
+bool Steam_Game_Coordinator::GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64 local_steam_id, GBE_DotaReconnectContext *out)
+{
+    if (!out || gc_profile != GC_PROFILE_DOTA2)
+        return false;
+
+    const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("recover_reconnect_context");
+    for (const GBE_LocalLobby &snapshot : snapshots) {
+        if (!snapshot.active ||
+            snapshot.custom_game.game_id == 0ull ||
+            snapshot.server_id == 0ull ||
+            snapshot.connect.empty() ||
+            (snapshot.state < 2u && snapshot.game_state < 2u))
+            continue;
+        if (local_steam_id != 0ull && snapshot.owner_steam_id == local_steam_id)
+            continue;
+
+        bool local_in_lobby = local_steam_id == 0ull;
+        for (const GBE_DotaLobbyMemberState &member : snapshot.members) {
+            if (member.steam_id == local_steam_id) {
+                local_in_lobby = true;
+                break;
+            }
+        }
+        if (!local_in_lobby)
+            continue;
+
+        *out = GBE_DotaReconnectContext{};
+        out->server_id = snapshot.server_id;
+        out->lobby_state = snapshot.state;
+        out->game_state = snapshot.game_state;
+        out->custom_game_id = snapshot.custom_game.game_id;
+        const std::string endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(snapshot.connect);
+        std::strncpy(out->connect, endpoint.c_str(), sizeof(out->connect) - 1);
+        out->connect[sizeof(out->connect) - 1] = '\0';
+        out->owner_steam_id = snapshot.owner_steam_id;
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "recovered arcade reconnect context from generic lobby local=%llu dota_lobby_id=%llu server_id=%llu state=%u game_state=%u custom_game_id=%llu endpoint=%s owner=%llu",
+            static_cast<unsigned long long>(local_steam_id),
+            static_cast<unsigned long long>(snapshot.lobby_id),
+            static_cast<unsigned long long>(out->server_id),
+            out->lobby_state,
+            out->game_state,
+            static_cast<unsigned long long>(out->custom_game_id),
+            out->connect,
+            static_cast<unsigned long long>(out->owner_steam_id)
+        );
+        return true;
+    }
+
+    return false;
+}
+
 std::vector<Steam_Game_Coordinator::GBE_LocalLobby> Steam_Game_Coordinator::GBE_GetDotaGenericLobbySnapshots(const char *reason)
 {
     std::vector<GBE_LocalLobby> snapshots;
@@ -13835,8 +13897,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
                 const bool load_failed = GBE_Dota8053IndicatesLoadFailure(load_result);
                 const char *reason = load_failed ? "8053_load_failed" : "8053_finished_loading";
-                if (!load_failed)
+                if (!load_failed) {
+                    const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
+                    if (local_steam_id != 0ull)
+                        GBE_SetDotaLobbyMemberRuntimeState(local_steam_id, true, 0u, false);
                     GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseLoaded, reason);
+                    GBE_PublishDotaPracticeLobbyLocalMemberData(reason);
+                }
                 GBE_PublishSharedDotaLobbyState(reason);
                 GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, reason);
                 GBE_GC_DebugLog(
@@ -14591,6 +14658,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
             bool owner_hero_updated_from_7034 = false;
             const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
+            const bool custom_game_launch = GBE_local_lobby.custom_game.game_id != 0ull;
             for (const GBE_Dota7034ConnectedPlayer &connected_player : request_shape.connected_players) {
                 if (!connected_player.has_steam_id || connected_player.steam_id == 0ull)
                     continue;
@@ -14610,6 +14678,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 }
                 if (connected_player.steam_id == owner_steam_id && connected_player.has_hero_id && connected_player.hero_id != 0u && previous_owner_hero_id != GBE_local_lobby.owner_hero_id)
                     owner_hero_updated_from_7034 = true;
+            }
+
+            if (custom_game_launch) {
+                GBE_LocalLobby refreshed_lobby{};
+                GBE_CaptureCurrentDotaLobbyState("7034_custom_runtime_member_refresh", refreshed_lobby, false);
             }
 
             if (owner_hero_updated_from_7034) {
@@ -14702,8 +14775,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             const bool request_advances_to_strategy_time =
                 (request_shape.has_game_state && request_shape.game_state >= 3u) ||
                 (request_shape.has_send_reason && request_shape.send_reason == 10u);
-            const bool custom_game_launch = GBE_local_lobby.custom_game.game_id != 0ull;
-
             if (custom_game_launch &&
                     GBE_local_lobby.state == 2u &&
                     GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued &&
