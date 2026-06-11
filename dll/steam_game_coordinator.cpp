@@ -10877,6 +10877,15 @@ bool Steam_Game_Coordinator::GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bo
             member.connected = connected;
             changed = true;
         }
+        if (!connected &&
+            GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) &&
+            GBE_local_lobby.state == 2u &&
+            GBE_local_lobby.game_state >= 1u &&
+            GBE_local_lobby.match_id != 0ull &&
+            member.leaver_status == 0u) {
+            member.leaver_status = 1u;
+            changed = true;
+        }
         // Clear leaver_status when player reconnects
         if (connected && member.leaver_status != 0u) {
             member.leaver_status = 0u;
@@ -11237,7 +11246,7 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                         member.slot = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby_id, member_id, GBE_kDotaGenericLobbyMemberSlotKey));
                         member.hero_id = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby_id, member_id, GBE_kDotaGenericLobbyMemberHeroKey));
                         member.connected = GBE_ParseUint32OrZero(steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby_id, member_id, GBE_kDotaGenericLobbyMemberConnectedKey)) != 0u;
-                        if (preserve_launched_lan_members && !member.connected) {
+                        if (preserve_launched_lan_members && !preserve_custom_game_runtime_members && !member.connected) {
                             for (const GBE_DotaLobbyMemberState &existing : GBE_local_lobby.members) {
                                 if (existing.steam_id == member.steam_id && existing.connected) {
                                     member.connected = true;
@@ -11245,6 +11254,8 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                                 }
                             }
                         }
+                        if (preserve_custom_game_runtime_members && !member.connected)
+                            member.leaver_status = 1u;
                     }
                     GBE_UpsertDotaLobbyMember(members, member);
                 }
