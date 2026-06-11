@@ -11163,6 +11163,15 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                 const std::string generic_bot_difficulty_dire_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyBotDifficultyDireKey);
                 const std::string generic_bot_radiant_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyBotRadiantKey);
                 const std::string generic_bot_dire_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyBotDireKey);
+                const std::string generic_custom_game_mode = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomGameModeKey);
+                const std::string generic_custom_map_name = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomMapNameKey);
+                const std::string generic_custom_difficulty_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomDifficultyKey);
+                const std::string generic_custom_game_id_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomGameIdKey);
+                const std::string generic_custom_min_players_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomMinPlayersKey);
+                const std::string generic_custom_max_players_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomMaxPlayersKey);
+                const std::string generic_custom_game_crc_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomGameCrcKey);
+                const std::string generic_custom_game_timestamp_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomGameTimestampKey);
+                const std::string generic_custom_game_penalties_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomGamePenaltiesKey);
                 if (!generic_lobby_state_raw.empty()) {
                     const uint32 generic_lobby_state = GBE_ParseUint32OrZero(generic_lobby_state_raw.c_str());
                     const bool stale_launch_regression =
@@ -11222,6 +11231,24 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                     GBE_local_lobby.bot_radiant = GBE_ParseUint64OrZero(generic_bot_radiant_raw.c_str());
                 if (!generic_bot_dire_raw.empty())
                     GBE_local_lobby.bot_dire = GBE_ParseUint64OrZero(generic_bot_dire_raw.c_str());
+                if (!generic_custom_game_mode.empty())
+                    GBE_local_lobby.custom_game.mode = generic_custom_game_mode;
+                if (!generic_custom_map_name.empty())
+                    GBE_local_lobby.custom_game.map_name = generic_custom_map_name;
+                if (!generic_custom_difficulty_raw.empty())
+                    GBE_local_lobby.custom_game.difficulty = GBE_ParseUint32OrZero(generic_custom_difficulty_raw.c_str());
+                if (!generic_custom_game_id_raw.empty())
+                    GBE_local_lobby.custom_game.game_id = GBE_ParseUint64OrZero(generic_custom_game_id_raw.c_str());
+                if (!generic_custom_min_players_raw.empty())
+                    GBE_local_lobby.custom_game.min_players = GBE_ParseUint32OrZero(generic_custom_min_players_raw.c_str());
+                if (!generic_custom_max_players_raw.empty())
+                    GBE_local_lobby.custom_game.max_players = GBE_ParseUint32OrZero(generic_custom_max_players_raw.c_str());
+                if (!generic_custom_game_crc_raw.empty())
+                    GBE_local_lobby.custom_game.crc = GBE_ParseUint64OrZero(generic_custom_game_crc_raw.c_str());
+                if (!generic_custom_game_timestamp_raw.empty())
+                    GBE_local_lobby.custom_game.timestamp = GBE_ParseUint32OrZero(generic_custom_game_timestamp_raw.c_str());
+                if (!generic_custom_game_penalties_raw.empty())
+                    GBE_local_lobby.custom_game.penalties = GBE_ParseUint32OrZero(generic_custom_game_penalties_raw.c_str()) != 0u;
 
                 const bool repaired_owner = steam_client->steam_matchmaking->RepairLobbyOwnerIfMissing(generic_lobby_id, reason ? reason : "capture_current_lobby_state");
                 if (repaired_owner) {
@@ -17348,6 +17375,21 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
         GBE_local_lobby.lan = matched_lobby.lan;
         GBE_local_lobby.lan_host_ping_location = matched_lobby.lan_host_ping_location;
         GBE_local_lobby.pass_key = matched_lobby.pass_key;
+        GBE_local_lobby.allow_cheats = matched_lobby.allow_cheats;
+        GBE_local_lobby.fill_with_bots = matched_lobby.fill_with_bots;
+        GBE_local_lobby.allow_spectating = matched_lobby.allow_spectating;
+        GBE_local_lobby.visibility = matched_lobby.visibility;
+        GBE_local_lobby.bot_difficulty_radiant = matched_lobby.bot_difficulty_radiant;
+        GBE_local_lobby.bot_difficulty_dire = matched_lobby.bot_difficulty_dire;
+        GBE_local_lobby.bot_radiant = matched_lobby.bot_radiant;
+        GBE_local_lobby.bot_dire = matched_lobby.bot_dire;
+        GBE_local_lobby.custom_game = matched_lobby.custom_game;
+        GBE_local_lobby.state = matched_lobby.state;
+        GBE_local_lobby.game_state = matched_lobby.game_state;
+        GBE_local_lobby.match_id = matched_lobby.match_id;
+        GBE_local_lobby.server_id = matched_lobby.server_id;
+        GBE_local_lobby.connect = matched_lobby.connect;
+        GBE_local_lobby.game_start_time = matched_lobby.game_start_time;
         GBE_local_lobby.owner_account_id = matched_lobby.owner_account_id;
         GBE_local_lobby.owner_name = matched_lobby.owner_name;
         if (matched_lobby.owner_steam_id != 0ull)
@@ -17367,6 +17409,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
         if (steam_client && steam_client->steam_matchmaking)
             steam_client->steam_matchmaking->JoinLobby(matched_generic_lobby_id);
         GBE_SyncSettingsLobbyFromGenericLobby("7044_join_generic");
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] 7044 matched generic custom metadata lobby_id=%llu generic_lobby_id=%llu custom_game_id=%llu custom_mode=%s custom_map=%s state=%u game_state=%u match_id=%llu server_id=%llu connect=%s",
+            static_cast<unsigned long long>(matched_lobby.lobby_id),
+            static_cast<unsigned long long>(matched_lobby.generic_lobby_id),
+            static_cast<unsigned long long>(matched_lobby.custom_game.game_id),
+            matched_lobby.custom_game.mode.c_str(),
+            matched_lobby.custom_game.map_name.c_str(),
+            matched_lobby.state,
+            matched_lobby.game_state,
+            static_cast<unsigned long long>(matched_lobby.match_id),
+            static_cast<unsigned long long>(matched_lobby.server_id),
+            matched_lobby.connect.c_str());
     }
 
     GBE_DotaLobbyMemberState local_member{};
@@ -17390,12 +17445,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Preparing 7044 cache update LobbyID=%llu owner_steam=%llu local_steam=%llu members=%zu matched_generic_members=%zu",
+        "[LOBBY] Preparing 7044 cache update LobbyID=%llu owner_steam=%llu local_steam=%llu members=%zu matched_generic_members=%zu custom_game_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu connect=%s",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         static_cast<unsigned long long>(GBE_local_lobby.owner_steam_id),
         static_cast<unsigned long long>(local_member.steam_id),
         GBE_local_lobby.members.size(),
-        matched_lobby.members.size()
+        matched_lobby.members.size(),
+        static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id),
+        GBE_local_lobby.state,
+        GBE_local_lobby.game_state,
+        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        static_cast<unsigned long long>(GBE_local_lobby.server_id),
+        GBE_local_lobby.connect.c_str()
     );
 
     std::string response_24;
