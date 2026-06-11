@@ -2448,7 +2448,8 @@ static bool GBE_DotaLobbyMembersEqual(
                 left[i].team != right[i].team ||
                 left[i].slot != right[i].slot ||
                 left[i].hero_id != right[i].hero_id ||
-                left[i].connected != right[i].connected)
+                left[i].connected != right[i].connected ||
+                left[i].leaver_status != right[i].leaver_status)
             return false;
     }
 
@@ -11186,8 +11187,14 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                 std::vector<GBE_DotaLobbyMemberState> members;
                 const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
                 const std::vector<CSteamID> generic_members = steam_client->steam_matchmaking->GetLobbyMemberListSnapshot(generic_lobby_id);
+                const bool preserve_custom_game_runtime_members =
+                    GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) &&
+                    GBE_local_lobby.match_id != 0ull &&
+                    GBE_local_lobby.state == 2u &&
+                    GBE_local_lobby.game_state >= 1u &&
+                    !generic_members.empty();
                 const bool preserve_launched_lan_members =
-                    GBE_local_lobby.lan &&
+                    (GBE_local_lobby.lan || preserve_custom_game_runtime_members) &&
                     GBE_local_lobby.match_id != 0ull &&
                     GBE_local_lobby.state >= 1u &&
                     !generic_members.empty();
@@ -11248,8 +11255,11 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                         !GBE_DotaLobbyMembersContainSteamId(members, existing.steam_id);
                     if (generic_members.empty() || existing.steam_id == local_steam_id || (preserve_launched_lan_members && missing_from_generic)) {
                         GBE_DotaLobbyMemberState preserved = existing;
-                        if (preserve_launched_lan_members && missing_from_generic && preserved.steam_id != GBE_local_lobby.owner_steam_id)
+                        if (preserve_launched_lan_members && missing_from_generic && preserved.steam_id != GBE_local_lobby.owner_steam_id) {
                             preserved.connected = false;
+                            if (preserve_custom_game_runtime_members && preserved.leaver_status == 0u)
+                                preserved.leaver_status = 1u;
+                        }
                         GBE_UpsertDotaLobbyMember(members, preserved);
                     }
                 }
