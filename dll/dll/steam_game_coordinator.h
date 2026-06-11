@@ -206,6 +206,7 @@ public ISteamGameCoordinator
     void GBE_ClearDotaAbandonedLobbySuppression(uint64 lobby_id, const char *reason);
     bool GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(uint32 masked_emsg) const;
     bool GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bool connected);
+    bool GBE_SetDotaLobbyMemberRuntimeState(uint64 steam_id, bool connected, uint32 hero_id, bool has_hero_id);
     bool GBE_ShouldHoldDotaLanLaunchForRemoteMembers(uint32 next_game_state, uint32 *remote_count_out, uint32 *connected_remote_count_out) const;
     void GBE_DiscardQueuedDotaLaunchMessagesForAbandon(const char *reason);
     void push_incoming(uint32 msg_type, const std::string &message, double delay = 0.1, bool apply_lobby_state = false, uint32 lobby_state = 0, uint32 lobby_game_state = 0);

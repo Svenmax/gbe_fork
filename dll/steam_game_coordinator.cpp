@@ -3463,6 +3463,24 @@ static std::string GBE_FormatDota7034Summary(const uint8 *data, size_t size)
     return stream.str();
 }
 
+struct GBE_Dota7034ConnectedPlayer
+{
+    uint64 steam_id{};
+    uint32 hero_id{};
+    bool has_steam_id{};
+    bool has_hero_id{};
+};
+
+struct GBE_Dota7034DisconnectedPlayer
+{
+    uint64 steam_id{};
+    uint32 lobby_state{};
+    uint32 game_state{};
+    bool has_steam_id{};
+    bool has_lobby_state{};
+    bool has_game_state{};
+};
+
 struct GBE_Dota7034RequestShape
 {
     uint32 game_state{};
@@ -3472,14 +3490,11 @@ struct GBE_Dota7034RequestShape
     uint32 dire_kills{};
     uint32 radiant_lead{};
     uint32 building_state{};
-    uint64 connected_steam_id{};
-    uint32 connected_hero_id{};
     uint64 draft_steam_id{};
     uint32 draft_team{};
     uint32 draft_team_slot{};
-    uint64 disconnected_steam_id{};
-    uint32 disconnected_lobby_state{};
-    uint32 disconnected_game_state{};
+    std::vector<GBE_Dota7034ConnectedPlayer> connected_players;
+    std::vector<GBE_Dota7034DisconnectedPlayer> disconnected_players;
     bool has_game_state{};
     bool has_send_reason{};
     bool has_first_blood_happened{};
@@ -3488,16 +3503,11 @@ struct GBE_Dota7034RequestShape
     bool has_radiant_lead{};
     bool has_building_state{};
     bool has_connected_player{};
-    bool has_connected_steam_id{};
-    bool has_connected_hero_id{};
     bool has_draft{};
     bool has_draft_steam_id{};
     bool has_draft_team{};
     bool has_draft_team_slot{};
     bool has_disconnected_player{};
-    bool has_disconnected_steam_id{};
-    bool has_disconnected_lobby_state{};
-    bool has_disconnected_game_state{};
 };
 
 struct GBE_DotaEmptyRequestShape
@@ -3548,45 +3558,48 @@ static GBE_Dota7034RequestShape GBE_ParseDota7034RequestShape(const uint8 *data,
     if (GBE_ExtractProtoFieldUint32(data, size, view, shape.building_state))
         shape.has_building_state = true;
 
-    std::string connected_player_raw;
-    if (GBE_ExtractProtoFieldBytes(data, size, GBE_FindProtoField(data, size, 1u), connected_player_raw) && !connected_player_raw.empty()) {
-        shape.has_connected_player = true;
+    size_t player_offset = 0;
+    while (player_offset < size) {
+        uint32 field_number = 0;
+        uint32 wire_type = 0;
+        size_t field_offset = 0;
+        size_t value_offset = 0;
+        size_t value_size = 0;
+        size_t field_end = 0;
+        if (!GBE_ReadNextProtoField(data, size, player_offset, field_number, wire_type, field_offset, value_offset, value_size, field_end))
+            break;
+        if (wire_type != 2u)
+            continue;
 
-        const uint8 *player_data = reinterpret_cast<const uint8 *>(connected_player_raw.data());
-        const size_t player_size = connected_player_raw.size();
-        uint64 connected_steam_id = 0;
-        if (GBE_ExtractProtoFieldUint64(player_data, player_size, GBE_FindProtoField(player_data, player_size, 1u), connected_steam_id)) {
-            shape.connected_steam_id = connected_steam_id;
-            shape.has_connected_steam_id = true;
-        }
+        if (field_number == 1u) {
+            GBE_Dota7034ConnectedPlayer connected_player{};
+            const uint8 *player_data = data + value_offset;
+            const size_t player_size = value_size;
+            if (GBE_ExtractProtoFieldUint64(player_data, player_size, GBE_FindProtoField(player_data, player_size, 1u), connected_player.steam_id))
+                connected_player.has_steam_id = true;
+            if (GBE_ExtractProtoFieldUint32(player_data, player_size, GBE_FindProtoField(player_data, player_size, 2u), connected_player.hero_id))
+                connected_player.has_hero_id = true;
+            shape.has_connected_player = true;
+            shape.connected_players.push_back(connected_player);
+        } else if (field_number == 7u) {
+            GBE_Dota7034DisconnectedPlayer disconnected_player{};
+            const uint8 *player_data = data + value_offset;
+            const size_t player_size = value_size;
+            if (GBE_ExtractProtoFieldUint64(player_data, player_size, GBE_FindProtoField(player_data, player_size, 1u), disconnected_player.steam_id))
+                disconnected_player.has_steam_id = true;
 
-        uint32 connected_hero_id = 0;
-        if (GBE_ExtractProtoFieldUint32(player_data, player_size, GBE_FindProtoField(player_data, player_size, 2u), connected_hero_id)) {
-            shape.connected_hero_id = connected_hero_id;
-            shape.has_connected_hero_id = true;
-        }
-    }
+            std::string leaver_state_raw;
+            if (GBE_ExtractProtoFieldBytes(player_data, player_size, GBE_FindProtoField(player_data, player_size, 3u), leaver_state_raw) && !leaver_state_raw.empty()) {
+                const uint8 *leaver_state_data = reinterpret_cast<const uint8 *>(leaver_state_raw.data());
+                const size_t leaver_state_size = leaver_state_raw.size();
+                if (GBE_ExtractProtoFieldUint32(leaver_state_data, leaver_state_size, GBE_FindProtoField(leaver_state_data, leaver_state_size, 1u), disconnected_player.lobby_state))
+                    disconnected_player.has_lobby_state = true;
+                if (GBE_ExtractProtoFieldUint32(leaver_state_data, leaver_state_size, GBE_FindProtoField(leaver_state_data, leaver_state_size, 2u), disconnected_player.game_state))
+                    disconnected_player.has_game_state = true;
+            }
 
-    std::string disconnected_player_raw;
-    if (GBE_ExtractProtoFieldBytes(data, size, GBE_FindProtoField(data, size, 7u), disconnected_player_raw) && !disconnected_player_raw.empty()) {
-        shape.has_disconnected_player = true;
-
-        const uint8 *player_data = reinterpret_cast<const uint8 *>(disconnected_player_raw.data());
-        const size_t player_size = disconnected_player_raw.size();
-        uint64 disconnected_steam_id = 0;
-        if (GBE_ExtractProtoFieldUint64(player_data, player_size, GBE_FindProtoField(player_data, player_size, 1u), disconnected_steam_id)) {
-            shape.disconnected_steam_id = disconnected_steam_id;
-            shape.has_disconnected_steam_id = true;
-        }
-
-        std::string leaver_state_raw;
-        if (GBE_ExtractProtoFieldBytes(player_data, player_size, GBE_FindProtoField(player_data, player_size, 3u), leaver_state_raw) && !leaver_state_raw.empty()) {
-            const uint8 *leaver_state_data = reinterpret_cast<const uint8 *>(leaver_state_raw.data());
-            const size_t leaver_state_size = leaver_state_raw.size();
-            if (GBE_ExtractProtoFieldUint32(leaver_state_data, leaver_state_size, GBE_FindProtoField(leaver_state_data, leaver_state_size, 1u), shape.disconnected_lobby_state))
-                shape.has_disconnected_lobby_state = true;
-            if (GBE_ExtractProtoFieldUint32(leaver_state_data, leaver_state_size, GBE_FindProtoField(leaver_state_data, leaver_state_size, 2u), shape.disconnected_game_state))
-                shape.has_disconnected_game_state = true;
+            shape.has_disconnected_player = true;
+            shape.disconnected_players.push_back(disconnected_player);
         }
     }
 
@@ -6547,9 +6560,7 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
 
         std::string player;
         GBE_AppendProtoFixed64Field(player, 1u, player_steam_id);
-        if (request_shape.has_connected_steam_id && request_shape.connected_steam_id == player_steam_id && request_shape.has_connected_hero_id && request_shape.connected_hero_id != 0u)
-            GBE_AppendProtoVarIntField(player, 2u, request_shape.connected_hero_id);
-        else if (hero_id != 0u)
+        if (hero_id != 0u)
             GBE_AppendProtoVarIntField(player, 2u, hero_id);
         GBE_AppendProtoBytesField(player, 3u, leaver_state);
         GBE_AppendProtoVarIntField(player, 4u, 0u);
@@ -6578,25 +6589,31 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     };
 
     if (request_shape.has_connected_player || request_shape.has_disconnected_player) {
-        if (request_shape.has_connected_steam_id && request_shape.connected_steam_id != 0ull) {
+        for (const GBE_Dota7034ConnectedPlayer &connected_player : request_shape.connected_players) {
+            if (!connected_player.has_steam_id || connected_player.steam_id == 0ull)
+                continue;
             uint32 hero_id = 0u;
             uint32 team = owner_team;
             uint32 slot = owner_slot;
             for (const GBE_DotaLobbyMemberState &member : members) {
-                if (member.steam_id == request_shape.connected_steam_id) {
+                if (member.steam_id == connected_player.steam_id) {
                     hero_id = member.hero_id;
                     team = member.team;
                     slot = member.slot;
                     break;
                 }
             }
-            append_connected_player(request_shape.connected_steam_id, hero_id, team, slot);
+            if (connected_player.has_hero_id && connected_player.hero_id != 0u)
+                hero_id = connected_player.hero_id;
+            append_connected_player(connected_player.steam_id, hero_id, team, slot);
         }
 
-        if (request_shape.has_disconnected_steam_id && request_shape.disconnected_steam_id != 0ull) {
-            const uint32 disconnected_lobby_state = request_shape.has_disconnected_lobby_state ? request_shape.disconnected_lobby_state : lobby_state;
-            const uint32 disconnected_game_state = request_shape.has_disconnected_game_state ? request_shape.disconnected_game_state : game_state;
-            append_disconnected_player(request_shape.disconnected_steam_id, disconnected_lobby_state, disconnected_game_state);
+        for (const GBE_Dota7034DisconnectedPlayer &disconnected_player : request_shape.disconnected_players) {
+            if (!disconnected_player.has_steam_id || disconnected_player.steam_id == 0ull)
+                continue;
+            const uint32 disconnected_lobby_state = disconnected_player.has_lobby_state ? disconnected_player.lobby_state : lobby_state;
+            const uint32 disconnected_game_state = disconnected_player.has_game_state ? disconnected_player.game_state : game_state;
+            append_disconnected_player(disconnected_player.steam_id, disconnected_lobby_state, disconnected_game_state);
         }
     } else {
         append_connected_player(steam_id, 0u, owner_team, owner_slot);
@@ -6623,9 +6640,30 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
         GBE_AppendProtoVarIntField(body, 14u, request_shape.radiant_lead);
     if (request_shape.has_building_state)
         GBE_AppendProtoVarIntField(body, 15u, request_shape.building_state);
-    if (request_shape.has_disconnected_player && (!request_shape.has_disconnected_steam_id || request_shape.disconnected_steam_id == steam_id)) {
-        uint32 disconnected_lobby_state = request_shape.has_disconnected_lobby_state ? request_shape.disconnected_lobby_state : lobby_state;
-        uint32 disconnected_game_state = request_shape.has_disconnected_game_state ? request_shape.disconnected_game_state : game_state;
+    bool disconnected_request_has_steam_id = false;
+    bool disconnected_request_includes_local = false;
+    for (const GBE_Dota7034DisconnectedPlayer &disconnected_player : request_shape.disconnected_players) {
+        if (!disconnected_player.has_steam_id)
+            continue;
+        disconnected_request_has_steam_id = true;
+        if (disconnected_player.steam_id == steam_id) {
+            disconnected_request_includes_local = true;
+            break;
+        }
+    }
+    if (request_shape.has_disconnected_player && (!disconnected_request_has_steam_id || disconnected_request_includes_local)) {
+        uint32 disconnected_lobby_state = lobby_state;
+        uint32 disconnected_game_state = game_state;
+        for (const GBE_Dota7034DisconnectedPlayer &disconnected_player : request_shape.disconnected_players) {
+            if (disconnected_request_includes_local && disconnected_player.steam_id != steam_id)
+                continue;
+            if (disconnected_player.has_lobby_state)
+                disconnected_lobby_state = disconnected_player.lobby_state;
+            if (disconnected_player.has_game_state)
+                disconnected_game_state = disconnected_player.game_state;
+            if (!disconnected_request_includes_local || disconnected_player.steam_id == steam_id)
+                break;
+        }
         if (disconnected_lobby_state < lobby_state)
             disconnected_lobby_state = lobby_state;
         if (disconnected_game_state < game_state)
@@ -10859,6 +10897,31 @@ bool Steam_Game_Coordinator::GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bo
     return changed;
 }
 
+bool Steam_Game_Coordinator::GBE_SetDotaLobbyMemberRuntimeState(uint64 steam_id, bool connected, uint32 hero_id, bool has_hero_id)
+{
+    if (steam_id == 0ull)
+        return false;
+
+    bool changed = GBE_SetDotaLobbyMemberConnected(steam_id, connected);
+    if (has_hero_id && hero_id != 0u) {
+        if (steam_id == GBE_local_lobby.owner_steam_id && GBE_local_lobby.owner_hero_id != hero_id) {
+            GBE_local_lobby.owner_hero_id = hero_id;
+            changed = true;
+        }
+        for (GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+            if (member.steam_id != steam_id)
+                continue;
+            if (member.hero_id != hero_id) {
+                member.hero_id = hero_id;
+                changed = true;
+            }
+            break;
+        }
+    }
+
+    return changed;
+}
+
 bool Steam_Game_Coordinator::GBE_ShouldHoldDotaLanLaunchForRemoteMembers(uint32 next_game_state, uint32 *remote_count_out, uint32 *connected_remote_count_out) const
 {
     if (remote_count_out)
@@ -14420,8 +14483,30 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_PublishSharedDotaLobbyState("7034_draft_team_slot");
             }
 
-            if (request_shape.has_connected_steam_id && request_shape.connected_steam_id == GBE_GetDotaLobbyOwnerSteamId() && request_shape.has_connected_hero_id && request_shape.connected_hero_id != 0u && GBE_local_lobby.owner_hero_id != request_shape.connected_hero_id) {
-                GBE_local_lobby.owner_hero_id = request_shape.connected_hero_id;
+            bool owner_hero_updated_from_7034 = false;
+            const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
+            for (const GBE_Dota7034ConnectedPlayer &connected_player : request_shape.connected_players) {
+                if (!connected_player.has_steam_id || connected_player.steam_id == 0ull)
+                    continue;
+                const uint32 previous_owner_hero_id = GBE_local_lobby.owner_hero_id;
+                if (GBE_SetDotaLobbyMemberRuntimeState(connected_player.steam_id, true, connected_player.hero_id, connected_player.has_hero_id)) {
+                    GBE_PublishSharedDotaLobbyState("7034_connected_player");
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "marked connected player from 7034 steam_id=%llu hero_id=%u has_hero=%u source_job=%llu state=%u game_state=%u",
+                        static_cast<unsigned long long>(connected_player.steam_id),
+                        connected_player.hero_id,
+                        connected_player.has_hero_id ? 1u : 0u,
+                        static_cast<unsigned long long>(source_job),
+                        GBE_local_lobby.state,
+                        GBE_local_lobby.game_state
+                    );
+                }
+                if (connected_player.steam_id == owner_steam_id && connected_player.has_hero_id && connected_player.hero_id != 0u && previous_owner_hero_id != GBE_local_lobby.owner_hero_id)
+                    owner_hero_updated_from_7034 = true;
+            }
+
+            if (owner_hero_updated_from_7034) {
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
                     "updated owner hero from 7034 request hero_id=%u source_job=%llu state=%u game_state=%u",
@@ -14430,17 +14515,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     GBE_local_lobby.state,
                     GBE_local_lobby.game_state
                 );
-                GBE_PublishSharedDotaLobbyState("7034_connected_player_hero");
 
                 if (is_server && gc_profile == GC_PROFILE_DOTA2) {
                     Steam_Client *steam_client = get_steam_client();
                     Steam_Game_Coordinator *client_gc = steam_client ? steam_client->steam_game_coordinator : nullptr;
-                    const uint64 owner_steam64 = GBE_GetDotaLobbyOwnerSteamId();
+                    const uint64 owner_steam64 = owner_steam_id;
                     if (client_gc && owner_steam64 != 0ull) {
-                        const CSteamID owner_steam_id(owner_steam64);
+                        const CSteamID owner_id(owner_steam64);
                         const auto &client_items = client_gc->get_items();
-                        // Push to server GC so remote players see host cosmetics
-                        if (GBE_PushDotaPlayerEquippedItemsCacheToGC(this, owner_steam_id, client_items, true, "7034_owner_hero_known_server")) {
+                        if (GBE_PushDotaPlayerEquippedItemsCacheToGC(this, owner_id, client_items, true, "7034_owner_hero_known_server")) {
                             GBE_GC_DebugLog(
                                 "GC_DOTA_DIRECT",
                                 "replayed host equipped items to server GC after owner hero became known: steam64=%llu hero_id=%u source_job=%llu",
@@ -14453,27 +14536,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 }
             }
 
-            if (request_shape.has_connected_steam_id && request_shape.connected_steam_id != 0ull) {
-                if (GBE_SetDotaLobbyMemberConnected(request_shape.connected_steam_id, true)) {
-                    GBE_PublishSharedDotaLobbyState("7034_connected_player");
-                    GBE_GC_DebugLog(
-                        "GC_DOTA_DIRECT",
-                        "marked connected player from 7034 steam_id=%llu source_job=%llu state=%u game_state=%u",
-                        static_cast<unsigned long long>(request_shape.connected_steam_id),
-                        static_cast<unsigned long long>(source_job),
-                        GBE_local_lobby.state,
-                        GBE_local_lobby.game_state
-                    );
-                }
-            }
-
-            if (request_shape.has_disconnected_steam_id && request_shape.disconnected_steam_id != 0ull) {
-                if (GBE_SetDotaLobbyMemberConnected(request_shape.disconnected_steam_id, false)) {
+            for (const GBE_Dota7034DisconnectedPlayer &disconnected_player : request_shape.disconnected_players) {
+                if (!disconnected_player.has_steam_id || disconnected_player.steam_id == 0ull)
+                    continue;
+                if (GBE_SetDotaLobbyMemberRuntimeState(disconnected_player.steam_id, false, 0u, false)) {
                     GBE_PublishSharedDotaLobbyState("7034_disconnected_player");
                     GBE_GC_DebugLog(
                         "GC_DOTA_DIRECT",
                         "marked disconnected player from 7034 steam_id=%llu source_job=%llu state=%u game_state=%u",
-                        static_cast<unsigned long long>(request_shape.disconnected_steam_id),
+                        static_cast<unsigned long long>(disconnected_player.steam_id),
                         static_cast<unsigned long long>(source_job),
                         GBE_local_lobby.state,
                         GBE_local_lobby.game_state
