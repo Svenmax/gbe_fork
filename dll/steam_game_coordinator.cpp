@@ -20428,10 +20428,11 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
         }
     }
 
+    GBE_dota_reconnect_eligible.store(false);
     GBE_last_dota_direct_connect_callback_signature = signature;
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
-        "queued direct connect callbacks reason=%s lobby_id=%llu match_id=%llu endpoint=%s endpoint_raw=%s command=%s local_is_owner=%u",
+        "queued direct connect callbacks reason=%s lobby_id=%llu match_id=%llu endpoint=%s endpoint_raw=%s command=%s local_is_owner=%u reconnect_eligible=0",
         reason ? reason : "unknown",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         static_cast<unsigned long long>(GBE_local_lobby.match_id),

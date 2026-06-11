@@ -776,6 +776,17 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     if (!state_ready || !has_connect)
         return;
 
+    if (!eligible_before) {
+        GBE_ReconnectLog(
+            "GBE_RECONNECT_DIAG",
+            "skipping PostConnectionStateMsg direct connect reason=reconnect_not_eligible server_id=%llu endpoint=%s endpoint_raw=%s",
+            (unsigned long long)ctx.server_id,
+            endpoint.c_str(),
+            ctx.connect
+        );
+        return;
+    }
+
     if (local_is_owner) {
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
