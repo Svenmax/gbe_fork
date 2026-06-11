@@ -543,7 +543,7 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
             ctx.connect,
             local_is_owner ? 1u : 0u
         );
-        if (is_arcade_context && remote_matches && state_ready && has_connect && !local_is_owner) {
+        if (remote_matches && state_ready && has_connect && !local_is_owner) {
             bool expected = true;
             if (GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false)) {
                 GBE_ReconnectLog("GBE_RECONNECT",
