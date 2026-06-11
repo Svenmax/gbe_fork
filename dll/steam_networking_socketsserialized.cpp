@@ -543,7 +543,7 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
             ctx.connect,
             local_is_owner ? 1u : 0u
         );
-        if (remote_matches && state_ready && has_connect && !local_is_owner) {
+        if (is_arcade_context && remote_matches && state_ready && has_connect && !local_is_owner) {
             bool expected = true;
             if (GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false)) {
                 GBE_ReconnectLog("GBE_RECONNECT",
@@ -775,6 +775,17 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
 
     if (!state_ready || !has_connect)
         return;
+
+    if (!is_arcade_context) {
+        GBE_ReconnectLog(
+            "GBE_RECONNECT_DIAG",
+            "skipping PostConnectionStateMsg direct connect reason=ordinary_lobby server_id=%llu endpoint=%s endpoint_raw=%s",
+            (unsigned long long)ctx.server_id,
+            endpoint.c_str(),
+            ctx.connect
+        );
+        return;
+    }
 
     if (!eligible_before) {
         GBE_ReconnectLog(
