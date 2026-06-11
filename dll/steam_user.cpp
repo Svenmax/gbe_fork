@@ -797,7 +797,7 @@ void Steam_User::CancelAuthTicket( HAuthTicket hAuthTicket )
     // GameServerChangeRequested_t with the LAN IP instead.
     {
         GBE_DotaReconnectContext ctx{};
-        if (GBE_GetDotaReconnectContext(&ctx) && ctx.game_state >= 2) {
+        if (GBE_GetDotaReconnectContext(&ctx) && GBE_DotaReconnectContextIsStarted(ctx)) {
             GBE_dota_reconnect_eligible.store(true);
             GBE_ReconnectLog("GBE_RECONNECT", "CancelAuthTicket: set reconnect_eligible=true server_id=%llu connect=%s",
                 (unsigned long long)ctx.server_id, ctx.connect);

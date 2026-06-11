@@ -518,7 +518,7 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
         const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
         const std::string selected_endpoint = GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(ctx.connect, local_id, ctx.owner_steam_id);
         const bool remote_matches = has_ctx && remote_id == ctx.server_id;
-        const bool state_ready = has_ctx && ctx.game_state >= 2;
+        const bool state_ready = has_ctx && GBE_DotaReconnectContextIsStarted(ctx);
         const bool has_connect = has_ctx && ctx.connect[0] != '\0';
         const bool is_arcade_context = has_ctx && ctx.custom_game_id != 0ull;
         const bool local_is_owner = local_id != 0ull && local_id == ctx.owner_steam_id;
@@ -543,7 +543,7 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
             ctx.connect,
             local_is_owner ? 1u : 0u
         );
-        if (is_arcade_context && remote_matches && state_ready && has_connect && !local_is_owner) {
+        if (remote_matches && state_ready && has_connect && !local_is_owner) {
             bool expected = true;
             if (GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false)) {
                 GBE_ReconnectLog("GBE_RECONNECT",
@@ -647,10 +647,10 @@ SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
     struct SteamNetworkingSocketsCert_t data = {};
     GBE_DotaReconnectContext ctx{};
     const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
-    const bool state_ready = has_ctx && ctx.game_state >= 2;
+    const bool state_ready = has_ctx && GBE_DotaReconnectContextIsStarted(ctx);
     const bool has_connect = has_ctx && ctx.connect[0] != '\0';
     const bool is_arcade_context = has_ctx && ctx.custom_game_id != 0ull;
-    const bool cert_ready = is_arcade_context && state_ready && has_connect;
+    const bool cert_ready = state_ready && has_connect;
     data.m_eResult = cert_ready ? k_EResultOK : k_EResultNoConnection;
     if (cert_ready) {
         const auto cert = GBE_BuildSerializedNetworkingCert(settings->get_local_steam_id(), settings->get_local_game_id().AppID());
@@ -748,7 +748,7 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
     const uint64 local_id = settings->get_local_steam_id().ConvertToUint64();
     const std::string endpoint = GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(ctx.connect, local_id, ctx.owner_steam_id);
-    const bool state_ready = has_ctx && ctx.game_state >= 2;
+    const bool state_ready = has_ctx && GBE_DotaReconnectContextIsStarted(ctx);
     const bool has_connect = has_ctx && ctx.connect[0] != '\0';
     const bool is_arcade_context = has_ctx && ctx.custom_game_id != 0ull;
     const bool local_is_owner = local_id != 0ull && local_id == ctx.owner_steam_id;
@@ -773,13 +773,13 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         local_is_owner ? 1u : 0u
     );
 
-    if (!is_arcade_context || !state_ready || !has_connect)
+    if (!state_ready || !has_connect)
         return;
 
     if (local_is_owner) {
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
-            "skipping PostConnectionStateMsg direct connect for local arcade owner server_id=%llu endpoint=%s endpoint_raw=%s",
+            "skipping PostConnectionStateMsg direct connect for local owner server_id=%llu endpoint=%s endpoint_raw=%s",
             (unsigned long long)ctx.server_id,
             endpoint.c_str(),
             ctx.connect

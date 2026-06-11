@@ -330,10 +330,11 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
 
     if (GBE_shared_dota_lobby_state.valid &&
         GBE_shared_dota_lobby_state.active &&
-        GBE_shared_dota_lobby_state.game_state >= 2u &&
+        (GBE_shared_dota_lobby_state.state >= 2u || GBE_shared_dota_lobby_state.game_state >= 2u) &&
         !GBE_shared_dota_lobby_state.connect.empty() &&
         GBE_shared_dota_lobby_state.server_id != 0) {
         out->server_id = GBE_shared_dota_lobby_state.server_id;
+        out->lobby_state = GBE_shared_dota_lobby_state.state;
         out->game_state = GBE_shared_dota_lobby_state.game_state;
         out->custom_game_id = GBE_shared_dota_lobby_state.custom_game.game_id;
         const std::string endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_shared_dota_lobby_state.connect);
@@ -344,7 +345,7 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
     }
 
     if (GBE_recent_dota_reconnect_context_valid &&
-        GBE_recent_dota_reconnect_context.game_state >= 2u &&
+        GBE_DotaReconnectContextIsStarted(GBE_recent_dota_reconnect_context) &&
         GBE_recent_dota_reconnect_context.connect[0] != '\0' &&
         GBE_recent_dota_reconnect_context.server_id != 0) {
         *out = GBE_recent_dota_reconnect_context;
@@ -11374,14 +11375,14 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
     GBE_shared_dota_lobby_state.has_cache_sync_version = GBE_local_lobby.has_cache_sync_version;
     GBE_shared_dota_lobby_state.cache_sync_version = GBE_local_lobby.cache_sync_version;
 
-    if (GBE_local_lobby.custom_game.game_id != 0ull &&
-        GBE_local_lobby.active &&
-        GBE_local_lobby.game_state >= 2u &&
+    if (GBE_local_lobby.active &&
+        (GBE_local_lobby.state >= 2u || GBE_local_lobby.game_state >= 2u) &&
         GBE_local_lobby.server_id != 0ull &&
         !GBE_local_lobby.connect.empty()) {
         GBE_recent_dota_reconnect_context_valid = true;
         GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
         GBE_recent_dota_reconnect_context.server_id = GBE_local_lobby.server_id;
+        GBE_recent_dota_reconnect_context.lobby_state = GBE_local_lobby.state;
         GBE_recent_dota_reconnect_context.game_state = GBE_local_lobby.game_state;
         GBE_recent_dota_reconnect_context.custom_game_id = GBE_local_lobby.custom_game.game_id;
         const std::string endpoint = GBE_GetDotaPracticeLobbyFirstConnectEndpoint(GBE_local_lobby.connect);
@@ -11390,10 +11391,12 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
         GBE_recent_dota_reconnect_context.owner_steam_id = GBE_local_lobby.owner_steam_id;
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
-            "cached recent arcade reconnect context reason=%s server_id=%llu game_state=%u endpoint=%s",
+            "cached recent dota reconnect context reason=%s server_id=%llu lobby_state=%u game_state=%u custom_game_id=%llu endpoint=%s",
             reason ? reason : "unknown",
             static_cast<unsigned long long>(GBE_recent_dota_reconnect_context.server_id),
+            GBE_recent_dota_reconnect_context.lobby_state,
             GBE_recent_dota_reconnect_context.game_state,
+            static_cast<unsigned long long>(GBE_recent_dota_reconnect_context.custom_game_id),
             GBE_recent_dota_reconnect_context.connect
         );
     }
@@ -12493,7 +12496,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 GBE_local_lobby.state = 2u;
             }
             GBE_local_lobby.match_id = GBE_shared_dota_lobby_state.match_id;
-            GBE_local_lobby.server_id = GBE_shared_dota_lobby_state.match_id != 0ull ? GBE_shared_dota_lobby_state.server_id : 0ull;
+            GBE_local_lobby.server_id = GBE_shared_dota_lobby_state.server_id;
             GBE_local_lobby.owner_steam_id = GBE_shared_dota_lobby_state.owner_steam_id;
             GBE_local_lobby.owner_account_id = GBE_shared_dota_lobby_state.owner_account_id;
             GBE_local_lobby.owner_name = GBE_shared_dota_lobby_state.owner_name;
@@ -12545,11 +12548,6 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         }
         const uint64 previous_server_id = GBE_local_lobby.server_id;
         const std::string previous_connect = GBE_local_lobby.connect;
-
-        if (GBE_local_lobby.server_id != 0ull && GBE_shared_dota_lobby_state.match_id == 0ull) {
-            GBE_local_lobby.server_id = 0ull;
-            changed = true;
-        }
 
         const std::string shared_connect = GBE_NormalizeDotaPracticeLobbyConnect(GBE_shared_dota_lobby_state.connect);
         if (!shared_connect.empty() && GBE_local_lobby.connect != shared_connect) {
@@ -20338,16 +20336,15 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     const uint64 owner_steam_id = GBE_local_lobby.owner_steam_id != 0 ? GBE_local_lobby.owner_steam_id : GBE_GetDotaLobbyOwnerSteamId();
     const bool local_is_owner = local_steam_id != 0ull && local_steam_id == owner_steam_id;
     const bool arcade_custom_launch = GBE_local_lobby.custom_game.game_id != 0ull;
-    if (!arcade_custom_launch)
-        return;
 
     if (local_is_owner) {
         GBE_GC_DebugLog(
             "GC_DOTA_CONNECT_DIAG",
-            "skipping direct connect callbacks for local arcade owner reason=%s lobby_id=%llu match_id=%llu endpoint_raw=%s server_id=%llu",
+            "skipping direct connect callbacks for local owner reason=%s lobby_id=%llu match_id=%llu custom_game_id=%llu endpoint_raw=%s server_id=%llu",
             reason ? reason : "unknown",
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
             static_cast<unsigned long long>(GBE_local_lobby.match_id),
+            static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id),
             raw_endpoint.c_str(),
             static_cast<unsigned long long>(GBE_local_lobby.server_id)
         );
