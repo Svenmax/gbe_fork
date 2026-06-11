@@ -100,6 +100,8 @@ static constexpr uint32 GBE_kDotaDestroyLobbyResponse = 8247u;
 static constexpr uint32 GBE_kDotaPracticeLobbyCloseBroadcastChannel = 8054u;
 static constexpr uint32 GBE_kDotaFindTopSourceTVGames = 8009u;
 static constexpr uint32 GBE_kDotaFindTopSourceTVGamesResponse = 8010u;
+static constexpr uint32 GBE_kDotaCustomGameInfoRequest = 8020u;
+static constexpr uint32 GBE_kDotaCustomGameInfoResponse = 8021u;
 static constexpr uint32 GBE_kDotaLobbyList = 8011u;
 static constexpr uint32 GBE_kDotaLobbyListResponse = 8012u;
 static constexpr uint32 GBE_kDotaSOUpdateMultiple = 6146u;
@@ -6209,6 +6211,14 @@ static bool GBE_BuildDotaFriendPracticeLobbyListResponsePayload(const std::vecto
     for (const std::string &entry : entries)
         GBE_AppendProtoBytesField(body, 1u, entry);
     return GBE_BuildDotaZeroHeaderPayload(GBE_kDotaFriendPracticeLobbyListResponse, body, message);
+}
+
+static bool GBE_BuildDotaCustomGameInfoResponsePayload(uint64 custom_game_id, bool has_request_job, uint64 request_job_id, std::string &message)
+{
+    std::string body;
+    if (custom_game_id != 0ull)
+        GBE_AppendProtoVarIntField(body, 1u, custom_game_id);
+    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(GBE_kDotaCustomGameInfoResponse, has_request_job, request_job_id, body, message);
 }
 
 static std::string GBE_BuildDotaCustomLobbyListEntryBody(
@@ -15827,6 +15837,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             // CMsgPlayerConductScorecardRequest -> suppress (don't reply)
             // Not replying prevents misleading conduct scorecard popup.
             GBE_GC_DebugLog("GC_DOTA_DIRECT", "conduct scorecard request suppressed source_job=%llu", static_cast<unsigned long long>(source_job));
+            return true;
+        }
+        case GBE_kDotaCustomGameInfoRequest: {
+            uint64 custom_game_id = 0ull;
+            GBE_ExtractProtoFieldUint64(body, body_size, GBE_FindProtoField(body, body_size, 1u), custom_game_id);
+
+            std::string response_message;
+            if (!GBE_BuildDotaCustomGameInfoResponsePayload(custom_game_id, has_source_job, source_job, response_message)) {
+                GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, GBE_kDotaCustomGameInfoResponse);
+                return true;
+            }
+
+            push_incoming_now(GBE_kDotaCustomGameInfoResponse | GBE_kProtoMask, response_message);
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "custom game info -> response custom_game_id=%llu source_job=%llu",
+                static_cast<unsigned long long>(custom_game_id),
+                static_cast<unsigned long long>(source_job));
             return true;
         }
         case GBE_kDotaJoinableCustomGameModesRequest: {
