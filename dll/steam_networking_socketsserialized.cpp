@@ -891,16 +891,10 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         ctx.connect
     );
 
-    std::string connect_command = std::string("+connect ") + endpoint;
-    GameRichPresenceJoinRequested_t rich_join{};
-    rich_join.m_steamIDFriend = CSteamID(static_cast<uint64>(ctx.owner_steam_id));
-    std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
-    rich_join.m_rgchConnect[sizeof(rich_join.m_rgchConnect) - 1] = '\0';
-    callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
+    const std::string connect_command = std::string("+connect ") + endpoint;
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
-        "queued callback id=%d type=GameRichPresenceJoinRequested delay=0.25 source=PostConnectionStateMsg retry=%u once=1 command=%s owner=%llu",
-        rich_join.k_iCallback,
+        "skipping GameRichPresenceJoinRequested source=PostConnectionStateMsg reason=arcade_direct_connect_uses_server_change retry=%u command=%s owner=%llu",
         GBE_post_connection_state_retry_count,
         connect_command.c_str(),
         (unsigned long long)ctx.owner_steam_id

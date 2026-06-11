@@ -11259,7 +11259,8 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                 if (!generic_custom_game_penalties_raw.empty())
                     GBE_local_lobby.custom_game.penalties = GBE_ParseUint32OrZero(generic_custom_game_penalties_raw.c_str()) != 0u;
 
-                const bool repaired_owner = steam_client->steam_matchmaking->RepairLobbyOwnerIfMissing(generic_lobby_id, reason ? reason : "capture_current_lobby_state");
+                const bool custom_runtime_member_refresh = reason && std::strcmp(reason, "7034_custom_runtime_member_refresh") == 0;
+                const bool repaired_owner = custom_runtime_member_refresh ? false : steam_client->steam_matchmaking->RepairLobbyOwnerIfMissing(generic_lobby_id, reason ? reason : "capture_current_lobby_state");
                 if (repaired_owner) {
                     GBE_GC_DebugLog(
                         "GC_DOTA_LOBBY",
@@ -11269,7 +11270,8 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                         static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id)
                     );
                 }
-                GBE_AdoptDotaGenericLobbyOwnerIfNeeded(reason ? reason : "capture_current_lobby_state");
+                if (!custom_runtime_member_refresh)
+                    GBE_AdoptDotaGenericLobbyOwnerIfNeeded(reason ? reason : "capture_current_lobby_state");
 
                 std::vector<GBE_DotaLobbyMemberState> members;
                 const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
@@ -20793,25 +20795,39 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     );
 
     const std::string connect_command = std::string("+connect ") + endpoint;
-    GameRichPresenceJoinRequested_t rich_join{};
-    rich_join.m_steamIDFriend = CSteamID(owner_steam_id);
-    std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
-    callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
+    if (!arcade_custom_launch) {
+        GameRichPresenceJoinRequested_t rich_join{};
+        rich_join.m_steamIDFriend = CSteamID(owner_steam_id);
+        std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
+        callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
 
-    GBE_GC_DebugLog(
-        "GC_DOTA_CONNECT_DIAG",
-        "queued callback id=%d type=GameRichPresenceJoinRequested delay=0.25 reason=%s lobby_id=%llu match_id=%llu owner=%llu local=%llu state=%u game_state=%u command=%s server_id=%llu",
-        rich_join.k_iCallback,
-        reason ? reason : "unknown",
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        static_cast<unsigned long long>(GBE_local_lobby.match_id),
-        static_cast<unsigned long long>(owner_steam_id),
-        static_cast<unsigned long long>(local_steam_id),
-        GBE_local_lobby.state,
-        GBE_local_lobby.game_state,
-        connect_command.c_str(),
-        static_cast<unsigned long long>(GBE_local_lobby.server_id)
-    );
+        GBE_GC_DebugLog(
+            "GC_DOTA_CONNECT_DIAG",
+            "queued callback id=%d type=GameRichPresenceJoinRequested delay=0.25 reason=%s lobby_id=%llu match_id=%llu owner=%llu local=%llu state=%u game_state=%u command=%s server_id=%llu",
+            rich_join.k_iCallback,
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(GBE_local_lobby.match_id),
+            static_cast<unsigned long long>(owner_steam_id),
+            static_cast<unsigned long long>(local_steam_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            connect_command.c_str(),
+            static_cast<unsigned long long>(GBE_local_lobby.server_id)
+        );
+    } else {
+        GBE_GC_DebugLog(
+            "GC_DOTA_CONNECT_DIAG",
+            "skipping GameRichPresenceJoinRequested for arcade direct connect reason=%s lobby_id=%llu match_id=%llu owner=%llu local=%llu command=%s server_id=%llu",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(GBE_local_lobby.match_id),
+            static_cast<unsigned long long>(owner_steam_id),
+            static_cast<unsigned long long>(local_steam_id),
+            connect_command.c_str(),
+            static_cast<unsigned long long>(GBE_local_lobby.server_id)
+        );
+    }
 
     if (arcade_custom_launch) {
         Steam_Client *steam_client = get_steam_client();
