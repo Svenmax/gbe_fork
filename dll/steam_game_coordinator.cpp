@@ -20337,19 +20337,6 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     const bool local_is_owner = local_steam_id != 0ull && local_steam_id == owner_steam_id;
     const bool arcade_custom_launch = GBE_local_lobby.custom_game.game_id != 0ull;
 
-    if (!arcade_custom_launch) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_CONNECT_DIAG",
-            "skipping direct connect callbacks for ordinary lobby reason=%s lobby_id=%llu match_id=%llu endpoint_raw=%s server_id=%llu",
-            reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.match_id),
-            raw_endpoint.c_str(),
-            static_cast<unsigned long long>(GBE_local_lobby.server_id)
-        );
-        return;
-    }
-
     if (local_is_owner) {
         GBE_GC_DebugLog(
             "GC_DOTA_CONNECT_DIAG",
