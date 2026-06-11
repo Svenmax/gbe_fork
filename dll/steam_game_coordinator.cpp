@@ -13719,10 +13719,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             if (GBE_BuildDotaReadyUpStatusPayload(has_source_job, source_job, GBE_local_lobby.lobby_id, 0u, ready_state != 0u ? ready_state : 1u, response_7170))
                 push_incoming_now(7170u | GBE_kProtoMask, response_7170);
 
-            if (ready_state == 1u && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state < 2u && GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
-                GBE_local_lobby.game_state = 2u;
-                GBE_PublishSharedDotaLobbyState("7070_ready_up_run_ack");
-                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "7070_ready_up_run_ack");
+            if (ready_state == 1u && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state < 1u && GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
+                GBE_local_lobby.game_state = 1u;
+                GBE_PublishSharedDotaLobbyState("7070_custom_game_ready_up_run_ack");
+                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "7070_custom_game_ready_up_run_ack");
             }
         }
         return true;
@@ -13800,8 +13800,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             if (load_result.lobby_id == 0 || load_result.lobby_id == GBE_local_lobby.lobby_id) {
                 if (GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
                     GBE_local_lobby.state = 2u;
-                    if (GBE_local_lobby.game_state < 2u)
-                        GBE_local_lobby.game_state = 2u;
+                    if (GBE_local_lobby.game_state < 1u)
+                        GBE_local_lobby.game_state = 1u;
                 } else if (GBE_local_lobby.state < 2u) {
                     GBE_local_lobby.state = 2u;
                 }
@@ -19764,10 +19764,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
                     push_incoming_now(GBE_kEMsgClientFromGC | GBE_kProtoMask, wrapped_7170);
             }
 
-            if (ready_state == 1u && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state < 2u && GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
-                GBE_local_lobby.game_state = 2u;
-                GBE_PublishSharedDotaLobbyState("7070_wrapped_ready_up_run_ack");
-                GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, "7070_wrapped_ready_up_run_ack");
+            if (ready_state == 1u && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state < 1u && GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
+                GBE_local_lobby.game_state = 1u;
+                GBE_PublishSharedDotaLobbyState("7070_wrapped_custom_game_ready_up_run_ack");
+                GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, "7070_wrapped_custom_game_ready_up_run_ack");
             }
         }
         return true;
@@ -19895,8 +19895,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
             if (load_result.lobby_id == 0 || load_result.lobby_id == GBE_local_lobby.lobby_id) {
                 if (GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
                     GBE_local_lobby.state = 2u;
-                    if (GBE_local_lobby.game_state < 2u)
-                        GBE_local_lobby.game_state = 2u;
+                    if (GBE_local_lobby.game_state < 1u)
+                        GBE_local_lobby.game_state = 1u;
                 } else if (GBE_local_lobby.state < 2u) {
                     GBE_local_lobby.state = 2u;
                 }
