@@ -12124,6 +12124,31 @@ bool Steam_Game_Coordinator::GBE_AdoptDotaGenericLobbyOwnerIfNeeded(const char *
     const uint64 new_owner_steam_id = generic_owner.ConvertToUint64();
     const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
 
+    const bool preserve_custom_game_launch_owner =
+        GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) &&
+        GBE_local_lobby.match_id != 0ull &&
+        GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced;
+    if (preserve_custom_game_launch_owner) {
+        if (!GBE_local_lobby.owner_adoption_suppressed_logged) {
+            GBE_local_lobby.owner_adoption_suppressed_logged = true;
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Ignored generic lobby owner adoption during custom game launch reason=%s dota_lobby_id=%llu generic_lobby_id=%llu dota_owner=%llu generic_owner=%llu state=%u game_state=%u launch_phase=%s team=%u slot=%u",
+                reason ? reason : "unknown",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+                static_cast<unsigned long long>(previous_owner_steam_id),
+                static_cast<unsigned long long>(new_owner_steam_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state,
+                GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
+                GBE_local_lobby.owner_team,
+                GBE_local_lobby.owner_slot
+            );
+        }
+        return false;
+    }
+
     if (!is_server &&
         local_steam_id != 0ull &&
         previous_owner_steam_id != 0ull &&
@@ -20946,11 +20971,13 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
         );
     }
 
-    GBE_dota_reconnect_eligible.store(false);
+    const bool reconnect_eligible_after_trigger = arcade_custom_launch;
+    if (!reconnect_eligible_after_trigger)
+        GBE_dota_reconnect_eligible.store(false);
     GBE_last_dota_direct_connect_callback_signature = signature;
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
-        "queued direct connect trigger reason=%s lobby_id=%llu match_id=%llu endpoint=%s endpoint_raw=%s command=%s local_is_owner=%u arcade=%u reconnect_eligible=0",
+        "queued direct connect trigger reason=%s lobby_id=%llu match_id=%llu endpoint=%s endpoint_raw=%s command=%s local_is_owner=%u arcade=%u reconnect_eligible=%u",
         reason ? reason : "unknown",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         static_cast<unsigned long long>(GBE_local_lobby.match_id),
@@ -20958,7 +20985,8 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
         raw_endpoint.c_str(),
         connect_command.c_str(),
         local_is_owner ? 1u : 0u,
-        arcade_custom_launch ? 1u : 0u
+        arcade_custom_launch ? 1u : 0u,
+        reconnect_eligible_after_trigger ? 1u : 0u
     );
 }
 
