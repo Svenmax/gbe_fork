@@ -7369,7 +7369,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     GBE_AppendProtoVarIntField(object_2004, 13, allow_cheats ? 1u : 0u);
     GBE_AppendProtoVarIntField(object_2004, 14, fill_with_bots ? 1u : 0u);
     GBE_AppendProtoBytesField(object_2004, 16, room_name);
-    if (lobby_state != 0u && !has_custom_game) {
+    if (lobby_state != 0u) {
         GBE_AppendProtoBytesField(object_2004, 17, GBE_BuildDotaLobbyTeamDetailsPayload(true));
         GBE_AppendProtoBytesField(object_2004, 17, GBE_BuildDotaLobbyTeamDetailsPayload(false));
     }
@@ -7380,7 +7380,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
         lobby_state,
         lobby_game_state,
         static_cast<unsigned long long>(has_custom_game ? custom_game->game_id : 0ull),
-        (lobby_state != 0u && !has_custom_game) ? 2u : 0u
+        lobby_state != 0u ? 2u : 0u
     );
     GBE_AppendProtoVarIntField(object_2004, 21, server_region);
     if (lobby_state != 0u || lobby_game_state != 0u)
