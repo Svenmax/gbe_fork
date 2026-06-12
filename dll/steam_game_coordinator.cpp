@@ -18672,8 +18672,13 @@ bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped
     if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "details_update", lobby))
         return false;
 
+    const bool preserve_server_id =
+        lobby.custom_game.game_id != 0ull &&
+        lobby.match_id != 0ull &&
+        (lobby.state >= 2u || lobby.game_state >= 1u);
+
     std::string response_26;
-    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26)) {
+    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, preserve_server_id)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 26 details update for LobbyID=%llu reason=%s", static_cast<unsigned long long>(lobby.lobby_id), reason ? reason : "unknown");
         return false;
     }
