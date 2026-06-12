@@ -6642,6 +6642,7 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     uint32 owner_slot,
     const std::vector<GBE_DotaLobbyMemberState> &members,
     const GBE_Dota7034RequestShape &request_shape,
+    bool compact_member_slots,
     bool has_request_job,
     uint64 request_job_id,
     std::string &message)
@@ -6652,6 +6653,16 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     std::vector<uint64> disconnected_steam_ids;
 
     std::string body;
+
+    auto resolve_draft_slot = [&](uint64 player_steam_id, uint32 slot) -> uint32 {
+        if (compact_member_slots) {
+            for (size_t index = 0; index < members.size(); ++index) {
+                if (members[index].steam_id == player_steam_id)
+                    return static_cast<uint32>(index);
+            }
+        }
+        return slot > 0u ? (slot - 1u) : 0u;
+    };
 
     auto append_connected_player = [&](uint64 player_steam_id, uint32 hero_id, uint32 team, uint32 slot) {
         if (player_steam_id == 0ull || std::find(connected_steam_ids.begin(), connected_steam_ids.end(), player_steam_id) != connected_steam_ids.end())
@@ -6670,7 +6681,7 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
             std::string draft;
             GBE_AppendProtoFixed64Field(draft, 1u, player_steam_id);
             GBE_AppendProtoVarIntField(draft, 2u, team);
-            GBE_AppendProtoVarIntField(draft, 3u, slot > 0u ? (slot - 1u) : 0u);
+            GBE_AppendProtoVarIntField(draft, 3u, resolve_draft_slot(player_steam_id, slot));
             GBE_AppendProtoBytesField(body, 16u, draft);
         }
     };
@@ -15044,6 +15055,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_local_lobby.owner_slot,
                 GBE_local_lobby.members,
                 request_shape,
+                GBE_local_lobby.custom_game.game_id != 0ull,
                 has_source_job,
                 source_job,
                 response_message)) {
@@ -21118,8 +21130,8 @@ void Steam_Game_Coordinator::GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(cons
             GBE_local_lobby.state,
             GBE_local_lobby.game_state
         );
-        // Still allow direct connect callback for reconnect support.
-        GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback(reason);
+        if (GBE_local_lobby.custom_game.game_id != 0ull)
+            GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback(reason);
         return;
     }
 
