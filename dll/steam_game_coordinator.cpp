@@ -13547,6 +13547,9 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
     effective_lobby.server_id = effective_server_id;
     effective_lobby.connect = effective_connect;
 
+    if (lobby.custom_game.game_id != 0ull)
+        return GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(effective_lobby, effective_player_name, message);
+
     const bool launched_lan_with_remote_members = lobby.match_id != 0 && lobby.lan && lobby.members.size() > 1;
 
     if ((lobby.match_id == 0 || launched_lan_with_remote_members) && lobby.members.size() > 1)
