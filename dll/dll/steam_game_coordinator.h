@@ -264,6 +264,7 @@ public ISteamGameCoordinator
     bool GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(const char *reason);
     bool GBE_MaybeHandleDotaPracticeLobbyKicked(const char *reason);
     bool GBE_AdoptDotaGenericLobbyOwnerIfNeeded(const char *reason);
+    bool GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_LocalLobby &lobby);
     void GBE_PublishDotaPracticeLobbyLocalMemberData(const char *reason);
     void GBE_PublishDotaPracticeLobbyMetadata(const char *reason);
     bool GBE_FindDotaGenericLobbyByDotaLobbyId(uint64 dota_lobby_id, CSteamID &generic_lobby_id, GBE_LocalLobby *lobby_snapshot, const char *reason);

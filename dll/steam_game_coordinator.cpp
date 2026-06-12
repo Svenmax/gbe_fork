@@ -2616,7 +2616,7 @@ static bool GBE_NormalizeDotaArcadeLobbyMemberSlot(
     return true;
 }
 
-static bool GBE_NormalizeDotaArcadeLobbyMemberSlots(Steam_Game_Coordinator::GBE_LocalLobby &lobby)
+bool Steam_Game_Coordinator::GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_LocalLobby &lobby)
 {
     if (lobby.custom_game.game_id == 0ull)
         return false;
