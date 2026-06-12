@@ -18672,6 +18672,45 @@ bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped
     if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "details_update", lobby))
         return false;
 
+    if (GBE_ShouldSuppressDotaAbandonedLobby(lobby.lobby_id)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Skipped 26 details update for suppressed abandoned lobby LobbyID=%llu reason=%s state=%u game_state=%u",
+            static_cast<unsigned long long>(lobby.lobby_id),
+            reason ? reason : "unknown",
+            lobby.state,
+            lobby.game_state
+        );
+        return false;
+    }
+
+    const char *details_reason = reason ? reason : "";
+    const bool arcade_runtime_loading_result =
+        !wrapped &&
+        lobby.custom_game.game_id != 0ull &&
+        lobby.match_id != 0ull &&
+        lobby.launch_phase >= GBE_kDotaLaunchPhaseLoaded &&
+        (std::strcmp(details_reason, "8053_finished_loading") == 0 ||
+            std::strcmp(details_reason, "8053_load_failed") == 0);
+    const bool arcade_runtime_poll =
+        !wrapped &&
+        lobby.custom_game.game_id != 0ull &&
+        lobby.match_id != 0ull &&
+        lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued &&
+        std::strcmp(details_reason, "7034_launch_poll") == 0;
+    if (arcade_runtime_loading_result || arcade_runtime_poll) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Skipped arcade runtime 26 details update LobbyID=%llu reason=%s state=%u game_state=%u launch_phase=%s",
+            static_cast<unsigned long long>(lobby.lobby_id),
+            reason ? reason : "unknown",
+            lobby.state,
+            lobby.game_state,
+            GBE_DescribeDotaLaunchPhase(lobby.launch_phase)
+        );
+        return false;
+    }
+
     const bool preserve_server_id =
         lobby.custom_game.game_id != 0ull &&
         lobby.match_id != 0ull &&
