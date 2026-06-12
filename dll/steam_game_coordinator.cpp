@@ -20774,28 +20774,29 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     }
 
     const std::string connect_command = std::string("+connect ") + endpoint;
+    GameServerChangeRequested_t server_change{};
+    std::strncpy(server_change.m_rgchServer, endpoint.c_str(), sizeof(server_change.m_rgchServer) - 1);
+    callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_CONNECT_DIAG",
+        "queued callback id=%d type=GameServerChangeRequested delay=0.00 reason=%s lobby_id=%llu match_id=%llu owner=%llu local=%llu local_is_owner=%u state=%u game_state=%u endpoint=%s endpoint_raw=%s server_id=%llu arcade=%u",
+        server_change.k_iCallback,
+        reason ? reason : "unknown",
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        static_cast<unsigned long long>(owner_steam_id),
+        static_cast<unsigned long long>(local_steam_id),
+        local_is_owner ? 1u : 0u,
+        GBE_local_lobby.state,
+        GBE_local_lobby.game_state,
+        endpoint.c_str(),
+        raw_endpoint.c_str(),
+        static_cast<unsigned long long>(GBE_local_lobby.server_id),
+        arcade_custom_launch ? 1u : 0u
+    );
+
     if (!arcade_custom_launch) {
-        GameServerChangeRequested_t server_change{};
-        std::strncpy(server_change.m_rgchServer, endpoint.c_str(), sizeof(server_change.m_rgchServer) - 1);
-        callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0);
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_CONNECT_DIAG",
-            "queued callback id=%d type=GameServerChangeRequested delay=0.00 reason=%s lobby_id=%llu match_id=%llu owner=%llu local=%llu local_is_owner=%u state=%u game_state=%u endpoint=%s endpoint_raw=%s server_id=%llu",
-            server_change.k_iCallback,
-            reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.match_id),
-            static_cast<unsigned long long>(owner_steam_id),
-            static_cast<unsigned long long>(local_steam_id),
-            local_is_owner ? 1u : 0u,
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            endpoint.c_str(),
-            raw_endpoint.c_str(),
-            static_cast<unsigned long long>(GBE_local_lobby.server_id)
-        );
-
         GameRichPresenceJoinRequested_t rich_join{};
         rich_join.m_steamIDFriend = CSteamID(owner_steam_id);
         std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
@@ -20818,7 +20819,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     } else {
         GBE_GC_DebugLog(
             "GC_DOTA_CONNECT_DIAG",
-            "skipping engine callbacks for arcade launch command line reason=%s lobby_id=%llu match_id=%llu owner=%llu local=%llu command=%s server_id=%llu",
+            "skipping rich presence join and launch command line for arcade server change reason=%s lobby_id=%llu match_id=%llu owner=%llu local=%llu command=%s server_id=%llu",
             reason ? reason : "unknown",
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
             static_cast<unsigned long long>(GBE_local_lobby.match_id),
@@ -20827,21 +20828,6 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
             connect_command.c_str(),
             static_cast<unsigned long long>(GBE_local_lobby.server_id)
         );
-    }
-
-    if (arcade_custom_launch) {
-        Steam_Client *steam_client = get_steam_client();
-        if (steam_client && steam_client->steam_apps) {
-            steam_client->steam_apps->QueueLaunchCommandLine(connect_command.c_str());
-            GBE_GC_DebugLog(
-                "GC_DOTA_CONNECT_DIAG",
-                "queued launch command line reason=%s lobby_id=%llu match_id=%llu command=%s",
-                reason ? reason : "unknown",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                static_cast<unsigned long long>(GBE_local_lobby.match_id),
-                connect_command.c_str()
-            );
-        }
     }
 
     GBE_dota_reconnect_eligible.store(false);
