@@ -2310,7 +2310,6 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
     for (const GBE_DotaLobbyMemberState &member : effective_members) {
         const uint64 member_steam_id = member.steam_id;
         if (member_steam_id == 0ull) {
-            GBE_AppendProtoBytesField(object_2016, 1u, std::string(1u, '\0'));
             continue;
         }
 
@@ -2325,7 +2324,7 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
         GBE_AppendProtoVarIntField(member_bytes, 11u, 1u); // is_plus_subscriber = true
         GBE_AppendProtoFixed64Field(member_bytes, 12u, 0ull);
         GBE_AppendProtoVarIntField(member_bytes, 13u, 0u);
-        if (game_mode != 2u && member.connected)
+        if (game_mode != 2u)
             GBE_AppendProtoFixed32Field(member_bytes, 16u, 0u);
         for (size_t i = 0; i < 4; ++i)
             GBE_AppendProtoVarIntField(member_bytes, 19u, 0u);
