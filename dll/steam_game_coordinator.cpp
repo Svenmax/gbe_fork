@@ -6666,6 +6666,9 @@ static bool GBE_BuildDota7451BatchPlayerResourcesResponsePayload(const std::vect
 {
     std::string body;
     for (uint32 account_id : account_ids) {
+        if (account_id == 0u)
+            continue;
+
         std::string result;
         GBE_AppendProtoVarIntField(result, 1u, account_id);
         GBE_AppendProtoVarIntField(result, 6u, 0u);
@@ -7331,7 +7334,8 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
 {
     static const uint8 GBE_kDotaLobbyField62Value[] = { 0x08, 0xF5, 0x44, 0x12, 0x02, 0x08, 0x00 };
 
-    const std::vector<GBE_DotaLobbyMemberState> effective_members = GBE_BuildDotaLobbyMembers(
+    const bool has_custom_game = custom_game && custom_game->game_id != 0ull;
+    std::vector<GBE_DotaLobbyMemberState> effective_members = GBE_BuildDotaLobbyMembers(
         steam_id,
         extra_startup_account_id,
         owner_team,
@@ -7339,6 +7343,11 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
         owner_hero_id,
         true,
         members);
+    if (has_custom_game) {
+        effective_members.erase(
+            std::remove_if(effective_members.begin(), effective_members.end(), [](const GBE_DotaLobbyMemberState &member) { return member.steam_id == 0ull; }),
+            effective_members.end());
+    }
 
     if (!GBE_BuildDotaServerLobbyObject2015(effective_members.size(), extra_startup_account_id, object_2015))
         object_2015.clear();
@@ -7360,7 +7369,6 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     GBE_AppendProtoVarIntField(object_2004, 13, allow_cheats ? 1u : 0u);
     GBE_AppendProtoVarIntField(object_2004, 14, fill_with_bots ? 1u : 0u);
     GBE_AppendProtoBytesField(object_2004, 16, room_name);
-    const bool has_custom_game = custom_game && custom_game->game_id != 0ull;
     if (lobby_state != 0u && !has_custom_game) {
         GBE_AppendProtoBytesField(object_2004, 17, GBE_BuildDotaLobbyTeamDetailsPayload(true));
         GBE_AppendProtoBytesField(object_2004, 17, GBE_BuildDotaLobbyTeamDetailsPayload(false));
