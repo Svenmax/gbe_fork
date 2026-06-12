@@ -15054,7 +15054,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_local_lobby.owner_slot,
                 GBE_local_lobby.members,
                 request_shape,
-                GBE_local_lobby.custom_game.game_id != 0ull,
+                true,
                 has_source_job,
                 source_job,
                 response_message)) {
