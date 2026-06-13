@@ -7343,17 +7343,16 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
         owner_hero_id,
         true,
         members);
-    std::vector<GBE_DotaLobbyMemberState> static_lobby_members = effective_members;
     if (has_custom_game) {
-        static_lobby_members.erase(
-            std::remove_if(static_lobby_members.begin(), static_lobby_members.end(), [](const GBE_DotaLobbyMemberState &member) { return member.steam_id == 0ull; }),
-            static_lobby_members.end());
+        effective_members.erase(
+            std::remove_if(effective_members.begin(), effective_members.end(), [](const GBE_DotaLobbyMemberState &member) { return member.steam_id == 0ull; }),
+            effective_members.end());
     }
 
     if (!GBE_BuildDotaServerLobbyObject2015(effective_members.size(), extra_startup_account_id, object_2015))
         object_2015.clear();
 
-    GBE_BuildDotaServerStaticLobbyObject2016(extra_startup_account_id, steam_id, game_mode, static_lobby_members, object_2016);
+    GBE_BuildDotaServerStaticLobbyObject2016(extra_startup_account_id, steam_id, game_mode, effective_members, object_2016);
 
     const std::string normalized_connect = GBE_FormatDotaPracticeLobbyConnectForCustomGame(connect, custom_game);
 
