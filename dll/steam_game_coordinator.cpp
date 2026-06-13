@@ -11349,10 +11349,18 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                 if (!generic_match_id_raw.empty() && (generic_match_id != 0ull || GBE_local_lobby.match_id == 0ull))
                     GBE_local_lobby.match_id = generic_match_id;
                 const uint64 generic_server_id = GBE_ParseUint64OrZero(generic_server_id_raw.c_str());
-                if (!generic_server_id_raw.empty() && (generic_server_id != 0ull || GBE_local_lobby.server_id == 0ull || GBE_local_lobby.match_id == 0ull))
+                const bool preserve_existing_lan_runtime =
+                    GBE_local_lobby.custom_game.game_id == 0ull &&
+                    GBE_local_lobby.lan &&
+                    GBE_local_lobby.match_id != 0ull &&
+                    GBE_local_lobby.server_id != 0ull &&
+                    GBE_ParseDotaPracticeLobbyConnectIPv4(GBE_local_lobby.connect) != 0u;
+                if (!generic_server_id_raw.empty() &&
+                    !preserve_existing_lan_runtime &&
+                    (generic_server_id != 0ull || GBE_local_lobby.server_id == 0ull || GBE_local_lobby.match_id == 0ull))
                     GBE_local_lobby.server_id = generic_server_id;
 
-                if (!generic_connect.empty())
+                if (!generic_connect.empty() && !preserve_existing_lan_runtime)
                     GBE_local_lobby.connect = GBE_NormalizeDotaPracticeLobbyConnect(generic_connect);
                 if (!generic_game_start_time_raw.empty())
                     GBE_local_lobby.game_start_time = GBE_ParseUint32OrZero(generic_game_start_time_raw.c_str());
@@ -11500,6 +11508,7 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                     GBE_UpsertDotaLobbyMember(members, owner);
 
                 GBE_local_lobby.members = members;
+                GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby);
             }
         }
     }
@@ -14864,6 +14873,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             if (custom_game_launch) {
                 GBE_LocalLobby refreshed_lobby{};
                 GBE_CaptureCurrentDotaLobbyState("7034_custom_runtime_member_refresh", refreshed_lobby, false);
+                if (GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby))
+                    GBE_PublishSharedDotaLobbyState("7034_custom_runtime_slot_normalize");
             }
 
             if (owner_hero_updated_from_7034) {
@@ -15558,10 +15569,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         const std::string runtime_connect = GBE_FormatDotaPracticeLobbyConnectForCustomGame(
             GBE_FormatDotaPracticeLobbyConnectFromIps(public_ip, private_ip, server_port),
             &GBE_local_lobby.custom_game);
-        // 4508 reports the engine's actual listen address — always prefer it over
-        // the peer-announce-derived getOwnIP() that was used at launch time.
+        // 4508 reports the engine's listen address, but peers that already have a
+        // working LAN endpoint must keep it to avoid a post-connect P2P redirect.
+        const bool preserve_existing_lan_connect =
+            GBE_local_lobby.active &&
+            GBE_local_lobby.lobby_id != 0 &&
+            GBE_local_lobby.custom_game.game_id == 0ull &&
+            GBE_local_lobby.lan &&
+            GBE_local_lobby.match_id != 0ull &&
+            GBE_ParseDotaPracticeLobbyConnectIPv4(GBE_local_lobby.connect) != 0u &&
+            GBE_ParseDotaPracticeLobbyConnectIPv4(runtime_connect) != 0u &&
+            runtime_connect != GBE_local_lobby.connect;
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
-            !runtime_connect.empty() && runtime_connect != GBE_local_lobby.connect) {
+            !runtime_connect.empty() && runtime_connect != GBE_local_lobby.connect &&
+            !preserve_existing_lan_connect) {
             const std::string previous_connect = GBE_local_lobby.connect;
             GBE_local_lobby.connect = runtime_connect;
             if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id)
@@ -15572,6 +15593,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 "adopted game server address as lobby connect reason=4508_game_server_info lobby_id=%llu previous=%s new=%s",
                 static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                 previous_connect.c_str(),
+                runtime_connect.c_str()
+            );
+        } else if (preserve_existing_lan_connect) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "preserved existing LAN lobby connect over 4508 runtime address lobby_id=%llu current=%s candidate=%s",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_local_lobby.connect.c_str(),
                 runtime_connect.c_str()
             );
         }
