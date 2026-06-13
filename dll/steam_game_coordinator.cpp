@@ -17315,7 +17315,56 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
 bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw)
 {
+    GBE_DotaPracticeLobbyCreateRequest pre_reset_request{};
+    GBE_DotaCustomGameDetails pre_reset_custom_game{};
+    const bool parsed_pre_reset_request = GBE_ParseDotaPracticeLobbyCreateBody(reinterpret_cast<const uint8 *>(request_body.data()), request_body.size(), pre_reset_request);
+    if (parsed_pre_reset_request && pre_reset_request.has_lobby_details) {
+        GBE_ApplyDotaCustomGameDetailsRequest(pre_reset_request.lobby_details, pre_reset_custom_game);
+        GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, pre_reset_custom_game);
+    }
+
+    const uint64 previous_lobby_id = GBE_local_lobby.lobby_id;
+    const uint64 previous_match_id = GBE_local_lobby.match_id;
+    const uint64 previous_custom_game_id = GBE_local_lobby.custom_game.game_id;
+    const uint32 previous_state = GBE_local_lobby.state;
+    const uint32 previous_game_state = GBE_local_lobby.game_state;
+    const uint32 previous_owner_team = GBE_local_lobby.owner_team;
+    const uint32 previous_owner_slot = GBE_local_lobby.owner_slot;
+    const bool custom_game_create = pre_reset_custom_game.game_id != 0ull;
+    const bool replace_running_practice_lobby =
+        custom_game_create &&
+        GBE_local_lobby.active &&
+        previous_lobby_id != 0ull &&
+        previous_match_id != 0ull &&
+        previous_custom_game_id == 0ull;
+
     ResetGCMemory("7038_create", true, true);
+
+    if (replace_running_practice_lobby) {
+        std::string response_25;
+        if (GBE_BuildDotaLobbyCacheUnsubscribedPayload(previous_lobby_id, response_25)) {
+            push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Unsubscribed previous practice lobby before arcade create previous_lobby_id=%llu previous_match_id=%llu previous_state=%u previous_game_state=%u previous_team=%u previous_slot=%u custom_game_id=%llu size=%zu",
+                static_cast<unsigned long long>(previous_lobby_id),
+                static_cast<unsigned long long>(previous_match_id),
+                previous_state,
+                previous_game_state,
+                previous_owner_team,
+                previous_owner_slot,
+                static_cast<unsigned long long>(pre_reset_custom_game.game_id),
+                response_25.size()
+            );
+        } else {
+            GBE_GC_DebugLog(
+                "GC_DOTA_LOBBY",
+                "[LOBBY] Failed unsubscribing previous practice lobby before arcade create previous_lobby_id=%llu custom_game_id=%llu",
+                static_cast<unsigned long long>(previous_lobby_id),
+                static_cast<unsigned long long>(pre_reset_custom_game.game_id)
+            );
+        }
+    }
 
     GBE_local_lobby = GBE_LocalLobby{};
     GBE_local_lobby.active = true;
