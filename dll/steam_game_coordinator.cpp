@@ -359,6 +359,13 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
     return false;
 }
 
+bool GBE_IsDotaArcadeLobbyActive()
+{
+    return GBE_shared_dota_lobby_state.valid &&
+        GBE_shared_dota_lobby_state.active &&
+        GBE_shared_dota_lobby_state.custom_game.game_id != 0ull;
+}
+
 bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64_t local_steam_id, GBE_DotaReconnectContext *out)
 {
     Steam_Client *steam_client = get_steam_client();
@@ -17259,7 +17266,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
                 GBE_local_lobby.pass_key = details.pass_key;
             GBE_ApplyDotaCustomGameDetailsRequest(details, GBE_local_lobby.custom_game);
             GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, GBE_local_lobby.custom_game);
+            const bool custom_game_create = GBE_local_lobby.custom_game.game_id != 0ull;
             GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby);
+            if (custom_game_create) {
+                GBE_recent_dota_reconnect_context_valid = false;
+                GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
+                GBE_dota_reconnect_eligible.store(true);
+                GBE_GC_DebugLog(
+                    "GC_DOTA_LOBBY",
+                    "[LOBBY] Isolated arcade lobby from prior practice runtime lobby_id=%llu custom_game_id=%llu",
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id)
+                );
+            }
         }
 
         if (request.has_pass_key && GBE_local_lobby.pass_key.empty())

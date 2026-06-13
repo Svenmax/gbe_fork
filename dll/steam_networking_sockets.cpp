@@ -742,9 +742,9 @@ bool Steam_Networking_Sockets::SetConnectionUserData( HSteamNetConnection hPeer,
     if (connect_socket == sbcs->connect_sockets.end()) return false;
 
     GBE_DotaReconnectContext dota_ctx{};
+    const bool has_dota_ctx = GBE_GetDotaReconnectContext(&dota_ctx);
     const bool arcade_context = settings->get_local_game_id().AppID() == GBE_kDotaAppId &&
-        GBE_GetDotaReconnectContext(&dota_ctx) &&
-        dota_ctx.custom_game_id != 0ull &&
+        ((has_dota_ctx && dota_ctx.custom_game_id != 0ull) || GBE_IsDotaArcadeLobbyActive()) &&
         connect_socket->second.remote_id != k_HSteamNetConnection_Invalid;
     if (arcade_context) {
         auto paired_socket = sbcs->connect_sockets.find(connect_socket->second.remote_id);

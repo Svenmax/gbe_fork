@@ -27,6 +27,7 @@ inline bool GBE_DotaReconnectContextIsStarted(const GBE_DotaReconnectContext &ct
 // Returns false if no active lobby or game not started.
 bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out);
 bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64_t local_steam_id, GBE_DotaReconnectContext *out);
+bool GBE_IsDotaArcadeLobbyActive();
 
 // Flag indicating player has disconnected (CancelAuthTicket called)
 // and is eligible for reconnect interception.
