@@ -95,6 +95,7 @@ public ISteamNetworkingSockets
 
     struct shared_between_client_server *sbcs{};
     std::chrono::steady_clock::time_point created{};
+    bool is_server_interface{};
 
     static const int SNS_DISABLED_PORT = -1;
 

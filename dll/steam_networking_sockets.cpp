@@ -16,6 +16,7 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/steam_networking_sockets.h"
+#include "dll/gbe_dota_reconnect_shared.h"
 
 #include <cstdio>
 #include <cstring>
@@ -333,6 +334,7 @@ Steam_Networking_Sockets::Steam_Networking_Sockets(class Settings *settings, cla
     this->run_every_runcb = run_every_runcb;
     this->callback_results = callback_results;
     this->callbacks = callbacks;
+    this->is_server_interface = (sbcs != nullptr);
 
     this->created = std::chrono::steady_clock::now();
     
@@ -738,6 +740,51 @@ bool Steam_Networking_Sockets::SetConnectionUserData( HSteamNetConnection hPeer,
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     auto connect_socket = sbcs->connect_sockets.find(hPeer);
     if (connect_socket == sbcs->connect_sockets.end()) return false;
+
+    GBE_DotaReconnectContext dota_ctx{};
+    const bool arcade_context = settings->get_local_game_id().AppID() == GBE_kDotaAppId &&
+        GBE_GetDotaReconnectContext(&dota_ctx) &&
+        dota_ctx.custom_game_id != 0ull &&
+        connect_socket->second.remote_id != k_HSteamNetConnection_Invalid;
+    if (arcade_context) {
+        auto paired_socket = sbcs->connect_sockets.find(connect_socket->second.remote_id);
+        const bool socket_pair = paired_socket != sbcs->connect_sockets.end() &&
+            connect_socket->second.listen_socket_id == k_HSteamListenSocket_Invalid &&
+            paired_socket->second.listen_socket_id == k_HSteamListenSocket_Invalid &&
+            connect_socket->second.real_port == SNS_DISABLED_PORT &&
+            paired_socket->second.real_port == SNS_DISABLED_PORT &&
+            connect_socket->second.virtual_port == 0 &&
+            paired_socket->second.virtual_port == 0;
+        if (socket_pair) {
+            const int64 expected_user_data = is_server_interface ? 0 : 1;
+            if (nUserData != expected_user_data) {
+                GBE_ReconnectLog(
+                    "NETSOCK_USERDATA",
+                    "normalizing arcade loopback userdata hPeer=%u requested=%lld expected=%lld server_interface=%u paired=%u paired_userdata=%lld custom_game_id=%llu",
+                    hPeer,
+                    (long long)nUserData,
+                    (long long)expected_user_data,
+                    is_server_interface ? 1u : 0u,
+                    connect_socket->second.remote_id,
+                    (long long)paired_socket->second.user_data,
+                    (unsigned long long)dota_ctx.custom_game_id
+                );
+                nUserData = expected_user_data;
+            } else {
+                GBE_ReconnectLog(
+                    "NETSOCK_USERDATA",
+                    "arcade loopback userdata hPeer=%u requested=%lld server_interface=%u paired=%u paired_userdata=%lld custom_game_id=%llu",
+                    hPeer,
+                    (long long)nUserData,
+                    is_server_interface ? 1u : 0u,
+                    connect_socket->second.remote_id,
+                    (long long)paired_socket->second.user_data,
+                    (unsigned long long)dota_ctx.custom_game_id
+                );
+            }
+        }
+    }
+
     connect_socket->second.user_data = nUserData;
     return true;
 }
