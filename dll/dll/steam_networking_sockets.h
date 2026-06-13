@@ -119,6 +119,7 @@ public ISteamNetworkingSockets
 
     void set_steamnetconnectioninfo(std::map<HSteamNetConnection, Connect_Socket>::iterator connect_socket, SteamNetConnectionInfo_t *pInfo);
     void set_steamnetconnectioninfo_001(std::map<HSteamNetConnection, Connect_Socket>::iterator connect_socket, SteamNetConnectionInfo001_t* pInfo);
+    int64 normalize_dota_arcade_loopback_user_data(std::map<HSteamNetConnection, Connect_Socket>::iterator connect_socket, int64 requested_user_data, const char *reason);
 
 
     void launch_callback(HSteamNetConnection m_hConn, enum connect_socket_status old_status);
