@@ -6698,12 +6698,13 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     const std::vector<GBE_DotaLobbyMemberState> &members,
     const GBE_Dota7034RequestShape &request_shape,
     bool compact_member_slots,
+    bool include_draft_players,
     bool has_request_job,
     uint64 request_job_id,
     std::string &message)
 {
     const std::string leaver_state = GBE_BuildDota7034LeaverStatePayload(lobby_state, game_state);
-    const bool include_draft = (lobby_state >= 2u && game_state >= 2u);
+    const bool include_draft = include_draft_players && (lobby_state >= 2u && game_state >= 2u);
     std::vector<uint64> connected_steam_ids;
     std::vector<uint64> disconnected_steam_ids;
 
@@ -15140,6 +15141,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 GBE_local_lobby.members,
                 request_shape,
                 true,
+                !custom_game_launch,
                 has_source_job,
                 source_job,
                 response_message)) {
