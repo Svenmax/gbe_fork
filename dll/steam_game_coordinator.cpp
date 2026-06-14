@@ -213,7 +213,8 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
     uint64 steam_id,
     uint32 game_mode,
     const std::vector<GBE_DotaLobbyMemberState> &members,
-    std::string &object_2016);
+    std::string &object_2016,
+    bool is_custom_game = false);
 
 static const char GBE_kDotaOfficialLobbyStartupAccountDataTemplate[] =
     "\010\365\355\206A\022\274\001\n\005\010\002\020\300\014\n\005\010\005\020\310\001"
@@ -2292,7 +2293,7 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(uint32 account_id, uint64 s
     owner.steam_id = steam_id;
     owner.account_id = account_id;
     members.push_back(owner);
-    GBE_BuildDotaServerStaticLobbyObject2016(account_id, steam_id, game_mode, members, object_2016);
+    GBE_BuildDotaServerStaticLobbyObject2016(account_id, steam_id, game_mode, members, object_2016, false);
 }
 
 static void GBE_BuildDotaServerStaticLobbyObject2016(
@@ -2300,7 +2301,8 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
     uint64 steam_id,
     uint32 game_mode,
     const std::vector<GBE_DotaLobbyMemberState> &members,
-    std::string &object_2016)
+    std::string &object_2016,
+    bool is_custom_game)
 {
     object_2016.clear();
 
@@ -2346,7 +2348,9 @@ static void GBE_BuildDotaServerStaticLobbyObject2016(
 
     GBE_AppendProtoFixed32Field(object_2016, 2u, 0u);
 
-    if (include_event_points && account_id != 0u && wrote_owner_event_points) {
+    // For custom games, omit event points data entirely to match official SO cache structure.
+    // Official custom game lobbies send minimal type=2016 objects without Battle Pass ownership data.
+    if (!is_custom_game && include_event_points && account_id != 0u && wrote_owner_event_points) {
         // Declare ownership for all known Dota 2 event/Battle Pass IDs so that
         // world items (creep skins, tower skins, weather, etc.) bound to any
         // historical event are not marked "Unavailable" by the client.
@@ -7424,7 +7428,7 @@ static void GBE_BuildDotaPracticeLobbySOObjectData(
     if (!GBE_BuildDotaServerLobbyObject2015(effective_members.size(), extra_startup_account_id, object_2015))
         object_2015.clear();
 
-    GBE_BuildDotaServerStaticLobbyObject2016(extra_startup_account_id, steam_id, game_mode, effective_members, object_2016);
+    GBE_BuildDotaServerStaticLobbyObject2016(extra_startup_account_id, steam_id, game_mode, effective_members, object_2016, has_custom_game);
 
     const std::string normalized_connect = GBE_FormatDotaPracticeLobbyConnectForCustomGame(connect, custom_game);
 
