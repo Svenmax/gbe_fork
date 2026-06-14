@@ -733,9 +733,6 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    const std::string payload_prefix = GBE_FormatPayloadPrefix(pMsg, cbMsg);
-    const std::string payload_fields = GBE_FormatSerializedPayloadFields(pMsg, cbMsg);
-    const std::string payload_details = GBE_FormatSerializedStateDetails(pMsg, cbMsg);
 
     if (GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsConfigUpdated_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsConfigUpdated") ||
         GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsCert_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsCert") ||
@@ -747,8 +744,34 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     const uint64 local_id = settings->get_local_steam_id().ConvertToUint64();
     GBE_DotaReconnectContext ctx{};
     bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
-    if (!has_ctx)
-        has_ctx = GBE_TryRecoverDotaReconnectContextFromGenericLobbies(local_id, &ctx);
+    if (has_ctx && ctx.custom_game_id == 0ull)
+        return;
+
+    if (!has_ctx && GBE_dota_reconnect_eligible.load()) {
+        static std::time_t s_last_recover_probe_time = 0;
+        static uint64 s_last_recover_probe_local_id = 0;
+        static bool s_last_recover_probe_has_ctx = false;
+        static GBE_DotaReconnectContext s_last_recover_probe_ctx{};
+
+        const std::time_t now = std::time(nullptr);
+        if (s_last_recover_probe_local_id != local_id || s_last_recover_probe_time != now) {
+            s_last_recover_probe_local_id = local_id;
+            s_last_recover_probe_time = now;
+            s_last_recover_probe_ctx = GBE_DotaReconnectContext{};
+            s_last_recover_probe_has_ctx = GBE_TryRecoverDotaReconnectContextFromGenericLobbies(local_id, &s_last_recover_probe_ctx);
+        }
+        if (s_last_recover_probe_has_ctx) {
+            ctx = s_last_recover_probe_ctx;
+            has_ctx = true;
+        }
+    }
+
+    if (!has_ctx || ctx.custom_game_id == 0ull)
+        return;
+
+    const std::string payload_prefix = GBE_FormatPayloadPrefix(pMsg, cbMsg);
+    const std::string payload_fields = GBE_FormatSerializedPayloadFields(pMsg, cbMsg);
+    const std::string payload_details = GBE_FormatSerializedStateDetails(pMsg, cbMsg);
     const std::string endpoint = GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(ctx.connect, local_id, ctx.owner_steam_id);
     const bool state_ready = has_ctx && GBE_DotaReconnectContextIsStarted(ctx);
     const bool has_connect = has_ctx && ctx.connect[0] != '\0';
@@ -777,17 +800,6 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
 
     if (!state_ready || !has_connect)
         return;
-
-    if (!is_arcade_context) {
-        GBE_ReconnectLog(
-            "GBE_RECONNECT_DIAG",
-            "skipping PostConnectionStateMsg direct connect reason=ordinary_lobby server_id=%llu endpoint=%s endpoint_raw=%s",
-            (unsigned long long)ctx.server_id,
-            endpoint.c_str(),
-            ctx.connect
-        );
-        return;
-    }
 
     if (!eligible_before) {
         GBE_ReconnectLog(
