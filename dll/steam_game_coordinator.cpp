@@ -4897,7 +4897,9 @@ static void GBE_LogDotaSOCacheSubscribedSummary(const char *tag, const char *lab
                 uint64 match_id = 0;
                 uint32 game_start_time = 0;
                 const uint32 team_details_count = GBE_CountProtoRepeatedBytesField(object_data, 17u);
+                std::string owner_state;
                 const bool has_connect = GBE_ExtractProtoFieldBytes(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 5u), connect);
+                const bool has_owner_state = GBE_ExtractProtoFieldBytes(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 120u), owner_state);
                 GBE_ExtractProtoFieldUint64(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 1u), lobby_id);
                 GBE_ExtractProtoFieldUint32(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 4u), lobby_state);
                 GBE_ExtractProtoFieldUint64(object_bytes, object_size, GBE_FindProtoField(object_bytes, object_size, 6u), server_id);
@@ -4919,6 +4921,16 @@ static void GBE_LogDotaSOCacheSubscribedSummary(const char *tag, const char *lab
                     has_connect ? connect.c_str() : "",
                     team_details_count
                 );
+                if (has_owner_state) {
+                    GBE_GC_DebugLog(
+                        tag,
+                        "%s object[%d] data[%d] type=2004 owner_state{%s}",
+                        label ? label : "dota_cache_subscribed_summary",
+                        object_index,
+                        data_index,
+                        GBE_FormatDotaLobbyMemberStateSummary(owner_state).c_str()
+                    );
+                }
                 continue;
             }
 

@@ -117,7 +117,7 @@ SteamNetworkingMessage_t* Steam_Networking_Sockets::get_steam_message_connection
     memcpy(pMsg->m_pData, connect_socket->second.data.top().data().data(), size);
     pMsg->m_conn = hConn;
     pMsg->m_identityPeer = connect_socket->second.remote_identity;
-    pMsg->m_nConnUserData = connect_socket->second.user_data;
+    pMsg->m_nConnUserData = normalize_dota_arcade_loopback_user_data(connect_socket, connect_socket->second.user_data, "recv");
     pMsg->m_usecTimeReceived = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - created).count();
     //TODO: check where messagenumber starts
     pMsg->m_nMessageNumber = connect_socket->second.data.top().message_number();
@@ -1229,7 +1229,7 @@ int Steam_Networking_Sockets::ReceiveMessagesOnConnection( HSteamNetConnection h
         memcpy(pMsg->m_pData, queued.data().data(), size);
         pMsg->m_conn = hConn;
         pMsg->m_steamIDSender = connect_socket->second.remote_identity.GetSteamID();
-        pMsg->m_nConnUserData = connect_socket->second.user_data;
+        pMsg->m_nConnUserData = normalize_dota_arcade_loopback_user_data(connect_socket, connect_socket->second.user_data, "recv001");
         pMsg->m_usecTimeReceived = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - created).count();
         pMsg->m_nMessageNumber = queued.message_number();
         pMsg->m_pfnRelease = &GBE_DeleteSteamMessage001;
@@ -1275,7 +1275,7 @@ int Steam_Networking_Sockets::ReceiveMessagesOnListenSocket( HSteamListenSocket 
                 memcpy(pMsg->m_pData, queued.data().data(), size);
                 pMsg->m_conn = socket_conn->first;
                 pMsg->m_steamIDSender = socket_conn->second.remote_identity.GetSteamID();
-                pMsg->m_nConnUserData = socket_conn->second.user_data;
+                pMsg->m_nConnUserData = normalize_dota_arcade_loopback_user_data(socket_conn, socket_conn->second.user_data, "recv_listen001");
                 pMsg->m_usecTimeReceived = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - created).count();
                 pMsg->m_nMessageNumber = queued.message_number();
                 pMsg->m_pfnRelease = &GBE_DeleteSteamMessage001;
@@ -1436,6 +1436,12 @@ bool Steam_Networking_Sockets::CreateSocketPair( HSteamNetConnection *pOutConnec
     HSteamNetConnection con1 = new_connect_socket(remote_identity, 0, SNS_DISABLED_PORT, CONNECT_SOCKET_CONNECTED, k_HSteamListenSocket_Invalid, k_HSteamNetConnection_Invalid);
     HSteamNetConnection con2 = new_connect_socket(remote_identity, 0, SNS_DISABLED_PORT, CONNECT_SOCKET_CONNECTED, k_HSteamListenSocket_Invalid, con1);
     sbcs->connect_sockets[con1].remote_id = con2;
+    auto socket1 = sbcs->connect_sockets.find(con1);
+    auto socket2 = sbcs->connect_sockets.find(con2);
+    if (socket1 != sbcs->connect_sockets.end())
+        normalize_dota_arcade_loopback_user_data(socket1, socket1->second.user_data, "socket_pair_create");
+    if (socket2 != sbcs->connect_sockets.end())
+        normalize_dota_arcade_loopback_user_data(socket2, socket2->second.user_data, "socket_pair_create");
     *pOutConnection1 = con1;
     *pOutConnection2 = con2;
     return true;
