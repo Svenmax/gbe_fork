@@ -637,22 +637,6 @@ static uint64 GBE_BuildDotaPracticeLobbyIpServerId(uint32 ip)
     return server_id.ConvertToUint64();
 }
 
-static uint64 GBE_BuildDotaCustomGameSessionServerId(uint32 ip, uint64 lobby_id, uint64 match_id, uint64 custom_game_id)
-{
-    uint32 account_id = ip;
-    account_id ^= static_cast<uint32>(lobby_id);
-    account_id ^= static_cast<uint32>(lobby_id >> 32);
-    account_id ^= static_cast<uint32>(match_id);
-    account_id ^= static_cast<uint32>(match_id >> 32);
-    account_id ^= static_cast<uint32>(custom_game_id);
-    account_id ^= static_cast<uint32>(custom_game_id >> 32);
-    if (account_id == 0u)
-        account_id = ip != 0u ? ip : 1u;
-
-    CSteamID server_id(account_id, k_unSteamUserDefaultInstance, k_EUniversePublic, k_EAccountTypeAnonGameServer);
-    return server_id.ConvertToUint64();
-}
-
 static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
 static constexpr uint32 GBE_kSteamAuthList = 5432u;
 static constexpr uint32 GBE_kSteamPersonaState = 766u;
@@ -10280,6 +10264,24 @@ void Steam_Game_Coordinator::shutdown_gc()
     GBE_dota_private_lobby_snapshot_replayed = false;
     GBE_last_dota_launch_state_pushed_game_state = 0;
     GBE_last_lobby_poll_time = {};
+    if (gc_profile == GC_PROFILE_DOTA2) {
+        const uint64 previous_lobby_id = GBE_local_lobby.lobby_id;
+        GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+        GBE_local_lobby = GBE_LocalLobby{};
+        GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+        GBE_recent_dota_reconnect_context_valid = false;
+        GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
+        GBE_pending_dota_normal_signout_finalize_after_25 = false;
+        GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+        if (settings && settings->get_lobby().ConvertToUint64() != 0)
+            settings->set_lobby(k_steamIDNil);
+        GBE_GC_DebugLog(
+            "GC_INIT",
+            "cleared Dota2 GC runtime on shutdown this=%p previous_lobby_id=%llu",
+            static_cast<void *>(this),
+            static_cast<unsigned long long>(previous_lobby_id)
+        );
+    }
     gc_initialized = false;
 }
 
@@ -13801,9 +13803,7 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
     if (connect_server_ip == 0u && GBE_local_lobby.lan && network)
         connect_server_ip = network->getOwnIP();
 
-    const uint64 derived_server_id = GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)
-        ? GBE_BuildDotaCustomGameSessionServerId(connect_server_ip, GBE_local_lobby.lobby_id, GBE_local_lobby.match_id, GBE_local_lobby.custom_game.game_id)
-        : GBE_BuildDotaPracticeLobbyIpServerId(connect_server_ip);
+    const uint64 derived_server_id = GBE_BuildDotaPracticeLobbyIpServerId(connect_server_ip);
     if (GBE_local_lobby.server_id == 0ull)
         return false;
 
@@ -18936,9 +18936,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(const std:
 
     const uint32 launch_ip = network ? network->getOwnIP() : 0u;
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
-    GBE_local_lobby.server_id = GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)
-        ? GBE_BuildDotaCustomGameSessionServerId(launch_ip, GBE_local_lobby.lobby_id, GBE_local_lobby.match_id, GBE_local_lobby.custom_game.game_id)
-        : GBE_BuildDotaPracticeLobbyIpServerId(launch_ip);
+    GBE_local_lobby.server_id = GBE_BuildDotaPracticeLobbyIpServerId(launch_ip);
     {
         const std::string launch_connect = GBE_FormatDotaPracticeLobbyConnectFromIp(launch_ip);
         if (GBE_ShouldPreferDotaLobbyConnectUpdate(GBE_local_lobby.connect, launch_connect))

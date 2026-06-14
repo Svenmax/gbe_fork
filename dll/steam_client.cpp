@@ -304,6 +304,8 @@ void Steam_Client::serverShutdown()
 
 void Steam_Client::clientShutdown()
 {
+    if (steam_game_coordinator)
+        steam_game_coordinator->shutdown_gc();
     callback_results_client->clear();
     user_logged_in = false;
 }
