@@ -18973,32 +18973,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(const std:
         return true;
     }
 
-    const double seconds_since_create = GBE_local_lobby.created == std::chrono::high_resolution_clock::time_point{}
-        ? 999.0
-        : std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - GBE_local_lobby.created).count();
-    const bool early_arcade_create_launch =
-        GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) &&
-        GBE_local_lobby.state == 0u &&
-        GBE_local_lobby.game_state == 0u &&
-        GBE_local_lobby.match_id == 0ull &&
-        GBE_local_lobby.launch_phase == GBE_kDotaLaunchPhaseNone &&
-        !GBE_local_lobby.ignored_early_arcade_launch &&
-        !has_request_job &&
-        request_body.size() <= 3u &&
-        seconds_since_create <= 2.0;
-    if (early_arcade_create_launch) {
-        GBE_local_lobby.ignored_early_arcade_launch = true;
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Ignoring early arcade 7041 during lobby creation LobbyID=%llu custom_id=%llu body_size=%zu age=%.3f",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id),
-            request_body.size(),
-            seconds_since_create
-        );
-        return true;
-    }
-
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
 
     GBE_local_lobby.match_id = GBE_GenerateDotaMatchId();
