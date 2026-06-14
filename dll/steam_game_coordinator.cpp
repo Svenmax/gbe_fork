@@ -6857,70 +6857,6 @@ static bool GBE_BuildDota7034ConnectedPlayersResponsePayload(
     return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7034u, has_request_job, request_job_id, body, message);
 }
 
-static bool GBE_BuildDotaArcade7034ConnectedPlayersResponsePayload(
-    uint32 lobby_state,
-    uint32 game_state,
-    const GBE_Dota7034RequestShape &request_shape,
-    bool has_request_job,
-    uint64 request_job_id,
-    std::string &message)
-{
-    std::string body;
-    const std::string leaver_state = GBE_BuildDota7034LeaverStatePayload(lobby_state, game_state);
-    std::vector<uint64> connected_steam_ids;
-    std::vector<uint64> disconnected_steam_ids;
-
-    auto append_connected_player = [&](const GBE_Dota7034ConnectedPlayer &connected_player) {
-        if (!connected_player.has_steam_id || connected_player.steam_id == 0ull ||
-                std::find(connected_steam_ids.begin(), connected_steam_ids.end(), connected_player.steam_id) != connected_steam_ids.end())
-            return;
-
-        std::string player;
-        GBE_AppendProtoFixed64Field(player, 1u, connected_player.steam_id);
-        if (connected_player.has_hero_id && connected_player.hero_id != 0u)
-            GBE_AppendProtoVarIntField(player, 2u, connected_player.hero_id);
-        GBE_AppendProtoBytesField(player, 3u, leaver_state);
-        GBE_AppendProtoVarIntField(player, 4u, 0u);
-        GBE_AppendProtoBytesField(body, 1u, player);
-        connected_steam_ids.push_back(connected_player.steam_id);
-    };
-
-    auto append_disconnected_player = [&](const GBE_Dota7034DisconnectedPlayer &disconnected_player) {
-        if (!disconnected_player.has_steam_id || disconnected_player.steam_id == 0ull ||
-                std::find(disconnected_steam_ids.begin(), disconnected_steam_ids.end(), disconnected_player.steam_id) != disconnected_steam_ids.end())
-            return;
-
-        const uint32 disconnected_lobby_state = disconnected_player.has_lobby_state ? disconnected_player.lobby_state : lobby_state;
-        const uint32 disconnected_game_state = disconnected_player.has_game_state ? disconnected_player.game_state : game_state;
-        std::string player;
-        GBE_AppendProtoFixed64Field(player, 1u, disconnected_player.steam_id);
-        GBE_AppendProtoBytesField(player, 3u, GBE_BuildDota7034LeaverStatePayload(disconnected_lobby_state, disconnected_game_state));
-        GBE_AppendProtoVarIntField(player, 4u, 0u);
-        GBE_AppendProtoBytesField(body, 7u, player);
-        disconnected_steam_ids.push_back(disconnected_player.steam_id);
-    };
-
-    for (const GBE_Dota7034ConnectedPlayer &connected_player : request_shape.connected_players)
-        append_connected_player(connected_player);
-    for (const GBE_Dota7034DisconnectedPlayer &disconnected_player : request_shape.disconnected_players)
-        append_disconnected_player(disconnected_player);
-
-    GBE_AppendProtoVarIntField(body, 2u, game_state);
-    if (request_shape.has_first_blood_happened)
-        GBE_AppendProtoVarIntField(body, 6u, request_shape.first_blood_happened);
-    GBE_AppendProtoVarIntField(body, 8u, request_shape.has_send_reason ? request_shape.send_reason : 2u);
-    if (request_shape.has_radiant_kills)
-        GBE_AppendProtoVarIntField(body, 11u, request_shape.radiant_kills);
-    if (request_shape.has_dire_kills)
-        GBE_AppendProtoVarIntField(body, 12u, request_shape.dire_kills);
-    if (request_shape.has_radiant_lead)
-        GBE_AppendProtoVarIntField(body, 14u, request_shape.radiant_lead);
-    if (request_shape.has_building_state)
-        GBE_AppendProtoVarIntField(body, 15u, request_shape.building_state);
-
-    return GBE_BuildDotaJobReplyOrZeroHeaderPayload(7034u, has_request_job, request_job_id, body, message);
-}
-
 static bool GBE_BuildDotaJoinChatChannelResponsePayload(
     uint64 steam_id,
     uint64 generic_lobby_id,
@@ -15160,7 +15096,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                 }
             }
 
-            if (queued_runtime_lobby_update) {
+            if (queued_runtime_lobby_update && !custom_game_launch) {
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
                     "continuing req=%u source_job=%llu with connected players reply after runtime 26 updates state=%u game_state=%u",
@@ -15169,6 +15105,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
                     GBE_local_lobby.state,
                     GBE_local_lobby.game_state
                 );
+            }
+
+            if (custom_game_launch) {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "consumed req=%u source_job=%llu note=custom game 7034 handled by runtime 26 update state=%u game_state=%u summary=%s",
+                    request_emsg,
+                    static_cast<unsigned long long>(source_job),
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state,
+                    GBE_FormatDota7034Summary(body, body_size).c_str()
+                );
+                return true;
             }
         }
 
@@ -15212,28 +15161,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         }
 
         std::string response_message;
-        const bool custom_game_launch = GBE_local_lobby.custom_game.game_id != 0ull;
-        const bool built_response = custom_game_launch
-            ? GBE_BuildDotaArcade7034ConnectedPlayersResponsePayload(
-                GBE_local_lobby.state,
-                GBE_local_lobby.game_state,
-                request_shape,
-                has_source_job,
-                source_job,
-                response_message)
-            : GBE_BuildDota7034ConnectedPlayersResponsePayload(
-                GBE_GetDotaLobbyOwnerSteamId(),
-                GBE_local_lobby.state,
-                GBE_local_lobby.game_state,
-                GBE_local_lobby.owner_team,
-                GBE_local_lobby.owner_slot,
-                GBE_local_lobby.members,
-                request_shape,
-                true,
-                true,
-                has_source_job,
-                source_job,
-                response_message);
+        const bool built_response = GBE_BuildDota7034ConnectedPlayersResponsePayload(
+            GBE_GetDotaLobbyOwnerSteamId(),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            GBE_local_lobby.owner_team,
+            GBE_local_lobby.owner_slot,
+            GBE_local_lobby.members,
+            request_shape,
+            true,
+            true,
+            has_source_job,
+            source_job,
+            response_message);
         if (!built_response) {
             GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 7034u);
             return true;
