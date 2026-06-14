@@ -10285,6 +10285,28 @@ void Steam_Game_Coordinator::shutdown_gc()
     gc_initialized = false;
 }
 
+void Steam_Game_Coordinator::on_appid_changed(uint32 appid)
+{
+    if (!appid)
+        return;
+
+    const uint32 previous_profile = static_cast<uint32>(gc_profile);
+    parse_gc_config();
+    GBE_GC_DebugLog(
+        "GC_CONFIG",
+        "refreshed GC config after appid change this=%p is_server=%u appid=%u previous_profile=%u new_profile=%u initialized=%u",
+        static_cast<void *>(this),
+        is_server ? 1u : 0u,
+        appid,
+        previous_profile,
+        static_cast<uint32>(gc_profile),
+        gc_initialized ? 1u : 0u
+    );
+
+    if (gc_profile == GC_PROFILE_DOTA2)
+        initialize_gc();
+}
+
 const std::vector<Econ_Item> &Steam_Game_Coordinator::load_items_from_file()
 {
     if (items_loaded)

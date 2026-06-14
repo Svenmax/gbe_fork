@@ -747,7 +747,11 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     if (has_ctx && ctx.custom_game_id == 0ull)
         return;
 
-    if (!has_ctx && GBE_dota_reconnect_eligible.load()) {
+    const bool eligible_before = GBE_dota_reconnect_eligible.load();
+    if (!eligible_before)
+        return;
+
+    if (!has_ctx) {
         static std::time_t s_last_recover_probe_time = 0;
         static uint64 s_last_recover_probe_local_id = 0;
         static bool s_last_recover_probe_has_ctx = false;
@@ -777,7 +781,6 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     const bool has_connect = has_ctx && ctx.connect[0] != '\0';
     const bool is_arcade_context = has_ctx && ctx.custom_game_id != 0ull;
     const bool local_is_owner = local_id != 0ull && local_id == ctx.owner_steam_id;
-    const bool eligible_before = GBE_dota_reconnect_eligible.load();
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
         "PostConnectionStateMsg gate size=%u prefix=%s fields=%s details=%s has_ctx=%u server_id=%llu game_state=%u custom_game_id=%llu arcade=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s endpoint_raw=%s local_is_owner=%u",

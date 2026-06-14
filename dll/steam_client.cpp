@@ -313,11 +313,13 @@ void Steam_Client::clientShutdown()
 void Steam_Client::setAppID(uint32 appid)
 {
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    bool appid_changed = false;
     if (appid && !settings_client->get_local_game_id().AppID()) {
         settings_client->set_game_id(CGameID(appid));
         settings_server->set_game_id(CGameID(appid));
         local_storage->setAppId(appid);
         network->setAppID(appid);
+        appid_changed = true;
 
         std::string appid_str(std::to_string(appid));
         set_env_variable("SteamAppId", appid_str);
@@ -328,7 +330,12 @@ void Steam_Client::setAppID(uint32 appid)
         }
     }
 
-    
+    if (appid_changed) {
+        if (steam_game_coordinator)
+            steam_game_coordinator->on_appid_changed(appid);
+        if (steam_gameserver_game_coordinator)
+            steam_gameserver_game_coordinator->on_appid_changed(appid);
+    }
 }
 
 // Creates a communication pipe to the Steam client.

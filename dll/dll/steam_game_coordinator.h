@@ -335,6 +335,7 @@ public:
 
     void initialize_gc();
     void shutdown_gc();
+    void on_appid_changed(uint32 appid);
     bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64 local_steam_id, GBE_DotaReconnectContext *out);
     void GBE_MaybePrimeDotaServerWelcomeFromCache(const char *reason);
     std::string GBE_BuildDotaJoinableCustomLobbiesHTTPJSON(uint64 requested_custom_game_id);
