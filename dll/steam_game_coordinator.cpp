@@ -1500,6 +1500,37 @@ struct GBE_ProtoField
     }
 };
 
+struct GBE_DirectProtoContext
+{
+    ProtoBufMsgHeader_t hdr{};
+    CMsgProtoBufHeader protohdr;
+    const uint8 *body{};
+    size_t body_size{};
+};
+
+static bool GBE_ParseDirectProtoContext(const void *pubData, uint32 cubData, GBE_DirectProtoContext &context)
+{
+    context = {};
+    context.protohdr.Clear();
+
+    if (!pubData || cubData < sizeof(ProtoBufMsgHeader_t))
+        return false;
+
+    const uint8 *bytes = reinterpret_cast<const uint8 *>(pubData);
+    std::memcpy(&context.hdr, bytes, sizeof(context.hdr));
+
+    const size_t body_offset = sizeof(context.hdr) + context.hdr.m_cubProtoBufExtHdr;
+    if (body_offset > cubData)
+        return false;
+
+    if (context.hdr.m_cubProtoBufExtHdr != 0 && !context.protohdr.ParseFromArray(bytes + sizeof(context.hdr), context.hdr.m_cubProtoBufExtHdr))
+        return false;
+
+    context.body = bytes + body_offset;
+    context.body_size = static_cast<size_t>(cubData - body_offset);
+    return true;
+}
+
 struct GBE_DotaHelloContext
 {
     bool valid{};
@@ -2349,17 +2380,12 @@ static bool GBE_RewriteAccountIdVarintInDirectProtoBody(
 {
     replacement_count = 0;
 
-    if (message.size() < sizeof(ProtoBufMsgHeader_t))
+    GBE_DirectProtoContext proto_context{};
+    if (!GBE_ParseDirectProtoContext(message.data(), static_cast<uint32>(message.size()), proto_context))
         return false;
 
-    ProtoBufMsgHeader_t hdr{};
-    std::memcpy(&hdr, message.data(), sizeof(hdr));
-
-    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
-    if (body_offset > message.size())
-        return false;
-
-    const std::string body = message.substr(body_offset);
+    const size_t body_offset = sizeof(ProtoBufMsgHeader_t) + proto_context.hdr.m_cubProtoBufExtHdr;
+    const std::string body(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size);
     std::string rewritten_body;
     if (!GBE_RewriteProtoVarintBytesRecursive(
             body,
@@ -4009,26 +4035,14 @@ static bool GBE_ParseDotaChatMessageBody(const uint8 *body, size_t body_size, GB
 
 static bool GBE_ParseDirectProtoContext(const void *pubData, uint32 cubData, ProtoBufMsgHeader_t &hdr, CMsgProtoBufHeader &protohdr, const uint8 *&body, size_t &body_size)
 {
-    hdr = {};
-    protohdr.Clear();
-    body = nullptr;
-    body_size = 0;
-
-    if (!pubData || cubData < sizeof(ProtoBufMsgHeader_t))
+    GBE_DirectProtoContext context{};
+    if (!GBE_ParseDirectProtoContext(pubData, cubData, context))
         return false;
 
-    const uint8 *bytes = reinterpret_cast<const uint8 *>(pubData);
-    std::memcpy(&hdr, bytes, sizeof(hdr));
-
-    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
-    if (body_offset > cubData)
-        return false;
-
-    if (hdr.m_cubProtoBufExtHdr != 0 && !protohdr.ParseFromArray(bytes + sizeof(hdr), hdr.m_cubProtoBufExtHdr))
-        return false;
-
-    body = bytes + body_offset;
-    body_size = static_cast<size_t>(cubData - body_offset);
+    hdr = context.hdr;
+    protohdr = context.protohdr;
+    body = context.body;
+    body_size = context.body_size;
     return true;
 }
 
@@ -4205,17 +4219,12 @@ static bool GBE_PatchDotaLobbyTemplateIdentifiersIfPresent(std::string &message,
 
 static bool GBE_ForceDotaLobbyCacheOwnerSOID(std::string &message, uint64 lobby_id)
 {
-    if (message.size() < sizeof(ProtoBufMsgHeader_t))
-        return false;
-
-    ProtoBufMsgHeader_t hdr{};
-    std::memcpy(&hdr, message.data(), sizeof(hdr));
-    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
-    if (body_offset > message.size())
+    GBE_DirectProtoContext proto_context{};
+    if (!GBE_ParseDirectProtoContext(message.data(), static_cast<uint32>(message.size()), proto_context))
         return false;
 
     CMsgSOCacheSubscribed protomsg;
-    if (!protomsg.ParseFromArray(message.data() + body_offset, static_cast<int>(message.size() - body_offset)))
+    if (!protomsg.ParseFromArray(proto_context.body, static_cast<int>(proto_context.body_size)))
         return false;
 
     protomsg.clear_owner();
@@ -4223,7 +4232,7 @@ static bool GBE_ForceDotaLobbyCacheOwnerSOID(std::string &message, uint64 lobby_
     owner_soid->set_type(3u);
     owner_soid->set_id(lobby_id);
 
-    std::string updated = message.substr(0, body_offset);
+    std::string updated = message.substr(0, sizeof(ProtoBufMsgHeader_t) + proto_context.hdr.m_cubProtoBufExtHdr);
     protomsg.AppendToString(&updated);
     message.swap(updated);
     return true;
@@ -4231,17 +4240,12 @@ static bool GBE_ForceDotaLobbyCacheOwnerSOID(std::string &message, uint64 lobby_
 
 static bool GBE_ForceDotaLobbyUpdateOwnerSOID(std::string &message, uint64 lobby_id)
 {
-    if (message.size() < sizeof(ProtoBufMsgHeader_t))
-        return false;
-
-    ProtoBufMsgHeader_t hdr{};
-    std::memcpy(&hdr, message.data(), sizeof(hdr));
-    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
-    if (body_offset > message.size())
+    GBE_DirectProtoContext proto_context{};
+    if (!GBE_ParseDirectProtoContext(message.data(), static_cast<uint32>(message.size()), proto_context))
         return false;
 
     CMsgSOMultipleObjects protomsg;
-    if (!protomsg.ParseFromArray(message.data() + body_offset, static_cast<int>(message.size() - body_offset)))
+    if (!protomsg.ParseFromArray(proto_context.body, static_cast<int>(proto_context.body_size)))
         return false;
 
     protomsg.clear_owner();
@@ -4249,7 +4253,7 @@ static bool GBE_ForceDotaLobbyUpdateOwnerSOID(std::string &message, uint64 lobby
     owner_soid->set_type(3u);
     owner_soid->set_id(lobby_id);
 
-    std::string updated = message.substr(0, body_offset);
+    std::string updated = message.substr(0, sizeof(ProtoBufMsgHeader_t) + proto_context.hdr.m_cubProtoBufExtHdr);
     protomsg.AppendToString(&updated);
     message.swap(updated);
     return true;
@@ -4257,17 +4261,12 @@ static bool GBE_ForceDotaLobbyUpdateOwnerSOID(std::string &message, uint64 lobby
 
 static void GBE_LogDotaSOMultipleObjectsSummary(const char *tag, const char *label, const std::string &message)
 {
-    if (message.size() < sizeof(ProtoBufMsgHeader_t))
-        return;
-
-    ProtoBufMsgHeader_t hdr{};
-    std::memcpy(&hdr, message.data(), sizeof(hdr));
-    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
-    if (body_offset > message.size())
+    GBE_DirectProtoContext proto_context{};
+    if (!GBE_ParseDirectProtoContext(message.data(), static_cast<uint32>(message.size()), proto_context))
         return;
 
     CMsgSOMultipleObjects protomsg;
-    if (!protomsg.ParseFromArray(message.data() + body_offset, static_cast<int>(message.size() - body_offset)))
+    if (!protomsg.ParseFromArray(proto_context.body, static_cast<int>(proto_context.body_size)))
         return;
 
     GBE_GC_DebugLog(
@@ -4390,17 +4389,12 @@ static void GBE_LogDotaSOMultipleObjectsSummary(const char *tag, const char *lab
 
 static void GBE_LogDotaSOCacheSubscribedSummary(const char *tag, const char *label, const std::string &message)
 {
-    if (message.size() < sizeof(ProtoBufMsgHeader_t))
-        return;
-
-    ProtoBufMsgHeader_t hdr{};
-    std::memcpy(&hdr, message.data(), sizeof(hdr));
-    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
-    if (body_offset > message.size())
+    GBE_DirectProtoContext proto_context{};
+    if (!GBE_ParseDirectProtoContext(message.data(), static_cast<uint32>(message.size()), proto_context))
         return;
 
     CMsgSOCacheSubscribed protomsg;
-    if (!protomsg.ParseFromArray(message.data() + body_offset, static_cast<int>(message.size() - body_offset)))
+    if (!protomsg.ParseFromArray(proto_context.body, static_cast<int>(proto_context.body_size)))
         return;
 
     GBE_GC_DebugLog(
@@ -5062,16 +5056,11 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
 {
     (void)account_id;
 
-    if (message.size() < sizeof(ProtoBufMsgHeader_t))
+    GBE_DirectProtoContext proto_context{};
+    if (!GBE_ParseDirectProtoContext(message.data(), static_cast<uint32>(message.size()), proto_context))
         return false;
 
-    ProtoBufMsgHeader_t hdr{};
-    std::memcpy(&hdr, message.data(), sizeof(hdr));
-    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
-    if (body_offset > message.size())
-        return false;
-
-    const std::string body = message.substr(body_offset);
+    const std::string body(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size);
     std::string rewritten_body;
     const uint32 scratch_startup_account_id = rewrite_2015 ? extra_startup_account_id : 0u;
 
@@ -5745,20 +5734,12 @@ static bool GBE_AdaptDotaLobbyInviteCacheSubscribedPayload(
 
 static bool GBE_IsDotaLobbyInviteCacheSubscribedPayload(const std::string &message)
 {
-    if (message.size() < sizeof(ProtoBufMsgHeader_t))
-        return false;
-
-    ProtoBufMsgHeader_t hdr{};
-    std::memcpy(&hdr, message.data(), sizeof(hdr));
-    if (GBE_GC_MaskedEMsg(hdr.m_EMsgFlagged) != GBE_kDotaCacheSubscribed)
-        return false;
-
-    const size_t body_offset = sizeof(ProtoBufMsgHeader_t) + hdr.m_cubProtoBufExtHdr;
-    if (body_offset > message.size())
+    GBE_DirectProtoContext proto_context{};
+    if (!GBE_ParseDirectProtoContext(message.data(), static_cast<uint32>(message.size()), proto_context))
         return false;
 
     CMsgSOCacheSubscribed protomsg;
-    if (!protomsg.ParseFromArray(message.data() + body_offset, static_cast<int>(message.size() - body_offset)))
+    if (!protomsg.ParseFromArray(proto_context.body, static_cast<int>(proto_context.body_size)))
         return false;
 
     for (int object_index = 0; object_index < protomsg.objects_size(); ++object_index) {
@@ -6909,17 +6890,11 @@ static bool GBE_PrepareDotaDirectReplayMessage(
     if (!GBE_PatchDotaTemplateIdentifiers(message, account_id, steam_id, replace_account, replace_steam_id, request_emsg, response_emsg, body_size, context_note))
         return false;
 
-    if (message.size() < sizeof(ProtoBufMsgHeader_t))
+    GBE_DirectProtoContext proto_context{};
+    if (!GBE_ParseDirectProtoContext(message.data(), static_cast<uint32>(message.size()), proto_context))
         return false;
 
-    ProtoBufMsgHeader_t hdr{};
-    std::memcpy(&hdr, message.data(), sizeof(hdr));
-    if (message.size() < sizeof(hdr) + hdr.m_cubProtoBufExtHdr)
-        return false;
-
-    CMsgProtoBufHeader protohdr;
-    if (hdr.m_cubProtoBufExtHdr != 0 && !protohdr.ParseFromArray(message.data() + sizeof(hdr), hdr.m_cubProtoBufExtHdr))
-        return false;
+    CMsgProtoBufHeader protohdr = proto_context.protohdr;
 
     if (has_target_job) {
         protohdr.set_job_id_target(target_job);
@@ -6928,11 +6903,12 @@ static bool GBE_PrepareDotaDirectReplayMessage(
     }
     protohdr.clear_job_id_source();
 
-    const size_t old_header_size = hdr.m_cubProtoBufExtHdr;
-    const char *body_ptr = message.data() + sizeof(ProtoBufMsgHeader_t) + old_header_size;
-    const size_t serialized_body_size = message.size() - sizeof(ProtoBufMsgHeader_t) - old_header_size;
+    const size_t old_header_size = proto_context.hdr.m_cubProtoBufExtHdr;
+    const char *body_ptr = reinterpret_cast<const char *>(proto_context.body);
+    const size_t serialized_body_size = proto_context.body_size;
 
     std::string updated;
+    ProtoBufMsgHeader_t hdr = proto_context.hdr;
     hdr.m_cubProtoBufExtHdr = static_cast<uint32>(protohdr.ByteSizeLong());
     ser_var<ProtoBufMsgHeader_t>(updated, hdr);
     protohdr.AppendToString(&updated);
@@ -7046,39 +7022,22 @@ static bool GBE_ExtractDirectDotaHelloContext(uint32 unMsgType, const void *pubD
         return false;
     }
 
-    if (!pubData || cubData < sizeof(ProtoBufMsgHeader_t)) {
+    GBE_DirectProtoContext proto_context{};
+    if (!GBE_ParseDirectProtoContext(pubData, cubData, proto_context)) {
         GBE_GC_DebugLog("GC_DOTA_HELLO", "direct path invalid input pubData=%p cubData=%u", pubData, cubData);
         return false;
     }
 
-    const char *cursor = reinterpret_cast<const char *>(pubData);
-    const char *end = cursor + cubData;
-    ProtoBufMsgHeader_t hdr = deser_var<ProtoBufMsgHeader_t>(cursor);
-
-    if ((end - cursor) < hdr.m_cubProtoBufExtHdr) {
-        GBE_GC_DebugLog("GC_DOTA_HELLO", "direct path proto header overflow ext=%u cubData=%u", hdr.m_cubProtoBufExtHdr, cubData);
-        return false;
-    }
-
-    CMsgProtoBufHeader protohdr;
-    if (!protohdr.ParseFromArray(cursor, hdr.m_cubProtoBufExtHdr)) {
-        GBE_GC_DebugLog("GC_DOTA_HELLO", "direct path failed parsing CMsgProtoBufHeader ext=%u", hdr.m_cubProtoBufExtHdr);
-        return false;
-    }
-
-    cursor += hdr.m_cubProtoBufExtHdr;
-    const uint8 *body = reinterpret_cast<const uint8 *>(cursor);
-    const size_t body_size = static_cast<size_t>(end - cursor);
     uint64 parsed_version = 0;
-    if (!GBE_ReadProtoUint64Field(body, body_size, 1u, parsed_version)) {
+    if (!GBE_ReadProtoUint64Field(proto_context.body, proto_context.body_size, 1u, parsed_version)) {
         GBE_GC_DebugLog("GC_DOTA_HELLO", "direct path failed to extract version field");
         return false;
     }
 
     context.valid = true;
     context.version = static_cast<uint32>(parsed_version);
-    if (protohdr.has_job_id_source()) {
-        context.source_job_id = protohdr.job_id_source();
+    if (proto_context.protohdr.has_job_id_source()) {
+        context.source_job_id = proto_context.protohdr.job_id_source();
         context.has_source_job = true;
     }
 
@@ -7088,7 +7047,7 @@ static bool GBE_ExtractDirectDotaHelloContext(uint32 unMsgType, const void *pubD
         context.version,
         static_cast<unsigned long long>(context.source_job_id),
         context.has_source_job ? 1 : 0,
-        body_size
+        proto_context.body_size
     );
     return true;
 }
@@ -7102,33 +7061,15 @@ static bool GBE_ExtractDirectDotaServerHelloContext(uint32 unMsgType, const void
         return false;
     }
 
-    if (!pubData || cubData < sizeof(ProtoBufMsgHeader_t)) {
+    GBE_DirectProtoContext proto_context{};
+    if (!GBE_ParseDirectProtoContext(pubData, cubData, proto_context)) {
         GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "direct path invalid input pubData=%p cubData=%u", pubData, cubData);
         return false;
     }
 
-    const char *cursor = reinterpret_cast<const char *>(pubData);
-    const char *end = cursor + cubData;
-    ProtoBufMsgHeader_t hdr = deser_var<ProtoBufMsgHeader_t>(cursor);
-
-    if ((end - cursor) < hdr.m_cubProtoBufExtHdr) {
-        GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "direct path proto header overflow ext=%u cubData=%u", hdr.m_cubProtoBufExtHdr, cubData);
-        return false;
-    }
-
-    CMsgProtoBufHeader protohdr;
-    if (!protohdr.ParseFromArray(cursor, hdr.m_cubProtoBufExtHdr)) {
-        GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "direct path failed parsing CMsgProtoBufHeader ext=%u", hdr.m_cubProtoBufExtHdr);
-        return false;
-    }
-
-    cursor += hdr.m_cubProtoBufExtHdr;
-    const uint8 *body = reinterpret_cast<const uint8 *>(cursor);
-    const size_t body_size = static_cast<size_t>(end - cursor);
-
     CMsgServerHello protomsg;
-    if (!protomsg.ParseFromArray(body, static_cast<int>(body_size)) || !protomsg.has_version()) {
-        GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "direct path failed parsing CMsgServerHello body_size=%zu", body_size);
+    if (!protomsg.ParseFromArray(proto_context.body, static_cast<int>(proto_context.body_size)) || !protomsg.has_version()) {
+        GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "direct path failed parsing CMsgServerHello body_size=%zu", proto_context.body_size);
         return false;
     }
 
@@ -7139,28 +7080,28 @@ static bool GBE_ExtractDirectDotaServerHelloContext(uint32 unMsgType, const void
     context.min_allowed_version = version;
     context.compatibility_value = 0;
     context.universe = 0;
-    if (protohdr.has_client_steam_id()) {
-        context.client_steam_id = protohdr.client_steam_id();
+    if (proto_context.protohdr.has_client_steam_id()) {
+        context.client_steam_id = proto_context.protohdr.client_steam_id();
         context.has_client_steam_id = true;
     }
-    if (protohdr.has_client_session_id()) {
-        context.client_session_id = protohdr.client_session_id();
+    if (proto_context.protohdr.has_client_session_id()) {
+        context.client_session_id = proto_context.protohdr.client_session_id();
         context.has_client_session_id = true;
     }
-    if (protohdr.has_source_app_id()) {
-        context.source_app_id = protohdr.source_app_id();
+    if (proto_context.protohdr.has_source_app_id()) {
+        context.source_app_id = proto_context.protohdr.source_app_id();
         context.has_source_app_id = true;
     }
-    if (protohdr.has_job_id_source()) {
-        context.source_job_id = protohdr.job_id_source();
+    if (proto_context.protohdr.has_job_id_source()) {
+        context.source_job_id = proto_context.protohdr.job_id_source();
         context.has_source_job = true;
     }
-    if (protohdr.has_gc_msg_src()) {
-        context.gc_msg_src = static_cast<uint32>(protohdr.gc_msg_src());
+    if (proto_context.protohdr.has_gc_msg_src()) {
+        context.gc_msg_src = static_cast<uint32>(proto_context.protohdr.gc_msg_src());
         context.has_gc_msg_src = true;
     }
-    if (protohdr.has_gc_dir_index_source()) {
-        context.gc_dir_index_source = protohdr.gc_dir_index_source();
+    if (proto_context.protohdr.has_gc_dir_index_source()) {
+        context.gc_dir_index_source = proto_context.protohdr.gc_dir_index_source();
         context.has_gc_dir_index_source = true;
     }
 
@@ -7183,7 +7124,7 @@ static bool GBE_ExtractDirectDotaServerHelloContext(uint32 unMsgType, const void
         context.has_gc_msg_src ? 1 : 0,
         context.gc_dir_index_source,
         context.has_gc_dir_index_source ? 1 : 0,
-        body_size
+        proto_context.body_size
     );
     return true;
 }
@@ -7736,46 +7677,29 @@ std::string Steam_Game_Coordinator::build_protomsg_header(uint32 msg_type, JobID
 template <class T>
 std::tuple<ProtoBufMsgHeader_t, CMsgProtoBufHeader, T, bool> Steam_Game_Coordinator::parse_protomsg(const void *input, uint32 input_size)
 {
-    const char *p = reinterpret_cast<const char *>(input);
-    const char *end = p + input_size;
-
-    ProtoBufMsgHeader_t hdr{};
-    CMsgProtoBufHeader protohdr;
     T protomsg;
 
-    if (input_size < sizeof(ProtoBufMsgHeader_t))
-        return { hdr, protohdr, protomsg, false };
+    GBE_DirectProtoContext context{};
+    if (!GBE_ParseDirectProtoContext(input, input_size, context))
+        return { context.hdr, context.protohdr, protomsg, false };
 
-    hdr = deser_var<ProtoBufMsgHeader_t>(p);
+    if (!protomsg.ParseFromArray(context.body, static_cast<int>(context.body_size)))
+        return { context.hdr, context.protohdr, protomsg, false };
 
-    if (!protohdr.ParseFromArray(p, hdr.m_cubProtoBufExtHdr))
-        return { hdr, protohdr, protomsg, false };
-
-    p += hdr.m_cubProtoBufExtHdr;
-
-    int protomsg_size = static_cast<int>(end - p);
-    if (!protomsg.ParseFromArray(p, protomsg_size))
-        return { hdr, protohdr, protomsg, false };
-
-    return { hdr, protohdr, protomsg, true };
+    return { context.hdr, context.protohdr, protomsg, true };
 }
 
 bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::string &message)
 {
-    if (message.size() < sizeof(ProtoBufMsgHeader_t))
+    GBE_DirectProtoContext context{};
+    if (!GBE_ParseDirectProtoContext(message.data(), static_cast<uint32>(message.size()), context))
         return false;
 
-    ProtoBufMsgHeader_t hdr{};
-    std::memcpy(&hdr, message.data(), sizeof(hdr));
-    if (message.size() < sizeof(hdr) + hdr.m_cubProtoBufExtHdr)
-        return false;
-
+    const ProtoBufMsgHeader_t hdr = context.hdr;
     const char *proto_header_ptr = message.data() + sizeof(hdr);
-    const char *body_ptr = proto_header_ptr + hdr.m_cubProtoBufExtHdr;
-    const size_t body_size = message.size() - sizeof(hdr) - hdr.m_cubProtoBufExtHdr;
 
     CMsgSOCacheSubscribed protomsg;
-    if (!protomsg.ParseFromArray(body_ptr, static_cast<int>(body_size)))
+    if (!protomsg.ParseFromArray(context.body, static_cast<int>(context.body_size)))
         return false;
 
     auto *objects = protomsg.mutable_objects();
@@ -10229,17 +10153,12 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyStateWithPreviousSlots(
 
 void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason)
 {
-    if (message.size() < sizeof(ProtoBufMsgHeader_t))
-        return;
-
-    ProtoBufMsgHeader_t hdr{};
-    std::memcpy(&hdr, message.data(), sizeof(hdr));
-    const size_t body_offset = sizeof(hdr) + hdr.m_cubProtoBufExtHdr;
-    if (body_offset > message.size())
+    GBE_DirectProtoContext proto_context{};
+    if (!GBE_ParseDirectProtoContext(message.data(), static_cast<uint32>(message.size()), proto_context))
         return;
 
     CMsgSOCacheSubscribed protomsg;
-    if (!protomsg.ParseFromArray(message.data() + body_offset, static_cast<int>(message.size() - body_offset)))
+    if (!protomsg.ParseFromArray(proto_context.body, static_cast<int>(proto_context.body_size)))
         return;
 
     if (!protomsg.has_owner_soid() || protomsg.owner_soid().type() != 3u || protomsg.owner_soid().id() == 0)
@@ -12490,29 +12409,26 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
     const uint32 request_emsg = GBE_GC_MaskedEMsg(unMsgType);
 
-    ProtoBufMsgHeader_t hdr{};
-    CMsgProtoBufHeader protohdr;
-    const uint8 *body = nullptr;
-    size_t body_size = 0;
-    if (!GBE_ParseDirectProtoContext(pubData, cubData, hdr, protohdr, body, body_size)) {
+    GBE_DirectProtoContext proto_context{};
+    if (!GBE_ParseDirectProtoContext(pubData, cubData, proto_context)) {
         GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed parsing direct request req=%u len=%u", request_emsg, cubData);
         return false;
     }
 
-    const bool has_source_job = protohdr.has_job_id_source();
-    const uint64 source_job = has_source_job ? protohdr.job_id_source() : 0ull;
+    const bool has_source_job = proto_context.protohdr.has_job_id_source();
+    const uint64 source_job = has_source_job ? proto_context.protohdr.job_id_source() : 0ull;
 
     if (request_emsg == GBE_kDotaJoinChatChannel) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 7009 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaJoinChatChannelRequest(
-            std::string(reinterpret_cast<const char *>(body), body_size),
+            std::string(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size),
             false,
             nullptr
         );
@@ -12523,11 +12439,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 7038 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
         return GBE_HandleDotaPracticeLobbyCreateRequest(
-            std::string(reinterpret_cast<const char *>(body), body_size),
+            std::string(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size),
             source_job,
             has_source_job,
             false,
@@ -12540,8 +12456,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 8011 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaLobbyListRequest(has_source_job, source_job, false, nullptr);
@@ -12552,12 +12468,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 7042 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaCustomLobbyListRequest(
-            std::string(reinterpret_cast<const char *>(body), body_size),
+            std::string(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size),
             false,
             nullptr
         );
@@ -12568,8 +12484,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 7111 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaFriendPracticeLobbyListRequest(false, nullptr);
