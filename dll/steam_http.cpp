@@ -261,7 +261,7 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
     if (!steam_client || !steam_client->steam_game_coordinator)
         return response.dump();
 
-    return steam_client->steam_game_coordinator->GBE_BuildDotaJoinableCustomLobbiesHTTPJSON(requested_custom_game_id);
+    return steam_client->steam_game_coordinator->GBE_GetDotaJoinableCustomLobbiesHTTPJSON(requested_custom_game_id);
 }
 
 void GBE_SetDotaCustomGamesHTTPResponse(struct Steam_Http_Request &request, class Settings *settings)

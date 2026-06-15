@@ -1201,6 +1201,66 @@ project "tool_generate_interfaces"
 -- End tool_generate_interfaces
 
 
+-- Project tool_gc_replay_test
+project "tool_gc_replay_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gc_replay_test"))
+    targetname "gc_replay_test_%{cfg.platform}"
+
+
+    -- common source & header files
+    ---------
+    files {
+        "tools/gc_replay_test/gc_replay_test.cpp",
+        "tools/gc_replay_test/gc_replay_summary.cpp",
+        "tools/gc_replay_test/gc_replay_summary.h",
+        "dll/gbe_gc_message_utils.cpp",
+        "dll/gbe_gc_message_utils.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gc_replay_test
+
+
+-- Project tool_gc_message_utils_test
+project "tool_gc_message_utils_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gc_message_utils_test"))
+    targetname "gc_message_utils_test_%{cfg.platform}"
+
+
+    -- common source & header files
+    ---------
+    files {
+        "tools/gc_message_utils_test/gc_message_utils_test.cpp",
+        "dll/gbe_gc_message_utils.cpp",
+        "dll/gbe_gc_message_utils.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gc_message_utils_test
+
+
+-- Project tool_gbe_proto_wire_test
+project "tool_gbe_proto_wire_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_proto_wire_test"))
+    targetname "gbe_proto_wire_test_%{cfg.platform}"
+
+
+    -- common source & header files
+    ---------
+    files {
+        "tools/gbe_proto_wire_test/gbe_proto_wire_test.cpp",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gbe_proto_wire_test
+
+
 -- Project lib_steamnetworkingsockets START
 project "lib_steamnetworkingsockets"
     kind "SharedLib"

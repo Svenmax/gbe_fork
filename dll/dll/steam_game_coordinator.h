@@ -281,6 +281,7 @@ public ISteamGameCoordinator
     bool GBE_HandleDotaJoinChatChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaAbandonCurrentGameRequest(bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaGameMatchSignOutRequest(bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id);
+    bool GBE_PushDotaResponse(uint32 inner_emsg, const std::string &inner_message, bool wrapped, const std::string *outer_session_field_raw, const char *reason, bool apply_lobby_state = false, uint32 lobby_state = 0, uint32 lobby_game_state = 0, std::string *out_wrapped_message = nullptr);
     bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw, const char *reason);
     bool GBE_SendDotaPracticeLobbyLaunchMessage(uint32 inner_emsg, const std::string &inner_message, bool wrapped, const std::string *outer_session_field_raw, const char *reason, bool apply_lobby_state = false, uint32 lobby_state = 0, uint32 lobby_game_state = 0);
     bool GBE_SendDotaCustomGameLaunchSetupFlow(bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id);
@@ -338,7 +339,7 @@ public:
     void on_appid_changed(uint32 appid);
     bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64 local_steam_id, GBE_DotaReconnectContext *out);
     void GBE_MaybePrimeDotaServerWelcomeFromCache(const char *reason);
-    std::string GBE_BuildDotaJoinableCustomLobbiesHTTPJSON(uint64 requested_custom_game_id);
+    std::string GBE_GetDotaJoinableCustomLobbiesHTTPJSON(uint64 requested_custom_game_id);
 
     // Returns true if the server GC has an active lobby matching the given lobby_id.
     // Used by client GC to detect HOST scenario and avoid running PLAYER PostGame cleanup.
