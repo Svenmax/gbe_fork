@@ -16926,8 +16926,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
     const uint32 lobby_state = GBE_local_lobby.state;
     const uint32 lobby_game_state = GBE_local_lobby.game_state;
-    const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
-    const bool local_is_owner = local_steam_id != 0ull && local_steam_id == GBE_local_lobby.owner_steam_id;
     const bool treat_as_current_game_disconnect =
         is_server &&
         GBE_local_lobby.owner_connected &&
@@ -16951,27 +16949,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         lobby_game_state >= 2u &&
         GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued &&
         GBE_local_lobby.launch_phase < GBE_kDotaLaunchPhaseLoaded;
-    const bool arcade_loaded_engine_7035 =
-        GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game) &&
-        !wrapped &&
-        !is_server &&
-        local_is_owner &&
-        GBE_local_lobby.owner_connected &&
-        lobby_state == 2u &&
-        lobby_game_state >= 2u &&
-        GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseLoaded;
-    if (arcade_loaded_engine_7035) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Ignoring arcade direct 7035 while loaded owner is still connected LobbyID=%llu state=%u game_state=%u launch_phase=%s owner_connected=%u",
-            static_cast<unsigned long long>(lobby_id),
-            lobby_state,
-            lobby_game_state,
-            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
-            GBE_local_lobby.owner_connected ? 1u : 0u
-        );
-        return true;
-    }
     if (arcade_launch_failed_before_connect && GBE_local_lobby.game_start_time != 0u) {
         const uint32 now = static_cast<uint32>(std::time(nullptr));
         if (now <= GBE_local_lobby.game_start_time + 5u) {
