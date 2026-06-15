@@ -14260,9 +14260,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             }
         }
 
-        const std::string runtime_connect = GBE_FormatDotaPracticeLobbyConnectForCustomGame(
-            GBE_FormatDotaPracticeLobbyConnectFromIps(public_ip, private_ip, server_port),
-            &GBE_local_lobby.custom_game);
+        const std::string runtime_connect = GBE_NormalizeDotaPracticeLobbyConnect(
+            GBE_FormatDotaPracticeLobbyConnectFromIps(public_ip, private_ip, server_port));
         // 4508 reports the engine's listen address, but peers that already have a
         // working LAN endpoint must keep it to avoid a post-connect P2P redirect.
         const bool preserve_existing_lan_connect =
