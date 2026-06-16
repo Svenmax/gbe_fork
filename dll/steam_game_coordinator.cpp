@@ -1504,6 +1504,7 @@ struct GBE_DirectProtoContext
 {
     ProtoBufMsgHeader_t hdr{};
     CMsgProtoBufHeader protohdr;
+    size_t body_offset{};
     const uint8 *body{};
     size_t body_size{};
 };
@@ -1526,6 +1527,7 @@ static bool GBE_ParseDirectProtoContext(const void *pubData, uint32 cubData, GBE
     if (context.hdr.m_cubProtoBufExtHdr != 0 && !context.protohdr.ParseFromArray(bytes + sizeof(context.hdr), context.hdr.m_cubProtoBufExtHdr))
         return false;
 
+    context.body_offset = body_offset;
     context.body = bytes + body_offset;
     context.body_size = static_cast<size_t>(cubData - body_offset);
     return true;
@@ -2384,7 +2386,6 @@ static bool GBE_RewriteAccountIdVarintInDirectProtoBody(
     if (!GBE_ParseDirectProtoContext(message.data(), static_cast<uint32>(message.size()), proto_context))
         return false;
 
-    const size_t body_offset = sizeof(ProtoBufMsgHeader_t) + proto_context.hdr.m_cubProtoBufExtHdr;
     const std::string body(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size);
     std::string rewritten_body;
     if (!GBE_RewriteProtoVarintBytesRecursive(
@@ -2399,7 +2400,7 @@ static bool GBE_RewriteAccountIdVarintInDirectProtoBody(
     if (replacement_count == 0)
         return true;
 
-    message.resize(body_offset);
+    message.resize(proto_context.body_offset);
     message.append(rewritten_body);
     return true;
 }
@@ -4033,19 +4034,6 @@ static bool GBE_ParseDotaChatMessageBody(const uint8 *body, size_t body_size, GB
     return request.has_channel_id && request.has_text;
 }
 
-static bool GBE_ParseDirectProtoContext(const void *pubData, uint32 cubData, ProtoBufMsgHeader_t &hdr, CMsgProtoBufHeader &protohdr, const uint8 *&body, size_t &body_size)
-{
-    GBE_DirectProtoContext context{};
-    if (!GBE_ParseDirectProtoContext(pubData, cubData, context))
-        return false;
-
-    hdr = context.hdr;
-    protohdr = context.protohdr;
-    body = context.body;
-    body_size = context.body_size;
-    return true;
-}
-
 static bool GBE_ShouldTraceGCProtoBoundary(uint32 emsg)
 {
     return gbe::gc_message::should_trace_dota_proto_boundary(emsg);
@@ -4061,11 +4049,8 @@ static void GBE_LogGCProtoBoundary(const char *scope, const char *direction, voi
     if (!scope || !direction || !data || size < sizeof(ProtoBufMsgHeader_t) || !GBE_ShouldTraceGCProtoBoundary(emsg))
         return;
 
-    ProtoBufMsgHeader_t hdr{};
-    CMsgProtoBufHeader protohdr;
-    const uint8 *body = nullptr;
-    size_t body_size = 0;
-    if (!GBE_ParseDirectProtoContext(data, size, hdr, protohdr, body, body_size)) {
+    GBE_DirectProtoContext context{};
+    if (!GBE_ParseDirectProtoContext(data, size, context)) {
         GBE_GC_DebugLog(
             scope,
             "%s this=%p is_server=%u emsg=%u size=%u parse=0",
@@ -4086,15 +4071,15 @@ static void GBE_LogGCProtoBoundary(const char *scope, const char *direction, voi
         is_server ? 1u : 0u,
         emsg,
         size,
-        hdr.m_cubProtoBufExtHdr,
-        body_size,
-        protohdr.has_job_id_source() ? 1u : 0u,
-        static_cast<unsigned long long>(protohdr.has_job_id_source() ? protohdr.job_id_source() : 0ull),
-        protohdr.has_job_id_target() ? 1u : 0u,
-        static_cast<unsigned long long>(protohdr.has_job_id_target() ? protohdr.job_id_target() : 0ull),
-        static_cast<unsigned long long>(protohdr.has_client_steam_id() ? protohdr.client_steam_id() : 0ull),
-        protohdr.has_client_session_id() ? protohdr.client_session_id() : 0,
-        protohdr.has_source_app_id() ? protohdr.source_app_id() : 0u
+        context.hdr.m_cubProtoBufExtHdr,
+        context.body_size,
+        context.protohdr.has_job_id_source() ? 1u : 0u,
+        static_cast<unsigned long long>(context.protohdr.has_job_id_source() ? context.protohdr.job_id_source() : 0ull),
+        context.protohdr.has_job_id_target() ? 1u : 0u,
+        static_cast<unsigned long long>(context.protohdr.has_job_id_target() ? context.protohdr.job_id_target() : 0ull),
+        static_cast<unsigned long long>(context.protohdr.has_client_steam_id() ? context.protohdr.client_steam_id() : 0ull),
+        context.protohdr.has_client_session_id() ? context.protohdr.client_session_id() : 0,
+        context.protohdr.has_source_app_id() ? context.protohdr.source_app_id() : 0u
     );
 }
 
@@ -4232,7 +4217,7 @@ static bool GBE_ForceDotaLobbyCacheOwnerSOID(std::string &message, uint64 lobby_
     owner_soid->set_type(3u);
     owner_soid->set_id(lobby_id);
 
-    std::string updated = message.substr(0, sizeof(ProtoBufMsgHeader_t) + proto_context.hdr.m_cubProtoBufExtHdr);
+    std::string updated = message.substr(0, proto_context.body_offset);
     protomsg.AppendToString(&updated);
     message.swap(updated);
     return true;
@@ -4253,7 +4238,7 @@ static bool GBE_ForceDotaLobbyUpdateOwnerSOID(std::string &message, uint64 lobby
     owner_soid->set_type(3u);
     owner_soid->set_id(lobby_id);
 
-    std::string updated = message.substr(0, sizeof(ProtoBufMsgHeader_t) + proto_context.hdr.m_cubProtoBufExtHdr);
+    std::string updated = message.substr(0, proto_context.body_offset);
     protomsg.AppendToString(&updated);
     message.swap(updated);
     return true;
@@ -5192,7 +5177,7 @@ static bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
         gbe::proto_wire::append_bytes_field(rewritten_body, 2u, rewritten_subscribed);
     }
 
-    message.resize(body_offset);
+    message.resize(proto_context.body_offset);
     message.append(rewritten_body);
     return true;
 }
@@ -6903,7 +6888,6 @@ static bool GBE_PrepareDotaDirectReplayMessage(
     }
     protohdr.clear_job_id_source();
 
-    const size_t old_header_size = proto_context.hdr.m_cubProtoBufExtHdr;
     const char *body_ptr = reinterpret_cast<const char *>(proto_context.body);
     const size_t serialized_body_size = proto_context.body_size;
 
@@ -12417,6 +12401,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
     const bool has_source_job = proto_context.protohdr.has_job_id_source();
     const uint64 source_job = has_source_job ? proto_context.protohdr.job_id_source() : 0ull;
+    const uint8 *body = proto_context.body;
+    const size_t body_size = proto_context.body_size;
 
     if (request_emsg == GBE_kDotaJoinChatChannel) {
         GBE_GC_DebugLog(
@@ -12496,12 +12482,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 4512 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaInviteToLobbyRequest(
-            std::string(reinterpret_cast<const char *>(body), body_size),
+            std::string(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size),
             false,
             nullptr
         );
@@ -12512,12 +12498,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 4513 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaLobbyInviteResponseRequest(
-            std::string(reinterpret_cast<const char *>(body), body_size),
+            std::string(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size),
             false,
             nullptr
         );
@@ -12528,12 +12514,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 7044 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaPracticeLobbyJoinRequest(
-            std::string(reinterpret_cast<const char *>(body), body_size),
+            std::string(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size),
             source_job,
             has_source_job,
             false,
@@ -12546,8 +12532,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 7040 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaPracticeLobbyLeaveRequest(false, nullptr);
@@ -12558,12 +12544,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 7041 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaPracticeLobbyLaunchRequest(
-            std::string(reinterpret_cast<const char *>(body), body_size),
+            std::string(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size),
             false,
             nullptr,
             has_source_job,
@@ -12576,13 +12562,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 7070 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
             uint32 ready_state = 0u;
-            GBE_ReadProtoUint32Field(body, body_size, 1u, ready_state);
+            GBE_ReadProtoUint32Field(proto_context.body, proto_context.body_size, 1u, ready_state);
             std::string response_7170;
             if (gbe::gc_message::build_dota_ready_up_status_payload(has_source_job, source_job, GBE_local_lobby.lobby_id, 0u, ready_state != 0u ? ready_state : 1u, response_7170))
                 push_incoming_now(7170u | GBE_kProtoMask, response_7170);
@@ -12601,12 +12587,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 7046 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaPracticeLobbySetDetailsRequest(
-            std::string(reinterpret_cast<const char *>(body), body_size),
+            std::string(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size),
             false,
             nullptr
         );
@@ -12617,17 +12603,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 8052 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
             uint64 lobby_id = 0;
             uint64 custom_game_id = 0;
             uint64 start_time = 0;
-            GBE_ReadProtoUint64Field(body, body_size, 1u, lobby_id);
-            GBE_ReadProtoUint64Field(body, body_size, 2u, custom_game_id);
-            GBE_ReadProtoUint64Field(body, body_size, 4u, start_time);
+            GBE_ReadProtoUint64Field(proto_context.body, proto_context.body_size, 1u, lobby_id);
+            GBE_ReadProtoUint64Field(proto_context.body, proto_context.body_size, 2u, custom_game_id);
+            GBE_ReadProtoUint64Field(proto_context.body, proto_context.body_size, 4u, start_time);
 
             if (lobby_id == 0 || lobby_id == GBE_local_lobby.lobby_id) {
                 if (custom_game_id != 0)
@@ -12658,12 +12644,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 8053 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_HasDotaCustomGameDetails(GBE_local_lobby.custom_game)) {
-            const GBE_Dota8053Result load_result = GBE_ParseDota8053Result(body, body_size);
+            const GBE_Dota8053Result load_result = GBE_ParseDota8053Result(proto_context.body, proto_context.body_size);
 
             if (load_result.lobby_id == 0 || load_result.lobby_id == GBE_local_lobby.lobby_id) {
                 if (GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
@@ -12705,12 +12691,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 7047 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaPracticeLobbySetTeamSlotRequest(
-            std::string(reinterpret_cast<const char *>(body), body_size),
+            std::string(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size),
             source_job,
             has_source_job,
             false,
@@ -12723,12 +12709,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 7081 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaPracticeLobbyKickRequest(
-            std::string(reinterpret_cast<const char *>(body), body_size),
+            std::string(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size),
             false,
             nullptr
         );
@@ -12739,12 +12725,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 7273 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaChatMessageRequest(
-            std::string(reinterpret_cast<const char *>(body), body_size),
+            std::string(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size),
             false,
             nullptr
         );
@@ -12755,8 +12741,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             "GC_DOTA_LOBBY",
             "[LOBBY] Received direct 7149 source_job=%llu body_size=%zu body_prefix=%s",
             static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_FormatHexPrefix(body, body_size, 48).c_str()
+            proto_context.body_size,
+            GBE_FormatHexPrefix(proto_context.body, proto_context.body_size, 48).c_str()
         );
 
         return GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest(
