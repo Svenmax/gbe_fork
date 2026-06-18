@@ -1264,6 +1264,46 @@ project "tool_gbe_proto_wire_test"
 -- End tool_gbe_proto_wire_test
 
 
+-- Project tool_gbe_dota_custom_game_test
+project "tool_gbe_dota_custom_game_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_custom_game_test"))
+    targetname "gbe_dota_custom_game_test_%{cfg.platform}"
+
+
+    -- common source & header files
+    ---------
+    files {
+        "tools/gbe_dota_custom_game_test/gbe_dota_custom_game_test.cpp",
+        "dll/gbe_dota_custom_game.cpp",
+        "dll/gbe_dota_custom_game.h",
+        "dll/gbe_dota_types.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gbe_dota_custom_game_test
+
+
+-- Project tool_gbe_dota_lobby_flow_test
+project "tool_gbe_dota_lobby_flow_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_lobby_flow_test"))
+    targetname "gbe_dota_lobby_flow_test_%{cfg.platform}"
+
+
+    -- common source & header files
+    ---------
+    files {
+        "tools/gbe_dota_lobby_flow_test/gbe_dota_lobby_flow_test.cpp",
+        "dll/gbe_dota_lobby_flow.cpp",
+        "dll/gbe_dota_lobby_flow.h",
+        "dll/gbe_dota_types.h",
+    }
+-- End tool_gbe_dota_lobby_flow_test
+
+
 -- Project lib_steamnetworkingsockets START
 project "lib_steamnetworkingsockets"
     kind "SharedLib"

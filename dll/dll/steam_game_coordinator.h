@@ -20,6 +20,7 @@
 
 #include "base.h"
 #include "econ_item.h"
+#include "gbe_dota_types.h"
 #include "gbe_dota_reconnect_shared.h"
 
 class Steam_User_Items;
@@ -28,30 +29,6 @@ struct GCMsgHdr_t;
 struct GCMsgHdrEx_t;
 struct ProtoBufMsgHeader_t;
 class CMsgProtoBufHeader;
-
-struct GBE_DotaLobbyMemberState
-{
-    uint64 steam_id{};
-    uint32 account_id{};
-    uint32 team{};
-    uint32 slot{};
-    uint32 hero_id{};
-    bool connected{};
-    uint32 leaver_status{};  // 0=NONE, 1=DISCONNECTED, 5=ABANDONED, etc.
-};
-
-struct GBE_DotaCustomGameDetails
-{
-    std::string mode;
-    std::string map_name;
-    uint32 difficulty{};
-    uint64 game_id{};
-    uint32 min_players{};
-    uint32 max_players{};
-    uint64 crc{};
-    uint32 timestamp{};
-    bool penalties{};
-};
 
 class Steam_Game_Coordinator :
 public ISteamGameCoordinator
