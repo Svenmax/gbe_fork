@@ -7979,20 +7979,7 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
         previous_bot_difficulty_dire != GBE_local_lobby.bot_difficulty_dire ||
         previous_bot_radiant != GBE_local_lobby.bot_radiant ||
         previous_bot_dire != GBE_local_lobby.bot_dire;
-    std::vector<GBE_DotaLobbyMemberState> joined_members;
-    for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
-        if (member.steam_id == 0ull)
-            continue;
-        bool existed = false;
-        for (const GBE_DotaLobbyMemberState &previous_member : previous_members) {
-            if (previous_member.steam_id == member.steam_id) {
-                existed = true;
-                break;
-            }
-        }
-        if (!existed)
-            joined_members.push_back(member);
-    }
+    const std::vector<GBE_DotaLobbyMemberState> joined_members = gbe::dota_lobby_flow::find_joined_lobby_members(previous_members, GBE_local_lobby.members);
     if (!owner_changed && !runtime_changed && !settings_changed && gbe::dota_lobby_flow::lobby_members_equal(previous_members, GBE_local_lobby.members))
         return false;
 
@@ -8231,11 +8218,7 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
 
     if (GBE_local_lobby.has_chat_channel && GBE_local_lobby.chat_channel_id != 0) {
         GBE_LocalLobby chat_snapshot = lobby;
-        chat_snapshot.members.clear();
-        for (const GBE_DotaLobbyMemberState &member : lobby.members) {
-            if (member.steam_id != 0ull)
-                chat_snapshot.members.push_back(member);
-        }
+        chat_snapshot.members = gbe::dota_lobby_flow::filter_nonzero_lobby_members(lobby.members);
 
         std::string response_7010;
         if (GBE_AdaptDotaJoinChatChannelResponsePayload(

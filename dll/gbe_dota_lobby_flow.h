@@ -22,6 +22,13 @@ bool find_lobby_member_index(
     std::uint64_t steam_id,
     std::size_t &index);
 
+std::vector<GBE_DotaLobbyMemberState> find_joined_lobby_members(
+    const std::vector<GBE_DotaLobbyMemberState> &previous_members,
+    const std::vector<GBE_DotaLobbyMemberState> &current_members);
+
+std::vector<GBE_DotaLobbyMemberState> filter_nonzero_lobby_members(
+    const std::vector<GBE_DotaLobbyMemberState> &members);
+
 void preserve_lobby_owner_transfer_slots(
     std::vector<GBE_DotaLobbyMemberState> &members,
     const std::vector<GBE_DotaLobbyMemberState> &previous_members,

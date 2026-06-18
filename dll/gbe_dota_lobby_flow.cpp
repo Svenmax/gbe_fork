@@ -51,6 +51,34 @@ bool find_lobby_member_index(
     return false;
 }
 
+std::vector<GBE_DotaLobbyMemberState> find_joined_lobby_members(
+    const std::vector<GBE_DotaLobbyMemberState> &previous_members,
+    const std::vector<GBE_DotaLobbyMemberState> &current_members)
+{
+    std::vector<GBE_DotaLobbyMemberState> joined_members;
+    for (const GBE_DotaLobbyMemberState &member : current_members) {
+        if (member.steam_id == 0ull)
+            continue;
+        if (!lobby_members_contain_steam_id(previous_members, member.steam_id))
+            joined_members.push_back(member);
+    }
+
+    return joined_members;
+}
+
+std::vector<GBE_DotaLobbyMemberState> filter_nonzero_lobby_members(
+    const std::vector<GBE_DotaLobbyMemberState> &members)
+{
+    std::vector<GBE_DotaLobbyMemberState> result;
+    result.reserve(members.size());
+    for (const GBE_DotaLobbyMemberState &member : members) {
+        if (member.steam_id != 0ull)
+            result.push_back(member);
+    }
+
+    return result;
+}
+
 void preserve_lobby_owner_transfer_slots(
     std::vector<GBE_DotaLobbyMemberState> &members,
     const std::vector<GBE_DotaLobbyMemberState> &previous_members,

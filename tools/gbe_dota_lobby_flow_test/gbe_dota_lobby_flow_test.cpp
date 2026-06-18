@@ -58,6 +58,28 @@ bool test_member_find_and_equality()
     return ok;
 }
 
+bool test_member_diff_and_filter()
+{
+    bool ok = true;
+
+    std::vector<GBE_DotaLobbyMemberState> previous{member(10ull, 1u), member(20ull, 2u)};
+    std::vector<GBE_DotaLobbyMemberState> current{member(10ull, 1u), GBE_DotaLobbyMemberState{}, member(30ull, 3u), member(30ull, 4u)};
+    std::vector<GBE_DotaLobbyMemberState> joined = gbe::dota_lobby_flow::find_joined_lobby_members(previous, current);
+    ok &= expect_eq_u64(joined.size(), 2u, "joined keeps repeated new members");
+    ok &= expect_eq_u64(joined[0].steam_id, 30ull, "joined first steam id");
+    ok &= expect_eq_u64(joined[0].slot, 3u, "joined first slot");
+    ok &= expect_eq_u64(joined[1].steam_id, 30ull, "joined repeated steam id");
+    ok &= expect_eq_u64(joined[1].slot, 4u, "joined repeated slot");
+
+    std::vector<GBE_DotaLobbyMemberState> filtered = gbe::dota_lobby_flow::filter_nonzero_lobby_members(current);
+    ok &= expect_eq_u64(filtered.size(), 3u, "filter removes zero members");
+    ok &= expect_eq_u64(filtered[0].steam_id, 10ull, "filter keeps first member");
+    ok &= expect_eq_u64(filtered[1].steam_id, 30ull, "filter keeps second member");
+    ok &= expect_eq_u64(filtered[2].slot, 4u, "filter keeps repeated member order");
+
+    return ok;
+}
+
 bool test_upsert_and_slot_selection()
 {
     bool ok = true;
@@ -176,6 +198,7 @@ int main()
 {
     bool ok = true;
     ok &= test_member_find_and_equality();
+    ok &= test_member_diff_and_filter();
     ok &= test_upsert_and_slot_selection();
     ok &= test_compose_lobby_members();
     ok &= test_normalize_and_owner_transfer();
