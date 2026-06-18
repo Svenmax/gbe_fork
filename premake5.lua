@@ -1254,7 +1254,10 @@ project "tool_gbe_proto_wire_test"
     -- common source & header files
     ---------
     files {
+        "tools/gbe_proto_wire_test/README.md",
         "tools/gbe_proto_wire_test/gbe_proto_wire_test.cpp",
+        "dll/gbe_dota_gc_wire.cpp",
+        "dll/gbe_dota_gc_wire.h",
         "dll/gbe_proto_wire.cpp",
         "dll/gbe_proto_wire.h",
     }
