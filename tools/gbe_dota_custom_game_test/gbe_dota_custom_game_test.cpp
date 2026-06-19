@@ -2,6 +2,8 @@
 #include "dll/gbe_dota_custom_lobby_http.h"
 
 #include <iostream>
+#include <filesystem>
+#include <fstream>
 #include <json/json.hpp>
 #include <vector>
 
@@ -327,6 +329,45 @@ bool test_should_include_joinable_custom_lobby()
     return ok;
 }
 
+bool test_is_guide_only_workshop_mod()
+{
+    bool ok = true;
+
+    const std::filesystem::path guide_root = std::filesystem::temp_directory_path() / "gbe_guide_only_workshop_mod_test";
+    const std::filesystem::path guide_file = guide_root / "guidedata.bin";
+    const std::filesystem::path map_root = std::filesystem::temp_directory_path() / "gbe_map_workshop_mod_test";
+    const std::filesystem::path map_file = map_root / "maps" / "example.vmap";
+
+    std::filesystem::create_directories(guide_root);
+    std::filesystem::create_directories(map_file.parent_path());
+
+    {
+        std::ofstream output(guide_file, std::ios::binary);
+        output << "guidedata\n";
+        output << "Hero\tfurion\n";
+        output << "Title\tF228` Core (1-5 pos)\n";
+        output << "GuideRevision\t157\n";
+        output << "AssociatedWorkshopItemID\t0x000000000ACA8FFC\n";
+    }
+
+    {
+        std::ofstream output(map_file, std::ios::binary);
+        output << "placeholder";
+    }
+
+    ok &= expect_true(
+        gbe::dota_custom_game::is_guide_only_workshop_mod("", "Workshop 1187484766", "guide item", guide_root.u8string()),
+        "guide-only workshop mod detected");
+    ok &= expect_true(
+        !gbe::dota_custom_game::is_guide_only_workshop_mod("", "Guide to Custom Play", "custom game", map_root.u8string()),
+        "guide word in title does not force exclusion");
+    ok &= expect_true(
+        !gbe::dota_custom_game::is_guide_only_workshop_mod("", "Workshop 1187484766", "custom game", map_root.u8string()),
+        "map workshop mod remains visible");
+
+    return ok;
+}
+
 bool test_compose_joinable_custom_lobby_json_item()
 {
     bool ok = true;
@@ -411,6 +452,7 @@ int main()
     ok &= test_compose_joinable_custom_lobby_json_item();
     ok &= test_compose_custom_game_publish_data();
     ok &= test_should_include_joinable_custom_lobby();
+    ok &= test_is_guide_only_workshop_mod();
 
     if (!ok)
         return 1;

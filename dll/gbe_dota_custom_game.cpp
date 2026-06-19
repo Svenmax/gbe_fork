@@ -3,6 +3,8 @@
 #include "gbe_proto_wire.h"
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 
 #include <json/json.hpp>
 
@@ -78,6 +80,63 @@ std::uint64_t derive_practice_lobby_ip_server_id(std::uint32_t ip)
     return (universe_public << 56) |
         (account_type_anon_game_server << 52) |
         static_cast<std::uint64_t>(ip);
+}
+
+static bool contains_guide_keyword(const std::string &value)
+{
+    if (value.empty())
+        return false;
+
+    std::string lower = value;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return lower.find("guidedata") != std::string::npos ||
+        lower.find("associatedworkshopitemid") != std::string::npos ||
+        lower.find("guiderevision") != std::string::npos;
+}
+
+bool is_guide_only_workshop_mod(
+    const std::string &metadata_json,
+    const std::string &title,
+    const std::string &description,
+    const std::string &path)
+{
+    if (contains_guide_keyword(metadata_json) || contains_guide_keyword(title) || contains_guide_keyword(description))
+        return true;
+
+    if (path.empty())
+        return false;
+
+    try {
+        const std::filesystem::path root = std::filesystem::u8path(path);
+        if (!std::filesystem::exists(root) || !std::filesystem::is_directory(root))
+            return false;
+
+        for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+            if (!std::filesystem::is_regular_file(dir_entry))
+                continue;
+
+            const std::string filename = dir_entry.path().filename().u8string();
+            if (contains_guide_keyword(filename))
+                return true;
+
+            const std::string extension = dir_entry.path().extension().u8string();
+            if (extension != ".bin" && extension != ".txt" && extension != ".gi" && extension != ".json")
+                continue;
+
+            std::ifstream input(dir_entry.path());
+            if (!input.is_open())
+                continue;
+
+            std::string line;
+            for (int line_count = 0; line_count < 64 && std::getline(input, line); ++line_count) {
+                if (contains_guide_keyword(line))
+                    return true;
+            }
+        }
+    } catch (...) {
+    }
+
+    return false;
 }
 
 GBE_DotaCustomGameDetails compose_snapshot_custom_game_details(

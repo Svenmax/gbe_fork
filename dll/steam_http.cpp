@@ -22,6 +22,7 @@
 #include <cctype>
 #include <cstdio>
 
+#include "dll/gbe_dota_custom_game.h"
 #include "steam/isteamnetworkingsocketsserialized.h"
 
 namespace {
@@ -201,7 +202,7 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
         for (PublishedFileId_t mod_id : settings->modSet()) {
             Mod_entry mod = settings->getMod(mod_id);
             const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", "");
-            if (map_name.empty() || !GBE_DotaHasWorkshopMapResource(mod))
+            if (map_name.empty() || !GBE_DotaHasWorkshopMapResource(mod) || gbe::dota_custom_game::is_guide_only_workshop_mod(mod.metadata, mod.title, mod.description, mod.path))
                 continue;
 
             const std::string addon_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);

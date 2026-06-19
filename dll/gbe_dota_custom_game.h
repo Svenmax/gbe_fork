@@ -31,6 +31,12 @@ std::string format_practice_lobby_connect_for_custom_game(
 
 std::uint64_t derive_practice_lobby_ip_server_id(std::uint32_t ip);
 
+bool is_guide_only_workshop_mod(
+    const std::string &metadata_json,
+    const std::string &title,
+    const std::string &description,
+    const std::string &path);
+
 GBE_DotaCustomGameDetails compose_snapshot_custom_game_details(
     const char *mode,
     const char *map_name,

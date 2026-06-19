@@ -17,6 +17,7 @@
 
 #include "dll/steam_ugc.h"
 #include "dll/dll.h"
+#include "dll/gbe_dota_custom_game.h"
 
 #include <cctype>
 #include <fstream>
@@ -553,7 +554,7 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
                 ? detected_name
                 : GBE_DotaWorkshopFallbackDisplayName(workshop_folder);
             const std::string map_name = GBE_DotaWorkshopModMapName(mod_path, "");
-            if (map_name.empty()) {
+            if (map_name.empty() || gbe::dota_custom_game::is_guide_only_workshop_mod({}, display_name, detected_name, mod_path)) {
                 PRINT_DEBUG("[DOTA_UGC] skipping workshop folder '%s' invalid map='%s' path='%s'", workshop_folder.c_str(), map_name.c_str(), mod_path.c_str());
                 continue;
             }
