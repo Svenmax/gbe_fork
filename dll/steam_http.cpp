@@ -99,6 +99,26 @@ bool GBE_DotaIsReadableCustomGameName(const std::string &value)
         && value != "thumbnail";
 }
 
+bool GBE_DotaHasWorkshopMapResource(const Mod_entry &mod)
+{
+    if (mod.path.empty()) return false;
+
+    try {
+        const std::filesystem::path root = std::filesystem::u8path(mod.path);
+        if (!common_helpers::dir_exist(root)) return false;
+
+        for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+            if (!std::filesystem::is_regular_file(dir_entry)) continue;
+
+            const std::string extension = common_helpers::to_lower(dir_entry.path().extension().u8string());
+            if (extension == ".vmap" || extension == ".vmap_c" || extension == ".bsp" || extension == ".vpk")
+                return true;
+        }
+    } catch (...) { }
+
+    return false;
+}
+
 std::string GBE_DotaFileStem(const std::string &filename)
 {
     size_t begin = filename.find_last_of("/\\");
@@ -180,11 +200,12 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
     if (settings) {
         for (PublishedFileId_t mod_id : settings->modSet()) {
             Mod_entry mod = settings->getMod(mod_id);
+            const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", "");
+            if (map_name.empty() || !GBE_DotaHasWorkshopMapResource(mod))
+                continue;
+
             const std::string addon_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);
             const std::string display_name = GBE_DotaModReadableName(mod);
-            const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", "");
-            if (map_name.empty())
-                continue;
 
             const std::string mode_name = GBE_DotaIsReadableCustomGameName(addon_name) ? addon_name : display_name;
             if (GBE_IsDotaPopularGamesHTTPURL(url)) {

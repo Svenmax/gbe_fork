@@ -554,7 +554,7 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
                 : GBE_DotaWorkshopFallbackDisplayName(workshop_folder);
             const std::string map_name = GBE_DotaWorkshopModMapName(mod_path, "");
             if (map_name.empty()) {
-                PRINT_DEBUG("[DOTA_UGC] skipping workshop folder '%s' without map path='%s'", workshop_folder.c_str(), mod_path.c_str());
+                PRINT_DEBUG("[DOTA_UGC] skipping workshop folder '%s' invalid map='%s' path='%s'", workshop_folder.c_str(), map_name.c_str(), mod_path.c_str());
                 continue;
             }
             Mod_entry mod{};
