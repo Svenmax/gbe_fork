@@ -22,7 +22,7 @@
 #include <cctype>
 #include <cstdio>
 
-#include "dll/gbe_dota_custom_game.h"
+#include "gbe_dota_custom_game.h"
 #include "steam/isteamnetworkingsocketsserialized.h"
 
 namespace {
