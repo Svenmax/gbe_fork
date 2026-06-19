@@ -182,8 +182,11 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
             Mod_entry mod = settings->getMod(mod_id);
             const std::string addon_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);
             const std::string display_name = GBE_DotaModReadableName(mod);
+            const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", "");
+            if (map_name.empty())
+                continue;
+
             const std::string mode_name = GBE_DotaIsReadableCustomGameName(addon_name) ? addon_name : display_name;
-            const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", addon_name);
             if (GBE_IsDotaPopularGamesHTTPURL(url)) {
                 custom_games.push_back({
                     {"id", std::to_string(mod.id)},
