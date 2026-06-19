@@ -1299,6 +1299,10 @@ project "tool_gbe_dota_lobby_flow_test"
         "tools/gbe_dota_lobby_flow_test/gbe_dota_lobby_flow_test.cpp",
         "dll/gbe_dota_lobby_flow.cpp",
         "dll/gbe_dota_lobby_flow.h",
+        "dll/gbe_dota_lobby_publish.cpp",
+        "dll/gbe_dota_lobby_publish.h",
+        "dll/gbe_dota_lobby_snapshot.cpp",
+        "dll/gbe_dota_lobby_snapshot.h",
         "dll/gbe_dota_types.h",
     }
 -- End tool_gbe_dota_lobby_flow_test

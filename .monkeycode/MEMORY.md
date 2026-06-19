@@ -11,6 +11,8 @@
 - Instructions:
   - `gbe_proto_wire_test` 可用下面的命令独立编译并运行：`g++ -std=c++17 -I. -Idll tools/gbe_proto_wire_test/gbe_proto_wire_test.cpp dll/gbe_proto_wire.cpp dll/gbe_dota_gc_wire.cpp -o /tmp/opencode/gbe_proto_wire_test && /tmp/opencode/gbe_proto_wire_test`
   - `gc_message_utils_test` 可用下面的命令独立编译并运行：`g++ -std=c++17 -I. -Idll tools/gc_message_utils_test/gc_message_utils_test.cpp dll/gbe_gc_message_utils.cpp dll/gbe_proto_wire.cpp -o /tmp/opencode/gc_message_utils_test && /tmp/opencode/gc_message_utils_test`
+  - `gbe_dota_custom_game_test` 可用下面的命令独立编译并运行：`g++ -std=c++17 -I. -Idll -Ilibs tools/gbe_dota_custom_game_test/gbe_dota_custom_game_test.cpp dll/gbe_dota_custom_game.cpp dll/gbe_proto_wire.cpp -o /tmp/opencode/gbe_dota_custom_game_test && /tmp/opencode/gbe_dota_custom_game_test`
+  - `gbe_dota_lobby_flow_test` 可用下面的命令独立编译并运行：`g++ -std=c++17 -I. -Idll tools/gbe_dota_lobby_flow_test/gbe_dota_lobby_flow_test.cpp dll/gbe_dota_lobby_flow.cpp dll/gbe_dota_lobby_publish.cpp dll/gbe_dota_lobby_snapshot.cpp -o /tmp/opencode/gbe_dota_lobby_flow_test && /tmp/opencode/gbe_dota_lobby_flow_test`
   - `dll/steam_game_coordinator.cpp` 的直接语法检查会受工作区缺失生成头和第三方 include 影响，当前环境里可见的缺口包括 `json/json.hpp` 与生成的 protobuf 头。
 
 [gbe_fork GC 重构执行规则]
@@ -41,3 +43,18 @@
   - 不要把所有 Dota 逻辑集中到一个新的大 cpp，避免形成新的 `steam_game_coordinator.cpp`。
   - 不要一开始拆太多 Dota 文件；等 `gbe_dota_lobby_flow.cpp` 变大后，再按业务增长拆出 `lobby_state`、`practice_lobby_flow`、`launch_flow`、`chat_flow`。
   - 归档规则：通用 protobuf 字节工具放 `gbe_proto_wire`；Dota 纯字节模板重写放 `gbe_dota_gc_wire`；自定义游戏、workshop mod、display name 和 metadata 放 `gbe_dota_custom_game`；lobby 创建、加入、踢人、换位置和 details 更新放 `gbe_dota_lobby_flow`；发消息、队列、Steam client、rich presence 和顶层分发留在 `steam_game_coordinator`。
+
+[gbe_fork 提交流程限制]
+- Date: 2026-06-18
+- Context: 用户要求继续重构时调整后续协作方式
+- Category: 工作流协作
+- Instructions:
+  - 后续继续开发和验证时先保留本地未提交状态，只有用户明确要求时再执行 git commit 或 git push。
+
+[gbe_fork 重构拆分粒度]
+- Date: 2026-06-18
+- Context: 用户纠正后续 GC/Dota lobby 重构推进方式
+- Category: 工作流协作
+- Instructions:
+  - 后续重构按业务块推进和说明，例如 member state update、owner adoption、generic lobby snapshot、chat channel sync 等块。
+  - 避免只按零散 helper 连续抽离；每次选择一个清晰业务块，完成该块内必要的纯逻辑迁移、测试和回归。

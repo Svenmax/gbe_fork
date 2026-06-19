@@ -23,6 +23,11 @@
 #include "gbe_dota_types.h"
 #include "gbe_dota_reconnect_shared.h"
 
+namespace gbe::proto_wire {
+struct Dota7034DisconnectedPlayer;
+struct Dota7034RequestShape;
+}
+
 class Steam_User_Items;
 class Steam_GameServer_Items;
 struct GCMsgHdr_t;
@@ -232,6 +237,16 @@ public ISteamGameCoordinator
     void GBE_PushDotaLaunchStateToClientPeer(const char *reason);
     bool GBE_TryQueueDotaPrelaunch021(const char *note, uint32 trigger_emsg, uint64 source_job);
     bool GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state, double delay = 0.0);
+    void GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(uint64 owner_steam_id, uint64 source_job);
+    void GBE_HandleDotaDirect7034DisconnectedPlayers(const std::vector<gbe::proto_wire::Dota7034DisconnectedPlayer> &disconnected_players, uint64 source_job);
+    void GBE_HandleDotaDirect7034RuntimeUpdates(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RequestShape &request_shape, bool custom_game_launch, uint64 source_job, bool &queued_runtime_lobby_update);
+    bool GBE_HandleDotaDirect7034Response(uint32 request_emsg, const gbe::proto_wire::Dota7034RequestShape &request_shape, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    void GBE_HandleDotaDirect7034WaitForPlayers(uint32 request_emsg, const uint8 *body, size_t body_size, bool custom_game_launch, bool request_advances_to_hero_selection, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034StrategyTime(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RequestShape &request_shape, bool custom_game_launch, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034StrategyTimeFallback(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RequestShape &request_shape, bool custom_game_launch, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034StrategyTimePreserve(uint32 request_emsg, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034LaunchPoll(uint32 request_emsg, uint64 source_job, bool &queued_runtime_lobby_update);
+    bool GBE_HandleDotaDirect7034Request(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HasDotaLaunchServerSetupSync() const;
     void GBE_MarkDotaLaunchPhase(uint32 phase, const char *reason);
     bool GBE_MaybeQueueDotaPracticeLobbySteamAuthAck(const char *reason, uint64 request_job_id);

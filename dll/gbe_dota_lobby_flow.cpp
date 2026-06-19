@@ -1,8 +1,33 @@
 #include "gbe_dota_lobby_flow.h"
 
 #include <algorithm>
+#include <climits>
+#include <cstdlib>
 
 namespace gbe::dota_lobby_flow {
+
+namespace {
+
+std::uint32_t member_account_id_or_steam_account_id(
+    const GBE_DotaLobbyMemberState &member)
+{
+    return member.account_id != 0u ? member.account_id : static_cast<std::uint32_t>(member.steam_id & 0xffffffffu);
+}
+
+std::uint32_t parse_uint32_or_zero(
+    const std::string &text)
+{
+    if (text.empty())
+        return 0u;
+
+    char *end = nullptr;
+    const unsigned long long value = std::strtoull(text.c_str(), &end, 10);
+    if (!end || *end != '\0' || value > UINT32_MAX)
+        return 0u;
+    return static_cast<std::uint32_t>(value);
+}
+
+} // namespace
 
 bool lobby_members_equal(
     const std::vector<GBE_DotaLobbyMemberState> &left,
@@ -33,6 +58,34 @@ bool lobby_members_contain_steam_id(
     return find_lobby_member_index(members, steam_id, index);
 }
 
+void count_remote_lobby_members(
+    const std::vector<GBE_DotaLobbyMemberState> &members,
+    std::uint64_t owner_steam_id,
+    std::uint32_t &remote_count,
+    std::uint32_t &connected_remote_count)
+{
+    remote_count = 0u;
+    connected_remote_count = 0u;
+
+    for (const GBE_DotaLobbyMemberState &member : members) {
+        if (member.steam_id == 0ull || member.steam_id == owner_steam_id)
+            continue;
+        ++remote_count;
+        if (member.connected)
+            ++connected_remote_count;
+    }
+}
+
+bool should_hold_lan_launch_for_remote_members(
+    const std::vector<GBE_DotaLobbyMemberState> &members,
+    std::uint64_t owner_steam_id,
+    std::uint32_t &remote_count,
+    std::uint32_t &connected_remote_count)
+{
+    count_remote_lobby_members(members, owner_steam_id, remote_count, connected_remote_count);
+    return remote_count != 0u && connected_remote_count < remote_count;
+}
+
 bool find_lobby_member_index(
     const std::vector<GBE_DotaLobbyMemberState> &members,
     std::uint64_t steam_id,
@@ -44,6 +97,40 @@ bool find_lobby_member_index(
     for (std::size_t i = 0; i < members.size(); ++i) {
         if (members[i].steam_id == steam_id) {
             index = i;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+std::uint64_t find_lobby_member_steam_id_by_account_id(
+    const std::vector<GBE_DotaLobbyMemberState> &members,
+    std::uint32_t account_id)
+{
+    if (account_id == 0u)
+        return 0ull;
+
+    for (const GBE_DotaLobbyMemberState &member : members) {
+        const std::uint32_t member_account_id = member_account_id_or_steam_account_id(member);
+        if (member.steam_id != 0ull && member_account_id == account_id)
+            return member.steam_id;
+    }
+
+    return 0ull;
+}
+
+bool clear_lobby_member_by_account_id(
+    std::vector<GBE_DotaLobbyMemberState> &members,
+    std::uint32_t account_id)
+{
+    if (account_id == 0u)
+        return false;
+
+    for (GBE_DotaLobbyMemberState &member : members) {
+        const std::uint32_t member_account_id = member_account_id_or_steam_account_id(member);
+        if (member.steam_id != 0ull && member_account_id == account_id) {
+            member = GBE_DotaLobbyMemberState{};
             return true;
         }
     }
@@ -77,6 +164,109 @@ std::vector<GBE_DotaLobbyMemberState> filter_nonzero_lobby_members(
     }
 
     return result;
+}
+
+std::string resolve_chat_member_display_name(
+    std::uint64_t member_steam_id,
+    std::uint64_t local_steam_id,
+    const std::string &local_name,
+    std::uint64_t owner_steam_id,
+    const std::string &owner_name,
+    const std::string &generic_member_name,
+    const std::string &friend_name,
+    const std::string &fallback_name)
+{
+    if (member_steam_id == local_steam_id)
+        return local_name;
+    if (member_steam_id == owner_steam_id && !owner_name.empty())
+        return owner_name;
+    if (!generic_member_name.empty())
+        return generic_member_name;
+    if (!friend_name.empty() && friend_name != "Unknown User")
+        return friend_name;
+    if (!fallback_name.empty())
+        return fallback_name;
+    return std::to_string(member_steam_id);
+}
+
+std::vector<GBE_DotaChatMemberState> compose_join_chat_channel_members(
+    std::uint64_t local_steam_id,
+    const std::string &local_name,
+    const std::vector<GBE_DotaLobbyMemberState> &channel_members,
+    std::uint64_t owner_steam_id,
+    const std::string &owner_name,
+    const std::vector<GBE_DotaChatMemberState> &resolved_remote_names)
+{
+    auto find_resolved_name = [&resolved_remote_names](std::uint64_t steam_id) -> std::string {
+        for (const GBE_DotaChatMemberState &resolved : resolved_remote_names) {
+            if (resolved.steam_id == steam_id)
+                return resolved.name;
+        }
+        return std::string();
+    };
+
+    std::vector<GBE_DotaChatMemberState> chat_members;
+    for (const GBE_DotaLobbyMemberState &channel_member : channel_members) {
+        if (channel_member.steam_id == local_steam_id) {
+            chat_members.push_back({ channel_member.steam_id, local_name });
+            break;
+        }
+    }
+    chat_members.push_back({ local_steam_id, local_name });
+
+    for (const GBE_DotaLobbyMemberState &channel_member : channel_members) {
+        if (channel_member.steam_id == local_steam_id)
+            continue;
+        chat_members.push_back({
+            channel_member.steam_id,
+            resolve_chat_member_display_name(
+                channel_member.steam_id,
+                local_steam_id,
+                local_name,
+                owner_steam_id,
+                owner_name,
+                find_resolved_name(channel_member.steam_id),
+                std::string(),
+                std::string()) });
+    }
+
+    return chat_members;
+}
+
+bool should_use_current_practice_lobby_payload_for_details_update(
+    std::uint64_t match_id,
+    bool lan,
+    std::size_t member_count,
+    std::uint64_t custom_game_id)
+{
+    if (custom_game_id != 0ull)
+        return true;
+
+    const bool launched_lan_with_remote_members = match_id != 0ull && lan && member_count > 1u;
+    return (match_id == 0ull || launched_lan_with_remote_members) && member_count > 1u;
+}
+
+bool should_use_current_practice_lobby_payload_for_cache_subscribed(
+    bool launch_started,
+    bool lan,
+    std::size_t member_count)
+{
+    const bool launched_lan_with_remote_members = launch_started && lan && member_count > 1u;
+    return (!launch_started || launched_lan_with_remote_members) && member_count > 1u;
+}
+
+GBE_DotaAuthoritativeLobbyPayloadData compose_authoritative_lobby_payload_data(
+    bool preserve_server_id,
+    bool launch_started,
+    std::uint64_t current_server_id,
+    std::uint64_t server_candidate_id,
+    const std::string &formatted_connect)
+{
+    GBE_DotaAuthoritativeLobbyPayloadData data{};
+    data.connect = formatted_connect;
+    if (preserve_server_id && launch_started)
+        data.server_id = current_server_id != 0ull ? current_server_id : server_candidate_id;
+    return data;
 }
 
 void preserve_lobby_owner_transfer_slots(
@@ -152,6 +342,214 @@ void upsert_lobby_member(
     }
 
     members.push_back(member);
+}
+
+void apply_lobby_member_team_slot_update(
+    std::vector<GBE_DotaLobbyMemberState> &members,
+    std::uint64_t steam_id,
+    std::uint32_t account_id,
+    bool has_team,
+    std::uint32_t team,
+    bool has_slot,
+    std::uint32_t slot,
+    std::uint32_t default_team,
+    bool connected)
+{
+    if (steam_id == 0ull)
+        return;
+
+    for (GBE_DotaLobbyMemberState &member : members) {
+        if (member.steam_id != steam_id)
+            continue;
+        if (has_team)
+            member.team = team;
+        if (has_slot)
+            member.slot = slot;
+        return;
+    }
+
+    GBE_DotaLobbyMemberState member{};
+    member.steam_id = steam_id;
+    member.account_id = account_id;
+    member.team = has_team ? team : default_team;
+    member.slot = has_slot ? slot : 0u;
+    member.connected = connected;
+    upsert_lobby_member(members, member);
+}
+
+bool set_lobby_member_connected(
+    std::vector<GBE_DotaLobbyMemberState> &members,
+    std::uint64_t steam_id,
+    std::uint32_t account_id,
+    bool connected,
+    bool has_custom_game,
+    bool should_mark_leaver,
+    std::uint64_t owner_steam_id,
+    std::uint32_t owner_slot,
+    std::uint32_t good_guys_team,
+    std::uint32_t player_pool_team)
+{
+    if (steam_id == 0ull)
+        return false;
+
+    bool changed = false;
+    for (GBE_DotaLobbyMemberState &member : members) {
+        if (member.steam_id != steam_id)
+            continue;
+        if (member.connected != connected) {
+            member.connected = connected;
+            changed = true;
+        }
+        if (connected && has_custom_game)
+            changed = normalize_arcade_lobby_member_slot(member, members, owner_steam_id, owner_slot, good_guys_team, player_pool_team) || changed;
+        if (!connected && has_custom_game && should_mark_leaver && member.leaver_status == 0u) {
+            member.leaver_status = 1u;
+            changed = true;
+        }
+        if (connected && member.leaver_status != 0u) {
+            member.leaver_status = 0u;
+            changed = true;
+        }
+        return changed;
+    }
+
+    if (connected && steam_id != owner_steam_id) {
+        GBE_DotaLobbyMemberState member{};
+        member.steam_id = steam_id;
+        member.account_id = account_id;
+        member.team = player_pool_team;
+        if (has_custom_game)
+            normalize_arcade_lobby_member_slot(member, members, owner_steam_id, owner_slot, good_guys_team, player_pool_team);
+        member.connected = true;
+        upsert_lobby_member(members, member);
+        return true;
+    }
+
+    return changed;
+}
+
+bool set_lobby_member_hero(
+    std::vector<GBE_DotaLobbyMemberState> &members,
+    std::uint64_t steam_id,
+    std::uint32_t hero_id)
+{
+    if (steam_id == 0ull || hero_id == 0u)
+        return false;
+
+    for (GBE_DotaLobbyMemberState &member : members) {
+        if (member.steam_id != steam_id)
+            continue;
+        if (member.hero_id == hero_id)
+            return false;
+        member.hero_id = hero_id;
+        return true;
+    }
+
+    return false;
+}
+
+void preserve_generic_snapshot_member_runtime(
+    GBE_DotaLobbyMemberState &member,
+    const std::vector<GBE_DotaLobbyMemberState> &existing_members,
+    bool preserve_launched_lan_members,
+    bool preserve_custom_game_runtime_members)
+{
+    if (preserve_launched_lan_members && !preserve_custom_game_runtime_members && !member.connected) {
+        for (const GBE_DotaLobbyMemberState &existing : existing_members) {
+            if (existing.steam_id == member.steam_id && existing.connected) {
+                member.connected = true;
+                break;
+            }
+        }
+    }
+    if (preserve_custom_game_runtime_members && !member.connected)
+        member.leaver_status = 1u;
+}
+
+void merge_existing_lobby_members_for_generic_snapshot(
+    std::vector<GBE_DotaLobbyMemberState> &members,
+    const std::vector<GBE_DotaLobbyMemberState> &existing_members,
+    bool generic_members_empty,
+    std::uint64_t local_steam_id,
+    std::uint64_t owner_steam_id,
+    bool preserve_launched_lan_members,
+    bool preserve_custom_game_runtime_members)
+{
+    for (const GBE_DotaLobbyMemberState &existing : existing_members) {
+        const bool missing_from_generic =
+            existing.steam_id != 0ull &&
+            !lobby_members_contain_steam_id(members, existing.steam_id);
+        if (generic_members_empty || existing.steam_id == local_steam_id || (preserve_launched_lan_members && missing_from_generic)) {
+            GBE_DotaLobbyMemberState preserved = existing;
+            if (preserve_launched_lan_members && missing_from_generic && preserved.steam_id != owner_steam_id) {
+                preserved.connected = false;
+                if (preserve_custom_game_runtime_members && preserved.leaver_status == 0u)
+                    preserved.leaver_status = 1u;
+            }
+            upsert_lobby_member(members, preserved);
+        }
+    }
+}
+
+void upsert_owner_member_for_generic_snapshot(
+    std::vector<GBE_DotaLobbyMemberState> &members,
+    bool owner_in_generic_members,
+    bool generic_members_empty,
+    std::uint64_t owner_steam_id,
+    std::uint32_t owner_account_id,
+    std::uint32_t owner_team,
+    std::uint32_t owner_slot,
+    std::uint32_t owner_hero_id,
+    bool owner_connected)
+{
+    if (!owner_in_generic_members && !generic_members_empty)
+        return;
+
+    GBE_DotaLobbyMemberState owner{};
+    owner.steam_id = owner_steam_id;
+    owner.account_id = owner_account_id;
+    owner.team = owner_team;
+    owner.slot = owner_slot;
+    owner.hero_id = owner_hero_id;
+    owner.connected = owner_connected;
+    upsert_lobby_member(members, owner);
+}
+
+GBE_DotaLobbyMemberState adopt_lobby_owner_member(
+    std::vector<GBE_DotaLobbyMemberState> &members,
+    std::uint64_t new_owner_steam_id,
+    std::uint32_t default_owner_account_id,
+    std::uint32_t default_owner_team,
+    bool default_owner_connected,
+    std::uint64_t &owner_steam_id,
+    std::uint32_t &owner_account_id,
+    std::uint32_t &owner_team,
+    std::uint32_t &owner_slot,
+    std::uint32_t &owner_hero_id,
+    bool &owner_connected)
+{
+    GBE_DotaLobbyMemberState new_owner{};
+    new_owner.steam_id = new_owner_steam_id;
+    new_owner.account_id = default_owner_account_id;
+    new_owner.team = default_owner_team;
+    new_owner.slot = 0u;
+    new_owner.connected = default_owner_connected;
+
+    for (const GBE_DotaLobbyMemberState &member : members) {
+        if (member.steam_id != new_owner_steam_id)
+            continue;
+        new_owner = member;
+        break;
+    }
+
+    owner_steam_id = new_owner_steam_id;
+    owner_account_id = new_owner.account_id;
+    owner_team = new_owner.team;
+    owner_slot = new_owner.slot;
+    owner_hero_id = new_owner.hero_id;
+    owner_connected = new_owner.connected;
+    upsert_lobby_member(members, new_owner);
+    return new_owner;
 }
 
 std::vector<GBE_DotaLobbyMemberState> compose_lobby_members(
