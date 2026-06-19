@@ -203,6 +203,21 @@ static std::string GBE_DotaWorkshopModMapName(const std::string &mod_path, const
     return fallback;
 }
 
+static bool GBE_DotaWorkshopFolderHasVpk(const std::string &mod_path)
+{
+    try {
+        const std::filesystem::path root = std::filesystem::u8path(mod_path);
+        if (!common_helpers::dir_exist(root)) return false;
+
+        for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+            if (!std::filesystem::is_regular_file(dir_entry)) continue;
+            if (common_helpers::to_lower(dir_entry.path().extension().u8string()) == ".vpk") return true;
+        }
+    } catch (...) { }
+
+    return false;
+}
+
 static bool GBE_DotaIsNumericString(const std::string &value)
 {
     return !value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; });
@@ -548,6 +563,11 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
             if (!GBE_DotaParseWorkshopId(workshop_folder, workshop_id)) continue;
 
             const std::string mod_path = candidate_root + PATH_SEPARATOR + workshop_folder;
+            if (!GBE_DotaWorkshopFolderHasVpk(mod_path)) {
+                PRINT_DEBUG("[DOTA_UGC] skipping workshop folder '%s' without vpk path='%s'", workshop_folder.c_str(), mod_path.c_str());
+                continue;
+            }
+
             const std::string detected_name = GBE_DotaWorkshopDisplayName(mod_path, workshop_folder);
             const std::string display_name = GBE_DotaIsReadableAddonName(detected_name)
                 ? detected_name

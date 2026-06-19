@@ -7412,6 +7412,7 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
             if (generic_lobby_id.IsLobby()) {
                 const std::string generic_lobby_state_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyStateKey);
                 const std::string generic_lobby_game_state_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStateKey);
+                const std::string generic_room_name = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyRoomNameKey);
                 const std::string generic_match_id_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey);
                 const std::string generic_server_id_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey);
                 const std::string generic_connect = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyConnectKey);
@@ -7465,6 +7466,8 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                     if (!stale_launch_game_regression)
                         GBE_local_lobby.game_state = generic_lobby_game_state;
                 }
+                if (!generic_room_name.empty())
+                    GBE_local_lobby.room_name = generic_room_name;
                 const uint64 generic_match_id = gbe::proto_wire::parse_uint64_or_zero(generic_match_id_raw.c_str());
                 if (!generic_match_id_raw.empty() && (generic_match_id != 0ull || GBE_local_lobby.match_id == 0ull))
                     GBE_local_lobby.match_id = generic_match_id;
