@@ -125,6 +125,8 @@
     - 优先迁移与 Dota wire、lobby state、HTTP JSON、路由表相关的 static helper。
     - 保持 TF2 item GC 逻辑位置稳定，降低无关回归面。
     - 已完成前置分组：GC router、lobby state、custom lobby HTTP、GC config 均已有独立模块入口。
+    - 已迁移 custom game practice lobby connect 规范化 helper 到 `gbe_dota_custom_game`，并补充普通 lobby、custom lobby、空指针路径测试。
+    - 已迁移 custom game practice lobby IP server_id 派生 helper 到 `gbe_dota_custom_game`，并补充 zero IP 与 loopback IP 的 SteamID 位布局测试。
   - [x] 11.3 建立文件职责注释
     - 在新模块头文件顶部用短注释说明职责边界。
     - 注释只描述模块边界和输入输出，避免复制实现细节。

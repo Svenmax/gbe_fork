@@ -59,6 +59,27 @@ std::string custom_game_display_name_from_details(
     return fallback.empty() ? std::string("Lobby") : fallback;
 }
 
+std::string format_practice_lobby_connect_for_custom_game(
+    const std::string &connect,
+    const GBE_DotaCustomGameDetails *custom_game)
+{
+    if (custom_game && has_custom_game_details(*custom_game))
+        return proto_wire::normalize_dota_practice_lobby_connect_pair(connect);
+    return proto_wire::normalize_dota_practice_lobby_connect(connect);
+}
+
+std::uint64_t derive_practice_lobby_ip_server_id(std::uint32_t ip)
+{
+    if (ip == 0u)
+        return 0ull;
+
+    constexpr std::uint64_t universe_public = 1ull;
+    constexpr std::uint64_t account_type_anon_game_server = 4ull;
+    return (universe_public << 56) |
+        (account_type_anon_game_server << 52) |
+        static_cast<std::uint64_t>(ip);
+}
+
 GBE_DotaCustomGameDetails compose_snapshot_custom_game_details(
     const char *mode,
     const char *map_name,

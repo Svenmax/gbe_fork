@@ -25,6 +25,12 @@ std::string custom_game_display_name_from_details(
     const GBE_DotaCustomGameDetails &custom_game,
     const std::string &fallback);
 
+std::string format_practice_lobby_connect_for_custom_game(
+    const std::string &connect,
+    const GBE_DotaCustomGameDetails *custom_game);
+
+std::uint64_t derive_practice_lobby_ip_server_id(std::uint32_t ip);
+
 GBE_DotaCustomGameDetails compose_snapshot_custom_game_details(
     const char *mode,
     const char *map_name,

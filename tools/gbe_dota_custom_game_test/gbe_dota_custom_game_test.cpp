@@ -158,6 +158,49 @@ bool test_compose_snapshot_custom_game_details()
     return ok;
 }
 
+bool test_format_practice_lobby_connect_for_custom_game()
+{
+    bool ok = true;
+
+    const std::string connect = "117.157.79.194:27015 10.110.4.21:27015";
+    GBE_DotaCustomGameDetails empty{};
+    ok &= expect_eq_string(
+        gbe::dota_custom_game::format_practice_lobby_connect_for_custom_game(connect, &empty),
+        "117.157.79.194:27015",
+        "regular lobby connect uses first endpoint");
+
+    GBE_DotaCustomGameDetails custom_game{};
+    custom_game.mode = "addon_mode";
+    ok &= expect_eq_string(
+        gbe::dota_custom_game::format_practice_lobby_connect_for_custom_game(connect, &custom_game),
+        "117.157.79.194:27015 10.110.4.21:27015",
+        "custom lobby connect keeps endpoint pair");
+
+    ok &= expect_eq_string(
+        gbe::dota_custom_game::format_practice_lobby_connect_for_custom_game(connect, nullptr),
+        "117.157.79.194:27015",
+        "null custom game connect uses first endpoint");
+
+    return ok;
+}
+
+bool test_derive_practice_lobby_ip_server_id()
+{
+    bool ok = true;
+
+    ok &= expect_eq_u64(
+        gbe::dota_custom_game::derive_practice_lobby_ip_server_id(0u),
+        0ull,
+        "zero ip server id");
+
+    ok &= expect_eq_u64(
+        gbe::dota_custom_game::derive_practice_lobby_ip_server_id(0x7f000001u),
+        0x014000007f000001ull,
+        "loopback anon game server id");
+
+    return ok;
+}
+
 bool test_compose_joinable_custom_lobby_item_data()
 {
     bool ok = true;
@@ -362,6 +405,8 @@ int main()
     ok &= test_custom_game_details_equal();
     ok &= test_mod_metadata_value_for_gc();
     ok &= test_compose_snapshot_custom_game_details();
+    ok &= test_format_practice_lobby_connect_for_custom_game();
+    ok &= test_derive_practice_lobby_ip_server_id();
     ok &= test_compose_joinable_custom_lobby_item_data();
     ok &= test_compose_joinable_custom_lobby_json_item();
     ok &= test_compose_custom_game_publish_data();
