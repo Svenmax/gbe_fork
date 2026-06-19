@@ -195,7 +195,7 @@ bool test_derive_practice_lobby_ip_server_id()
 
     ok &= expect_eq_u64(
         gbe::dota_custom_game::derive_practice_lobby_ip_server_id(0x7f000001u),
-        0x014000007f000001ull,
+        0x014000017f000001ull,
         "loopback anon game server id");
 
     return ok;

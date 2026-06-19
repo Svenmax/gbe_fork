@@ -8915,7 +8915,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 }
             }
 
-            gbe::dota_lobby_state::adopt_shared_lobby_to_local(GBE_shared_dota_lobby_state, false, GBE_local_lobby);
+            gbe::dota_lobby_state::adopt_shared_lobby_to_local(GBE_shared_dota_lobby_state, false, true, GBE_local_lobby);
 
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
@@ -9156,7 +9156,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         return;
     }
 
-    gbe::dota_lobby_state::adopt_shared_lobby_to_local(GBE_shared_dota_lobby_state, true, GBE_local_lobby);
+    gbe::dota_lobby_state::adopt_shared_lobby_to_local(GBE_shared_dota_lobby_state, true, false, GBE_local_lobby);
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
@@ -13193,11 +13193,37 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
         }
     }
 
+    gbe::dota_gc_router::DotaGcOutboundMessage outbound_24{};
+    gbe::dota_gc_router::DotaGcOutboundMessage outbound_7113{};
+    if (!gbe::dota_gc_router::build_outbound_message(
+            GBE_kDotaCacheSubscribed,
+            response_24,
+            wrapped,
+            outer_session_field_raw,
+            settings->get_local_steam_id().ConvertToUint64(),
+            GBE_kEMsgClientFromGC,
+            GBE_kDotaAppId,
+            outbound_24) ||
+        (send_join_response && !gbe::dota_gc_router::build_outbound_message(
+            GBE_kDotaPracticeLobbyJoinResponse,
+            response_7113,
+            wrapped,
+            outer_session_field_raw,
+            settings->get_local_steam_id().ConvertToUint64(),
+            GBE_kEMsgClientFromGC,
+            GBE_kDotaAppId,
+            outbound_7113))) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building outbound 7044 responses LobbyID=%llu wrapped=%d", static_cast<unsigned long long>(GBE_local_lobby.lobby_id), wrapped ? 1 : 0);
+        return true;
+    }
+
     GBE_RecordDotaLobbyCacheSubscriptionState(response_24, wrapped ? "7044_join_wrapped" : "7044_join_direct");
-    if (!GBE_PushDotaResponse(GBE_kDotaCacheSubscribed, response_24, wrapped, outer_session_field_raw, "7044_join_24"))
-        return true;
-    if (send_join_response && !GBE_PushDotaResponse(GBE_kDotaPracticeLobbyJoinResponse, response_7113, wrapped, outer_session_field_raw, "7044_join_7113"))
-        return true;
+    push_incoming_now(outbound_24.emsg, outbound_24.payload);
+    GBE_LogDotaResponsePacket("7044_join_24", GBE_kDotaCacheSubscribed, wrapped, response_24, outbound_24.payload, GBE_local_lobby.lobby_id, GBE_local_lobby.state, GBE_local_lobby.game_state);
+    if (send_join_response) {
+        push_incoming_now(outbound_7113.emsg, outbound_7113.payload);
+        GBE_LogDotaResponsePacket("7044_join_7113", GBE_kDotaPracticeLobbyJoinResponse, wrapped, response_7113, outbound_7113.payload, GBE_local_lobby.lobby_id, GBE_local_lobby.state, GBE_local_lobby.game_state);
+    }
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -14946,11 +14972,37 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDestroyLobbyRequest(uint64 request_jo
         }
     }
 
+    gbe::dota_gc_router::DotaGcOutboundMessage outbound_25{};
+    gbe::dota_gc_router::DotaGcOutboundMessage outbound_8247{};
+    if (!gbe::dota_gc_router::build_outbound_message(
+            GBE_kDotaCacheUnsubscribed,
+            response_25,
+            wrapped,
+            outer_session_field_raw,
+            settings->get_local_steam_id().ConvertToUint64(),
+            GBE_kEMsgClientFromGC,
+            GBE_kDotaAppId,
+            outbound_25) ||
+        (has_request_job && !gbe::dota_gc_router::build_outbound_message(
+            GBE_kDotaDestroyLobbyResponse,
+            response_8247,
+            wrapped,
+            outer_session_field_raw,
+            settings->get_local_steam_id().ConvertToUint64(),
+            GBE_kEMsgClientFromGC,
+            GBE_kDotaAppId,
+            outbound_8247))) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building outbound 8246 responses LobbyID=%llu wrapped=%d", static_cast<unsigned long long>(lobby_id), wrapped ? 1 : 0);
+        return true;
+    }
+
     ResetGCMemory("8246_destroy", true, true);
-    if (!GBE_PushDotaResponse(GBE_kDotaCacheUnsubscribed, response_25, wrapped, outer_session_field_raw, "8246_destroy_25"))
-        return true;
-    if (has_request_job && !GBE_PushDotaResponse(GBE_kDotaDestroyLobbyResponse, response_8247, wrapped, outer_session_field_raw, "8246_destroy_8247"))
-        return true;
+    push_incoming_now(outbound_25.emsg, outbound_25.payload);
+    GBE_LogDotaResponsePacket("8246_destroy_25", GBE_kDotaCacheUnsubscribed, wrapped, response_25, outbound_25.payload, lobby_id, 0u, 0u);
+    if (has_request_job) {
+        push_incoming_now(outbound_8247.emsg, outbound_8247.payload);
+        GBE_LogDotaResponsePacket("8246_destroy_8247", GBE_kDotaDestroyLobbyResponse, wrapped, response_8247, outbound_8247.payload, lobby_id, 0u, 0u);
+    }
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",

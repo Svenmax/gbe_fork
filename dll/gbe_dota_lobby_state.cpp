@@ -440,7 +440,11 @@ void publish_local_lobby_to_shared(const GBE_LocalLobby &local, bool is_server, 
     shared.cache_sync_version = local.cache_sync_version;
 }
 
-void adopt_shared_lobby_to_local(const GBE_SharedDotaLobbyState &shared, bool clear_server_id_without_match, GBE_LocalLobby &local)
+void adopt_shared_lobby_to_local(
+    const GBE_SharedDotaLobbyState &shared,
+    bool clear_server_id_without_match,
+    bool normalize_custom_readyup_run_state,
+    GBE_LocalLobby &local)
 {
     local.active = shared.active;
     local.lobby_id = shared.lobby_id;
@@ -465,7 +469,10 @@ void adopt_shared_lobby_to_local(const GBE_SharedDotaLobbyState &shared, bool cl
     local.custom_game = shared.custom_game;
     local.state = shared.state;
     local.game_state = shared.game_state;
-    if (local.custom_game.game_id != 0ull && local.game_state >= 2u && local.state == 4u)
+    if (normalize_custom_readyup_run_state &&
+        dota_custom_game::has_custom_game_details(local.custom_game) &&
+        local.game_state >= 2u &&
+        local.state == 4u)
         local.state = 2u;
     local.match_id = shared.match_id;
     local.server_id = clear_server_id_without_match && shared.match_id == 0ull ? 0ull : shared.server_id;

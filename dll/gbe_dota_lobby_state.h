@@ -230,7 +230,11 @@ struct CustomGameLaunchSetupEventPlan {
 };
 
 void publish_local_lobby_to_shared(const GBE_LocalLobby &local, bool is_server, GBE_SharedDotaLobbyState &shared);
-void adopt_shared_lobby_to_local(const GBE_SharedDotaLobbyState &shared, bool clear_server_id_without_match, GBE_LocalLobby &local);
+void adopt_shared_lobby_to_local(
+    const GBE_SharedDotaLobbyState &shared,
+    bool clear_server_id_without_match,
+    bool normalize_custom_readyup_run_state,
+    GBE_LocalLobby &local);
 bool build_reconnect_context(const GBE_LocalLobby &local, GBE_DotaReconnectContext &context);
 CreateLobbyPlan compose_create_lobby_plan(
     const proto_wire::DotaPracticeLobbyCreateRequest &request,

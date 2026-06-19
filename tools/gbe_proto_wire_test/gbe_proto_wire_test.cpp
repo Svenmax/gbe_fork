@@ -1488,7 +1488,7 @@ bool test_dota_lobby_state_helpers()
     ok &= expect_eq_u64(shared.server_id, 0x2222ull, "lobby state server overwrites server id");
 
     GBE_LocalLobby restored{};
-    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, restored);
+    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, true, restored);
     ok &= expect_true(restored.active, "lobby state restore active");
     ok &= expect_eq_u64(restored.lobby_id, local.lobby_id, "lobby state restore lobby id");
     ok &= expect_eq_u64(restored.generic_lobby_id, local.generic_lobby_id, "lobby state restore generic lobby id");
@@ -1508,14 +1508,18 @@ bool test_dota_lobby_state_helpers()
 
     shared.match_id = 0ull;
     shared.server_id = 0x3333ull;
-    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, true, restored);
+    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, true, false, restored);
     ok &= expect_eq_u64(restored.server_id, 0ull, "lobby state restore clears server without match");
 
-    shared.custom_game.game_id = 12345ull;
+    shared.custom_game = GBE_DotaCustomGameDetails{};
+    shared.custom_game.map_name = "custom_map_without_id";
     shared.state = 4u;
     shared.game_state = 2u;
-    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, restored);
+    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, true, restored);
     ok &= expect_eq_u64(restored.state, 2u, "lobby state restore normalizes custom readyup run state");
+
+    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, true, false, restored);
+    ok &= expect_eq_u64(restored.state, 4u, "lobby state restore preserves readyup state without normalization");
 
     GBE_DotaReconnectContext reconnect{};
     ok &= expect_true(gbe::dota_lobby_state::build_reconnect_context(local, reconnect), "lobby state reconnect builds");
