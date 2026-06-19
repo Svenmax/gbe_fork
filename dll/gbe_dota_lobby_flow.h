@@ -125,6 +125,18 @@ void preserve_generic_snapshot_member_runtime(
     bool preserve_launched_lan_members,
     bool preserve_custom_game_runtime_members);
 
+void update_generic_lobby_member_snapshot_state(
+    GBE_DotaLobbyMemberState &member,
+    const std::vector<GBE_DotaLobbyMemberState> &existing_members,
+    bool has_custom_game,
+    std::uint64_t owner_steam_id,
+    std::uint32_t owner_slot,
+    std::vector<GBE_DotaLobbyMemberState> &members,
+    bool preserve_launched_lan_members,
+    bool preserve_custom_game_runtime_members,
+    std::uint32_t good_guys_team,
+    std::uint32_t player_pool_team);
+
 void merge_existing_lobby_members_for_generic_snapshot(
     std::vector<GBE_DotaLobbyMemberState> &members,
     const std::vector<GBE_DotaLobbyMemberState> &existing_members,

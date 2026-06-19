@@ -1,4 +1,5 @@
 #include "dll/gbe_dota_lobby_flow.h"
+#include "dll/gbe_dota_types.h"
 
 #include <iostream>
 
@@ -837,6 +838,128 @@ bool test_generic_lobby_snapshot_member_parse_block()
     return ok;
 }
 
+bool test_coordinator_generic_snapshot_flow_block()
+{
+    bool ok = true;
+
+    GBE_DotaLobbyOwnerSnapshotData owner_snapshot = gbe::dota_lobby_flow::compose_lobby_owner_snapshot_data(
+        10ull,
+        10u,
+        "Stored Owner",
+        20ull,
+        20u,
+        true,
+        20ull,
+        "Local",
+        99u,
+        "Lobby Host");
+    ok &= expect_eq_u64(owner_snapshot.owner_steam_id, 20ull, "coordinator snapshot owner steam");
+    ok &= expect_eq_u64(owner_snapshot.owner_account_id, 20u, "coordinator snapshot owner account");
+    ok &= expect_true(owner_snapshot.owner_name == "Local", "coordinator snapshot owner name");
+    ok &= expect_true(owner_snapshot.should_publish_local_owner, "coordinator snapshot owner publish local");
+
+    GBE_DotaLobbyOwnerPublishData owner_publish = gbe::dota_lobby_flow::compose_lobby_owner_publish_data(owner_snapshot, "Local");
+    ok &= expect_eq_u64(owner_publish.owner_steam_id, 20ull, "coordinator publish owner steam");
+    ok &= expect_true(owner_publish.owner_name == "Local", "coordinator publish owner name");
+
+    std::vector<GBE_DotaLobbyMemberState> members{member(10ull, 1u), member(30ull, 3u)};
+    members[1].connected = false;
+    members[1].leaver_status = 1u;
+
+    std::uint64_t owner_steam_id = 10ull;
+    std::uint32_t owner_account_id = 10u;
+    std::uint32_t owner_team = kGoodGuys;
+    std::uint32_t owner_slot = 1u;
+    std::uint32_t owner_hero_id = 11u;
+    bool owner_connected = true;
+
+    GBE_DotaLobbyMemberState adopted_owner = gbe::dota_lobby_flow::adopt_lobby_owner_member(
+        members,
+        owner_snapshot.owner_steam_id,
+        owner_snapshot.owner_account_id,
+        kGoodGuys,
+        false,
+        owner_steam_id,
+        owner_account_id,
+        owner_team,
+        owner_slot,
+        owner_hero_id,
+        owner_connected);
+    ok &= expect_eq_u64(adopted_owner.steam_id, 20ull, "coordinator adoption owner steam");
+    ok &= expect_eq_u64(owner_steam_id, 20ull, "coordinator adoption owner steam field");
+    ok &= expect_eq_u64(owner_slot, 0u, "coordinator adoption owner slot field");
+    ok &= expect_true(!owner_connected, "coordinator adoption owner connected field");
+
+    GBE_DotaGenericLobbyMemberSnapshotInput owner_input{};
+    owner_input.member_steam_id = 20ull;
+    owner_input.member_account_id = 20u;
+    owner_input.owner_steam_id = owner_steam_id;
+    owner_input.owner_account_id = owner_account_id;
+    owner_input.owner_team = owner_team;
+    owner_input.owner_slot = owner_slot;
+    owner_input.owner_hero_id = owner_hero_id;
+    owner_input.owner_connected = owner_connected;
+    owner_input.member_team_raw = "0";
+    owner_input.member_slot_raw = "0";
+    owner_input.member_hero_raw = "42";
+    owner_input.member_connected_raw = "0";
+    owner_input.player_pool_team = kPlayerPool;
+    GBE_DotaLobbyMemberSnapshotData owner_member_snapshot = gbe::dota_lobby_flow::compose_generic_lobby_member_snapshot_data(owner_input);
+
+    GBE_DotaLobbyMemberState owner_member = owner_member_snapshot.member;
+    gbe::dota_lobby_flow::update_generic_lobby_member_snapshot_state(
+        owner_member,
+        members,
+        true,
+        owner_steam_id,
+        owner_slot,
+        members,
+        true,
+        true,
+        kGoodGuys,
+        kPlayerPool);
+    gbe::dota_lobby_flow::upsert_lobby_member(members, owner_member);
+
+    GBE_DotaGenericLobbyMemberSnapshotInput remote_input{};
+    remote_input.member_steam_id = 40ull;
+    remote_input.member_account_id = 40u;
+    remote_input.owner_steam_id = owner_steam_id;
+    remote_input.owner_account_id = owner_account_id;
+    remote_input.owner_team = owner_team;
+    remote_input.owner_slot = owner_slot;
+    remote_input.owner_hero_id = owner_hero_id;
+    remote_input.owner_connected = owner_connected;
+    remote_input.member_team_raw.clear();
+    remote_input.member_slot_raw = "4";
+    remote_input.member_hero_raw = "23";
+    remote_input.member_connected_raw = "1";
+    remote_input.player_pool_team = kPlayerPool;
+    GBE_DotaLobbyMemberSnapshotData remote_member_snapshot = gbe::dota_lobby_flow::compose_generic_lobby_member_snapshot_data(remote_input);
+
+    GBE_DotaLobbyMemberState remote_member = remote_member_snapshot.member;
+    gbe::dota_lobby_flow::update_generic_lobby_member_snapshot_state(
+        remote_member,
+        members,
+        true,
+        owner_steam_id,
+        owner_slot,
+        members,
+        true,
+        true,
+        kGoodGuys,
+        kPlayerPool);
+    gbe::dota_lobby_flow::upsert_lobby_member(members, remote_member);
+
+    ok &= expect_eq_u64(members.size(), 4u, "coordinator flow keeps adopted owner plus remote members");
+    ok &= expect_eq_u64(members[2].steam_id, 20ull, "coordinator flow adopted owner appended");
+    ok &= expect_eq_u64(members[2].slot, 0u, "coordinator flow adopted owner slot cleared");
+    ok &= expect_eq_u64(members[3].steam_id, 40ull, "coordinator flow remote member appended");
+    ok &= expect_eq_u64(members[3].team, kGoodGuys, "coordinator flow remote normalized team");
+    ok &= expect_eq_u64(members[3].slot, 2u, "coordinator flow remote normalized slot");
+
+    return ok;
+}
+
 bool test_compose_lobby_members()
 {
     bool ok = true;
@@ -947,6 +1070,7 @@ int main()
     ok &= test_lobby_publish_data_block();
     ok &= test_generic_lobby_snapshot_basic_block();
     ok &= test_generic_lobby_snapshot_member_parse_block();
+    ok &= test_coordinator_generic_snapshot_flow_block();
     ok &= test_compose_lobby_members();
     ok &= test_normalize_and_owner_transfer();
     ok &= test_normalize_arcade_lobby_member_slots();

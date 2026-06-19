@@ -466,6 +466,31 @@ void preserve_generic_snapshot_member_runtime(
         member.leaver_status = 1u;
 }
 
+void update_generic_lobby_member_snapshot_state(
+    GBE_DotaLobbyMemberState &member,
+    const std::vector<GBE_DotaLobbyMemberState> &existing_members,
+    bool has_custom_game,
+    std::uint64_t owner_steam_id,
+    std::uint32_t owner_slot,
+    std::vector<GBE_DotaLobbyMemberState> &members,
+    bool preserve_launched_lan_members,
+    bool preserve_custom_game_runtime_members,
+    std::uint32_t good_guys_team,
+    std::uint32_t player_pool_team)
+{
+    preserve_generic_snapshot_member_runtime(
+        member,
+        existing_members,
+        preserve_launched_lan_members,
+        preserve_custom_game_runtime_members);
+
+    if (member.steam_id == owner_steam_id)
+        return;
+
+    if (has_custom_game)
+        normalize_arcade_lobby_member_slot(member, members, owner_steam_id, owner_slot, good_guys_team, player_pool_team);
+}
+
 void merge_existing_lobby_members_for_generic_snapshot(
     std::vector<GBE_DotaLobbyMemberState> &members,
     const std::vector<GBE_DotaLobbyMemberState> &existing_members,

@@ -1243,6 +1243,24 @@ project "tool_gc_message_utils_test"
 -- End tool_gc_message_utils_test
 
 
+-- Project tool_gbe_gc_config_test
+project "tool_gbe_gc_config_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_gc_config_test"))
+    targetname "gbe_gc_config_test_%{cfg.platform}"
+
+
+    -- common source & header files
+    ---------
+    files {
+        "tools/gbe_gc_config_test/gbe_gc_config_test.cpp",
+        "dll/gbe_gc_config.cpp",
+        "dll/gbe_gc_config.h",
+    }
+-- End tool_gbe_gc_config_test
+
+
 -- Project tool_gbe_proto_wire_test
 project "tool_gbe_proto_wire_test"
     kind "ConsoleApp"
@@ -1258,6 +1276,18 @@ project "tool_gbe_proto_wire_test"
         "tools/gbe_proto_wire_test/gbe_proto_wire_test.cpp",
         "dll/gbe_dota_gc_wire.cpp",
         "dll/gbe_dota_gc_wire.h",
+        "dll/gbe_dota_gc_router.cpp",
+        "dll/gbe_dota_gc_router.h",
+        "dll/gbe_dota_custom_game.cpp",
+        "dll/gbe_dota_custom_game.h",
+        "dll/gbe_dota_custom_lobby_http.cpp",
+        "dll/gbe_dota_custom_lobby_http.h",
+        "dll/gbe_dota_lobby_flow.cpp",
+        "dll/gbe_dota_lobby_flow.h",
+        "dll/gbe_dota_lobby_state.cpp",
+        "dll/gbe_dota_lobby_state.h",
+        "dll/gbe_gc_message_utils.cpp",
+        "dll/gbe_gc_message_utils.h",
         "dll/gbe_proto_wire.cpp",
         "dll/gbe_proto_wire.h",
     }
@@ -1278,6 +1308,8 @@ project "tool_gbe_dota_custom_game_test"
         "tools/gbe_dota_custom_game_test/gbe_dota_custom_game_test.cpp",
         "dll/gbe_dota_custom_game.cpp",
         "dll/gbe_dota_custom_game.h",
+        "dll/gbe_dota_custom_lobby_http.cpp",
+        "dll/gbe_dota_custom_lobby_http.h",
         "dll/gbe_dota_types.h",
         "dll/gbe_proto_wire.cpp",
         "dll/gbe_proto_wire.h",

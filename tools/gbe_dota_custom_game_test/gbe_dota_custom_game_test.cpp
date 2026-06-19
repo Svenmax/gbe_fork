@@ -1,6 +1,8 @@
 #include "dll/gbe_dota_custom_game.h"
+#include "dll/gbe_dota_custom_lobby_http.h"
 
 #include <iostream>
+#include <json/json.hpp>
 #include <vector>
 
 namespace {
@@ -282,6 +284,75 @@ bool test_should_include_joinable_custom_lobby()
     return ok;
 }
 
+bool test_compose_joinable_custom_lobby_json_item()
+{
+    bool ok = true;
+
+    GBE_DotaCustomGameDetails custom_game{};
+    custom_game.mode = "addon_mode";
+    GBE_DotaJoinableCustomLobbyItemData item_data{};
+    item_data.member_count = 4u;
+    item_data.max_players = 8u;
+    item_data.min_players = 2u;
+    item_data.leader_account_id = 77u;
+    item_data.leader_name = "Owner User";
+    item_data.room_name = "Room Name";
+    item_data.custom_map_name = "custom_map";
+    item_data.lobby_creation_time = 2222u;
+
+    const nlohmann::json item = gbe::dota_custom_lobby_http::compose_joinable_custom_lobby_json_item(
+        item_data,
+        custom_game,
+        "Display Name",
+        123456789ull,
+        987654321ull,
+        15u,
+        true,
+        "iad",
+        42u,
+        "5555",
+        true);
+
+    ok &= expect_eq_string(item.value("lobby_id", ""), "123456789", "json lobby id");
+    ok &= expect_eq_string(item.value("custom_game_id", ""), "987654321", "json custom game id");
+    ok &= expect_eq_u64(item.value("member_count", 0u), 4u, "json member count");
+    ok &= expect_eq_u64(item.value("leader_account_id", 0u), 77u, "json leader account id");
+    ok &= expect_eq_string(item.value("leader_name", ""), "Owner User", "json leader name");
+    ok &= expect_eq_string(item.value("custom_map_name", ""), "custom_map", "json custom map name");
+    ok &= expect_eq_u64(item.value("max_player_count", 0u), 8u, "json max players");
+    ok &= expect_eq_u64(item.value("server_region", 0u), 15u, "json server region");
+    ok &= expect_true(item.value("has_pass_key", false), "json pass key");
+    ok &= expect_eq_u64(item.value("lobby_creation_time", 0u), 2222u, "json creation time");
+    ok &= expect_eq_u64(item.value("custom_game_timestamp", 0u), 42u, "json custom game timestamp");
+    ok &= expect_eq_string(item.value("custom_game_crc", ""), "5555", "json custom game crc");
+    ok &= expect_eq_u64(item.value("min_player_count", 0u), 2u, "json min players");
+    ok &= expect_true(item.value("penalties_enabled", false), "json penalties");
+    ok &= expect_eq_string(item.value("name", ""), "Display Name", "json name");
+    ok &= expect_eq_string(item.value("display_name", ""), "Display Name", "json display name");
+    ok &= expect_eq_string(item.value("title", ""), "Display Name", "json title");
+    ok &= expect_eq_string(item.value("room_name", ""), "Room Name", "json room name");
+    ok &= expect_eq_string(item.value("custom_game_mode", ""), "addon_mode", "json custom game mode");
+    ok &= expect_eq_string(item.value("custom_game_mode_name", ""), "Display Name", "json custom game mode name");
+    ok &= expect_eq_string(item.value("lan_host_ping_location", ""), "iad", "json lan ping location");
+    ok &= expect_eq_u64(item.size(), 21u, "json field count");
+
+    const nlohmann::json item_again = gbe::dota_custom_lobby_http::compose_joinable_custom_lobby_json_item(
+        item_data,
+        custom_game,
+        "Display Name",
+        123456789ull,
+        987654321ull,
+        15u,
+        true,
+        "iad",
+        42u,
+        "5555",
+        true);
+    ok &= expect_eq_string(item.dump(), item_again.dump(), "json output stable");
+
+    return ok;
+}
+
 } // namespace
 
 int main()
@@ -292,6 +363,7 @@ int main()
     ok &= test_mod_metadata_value_for_gc();
     ok &= test_compose_snapshot_custom_game_details();
     ok &= test_compose_joinable_custom_lobby_item_data();
+    ok &= test_compose_joinable_custom_lobby_json_item();
     ok &= test_compose_custom_game_publish_data();
     ok &= test_should_include_joinable_custom_lobby();
 

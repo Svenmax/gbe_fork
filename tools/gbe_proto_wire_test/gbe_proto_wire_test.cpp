@@ -1,4 +1,7 @@
+#include "dll/gbe_dota_gc_router.h"
 #include "dll/gbe_dota_gc_wire.h"
+#include "dll/gbe_dota_lobby_state.h"
+#include "dll/gbe_gc_message_utils.h"
 #include "dll/gbe_proto_wire.h"
 
 #include <algorithm>
@@ -1351,6 +1354,459 @@ bool test_basic_wire_and_parsers()
     return ok;
 }
 
+bool test_dota_gc_router_response_helpers()
+{
+    using namespace gbe::proto_wire;
+
+    bool ok = true;
+    const std::uint32_t inner_emsg = 26u;
+    const std::uint32_t outer_emsg = 5453u;
+    const std::uint32_t app_id = 570u;
+    const std::uint64_t steam_id = 0x0102030405060708ull;
+
+    std::string inner_body;
+    append_varint_field(inner_body, 1u, 123u);
+    append_bytes_field(inner_body, 2u, "payload-body");
+    std::string inner_payload;
+    append_little_endian32(inner_payload, gbe::gc_message::with_proto_mask(inner_emsg));
+    append_little_endian32(inner_payload, 0u);
+    inner_payload.append(inner_body);
+
+    gbe::dota_gc_router::DotaGcOutboundMessage direct{};
+    ok &= expect_true(
+        gbe::dota_gc_router::build_outbound_message(inner_emsg, inner_payload, false, nullptr, steam_id, outer_emsg, app_id, direct),
+        "router direct outbound builds");
+    ok &= expect_eq_u64(direct.emsg, gbe::gc_message::with_proto_mask(inner_emsg), "router direct emsg");
+    ok &= expect_eq_string(direct.payload, inner_payload, "router direct payload preserved");
+
+    gbe::dota_gc_router::DotaGcOutboundMessage missing_session{};
+    ok &= expect_true(
+        !gbe::dota_gc_router::build_outbound_message(inner_emsg, inner_payload, true, nullptr, steam_id, outer_emsg, app_id, missing_session),
+        "router wrapped rejects missing session");
+
+    std::string session_field_raw;
+    append_varint_field(session_field_raw, 1u, 42u);
+    append_bytes_field(session_field_raw, 2u, "session");
+
+    gbe::dota_gc_router::DotaGcOutboundMessage wrapped_a{};
+    gbe::dota_gc_router::DotaGcOutboundMessage wrapped_b{};
+    ok &= expect_true(
+        gbe::dota_gc_router::build_outbound_message(inner_emsg, inner_payload, true, &session_field_raw, steam_id, outer_emsg, app_id, wrapped_a),
+        "router wrapped outbound builds");
+    ok &= expect_true(
+        gbe::dota_gc_router::build_outbound_message(inner_emsg, inner_payload, true, &session_field_raw, steam_id, outer_emsg, app_id, wrapped_b),
+        "router wrapped outbound rebuilds");
+    ok &= expect_eq_u64(wrapped_a.emsg, gbe::gc_message::with_proto_mask(outer_emsg), "router wrapped outer emsg");
+    ok &= expect_eq_string(wrapped_a.payload, wrapped_b.payload, "router wrapped output stable");
+
+    ok &= expect_true(wrapped_a.payload.size() >= 8u, "router wrapped packet has prefix");
+
+    std::uint32_t outer_raw_emsg = 0;
+    std::uint32_t outer_header_size = 0;
+    if (wrapped_a.payload.size() >= 8u) {
+        std::memcpy(&outer_raw_emsg, wrapped_a.payload.data(), sizeof(outer_raw_emsg));
+        std::memcpy(&outer_header_size, wrapped_a.payload.data() + sizeof(outer_raw_emsg), sizeof(outer_header_size));
+    }
+    ok &= expect_eq_u64(gbe::gc_message::without_proto_mask(outer_raw_emsg), outer_emsg, "router wrapped packet raw emsg");
+    ok &= expect_true(8u + outer_header_size <= wrapped_a.payload.size(), "router wrapped packet header bounds");
+
+    const bool has_outer_body = 8u + outer_header_size <= wrapped_a.payload.size();
+    const std::uint8_t *outer_body = has_outer_body ? reinterpret_cast<const std::uint8_t *>(wrapped_a.payload.data()) + 8u + outer_header_size : nullptr;
+    const std::size_t outer_body_size = has_outer_body ? wrapped_a.payload.size() - 8u - outer_header_size : 0u;
+
+    std::string replay_payload;
+    ok &= expect_true(
+        read_bytes_field(outer_body, outer_body_size, 3u, replay_payload),
+        "router wrapped replay payload field");
+    ok &= expect_eq_size(replay_payload.size(), inner_payload.size(), "router wrapped inner payload size");
+    ok &= expect_eq_string(replay_payload, inner_payload, "router wrapped inner payload preserved");
+
+    std::uint64_t parsed_app_id = 0;
+    std::uint64_t parsed_inner_emsg = 0;
+    ok &= expect_true(
+        read_uint64_field(outer_body, outer_body_size, 1u, parsed_app_id),
+        "router wrapped app id field");
+    ok &= expect_eq_u64(parsed_app_id, app_id, "router wrapped app id value");
+    ok &= expect_true(
+        read_uint64_field(outer_body, outer_body_size, 2u, parsed_inner_emsg),
+        "router wrapped inner emsg field");
+    ok &= expect_eq_u64(parsed_inner_emsg, gbe::gc_message::with_proto_mask(inner_emsg), "router wrapped inner emsg value");
+
+    const std::uint8_t *outer_header = reinterpret_cast<const std::uint8_t *>(wrapped_a.payload.data()) + 8u;
+    std::uint64_t parsed_steam_id = 0;
+    ok &= expect_true(
+        read_uint64_field(outer_header, outer_header_size, 1u, parsed_steam_id),
+        "router wrapped steam id header field");
+    ok &= expect_eq_u64(parsed_steam_id, steam_id, "router wrapped steam id header value");
+
+    return ok;
+}
+
+bool test_dota_lobby_state_helpers()
+{
+    bool ok = true;
+
+    GBE_LocalLobby local{};
+    local.active = true;
+    local.lobby_id = 0x0102ull;
+    local.generic_lobby_id = 0x0304ull;
+    local.room_name = "room";
+    local.game_mode = 2u;
+    local.server_region = 3u;
+    local.state = 1u;
+    local.game_state = 0u;
+    local.server_id = 0x0506ull;
+    local.match_id = 0x0708ull;
+    local.owner_steam_id = 0x090aull;
+    local.owner_account_id = 11u;
+    local.owner_name = "owner";
+    local.connect = "10.0.0.1:27015 10.0.0.2:27016";
+    local.custom_game.game_id = 12345ull;
+    local.has_cache_version = true;
+    local.cache_version = 99ull;
+    local.cache_service_list = { 1u, 2u };
+
+    GBE_SharedDotaLobbyState shared{};
+    shared.state = 4u;
+    shared.game_state = 3u;
+    shared.server_id = 0x1111ull;
+    gbe::dota_lobby_state::publish_local_lobby_to_shared(local, false, shared);
+    ok &= expect_true(shared.valid, "lobby state publish client valid");
+    ok &= expect_eq_u64(shared.lobby_id, local.lobby_id, "lobby state publish lobby id");
+    ok &= expect_eq_string(shared.room_name, local.room_name, "lobby state publish room name");
+    ok &= expect_eq_u64(shared.state, 4u, "lobby state client preserves higher state");
+    ok &= expect_eq_u64(shared.game_state, 3u, "lobby state client preserves higher game state");
+    ok &= expect_eq_u64(shared.server_id, local.server_id, "lobby state client accepts nonzero server id");
+    ok &= expect_eq_size(shared.cache_service_list.size(), 2u, "lobby state publish cache service list");
+
+    local.state = 2u;
+    local.game_state = 2u;
+    local.server_id = 0x2222ull;
+    gbe::dota_lobby_state::publish_local_lobby_to_shared(local, true, shared);
+    ok &= expect_eq_u64(shared.state, 2u, "lobby state server overwrites state");
+    ok &= expect_eq_u64(shared.game_state, 2u, "lobby state server overwrites game state");
+    ok &= expect_eq_u64(shared.server_id, 0x2222ull, "lobby state server overwrites server id");
+
+    GBE_LocalLobby restored{};
+    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, restored);
+    ok &= expect_true(restored.active, "lobby state restore active");
+    ok &= expect_eq_u64(restored.lobby_id, local.lobby_id, "lobby state restore lobby id");
+    ok &= expect_eq_u64(restored.generic_lobby_id, local.generic_lobby_id, "lobby state restore generic lobby id");
+    ok &= expect_eq_string(restored.room_name, local.room_name, "lobby state restore room name");
+    ok &= expect_eq_u64(restored.state, local.state, "lobby state restore state");
+    ok &= expect_eq_u64(restored.game_state, local.game_state, "lobby state restore game state");
+    ok &= expect_eq_u64(restored.match_id, local.match_id, "lobby state restore match id");
+    ok &= expect_eq_u64(restored.server_id, local.server_id, "lobby state restore server id");
+    ok &= expect_eq_u64(restored.owner_steam_id, local.owner_steam_id, "lobby state restore owner steam id");
+    ok &= expect_eq_u64(restored.owner_account_id, local.owner_account_id, "lobby state restore owner account id");
+    ok &= expect_eq_string(restored.owner_name, local.owner_name, "lobby state restore owner name");
+    ok &= expect_eq_string(restored.connect, "10.0.0.1:27015", "lobby state restore normalized connect");
+    ok &= expect_eq_u64(restored.custom_game.game_id, local.custom_game.game_id, "lobby state restore custom game id");
+    ok &= expect_true(restored.has_cache_version, "lobby state restore cache version present");
+    ok &= expect_eq_u64(restored.cache_version, local.cache_version, "lobby state restore cache version");
+    ok &= expect_eq_size(restored.cache_service_list.size(), 2u, "lobby state restore cache service list");
+
+    shared.match_id = 0ull;
+    shared.server_id = 0x3333ull;
+    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, true, restored);
+    ok &= expect_eq_u64(restored.server_id, 0ull, "lobby state restore clears server without match");
+
+    shared.custom_game.game_id = 12345ull;
+    shared.state = 4u;
+    shared.game_state = 2u;
+    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, restored);
+    ok &= expect_eq_u64(restored.state, 2u, "lobby state restore normalizes custom readyup run state");
+
+    GBE_DotaReconnectContext reconnect{};
+    ok &= expect_true(gbe::dota_lobby_state::build_reconnect_context(local, reconnect), "lobby state reconnect builds");
+    ok &= expect_eq_u64(reconnect.server_id, local.server_id, "lobby state reconnect server id");
+    ok &= expect_eq_u64(reconnect.lobby_state, local.state, "lobby state reconnect lobby state");
+    ok &= expect_eq_u64(reconnect.game_state, local.game_state, "lobby state reconnect game state");
+    ok &= expect_eq_u64(reconnect.custom_game_id, local.custom_game.game_id, "lobby state reconnect custom id");
+    ok &= expect_eq_u64(reconnect.owner_steam_id, local.owner_steam_id, "lobby state reconnect owner");
+    ok &= expect_eq_string(reconnect.connect, "10.0.0.1:27015", "lobby state reconnect first endpoint");
+
+    local.server_id = 0ull;
+    ok &= expect_true(!gbe::dota_lobby_state::build_reconnect_context(local, reconnect), "lobby state reconnect rejects missing server");
+
+    gbe::proto_wire::DotaPracticeLobbyCreateRequest create_request{};
+    create_request.has_pass_key = true;
+    create_request.pass_key = "top-level-pass";
+    create_request.has_lobby_details = true;
+    create_request.lobby_details.has_room_name = true;
+    create_request.lobby_details.room_name = "created-room";
+    create_request.lobby_details.has_server_region = true;
+    create_request.lobby_details.server_region = 12u;
+    create_request.lobby_details.has_lan = true;
+    create_request.lobby_details.lan = false;
+    create_request.lobby_details.has_fill_with_bots = true;
+    create_request.lobby_details.fill_with_bots = false;
+    create_request.lobby_details.has_pass_key = true;
+    create_request.lobby_details.pass_key = "details-pass";
+    create_request.lobby_details.has_custom_game_id = true;
+    create_request.lobby_details.custom_game_id = 777ull;
+    create_request.lobby_details.has_custom_map_name = true;
+    create_request.lobby_details.custom_map_name = "custom-map";
+    const gbe::dota_lobby_state::CreateLobbyPlan create_plan = gbe::dota_lobby_state::compose_create_lobby_plan(
+        create_request,
+        0x5555ull,
+        0x6666ull,
+        77u,
+        "creator",
+        0u,
+        1u);
+    ok &= expect_true(create_plan.lobby.active, "create lobby plan active");
+    ok &= expect_eq_u64(create_plan.lobby.lobby_id, 0x5555ull, "create lobby plan lobby id");
+    ok &= expect_eq_u64(create_plan.lobby.owner_steam_id, 0x6666ull, "create lobby plan owner steam id");
+    ok &= expect_eq_u64(create_plan.lobby.owner_account_id, 77u, "create lobby plan owner account id");
+    ok &= expect_eq_string(create_plan.lobby.owner_name, "creator", "create lobby plan owner name");
+    ok &= expect_eq_string(create_plan.lobby.room_name, "created-room", "create lobby plan room name");
+    ok &= expect_eq_u64(create_plan.lobby.server_region, 12u, "create lobby plan server region");
+    ok &= expect_true(!create_plan.lobby.lan, "create lobby plan lan override");
+    ok &= expect_true(!create_plan.lobby.fill_with_bots, "create lobby plan fill bots override");
+    ok &= expect_eq_string(create_plan.lobby.pass_key, "details-pass", "create lobby plan details pass key wins");
+    ok &= expect_eq_u64(create_plan.lobby.custom_game.game_id, 777ull, "create lobby plan custom game id");
+    ok &= expect_eq_string(create_plan.lobby.custom_game.map_name, "custom-map", "create lobby plan custom map");
+    ok &= expect_true(create_plan.custom_game_create, "create lobby plan custom flag");
+    ok &= expect_eq_size(create_plan.lobby.members.size(), 1u, "create lobby plan owner member count");
+    if (!create_plan.lobby.members.empty()) {
+        ok &= expect_eq_u64(create_plan.lobby.members[0].steam_id, 0x6666ull, "create lobby plan owner member steam id");
+        ok &= expect_eq_u64(create_plan.lobby.members[0].account_id, 77u, "create lobby plan owner member account id");
+        ok &= expect_eq_u64(create_plan.lobby.members[0].team, 0u, "create lobby plan owner member team");
+        ok &= expect_eq_u64(create_plan.lobby.members[0].slot, 1u, "create lobby plan owner member slot");
+        ok &= expect_true(!create_plan.lobby.members[0].connected, "create lobby plan owner member disconnected");
+    }
+
+    create_request.lobby_details.has_pass_key = false;
+    const gbe::dota_lobby_state::CreateLobbyPlan fallback_pass_plan = gbe::dota_lobby_state::compose_create_lobby_plan(
+        create_request,
+        0x5556ull,
+        0x6667ull,
+        78u,
+        "creator2",
+        0u,
+        1u);
+    ok &= expect_eq_string(fallback_pass_plan.lobby.pass_key, "top-level-pass", "create lobby plan top-level pass fallback");
+
+    GBE_LocalLobby previous_lobby{};
+    previous_lobby.active = true;
+    previous_lobby.lobby_id = 0x7000ull;
+    previous_lobby.match_id = 0x8000ull;
+    previous_lobby.custom_game.game_id = 0ull;
+    previous_lobby.state = 2u;
+    previous_lobby.game_state = 1u;
+    previous_lobby.owner_team = 0u;
+    previous_lobby.owner_slot = 1u;
+    GBE_DotaCustomGameDetails requested_custom_game{};
+    requested_custom_game.game_id = 0x9000ull;
+    const gbe::dota_lobby_state::CreateLobbyResetPlan reset_plan = gbe::dota_lobby_state::compose_create_lobby_reset_plan(previous_lobby, requested_custom_game);
+    ok &= expect_true(reset_plan.custom_game_create, "create reset plan custom game create");
+    ok &= expect_true(reset_plan.unsubscribe_previous_practice_lobby, "create reset plan unsubscribes previous practice lobby");
+    ok &= expect_eq_u64(reset_plan.previous_lobby_id, previous_lobby.lobby_id, "create reset plan previous lobby id");
+    ok &= expect_eq_u64(reset_plan.previous_match_id, previous_lobby.match_id, "create reset plan previous match id");
+    ok &= expect_eq_u64(reset_plan.previous_state, previous_lobby.state, "create reset plan previous state");
+    ok &= expect_eq_u64(reset_plan.previous_game_state, previous_lobby.game_state, "create reset plan previous game state");
+    previous_lobby.custom_game.game_id = 0x9000ull;
+    const gbe::dota_lobby_state::CreateLobbyResetPlan custom_previous_reset_plan = gbe::dota_lobby_state::compose_create_lobby_reset_plan(previous_lobby, requested_custom_game);
+    ok &= expect_true(!custom_previous_reset_plan.unsubscribe_previous_practice_lobby, "create reset plan keeps previous custom lobby");
+
+    GBE_LocalLobby matched_lobby{};
+    matched_lobby.active = true;
+    matched_lobby.lobby_id = 0xabcull;
+    matched_lobby.generic_lobby_id = 0xdefull;
+    matched_lobby.room_name = "matched-room";
+    matched_lobby.game_mode = 22u;
+    matched_lobby.server_region = 33u;
+    matched_lobby.pass_key = "matched-pass";
+    matched_lobby.custom_game.game_id = 444ull;
+    matched_lobby.state = 2u;
+    matched_lobby.game_state = 1u;
+    matched_lobby.match_id = 555ull;
+    matched_lobby.server_id = 666ull;
+    matched_lobby.connect = "127.0.0.1:27015";
+    matched_lobby.owner_steam_id = 700ull;
+    matched_lobby.owner_account_id = 70u;
+    matched_lobby.owner_name = "matched-owner";
+    matched_lobby.owner_team = 0u;
+    matched_lobby.owner_slot = 1u;
+    matched_lobby.members.push_back(GBE_DotaLobbyMemberState{700ull, 70u, 0u, 1u, 0u, true, 0u});
+    matched_lobby.members.push_back(GBE_DotaLobbyMemberState{800ull, 80u, 4u, 2u, 0u, true, 0u});
+    const gbe::dota_lobby_state::JoinLobbyMergePlan join_plan = gbe::dota_lobby_state::compose_join_lobby_merge_plan(
+        GBE_LocalLobby{},
+        true,
+        matched_lobby.lobby_id,
+        true,
+        matched_lobby,
+        800ull,
+        80u,
+        "local-player",
+        0u,
+        4u);
+    ok &= expect_eq_u64(join_plan.lobby.lobby_id, matched_lobby.lobby_id, "join merge lobby id");
+    ok &= expect_eq_u64(join_plan.lobby.generic_lobby_id, matched_lobby.generic_lobby_id, "join merge generic lobby id");
+    ok &= expect_eq_string(join_plan.lobby.room_name, matched_lobby.room_name, "join merge room name");
+    ok &= expect_eq_u64(join_plan.lobby.custom_game.game_id, matched_lobby.custom_game.game_id, "join merge custom game id");
+    ok &= expect_eq_u64(join_plan.lobby.owner_steam_id, matched_lobby.owner_steam_id, "join merge owner steam id");
+    ok &= expect_true(join_plan.seen_local_in_generic_lobby, "join merge sees local member");
+    ok &= expect_eq_u64(join_plan.local_member.steam_id, 800ull, "join merge local member steam id");
+    ok &= expect_eq_u64(join_plan.local_member.account_id, 80u, "join merge local member account id");
+    ok &= expect_eq_u64(join_plan.local_member.team, 0u, "join merge local member normalized team");
+    ok &= expect_true(join_plan.lobby.members.size() >= 2u, "join merge member count");
+
+    const gbe::dota_lobby_state::JoinLobbyMergePlan fallback_join_plan = gbe::dota_lobby_state::compose_join_lobby_merge_plan(
+        GBE_LocalLobby{},
+        true,
+        0x1234ull,
+        false,
+        GBE_LocalLobby{},
+        900ull,
+        90u,
+        "fallback-owner",
+        0u,
+        4u);
+    ok &= expect_true(fallback_join_plan.lobby.active, "join merge fallback active");
+    ok &= expect_eq_u64(fallback_join_plan.lobby.lobby_id, 0x1234ull, "join merge fallback lobby id");
+    ok &= expect_eq_u64(fallback_join_plan.lobby.owner_steam_id, 900ull, "join merge fallback owner steam id");
+    ok &= expect_eq_string(fallback_join_plan.lobby.owner_name, "fallback-owner", "join merge fallback owner name");
+    ok &= expect_eq_u64(fallback_join_plan.lobby.game_mode, 2u, "join merge fallback game mode");
+    ok &= expect_eq_u64(fallback_join_plan.lobby.server_region, 15u, "join merge fallback server region");
+    ok &= expect_true(fallback_join_plan.lobby.allow_spectating, "join merge fallback spectating");
+
+    GBE_LocalLobby seen_lobby = fallback_join_plan.lobby;
+    seen_lobby.seen_local_in_generic_lobby = true;
+    const gbe::dota_lobby_state::JoinLobbyMergePlan preserved_seen_join_plan = gbe::dota_lobby_state::compose_join_lobby_merge_plan(
+        seen_lobby,
+        false,
+        0ull,
+        false,
+        GBE_LocalLobby{},
+        900ull,
+        90u,
+        "fallback-owner",
+        0u,
+        4u);
+    ok &= expect_true(preserved_seen_join_plan.seen_local_in_generic_lobby, "join merge preserves seen local flag");
+    ok &= expect_true(preserved_seen_join_plan.lobby.seen_local_in_generic_lobby, "join merge preserves lobby seen local flag");
+
+    GBE_LocalLobby launch_lobby{};
+    launch_lobby.active = true;
+    launch_lobby.lobby_id = 0x2222ull;
+    const gbe::dota_lobby_state::LaunchInitPlan launch_init_plan = gbe::dota_lobby_state::compose_launch_init_plan(
+        launch_lobby,
+        0x3333ull,
+        0x4444ull,
+        "192.168.1.10:27015",
+        123456u,
+        1u);
+    ok &= expect_eq_u64(launch_init_plan.lobby.match_id, 0x3333ull, "launch init match id");
+    ok &= expect_eq_u64(launch_init_plan.lobby.server_id, 0x4444ull, "launch init server id");
+    ok &= expect_eq_string(launch_init_plan.lobby.connect, "192.168.1.10:27015", "launch init connect");
+    ok &= expect_eq_u64(launch_init_plan.lobby.game_start_time, 123456u, "launch init game start time");
+    ok &= expect_eq_u64(launch_init_plan.lobby.launch_phase, 1u, "launch init requested phase");
+
+    GBE_LocalLobby custom_launch_lobby = launch_init_plan.lobby;
+    custom_launch_lobby.custom_game.game_id = 0x5555ull;
+    custom_launch_lobby.state = 0u;
+    custom_launch_lobby.game_state = 9u;
+    const gbe::dota_lobby_state::CustomGameLaunchSetupPlan custom_launch_plan = gbe::dota_lobby_state::compose_custom_game_launch_setup_plan(custom_launch_lobby, 2u);
+    ok &= expect_eq_u64(custom_launch_plan.readyup_lobby.state, 4u, "custom launch readyup state");
+    ok &= expect_eq_u64(custom_launch_plan.readyup_lobby.game_state, 0u, "custom launch readyup game state");
+    ok &= expect_eq_u64(custom_launch_plan.readyup_lobby.launch_phase, 1u, "custom launch readyup preserves phase");
+    ok &= expect_eq_u64(custom_launch_plan.serversetup_lobby.state, 1u, "custom launch setup state");
+    ok &= expect_eq_u64(custom_launch_plan.serversetup_lobby.game_state, 0u, "custom launch setup game state");
+    ok &= expect_eq_u64(custom_launch_plan.serversetup_lobby.launch_phase, 1u, "custom launch setup preserves phase");
+    ok &= expect_eq_u64(custom_launch_plan.synced_launch_phase, 2u, "custom launch synced phase");
+
+    GBE_LocalLobby run_lobby = custom_launch_plan.serversetup_lobby;
+    run_lobby.launch_phase = 2u;
+    const gbe::dota_lobby_state::LaunchRunPlan run_plan = gbe::dota_lobby_state::compose_launch_run_plan(run_lobby, 2u, 3u, 0u);
+    ok &= expect_true(run_plan.can_advance, "launch run plan can advance");
+    ok &= expect_eq_u64(run_plan.launch_phase, 3u, "launch run plan phase");
+    ok &= expect_eq_u64(run_plan.next_state, 2u, "launch run plan next state");
+    ok &= expect_eq_u64(run_plan.next_game_state, 0u, "launch run plan next game state");
+
+    run_lobby.match_id = 0ull;
+    const gbe::dota_lobby_state::LaunchRunPlan blocked_run_plan = gbe::dota_lobby_state::compose_launch_run_plan(run_lobby, 2u, 3u, 0u);
+    ok &= expect_true(!blocked_run_plan.can_advance, "launch run plan blocks missing setup sync");
+
+    GBE_LocalLobby queued_lobby = custom_launch_plan.serversetup_lobby;
+    queued_lobby.launch_phase = 1u;
+    const gbe::dota_lobby_state::QueuedLobbyStateApplyPlan setup_apply_plan = gbe::dota_lobby_state::compose_queued_lobby_state_apply_plan(
+        queued_lobby,
+        1u,
+        0u,
+        true,
+        2u,
+        3u);
+    ok &= expect_eq_u64(setup_apply_plan.state, 1u, "queued setup apply state");
+    ok &= expect_eq_u64(setup_apply_plan.game_state, 0u, "queued setup apply game state");
+    ok &= expect_eq_u64(setup_apply_plan.launch_phase, 2u, "queued setup apply phase");
+
+    const gbe::dota_lobby_state::QueuedLobbyStateApplyPlan run_apply_plan = gbe::dota_lobby_state::compose_queued_lobby_state_apply_plan(
+        queued_lobby,
+        2u,
+        0u,
+        true,
+        2u,
+        3u);
+    ok &= expect_eq_u64(run_apply_plan.state, 2u, "queued run apply state");
+    ok &= expect_eq_u64(run_apply_plan.game_state, 0u, "queued run apply game state");
+    ok &= expect_eq_u64(run_apply_plan.launch_phase, 3u, "queued run apply phase");
+
+    queued_lobby.state = 2u;
+    queued_lobby.game_state = 2u;
+    queued_lobby.launch_phase = 3u;
+    const gbe::dota_lobby_state::QueuedLobbyStateApplyPlan monotonic_apply_plan = gbe::dota_lobby_state::compose_queued_lobby_state_apply_plan(
+        queued_lobby,
+        2u,
+        0u,
+        true,
+        2u,
+        3u);
+    ok &= expect_true(monotonic_apply_plan.preserved_game_state, "queued apply preserves game state flag");
+    ok &= expect_eq_u64(monotonic_apply_plan.game_state, 2u, "queued apply preserves game state value");
+    ok &= expect_eq_u64(monotonic_apply_plan.launch_phase, 3u, "queued apply preserves launch phase");
+
+    const gbe::dota_lobby_state::PracticeLobbyLaunchEventPlan practice_launch_events = gbe::dota_lobby_state::compose_practice_lobby_launch_event_plan(26u);
+    ok &= expect_true(practice_launch_events.initial_details.send, "practice launch sends initial details");
+    ok &= expect_eq_u64(practice_launch_events.initial_details.emsg, 26u, "practice launch details emsg");
+    ok &= expect_eq_string(practice_launch_events.initial_details.reason, "7041_initial_26", "practice launch details reason");
+    ok &= expect_true(practice_launch_events.initial_details.apply_lobby_state, "practice launch details applies state");
+    ok &= expect_eq_u64(practice_launch_events.initial_details.lobby_state, 1u, "practice launch details state");
+    ok &= expect_eq_u64(practice_launch_events.initial_details.lobby_game_state, 0u, "practice launch details game state");
+    ok &= expect_eq_u64(practice_launch_events.initial_details.lobby_source, gbe::dota_lobby_state::LaunchDetailsLobbySourceCurrent, "practice launch details source");
+    ok &= expect_true(practice_launch_events.steam_auth_ack.queue, "practice launch queues steam auth ack");
+    ok &= expect_eq_string(practice_launch_events.steam_auth_ack.reason, "7041_serversetup", "practice launch steam auth reason");
+    ok &= expect_true(practice_launch_events.presence.update, "practice launch updates presence");
+    ok &= expect_eq_string(practice_launch_events.presence.status, "#DOTA_RP_INIT", "practice launch presence status");
+    ok &= expect_eq_string(practice_launch_events.presence.lobby_state, "SERVERSETUP", "practice launch presence lobby state");
+    ok &= expect_true(!practice_launch_events.presence.include_party, "practice launch presence excludes party");
+    ok &= expect_true(practice_launch_events.presence.include_lobby, "practice launch persona includes lobby");
+    ok &= expect_eq_string(practice_launch_events.presence.persona_reason, "7041_launch_init", "practice launch persona reason");
+
+    const gbe::dota_lobby_state::LaunchPresenceEvent custom_init_presence = gbe::dota_lobby_state::compose_launch_serversetup_presence_event("7041_custom_game_launch_init");
+    ok &= expect_true(custom_init_presence.update, "custom launch init updates presence");
+    ok &= expect_eq_string(custom_init_presence.persona_reason, "7041_custom_game_launch_init", "custom launch init persona reason");
+
+    const gbe::dota_lobby_state::CustomGameLaunchSetupEventPlan custom_launch_events = gbe::dota_lobby_state::compose_custom_game_launch_setup_event_plan(26u);
+    ok &= expect_eq_size(custom_launch_events.details_events.size(), 2u, "custom launch details event count");
+    if (custom_launch_events.details_events.size() == 2u) {
+        ok &= expect_eq_string(custom_launch_events.details_events[0].reason, "7041_custom_game_readyup", "custom launch readyup reason");
+        ok &= expect_true(!custom_launch_events.details_events[0].apply_lobby_state, "custom launch readyup no apply state");
+        ok &= expect_eq_u64(custom_launch_events.details_events[0].lobby_state, 4u, "custom launch readyup state");
+        ok &= expect_eq_u64(custom_launch_events.details_events[0].lobby_source, gbe::dota_lobby_state::LaunchDetailsLobbySourceReadyUp, "custom launch readyup source");
+        ok &= expect_eq_string(custom_launch_events.details_events[1].reason, "7041_custom_game_serversetup", "custom launch setup reason");
+        ok &= expect_true(custom_launch_events.details_events[1].apply_lobby_state, "custom launch setup apply state");
+        ok &= expect_eq_u64(custom_launch_events.details_events[1].lobby_state, 1u, "custom launch setup event state");
+        ok &= expect_eq_u64(custom_launch_events.details_events[1].lobby_source, gbe::dota_lobby_state::LaunchDetailsLobbySourceServerSetup, "custom launch setup source");
+    }
+    ok &= expect_eq_string(custom_launch_events.mark_phase_reason, "7041_custom_game_serversetup_synced", "custom launch phase reason");
+    ok &= expect_true(custom_launch_events.steam_auth_ack.queue, "custom launch queues steam auth ack");
+    ok &= expect_eq_string(custom_launch_events.steam_auth_ack.reason, "7041_custom_game_serversetup", "custom launch steam auth reason");
+
+    return ok;
+}
+
 bool test_patch_and_rewrite_helpers()
 {
     using namespace gbe::proto_wire;
@@ -2234,6 +2690,8 @@ int main()
 {
     bool ok = true;
     ok &= test_basic_wire_and_parsers();
+    ok &= test_dota_gc_router_response_helpers();
+    ok &= test_dota_lobby_state_helpers();
     ok &= test_patch_and_rewrite_helpers();
     ok &= test_summary_helpers();
 
