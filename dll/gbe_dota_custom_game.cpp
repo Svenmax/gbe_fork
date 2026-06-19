@@ -75,10 +75,8 @@ std::uint64_t derive_practice_lobby_ip_server_id(std::uint32_t ip)
 
     constexpr std::uint64_t universe_public = 1ull;
     constexpr std::uint64_t account_type_anon_game_server = 4ull;
-    constexpr std::uint64_t steam_user_default_instance = 1ull;
     return (universe_public << 56) |
         (account_type_anon_game_server << 52) |
-        (steam_user_default_instance << 32) |
         static_cast<std::uint64_t>(ip);
 }
 
