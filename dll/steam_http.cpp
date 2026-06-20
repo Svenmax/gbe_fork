@@ -66,6 +66,11 @@ bool GBE_IsDotaPopularGamesHTTPURL(const std::string &url)
     return url.find("/ICustomGames/GetPopularGames/") != std::string::npos;
 }
 
+bool GBE_IsDotaGamePlayerCountsHTTPURL(const std::string &url)
+{
+    return url.find("/ICustomGames/GetGamePlayerCounts/") != std::string::npos;
+}
+
 std::string GBE_DotaModMetadataValue(const Mod_entry &mod, const char *key, const std::string &fallback)
 {
     if (mod.metadata.empty()) return fallback;
@@ -236,6 +241,14 @@ std::string GBE_DotaModReadableName(const Mod_entry &mod)
     return display_name;
 }
 
+bool GBE_DotaShouldIncludeCustomGameMod(const Mod_entry &mod)
+{
+    const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", "");
+    return !map_name.empty()
+        && GBE_DotaHasWorkshopMapResource(mod)
+        && !gbe::dota_custom_game::is_guide_only_workshop_mod(mod.metadata, mod.title, mod.description, mod.path);
+}
+
 uint64 GBE_ParseDotaCustomGameIdFromHTTPURL(const std::string &url)
 {
     const std::array<std::string, 3> keys = {
@@ -274,7 +287,7 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
         for (PublishedFileId_t mod_id : settings->modSet()) {
             Mod_entry mod = settings->getMod(mod_id);
             const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", "");
-            if (map_name.empty() || !GBE_DotaHasWorkshopMapResource(mod) || gbe::dota_custom_game::is_guide_only_workshop_mod(mod.metadata, mod.title, mod.description, mod.path))
+            if (!GBE_DotaShouldIncludeCustomGameMod(mod))
                 continue;
 
             const std::string addon_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);
@@ -361,9 +374,30 @@ std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const st
     return steam_client->steam_game_coordinator->GBE_GetDotaJoinableCustomLobbiesHTTPJSON(requested_custom_game_id);
 }
 
+std::string GBE_GetOfflineDotaGamePlayerCountsJSON(class Settings *settings, const std::string &url)
+{
+    const uint64 requested_custom_game_id = GBE_ParseDotaCustomGameIdFromHTTPURL(url);
+    bool include_custom_game = false;
+
+    if (settings && requested_custom_game_id != 0ull && settings->isModInstalled(requested_custom_game_id)) {
+        include_custom_game = GBE_DotaShouldIncludeCustomGameMod(settings->getMod(requested_custom_game_id));
+    }
+
+    nlohmann::json response = nlohmann::json::object();
+    response["result"] = {
+        {"success", include_custom_game},
+        {"custom_game_id", std::to_string(requested_custom_game_id)},
+        {"player_count", 0},
+        {"lobby_count", 0}
+    };
+    return response.dump();
+}
+
 void GBE_SetDotaCustomGamesHTTPResponse(struct Steam_Http_Request &request, class Settings *settings)
 {
-    request.response = GBE_GetOfflineDotaCustomGamesJSON(settings, request.url);
+    request.response = GBE_IsDotaGamePlayerCountsHTTPURL(request.url)
+        ? GBE_GetOfflineDotaGamePlayerCountsJSON(settings, request.url)
+        : GBE_GetOfflineDotaCustomGamesJSON(settings, request.url);
     request.headers["Content-Type"] = "application/json; charset=utf-8";
 }
 
