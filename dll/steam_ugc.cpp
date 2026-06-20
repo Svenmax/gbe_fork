@@ -586,7 +586,11 @@ static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc
             }
 
             const std::vector<std::string> primary_files = Local_Storage::get_filenames_path(mod.path);
-            if (!primary_files.empty()) mod.primaryFileName = primary_files[0];
+            if (!primary_files.empty()) {
+                mod.primaryFileName = primary_files[0];
+                mod.primaryFileSize = (int32)get_file_size_safe(mod.primaryFileName, mod.path, 0);
+                mod.total_files_sizes = mod.primaryFileSize;
+            }
 
             const bool already_installed = settings->isModInstalled(workshop_id);
             settings->addMod(mod.id, mod.title, mod.path);

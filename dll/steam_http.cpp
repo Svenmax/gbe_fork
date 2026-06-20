@@ -21,6 +21,7 @@
 #include <array>
 #include <cctype>
 #include <cstdio>
+#include <fstream>
 
 #include "gbe_dota_custom_game.h"
 #include "steam/isteamnetworkingsocketsserialized.h"
@@ -112,8 +113,79 @@ bool GBE_DotaHasWorkshopMapResource(const Mod_entry &mod)
             if (!std::filesystem::is_regular_file(dir_entry)) continue;
 
             const std::string extension = common_helpers::to_lower(dir_entry.path().extension().u8string());
-            if (extension == ".vmap" || extension == ".vmap_c" || extension == ".bsp" || extension == ".vpk")
+            if (extension == ".vmap" || extension == ".vmap_c" || extension == ".bsp")
                 return true;
+
+            if (extension != ".vpk")
+                continue;
+
+            std::ifstream input(dir_entry.path(), std::ios::binary);
+            if (!input.is_open())
+                continue;
+
+            uint32 signature = 0;
+            uint32 version = 0;
+            uint32 tree_size = 0;
+            input.read(reinterpret_cast<char *>(&signature), sizeof(signature));
+            input.read(reinterpret_cast<char *>(&version), sizeof(version));
+            input.read(reinterpret_cast<char *>(&tree_size), sizeof(tree_size));
+            if (!input.good() || signature != 0x55aa1234u || tree_size == 0u)
+                continue;
+
+            if (version >= 2u) {
+                uint32 ignored = 0;
+                for (int i = 0; i < 4; ++i) {
+                    input.read(reinterpret_cast<char *>(&ignored), sizeof(ignored));
+                    if (!input.good())
+                        break;
+                }
+                if (!input.good())
+                    continue;
+            }
+
+            auto read_cstring = [&input]() -> std::string {
+                std::string value;
+                char ch = 0;
+                while (input.read(&ch, 1) && ch != '\0') value.push_back(ch);
+                return value;
+            };
+
+            while (input.good()) {
+                const std::string extension_name = read_cstring();
+                if (extension_name.empty()) break;
+
+                while (input.good()) {
+                    const std::string path_name = read_cstring();
+                    if (path_name.empty()) break;
+
+                    while (input.good()) {
+                        const std::string filename = read_cstring();
+                        if (filename.empty()) break;
+
+                        uint32 crc = 0;
+                        uint16 preload_bytes = 0;
+                        uint16 archive_index = 0;
+                        uint32 offset = 0;
+                        uint32 length = 0;
+                        uint16 terminator = 0;
+                        input.read(reinterpret_cast<char *>(&crc), sizeof(crc));
+                        input.read(reinterpret_cast<char *>(&preload_bytes), sizeof(preload_bytes));
+                        input.read(reinterpret_cast<char *>(&archive_index), sizeof(archive_index));
+                        input.read(reinterpret_cast<char *>(&offset), sizeof(offset));
+                        input.read(reinterpret_cast<char *>(&length), sizeof(length));
+                        input.read(reinterpret_cast<char *>(&terminator), sizeof(terminator));
+                        if (!input.good()) return false;
+
+                        if (preload_bytes > 0)
+                            input.seekg(preload_bytes, std::ios::cur);
+
+                        const std::filesystem::path resource_path = std::filesystem::u8path(path_name + "/" + filename + "." + extension_name);
+                        const std::string resource_extension = common_helpers::to_lower(resource_path.extension().u8string());
+                        if (resource_extension == ".vmap" || resource_extension == ".vmap_c" || resource_extension == ".bsp")
+                            return true;
+                    }
+                }
+            }
         }
     } catch (...) { }
 
