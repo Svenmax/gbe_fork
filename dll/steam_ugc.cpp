@@ -669,6 +669,30 @@ std::vector<std::string> Steam_UGC::get_query_ugc_tags(UGCQueryHandle_t handle, 
 
 }
 
+bool Steam_UGC::should_expose_mod_to_ugc(PublishedFileId_t id)
+{
+    if (!settings->isModInstalled(id)) return false;
+    if (settings->get_local_game_id().AppID() != 570u) return true;
+
+    const Mod_entry mod = settings->getMod(id);
+    if (gbe::dota_custom_game::is_guide_only_workshop_mod(mod.metadata, mod.title, mod.description, mod.path))
+        return false;
+
+    const std::string metadata_map_name = GBE_DotaModMetadataValue(mod, "map_name", "");
+    const std::string detected_map_name = GBE_DotaWorkshopModMapName(mod.path, metadata_map_name);
+    return !detected_map_name.empty();
+}
+
+std::set<PublishedFileId_t> Steam_UGC::visible_ugc_mods(const std::set<PublishedFileId_t> &mods)
+{
+    std::set<PublishedFileId_t> visible;
+    for (PublishedFileId_t id : mods) {
+        if (should_expose_mod_to_ugc(id))
+            visible.insert(id);
+    }
+    return visible;
+}
+
 static uint64 GBE_UGCStatisticValue(const Mod_entry &mod, EItemStatistic eStatType)
 {
     switch (eStatType) {
@@ -734,7 +758,7 @@ void Steam_UGC::set_details(PublishedFileId_t id, SteamUGCDetails_t *pDetails, I
     if (pDetails) {
         pDetails->m_nPublishedFileId = id;
 
-        if (settings->isModInstalled(id)) {
+        if (should_expose_mod_to_ugc(id)) {
             PRINT_DEBUG("  mod is installed, setting details");
             pDetails->m_eResult = k_EResultOK;
 
@@ -1022,7 +1046,8 @@ SteamAPICall_t Steam_UGC::SendQueryUGCRequest( UGCQueryHandle_t handle )
     data.m_eResult = k_EResultOK;
     data.m_bCachedData = false;
 
-    std::set<PublishedFileId_t> all_subscribed = std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end());
+    std::set<PublishedFileId_t> all_subscribed = visible_ugc_mods(
+        std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end()));
 
     if (request->query_type == eUserUGCRequest) {
         if (request->return_all_subscribed) {
@@ -1081,7 +1106,7 @@ SteamAPICall_t Steam_UGC::SendQueryUGCRequest( UGCQueryHandle_t handle )
     else if (request->query_type == eUGCDetailsRequest) {
         if (request->return_only.size()) {
             for (auto & s : request->return_only) {
-                if (ugc_bridge->has_subbed_mod(s)) {
+                if (ugc_bridge->has_subbed_mod(s) && should_expose_mod_to_ugc(s)) {
                     request->results.insert(s);
                 }
             }
@@ -2065,7 +2090,7 @@ SteamAPICall_t Steam_UGC::SubscribeItem( PublishedFileId_t nPublishedFileID )
 
     RemoteStorageSubscribePublishedFileResult_t data{};
     data.m_nPublishedFileId = nPublishedFileID;
-    if (settings->isModInstalled(nPublishedFileID)) {
+    if (should_expose_mod_to_ugc(nPublishedFileID)) {
         data.m_eResult = k_EResultOK;
         ugc_bridge->add_subbed_mod(nPublishedFileID);
     } else {
@@ -2103,7 +2128,8 @@ uint32 Steam_UGC::GetNumSubscribedItems( bool bIncludeLocallyDisabled )
     PRINT_DEBUG(" %d", (int)bIncludeLocallyDisabled);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     
-    std::set<PublishedFileId_t> subscribed_enabled = std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end());
+    std::set<PublishedFileId_t> subscribed_enabled = visible_ugc_mods(
+        std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end()));
     if (!bIncludeLocallyDisabled) {
         for (auto &sd : subscribed_disabled) {
             subscribed_enabled.erase(sd);
@@ -2127,7 +2153,8 @@ uint32 Steam_UGC::GetSubscribedItems( PublishedFileId_t* pvecPublishedFileID, ui
     PRINT_DEBUG("%p %u %d", pvecPublishedFileID, cMaxEntries, (int)bIncludeLocallyDisabled);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    std::set<PublishedFileId_t> subscribed_enabled = std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end());
+    std::set<PublishedFileId_t> subscribed_enabled = visible_ugc_mods(
+        std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end()));
     if (!bIncludeLocallyDisabled) {
         for (auto &sd : subscribed_disabled) {
             subscribed_enabled.erase(sd);
@@ -2152,7 +2179,7 @@ uint32 Steam_UGC::GetItemState( PublishedFileId_t nPublishedFileID )
     PRINT_DEBUG("%llu", nPublishedFileID);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     
-    if (!settings->isModInstalled(nPublishedFileID)) {
+    if (!should_expose_mod_to_ugc(nPublishedFileID)) {
         PRINT_DEBUG("  mod isn't found");
         return k_EItemStateNone;
     }
@@ -2181,7 +2208,7 @@ bool Steam_UGC::GetItemInstallInfo( PublishedFileId_t nPublishedFileID, uint64 *
     PRINT_DEBUG("%llu %p %p [%u] %p", nPublishedFileID, punSizeOnDisk, pchFolder, cchFolderSize, punTimeStamp);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (!cchFolderSize) return false;
-    if (!settings->isModInstalled(nPublishedFileID)) return false;
+    if (!should_expose_mod_to_ugc(nPublishedFileID)) return false;
 
     auto mod = settings->getMod(nPublishedFileID);
     
@@ -2209,7 +2236,7 @@ bool Steam_UGC::GetItemDownloadInfo( PublishedFileId_t nPublishedFileID, uint64 
 {
     PRINT_DEBUG("%llu", nPublishedFileID);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    if (!settings->isModInstalled(nPublishedFileID)) return false;
+    if (!should_expose_mod_to_ugc(nPublishedFileID)) return false;
 
     auto mod = settings->getMod(nPublishedFileID);
     if (punBytesDownloaded) *punBytesDownloaded = mod.primaryFileSize;
@@ -2250,7 +2277,7 @@ bool Steam_UGC::DownloadItem( PublishedFileId_t nPublishedFileID, bool bHighPrio
     PRINT_DEBUG("%llu %i // TODO", nPublishedFileID, (int)bHighPriority);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     
-    if (!settings->isModInstalled(nPublishedFileID)) {
+    if (!should_expose_mod_to_ugc(nPublishedFileID)) {
         DownloadItemResult_t data_fail{};
         data_fail.m_eResult = EResult::k_EResultFail;
         data_fail.m_nPublishedFileId = nPublishedFileID;
@@ -2466,7 +2493,8 @@ bool Steam_UGC::SetItemsDisabledLocally( PublishedFileId_t *pvecPublishedFileIDs
         return false; // real steam crashes the app
 
     bool modified = false;
-    std::set<PublishedFileId_t> all_subscribed = std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end());
+    std::set<PublishedFileId_t> all_subscribed = visible_ugc_mods(
+        std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end()));
 
     for (uint32 i = 0; i < unNumPublishedFileIDs; ++i) {
         PublishedFileId_t id = pvecPublishedFileIDs[i];
@@ -2522,7 +2550,7 @@ uint32 Steam_UGC::GetNumDownloadedItems()
         return 0;
     }
 
-    return (uint32)settings->modSet().size(); // not sure if returning all mods is correct
+    return (uint32)visible_ugc_mods(settings->modSet()).size();
 }
 
 // Returns the ids of the items downloaded
@@ -2542,7 +2570,7 @@ uint32 Steam_UGC::GetDownloadedItems(PublishedFileId_t* pvecPublishedFileIDs, ui
         return 0;
     }
 
-    const auto all_mods = settings->modSet(); // not sure if using all mods is correct
+    const auto all_mods = visible_ugc_mods(settings->modSet());
     uint32 count = std::min<uint32>((uint32)all_mods.size(), cMaxEntries);
     std::copy_n(all_mods.cbegin(), count, pvecPublishedFileIDs);
 
