@@ -18,7 +18,6 @@
 #include "dll/steam_ugc.h"
 #include "dll/dll.h"
 #include "gbe_dota_custom_game.h"
-#include "helpers/common_helpers/common_helpers.hpp"
 
 #include <cctype>
 #include <fstream>
