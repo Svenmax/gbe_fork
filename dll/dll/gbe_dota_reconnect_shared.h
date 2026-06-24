@@ -11,14 +11,23 @@
 
 struct GBE_DotaReconnectContext {
     uint64_t server_id;       // lobby server_steamid (AnonGameServer)
+    uint32_t lobby_state;     // lobby state (2 = RUN)
     uint32_t game_state;      // lobby game_state (2 = in-game, 3 = post-game)
+    uint64_t custom_game_id;  // arcade/custom game id; zero for ordinary practice lobby
     char connect[128];        // LAN endpoint e.g. "172.19.60.153:27015"
     uint64_t owner_steam_id;  // lobby owner for GameRichPresenceJoinRequested
 };
 
+inline bool GBE_DotaReconnectContextIsStarted(const GBE_DotaReconnectContext &ctx)
+{
+    return ctx.lobby_state >= 2u || ctx.game_state >= 2u;
+}
+
 // Get current Dota lobby reconnect context.
 // Returns false if no active lobby or game not started.
 bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out);
+bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64_t local_steam_id, GBE_DotaReconnectContext *out);
+bool GBE_IsDotaArcadeLobbyActive();
 
 // Flag indicating player has disconnected (CancelAuthTicket called)
 // and is eligible for reconnect interception.

@@ -681,23 +681,41 @@ ISteamApps *Steam_Client::GetISteamApps( HSteamUser hSteamUser, HSteamPipe hStea
         steam_apps_temp = steam_apps;
     }
     if ((strcmp(pchVersion, "STEAMAPPS_INTERFACE_VERSION001") == 0) || (strcmp(pchVersion, "SteamApps001") == 0)) {
-        return reinterpret_cast<ISteamApps *>(static_cast<ISteamApps001 *>(steam_apps_temp));
+        auto result = reinterpret_cast<ISteamApps *>(static_cast<ISteamApps001 *>(steam_apps_temp));
+        GBE_LogGenericInterfaceRequest("APPS_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER);
+        return result;
     } else if (strcmp(pchVersion, "STEAMAPPS_INTERFACE_VERSION002") == 0) {
-        return reinterpret_cast<ISteamApps *>(static_cast<ISteamApps002 *>(steam_apps_temp));
+        auto result = reinterpret_cast<ISteamApps *>(static_cast<ISteamApps002 *>(steam_apps_temp));
+        GBE_LogGenericInterfaceRequest("APPS_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER);
+        return result;
     } else if (strcmp(pchVersion, "STEAMAPPS_INTERFACE_VERSION003") == 0) {
-        return reinterpret_cast<ISteamApps *>(static_cast<ISteamApps003 *>(steam_apps_temp));
+        auto result = reinterpret_cast<ISteamApps *>(static_cast<ISteamApps003 *>(steam_apps_temp));
+        GBE_LogGenericInterfaceRequest("APPS_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER);
+        return result;
     } else if (strcmp(pchVersion, "STEAMAPPS_INTERFACE_VERSION004") == 0) {
-        return reinterpret_cast<ISteamApps *>(static_cast<ISteamApps004 *>(steam_apps_temp));
+        auto result = reinterpret_cast<ISteamApps *>(static_cast<ISteamApps004 *>(steam_apps_temp));
+        GBE_LogGenericInterfaceRequest("APPS_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER);
+        return result;
     } else if (strcmp(pchVersion, "STEAMAPPS_INTERFACE_VERSION005") == 0) {
-        return reinterpret_cast<ISteamApps *>(static_cast<ISteamApps005 *>(steam_apps_temp));
+        auto result = reinterpret_cast<ISteamApps *>(static_cast<ISteamApps005 *>(steam_apps_temp));
+        GBE_LogGenericInterfaceRequest("APPS_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER);
+        return result;
     } else if (strcmp(pchVersion, "STEAMAPPS_INTERFACE_VERSION006") == 0) {
-        return reinterpret_cast<ISteamApps *>(static_cast<ISteamApps006 *>(steam_apps_temp));
+        auto result = reinterpret_cast<ISteamApps *>(static_cast<ISteamApps006 *>(steam_apps_temp));
+        GBE_LogGenericInterfaceRequest("APPS_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER);
+        return result;
     } else if (strcmp(pchVersion, "STEAMAPPS_INTERFACE_VERSION007") == 0) {
-        return reinterpret_cast<ISteamApps *>(static_cast<ISteamApps007 *>(steam_apps_temp));
+        auto result = reinterpret_cast<ISteamApps *>(static_cast<ISteamApps007 *>(steam_apps_temp));
+        GBE_LogGenericInterfaceRequest("APPS_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER);
+        return result;
     } else if (strcmp(pchVersion, "STEAMAPPS_INTERFACE_VERSION008") == 0) {
-        return reinterpret_cast<ISteamApps*>(static_cast<ISteamApps008 *>(steam_apps_temp));
+        auto result = reinterpret_cast<ISteamApps*>(static_cast<ISteamApps008 *>(steam_apps_temp));
+        GBE_LogGenericInterfaceRequest("APPS_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER);
+        return result;
     } else if (strcmp(pchVersion, STEAMAPPS_INTERFACE_VERSION) == 0) {
-        return reinterpret_cast<ISteamApps *>(static_cast<ISteamApps *>(steam_apps_temp));
+        auto result = reinterpret_cast<ISteamApps *>(static_cast<ISteamApps *>(steam_apps_temp));
+        GBE_LogGenericInterfaceRequest("APPS_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER);
+        return result;
     }
 
     report_missing_impl_and_exit(pchVersion, EMU_FUNC_NAME);
@@ -740,38 +758,72 @@ ISteamRemoteStorage *Steam_Client::GetISteamRemoteStorage( HSteamUser hSteamuser
     PRINT_DEBUG("%s", pchVersion);
     if (!steam_pipes.count(hSteamPipe) || !hSteamuser) return NULL;
 
+    const bool server = steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER;
+
     if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION001") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage001 *>(steam_remote_storage)); //Not found in public Archive, must be before 1.00
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage001 *>(steam_remote_storage)); //Not found in public Archive, must be before 1.00
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION002") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage002 *>(steam_remote_storage));
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage002 *>(steam_remote_storage));
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION003") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage003 *>(steam_remote_storage)); //Not found in public Archive, must be between 1.11-1.12
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage003 *>(steam_remote_storage)); //Not found in public Archive, must be between 1.11-1.12
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION004") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage004 *>(steam_remote_storage));
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage004 *>(steam_remote_storage));
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION005") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage005 *>(steam_remote_storage));
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage005 *>(steam_remote_storage));
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION006") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage006 *>(steam_remote_storage));
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage006 *>(steam_remote_storage));
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION007") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage007 *>(steam_remote_storage)); //Not found in public Archive, must be between 1.19-1.20
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage007 *>(steam_remote_storage)); //Not found in public Archive, must be between 1.19-1.20
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION008") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage008 *>(steam_remote_storage));
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage008 *>(steam_remote_storage));
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION009") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage009 *>(steam_remote_storage)); //Not found in public Archive, must be between 1.21-1.22
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage009 *>(steam_remote_storage)); //Not found in public Archive, must be between 1.21-1.22
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION010") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage010 *>(steam_remote_storage));
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage010 *>(steam_remote_storage));
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION011") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage011 *>(steam_remote_storage));
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage011 *>(steam_remote_storage));
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION012") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage012 *>(steam_remote_storage));
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage012 *>(steam_remote_storage));
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION013") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage013 *>(steam_remote_storage));
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage013 *>(steam_remote_storage));
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION014") == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage014 *>(steam_remote_storage));
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage014 *>(steam_remote_storage));
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMREMOTESTORAGE_INTERFACE_VERSION015") == 0) { // Not found in public Archive, based on reversing
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage015 *>(steam_remote_storage));
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage015 *>(steam_remote_storage));
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, STEAMREMOTESTORAGE_INTERFACE_VERSION) == 0) {
-        return reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage *>(steam_remote_storage));
+        auto result = reinterpret_cast<ISteamRemoteStorage *>(static_cast<ISteamRemoteStorage *>(steam_remote_storage));
+        GBE_LogGenericInterfaceRequest("REMOTE_STORAGE_INTERFACE_RETURN", pchVersion, hSteamuser, hSteamPipe, result, server);
+        return result;
     }
 
     report_missing_impl_and_exit(pchVersion, EMU_FUNC_NAME);
@@ -886,9 +938,13 @@ ISteamUGC *Steam_Client::GetISteamUGC( HSteamUser hSteamUser, HSteamPipe hSteamP
         steam_ugc_temp = steam_ugc;
     }
 
+    const bool server = steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER;
+
     if (strcmp(pchVersion, "STEAMUGC_INTERFACE_VERSION") == 0) {
         //Is this actually a valid interface version?
-        return reinterpret_cast<ISteamUGC *>(static_cast<ISteamUGC001 *>(steam_ugc_temp));
+        auto result = reinterpret_cast<ISteamUGC *>(static_cast<ISteamUGC001 *>(steam_ugc_temp));
+        GBE_LogGenericInterfaceRequest("UGC_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, server);
+        return result;
     } else if (strcmp(pchVersion, "STEAMUGC_INTERFACE_VERSION001") == 0) {
         return reinterpret_cast<ISteamUGC *>(static_cast<ISteamUGC001 *>(steam_ugc_temp));
     } else if (strcmp(pchVersion, "STEAMUGC_INTERFACE_VERSION002") == 0) {
@@ -930,7 +986,9 @@ ISteamUGC *Steam_Client::GetISteamUGC( HSteamUser hSteamUser, HSteamPipe hSteamP
     } else if (strcmp(pchVersion, "STEAMUGC_INTERFACE_VERSION020") == 0) {
         return reinterpret_cast<ISteamUGC *>(static_cast<ISteamUGC020 *>(steam_ugc_temp));
     } else if (strcmp(pchVersion, STEAMUGC_INTERFACE_VERSION) == 0) {
-        return reinterpret_cast<ISteamUGC *>(static_cast<ISteamUGC *>(steam_ugc_temp));
+        auto result = reinterpret_cast<ISteamUGC *>(static_cast<ISteamUGC *>(steam_ugc_temp));
+        GBE_LogGenericInterfaceRequest("UGC_INTERFACE_RETURN", pchVersion, hSteamUser, hSteamPipe, result, server);
+        return result;
     }
 
     report_missing_impl_and_exit(pchVersion, EMU_FUNC_NAME);

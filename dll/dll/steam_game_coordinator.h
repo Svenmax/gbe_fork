@@ -20,6 +20,16 @@
 
 #include "base.h"
 #include "econ_item.h"
+#include "gbe_dota_lobby_state.h"
+
+namespace gbe::proto_wire {
+struct Dota7034DisconnectedPlayer;
+struct Dota7034RequestShape;
+}
+
+namespace gbe::dota_gc_router {
+struct DotaGcRequestContext;
+}
 
 class Steam_User_Items;
 class Steam_GameServer_Items;
@@ -27,17 +37,6 @@ struct GCMsgHdr_t;
 struct GCMsgHdrEx_t;
 struct ProtoBufMsgHeader_t;
 class CMsgProtoBufHeader;
-
-struct GBE_DotaLobbyMemberState
-{
-    uint64 steam_id{};
-    uint32 account_id{};
-    uint32 team{};
-    uint32 slot{};
-    uint32 hero_id{};
-    bool connected{};
-    uint32 leaver_status{};  // 0=NONE, 1=DISCONNECTED, 5=ABANDONED, etc.
-};
 
 class Steam_Game_Coordinator :
 public ISteamGameCoordinator
@@ -97,69 +96,6 @@ public ISteamGameCoordinator
     std::string GBE_last_dota_direct_connect_callback_signature;
     std::chrono::high_resolution_clock::time_point GBE_last_lobby_poll_time{};
 
-    struct GBE_LocalLobby
-    {
-        bool active{};
-        uint64 lobby_id{};
-        uint64 generic_lobby_id{};
-        bool has_chat_channel{};
-        uint64 chat_channel_id{};
-        std::string chat_channel_name;
-        uint32 chat_channel_type{};
-        std::string room_name;
-        uint32 game_mode{};
-        uint32 server_region{};
-        bool lan{};
-        std::string lan_host_ping_location;
-        bool allow_cheats{};
-        bool fill_with_bots{};
-        bool allow_spectating{};
-        uint32 visibility{};
-        uint32 bot_difficulty_radiant{};
-        uint32 bot_difficulty_dire{};
-        uint64 bot_radiant{};
-        uint64 bot_dire{};
-        uint32 state{};
-        uint32 game_state{};
-        uint64 match_id{};
-        uint64 server_id{};
-        uint64 owner_steam_id{};
-        uint32 owner_account_id{};
-        std::string owner_name;
-        std::string connect;
-        uint32 game_start_time{};
-        uint32 owner_team{};
-        uint32 owner_slot{};
-        uint32 owner_hero_id{};
-        bool owner_connected{};
-        std::vector<GBE_DotaLobbyMemberState> members;
-        uint32 launch_phase{};
-        bool launch_4511_seen{};
-        bool has_broadcast_channel{};
-        uint32 broadcast_channel_id{};
-        std::string broadcast_country_code;
-        std::string broadcast_description;
-        std::string broadcast_language_code;
-        std::string pass_key;
-        uint64 tv_secret_code{};
-        uint32 tv_port{};
-        bool has_cache_version{};
-        uint64 cache_version{};
-        bool has_cache_service_id{};
-        uint32 cache_service_id{};
-        std::vector<uint32> cache_service_list;
-        bool has_cache_sync_version{};
-        uint64 cache_sync_version{};
-        bool abandon_postgame_active{};
-        uint64 abandon_pre_postgame_chat_channel_id{};
-        bool pending_leave_after_7040{};
-        uint64 pending_leave_lobby_id{};
-        bool seen_local_in_generic_lobby{};
-        bool kicked_suppressed_logged{};
-        bool waiting_join_confirmation_logged{};
-        bool owner_adoption_suppressed_logged{};
-    };
-
     GBE_LocalLobby GBE_local_lobby{};
 
     std::vector<Econ_Item> items;
@@ -187,6 +123,7 @@ public ISteamGameCoordinator
     void GBE_ClearDotaAbandonedLobbySuppression(uint64 lobby_id, const char *reason);
     bool GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(uint32 masked_emsg) const;
     bool GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bool connected);
+    bool GBE_SetDotaLobbyMemberRuntimeState(uint64 steam_id, bool connected, uint32 hero_id, bool has_hero_id);
     bool GBE_ShouldHoldDotaLanLaunchForRemoteMembers(uint32 next_game_state, uint32 *remote_count_out, uint32 *connected_remote_count_out) const;
     void GBE_DiscardQueuedDotaLaunchMessagesForAbandon(const char *reason);
     void push_incoming(uint32 msg_type, const std::string &message, double delay = 0.1, bool apply_lobby_state = false, uint32 lobby_state = 0, uint32 lobby_game_state = 0);
@@ -234,14 +171,26 @@ public ISteamGameCoordinator
     void GBE_PushDotaLaunchStateToClientPeer(const char *reason);
     bool GBE_TryQueueDotaPrelaunch021(const char *note, uint32 trigger_emsg, uint64 source_job);
     bool GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state, double delay = 0.0);
+    void GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(uint64 owner_steam_id, uint64 source_job);
+    void GBE_HandleDotaDirect7034DisconnectedPlayers(const std::vector<gbe::proto_wire::Dota7034DisconnectedPlayer> &disconnected_players, uint64 source_job);
+    void GBE_HandleDotaDirect7034RuntimeUpdates(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RequestShape &request_shape, bool custom_game_launch, uint64 source_job, bool &queued_runtime_lobby_update);
+    bool GBE_HandleDotaDirect7034Response(uint32 request_emsg, const gbe::proto_wire::Dota7034RequestShape &request_shape, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    void GBE_HandleDotaDirect7034WaitForPlayers(uint32 request_emsg, const uint8 *body, size_t body_size, bool custom_game_launch, bool request_advances_to_hero_selection, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034StrategyTime(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RequestShape &request_shape, bool custom_game_launch, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034StrategyTimeFallback(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RequestShape &request_shape, bool custom_game_launch, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034StrategyTimePreserve(uint32 request_emsg, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034LaunchPoll(uint32 request_emsg, uint64 source_job, bool &queued_runtime_lobby_update);
+    bool GBE_HandleDotaDirect7034Request(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HasDotaLaunchServerSetupSync() const;
     void GBE_MarkDotaLaunchPhase(uint32 phase, const char *reason);
-    bool GBE_TryAdvanceDotaLaunchToRun(const char *note, uint32 trigger_emsg, uint64 source_job, const char *reason);
+    bool GBE_MaybeQueueDotaPracticeLobbySteamAuthAck(const char *reason, uint64 request_job_id);
+    bool GBE_TryAdvanceDotaLaunchToRun(const char *note, uint32 trigger_emsg, uint64 source_job, const char *reason, uint32 next_game_state = 0u);
     void GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason);
     void GBE_PublishSharedDotaLobbyState(const char *reason);
     bool GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(const char *reason);
     bool GBE_MaybeHandleDotaPracticeLobbyKicked(const char *reason);
     bool GBE_AdoptDotaGenericLobbyOwnerIfNeeded(const char *reason);
+    bool GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_LocalLobby &lobby);
     void GBE_PublishDotaPracticeLobbyLocalMemberData(const char *reason);
     void GBE_PublishDotaPracticeLobbyMetadata(const char *reason);
     bool GBE_FindDotaGenericLobbyByDotaLobbyId(uint64 dota_lobby_id, CSteamID &generic_lobby_id, GBE_LocalLobby *lobby_snapshot, const char *reason);
@@ -258,15 +207,18 @@ public ISteamGameCoordinator
     bool GBE_HandleDotaJoinChatChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaAbandonCurrentGameRequest(bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaGameMatchSignOutRequest(bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id);
+    bool GBE_PushDotaResponse(uint32 inner_emsg, const std::string &inner_message, bool wrapped, const std::string *outer_session_field_raw, const char *reason, bool apply_lobby_state = false, uint32 lobby_state = 0, uint32 lobby_game_state = 0, std::string *out_wrapped_message = nullptr);
     bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw, const char *reason);
-    bool GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_SendDotaCustomGameLaunchSetupFlow(bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id);
+    bool GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaCustomLobbyListRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaLobbyListRequest(bool has_request_job, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaFriendPracticeLobbyListRequest(bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaPracticeLobbyJoinRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw, bool send_join_response = true);
     bool GBE_HandleDotaInviteToLobbyRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaLobbyInviteResponseRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrapped, const std::string *outer_session_field_raw);
-    bool GBE_HandleDotaPracticeLobbyLaunchRequest(bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id);
+    bool GBE_HandleDotaPracticeLobbyLaunchRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id);
     bool GBE_HandleDotaPracticeLobbySetDetailsRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaPracticeLobbyKickRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
@@ -280,6 +232,7 @@ public ISteamGameCoordinator
     bool GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaDestroyLobbyRequest(uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaAddSocketRequest(const uint8 *body, size_t body_size, bool has_request_job, uint64 request_job_id);
+    bool GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
     bool GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData);
     bool GBE_HandleDotaWrappedPostLoginRequest(const void *pubData, uint32 cubData);
     bool handle_dota_client_message(uint32 unMsgType, const void *pubData, uint32 cubData);
@@ -309,7 +262,10 @@ public:
 
     void initialize_gc();
     void shutdown_gc();
+    void on_appid_changed(uint32 appid);
+    bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64 local_steam_id, GBE_DotaReconnectContext *out);
     void GBE_MaybePrimeDotaServerWelcomeFromCache(const char *reason);
+    std::string GBE_GetDotaJoinableCustomLobbiesHTTPJSON(uint64 requested_custom_game_id);
 
     // Returns true if the server GC has an active lobby matching the given lobby_id.
     // Used by client GC to detect HOST scenario and avoid running PLAYER PostGame cleanup.

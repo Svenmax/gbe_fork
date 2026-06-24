@@ -18,6 +18,9 @@
 #include "dll/steam_friends.h"
 #include "dll/dll.h"
 
+#include <cstdio>
+#include <cstring>
+
 #define SEND_FRIEND_RATE 4.0
 
 
@@ -1035,6 +1038,13 @@ EUserRestriction Steam_Friends::GetUserRestrictions_old()
 bool Steam_Friends::SetRichPresence( const char *pchKey, const char *pchValue )
 {
     PRINT_DEBUG("%s %s", pchKey, pchValue ? pchValue : "NULL");
+    if (pchKey && std::strcmp(pchKey, "connect") == 0) {
+        FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+        if (file) {
+            std::fprintf(file, "[GBE_RECONNECT_DIAG] SetRichPresence connect=%s\n", pchValue ? pchValue : "NULL");
+            std::fclose(file);
+        }
+    }
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     bool changed = false;
 
@@ -1065,6 +1075,11 @@ bool Steam_Friends::SetRichPresence( const char *pchKey, const char *pchValue )
 void Steam_Friends::ClearRichPresence()
 {
     PRINT_DEBUG_ENTRY();
+    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (file) {
+        std::fprintf(file, "[GBE_RECONNECT_DIAG] ClearRichPresence clears connect\n");
+        std::fclose(file);
+    }
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (us.rich_presence().empty())
         return;

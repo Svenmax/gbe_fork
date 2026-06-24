@@ -510,6 +510,118 @@ static bool PatchConfigVisibility(byte_t* base, size_t size)
     return FallbackPatch(base, size);
 }
 
+static bool PatchUnauthenticatedConnectionGate(byte_t* base, size_t size)
+{
+    DebugLog("[AUTH_PATCH] Starting unauthenticated connection gate patch in %zu bytes...", size);
+
+    // Windows steamnetworkingsockets.dll (2026-05-22 sample):
+    //   call  BAllowWithoutAuth-like gate
+    //   movzx edx,al
+    //   lea   rcx,[r13+0x78]
+    //   call  identity/auth-scope check
+    //   test  eax,eax
+    //   jne   accept_connection
+    //   ... "Unauthenticated connections not allowed."
+    // We force the tail to jump to the accept path, matching the VAC/HLTV
+    // binary-patch style without relying on cert/config shims.
+    byte_t pattern[] = {
+        0x48, 0x8B, 0xCE, 0xE8, 0x00, 0x00, 0x00, 0x00,
+        0x0F, 0xB6, 0xD0, 0x49, 0x8D, 0x4D, 0x78, 0xE8,
+        0x00, 0x00, 0x00, 0x00, 0x85, 0xC0, 0x00, 0x3F
+    };
+    const char* mask = "xxxx????xxxxxxxx????xx?x";
+    const int patternLen = 24;
+
+    int count = CountPattern(base, size, pattern, mask, patternLen);
+    DebugLog("[AUTH_PATCH] Unauthenticated gate pattern matches: %d", count);
+    if (count != 1) {
+        DebugLog("[AUTH_PATCH] Expected exactly one unauthenticated gate match");
+        return false;
+    }
+
+    byte_t* addr = FindPattern(base, size, pattern, mask, patternLen);
+    if (!addr) {
+        DebugLog("[AUTH_PATCH] Gate pattern not found after count");
+        return false;
+    }
+
+    DebugLog("[AUTH_PATCH] Found unauthenticated gate at offset 0x%zX", static_cast<size_t>(addr - base));
+    if (*(addr + 22) == 0xEB) {
+        DebugLog("[AUTH_PATCH] Gate already patched");
+        return true;
+    }
+    if (*(addr + 22) != 0x75) {
+        DebugLog("[AUTH_PATCH] Gate jump byte unexpected: 0x%02X", *(addr + 22));
+        return false;
+    }
+
+    if (!PatchByte(addr + 22, 0x75, 0xEB)) {
+        DebugLog("[AUTH_PATCH] Failed to patch gate jump");
+        return false;
+    }
+
+    DebugLog("[AUTH_PATCH] Unauthenticated connection gate patch applied successfully");
+    return true;
+}
+
+static bool PatchCertFailureGate(byte_t* base, size_t size)
+{
+    DebugLog("[CERT_PATCH] Starting cert failure gate patch in %zu bytes...", size);
+
+    // Windows steamnetworkingsockets.dll (2026-05-22 sample):
+    //   call  GetAuthenticationStatus-like state query
+    //   test  eax,eax
+    //   jne   nonzero_auth_status
+    //   ... "Cert failure: %s"
+    //   call  ProblemDetectedLocally-like failure path
+    // We neutralize the local cert failure tail so LAN direct arcade sockets can
+    // keep progressing after GBE supplies its synthetic serialized certificate.
+    byte_t pattern[] = {
+        0x48, 0x8B, 0x03, 0x48, 0x8B, 0xCB, 0xFF, 0x90,
+        0xA0, 0x00, 0x00, 0x00, 0x85, 0xC0, 0x75, 0x37,
+        0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x04, 0x7C,
+        0x18, 0x4C, 0x8D, 0x83, 0x10, 0x17, 0x00, 0x00,
+        0xB9, 0x04, 0x00, 0x00, 0x00, 0x48, 0x8D, 0x15,
+        0x00, 0x00, 0x00, 0x00, 0xE8, 0x00, 0x00, 0x00,
+        0x00, 0x4C, 0x8B, 0xCE, 0x4C, 0x8D, 0x05, 0x00,
+        0x00, 0x00, 0x00, 0x8B, 0xD5, 0x48, 0x8B, 0xCB,
+        0xE8, 0x00, 0x00, 0x00, 0x00, 0xEB, 0x3E
+    };
+    const char* mask = "xxxxxxxxxxxxxxxxxx????xxxxxxxxxxxxxxxxxx????x????xxxxxx????xxxxxx????xx";
+    const int patternLen = 71;
+
+    int count = CountPattern(base, size, pattern, mask, patternLen);
+    DebugLog("[CERT_PATCH] Cert failure pattern matches: %d", count);
+    if (count != 1) {
+        DebugLog("[CERT_PATCH] Expected exactly one cert failure match");
+        return false;
+    }
+
+    byte_t* addr = FindPattern(base, size, pattern, mask, patternLen);
+    if (!addr) {
+        DebugLog("[CERT_PATCH] Cert failure pattern not found after count");
+        return false;
+    }
+
+    DebugLog("[CERT_PATCH] Found cert failure gate at offset 0x%zX", static_cast<size_t>(addr - base));
+    if (*(addr + 14) == 0xEB) {
+        DebugLog("[CERT_PATCH] Cert failure gate already patched");
+        return true;
+    }
+    if (*(addr + 14) != 0x75) {
+        DebugLog("[CERT_PATCH] Cert failure jump byte unexpected: 0x%02X", *(addr + 14));
+        return false;
+    }
+
+    if (!PatchByte(addr + 14, 0x75, 0xEB)) {
+        DebugLog("[CERT_PATCH] Failed to patch cert failure jump");
+        return false;
+    }
+
+    DebugLog("[CERT_PATCH] Cert failure gate patch applied successfully");
+    return true;
+}
+
 // Main entry point: apply all patches
 static void ApplyAll()
 {
@@ -528,13 +640,14 @@ static void ApplyAll()
             return;
         }
 
-        // Apply patch: make IP_AllowWithoutAuth visible
-        bool patched = PatchConfigVisibility(base, size);
+        bool configPatched = PatchConfigVisibility(base, size);
+        bool authGatePatched = PatchUnauthenticatedConnectionGate(base, size);
+        bool certFailurePatched = PatchCertFailureGate(base, size);
         
-        if (patched) {
-            DebugLog("[THREAD] Patch applied successfully!");
+        if (configPatched || authGatePatched || certFailurePatched) {
+            DebugLog("[THREAD] Patches applied: config=%d auth_gate=%d cert_failure=%d", configPatched ? 1 : 0, authGatePatched ? 1 : 0, certFailurePatched ? 1 : 0);
         } else {
-            DebugLog("[THREAD] Patch failed - pattern not found or byte mismatch");
+            DebugLog("[THREAD] Patches failed - patterns not found or byte mismatch");
         }
         
 #ifndef __WINDOWS__

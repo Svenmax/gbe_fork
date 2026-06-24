@@ -1,0 +1,47 @@
+gc_replay_test summary v1
+cases=5
+case 1
+label=dota_26_small_proto
+emsg=2147483674
+masked_emsg=26
+proto=1
+size=4
+fnv1a64=0x4487b9c24ac228fc
+body_size=4
+fields=1:0:1=1,2:0:1=2
+case 2
+label=dota_chat_small_body
+emsg=7273
+masked_emsg=7273
+proto=0
+size=7
+fnv1a64=0x632952a0cbef1bb7
+body_size=7
+fields=1:0:1=1,2:2:3=0x616263
+case 3
+label=mixed_wire_types
+emsg=2147483650
+masked_emsg=2
+proto=1
+size=26
+fnv1a64=0x7a7280fd395d6ac4
+body_size=26
+fields=1:1:8=0x0102030405060708,2:5:4=0x0a0b0c0d,3:2:10=0x0102030405060708...
+case 4
+label=dota_7055_ack
+emsg=2147490703
+masked_emsg=7055
+proto=1
+size=8
+fnv1a64=0x76aa2dd6803b9f38
+body_size=8
+fields=1:0:1=1,2:0:1=0,3:2:2=0x6f6b
+case 5
+label=dota_1087_socket
+emsg=2147484735
+masked_emsg=1087
+proto=1
+size=15
+fnv1a64=0xe75bb963fdbb5d29
+body_size=15
+fields=1:0:4=100000000,2:2:8=0x506f737447616d65
