@@ -9612,6 +9612,226 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameFinishedLoadingRequest(cons
     return true;
 }
 
+bool Steam_Game_Coordinator::GBE_HandleDotaMinimalVarintSuccessRequest(uint32 request_emsg, uint32 response_emsg, const char *log_note, const char *push_note, bool has_source_job, uint64 source_job)
+{
+    std::string response_message;
+    if (!gbe::gc_message::build_dota_varint_response_payload(response_emsg, 1u, 1u, has_source_job, source_job, response_message)) {
+        GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, response_emsg);
+        return true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "replying req=%u resp=%u source_job=%llu size=%zu note=%s",
+        request_emsg,
+        response_emsg,
+        static_cast<unsigned long long>(source_job),
+        response_message.size(),
+        log_note
+    );
+    GBE_PushDotaResponse(response_emsg, response_message, false, nullptr, push_note);
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDota7427NotificationsRequest(bool has_source_job, uint64 source_job)
+{
+    std::string response_message;
+    if (!gbe::gc_message::build_dota_7428_response_payload(has_source_job, source_job, response_message)) {
+        GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", 7427u, 7428u);
+        return true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "replying req=%u resp=%u source_job=%llu size=%zu note=%s",
+        7427u,
+        7428u,
+        static_cast<unsigned long long>(source_job),
+        response_message.size(),
+        "7427->7428 minimal notifications response"
+    );
+    GBE_PushDotaResponse(7428u, response_message, false, nullptr, "7427_7428");
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaUploadRateRequest(bool has_source_job, uint64 source_job)
+{
+    std::string response_message;
+    if (!gbe::gc_message::build_dota_4524_response_payload(has_source_job, source_job, response_message)) {
+        GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", 4523u, 4524u);
+        return true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "replying req=%u resp=%u source_job=%llu size=%zu note=%s",
+        4523u,
+        4524u,
+        static_cast<unsigned long long>(source_job),
+        response_message.size(),
+        "4523->4524 minimal upload_rate_modifier=1.0"
+    );
+    GBE_PushDotaResponse(4524u, response_message, false, nullptr, "4523_4524");
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaProfileCardRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job)
+{
+    uint64 account_id_field = settings->get_local_steam_id().GetAccountID();
+    gbe::proto_wire::read_uint64_field(body, body_size, 1u, account_id_field);
+
+    std::string response_message;
+    if (!gbe::gc_message::build_dota_varint_response_payload(7535u, 1u, static_cast<uint32>(account_id_field), has_source_job, source_job, response_message)) {
+        GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", 7534u, 7535u);
+        return true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "replying req=%u resp=%u source_job=%llu size=%zu note=7534->7535 minimal profile card account_id=%u",
+        7534u,
+        7535u,
+        static_cast<unsigned long long>(source_job),
+        response_message.size(),
+        static_cast<unsigned>(account_id_field)
+    );
+    GBE_PushDotaResponse(7535u, response_message, false, nullptr, "7534_7535");
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaLookupAccountNameRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job)
+{
+    uint64 account_id_field = settings->get_local_steam_id().GetAccountID();
+    gbe::proto_wire::read_uint64_field(body, body_size, 1u, account_id_field);
+
+    std::string response_message;
+    if (!gbe::gc_message::build_dota_2582_lookup_account_name_response_payload(
+            static_cast<uint32>(account_id_field),
+            std::string(settings->get_local_name()),
+            has_source_job,
+            source_job,
+            response_message)) {
+        GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", 2581u, 2582u);
+        return true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "replying req=%u resp=%u source_job=%llu size=%zu note=2581->2582 lookup account name account_id=%u",
+        2581u,
+        2582u,
+        static_cast<unsigned long long>(source_job),
+        response_message.size(),
+        static_cast<unsigned>(account_id_field)
+    );
+    GBE_PushDotaResponse(2582u, response_message, false, nullptr, "2581_2582");
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaEmoticonDataRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job)
+{
+    const GBE_DotaEmptyRequestShape request_shape = gbe::proto_wire::parse_dota_empty_request_shape(body, body_size);
+    const uint32 account_id = settings->get_local_steam_id().GetAccountID();
+    std::string response_message;
+    if (!gbe::gc_message::build_dota_7504_response_payload(account_id, has_source_job, source_job, response_message)) {
+        GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", 7503u, 7504u);
+        return true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "replying req=%u resp=%u source_job=%llu size=%zu note=7503->7504 parsed valid=%u fields=%u emoticon data account_id=%u",
+        7503u,
+        7504u,
+        static_cast<unsigned long long>(source_job),
+        response_message.size(),
+        request_shape.valid ? 1u : 0u,
+        request_shape.field_count,
+        account_id
+    );
+    GBE_PushDotaResponse(7504u, response_message, false, nullptr, "7503_7504");
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaConductScorecardRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job)
+{
+    const GBE_DotaEmptyRequestShape request_shape = gbe::proto_wire::parse_dota_empty_request_shape(body, body_size);
+    const uint32 account_id = settings->get_local_steam_id().GetAccountID();
+    std::string response_message;
+    if (!gbe::gc_message::build_dota_8096_response_payload(account_id, has_source_job, source_job, response_message)) {
+        GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", 8095u, 8096u);
+        return true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "replying req=%u resp=%u source_job=%llu size=%zu note=8095->8096 parsed valid=%u fields=%u conduct scorecard account_id=%u",
+        8095u,
+        8096u,
+        static_cast<unsigned long long>(source_job),
+        response_message.size(),
+        request_shape.valid ? 1u : 0u,
+        request_shape.field_count,
+        account_id
+    );
+    GBE_PushDotaResponse(8096u, response_message, false, nullptr, "8095_8096");
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaCoachingSummaryRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job)
+{
+    const GBE_DotaEmptyRequestShape request_shape = gbe::proto_wire::parse_dota_empty_request_shape(body, body_size);
+    std::string response_message;
+    if (!gbe::gc_message::build_dota_varint_response_payload(8801u, 1u, 1u, has_source_job, source_job, response_message)) {
+        GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", 8800u, 8801u);
+        return true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "replying req=%u resp=%u source_job=%llu size=%zu note=8800->8801 parsed valid=%u fields=%u coaching summary success",
+        8800u,
+        8801u,
+        static_cast<unsigned long long>(source_job),
+        response_message.size(),
+        request_shape.valid ? 1u : 0u,
+        request_shape.field_count
+    );
+    GBE_PushDotaResponse(8801u, response_message, false, nullptr, "8800_8801");
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaRankRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job)
+{
+    const GBE_DotaRankRequestShape request_shape = gbe::proto_wire::parse_dota_rank_request_shape(body, body_size);
+    std::string response_message;
+    if (!gbe::gc_message::build_dota_8880_response_payload(
+            request_shape.valid,
+            request_shape.has_rank_type,
+            gbe::proto_wire::dota_is_rank_type_supported(request_shape.rank_type),
+            has_source_job,
+            source_job,
+            response_message)) {
+        GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", 8879u, 8880u);
+        return true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "replying req=%u resp=%u source_job=%llu size=%zu note=8879->8880 parsed valid=%u fields=%u has_rank_type=%u rank_type=%u",
+        8879u,
+        8880u,
+        static_cast<unsigned long long>(source_job),
+        response_message.size(),
+        request_shape.valid ? 1u : 0u,
+        request_shape.field_count,
+        request_shape.has_rank_type ? 1u : 0u,
+        request_shape.rank_type
+    );
+    GBE_PushDotaResponse(8880u, response_message, false, nullptr, "8879_8880");
+    return true;
+}
+
 bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData)
 {
     GBE_RestoreSharedDotaLobbyState("direct_post_login_request");
@@ -10158,254 +10378,47 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     const char *response_note = "";
 
     if (request_emsg == 8727) {
-        std::string response_message;
-        if (!gbe::gc_message::build_dota_varint_response_payload(8728u, 1u, 1u, has_source_job, source_job, response_message)) {
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 8728u);
-            return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=%s",
-            request_emsg,
-            8728u,
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            "8727->8728 minimal success"
-        );
-        GBE_PushDotaResponse(8728u, response_message, false, nullptr, "8727_8728");
-        return true;
+        return GBE_HandleDotaMinimalVarintSuccessRequest(request_emsg, 8728u, "8727->8728 minimal success", "8727_8728", has_source_job, source_job);
     }
 
     if (request_emsg == 8886) {
-        std::string response_message;
-        if (!gbe::gc_message::build_dota_varint_response_payload(8887u, 1u, 1u, has_source_job, source_job, response_message)) {
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 8887u);
-            return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=%s",
-            request_emsg,
-            8887u,
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            "8886->8887 minimal success"
-        );
-        GBE_PushDotaResponse(8887u, response_message, false, nullptr, "8886_8887");
-        return true;
+        return GBE_HandleDotaMinimalVarintSuccessRequest(request_emsg, 8887u, "8886->8887 minimal success", "8886_8887", has_source_job, source_job);
     }
 
     if (request_emsg == 7427) {
-        std::string response_message;
-        if (!gbe::gc_message::build_dota_7428_response_payload(has_source_job, source_job, response_message)) {
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 7428u);
-            return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=%s",
-            request_emsg,
-            7428u,
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            "7427->7428 minimal notifications response"
-        );
-        GBE_PushDotaResponse(7428u, response_message, false, nullptr, "7427_7428");
-        return true;
+        return GBE_HandleDota7427NotificationsRequest(has_source_job, source_job);
     }
 
     if (request_emsg == 8793) {
-        std::string response_message;
-        if (!gbe::gc_message::build_dota_varint_response_payload(8794u, 1u, 1u, has_source_job, source_job, response_message)) {
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 8794u);
-            return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=%s",
-            request_emsg,
-            8794u,
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            "8793->8794 minimal success"
-        );
-        GBE_PushDotaResponse(8794u, response_message, false, nullptr, "8793_8794");
-        return true;
+        return GBE_HandleDotaMinimalVarintSuccessRequest(request_emsg, 8794u, "8793->8794 minimal success", "8793_8794", has_source_job, source_job);
     }
 
     if (request_emsg == 4523) {
-        std::string response_message;
-        if (!gbe::gc_message::build_dota_4524_response_payload(has_source_job, source_job, response_message)) {
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 4524u);
-            return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=%s",
-            request_emsg,
-            4524u,
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            "4523->4524 minimal upload_rate_modifier=1.0"
-        );
-        GBE_PushDotaResponse(4524u, response_message, false, nullptr, "4523_4524");
-        return true;
+        return GBE_HandleDotaUploadRateRequest(has_source_job, source_job);
     }
 
     if (request_emsg == 7534) {
-        uint64 account_id_field = settings->get_local_steam_id().GetAccountID();
-        gbe::proto_wire::read_uint64_field(body, body_size, 1u, account_id_field);
-
-        std::string response_message;
-        if (!gbe::gc_message::build_dota_varint_response_payload(7535u, 1u, static_cast<uint32>(account_id_field), has_source_job, source_job, response_message)) {
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 7535u);
-            return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=7534->7535 minimal profile card account_id=%u",
-            request_emsg,
-            7535u,
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            static_cast<unsigned>(account_id_field)
-        );
-        GBE_PushDotaResponse(7535u, response_message, false, nullptr, "7534_7535");
-        return true;
+        return GBE_HandleDotaProfileCardRequest(body, body_size, has_source_job, source_job);
     }
 
     if (request_emsg == 2581) {
-        uint64 account_id_field = settings->get_local_steam_id().GetAccountID();
-        gbe::proto_wire::read_uint64_field(body, body_size, 1u, account_id_field);
-
-        std::string response_message;
-        if (!gbe::gc_message::build_dota_2582_lookup_account_name_response_payload(
-                static_cast<uint32>(account_id_field),
-                std::string(settings->get_local_name()),
-                has_source_job,
-                source_job,
-                response_message)) {
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 2582u);
-            return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=2581->2582 lookup account name account_id=%u",
-            request_emsg,
-            2582u,
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            static_cast<unsigned>(account_id_field)
-        );
-        GBE_PushDotaResponse(2582u, response_message, false, nullptr, "2581_2582");
-        return true;
+        return GBE_HandleDotaLookupAccountNameRequest(body, body_size, has_source_job, source_job);
     }
 
     if (request_emsg == 7503) {
-        const GBE_DotaEmptyRequestShape request_shape = gbe::proto_wire::parse_dota_empty_request_shape(body, body_size);
-        const uint32 account_id = settings->get_local_steam_id().GetAccountID();
-        std::string response_message;
-        if (!gbe::gc_message::build_dota_7504_response_payload(account_id, has_source_job, source_job, response_message)) {
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 7504u);
-            return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=7503->7504 parsed valid=%u fields=%u emoticon data account_id=%u",
-            request_emsg,
-            7504u,
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            request_shape.valid ? 1u : 0u,
-            request_shape.field_count,
-            account_id
-        );
-        GBE_PushDotaResponse(7504u, response_message, false, nullptr, "7503_7504");
-        return true;
+        return GBE_HandleDotaEmoticonDataRequest(body, body_size, has_source_job, source_job);
     }
 
     if (request_emsg == 8095) {
-        const GBE_DotaEmptyRequestShape request_shape = gbe::proto_wire::parse_dota_empty_request_shape(body, body_size);
-        const uint32 account_id = settings->get_local_steam_id().GetAccountID();
-        std::string response_message;
-        if (!gbe::gc_message::build_dota_8096_response_payload(account_id, has_source_job, source_job, response_message)) {
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 8096u);
-            return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=8095->8096 parsed valid=%u fields=%u conduct scorecard account_id=%u",
-            request_emsg,
-            8096u,
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            request_shape.valid ? 1u : 0u,
-            request_shape.field_count,
-            account_id
-        );
-        GBE_PushDotaResponse(8096u, response_message, false, nullptr, "8095_8096");
-        return true;
+        return GBE_HandleDotaConductScorecardRequest(body, body_size, has_source_job, source_job);
     }
 
     if (request_emsg == 8800) {
-        const GBE_DotaEmptyRequestShape request_shape = gbe::proto_wire::parse_dota_empty_request_shape(body, body_size);
-        std::string response_message;
-        if (!gbe::gc_message::build_dota_varint_response_payload(8801u, 1u, 1u, has_source_job, source_job, response_message)) {
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 8801u);
-            return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=8800->8801 parsed valid=%u fields=%u coaching summary success",
-            request_emsg,
-            8801u,
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            request_shape.valid ? 1u : 0u,
-            request_shape.field_count
-        );
-        GBE_PushDotaResponse(8801u, response_message, false, nullptr, "8800_8801");
-        return true;
+        return GBE_HandleDotaCoachingSummaryRequest(body, body_size, has_source_job, source_job);
     }
 
     if (request_emsg == 8879) {
-        const GBE_DotaRankRequestShape request_shape = gbe::proto_wire::parse_dota_rank_request_shape(body, body_size);
-        std::string response_message;
-        if (!gbe::gc_message::build_dota_8880_response_payload(
-                request_shape.valid,
-                request_shape.has_rank_type,
-                gbe::proto_wire::dota_is_rank_type_supported(request_shape.rank_type),
-                has_source_job,
-                source_job,
-                response_message)) {
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "failed building reply req=%u resp=%u", request_emsg, 8880u);
-            return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=%u resp=%u source_job=%llu size=%zu note=8879->8880 parsed valid=%u fields=%u has_rank_type=%u rank_type=%u",
-            request_emsg,
-            8880u,
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            request_shape.valid ? 1u : 0u,
-            request_shape.field_count,
-            request_shape.has_rank_type ? 1u : 0u,
-            request_shape.rank_type
-        );
-        GBE_PushDotaResponse(8880u, response_message, false, nullptr, "8879_8880");
-        return true;
+        return GBE_HandleDotaRankRequest(body, body_size, has_source_job, source_job);
     }
 
     if (request_emsg == 7450) {
