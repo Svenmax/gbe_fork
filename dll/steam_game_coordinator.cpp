@@ -19,6 +19,7 @@
 #include "dll/dll.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
+#include "gbe_proto_buf_header.h"
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_custom_lobby_http.h"
 #include "gbe_dota_gc_router.h"
@@ -1122,11 +1123,6 @@ struct GCMsgHdrEx_t
     JobID_t m_JobIDSource;
 };
 
-struct ProtoBufMsgHeader_t
-{
-    uint32          m_EMsgFlagged;          // High bit should be set to indicate this message header type is in use.  The rest of the bits indicate message type.
-    uint32          m_cubProtoBufExtHdr;    // Size of the extended header which is a serialized protobuf object.  Indicates where it ends and the serialized body protobuf begins.
-};
 #pragma pack(pop)
 
 template <class T>

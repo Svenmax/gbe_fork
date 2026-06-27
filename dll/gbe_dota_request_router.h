@@ -38,12 +38,13 @@
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
+#include "gbe_proto_buf_header.h"
 
-// The context structs hold ProtoBufMsgHeader_t / CMsgProtoBufHeader by value,
-// which requires the complete type definitions (MSVC rejects incomplete types
-// as value members). Pull in the protobuf-generated header; the only TU that
-// includes this header today (steam_game_coordinator.cpp) already includes it,
-// so there is no extra compile cost.
+// CMsgProtoBufHeader is a protobuf-generated class held by value in
+// GBE_DirectProtoContext. MSVC rejects incomplete types as value members, so
+// the full definition is required here. The only TU that includes this header
+// (steam_game_coordinator.cpp) already pulls <steammessages.pb.h> in, so there
+// is no extra compile cost.
 #include <steammessages.pb.h>
 
 // --- Mask helper -----------------------------------------------------------
