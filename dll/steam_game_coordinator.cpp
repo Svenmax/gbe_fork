@@ -9832,6 +9832,105 @@ bool Steam_Game_Coordinator::GBE_HandleDotaRankRequest(const uint8 *body, size_t
     return true;
 }
 
+bool Steam_Game_Coordinator::GBE_HandleDotaLaunchAdvanceOrConsume(
+    uint32 request_emsg,
+    const char *advance_reason,
+    const char *advance_phase,
+    const char *consume_note,
+    uint64 source_job,
+    size_t body_size)
+{
+    // If we are stuck at state=1 (SERVERSETUP) because 4508 never arrived
+    // (dedicated server did not restart between matches), use 4506/5429 as the
+    // signal to advance the launch to RUN.  This is safe because:
+    //  - If 4508 already advanced us to state=2, the state==1 check fails.
+    //  - 4506 is "server available acknowledgement" / 5429 is "ticket auth
+    //    complete", so the server IS ready.
+    if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "req=%u advancing stalled launch: lobby_id=%llu state=%u launch_phase=%s",
+            request_emsg,
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
+        );
+        if (GBE_TryAdvanceDotaLaunchToRun(advance_reason, request_emsg, source_job, advance_phase))
+            return true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "consumed req=%u source_job=%llu note=%s body_size=%zu active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
+        request_emsg,
+        static_cast<unsigned long long>(source_job),
+        consume_note,
+        body_size,
+        GBE_local_lobby.active ? 1u : 0u,
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        GBE_local_lobby.state,
+        GBE_local_lobby.game_state,
+        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        static_cast<unsigned long long>(GBE_local_lobby.server_id)
+    );
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDota8870LaunchMarkerRequest(uint32 request_emsg, uint64 source_job)
+{
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "consumed req=%u source_job=%llu note=official 8870 launch marker without pending gate active=%u lobby_id=%llu state=%u game_state=%u",
+        request_emsg,
+        static_cast<unsigned long long>(source_job),
+        GBE_local_lobby.active ? 1u : 0u,
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        GBE_local_lobby.state,
+        GBE_local_lobby.game_state
+    );
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaLanServerAvailableRequest(uint32 request_emsg, const uint8 *body, size_t body_size, uint64 source_job)
+{
+    uint64 lobby_id = 0;
+    gbe::proto_wire::read_uint64_field(body, body_size, 1u, lobby_id);
+
+    const bool matches_local_lobby = (lobby_id != 0 && lobby_id == GBE_local_lobby.lobby_id);
+    if (matches_local_lobby) {
+        if (!GBE_local_lobby.launch_4511_seen) {
+            GBE_local_lobby.launch_4511_seen = true;
+            GBE_PublishSharedDotaLobbyState("4511_lan_server_available_seen");
+        }
+        GBE_TrySyncDotaLobbyServerIdFromGameServer("4511_lan_server_available");
+    }
+
+    if (matches_local_lobby && !incoming_messages.empty()) {
+        GCMessageAvailable_t data{};
+        data.m_nMessageSize = static_cast<uint32>(incoming_messages.front().msg_body.size());
+        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
+        GBE_GC_DebugLog(
+            "GC_CALLBACK",
+            "reposted GCMessageAvailable_t after 4511 lobby_id=%llu queued_emsg=%u queue_size=%zu size=%u",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_GC_MaskedEMsg(incoming_messages.front().msg_type),
+            incoming_messages.size(),
+            data.m_nMessageSize
+        );
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "consumed req=%u source_job=%llu note=lan server available notification without launch gating lobby_id=%llu local_lobby_id=%llu matches_local=%u",
+        request_emsg,
+        static_cast<unsigned long long>(source_job),
+        static_cast<unsigned long long>(lobby_id),
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        matches_local_lobby ? 1u : 0u
+    );
+    return true;
+}
+
 bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData)
 {
     GBE_RestoreSharedDotaLobbyState("direct_post_login_request");
@@ -10765,112 +10864,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == 4506) {
-        // If we are stuck at state=1 (SERVERSETUP) because 4508 never arrived
-        // (dedicated server did not restart between matches), use 4506 as the
-        // signal to advance the launch to RUN.  This is safe because:
-        //  - If 4508 already advanced us to state=2, the state==1 check fails.
-        //  - 4506 is "server available acknowledgement" so the server IS ready.
-        if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_DIRECT",
-                "4506 advancing stalled launch: lobby_id=%llu state=%u launch_phase=%s",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_local_lobby.state,
-                GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
-            );
-            if (GBE_TryAdvanceDotaLaunchToRun("runtime packet after 4506 stall recovery", request_emsg, source_job, "4506_launch_run"))
-                return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "consumed req=%u source_job=%llu note=server available acknowledgement body_size=%zu active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
-            request_emsg,
-            static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_local_lobby.active ? 1u : 0u,
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            static_cast<unsigned long long>(GBE_local_lobby.match_id),
-            static_cast<unsigned long long>(GBE_local_lobby.server_id)
-        );
-        return true;
+        return GBE_HandleDotaLaunchAdvanceOrConsume(request_emsg, "runtime packet after 4506 stall recovery", "4506_launch_run", "server available acknowledgement", source_job, body_size);
     }
 
     if (request_emsg == GBE_kSteamTicketAuthComplete) {
-        if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
-            if (GBE_TryAdvanceDotaLaunchToRun("runtime packet after 5429", request_emsg, source_job, "5429_launch_run"))
-                return true;
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "consumed req=%u source_job=%llu note=ticket auth complete body_size=%zu active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
-            request_emsg,
-            static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_local_lobby.active ? 1u : 0u,
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            static_cast<unsigned long long>(GBE_local_lobby.match_id),
-            static_cast<unsigned long long>(GBE_local_lobby.server_id)
-        );
-        return true;
+        return GBE_HandleDotaLaunchAdvanceOrConsume(request_emsg, "runtime packet after 5429", "5429_launch_run", "ticket auth complete", source_job, body_size);
     }
 
     if (request_emsg == 8870) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "consumed req=%u source_job=%llu note=official 8870 launch marker without pending gate active=%u lobby_id=%llu state=%u game_state=%u",
-            request_emsg,
-            static_cast<unsigned long long>(source_job),
-            GBE_local_lobby.active ? 1u : 0u,
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state
-        );
-        return true;
+        return GBE_HandleDota8870LaunchMarkerRequest(request_emsg, source_job);
     }
 
     if (request_emsg == 4511) {
-        uint64 lobby_id = 0;
-        gbe::proto_wire::read_uint64_field(body, body_size, 1u, lobby_id);
-
-        const bool matches_local_lobby = (lobby_id != 0 && lobby_id == GBE_local_lobby.lobby_id);
-        if (matches_local_lobby) {
-            if (!GBE_local_lobby.launch_4511_seen) {
-                GBE_local_lobby.launch_4511_seen = true;
-                GBE_PublishSharedDotaLobbyState("4511_lan_server_available_seen");
-            }
-            GBE_TrySyncDotaLobbyServerIdFromGameServer("4511_lan_server_available");
-        }
-
-        if (matches_local_lobby && !incoming_messages.empty()) {
-            GCMessageAvailable_t data{};
-            data.m_nMessageSize = static_cast<uint32>(incoming_messages.front().msg_body.size());
-            callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
-            GBE_GC_DebugLog(
-                "GC_CALLBACK",
-                "reposted GCMessageAvailable_t after 4511 lobby_id=%llu queued_emsg=%u queue_size=%zu size=%u",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_GC_MaskedEMsg(incoming_messages.front().msg_type),
-                incoming_messages.size(),
-                data.m_nMessageSize
-            );
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "consumed req=%u source_job=%llu note=lan server available notification without launch gating lobby_id=%llu local_lobby_id=%llu matches_local=%u",
-            request_emsg,
-            static_cast<unsigned long long>(source_job),
-            static_cast<unsigned long long>(lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            matches_local_lobby ? 1u : 0u
-        );
-        return true;
+        return GBE_HandleDotaLanServerAvailableRequest(request_emsg, body, body_size, source_job);
     }
 
     if (request_emsg == 4508) {
