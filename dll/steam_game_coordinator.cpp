@@ -10227,6 +10227,188 @@ bool Steam_Game_Coordinator::GBE_HandleDotaSubmitPlayerReportV2Request(const uin
     return true;
 }
 
+bool Steam_Game_Coordinator::GBE_HandleDotaUnlockItemStyleRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job) {
+    uint64 unlock_item_id = 0;
+    uint32 unlock_style_index = 255u;
+    uint64 consumable_item_id = 0;
+    gbe::proto_wire::read_uint64_field(body, body_size, 1u, unlock_item_id);
+    gbe::proto_wire::read_uint32_field(body, body_size, 2u, unlock_style_index);
+    gbe::proto_wire::read_uint64_field(body, body_size, 3u, consumable_item_id);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "received direct 2571 UnlockItemStyle source_job=%llu item_id=0x%llx style_index=%u consumable=0x%llx body_size=%zu",
+        static_cast<unsigned long long>(source_job),
+        static_cast<unsigned long long>(unlock_item_id),
+        unlock_style_index,
+        static_cast<unsigned long long>(consumable_item_id),
+        body_size
+    );
+
+    // Step 1: Update item's attr 400 (unlocked styles bitmask) BEFORE replying
+    if (unlock_item_id != 0 && unlock_style_index != 255u) {
+        for (Econ_Item &item : items) {
+            if (item.id == unlock_item_id) {
+                // Also update item.style to the requested style
+                item.style = static_cast<uint8>(unlock_style_index);
+                // Find or create attr 400
+                bool found_attr = false;
+                for (auto &attr : item.attributes) {
+                    if (attr.def == 400u) {
+                        uint32_t current_val = 0;
+                        if (attr.value_bytes.size() >= 4) {
+                            memcpy(&current_val, attr.value_bytes.data(), 4);
+                        }
+                        current_val |= (1u << unlock_style_index);
+                        attr.value_bytes.assign(reinterpret_cast<const char *>(&current_val), 4);
+                        found_attr = true;
+                        break;
+                    }
+                }
+                if (!found_attr) {
+                    Econ_Item_Attribute unlock_attr;
+                    unlock_attr.def = 400u;
+                    uint32_t val = 0xFFFFFFFFu; // unlock all styles in LAN
+                    unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&val), 4);
+                    unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+                    item.attributes.push_back(unlock_attr);
+                }
+                // Push SO update immediately (emsg=22 CMsgSOSingleObject) via push_incoming_now
+                {
+                    uint32 msg_type_so = ESOMsg::k_ESOMsg_Update | protobuf_mask;
+                    std::string so_message = build_protomsg_header(msg_type_so);
+                    CMsgSOSingleObject so_msg;
+                    so_msg.set_owner(settings->get_local_steam_id().ConvertToUint64());
+                    so_msg.set_type_id(1);
+                    so_msg.set_object_data(item_to_gcprotobuf(item, settings->get_local_steam_id()));
+                    so_msg.AppendToString(&so_message);
+                    push_incoming_now(msg_type_so, so_message);
+                }
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "2571 unlock: updated attr=400 for item 0x%llx style_bit=%u and pushed SO update (immediate)",
+                    static_cast<unsigned long long>(unlock_item_id),
+                    unlock_style_index
+                );
+                break;
+            }
+        }
+    }
+
+    // Step 2: Consume the consumable item (delete from inventory + push SO Destroy immediately)
+    if (consumable_item_id != 0) {
+        for (auto it = items.begin(); it != items.end(); ++it) {
+            if (it->id == consumable_item_id) {
+                items.erase(it);
+                // Push SO Destroy immediately (emsg=24 CMsgSOSingleObject)
+                {
+                    uint32 msg_type_del = ESOMsg::k_ESOMsg_Destroy | protobuf_mask;
+                    std::string del_message = build_protomsg_header(msg_type_del);
+                    CMsgSOSingleObject del_msg;
+                    del_msg.set_owner(settings->get_local_steam_id().ConvertToUint64());
+                    del_msg.set_type_id(1);
+                    CSOEconItem del_proto_item;
+                    del_proto_item.set_id(consumable_item_id);
+                    del_msg.set_object_data(del_proto_item.SerializeAsString());
+                    del_msg.AppendToString(&del_message);
+                    push_incoming_now(msg_type_del, del_message);
+                }
+                GBE_GC_DebugLog(
+                    "GC_DOTA_DIRECT",
+                    "2571 unlock: consumed item 0x%llx (SO Destroy pushed immediate)",
+                    static_cast<unsigned long long>(consumable_item_id)
+                );
+                break;
+            }
+        }
+    }
+
+    // Step 3: Build and send 2572 response
+    std::string resp_body;
+    gbe::gc_message::build_dota_unlock_item_style_response_body(unlock_item_id, unlock_style_index, resp_body);
+
+    std::string response_message;
+    gbe::gc_message::build_dota_job_reply_or_zero_header_payload(GBE_kDotaUnlockItemStyleResponse, has_source_job, source_job, resp_body, response_message);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "replying req=2571 resp=2572 source_job=%llu size=%zu note=unlock style success item_id=0x%llx style_index=%u",
+        static_cast<unsigned long long>(source_job),
+        response_message.size(),
+        static_cast<unsigned long long>(unlock_item_id),
+        unlock_style_index
+    );
+    push_incoming_now(GBE_kDotaUnlockItemStyleResponse | GBE_kProtoMask, response_message);
+
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaSetItemStyleRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job) {
+    uint64 style_item_id = 0;
+    uint32 style_index = 255u;
+    gbe::proto_wire::read_uint64_field(body, body_size, 1u, style_item_id);
+    gbe::proto_wire::read_uint32_field(body, body_size, 2u, style_index);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "received direct 2577 SetItemStyle source_job=%llu item_id=0x%llx style_index=%u body_size=%zu",
+        static_cast<unsigned long long>(source_job),
+        static_cast<unsigned long long>(style_item_id),
+        style_index,
+        body_size
+    );
+
+    bool found = false;
+    if (style_item_id != 0 && style_index != 255u) {
+        for (Econ_Item &item : items) {
+            if (item.id != style_item_id)
+                continue;
+            item.style = static_cast<uint8>(style_index);
+            found = true;
+
+            // Push SO update (emsg=21) so the client immediately sees the style change
+            callback_item_updated(settings->get_local_steam_id(), item);
+
+            // Forward style change to server GC if active
+            if (gc_profile == GC_PROFILE_DOTA2 && !is_server) {
+                Steam_Client *steam_client = get_steam_client();
+                Steam_Game_Coordinator *server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
+                if (server_gc && server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id)) {
+                    GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, settings->get_local_steam_id(), items, true, "set_item_style_forward");
+                }
+            }
+
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "applied style: item_id=0x%llx new_style=%u",
+                static_cast<unsigned long long>(style_item_id),
+                style_index
+            );
+            break;
+        }
+        if (found)
+            save_items_to_file();
+    }
+
+    // Build 2578 response: field 1 varint = 0 (k_SetStyle_Succeeded)
+    std::string resp_body;
+    gbe::gc_message::build_dota_set_item_style_response_body(resp_body);
+
+    std::string response_message;
+    gbe::gc_message::build_dota_job_reply_or_zero_header_payload(GBE_kDotaSetItemStyleResponse, has_source_job, source_job, resp_body, response_message);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "replying req=2577 resp=2578 source_job=%llu size=%zu found=%d style_index=%u",
+        static_cast<unsigned long long>(source_job),
+        response_message.size(),
+        (int)found,
+        style_index
+    );
+    push_incoming_now(GBE_kDotaSetItemStyleResponse | GBE_kProtoMask, response_message);
+    return true;
+}
+
 bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job) {
     const uint8 *template_bytes = nullptr;
     size_t template_size = 0;
@@ -12191,195 +12373,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return GBE_HandleDotaAddSocketRequest(body, body_size, has_source_job, source_job);
     }
 
-    // Handle k_EMsgClientToGCUnlockItemStyle (2571) -> reply 2572
-    // In LAN mode all styles are unlocked, so always reply with success.
-    // Proto: CMsgClientToGCUnlockItemStyle { optional uint64 item_to_unlock = 1; optional uint32 style_index = 2 [default = 255]; repeated uint64 consumable_item_ids = 3; }
-    // Proto: CMsgClientToGCUnlockItemStyleResponse { optional EUnlockStyle response = 1 [default = k_UnlockStyle_Succeeded]; optional uint64 item_id = 2; optional uint32 style_index = 3 [default = 255]; }
     if (request_emsg == GBE_kDotaUnlockItemStyle) {
-        uint64 unlock_item_id = 0;
-        uint32 unlock_style_index = 255u;
-        uint64 consumable_item_id = 0;
-        gbe::proto_wire::read_uint64_field(body, body_size, 1u, unlock_item_id);
-        gbe::proto_wire::read_uint32_field(body, body_size, 2u, unlock_style_index);
-        gbe::proto_wire::read_uint64_field(body, body_size, 3u, consumable_item_id);
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "received direct 2571 UnlockItemStyle source_job=%llu item_id=0x%llx style_index=%u consumable=0x%llx body_size=%zu",
-            static_cast<unsigned long long>(source_job),
-            static_cast<unsigned long long>(unlock_item_id),
-            unlock_style_index,
-            static_cast<unsigned long long>(consumable_item_id),
-            body_size
-        );
-
-        // Step 1: Update item's attr 400 (unlocked styles bitmask) BEFORE replying
-        if (unlock_item_id != 0 && unlock_style_index != 255u) {
-            for (Econ_Item &item : items) {
-                if (item.id == unlock_item_id) {
-                    // Also update item.style to the requested style
-                    item.style = static_cast<uint8>(unlock_style_index);
-                    // Find or create attr 400
-                    bool found_attr = false;
-                    for (auto &attr : item.attributes) {
-                        if (attr.def == 400u) {
-                            uint32_t current_val = 0;
-                            if (attr.value_bytes.size() >= 4) {
-                                memcpy(&current_val, attr.value_bytes.data(), 4);
-                            }
-                            current_val |= (1u << unlock_style_index);
-                            attr.value_bytes.assign(reinterpret_cast<const char *>(&current_val), 4);
-                            found_attr = true;
-                            break;
-                        }
-                    }
-                    if (!found_attr) {
-                        Econ_Item_Attribute unlock_attr;
-                        unlock_attr.def = 400u;
-                        uint32_t val = 0xFFFFFFFFu; // unlock all styles in LAN
-                        unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&val), 4);
-                        unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
-                        item.attributes.push_back(unlock_attr);
-                    }
-                    // Push SO update immediately (emsg=22 CMsgSOSingleObject) via push_incoming_now
-                    {
-                        uint32 msg_type_so = ESOMsg::k_ESOMsg_Update | protobuf_mask;
-                        std::string so_message = build_protomsg_header(msg_type_so);
-                        CMsgSOSingleObject so_msg;
-                        so_msg.set_owner(settings->get_local_steam_id().ConvertToUint64());
-                        so_msg.set_type_id(1);
-                        so_msg.set_object_data(item_to_gcprotobuf(item, settings->get_local_steam_id()));
-                        so_msg.AppendToString(&so_message);
-                        push_incoming_now(msg_type_so, so_message);
-                    }
-                    GBE_GC_DebugLog(
-                        "GC_DOTA_DIRECT",
-                        "2571 unlock: updated attr=400 for item 0x%llx style_bit=%u and pushed SO update (immediate)",
-                        static_cast<unsigned long long>(unlock_item_id),
-                        unlock_style_index
-                    );
-                    break;
-                }
-            }
-        }
-
-        // Step 2: Consume the consumable item (delete from inventory + push SO Destroy immediately)
-        if (consumable_item_id != 0) {
-            for (auto it = items.begin(); it != items.end(); ++it) {
-                if (it->id == consumable_item_id) {
-                    items.erase(it);
-                    // Push SO Destroy immediately (emsg=24 CMsgSOSingleObject)
-                    {
-                        uint32 msg_type_del = ESOMsg::k_ESOMsg_Destroy | protobuf_mask;
-                        std::string del_message = build_protomsg_header(msg_type_del);
-                        CMsgSOSingleObject del_msg;
-                        del_msg.set_owner(settings->get_local_steam_id().ConvertToUint64());
-                        del_msg.set_type_id(1);
-                        CSOEconItem del_proto_item;
-                        del_proto_item.set_id(consumable_item_id);
-                        del_msg.set_object_data(del_proto_item.SerializeAsString());
-                        del_msg.AppendToString(&del_message);
-                        push_incoming_now(msg_type_del, del_message);
-                    }
-                    GBE_GC_DebugLog(
-                        "GC_DOTA_DIRECT",
-                        "2571 unlock: consumed item 0x%llx (SO Destroy pushed immediate)",
-                        static_cast<unsigned long long>(consumable_item_id)
-                    );
-                    break;
-                }
-            }
-        }
-
-        // Step 3: Build and send 2572 response
-        std::string resp_body;
-        gbe::gc_message::build_dota_unlock_item_style_response_body(unlock_item_id, unlock_style_index, resp_body);
-
-        std::string response_message;
-        gbe::gc_message::build_dota_job_reply_or_zero_header_payload(GBE_kDotaUnlockItemStyleResponse, has_source_job, source_job, resp_body, response_message);
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=2571 resp=2572 source_job=%llu size=%zu note=unlock style success item_id=0x%llx style_index=%u",
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            static_cast<unsigned long long>(unlock_item_id),
-            unlock_style_index
-        );
-        push_incoming_now(GBE_kDotaUnlockItemStyleResponse | GBE_kProtoMask, response_message);
-
-        return true;
+        return GBE_HandleDotaUnlockItemStyleRequest(body, body_size, has_source_job, source_job);
     }
 
-    // Handle k_EMsgClientToGCSetItemStyle (2577) -> reply 2578
-    // Proto: CMsgClientToGCSetItemStyle { optional uint64 item_id = 1; optional uint32 style_index = 2 [default = 255]; }
-    // Proto: CMsgClientToGCSetItemStyleResponse { optional ESetStyle response = 1 [default = k_SetStyle_Succeeded]; }
     if (request_emsg == GBE_kDotaSetItemStyle) {
-        uint64 style_item_id = 0;
-        uint32 style_index = 255u;
-        gbe::proto_wire::read_uint64_field(body, body_size, 1u, style_item_id);
-        gbe::proto_wire::read_uint32_field(body, body_size, 2u, style_index);
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "received direct 2577 SetItemStyle source_job=%llu item_id=0x%llx style_index=%u body_size=%zu",
-            static_cast<unsigned long long>(source_job),
-            static_cast<unsigned long long>(style_item_id),
-            style_index,
-            body_size
-        );
-
-        bool found = false;
-        if (style_item_id != 0 && style_index != 255u) {
-            for (Econ_Item &item : items) {
-                if (item.id != style_item_id)
-                    continue;
-                item.style = static_cast<uint8>(style_index);
-                found = true;
-
-                // Push SO update (emsg=21) so the client immediately sees the style change
-                callback_item_updated(settings->get_local_steam_id(), item);
-
-                // Forward style change to server GC if active
-                if (gc_profile == GC_PROFILE_DOTA2 && !is_server) {
-                    Steam_Client *steam_client = get_steam_client();
-                    Steam_Game_Coordinator *server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
-                    if (server_gc && server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id)) {
-                        GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, settings->get_local_steam_id(), items, true, "set_item_style_forward");
-                    }
-                }
-
-                GBE_GC_DebugLog(
-                    "GC_DOTA_DIRECT",
-                    "applied style: item_id=0x%llx new_style=%u",
-                    static_cast<unsigned long long>(style_item_id),
-                    style_index
-                );
-                break;
-            }
-            if (found)
-                save_items_to_file();
-        }
-
-        // Build 2578 response: field 1 varint = 0 (k_SetStyle_Succeeded)
-        std::string resp_body;
-        gbe::gc_message::build_dota_set_item_style_response_body(resp_body);
-
-        std::string response_message;
-        gbe::gc_message::build_dota_job_reply_or_zero_header_payload(GBE_kDotaSetItemStyleResponse, has_source_job, source_job, resp_body, response_message);
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=2577 resp=2578 source_job=%llu size=%zu found=%d style_index=%u",
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            (int)found,
-            style_index
-        );
-        push_incoming_now(GBE_kDotaSetItemStyleResponse | GBE_kProtoMask, response_message);
-        return true;
+        return GBE_HandleDotaSetItemStyleRequest(body, body_size, has_source_job, source_job);
     }
-
 
     if (request_emsg == 8727) {
         return GBE_HandleDotaMinimalVarintSuccessRequest(request_emsg, 8728u, "8727->8728 minimal success", "8727_8728", has_source_job, source_job);

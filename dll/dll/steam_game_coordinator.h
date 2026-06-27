@@ -255,6 +255,8 @@ public ISteamGameCoordinator
     bool GBE_HandleDotaServerAssignmentRequest(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaEquipItemsRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaTemplateReplayRequest(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaUnlockItemStyleRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaSetItemStyleRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
     bool GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData);
     bool GBE_HandleDotaWrappedPostLoginRequest(const void *pubData, uint32 cubData);
