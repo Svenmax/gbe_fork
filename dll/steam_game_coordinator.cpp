@@ -18,6 +18,7 @@
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
 #include "gbe_dota_protocol_constants.h"
+#include "gbe_dota_request_router.h"
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_custom_lobby_http.h"
 #include "gbe_dota_gc_router.h"
@@ -1173,39 +1174,6 @@ struct GBE_ProtoField
     }
 };
 
-struct GBE_DirectProtoContext
-{
-    ProtoBufMsgHeader_t hdr{};
-    CMsgProtoBufHeader protohdr;
-    size_t body_offset{};
-    const uint8 *body{};
-    size_t body_size{};
-};
-
-static bool GBE_ParseDirectProtoContext(const void *pubData, uint32 cubData, GBE_DirectProtoContext &context)
-{
-    context = {};
-    context.protohdr.Clear();
-
-    if (!pubData || cubData < sizeof(ProtoBufMsgHeader_t))
-        return false;
-
-    const uint8 *bytes = reinterpret_cast<const uint8 *>(pubData);
-    std::memcpy(&context.hdr, bytes, sizeof(context.hdr));
-
-    const size_t body_offset = sizeof(context.hdr) + context.hdr.m_cubProtoBufExtHdr;
-    if (body_offset > cubData)
-        return false;
-
-    if (context.hdr.m_cubProtoBufExtHdr != 0 && !context.protohdr.ParseFromArray(bytes + sizeof(context.hdr), context.hdr.m_cubProtoBufExtHdr))
-        return false;
-
-    context.body_offset = body_offset;
-    context.body = bytes + body_offset;
-    context.body_size = static_cast<size_t>(cubData - body_offset);
-    return true;
-}
-
 struct GBE_DotaHelloContext
 {
     bool valid{};
@@ -1237,16 +1205,6 @@ struct GBE_DotaServerHelloContext
 };
 
 static GBE_DotaServerHelloContext GBE_last_dota_server_hello_context;
-
-struct GBE_DotaWrappedDirectContext
-{
-    bool valid{};
-    uint32 inner_emsg{};
-    std::string outer_session_field_raw;
-    std::string inner_body_raw;
-    uint64 request_job_id{};
-    bool has_request_job{};
-};
 
 using GBE_DotaPracticeLobbyDetailsRequest = gbe::proto_wire::DotaPracticeLobbyDetailsRequest;
 using GBE_DotaPracticeLobbyCreateRequest = gbe::proto_wire::DotaPracticeLobbyCreateRequest;
@@ -1287,11 +1245,6 @@ static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)
 
     std::fprintf(file, "\n");
     std::fclose(file);
-}
-
-static uint32 GBE_GC_MaskedEMsg(uint32 msg_type)
-{
-    return gbe::gc_message::without_proto_mask(msg_type);
 }
 
 static void GBE_LogHexDump(const char *tag, const char *label, const std::string &message, size_t bytes_per_line)
@@ -2261,38 +2214,6 @@ static uint64 GBE_GenerateDotaLobbyInviteGid(uint64 lobby_id, uint64 invitee_ste
     return static_cast<uint64>(invite_gid);
 }
 
-static bool GBE_ExtractWrappedClientFromGCPayload(
-    const std::string &wrapped_message,
-    uint32 expected_inner_emsg,
-    std::string &inner_payload)
-{
-    inner_payload.clear();
-    if (wrapped_message.size() < 8u)
-        return false;
-
-    const uint8 *bytes = reinterpret_cast<const uint8 *>(wrapped_message.data());
-    uint32 outer_raw_emsg = 0;
-    uint32 outer_header_length = 0;
-    std::memcpy(&outer_raw_emsg, bytes, sizeof(outer_raw_emsg));
-    std::memcpy(&outer_header_length, bytes + sizeof(outer_raw_emsg), sizeof(outer_header_length));
-
-    if (GBE_GC_MaskedEMsg(outer_raw_emsg) != GBE_kEMsgClientFromGC)
-        return false;
-
-    const size_t outer_body_offset = 8u + outer_header_length;
-    if (outer_body_offset > wrapped_message.size())
-        return false;
-
-    const uint8 *outer_body = bytes + outer_body_offset;
-    const size_t outer_body_size = wrapped_message.size() - outer_body_offset;
-    if (!gbe::proto_wire::read_bytes_field(outer_body, outer_body_size, 3u, inner_payload) || inner_payload.size() < 8u)
-        return false;
-
-    uint32 inner_raw_emsg = 0;
-    std::memcpy(&inner_raw_emsg, inner_payload.data(), sizeof(inner_raw_emsg));
-    return GBE_GC_MaskedEMsg(inner_raw_emsg) == expected_inner_emsg;
-}
-
 static bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
     std::string &message,
     uint32 account_id,
@@ -2574,68 +2495,6 @@ static bool GBE_PrepareDotaPersonaStatePeripheralMessage(
     std::string &message)
 {
     return GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage(template_hex, steam_id, lobby_id, 0u, false, message);
-}
-
-static bool GBE_ExtractWrappedDotaDirectContext(const void *pubData, uint32 cubData, GBE_DotaWrappedDirectContext &context)
-{
-    context = {};
-
-    if (!pubData || cubData < 8)
-        return false;
-
-    const uint8 *bytes = reinterpret_cast<const uint8 *>(pubData);
-    uint32 outer_raw_emsg = 0;
-    uint32 outer_header_length = 0;
-    std::memcpy(&outer_raw_emsg, bytes, sizeof(outer_raw_emsg));
-    std::memcpy(&outer_header_length, bytes + sizeof(outer_raw_emsg), sizeof(outer_header_length));
-
-    if (GBE_GC_MaskedEMsg(outer_raw_emsg) != GBE_kEMsgClientToGC)
-        return false;
-
-    const size_t outer_header_offset = 8;
-    const size_t outer_body_offset = outer_header_offset + outer_header_length;
-    if (outer_body_offset > cubData)
-        return false;
-
-    const uint8 *outer_header = bytes + outer_header_offset;
-    const uint8 *outer_body = bytes + outer_body_offset;
-    const size_t outer_body_size = cubData - outer_body_offset;
-
-    if (!gbe::proto_wire::read_bytes_field(outer_header, outer_header_length, 2u, context.outer_session_field_raw))
-        return false;
-
-    std::string payload_raw;
-    if (!gbe::proto_wire::read_bytes_field(outer_body, outer_body_size, 3u, payload_raw) || payload_raw.size() < 8u)
-        return false;
-
-    const uint8 *payload = reinterpret_cast<const uint8 *>(payload_raw.data());
-    uint32 inner_raw_emsg = 0;
-    uint32 inner_header_length = 0;
-    std::memcpy(&inner_raw_emsg, payload, sizeof(inner_raw_emsg));
-    std::memcpy(&inner_header_length, payload + sizeof(inner_raw_emsg), sizeof(inner_header_length));
-
-    const size_t inner_header_offset = 8;
-    const size_t inner_body_offset = inner_header_offset + inner_header_length;
-    if (inner_body_offset > payload_raw.size())
-        return false;
-
-    const uint8 *inner_header = payload + inner_header_offset;
-    context.inner_emsg = GBE_GC_MaskedEMsg(inner_raw_emsg);
-
-    context.inner_body_raw.assign(
-        reinterpret_cast<const char *>(payload + inner_body_offset),
-        payload_raw.size() - inner_body_offset
-    );
-
-    uint64 request_job_id = 0;
-    if (gbe::proto_wire::read_uint64_field(inner_header, inner_header_length, 10u, request_job_id) ||
-        gbe::proto_wire::read_uint64_field(inner_header, inner_header_length, 11u, request_job_id)) {
-        context.request_job_id = request_job_id;
-        context.has_request_job = true;
-    }
-
-    context.valid = true;
-    return true;
 }
 
 static void GBE_LogDotaResponsePacket(
