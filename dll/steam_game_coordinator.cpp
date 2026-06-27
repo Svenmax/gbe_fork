@@ -10227,6 +10227,150 @@ bool Steam_Game_Coordinator::GBE_HandleDotaSubmitPlayerReportV2Request(const uin
     return true;
 }
 
+bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job)
+{
+    uint32 public_ip = 0;
+    uint32 private_ip = 0;
+    uint32 server_port = 0;
+    uint32 tv_port = 0;
+    uint32 server_type = 0;
+    uint32 server_region = 0;
+    uint32 relay_slots_max = 0;
+    uint32 server_version = 0;
+    uint32 server_cluster = 0;
+    uint32 assigned_tv_port = 0;
+    uint32 allow_custom_games = 0;
+    uint32 build_version = 0;
+
+    gbe::proto_wire::read_uint32_field(body, body_size, 1u, public_ip);
+    gbe::proto_wire::read_uint32_field(body, body_size, 2u, private_ip);
+    gbe::proto_wire::read_uint32_field(body, body_size, 3u, server_port);
+    gbe::proto_wire::read_uint32_field(body, body_size, 4u, tv_port);
+    gbe::proto_wire::read_uint32_field(body, body_size, 7u, server_type);
+    gbe::proto_wire::read_uint32_field(body, body_size, 8u, server_region);
+    gbe::proto_wire::read_uint32_field(body, body_size, 13u, relay_slots_max);
+    gbe::proto_wire::read_uint32_field(body, body_size, 19u, server_version);
+    gbe::proto_wire::read_uint32_field(body, body_size, 20u, server_cluster);
+    gbe::proto_wire::read_uint32_field(body, body_size, 22u, assigned_tv_port);
+    gbe::proto_wire::read_uint32_field(body, body_size, 23u, allow_custom_games);
+    gbe::proto_wire::read_uint32_field(body, body_size, 24u, build_version);
+
+    // Extract tv_secret_code from field 18 - needed for SourceTV spectating
+    // Try fixed64 first (wire type 1), then varint (wire type 0)
+    uint64 tv_secret_code = 0;
+    {
+        gbe::proto_wire::Field f18{};
+        const bool has_f18 = gbe::proto_wire::find_field(body, body_size, 18u, f18);
+        if (has_f18) {
+            if (f18.wire_type == 1 && f18.value_size == 8) {
+                std::memcpy(&tv_secret_code, body + f18.value_offset, sizeof(tv_secret_code));
+            } else if (f18.wire_type == 0) {
+                size_t off = f18.value_offset;
+                gbe::proto_wire::read_varuint(body, body_size, off, tv_secret_code);
+            }
+            GBE_GC_DebugLog("GC_DOTA_DIRECT",
+                "4508 field_18 found wire_type=%u value_size=%zu tv_secret_code=0x%llx",
+                f18.wire_type, f18.value_size,
+                static_cast<unsigned long long>(tv_secret_code));
+        } else {
+            // Field 18 not found - dump all fields for diagnosis
+            size_t pos = 0;
+            std::string field_list;
+            while (pos < body_size) {
+                gbe::proto_wire::Field field{};
+                size_t field_offset = 0;
+                size_t field_end = 0;
+                if (!gbe::proto_wire::read_next_field(body, body_size, pos, field, &field_offset, &field_end))
+                    break;
+                if (!field_list.empty()) field_list += ",";
+                field_list += std::to_string(field.number) + ":" + std::to_string(field.wire_type);
+            }
+            GBE_GC_DebugLog("GC_DOTA_DIRECT",
+                "4508 field_18 NOT found body_size=%zu fields=[%s]",
+                body_size, field_list.c_str());
+        }
+    }
+
+    const std::string runtime_connect = gbe::proto_wire::normalize_dota_practice_lobby_connect(
+        gbe::proto_wire::format_dota_practice_lobby_connect_from_ips(public_ip, private_ip, server_port));
+    // 4508 reports the engine's listen address, but peers that already have a
+    // working LAN endpoint must keep it to avoid a post-connect P2P redirect.
+    const bool preserve_existing_lan_connect =
+        GBE_local_lobby.active &&
+        GBE_local_lobby.lobby_id != 0 &&
+        GBE_local_lobby.custom_game.game_id == 0ull &&
+        GBE_local_lobby.lan &&
+        GBE_local_lobby.match_id != 0ull &&
+        gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(GBE_local_lobby.connect) != 0u &&
+        gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(runtime_connect) != 0u &&
+        runtime_connect != GBE_local_lobby.connect;
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
+        !runtime_connect.empty() && runtime_connect != GBE_local_lobby.connect &&
+        !preserve_existing_lan_connect) {
+        const std::string previous_connect = GBE_local_lobby.connect;
+        GBE_local_lobby.connect = runtime_connect;
+        if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id)
+            GBE_shared_dota_lobby_state.connect = runtime_connect;
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "adopted game server address as lobby connect reason=4508_game_server_info lobby_id=%llu previous=%s new=%s",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            previous_connect.c_str(),
+            runtime_connect.c_str()
+        );
+    } else if (preserve_existing_lan_connect) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "preserved existing LAN lobby connect over 4508 runtime address lobby_id=%llu current=%s candidate=%s",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.connect.c_str(),
+            runtime_connect.c_str()
+        );
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "consumed req=%u source_job=%llu note=game server info notification public_ip=%s private_ip=%s port=%u tv_port=%u assigned_tv_port=%u type=%u region=%u relay_slots=%u version=%u build=%u cluster=%u custom_games=%u",
+        request_emsg,
+        static_cast<unsigned long long>(source_job),
+        gbe::proto_wire::format_ipv4(public_ip).c_str(),
+        gbe::proto_wire::format_ipv4(private_ip).c_str(),
+        server_port,
+        tv_port,
+        assigned_tv_port,
+        server_type,
+        server_region,
+        relay_slots_max,
+        server_version,
+        build_version,
+        server_cluster,
+        allow_custom_games
+    );
+
+    GBE_TrySyncDotaLobbyServerIdFromGameServer("4508_game_server_info");
+
+    // Store tv_secret_code and tv_port for SourceTV spectating
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+        if (tv_secret_code != 0)
+            GBE_local_lobby.tv_secret_code = tv_secret_code;
+        if (tv_port != 0)
+            GBE_local_lobby.tv_port = tv_port;
+        GBE_PublishDotaPracticeLobbyMetadata("4508_game_server_info");
+    }
+
+    if (GBE_HasDotaLaunchServerSetupSync())
+        GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseSetupSynced, "4508_game_server_info");
+
+    if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
+        if (GBE_TryAdvanceDotaLaunchToRun("runtime packet after 4508", request_emsg, source_job, "4508_launch_run"))
+            return true;
+    }
+
+    return true;
+}
+
+
 bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData)
 {
     GBE_RestoreSharedDotaLobbyState("direct_post_login_request");
@@ -10907,145 +11051,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == 4508) {
-        uint32 public_ip = 0;
-        uint32 private_ip = 0;
-        uint32 server_port = 0;
-        uint32 tv_port = 0;
-        uint32 server_type = 0;
-        uint32 server_region = 0;
-        uint32 relay_slots_max = 0;
-        uint32 server_version = 0;
-        uint32 server_cluster = 0;
-        uint32 assigned_tv_port = 0;
-        uint32 allow_custom_games = 0;
-        uint32 build_version = 0;
-
-        gbe::proto_wire::read_uint32_field(body, body_size, 1u, public_ip);
-        gbe::proto_wire::read_uint32_field(body, body_size, 2u, private_ip);
-        gbe::proto_wire::read_uint32_field(body, body_size, 3u, server_port);
-        gbe::proto_wire::read_uint32_field(body, body_size, 4u, tv_port);
-        gbe::proto_wire::read_uint32_field(body, body_size, 7u, server_type);
-        gbe::proto_wire::read_uint32_field(body, body_size, 8u, server_region);
-        gbe::proto_wire::read_uint32_field(body, body_size, 13u, relay_slots_max);
-        gbe::proto_wire::read_uint32_field(body, body_size, 19u, server_version);
-        gbe::proto_wire::read_uint32_field(body, body_size, 20u, server_cluster);
-        gbe::proto_wire::read_uint32_field(body, body_size, 22u, assigned_tv_port);
-        gbe::proto_wire::read_uint32_field(body, body_size, 23u, allow_custom_games);
-        gbe::proto_wire::read_uint32_field(body, body_size, 24u, build_version);
-
-        // Extract tv_secret_code from field 18 - needed for SourceTV spectating
-        // Try fixed64 first (wire type 1), then varint (wire type 0)
-        uint64 tv_secret_code = 0;
-        {
-            gbe::proto_wire::Field f18{};
-            const bool has_f18 = gbe::proto_wire::find_field(body, body_size, 18u, f18);
-            if (has_f18) {
-                if (f18.wire_type == 1 && f18.value_size == 8) {
-                    std::memcpy(&tv_secret_code, body + f18.value_offset, sizeof(tv_secret_code));
-                } else if (f18.wire_type == 0) {
-                    size_t off = f18.value_offset;
-                    gbe::proto_wire::read_varuint(body, body_size, off, tv_secret_code);
-                }
-                GBE_GC_DebugLog("GC_DOTA_DIRECT",
-                    "4508 field_18 found wire_type=%u value_size=%zu tv_secret_code=0x%llx",
-                    f18.wire_type, f18.value_size,
-                    static_cast<unsigned long long>(tv_secret_code));
-            } else {
-                // Field 18 not found - dump all fields for diagnosis
-                size_t pos = 0;
-                std::string field_list;
-                while (pos < body_size) {
-                    gbe::proto_wire::Field field{};
-                    size_t field_offset = 0;
-                    size_t field_end = 0;
-                    if (!gbe::proto_wire::read_next_field(body, body_size, pos, field, &field_offset, &field_end))
-                        break;
-                    if (!field_list.empty()) field_list += ",";
-                    field_list += std::to_string(field.number) + ":" + std::to_string(field.wire_type);
-                }
-                GBE_GC_DebugLog("GC_DOTA_DIRECT",
-                    "4508 field_18 NOT found body_size=%zu fields=[%s]",
-                    body_size, field_list.c_str());
-            }
-        }
-
-        const std::string runtime_connect = gbe::proto_wire::normalize_dota_practice_lobby_connect(
-            gbe::proto_wire::format_dota_practice_lobby_connect_from_ips(public_ip, private_ip, server_port));
-        // 4508 reports the engine's listen address, but peers that already have a
-        // working LAN endpoint must keep it to avoid a post-connect P2P redirect.
-        const bool preserve_existing_lan_connect =
-            GBE_local_lobby.active &&
-            GBE_local_lobby.lobby_id != 0 &&
-            GBE_local_lobby.custom_game.game_id == 0ull &&
-            GBE_local_lobby.lan &&
-            GBE_local_lobby.match_id != 0ull &&
-            gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(GBE_local_lobby.connect) != 0u &&
-            gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(runtime_connect) != 0u &&
-            runtime_connect != GBE_local_lobby.connect;
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
-            !runtime_connect.empty() && runtime_connect != GBE_local_lobby.connect &&
-            !preserve_existing_lan_connect) {
-            const std::string previous_connect = GBE_local_lobby.connect;
-            GBE_local_lobby.connect = runtime_connect;
-            if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id)
-                GBE_shared_dota_lobby_state.connect = runtime_connect;
-
-            GBE_GC_DebugLog(
-                "GC_DOTA_SYNC",
-                "adopted game server address as lobby connect reason=4508_game_server_info lobby_id=%llu previous=%s new=%s",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                previous_connect.c_str(),
-                runtime_connect.c_str()
-            );
-        } else if (preserve_existing_lan_connect) {
-            GBE_GC_DebugLog(
-                "GC_DOTA_SYNC",
-                "preserved existing LAN lobby connect over 4508 runtime address lobby_id=%llu current=%s candidate=%s",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_local_lobby.connect.c_str(),
-                runtime_connect.c_str()
-            );
-        }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "consumed req=%u source_job=%llu note=game server info notification public_ip=%s private_ip=%s port=%u tv_port=%u assigned_tv_port=%u type=%u region=%u relay_slots=%u version=%u build=%u cluster=%u custom_games=%u",
-            request_emsg,
-            static_cast<unsigned long long>(source_job),
-            gbe::proto_wire::format_ipv4(public_ip).c_str(),
-            gbe::proto_wire::format_ipv4(private_ip).c_str(),
-            server_port,
-            tv_port,
-            assigned_tv_port,
-            server_type,
-            server_region,
-            relay_slots_max,
-            server_version,
-            build_version,
-            server_cluster,
-            allow_custom_games
-        );
-
-        GBE_TrySyncDotaLobbyServerIdFromGameServer("4508_game_server_info");
-
-        // Store tv_secret_code and tv_port for SourceTV spectating
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
-            if (tv_secret_code != 0)
-                GBE_local_lobby.tv_secret_code = tv_secret_code;
-            if (tv_port != 0)
-                GBE_local_lobby.tv_port = tv_port;
-            GBE_PublishDotaPracticeLobbyMetadata("4508_game_server_info");
-        }
-
-        if (GBE_HasDotaLaunchServerSetupSync())
-            GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseSetupSynced, "4508_game_server_info");
-
-        if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
-            if (GBE_TryAdvanceDotaLaunchToRun("runtime packet after 4508", request_emsg, source_job, "4508_launch_run"))
-                return true;
-        }
-
-        return true;
+        return GBE_HandleDotaServerAssignmentRequest(body, body_size, has_source_job, source_job);
     }
 
     if (request_emsg == GBE_kSteamGamesPlayedWithDataBlob && GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()) {
