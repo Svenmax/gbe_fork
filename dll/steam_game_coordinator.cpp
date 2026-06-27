@@ -17,6 +17,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_custom_lobby_http.h"
 #include "gbe_dota_gc_router.h"
@@ -51,130 +52,12 @@
 using namespace gamecoordinator::tf2;
 
 constexpr int GC_MIN_VERSION = 20091217;
-static constexpr uint32 GBE_kProtoMask = gbe::gc_message::kProtoMask;
-static constexpr uint32 GBE_kEMsgClientToGC = 5452u;
-static constexpr uint32 GBE_kEMsgClientFromGC = 5453u;
-static constexpr uint32 GBE_kEMsgGCClientHello = 4006u;
-static constexpr uint32 GBE_kEMsgGCServerHello = 4007u;
-static constexpr uint32 GBE_kEMsgGCClientWelcome = 4004u;
-static constexpr uint32 GBE_kGCInvitationCreated = 4502u;
-static constexpr uint32 GBE_kGCInviteToLobby = 4512u;
-static constexpr uint32 GBE_kGCLobbyInviteResponse = 4513u;
-static constexpr uint32 GBE_kDotaAppId = 570u;
-static constexpr uint32 GBE_kDotaCacheSubscribed = 24u;
-static constexpr uint32 GBE_kDotaCacheUnsubscribed = 25u;
-static constexpr uint32 GBE_kDotaPracticeLobbyDetailsUpdate = 26u;
-static constexpr uint32 GBE_kDotaCacheSubscriptionCheck = 27u;
-static constexpr uint32 GBE_kDotaCacheSubscriptionRefresh = 28u;
-static constexpr uint32 GBE_kDotaCacheSubscribedUpToDate = 29u;
-static constexpr uint32 GBE_kDotaGameMatchSignOut = 7004u;
-static constexpr uint32 GBE_kDotaGameMatchSignOutResponse = 7005u;
-static constexpr uint32 GBE_kDotaJoinChatChannel = 7009u;
-static constexpr uint32 GBE_kDotaJoinChatChannelResponse = 7010u;
-static constexpr uint32 GBE_kDotaOtherJoinedChannel = 7013u;
-static constexpr uint32 GBE_kDotaOtherLeftChannel = 7014u;
-static constexpr uint32 GBE_kDotaAbandonCurrentGame = 7035u;
-static constexpr uint32 GBE_kDotaLeaverDetected = 7072u;
-static constexpr uint32 GBE_kDotaSubmitPlayerReportV2 = 7082u;
-static constexpr uint32 GBE_kDotaSubmitPlayerReportResponseV2 = 7083u;
-static constexpr uint32 GBE_kDotaGameMatchSignOutPermissionRequest = 7381u;
-static constexpr uint32 GBE_kDotaGameMatchSignOutPermissionResponse = 7382u;
-static constexpr uint32 GBE_kDotaLobbyAdditionalAccountData = 8869u;
-static constexpr uint32 GBE_kDotaPracticeLobbyCreate = 7038u;
-static constexpr uint32 GBE_kDotaPracticeLobbyLeave = 7040u;
-static constexpr uint32 GBE_kDotaPracticeLobbyLaunch = 7041u;
-static constexpr uint32 GBE_kDotaCustomLobbyListRequest = 7042u;
-static constexpr uint32 GBE_kDotaCustomLobbyListResponse = 7043u;
-static constexpr uint32 GBE_kDotaPracticeLobbyJoin = 7044u;
-static constexpr uint32 GBE_kDotaPracticeLobbySetDetails = 7046u;
-static constexpr uint32 GBE_kDotaPracticeLobbySetTeamSlot = 7047u;
-static constexpr uint32 GBE_kDotaPracticeLobbyResponse = 7055u;
-static constexpr uint32 GBE_kDotaPracticeLobbyKick = 7081u;
-static constexpr uint32 GBE_kDotaPopup = 7102u;
-static constexpr uint32 GBE_kDotaFriendPracticeLobbyListRequest = 7111u;
-static constexpr uint32 GBE_kDotaFriendPracticeLobbyListResponse = 7112u;
-static constexpr uint32 GBE_kDotaPracticeLobbyJoinResponse = 7113u;
-static constexpr uint32 GBE_kDotaJoinableCustomGameModesRequest = 7466u;
-static constexpr uint32 GBE_kDotaJoinableCustomGameModesResponse = 7467u;
-static constexpr uint32 GBE_kDotaJoinableCustomLobbiesRequest = 7468u;
-static constexpr uint32 GBE_kDotaJoinableCustomLobbiesResponse = 7469u;
-static constexpr uint32 GBE_kDotaTopCustomGamesList = 8024u;
-static constexpr uint32 GBE_kDotaLeaveChatChannel = 7272u;
-static constexpr uint32 GBE_kDotaChatMessage = 7273u;
-static constexpr uint32 GBE_kDotaPracticeLobbyJoinBroadcastChannel = 7149u;
-static constexpr uint32 GBE_kDotaLobbyUpdateBroadcastChannelInfo = 7367u;
-static constexpr uint32 GBE_kDotaDestroyLobbyRequest = 8246u;
-static constexpr uint32 GBE_kDotaDestroyLobbyResponse = 8247u;
-static constexpr uint32 GBE_kDotaPracticeLobbyCloseBroadcastChannel = 8054u;
-static constexpr uint32 GBE_kDotaFindTopSourceTVGames = 8009u;
-static constexpr uint32 GBE_kDotaFindTopSourceTVGamesResponse = 8010u;
-static constexpr uint32 GBE_kDotaCustomGameInfoRequest = 8020u;
-static constexpr uint32 GBE_kDotaCustomGameInfoResponse = 8021u;
-static constexpr uint32 GBE_kDotaLobbyList = 8011u;
-static constexpr uint32 GBE_kDotaLobbyListResponse = 8012u;
-static constexpr uint32 GBE_kDotaSOUpdateMultiple = 6146u;
-static constexpr uint32 GBE_kDotaAddSocket = 1087u;
-static constexpr uint32 GBE_kDotaAddSocketResponse = 1090u;
-static constexpr uint32 GBE_kDotaSetItemStyle = 2577u;
-static constexpr uint32 GBE_kDotaSetItemStyleResponse = 2578u;
-static constexpr uint32 GBE_kDotaUnlockItemStyle = 2571u;
-static constexpr uint32 GBE_kDotaUnlockItemStyleResponse = 2572u;
-
-static constexpr size_t GBE_kDotaWelcomeInnerBodyOffset = 48u;
-static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
-static constexpr uint64 GBE_kDotaLobbyDetailsTimestamp = 0x0069E7F5C567E78Bull;
-static constexpr uint32 GBE_kDotaLobbyField128Value = 1776809986u;
-static constexpr uint32 GBE_kDotaTeamGoodGuys = 0u;
-static constexpr uint32 GBE_kDotaTeamBadGuys = 1u;
-static constexpr uint32 GBE_kDotaTeamPlayerPool = 4u;
-static constexpr const char *GBE_kDotaGenericLobbyMarkerKey = "gbe_dota_practice_lobby";
-static constexpr const char *GBE_kDotaGenericLobbyMarkerValue = "1";
-static constexpr const char *GBE_kDotaGenericLobbyDotaLobbyIdKey = "gbe_dota_lobby_id";
-static constexpr const char *GBE_kDotaGenericLobbyRoomNameKey = "gbe_dota_room_name";
-static constexpr const char *GBE_kDotaGenericLobbyGameModeKey = "gbe_dota_game_mode";
-static constexpr const char *GBE_kDotaGenericLobbyServerRegionKey = "gbe_dota_server_region";
-static constexpr const char *GBE_kDotaGenericLobbyLanPingKey = "gbe_dota_lan_ping";
-static constexpr const char *GBE_kDotaGenericLobbyPassKeyKey = "gbe_dota_pass_key";
-static constexpr const char *GBE_kDotaGenericLobbyAllowCheatsKey = "gbe_dota_allow_cheats";
-static constexpr const char *GBE_kDotaGenericLobbyFillWithBotsKey = "gbe_dota_fill_with_bots";
-static constexpr const char *GBE_kDotaGenericLobbyAllowSpectatingKey = "gbe_dota_allow_spectating";
-static constexpr const char *GBE_kDotaGenericLobbyVisibilityKey = "gbe_dota_visibility";
-static constexpr const char *GBE_kDotaGenericLobbyBotDifficultyRadiantKey = "gbe_dota_bot_diff_radiant";
-static constexpr const char *GBE_kDotaGenericLobbyBotDifficultyDireKey = "gbe_dota_bot_diff_dire";
-static constexpr const char *GBE_kDotaGenericLobbyBotRadiantKey = "gbe_dota_bot_radiant";
-static constexpr const char *GBE_kDotaGenericLobbyBotDireKey = "gbe_dota_bot_dire";
-static constexpr const char *GBE_kDotaGenericLobbyCustomGameModeKey = "gbe_dota_custom_game_mode";
-static constexpr const char *GBE_kDotaGenericLobbyCustomMapNameKey = "gbe_dota_custom_map_name";
-static constexpr const char *GBE_kDotaGenericLobbyCustomDifficultyKey = "gbe_dota_custom_difficulty";
-static constexpr const char *GBE_kDotaGenericLobbyCustomGameIdKey = "gbe_dota_custom_game_id";
-static constexpr const char *GBE_kDotaGenericLobbyCustomMinPlayersKey = "gbe_dota_custom_min_players";
-static constexpr const char *GBE_kDotaGenericLobbyCustomMaxPlayersKey = "gbe_dota_custom_max_players";
-static constexpr const char *GBE_kDotaGenericLobbyCustomGameCrcKey = "gbe_dota_custom_game_crc";
-static constexpr const char *GBE_kDotaGenericLobbyCustomGameTimestampKey = "gbe_dota_custom_game_timestamp";
-static constexpr const char *GBE_kDotaGenericLobbyCustomGamePenaltiesKey = "gbe_dota_custom_game_penalties";
-static constexpr const char *GBE_kDotaGenericLobbyOwnerSteamIdKey = "gbe_dota_owner_steam_id";
-static constexpr const char *GBE_kDotaGenericLobbyOwnerAccountIdKey = "gbe_dota_owner_account_id";
-static constexpr const char *GBE_kDotaGenericLobbyOwnerNameKey = "gbe_dota_owner_name";
-static constexpr const char *GBE_kDotaGenericLobbyStateKey = "gbe_dota_state";
-static constexpr const char *GBE_kDotaGenericLobbyGameStateKey = "gbe_dota_game_state";
-static constexpr const char *GBE_kDotaGenericLobbyMatchIdKey = "gbe_dota_match_id";
-static constexpr const char *GBE_kDotaGenericLobbyServerIdKey = "gbe_dota_server_id";
-
 static bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
     Steam_Game_Coordinator *target_gc,
     const CSteamID &player_steam_id,
     const std::vector<Econ_Item> &source_items,
     bool unsubscribe_first,
     const char *reason);
-static constexpr const char *GBE_kDotaGenericLobbyConnectKey = "gbe_dota_connect";
-static constexpr const char *GBE_kDotaGenericLobbyGameStartTimeKey = "gbe_dota_game_start_time";
-static constexpr const char *GBE_kDotaGenericLobbyTvSecretCodeKey = "gbe_dota_tv_secret_code";
-static constexpr const char *GBE_kDotaGenericLobbyTvPortKey = "gbe_dota_tv_port";
-static constexpr const char *GBE_kDotaGenericLobbyMemberTeamKey = "gbe_dota_member_team";
-static constexpr const char *GBE_kDotaGenericLobbyMemberSlotKey = "gbe_dota_member_slot";
-static constexpr const char *GBE_kDotaGenericLobbyMemberHeroKey = "gbe_dota_member_hero";
-static constexpr const char *GBE_kDotaGenericLobbyMemberConnectedKey = "gbe_dota_member_connected";
-static constexpr const char *GBE_kDotaGenericLobbyMemberNameKey = "gbe_dota_member_name";
 
 static void GBE_ComposeDotaPracticeLobbySOObjects(
     uint64 steam_id,
