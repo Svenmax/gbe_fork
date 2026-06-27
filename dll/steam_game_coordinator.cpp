@@ -11699,7 +11699,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
     return true;
 }
 
-bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job)
+bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job)
 {
     uint32 public_ip = 0;
     uint32 private_ip = 0;
@@ -12516,7 +12516,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == 4508) {
-        return GBE_HandleDotaServerAssignmentRequest(body, body_size, has_source_job, source_job);
+        return GBE_HandleDotaServerAssignmentRequest(request_emsg, body, body_size, has_source_job, source_job);
     }
 
     if (request_emsg == GBE_kSteamGamesPlayedWithDataBlob && GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()) {
