@@ -39,11 +39,12 @@
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
 
-// Forward declarations of the protobuf-generated types used in the contexts.
-// The full definitions come from <steammessages.pb.h> which the .cpp includes;
-// the header only needs the type names for struct fields.
-struct ProtoBufMsgHeader_t;
-class CMsgProtoBufHeader;
+// The context structs hold ProtoBufMsgHeader_t / CMsgProtoBufHeader by value,
+// which requires the complete type definitions (MSVC rejects incomplete types
+// as value members). Pull in the protobuf-generated header; the only TU that
+// includes this header today (steam_game_coordinator.cpp) already includes it,
+// so there is no extra compile cost.
+#include <steammessages.pb.h>
 
 // --- Mask helper -----------------------------------------------------------
 // Strips the protobuf mask bit (0x80000000) from an emsg. Used everywhere the
@@ -62,7 +63,7 @@ struct GBE_DirectProtoContext
     ProtoBufMsgHeader_t hdr{};
     CMsgProtoBufHeader protohdr;
     std::size_t body_offset{};
-    const std::uint8 *body{};
+    const std::uint8_t *body{};
     std::size_t body_size{};
 };
 
@@ -70,13 +71,6 @@ struct GBE_DirectProtoContext
 // truncated/invalid input. On success context.body points into the caller's
 // buffer (no copy) and context.protohdr holds the parsed extended header.
 inline bool GBE_ParseDirectProtoContext(const void *pubData, std::uint32_t cubData, GBE_DirectProtoContext &context);
-
-// NOTE: GBE_ParseDirectProtoContext's implementation lives in
-// gbe_dota_request_router.cpp because it calls CMsgProtoBufHeader methods
-// (Clear/ParseFromArray) and pulling <steammessages.pb.h> into this header
-// would force every includer to compile the heavyweight protobuf-generated
-// header. The other two parsers only touch bytes/gbe_proto_wire and stay
-// inline here.
 
 // --- Wrapped ClientToGC replay envelope ------------------------------------
 // Layout (two layers):
@@ -110,10 +104,33 @@ inline bool GBE_ExtractWrappedClientFromGCPayload(
     std::string &inner_payload);
 
 // =====================================================================
-// Inline implementations (kept in the header to match the original
-// `static` semantics for the two bytes-only parsers; the direct-proto
-// parser lives in gbe_dota_request_router.cpp due to its protobuf dep).
+// Inline implementations (matching the original `static` semantics; the
+// only TU using them today, steam_game_coordinator.cpp, compiles unchanged).
 // =====================================================================
+
+inline bool GBE_ParseDirectProtoContext(const void *pubData, std::uint32_t cubData, GBE_DirectProtoContext &context)
+{
+    context = {};
+    context.protohdr.Clear();
+
+    if (!pubData || cubData < sizeof(ProtoBufMsgHeader_t))
+        return false;
+
+    const std::uint8_t *bytes = reinterpret_cast<const std::uint8_t *>(pubData);
+    std::memcpy(&context.hdr, bytes, sizeof(context.hdr));
+
+    const std::size_t body_offset = sizeof(context.hdr) + context.hdr.m_cubProtoBufExtHdr;
+    if (body_offset > cubData)
+        return false;
+
+    if (context.hdr.m_cubProtoBufExtHdr != 0 && !context.protohdr.ParseFromArray(bytes + sizeof(context.hdr), context.hdr.m_cubProtoBufExtHdr))
+        return false;
+
+    context.body_offset = body_offset;
+    context.body = bytes + body_offset;
+    context.body_size = static_cast<std::size_t>(cubData - body_offset);
+    return true;
+}
 
 inline bool GBE_ExtractWrappedDotaDirectContext(const void *pubData, std::uint32_t cubData, GBE_DotaWrappedDirectContext &context)
 {
@@ -122,7 +139,7 @@ inline bool GBE_ExtractWrappedDotaDirectContext(const void *pubData, std::uint32
     if (!pubData || cubData < 8)
         return false;
 
-    const std::uint8 *bytes = reinterpret_cast<const std::uint8 *>(pubData);
+    const std::uint8_t *bytes = reinterpret_cast<const std::uint8_t *>(pubData);
     std::uint32_t outer_raw_emsg = 0;
     std::uint32_t outer_header_length = 0;
     std::memcpy(&outer_raw_emsg, bytes, sizeof(outer_raw_emsg));
@@ -136,8 +153,8 @@ inline bool GBE_ExtractWrappedDotaDirectContext(const void *pubData, std::uint32
     if (outer_body_offset > cubData)
         return false;
 
-    const std::uint8 *outer_header = bytes + outer_header_offset;
-    const std::uint8 *outer_body = bytes + outer_body_offset;
+    const std::uint8_t *outer_header = bytes + outer_header_offset;
+    const std::uint8_t *outer_body = bytes + outer_body_offset;
     const std::size_t outer_body_size = cubData - outer_body_offset;
 
     if (!gbe::proto_wire::read_bytes_field(outer_header, outer_header_length, 2u, context.outer_session_field_raw))
@@ -147,7 +164,7 @@ inline bool GBE_ExtractWrappedDotaDirectContext(const void *pubData, std::uint32
     if (!gbe::proto_wire::read_bytes_field(outer_body, outer_body_size, 3u, payload_raw) || payload_raw.size() < 8u)
         return false;
 
-    const std::uint8 *payload = reinterpret_cast<const std::uint8 *>(payload_raw.data());
+    const std::uint8_t *payload = reinterpret_cast<const std::uint8_t *>(payload_raw.data());
     std::uint32_t inner_raw_emsg = 0;
     std::uint32_t inner_header_length = 0;
     std::memcpy(&inner_raw_emsg, payload, sizeof(inner_raw_emsg));
@@ -158,7 +175,7 @@ inline bool GBE_ExtractWrappedDotaDirectContext(const void *pubData, std::uint32
     if (inner_body_offset > payload_raw.size())
         return false;
 
-    const std::uint8 *inner_header = payload + inner_header_offset;
+    const std::uint8_t *inner_header = payload + inner_header_offset;
     context.inner_emsg = GBE_GC_MaskedEMsg(inner_raw_emsg);
 
     context.inner_body_raw.assign(
@@ -186,7 +203,7 @@ inline bool GBE_ExtractWrappedClientFromGCPayload(
     if (wrapped_message.size() < 8u)
         return false;
 
-    const std::uint8 *bytes = reinterpret_cast<const std::uint8 *>(wrapped_message.data());
+    const std::uint8_t *bytes = reinterpret_cast<const std::uint8_t *>(wrapped_message.data());
     std::uint32_t outer_raw_emsg = 0;
     std::uint32_t outer_header_length = 0;
     std::memcpy(&outer_raw_emsg, bytes, sizeof(outer_raw_emsg));
@@ -199,7 +216,7 @@ inline bool GBE_ExtractWrappedClientFromGCPayload(
     if (outer_body_offset > wrapped_message.size())
         return false;
 
-    const std::uint8 *outer_body = bytes + outer_body_offset;
+    const std::uint8_t *outer_body = bytes + outer_body_offset;
     const std::size_t outer_body_size = wrapped_message.size() - outer_body_offset;
     if (!gbe::proto_wire::read_bytes_field(outer_body, outer_body_size, 3u, inner_payload) || inner_payload.size() < 8u)
         return false;
