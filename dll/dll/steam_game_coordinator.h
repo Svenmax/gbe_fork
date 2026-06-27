@@ -247,6 +247,11 @@ public ISteamGameCoordinator
     bool GBE_HandleDotaLaunchAdvanceOrConsume(uint32 request_emsg, const char *advance_reason, const char *advance_phase, const char *consume_note, uint64 source_job, size_t body_size);
     bool GBE_HandleDota8870LaunchMarkerRequest(uint32 request_emsg, uint64 source_job);
     bool GBE_HandleDotaLanServerAvailableRequest(uint32 request_emsg, const uint8 *body, size_t body_size, uint64 source_job);
+    bool GBE_HandleDotaBatchPlayerResourcesRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaCacheSubscriptionRefreshRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaLeaverDetectedRequest(const uint8 *body, size_t body_size, uint64 source_job);
+    bool GBE_HandleDotaSignOutPermissionRequest(bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaSubmitPlayerReportV2Request(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
     bool GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData);
     bool GBE_HandleDotaWrappedPostLoginRequest(const void *pubData, uint32 cubData);
