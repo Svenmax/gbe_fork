@@ -1782,7 +1782,7 @@ bool GBE_ReplayDotaPracticeLobbyOfficial26Payload(
     bool rewrite_2015,
     uint32 extra_startup_account_id,
     std::string &message,
-    const GBE_DotaCustomGameDetails *custom_game = nullptr)
+    const GBE_DotaCustomGameDetails *custom_game)
 {
     if (!wrapped_template_hex)
         return false;
@@ -2562,7 +2562,7 @@ bool GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedTemplate(
     const std::string &pass_key,
     uint32 extra_startup_account_id,
     std::string &message,
-    const GBE_DotaCustomGameDetails *custom_game = nullptr)
+    const GBE_DotaCustomGameDetails *custom_game)
 {
     (void)extra_startup_account_id;
 
@@ -2640,7 +2640,7 @@ bool GBE_AdaptDotaPracticeLobbyDetailsUpdatePayload(
     const std::string &broadcast_language_code,
     const std::string &pass_key,
     std::string &message,
-    const GBE_DotaCustomGameDetails *custom_game = nullptr)
+    const GBE_DotaCustomGameDetails *custom_game)
 {
     (void)has_broadcast_channel;
     (void)broadcast_channel_id;
