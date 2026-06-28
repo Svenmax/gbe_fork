@@ -52,6 +52,8 @@
 #include <tf2/gcsystemmsgs.pb.h>
 #include <tf2/tf_gcmessages.pb.h>
 
+using namespace gamecoordinator::tf2;
+
 bool Steam_Game_Coordinator::GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_LocalLobby &lobby)
 {
     return gbe::dota_lobby_flow::normalize_arcade_lobby_member_slots(
