@@ -155,4 +155,34 @@ bool GBE_PrepareDotaDirectReplayMessage(
     const char *context_note,
     std::string &message);
 
+// Server hello context (moved from steam_game_coordinator.cpp, shared with lobby-flow TU)
+struct GBE_DotaServerHelloContext
+{
+    bool valid{};
+    uint32 active_version{};
+    uint32 min_allowed_version{};
+    uint64 compatibility_value{};
+    uint32 universe{};
+    uint64 source_job_id{};
+    bool has_source_job{};
+    uint64 client_steam_id{};
+    bool has_client_steam_id{};
+    int32 client_session_id{};
+    bool has_client_session_id{};
+    uint32 source_app_id{};
+    bool has_source_app_id{};
+    uint32 gc_msg_src{};
+    bool has_gc_msg_src{};
+    uint32 gc_dir_index_source{};
+    bool has_gc_dir_index_source{};
+};
+
+// Shared server welcome builder (defined in steam_game_coordinator.cpp;
+// used by core code + lobby-flow TU).
+bool GBE_BuildDirectDotaServerWelcome(uint64 steam_id, uint32 app_id, const GBE_DotaServerHelloContext &context, std::string &message);
+
+// Shared mutable server-hello cache (defined in steam_game_coordinator.cpp;
+// used by core code + lobby-flow TU).
+extern GBE_DotaServerHelloContext GBE_last_dota_server_hello_context;
+
 #endif // __INCLUDED_GBE_DOTA_GC_INTERNAL_H__

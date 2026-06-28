@@ -99,37 +99,6 @@ static void GBE_ComposeDotaPracticeLobbySOObjects(
     const GBE_DotaCustomGameDetails *custom_game,
     gbe::gc_message::DotaPracticeLobbyObjects &lobby_objects);
 
-static const char GBE_kDotaOfficialLobbyStartupAccountDataTemplate[] =
-    "\010\365\355\206A\022\274\001\n\005\010\002\020\300\014\n\005\010\005\020\310\001"
-    "\n\004\010\012\020d\n\004\010\013\020d\n\005\010\014\020\336\002"
-    "\n\004\010\"\020d\n\004\010#\0202\n\005\010%\020\356\005"
-    "\n\005\010(\020\300\014\n\004\010*\0202\n\005\010,\020\333\003"
-    "\n\005\010/\020\254\002\n\005\0105\020\336\002\n\004\010E\020d"
-    "\n\004\010K\020d\n\005\010Q\020\330\004\n\005\010S\020\333\003"
-    "\n\005\010T\020\275\025\n\005\010U\020\226\001\n\004\010h\0202"
-    "\n\005\010\303\002\020\001\n\005\010\220\003\020\001"
-    "\n\005\010\221\003\020\001\n\005\010\222\003\020\001"
-    "\n\005\010\232\003\020\006\n\005\010\315\003\020\003"
-    "\n\005\010\316\003\020\010\n\005\010\317\003\020\026"
-    "\032\006\010\206\001\020\206\001\032\006\010\321\017\020\322\017"
-    "\032\006\010\211\047\020\212\047\032\006\010\221N\020\222N"
-    "\032\006\010\371U\020\372U\032\006\010\341]\020\342]"
-    "\032\010\010\321\211\002\020\322\211\002"
-    "\032\010\010\271\221\002\020\272\221\002"
-    "\032\010\010\211\241\002\020\212\241\002"
-    "\032\010\010\301\270\002\020\302\270\002"
-    "\032\010\010\221\310\002\020\222\310\002"
-    "\032\010\010\341\327\002\020\342\327\002"
-    "\032\010\010\231\357\002\020\232\357\002"
-    "\032\010\010\211\236\003\020\212\236\003"
-    "\032\010\010\211\233\004\020\212\233\004"
-    "\032\010\010\371\311\004\020\372\311\004"
-    "\032\010\010\351\370\004\020\352\370\004"
-    "\032\010\010\271\210\005\020\272\210\005"
-    "\032\010\010\241\220\005\020\242\220\005"
-    "\032\010\010\211\230\005\020\212\230\005"
-    "\032\010\010\301\254\006\020\302\254\006";
-
 struct GBE_DotaGenericLobbyEntry {
     CSteamID generic_lobby_id{};
     uint64 dota_lobby_id{};
@@ -294,18 +263,7 @@ static const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyGameStartTimeVarint =
 static constexpr const char *GBE_kOldDotaPracticeLobbyConnect = "117.157.79.194:27015 10.110.4.21:27015";
 extern const char *GBE_kOldDotaPracticeLobbyLobbyIdText = "29809934128949123";
 extern const char *GBE_kOldDotaPracticeLobbyLobbyIdTextAlt = "29822498642855090";
-static constexpr const char *GBE_kLocalDotaPracticeLobbyLoopbackEndpoint = "127.0.0.1:27015";
-
-static constexpr uint32 GBE_kSteamPersonaState = 766u;
 extern const uint32 GBE_kSteamTicketAuthComplete = 5429u;
-static constexpr uint32 GBE_kDotaConductScore = 12000u;
-static constexpr uint32 GBE_kDotaBehaviorLevel = 5u;
-static constexpr uint32 GBE_kDotaPlusOriginalStartDate = 1522540800u; // 2018-04-01 (Plus launch era)
-static constexpr uint32 GBE_kDotaPlusFlags = 1u;
-static constexpr uint32 GBE_kDotaPlusStatusActive = 1u;
-
-static constexpr const char *GBE_kDotaAbandonPersonaStatePrivateLobbyPostgameHex =
-    "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112ee0309911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f505249564154455f4c4f424259ba04270a0d737465616d5f646973706c6179121623444f54415f52505f505249564154455f4c4f424259ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348ba0492010a056c6f6262791288016c6f6262795f69643a203239383232343938363432383535303930206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a20226565656522206c6f6262795f747970653a2031c1040000000000000000c9040000000000000000f80400800500880500980501";
 static constexpr const char *GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex =
     "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112d80209911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f505249564154455f4c4f424259ba04270a0d737465616d5f646973706c6179121623444f54415f52505f505249564154455f4c4f424259ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348c1040000000000000000c9040000000000000000f80400800500880500980501";
 extern const char *GBE_kDotaAbandonPersonaStateInitHex =
@@ -341,146 +299,6 @@ static constexpr const char *GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficial
     "0138006000d00100d80100e001001a1c0827121808f5ed864110001800200138006000d00100d80100e001001a1d0838\n"
     "121908f5ed864110e8071800200138016000d00100d80100e0010019e0a6ef5331f16900220b080310d6f9ac9f95a6fc\n"
     "34";
-
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchCacheSubscribedPreludeHex =
-    "4d15008014000000090eac2b7cdec1400110dbc3fdeafdffffffff0108ba041098808080081a2a180000800000000019"
-    "fafc724931f16900220c080110f5ed86c19080808801300139b692f15331f16900";
-
-static constexpr const char *GBE_kDotaPracticeLobbyLaunchCacheSubscribedLargePreludeHex =
-    "4d15008014000000090eac2b7cdec1400110dbc3fdeafdffffffff0108ba041098808080081ae9311800008000000000"
-    "128d10080112190895a3edce0610f5ed8641180120982b780092010408011005121908ca8da2801010f5ed8641180520"
-    "b8307800920104084a1006121908eaa5c18d1010f5ed8641180620f72d780092010408321001121d08b5ccc18d1010f5"
-    "ed8641180420fb26400148067800920104080f1000121d0898e6c18d1010f5ed8641180a20b92a400148067800920104"
-    "08231002121e0899e6c18d1010f5ed8641180d20d44e40014806780092010508e80710041236088fc3c1c01010f5ed86"
-    "41180e208b32621b08011a170a0b1800220028bb1730003a0010011800200028f2e606780092010408661003124208e8"
-    "e8d1d71010f5ed8641180f20a82e62090890031a0400000000621c08011a180a0b1800220028bb1730003a0010011884"
-    "abc01920002800780092010408581000121d08d7f391821210f5ed8641181020ba2a4001480678009201040823100412"
-    "19088eb2f9831210f5ed86411811208430780092010408301001121908e09d8f841210f5ed8641181620883078009201"
-    "04080910021226088efd86931b10f5ed8641181320f91f4001620908d5011a0401000000780092010408351003121d08"
-    "e48f88931b10f5ed8641181220cb2640014806780092010408101004122708d88f9ac32210f5ed864118904e20ea2f40"
-    "01620908d5011a04010000007800920104084910011235089a8cd5c32210f5ed8641188f4e20fa264001480662150801"
-    "1a110a0b1800220028ba1730003a00100118007800920104080f1001122708b6fdfcd32210f5ed8641188d4e20a72b40"
-    "01620908d5011a04010000007800920104084b100312450899a9a9e72610f5ed8641188c4e20992d4001620908d5011a"
-    "0401000000621c08011a180a0b1800220028bb1730003a00100118d88cb628200028007800920104084a1004122708cf"
-    "8fedea2d10f5ed8641188b4e20b1254001620908d5011a04010000007800920104083a1000122708ed879f8b2e10f5ed"
-    "8641188a4e20a12a4001620908d5011a04010000007800920104086310041227089dd182802f10f5ed864118884e20ce"
-    "2b4001620908d5011a0401000000780092010408081000122708bda98fa73710f5ed864118874e20da284001620908d5"
-    "011a04010000007800920104084c1000122708eda6ffc44810f5ed864118fe4d20da2c4001620908d5011a0401000000"
-    "780092010408371003122708ddb198d85e10f5ed864118fd4d209b244001620908d5011a04010000007800920104083f"
-    "1003122708a5cc8bb65f10f5ed864118fc4d20e9254001620908d5011a0401000000780092010408341003122d08a589"
-    "99b85f10f5ed864118f84d209d604824621608011a120a0b1800220028c41730003a0010cd0118007800121e0895869a"
-    "b85f10f5ed864118f74d20f86140014822780092010408541007124d089d869ab85f10f5ed864118f64d20e66a400148"
-    "22622d08011a290a22180022176e70635f646f74615f6865726f5f6f6772655f6d61676928d21730003a00108a02185c"
-    "78009201040854100a121e0895dd9bb85f10f5ed864118ee4d20bc9401481f780092010508e8071002121408cde09bb8"
-    "5f10f5ed864118ea4d20fc89017800122808f5e99bb85f10f5ed864118f14d20a3b9014808620908d5011a0401000000"
-    "7800920104082e1001122808bd86f6a16010f5ed864118e44d20c49401481f620908d5011a0401000000780092010408"
-    "04100712280885b7e5a36010f5ed864118ec4d20cb98014822620908d5011a0401000000780092010408511000122808"
-    "8db7e5a36010f5ed864118e34d20ca98014822620908d5011a040100000078009201040851100312280895b7e5a36010"
-    "f5ed864118e24d20c998014822620908d5011a04010000007800920104085110011228089db7e5a36010f5ed864118e1"
-    "4d20c898014822620908d5011a0401000000780092010408511004122908a5b7e5a36010f5ed864118e04d20c7980148"
-    "22620908d5011a0401000000780092010508e8071006122808adb7e5a36010f5ed864118df4d20c698014822620908d5"
-    "011a04010000007800920104085110021228089d82e6a36010f5ed864118eb4d20b4b1014822620908d5011a04010000"
-    "007800920104083b1000122808a582e6a36010f5ed864118de4d20b5b1014822620908d5011a04010000007800920104"
-    "083b1001122808ad82e6a36010f5ed864118dd4d20b6b1014822620908d5011a04010000007800920104083b10041228"
-    "08b582e6a36010f5ed864118dc4d20f1b5014822620908d5011a04010000007800920104083b1002122808bd82e6a360"
-    "10f5ed864118db4d20f2b5014822620908d5011a04010000007800920104083b1003124f088580eba36010f5ed864118"
-    "00208705620908ac031a0454000000623008011a2c0a22180322176e70635f646f74615f6865726f5f6f6772655f6d61"
-    "676928db1730003a0010992b18b6fdbe027800121f08c5a7f1a36010f5ed864118e74d20f88e01400148227800920104"
-    "08021000121f08cda7f1a36010f5ed864118da4d20f78e0140014822780092010408021001121f08d5a7f1a36010f5ed"
-    "864118d94d20f68e0140014822780092010408021002121f08dda7f1a36010f5ed864118d84d20f58e01400148227800"
-    "92010408021003121f08e5a7f1a36010f5ed864118d74d20f48e0140014822780092010408021005122708add8eea361"
-    "10f5ed864118fa4d20fd1f4001620908d5011a04010000007800920104081d1004121c088dd5fd9a6b10f5ed864118fb"
-    "4d209a20481f780092010408171002121f088591cbe07910f5ed864118f54d20e1950240034807780092010408541002"
-    "12aa2108da0f122f08f5ed8641101318c90138c2fcc3bf0640004801500158006000700078038001aff1a9a505880102"
-    "900190c9a4b30f122f08f5ed8641101318ca0138c2fcc3bf0640004801500158006008700078038001eb8faba80d8801"
-    "029001b68dd0d30c122f08f5ed8641101318cb0138c2fcc3bf0640004801500158006000700078038001f1cda4e20388"
-    "0102900192ff8a9f05122f08f5ed8641101318f5033888df90ac0640004818500158006001700078038001a9ebf9d00e"
-    "8801059001e092cea903122f08f5ed8641101318f6033888df90ac06400048185001580060007000780380018f8df5f2"
-    "058801059001e78ea28b0b122f08f5ed8641101318f7033888df90ac064000481850015800600070007803800182d895"
-    "c3048801059001b8cad0ee01122f08f5ed8641101318e90738c489c0ab064000481650015800600070007803800191ea"
-    "b8bb0b88010a900196baaab20d122f08f5ed8641101318ea0738c489c0ab06400048165001580060007000780380018b"
-    "ef8fe80288010a9001c2ee8b870b122f08f5ed8641101318eb0738c489c0ab0640004816500158006001700078038001"
-    "b99aa1a50e88010a9001abd8e2e70e122f08f5ed8641101318cd08389bfdb1ab06400048155001580060007000780380"
-    "018893babf0f88010b90018aa187df0c122e08f5ed8641101318ce08389bfdb1ab064000481550015800600070007803"
-    "800195b0afa90d88010b9001c4c5a723122f08f5ed8641101318cf08389bfdb1ab064000481550015800600070007803"
-    "80018bef8fe80288010b9001c2ee8b870b122f08f5ed8641101318b109388fb89bab0640004814500158006000700078"
-    "038001a2bbfca20c88010c9001d2de8df60b122f08f5ed8641101318b209388fb89bab06400048145001580060017001"
-    "78038001c596e98c0988010c900199b3cdb702122f08f5ed8641101318b309388fb89bab064000481450015800600070"
-    "0078038001b093fa8c0f88010c9001cdd4adb008122f08f5ed8641101318a50d38c2c0969d064000480b500158006000"
-    "700078038001a2bbfca20c8801119001d2de8df60b122f08f5ed8641101318a60d38c2c0969d064000480b5001580060"
-    "00700078038001d9bdbdb302880111900196def6a20e122f08f5ed8641101318a70d38c2c0969d064000480b50015800"
-    "6000700078038001e3fecffc0188011190019eebb78406122f08f5ed8641101318b51038e697e39b0640004806500158"
-    "006000700078038001e3f5cfa2048801159001fdb9828803122f08f5ed8641101318b61038e697e39b06400048065001"
-    "58006000700078038001f4f4879e0b8801159001c9ded1ce04122f08f5ed8641101318b71038e697e39b064000480650"
-    "0158006000700078038001f4efb1ac0e8801159001f0b090a70e122f08f5ed8641101318c91a38f5ff97ab0640004813"
-    "500158006001700078038001b1fbcbf00d8801229001bb9193ed0c122f08f5ed8641101318ca1a38f5ff97ab06400048"
-    "1350015800600070007803800190e891f2078801229001bef3ada208122f08f5ed8641101318cb1a38f5ff97ab064000"
-    "4813500158006000700078038001d9bdbdb302880122900196def6a20e122f08f5ed8641101318ad1b389bd5a99d0640"
-    "004805500158006000700078038001f8a99b89018801239001969cb1850f122f08f5ed8641101318ae1b389bd5a99d06"
-    "40004805500158006000700078038001a097c3c70b8801239001cb95e59f0a122f08f5ed8641101318af1b389bd5a99d"
-    "0640004805500158006000700078038001968fe7b6088801239001d4a29c8607122f08f5ed8641101318f51c38e0f2f7"
-    "aa0640004810500158006000700078038001b7c7c3fd0a880125900185d5adec0e122f08f5ed8641101318f61c38e0f2"
-    "f7aa0640014810500158006002700378038001c1bfff910b88012590019aad93b30f122f08f5ed8641101318f71c38e0"
-    "f2f7aa06400048105001580060007000780380018f8df5f2058801259001e78ea28b0b122f08f5ed8641101318a11f38"
-    "b8e7c2bf0640004803500158006001700078038001c5fcbee1058801289001c5fcbee105122f08f5ed8641101318a21f"
-    "38b8e7c2bf0640004803500158006006700078038001e5b6c399068801289001e5b4d5c308122f08f5ed8641101318a3"
-    "1f38b8e7c2bf0640004803500158006000700078038001f4ade1b8048801289001b8a3ca9908122f08f5ed8641101318"
-    "e920388a98e39b0640004807500158006000700078038001c8d1cdb50e88012a9001c3dfd5950b122f08f5ed86411013"
-    "18ea20388a98e39b0640004807500158006000700078038001ada283c00588012a9001cab5ff830f122f08f5ed864110"
-    "1318eb20388a98e39b0640004807500158006000700078038001b093fa8c0f88012a9001cdd4adb008122f08f5ed8641"
-    "101318b12238a1b2ccab0640004817500158006000700078038001c289f5bb0888012c9001a093ee9908122f08f5ed86"
-    "41101318b22238a1b2ccab0640004817500158006000700078038001ac858cca0e88012c9001a086d09b08122f08f5ed"
-    "8641101318b32238a1b2ccab0640004817500158006001700278038001d9bdbdb30288012c900196def6a20e122f08f5"
-    "ed8641101318dd2438b9adc2bf064000481d500158006000700078038001e2a5c4dd0a88012f9001ead5da8505122f08"
-    "f5ed8641101318de2438b9adc2bf064000481d500158006000700078038001968fe7b60888012f9001d4a29c8607122f"
-    "08f5ed8641101318df2438b9adc2bf064000481d500158006001700078038001f1cda4e20388012f900192ff8a9f0512"
-    "2f08f5ed8641101318b529389efbb19c064000480a500158006001700178038001ecbfb8d10e8801359001ecefefd20a"
-    "122f08f5ed8641101318b629389efbb19c064000480a500158006000700078038001efa7bdd70c880135900181db9491"
-    "03122f08f5ed8641101318b729389efbb19c064000480a500158006000700078038001bfd8f7cc07880135900184b6f2"
-    "a10c122f08f5ed8641101318b93038aab699ac064000481a500158006000700078038001d9bdbdb30288013e900196de"
-    "f6a20e122f08f5ed8641101318ba3038aab699ac064000481a500158006000700078038001dcf9c8890f88013e9001d2"
-    "e792d00c122f08f5ed8641101318bb3038aab699ac064000481a500158006000700078038001e8a195d90d88013e9001"
-    "d1ab9ee603122f08f5ed86411013189d313891fdab9d064000480c50015800600070007803800194d7b3e00488013f90"
-    "0180e9e1d804122f08f5ed86411013189e313891fdab9d064000480c500158006000700078038001b291cea00e88013f"
-    "9001cddbe7c809122f08f5ed86411013189f313891fdab9d064000480c5001580060007000780380018893babf0f8801"
-    "3f90018aa187df0c122e08f5ed8641101318f53538b1b9b19c0640004808500158006000700078038001bfaedefc0b88"
-    "01459001fee68b36122f08f5ed8641101318f63538b1b9b19c0640004808500158006000700078038001f1cda4e20388"
-    "0145900192ff8a9f05122e08f5ed8641101318f73538b1b9b19c064000480850015800600170007803800198ecd4b40c"
-    "880145900192d68f4e122f08f5ed8641101318cd3a38e2ff94ac0640004812500158006000700078038001d9bdbdb302"
-    "88014b900196def6a20e122f08f5ed8641101318ce3a38e2ff94ac064000481250015800600070007803800182b1c3b5"
-    "0588014b9001b98c83ca04122f08f5ed8641101318cf3a38e2ff94ac0640004812500158006000700078038001b0d2c2"
-    "a40988014b9001e286fcc601122f08f5ed8641101318a53f3887b0f7aa064000480f500158006000700078038001e8a1"
-    "95d90d8801519001d1ab9ee603122f08f5ed8641101318a63f3887b0f7aa064000480f50015800600070007803800196"
-    "8fe7b6088801519001d4a29c8607122f08f5ed8641101318a73f3887b0f7aa064001480f500158006001700378038001"
-    "96fa9f9d0c8801519001fdc88cf002122f08f5ed8641101318ed4038d2a7ddaa064000480e5001580060007000780380"
-    "01f4ade1b8048801539001b8a3ca9908122f08f5ed8641101318ee4038d2a7ddaa064000480e50015800600170027803"
-    "8001a8fad4e4038801539001b390b6c50e122f08f5ed8641101318ef4038d2a7ddaa064000480e500158006000700078"
-    "038001f5ffe3a90988015390019ca18bae0a122f08f5ed8641101318d1413887cfc2bf06400048025001580060147000"
-    "78038001bf90a7b30f8801549001c0f684ab0e122f08f5ed8641101318d2413887cfc2bf064001480250015800601270"
-    "0378038001d9f8fea8038801549001e0f3ec8505122f08f5ed8641101318d3413887cfc2bf0640004802500158006000"
-    "700078038001b4b8f9b30e8801549001c6f3e7c008122f08f5ed8641101318b54238e8caccab06400048095001580060"
-    "007000780380019fd3af9b0d8801559001babd8aec03122e08f5ed8641101318b64238e8caccab064000480950015800"
-    "600170007803800198bfd585048801559001fab2ce29122f08f5ed8641101318b74238e8caccab064000480950015800"
-    "6000700078038001f1cda4e203880155900192ff8a9f05122f08f5ed8641101318e54b38a2ea93ac0640004819500158"
-    "006000700078038001ddf7a8c3038801619001d4e099df03122f08f5ed8641101318e64b38a2ea93ac06400048195001"
-    "5800600070007803800182d895c3048801619001b8cad0ee01122f08f5ed8641101318e74b38a2ea93ac064000481950"
-    "01580060007000780380019b85b8a5088801619001fac3ccbc01122f08f5ed8641101318a15138878a97ab0640004811"
-    "500158006000700078038001e8a195d90d8801689001d1ab9ee603122e08f5ed8641101318a25138878a97ab06400048"
-    "1150015800600070007803800195b0afa90d8801689001c4c5a723122e08f5ed8641101318a35138878a97ab06400048"
-    "1150015800600070007803800198ecd4b40c880168900192d68f4e122f08f5ed8641101318e952389cd29bac06400048"
-    "1c500158006000700078038001a097c3c70b88016a9001cb95e59f0a122f08f5ed8641101318ea52389cd29bac064000"
-    "481c5001580060007000780380018893babf0f88016a90018aa187df0c122f08f5ed8641101318eb52389cd29bac0640"
-    "00481c500158006000700078038001c3b1d3c10e88016a9001c690838101122f08f5ed8641101318895938c194e19b06"
-    "40004804500158006000700078038001e8a195d90d8801729001d1ab9ee603122f08f5ed86411013188a5938c194e19b"
-    "0640004804500158006000700078038001d9bdbdb302880172900196def6a20e122f08f5ed86411013188b5938c194e1"
-    "9b06400048045001580060007000780380019bec9ff8048801729001c1deb08503123008f5ed8641101318816438eedf"
-    "99ac064000481b500158006000700078038001e6fae5980e880180019001f291f8e50e123008f5ed8641101318826438"
-    "eedf99ac064000481b5001580060007000780380019f96aedc01880180019001f5c9c5d40e123008f5ed864110131883"
-    "6438eedf99ac064000481b5001580060007000780380019fc4b2fa0e8801800190019fc4b2fa0e123008f5ed86411013"
-    "18e96b38d5aee9a9064000480d500158006000700078038001a2bbfca20c88018a019001d2de8df60b123008f5ed8641"
-    "101318ea6b38d5aee9a9064000480d500158006000700078038001d9bdbdb30288018a01900196def6a20e123008f5ed"
-    "8641101318eb6b38d5aee9a9064000480d500158006000700078038001b2efa2d80a88018a019001fa8492980219a715"
-    "e32931f16909220c080110f5ed86c190808088012801300039b692f15331f16900";
 
 static const uint8 GBE_kDotaCacheSubscribedTemplate[] = {
     0x18, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x12, 0xC8, 0x18, 0x08, 0x01, 0x12, 0x19, 0x08,
@@ -957,26 +775,6 @@ static const uint8 GBE_kDotaCacheSubscribedTemplate[] = {
 // Removed: GBE_kDota7388Profile37Template (had owned=1 but used hardcoded account_id)
 // All 7387->7388 event queries now use gbe::gc_message::build_dota_7388_minimal_response_payload.
 
-static const uint8 GBE_kDotaPracticeLobbyResponseTemplate[] = {
-    0x8F, 0x1B, 0x00, 0x80, 0x09, 0x00, 0x00, 0x00, 0x59, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x08, 0x01,
-};
-
-static const uint8 GBE_kDotaPracticeLobbySOUpdateTemplate[] = {
-    0x02, 0x18, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x12, 0xC2, 0x01, 0x08, 0xD4, 0x0F, 0x12,
-    0xBC, 0x01, 0x08, 0x9D, 0x97, 0xF8, 0x9E, 0x95, 0xD7, 0xF7, 0x34, 0x18, 0x01, 0x20, 0x00, 0x59,
-    0xF5, 0xB6, 0x21, 0x08, 0x01, 0x00, 0x10, 0x01, 0x60, 0x01, 0x68, 0x00, 0x70, 0x01, 0x82, 0x01,
-    0x05, 0x30, 0x30, 0x31, 0x32, 0x35, 0xA8, 0x01, 0x05, 0xE0, 0x01, 0x00, 0xF8, 0x01, 0x01, 0xA0,
-    0x02, 0x04, 0xD0, 0x02, 0x00, 0xD8, 0x02, 0x00, 0xE0, 0x02, 0x00, 0xF0, 0x02, 0x00, 0xF8, 0x02,
-    0x00, 0x80, 0x03, 0x00, 0x98, 0x03, 0x00, 0xA8, 0x03, 0x00, 0xC8, 0x03, 0x00, 0xF2, 0x03, 0x07,
-    0x08, 0xF5, 0x44, 0x12, 0x02, 0x08, 0x00, 0xD8, 0x04, 0x00, 0x90, 0x05, 0x00, 0xC0, 0x05, 0x00,
-    0xE8, 0x05, 0x04, 0xF0, 0x05, 0x8A, 0xB6, 0xFB, 0x8B, 0x0C, 0xF8, 0x05, 0xCD, 0xFB, 0x92, 0xDA,
-    0x0A, 0x88, 0x06, 0x00, 0xF0, 0x06, 0x00, 0x88, 0x07, 0x00, 0xC2, 0x07, 0x10, 0x09, 0xF5, 0xB6,
-    0x21, 0x08, 0x01, 0x00, 0x10, 0x01, 0x18, 0x00, 0x38, 0x01, 0x80, 0x01, 0x01, 0xC8, 0x07, 0x00,
-    0xE0, 0x07, 0x00, 0xE0, 0x07, 0x00, 0xE0, 0x07, 0x00, 0xE0, 0x07, 0x00, 0xE0, 0x07, 0x00, 0xE0,
-    0x07, 0x00, 0xE0, 0x07, 0x00, 0xE0, 0x07, 0x00,
-};
-
 static const uint8 GBE_kDotaPracticeLobbyCacheSubscribedTemplate[] = {
     0x18, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x12, 0xC2, 0x01, 0x08, 0xD4, 0x0F, 0x12, 0xBC,
     0x01, 0x08, 0x9D, 0x97, 0xF8, 0x9E, 0x95, 0xD7, 0xF7, 0x34, 0x18, 0x01, 0x20, 0x00, 0x59, 0xF5,
@@ -1056,28 +854,7 @@ struct GBE_DotaHelloContext
     bool has_source_job{};
 };
 
-struct GBE_DotaServerHelloContext
-{
-    bool valid{};
-    uint32 active_version{};
-    uint32 min_allowed_version{};
-    uint64 compatibility_value{};
-    uint32 universe{};
-    uint64 source_job_id{};
-    bool has_source_job{};
-    uint64 client_steam_id{};
-    bool has_client_steam_id{};
-    int32 client_session_id{};
-    bool has_client_session_id{};
-    uint32 source_app_id{};
-    bool has_source_app_id{};
-    uint32 gc_msg_src{};
-    bool has_gc_msg_src{};
-    uint32 gc_dir_index_source{};
-    bool has_gc_dir_index_source{};
-};
-
-static GBE_DotaServerHelloContext GBE_last_dota_server_hello_context;
+GBE_DotaServerHelloContext GBE_last_dota_server_hello_context;
 
 using GBE_DotaPracticeLobbyDetailsRequest = gbe::proto_wire::DotaPracticeLobbyDetailsRequest;
 using GBE_DotaPracticeLobbyCreateRequest = gbe::proto_wire::DotaPracticeLobbyCreateRequest;
@@ -1119,26 +896,6 @@ void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)
     std::fprintf(file, "\n");
     std::fclose(file);
 }
-
-static void GBE_LogHexDump(const char *tag, const char *label, const std::string &message, size_t bytes_per_line)
-{
-    if (!tag || !label || message.empty() || bytes_per_line == 0)
-        return;
-
-    GBE_GC_DebugLog(tag, "%s size=%zu", label, message.size());
-    for (size_t offset = 0; offset < message.size(); offset += bytes_per_line) {
-        const size_t chunk_size = std::min(bytes_per_line, message.size() - offset);
-        GBE_GC_DebugLog(
-            tag,
-            "%s chunk offset=%zu size=%zu hex=%s",
-            label,
-            offset,
-            chunk_size,
-            gbe::proto_wire::format_hex(reinterpret_cast<const std::uint8_t *>(message.data()) + offset, chunk_size).c_str()
-        );
-    }
-}
-
 
 bool GBE_RewriteAccountIdVarintInDirectProtoBody(
     std::string &message,
@@ -1526,131 +1283,6 @@ static bool GBE_ForceDotaLobbyUpdateOwnerSOID(std::string &message, uint64 lobby
     return true;
 }
 
-static void GBE_LogDotaSOMultipleObjectsSummary(const char *tag, const char *label, const std::string &message)
-{
-    GBE_DirectProtoContext proto_context{};
-    if (!GBE_ParseDirectProtoContext(message.data(), static_cast<uint32>(message.size()), proto_context))
-        return;
-
-    CMsgSOMultipleObjects protomsg;
-    if (!protomsg.ParseFromArray(proto_context.body, static_cast<int>(proto_context.body_size)))
-        return;
-
-    GBE_GC_DebugLog(
-        tag,
-        "%s owner_type=%u owner_id=%llu objects=%d",
-        label ? label : "dota_so_summary",
-        protomsg.has_owner_soid() ? protomsg.owner_soid().type() : 0u,
-        static_cast<unsigned long long>(protomsg.has_owner_soid() ? protomsg.owner_soid().id() : 0ull),
-        protomsg.objects_size()
-    );
-
-    for (int object_index = 0; object_index < protomsg.objects_size(); ++object_index) {
-        const auto &object = protomsg.objects(object_index);
-        GBE_GC_DebugLog(
-            tag,
-            "%s object[%d] type=%d object_data_size=%zu",
-            label ? label : "dota_so_summary",
-            object_index,
-            object.type_id(),
-            object.object_data().size()
-        );
-
-        if (object.type_id() == 2004) {
-            const std::string &object_data = object.object_data();
-            const uint8 *object_bytes = reinterpret_cast<const uint8 *>(object_data.data());
-            const size_t object_size = object_data.size();
-            uint64 lobby_id = 0;
-            uint32 lobby_state = 0;
-            std::string connect;
-            uint64 server_id = 0;
-            uint32 game_state = 0;
-            uint64 match_id = 0;
-            uint32 game_start_time = 0;
-            std::string owner_state;
-            const uint32 team_details_count = gbe::proto_wire::count_repeated_bytes_field(object_data, 17u);
-            const bool has_lobby_id = gbe::proto_wire::read_uint64_field(object_bytes, object_size, 1u, lobby_id);
-            const bool has_lobby_state = gbe::proto_wire::read_uint32_field(object_bytes, object_size, 4u, lobby_state);
-            const bool has_connect = gbe::proto_wire::read_bytes_field(object_bytes, object_size, 5u, connect);
-            const bool has_server_id = gbe::proto_wire::read_uint64_field(object_bytes, object_size, 6u, server_id);
-            const bool has_game_state = gbe::proto_wire::read_uint32_field(object_bytes, object_size, 22u, game_state);
-            const bool has_match_id = gbe::proto_wire::read_uint64_field(object_bytes, object_size, 30u, match_id);
-            const bool has_game_start_time = gbe::proto_wire::read_uint32_field(object_bytes, object_size, 87u, game_start_time);
-            const bool has_owner_state = gbe::proto_wire::read_bytes_field(object_bytes, object_size, 120u, owner_state);
-            GBE_GC_DebugLog(
-                tag,
-                "%s object[%d] type=2004 lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu game_start_time=%u connect=%s team_details=%u flags[lobby_id=%u state=%u game_state=%u match_id=%u server_id=%u start_time=%u connect=%u]",
-                label ? label : "dota_so_summary",
-                object_index,
-                static_cast<unsigned long long>(lobby_id),
-                lobby_state,
-                game_state,
-                static_cast<unsigned long long>(match_id),
-                static_cast<unsigned long long>(server_id),
-                game_start_time,
-                has_connect ? connect.c_str() : "",
-                team_details_count,
-                has_lobby_id ? 1u : 0u,
-                has_lobby_state ? 1u : 0u,
-                has_game_state ? 1u : 0u,
-                has_match_id ? 1u : 0u,
-                has_server_id ? 1u : 0u,
-                has_game_start_time ? 1u : 0u,
-                has_connect ? 1u : 0u
-            );
-            if (has_owner_state) {
-                GBE_GC_DebugLog(
-                    tag,
-                    "%s object[%d] type=2004 owner_state{%s}",
-                    label ? label : "dota_so_summary",
-                    object_index,
-                    gbe::proto_wire::format_dota_lobby_member_state_summary(owner_state).c_str()
-                );
-            }
-            continue;
-        }
-
-        if (object.type_id() == 2016) {
-            const std::string &object_data = object.object_data();
-            const uint8 *object_bytes = reinterpret_cast<const uint8 *>(object_data.data());
-            const size_t object_size = object_data.size();
-            uint32 member_count = 0;
-            std::string first_member;
-            size_t offset = 0;
-            while (offset < object_size) {
-                gbe::proto_wire::Field field{};
-                size_t field_offset = 0;
-                size_t field_end = 0;
-                if (!gbe::proto_wire::read_next_field(object_bytes, object_size, offset, field, &field_offset, &field_end))
-                    break;
-                if (field.number == 1u && field.wire_type == 2u) {
-                    ++member_count;
-                    if (first_member.empty())
-                        first_member.assign(object_data.data() + field.value_offset, field.value_size);
-                }
-                offset = field_end;
-            }
-
-            GBE_GC_DebugLog(
-                tag,
-                "%s object[%d] type=2016 member_count=%u",
-                label ? label : "dota_so_summary",
-                object_index,
-                member_count
-            );
-            if (!first_member.empty()) {
-                GBE_GC_DebugLog(
-                    tag,
-                    "%s object[%d] type=2016 member[0]{%s}",
-                    label ? label : "dota_so_summary",
-                    object_index,
-                    gbe::proto_wire::format_dota_server_static_lobby_member_summary(first_member).c_str()
-                );
-            }
-        }
-    }
-}
-
 void GBE_LogDotaSOCacheSubscribedSummary(const char *tag, const char *label, const std::string &message)
 {
     GBE_DirectProtoContext proto_context{};
@@ -1982,14 +1614,6 @@ static uint64 GBE_GenerateDotaPostGameChatChannelId()
 
     const uint64 candidate = 0x62F000ull + (generator() & 0x0000000000000FFFull);
     return candidate != 0 ? candidate : 0x62FEB8ull;
-}
-
-static uint64 GBE_GenerateDotaLobbyInviteGid(uint64 lobby_id, uint64 invitee_steam_id, uint64 &cache_version)
-{
-    std::uint64_t parsed_cache_version = 0;
-    const std::uint64_t invite_gid = gbe::gc_message::generate_dota_lobby_invite_gid(lobby_id, invitee_steam_id, parsed_cache_version);
-    cache_version = static_cast<uint64>(parsed_cache_version);
-    return static_cast<uint64>(invite_gid);
 }
 
 static bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
@@ -2916,94 +2540,6 @@ static bool GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate(
     return true;
 }
 
-static bool GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedPreludeTemplate(
-    uint32 account_id,
-    uint64 steam_id,
-    uint64 lobby_id,
-    std::string &message)
-{
-    return GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate(
-        GBE_kDotaPracticeLobbyLaunchCacheSubscribedPreludeHex,
-        "practice lobby launch prelude cache template",
-        false,
-        false,
-        false,
-        false,
-        account_id,
-        steam_id,
-        lobby_id,
-        0u,
-        0u,
-        0ull,
-        0ull,
-        0u,
-        std::string(),
-        std::string(),
-        std::string(),
-        0u,
-        0u,
-        false,
-        std::string(),
-        false,
-        false,
-        false,
-        0u,
-        0u,
-        0u,
-        0ull,
-        0ull,
-        0u,
-        0u,
-        0u,
-        std::string(),
-        0u,
-        message);
-}
-
-static bool GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedLargePreludeTemplate(
-    uint32 account_id,
-    uint64 steam_id,
-    uint64 lobby_id,
-    std::string &message)
-{
-    return GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate(
-        GBE_kDotaPracticeLobbyLaunchCacheSubscribedLargePreludeHex,
-        "practice lobby launch large prelude cache template",
-        false,
-        false,
-        false,
-        false,
-        account_id,
-        steam_id,
-        lobby_id,
-        0u,
-        0u,
-        0ull,
-        0ull,
-        0u,
-        std::string(),
-        std::string(),
-        std::string(),
-        0u,
-        0u,
-        false,
-        std::string(),
-        false,
-        false,
-        false,
-        0u,
-        0u,
-        0u,
-        0ull,
-        0ull,
-        0u,
-        0u,
-        0u,
-        std::string(),
-        0u,
-        message);
-}
-
 static bool GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedTemplate(
     uint32 account_id,
     uint64 steam_id,
@@ -3586,7 +3122,7 @@ static bool GBE_BuildDirectDotaClientWelcome(uint64 steam_id, uint32 app_id, uin
     return true;
 }
 
-static bool GBE_BuildDirectDotaServerWelcome(uint64 steam_id, uint32 app_id, const GBE_DotaServerHelloContext &context, std::string &message)
+bool GBE_BuildDirectDotaServerWelcome(uint64 steam_id, uint32 app_id, const GBE_DotaServerHelloContext &context, std::string &message)
 {
     if (!context.valid) {
         GBE_GC_DebugLog("GC_DOTA_SERVER_HELLO", "invalid server hello context");
