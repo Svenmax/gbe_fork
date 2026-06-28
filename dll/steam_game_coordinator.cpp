@@ -55,7 +55,7 @@
 using namespace gamecoordinator::tf2;
 
 constexpr int GC_MIN_VERSION = 20091217;
-static bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
+bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
     Steam_Game_Coordinator *target_gc,
     const CSteamID &player_steam_id,
     const std::vector<Econ_Item> &source_items,
@@ -147,9 +147,9 @@ struct GBE_DotaGenericLobbyEntry {
 GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 bool GBE_recent_dota_reconnect_context_valid = false;
 GBE_DotaReconnectContext GBE_recent_dota_reconnect_context{};
-static bool GBE_pending_dota_normal_signout_finalize_after_25 = false;
-static uint64 GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
-static GBE_DotaLootListData GBE_vpk_loot_data;
+bool GBE_pending_dota_normal_signout_finalize_after_25 = false;
+uint64 GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+GBE_DotaLootListData GBE_vpk_loot_data;
 
 // --- Dota reconnect shared state ---
 std::atomic<bool> GBE_dota_reconnect_eligible{true};
@@ -281,25 +281,25 @@ static const uint8 GBE_kDotaClientWelcomeTemplate[] = {
 };
 
 static const std::array<uint8, 2> GBE_kOldDotaVersionVarint = { 0xEB, 0x34 };
-static const std::array<uint8, 4> GBE_kOldDotaAccountIdVarint = { 0xF5, 0xED, 0x86, 0x41 };
-static const std::array<uint8, 9> GBE_kOldDotaSteamIdVarint = { 0xF5, 0xED, 0x86, 0xC1, 0x90, 0x80, 0x80, 0x88, 0x01 };
-static const std::array<uint8, 8> GBE_kOldDotaLobbyIdVarint = { 0x9D, 0x97, 0xF8, 0x9E, 0x95, 0xD7, 0xF7, 0x34 };
-static const std::array<uint8, 8> GBE_kOldDotaSteamIdFixed64 = { 0xF5, 0xB6, 0x21, 0x08, 0x01, 0x00, 0x10, 0x01 };
-static const std::array<uint8, 8> GBE_kOldDotaPersonaSteamIdFixed64 = { 0x91, 0x1D, 0xDF, 0x05, 0x01, 0x00, 0x10, 0x01 };
-static const std::array<uint8, 4> GBE_kOldDotaAccountIdFixed32 = { 0xF5, 0xB6, 0x21, 0x08 };
+extern const std::array<uint8, 4> GBE_kOldDotaAccountIdVarint = { 0xF5, 0xED, 0x86, 0x41 };
+extern const std::array<uint8, 9> GBE_kOldDotaSteamIdVarint = { 0xF5, 0xED, 0x86, 0xC1, 0x90, 0x80, 0x80, 0x88, 0x01 };
+extern const std::array<uint8, 8> GBE_kOldDotaLobbyIdVarint = { 0x9D, 0x97, 0xF8, 0x9E, 0x95, 0xD7, 0xF7, 0x34 };
+extern const std::array<uint8, 8> GBE_kOldDotaSteamIdFixed64 = { 0xF5, 0xB6, 0x21, 0x08, 0x01, 0x00, 0x10, 0x01 };
+extern const std::array<uint8, 8> GBE_kOldDotaPersonaSteamIdFixed64 = { 0x91, 0x1D, 0xDF, 0x05, 0x01, 0x00, 0x10, 0x01 };
+extern const std::array<uint8, 4> GBE_kOldDotaAccountIdFixed32 = { 0xF5, 0xB6, 0x21, 0x08 };
 static const std::array<uint8, 8> GBE_kOldDotaPracticeLobbyLobbyIdVarint = { 0x83, 0xCF, 0xA2, 0xB4, 0xA2, 0xFF, 0xF9, 0x34 };
-static const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyMatchIdVarint = { 0xDF, 0xF8, 0xBB, 0xDB, 0x20 };
-static const std::array<uint8, 8> GBE_kOldDotaPracticeLobbyServerIdFixed64 = { 0x01, 0x7C, 0x58, 0xCA, 0x8F, 0xC1, 0x40, 0x01 };
+extern const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyMatchIdVarint = { 0xDF, 0xF8, 0xBB, 0xDB, 0x20 };
+extern const std::array<uint8, 8> GBE_kOldDotaPracticeLobbyServerIdFixed64 = { 0x01, 0x7C, 0x58, 0xCA, 0x8F, 0xC1, 0x40, 0x01 };
 static const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyGameStartTimeVarint = { 0xAE, 0xBB, 0xA3, 0xCF, 0x06 };
 static constexpr const char *GBE_kOldDotaPracticeLobbyConnect = "117.157.79.194:27015 10.110.4.21:27015";
-static constexpr const char *GBE_kOldDotaPracticeLobbyLobbyIdText = "29809934128949123";
-static constexpr const char *GBE_kOldDotaPracticeLobbyLobbyIdTextAlt = "29822498642855090";
+extern const char *GBE_kOldDotaPracticeLobbyLobbyIdText = "29809934128949123";
+extern const char *GBE_kOldDotaPracticeLobbyLobbyIdTextAlt = "29822498642855090";
 static constexpr const char *GBE_kLocalDotaPracticeLobbyLoopbackEndpoint = "127.0.0.1:27015";
 
 static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
 static constexpr uint32 GBE_kSteamAuthList = 5432u;
 static constexpr uint32 GBE_kSteamPersonaState = 766u;
-static constexpr uint32 GBE_kSteamTicketAuthComplete = 5429u;
+extern const uint32 GBE_kSteamTicketAuthComplete = 5429u;
 static constexpr uint32 GBE_kDotaConductScore = 12000u;
 static constexpr uint32 GBE_kDotaBehaviorLevel = 5u;
 static constexpr uint32 GBE_kDotaPlusOriginalStartDate = 1522540800u; // 2018-04-01 (Plus launch era)
@@ -310,7 +310,7 @@ static constexpr const char *GBE_kDotaAbandonPersonaStatePrivateLobbyPostgameHex
     "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112ee0309911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f505249564154455f4c4f424259ba04270a0d737465616d5f646973706c6179121623444f54415f52505f505249564154455f4c4f424259ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348ba0492010a056c6f6262791288016c6f6262795f69643a203239383232343938363432383535303930206c6f6262795f73746174653a2052554e2067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a20226565656522206c6f6262795f747970653a2031c1040000000000000000c9040000000000000000f80400800500880500980501";
 static constexpr const char *GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex =
     "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112d80209911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04200a06737461747573121623444f54415f52505f505249564154455f4c4f424259ba04270a0d737465616d5f646973706c6179121623444f54415f52505f505249564154455f4c4f424259ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba041e0a057061727479121570617274795f73746174653a20494e5f4d41544348c1040000000000000000c9040000000000000000f80400800500880500980501";
-static constexpr const char *GBE_kDotaAbandonPersonaStateInitHex =
+extern const char *GBE_kDotaAbandonPersonaStateInitHex =
     "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112a50209911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04170a06737461747573120d23444f54415f52505f494e4954ba041e0a0d737465616d5f646973706c6179120d23444f54415f52505f494e4954ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131c1040000000000000000c9040000000000000000f80400800500880500980501";
 static constexpr const char *GBE_kDotaLaunchPersonaStateInitServerSetupHex =
     "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112c30309911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04170a06737461747573120d23444f54415f52505f494e4954ba041e0a0d737465616d5f646973706c6179120d23444f54415f52505f494e4954ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131ba049a010a056c6f6262791290016c6f6262795f69643a203239383232343938363432383535303930206c6f6262795f73746174653a2053455256455253455455502067616d655f6d6f64653a20444f54415f47414d454d4f44455f4150206d656d6265725f636f756e743a2031206d61785f6d656d6265725f636f756e743a203130206e616d653a20226565656522206c6f6262795f747970653a2031c1040000000000000000c9040000000000000000f80400800500880500980501";
@@ -1118,11 +1118,6 @@ struct GCMsgHdrEx_t
 
 #pragma pack(pop)
 
-template <class T>
-static void ser_var(std::string &buf, const T &input)
-{
-    buf.append(reinterpret_cast<const char *>(&input), sizeof(T));
-}
 
 static void ser_varstring(std::string &buf, const std::string &input)
 {
@@ -1256,7 +1251,7 @@ static void GBE_LogHexDump(const char *tag, const char *label, const std::string
 }
 
 
-static bool GBE_RewriteAccountIdVarintInDirectProtoBody(
+bool GBE_RewriteAccountIdVarintInDirectProtoBody(
     std::string &message,
     uint32 account_id,
     size_t &replacement_count)
@@ -1286,7 +1281,7 @@ static bool GBE_RewriteAccountIdVarintInDirectProtoBody(
     return true;
 }
 
-static bool GBE_TryPatchDotaAccountIdVarint(
+bool GBE_TryPatchDotaAccountIdVarint(
     std::string &message,
     uint32 account_id,
     const char *log_scope,
@@ -1371,7 +1366,7 @@ static bool GBE_TryPatchDotaAccountIdVarint(
     return true;
 }
 
-static bool GBE_TryPatchDotaAccountIdFixed32(std::string &message, uint32 account_id, const char *log_scope)
+bool GBE_TryPatchDotaAccountIdFixed32(std::string &message, uint32 account_id, const char *log_scope)
 {
     const std::vector<uint8> old_account_id_fixed32 = gbe::proto_wire::vector_from_bytes(GBE_kOldDotaAccountIdFixed32.data(), GBE_kOldDotaAccountIdFixed32.size());
     size_t match_count = 0;
@@ -1483,7 +1478,7 @@ static void GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(class Settings *s
         custom_game.map_name = metadata_map_name;
 }
 
-static std::string GBE_DotaCustomGameDisplayName(class Settings *settings, const GBE_DotaCustomGameDetails &custom_game, const std::string &fallback)
+std::string GBE_DotaCustomGameDisplayName(class Settings *settings, const GBE_DotaCustomGameDetails &custom_game, const std::string &fallback)
 {
     if (settings && custom_game.game_id != 0ull && settings->isModInstalled(static_cast<PublishedFileId_t>(custom_game.game_id))) {
         Mod_entry mod = settings->getMod(static_cast<PublishedFileId_t>(custom_game.game_id));
@@ -1540,7 +1535,7 @@ static void GBE_LogGCProtoBoundary(const char *scope, const char *direction, voi
     );
 }
 
-static bool GBE_PatchDotaTemplateIdentifiers(
+bool GBE_PatchDotaTemplateIdentifiers(
     std::string &message,
     uint32 account_id,
     uint64 steam_id,
@@ -2435,7 +2430,7 @@ static bool GBE_ReplayDotaPracticeLobbyOfficial26Payload(
     return GBE_ForceDotaLobbyUpdateOwnerSOID(message, lobby_id);
 }
 
-static bool GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage(
+bool GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage(
     const char *template_hex,
     uint64 steam_id,
     uint64 lobby_id,
@@ -2467,7 +2462,7 @@ static bool GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage(
     return true;
 }
 
-static bool GBE_PrepareDotaPersonaStatePeripheralMessage(
+bool GBE_PrepareDotaPersonaStatePeripheralMessage(
     const char *template_hex,
     uint64 steam_id,
     uint64 lobby_id,
@@ -2476,7 +2471,7 @@ static bool GBE_PrepareDotaPersonaStatePeripheralMessage(
     return GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage(template_hex, steam_id, lobby_id, 0u, false, message);
 }
 
-static void GBE_LogDotaResponsePacket(
+void GBE_LogDotaResponsePacket(
     const char *reason,
     uint32 inner_emsg,
     bool wrapped,
@@ -2795,7 +2790,7 @@ static bool GBE_IsDotaOtherLeftChannelPayloadForChannel(const std::string &messa
     return payload_channel_id == channel_id;
 }
 
-static bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
+bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
     Steam_Game_Coordinator *target_gc,
     const CSteamID &player_steam_id,
     const std::vector<Econ_Item> &source_items,
@@ -3630,7 +3625,7 @@ static bool GBE_AdaptDotaPracticeLobbyDetailsUpdatePayload(
         custom_game);
 }
 
-static bool GBE_PrepareDotaDirectReplayMessage(
+bool GBE_PrepareDotaDirectReplayMessage(
     const uint8 *template_bytes,
     size_t template_size,
     uint32 account_id,

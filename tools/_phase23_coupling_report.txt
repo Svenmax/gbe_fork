@@ -1,0 +1,404 @@
+================================================================================
+PHASE 23: STATIC SYMBOL COUPLING ANALYSIS REPORT
+File: /workspace/dll/steam_game_coordinator.cpp (15029 lines)
+Purpose: Support refactoring — splitting GBE_HandleDota* handlers into
+         a new translation unit (gbe_dota_handlers.cpp)
+================================================================================
+
+METHODOLOGY
+-----------
+- All file-scope `static` symbols (functions, variables, const data tables)
+  were identified via regex `^static\s` at column 0.
+- All 163 Steam_Game_Coordinator:: member functions were identified via
+  `^[a-zA-Z_].*Steam_Game_Coordinator::` at column 0.
+- 62 of these are GBE_HandleDota* handlers (lines 3891–13445).
+- 101 are non-handler member functions (including ~40 interspersed in the
+  handler region at [4217–4345], [4659–7863], [11783–11888], [12113–12266]).
+- Function boundaries were determined by column-0 closing braces (`^}`).
+- Each static symbol's usages were found with word-boundary regex and
+  classified by which member function (handler / non-handler) or which
+  static helper the usage falls within.
+- Transitive static-to-static dependencies were resolved via iterative
+  flag propagation: if static A calls static B, B inherits A's
+  handler/non-handler usage flags.
+
+SYMBOL COUNT RECONCILIATION
+----------------------------
+- 113 lines match `^static\s` (column-0 static definitions/declarations).
+- 2 symbols have forward declarations that duplicate later definitions:
+    GBE_PushDotaPlayerEquippedItemsCacheToGC  (L58 decl + L2798 def)
+    GBE_ComposeDotaPracticeLobbySOObjects      (L65 decl + L2864 def)
+- Unique static symbols: 111
+
+CATEGORY SUMMARY
+----------------
+  List A  (handler-only, safe to move):          23
+  List B  (both handler + non-handler, external): 26
+  List C  (non-handler only, stays in main file): 44
+  Unused  (defined but never referenced):         18
+  ---------------------------------------------------
+  Total unique static symbols:                   111
+
+================================================================================
+LIST A — HANDLER-ONLY (safe to move with handlers to gbe_dota_handlers.cpp)
+Count: 23
+================================================================================
+These static symbols are used ONLY (directly or transitively through other
+List-A statics) from within GBE_HandleDota* member functions. They can be
+moved to the new TU and remain file-scope `static` there.
+
+ #  Def Line  Symbol Name                                  Handler Usage Lines
+--  --------  -------------------------------------------  --------------------
+ 1       299  GBE_kSteamGamesPlayedWithDataBlob            10634
+ 2       300  GBE_kSteamAuthList                           10650
+ 3       323  GBE_kDota8730TemplateHex                     8818
+ 4       339  GBE_kDota8331TemplateHex                     8828
+ 5       343  GBE_kDotaOfficial8745TemplateHex             8823
+ 6       979  GBE_kDota8678Template                        9903, 9904
+ 7       983  GBE_kDota8136Template                        8800, 8801
+ 8       988  GBE_kDota2538Template                        8788, 8789
+ 9       992  GBE_kDota2618Template                        8794, 8795
+10       997  GBE_kDota8674Template                        8806, 8807
+11      1002  GBE_kDota8677Template                        8833, 8834
+12      1007  GBE_kDota7198Template                        8812, 8813
+13      1035  GBE_kDota8079Template                        8878, 8879
+14      1040  GBE_kDota8854Template                        8884, 8885
+15      1047  GBE_kDota9024Template                        8890, 8891
+16      1449  GBE_ApplyDotaCustomGameDetailsRequest        10679, 12322
+17      1471  GBE_NormalizeDotaCustomGameDetailsFromInstalledMod  10680, 10725, 12323
+18      2128  GBE_GenerateDotaLobbyId                      10717, 11049
+19      2146  GBE_GenerateDotaChatChannelId                11327
+20      2170  GBE_GenerateDotaMatchId                      12030
+21      2521  GBE_AdaptDotaLobbyInviteCacheSubscribedPayload  11497
+22      2554  GBE_IsDotaLobbyInviteCacheSubscribedPayload  11537
+23      2573  GBE_AdaptDota7034ConnectedPlayersResponsePayload  4552
+
+================================================================================
+LIST B — BOTH HANDLER AND NON-HANDLER (must become external linkage)
+Count: 26
+================================================================================
+These static symbols are used from BOTH handler code and non-handler code
+(either directly or transitively through other statics). They MUST have
+`static` removed and be declared in gbe_dota_gc_internal.h so both TUs
+can link to them. The definitions stay in the main file.
+
+ #  Def Line  Symbol Name                                  Details
+--  --------  -------------------------------------------  --------------------
+ 1  L58/2798  GBE_PushDotaPlayerEquippedItemsCacheToGC
+              handler: 4360, 4538, 8742, 10133
+              non-handler: 5722 (callback_items_received), 14674 (network_callback_item_update)
+
+ 2       150  GBE_pending_dota_normal_signout_finalize_after_25
+              handler: 11922 (GBE_HandleDotaGameMatchSignOutRequest)
+              non-handler: 6096 (shutdown_gc), 7421 (ResetGCMemory),
+                           14417, 14465 (GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed)
+
+ 3       151  GBE_pending_dota_normal_signout_finalize_lobby_id
+              handler: 11923 (GBE_HandleDotaGameMatchSignOutRequest)
+              non-handler: 6097 (shutdown_gc), 7422 (ResetGCMemory),
+                           14464, 14466 (GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed)
+
+ 4       152  GBE_vpk_loot_data
+              handler: 9467–9473, 9517–9534, 9626–9633, 9719–9723
+                       (GBE_HandleDotaTemplateReplayRequest)
+              non-handler: 5034, 5037, 5038 (GBE_PatchDotaLoginCacheSubscribedInventory)
+
+ 5       284  GBE_kOldDotaAccountIdVarint  [transitive — no direct member usage]
+              called by statics: GBE_RewriteAccountIdVarintInDirectProtoBody,
+                                 GBE_TryPatchDotaAccountIdVarint
+              → handler path: GBE_TryPatchDotaAccountIdVarint → GBE_PatchDotaTemplateIdentifiers
+                → GBE_PrepareDotaDirectReplayMessage (handler usage L9853/9902)
+              → non-handler path: GBE_TryPatchDotaAccountIdVarint → GBE_PatchDotaPracticeLobbyLaunchTemplate
+                → GBE_ReplayDotaPracticeLobbyOfficial26Payload (non-handler usage L7807)
+
+ 6       285  GBE_kOldDotaSteamIdVarint  [transitive]
+              called by statics: GBE_PatchDotaTemplateIdentifiers, GBE_PrepareDotaWelcomeBody
+              → handler path: GBE_PatchDotaTemplateIdentifiers → GBE_PrepareDotaDirectReplayMessage (handler)
+              → non-handler path: GBE_PrepareDotaWelcomeBody → GBE_BuildDirectDotaClientWelcome
+                / GBE_ComposeDotaClientWelcome (non-handler)
+
+ 7       286  GBE_kOldDotaLobbyIdVarint  [transitive]
+              called by statics: GBE_PatchDotaLobbyTemplateIdentifiers (C),
+                                 GBE_PatchDotaLobbyTemplateIdentifiersIfPresent (C),
+                                 GBE_GenerateDotaLobbyId (A)
+              → handler path: GBE_GenerateDotaLobbyId (handler L10717/11049)
+              → non-handler path: GBE_PatchDotaLobbyTemplateIdentifiers →
+                GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate (non-handler)
+
+ 8       287  GBE_kOldDotaSteamIdFixed64  [transitive]
+              called by statics: GBE_PatchDotaLobbyTemplateIdentifiers (C),
+                                 GBE_PatchDotaLobbyTemplateIdentifiersIfPresent (C),
+                                 GBE_PatchDotaPracticeLobbyLaunchTemplate (C),
+                                 GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage (B)
+              → handler path: GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage →
+                GBE_PrepareDotaPersonaStatePeripheralMessage (handler L12661)
+              → non-handler path: GBE_PatchDotaPracticeLobbyLaunchTemplate →
+                GBE_ReplayDotaPracticeLobbyOfficial26Payload (non-handler L7807)
+
+ 9       288  GBE_kOldDotaPersonaSteamIdFixed64  [transitive]
+              called by statics: GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage (B)
+              → inherits B via transitive propagation
+
+10       289  GBE_kOldDotaAccountIdFixed32  [transitive]
+              called by statics: GBE_TryPatchDotaAccountIdFixed32
+              → same handler/non-handler split as #5 above
+
+11       291  GBE_kOldDotaPracticeLobbyMatchIdVarint  [transitive]
+              called by statics: GBE_GenerateDotaMatchId (A),
+                                 GBE_PatchDotaPracticeLobbyLaunchTemplate (C)
+              → handler path: GBE_GenerateDotaMatchId (handler L12030)
+              → non-handler path: GBE_PatchDotaPracticeLobbyLaunchTemplate →
+                GBE_ReplayDotaPracticeLobbyOfficial26Payload (non-handler L7807)
+
+12       292  GBE_kOldDotaPracticeLobbyServerIdFixed64  [transitive]
+              called by statics: GBE_PatchDotaPracticeLobbyLaunchTemplate (C),
+                                 GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage (B)
+              → same handler/non-handler split as #8 above
+
+13       295  GBE_kOldDotaPracticeLobbyLobbyIdText  [transitive]
+              called by statics: GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage (B)
+
+14       296  GBE_kOldDotaPracticeLobbyLobbyIdTextAlt  [transitive]
+              called by statics: GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage (B)
+
+15       302  GBE_kSteamTicketAuthComplete
+              handler: 10618 (GBE_HandleDotaDirectPostLoginRequest)
+              non-handler: 13701, 13715 (GBE_MaybeQueueDotaPracticeLobbySteamAuthAck)
+
+16       313  GBE_kDotaAbandonPersonaStateInitHex
+              handler: 12661 (GBE_HandleDotaLeaveChatChannelRequest)
+              non-handler: 14247 (GBE_FinalizeDotaAbandonAfterOtherLeftChannel)
+
+17      1122  ser_var  (template function)
+              direct non-handler: 4926, 4954 (build_msg_header, build_protomsg_header),
+                                  5242, 5296–5327 (GBE_PatchDotaLoginCacheSubscribedInventory),
+                                  5437 (handle_set_item_style),
+                                  5793–5801 (callback_items_received),
+                                  5853–5950 (callback_item_updated, callback_item_deleted),
+                                  6186–6196 (GBE_PushDotaLoginSyncMessages)
+              transitive handler path: called by GBE_PrepareDotaDirectReplayMessage (B,
+                handler L9853/9902)
+              transitive non-handler path: called by GBE_BuildDirectDotaClientWelcome /
+                GBE_BuildDirectDotaServerWelcome (C, non-handler L13607/5631)
+
+18      1259  GBE_RewriteAccountIdVarintInDirectProtoBody  [transitive]
+              called by statics: GBE_TryPatchDotaAccountIdVarint (B)
+              → inherits B
+
+19      1289  GBE_TryPatchDotaAccountIdVarint  [transitive]
+              called by statics: GBE_PatchDotaTemplateIdentifiers (B),
+                                 GBE_PatchDotaPracticeLobbyLaunchTemplate (C)
+              → handler path via GBE_PatchDotaTemplateIdentifiers → GBE_PrepareDotaDirectReplayMessage
+              → non-handler path via GBE_PatchDotaPracticeLobbyLaunchTemplate → GBE_ReplayDotaPracticeLobbyOfficial26Payload
+
+20      1374  GBE_TryPatchDotaAccountIdFixed32  [transitive]
+              called by statics: GBE_PatchDotaTemplateIdentifiers (B),
+                                 GBE_PatchDotaPracticeLobbyLaunchTemplate (C)
+              → same split as #19
+
+21      1486  GBE_DotaCustomGameDisplayName
+              handler: 8986 (GBE_HandleDotaUnlockItemStyleRequest)
+              non-handler: 7368 (GBE_GetDotaJoinableCustomLobbiesHTTPJSON)
+
+22      1543  GBE_PatchDotaTemplateIdentifiers  [transitive]
+              called by statics: GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate (C),
+                                 GBE_PrepareDotaDirectReplayMessage (B)
+              → handler path via GBE_PrepareDotaDirectReplayMessage (handler L9853/9902)
+              → non-handler path via GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate (non-handler)
+
+23      2438  GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage  [transitive]
+              called by statics: GBE_PrepareDotaPersonaStatePeripheralMessage (B)
+              → handler path via GBE_PrepareDotaPersonaStatePeripheralMessage (handler L12661)
+              → non-handler path via GBE_PrepareDotaPersonaStatePeripheralMessage (non-handler L11867/14026/14247)
+
+24      2470  GBE_PrepareDotaPersonaStatePeripheralMessage
+              handler: 12661 (GBE_HandleDotaLeaveChatChannelRequest)
+              non-handler: 11867 (GBE_QueueDotaPostGameTeardown),
+                           14026 (GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState),
+                           14247 (GBE_FinalizeDotaAbandonAfterOtherLeftChannel)
+
+25      2479  GBE_LogDotaResponsePacket
+              handler: 11148, 11151 (GBE_HandleDotaPracticeLobbyJoinRequest),
+                       12927, 12930 (GBE_HandleDotaDestroyLobbyRequest)
+              non-handler: 12204 (GBE_PushDotaResponse)
+
+26      3633  GBE_PrepareDotaDirectReplayMessage
+              handler: 9853, 9902 (GBE_HandleDotaTemplateReplayRequest)
+              non-handler: 6547 (GBE_PushDotaLoginSyncMessages)
+              transitive: called by GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl (C)
+
+================================================================================
+LIST C — NON-HANDLER ONLY (stays in main file, keeps `static`)
+Count: 44
+================================================================================
+These static symbols are used ONLY from non-handler member functions (or
+from statics that are themselves only used by non-handler code). They stay
+in the main file with internal linkage unchanged.
+
+ #  Def Line  Symbol Name
+--  --------  -----------------------------------------------------------
+ 1       65   GBE_ComposeDotaPracticeLobbySOObjects
+ 2      224   GBE_kDotaClientWelcomeTemplate
+ 3      283   GBE_kOldDotaVersionVarint
+ 4      290   GBE_kOldDotaPracticeLobbyLobbyIdVarint
+ 5      293   GBE_kOldDotaPracticeLobbyGameStartTimeVarint
+ 6      294   GBE_kOldDotaPracticeLobbyConnect
+ 7      311   GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex
+ 8      315   GBE_kDotaLaunchPersonaStateInitServerSetupHex
+ 9      317   GBE_kDotaLaunchPersonaStateFindingMatchServerSetupHex
+10      319   GBE_kDotaLaunchPersonaStateFindingMatchRunHex
+11      321   GBE_kDotaLaunchPersonaStatePrivateLobbyRunHex
+12      341   GBE_kDotaOfficial032PracticeLobby26Hex
+13      346   GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex
+14      508   GBE_kDotaCacheSubscribedTemplate
+15     1072   GBE_kDotaPracticeLobbyCacheSubscribedTemplate
+16     1127   ser_varstring
+17     1139   deser_var
+18     1196   GBE_last_dota_server_hello_context
+19     1386   GBE_PatchDotaWelcomeAccountObjects
+20     1504   GBE_LogGCProtoBoundary
+21     1596   GBE_PatchDotaLobbyTemplateIdentifiers
+22     1620   GBE_PatchDotaLobbyTemplateIdentifiersIfPresent
+23     1640   GBE_ForceDotaLobbyCacheOwnerSOID
+24     1661   GBE_ForceDotaLobbyUpdateOwnerSOID
+25     1974   GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState
+26     2158   GBE_GenerateDotaPostGameChatChannelId
+27     2196   GBE_PatchDotaPracticeLobbyLaunchTemplate
+28     2337   GBE_ReplayDotaPracticeLobbyOfficial26Payload
+29     2508   GBE_AdaptDotaTopCustomGamesListPayload
+30     2772   GBE_IsDotaOtherLeftChannelPayloadForChannel
+31     3010   GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload
+32     3088   GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload
+33     3170   GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate
+34     3395   GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedTemplate
+35     3468   GBE_AdaptDotaPracticeLobbyDetailsUpdatePayload
+36     3679   GBE_ExtractDotaHelloContext
+37     3775   GBE_ExtractDirectDotaHelloContext
+38     3814   GBE_ExtractDirectDotaServerHelloContext
+39     4034   GBE_PrepareDotaWelcomeBody
+40     4091   GBE_BuildDirectDotaClientWelcome
+41     4120   GBE_BuildDirectDotaServerWelcome
+42     4172   GBE_ComposeDotaClientWelcome
+43     6574   GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl
+44     6718   GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl
+
+================================================================================
+UNUSED — DEFINED BUT NEVER REFERENCED
+Count: 18
+================================================================================
+These static symbols are defined but have zero usages anywhere in the file
+(neither in handlers, non-handler members, nor other statics). They are
+dead code candidates. They can be deleted or moved without affecting
+compilation.
+
+ #  Def Line  Symbol Name
+--  --------  -----------------------------------------------------------
+ 1      102   GBE_kDotaOfficialLobbyStartupAccountDataTemplate
+ 2      297   GBE_kLocalDotaPracticeLobbyLoopbackEndpoint
+ 3      301   GBE_kSteamPersonaState
+ 4      303   GBE_kDotaConductScore
+ 5      304   GBE_kDotaBehaviorLevel
+ 6      305   GBE_kDotaPlusOriginalStartDate
+ 7      306   GBE_kDotaPlusFlags
+ 8      307   GBE_kDotaPlusStatusActive
+ 9      309   GBE_kDotaAbandonPersonaStatePrivateLobbyPostgameHex
+10      368   GBE_kDotaPracticeLobbyLaunchCacheSubscribedPreludeHex
+11      372   GBE_kDotaPracticeLobbyLaunchCacheSubscribedLargePreludeHex
+12     1052   GBE_kDotaPracticeLobbyResponseTemplate
+13     1057   GBE_kDotaPracticeLobbySOUpdateTemplate
+14     1239   GBE_LogHexDump
+15     1682   GBE_LogDotaSOMultipleObjectsSummary
+16     2188   GBE_GenerateDotaLobbyInviteGid
+17     3307   GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedPreludeTemplate
+18     3351   GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedLargePreludeTemplate
+
+================================================================================
+POST-HANDLER REGION ANALYSIS (Lines 13447–15029)
+================================================================================
+The post-handler region begins at L13447 (handle_dota_client_message) and
+extends to the end of the file (L15029). The 62nd and final handler
+GBE_HandleDotaWrappedPostLoginRequest ends at L13445.
+
+Post-handler core functions in this region:
+  - handle_dota_client_message              (L13447)
+  - GBE_ResetDotaPracticeLobbyLaunchPeripheralState (L13649)
+  - GBE_ShouldTrackDotaPracticeLobbyLateSteamChain (L13654)
+  - GBE_MaybeQueueDotaPracticeLobbySteamAuthAck (L13661)
+  - GBE_UpdateDotaPracticeLobbyLaunchRichPresence (L13739)
+  - GBE_ClearDotaPracticeLobbyLaunchRichPresence (L13825)
+  - GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback (L13848)
+  - GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState (L13979)
+  - GBE_ReapplyDotaPracticeLobbyLaunchRichPresence (L14053)
+  - GBE_FinalizeDotaAbandonAfterOtherLeftChannel (L14165)
+  - GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed (L14182)
+  - SendMessage_                            (L14266)
+  - IsMessageAvailable                      (L14336)
+  - RetrieveMessage                         (L14373)
+  - network_callback_inventory_request      (L14503)
+  - network_callback_inventory_response     (L14566)
+  - network_callback_item_update            (L14690)
+  - network_callback_item_deletion          (L14746)
+  - network_callback_respawn_request        (L14787)
+  - network_callback                        (L14800)
+  - RunCallbacks                            (L14873)
+
+YES — the post-handler core functions DO use static helpers.
+20 static symbols are referenced in this region:
+
+From List B (6 symbols — already require external linkage, no additional action):
+  - GBE_kSteamTicketAuthComplete                    L13701, L13715
+  - GBE_PrepareDotaPersonaStatePeripheralMessage    L14026, L14247
+  - GBE_kDotaAbandonPersonaStateInitHex             L14247
+  - GBE_pending_dota_normal_signout_finalize_after_25  L14417, L14465
+  - GBE_pending_dota_normal_signout_finalize_lobby_id  L14464, L14466
+  - GBE_PushDotaPlayerEquippedItemsCacheToGC        L14674
+
+From List C (14 symbols — correctly stay in main file as static):
+  - GBE_ExtractDirectDotaServerHelloContext         L13458
+  - GBE_last_dota_server_hello_context              L13463
+  - GBE_BuildDirectDotaServerWelcome                L13492
+  - GBE_ExtractDirectDotaHelloContext               L13584
+  - GBE_ExtractDotaHelloContext                     L13589
+  - GBE_BuildDirectDotaClientWelcome                L13607
+  - GBE_ComposeDotaClientWelcome                    L13608
+  - GBE_AdaptDotaTopCustomGamesListPayload          L13635
+  - GBE_kDotaLaunchPersonaStateInitServerSetupHex   L13989
+  - GBE_kDotaLaunchPersonaStateFindingMatchServerSetupHex  L13991
+  - GBE_kDotaLaunchPersonaStateFindingMatchRunHex   L13993
+  - GBE_kDotaLaunchPersonaStatePrivateLobbyRunHex   L13995
+  - GBE_LogGCProtoBoundary                          L14273, L14423
+  - GBE_IsDotaOtherLeftChannelPayloadForChannel     L14414
+
+From List A: 0 (confirms List A symbols are truly handler-only)
+From Unused: 0 (confirms unused symbols are truly unreferenced)
+
+================================================================================
+REFACTORING IMPLICATIONS
+================================================================================
+1. LIST A (23 symbols): Move definitions + `static` to gbe_dota_handlers.cpp.
+   No header declarations needed — they remain internal to the new TU.
+
+2. LIST B (26 symbols): Remove `static` from the definition in the main file,
+   add extern declarations to gbe_dota_gc_internal.h. Both TUs #include the
+   header. Definitions stay in steam_game_coordinator.cpp.
+   NOTE: 12 of the 26 List B symbols have NO direct member-function usage —
+   they are classified B purely through transitive static-to-static call
+   chains (see "transitive" annotations above). These are primarily the
+   GBE_kOldDota* varint/fixed64 data constants and the account-ID patching
+   helpers, which are shared between handler-path and non-handler-path
+   static helper chains.
+
+3. LIST C (44 symbols): No changes needed. Keep `static` in main file.
+
+4. UNUSED (18 symbols): Dead code. Safe to delete in a separate cleanup pass.
+   Consider removing before or after the split to reduce noise.
+
+5. POST-HANDLER REGION: Uses 6 List-B and 14 List-C statics. No List-A
+   statics. This confirms the post-handler region's coupling is entirely
+   to symbols that either stay in the main file (List C) or become
+   external (List B) — no additional symbols need promotion to external
+   linkage due to post-handler usage.
+
+================================================================================
+END OF REPORT
+================================================================================
