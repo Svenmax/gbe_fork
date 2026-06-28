@@ -41,6 +41,7 @@ extern GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 
 
 #include <array>
+#include <cstring>
 
 // Forward declarations (avoid heavy includes in this internal header).
 class Steam_Game_Coordinator;
@@ -58,6 +59,15 @@ template <class T>
 inline void ser_var(std::string &buf, const T &input)
 {
     buf.append(reinterpret_cast<const char *>(&input), sizeof(T));
+}
+// Template deserializer (moved here so both TUs can instantiate it).
+template <class T>
+inline T deser_var(const char *&p)
+{
+    T output;
+    memcpy(&output, p, sizeof(T));
+    p += sizeof(T);
+    return output;
 }
 
 // Shared mutable state
