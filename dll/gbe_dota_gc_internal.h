@@ -187,6 +187,17 @@ struct GBE_DotaServerHelloContext
     bool has_gc_dir_index_source{};
 };
 
+// Client hello context (moved from steam_game_coordinator.cpp, shared with
+// the payload-helpers TU gbe_dota_gc_payload_helpers.cpp).
+struct GBE_DotaHelloContext
+{
+    bool valid{};
+    uint32 version{};
+    std::string outer_session_field_raw;
+    uint64 source_job_id{};
+    bool has_source_job{};
+};
+
 // Shared server welcome builder (defined in steam_game_coordinator.cpp;
 // used by core code + lobby-flow TU).
 bool GBE_BuildDirectDotaServerWelcome(uint64 steam_id, uint32 app_id, const GBE_DotaServerHelloContext &context, std::string &message);
@@ -380,5 +391,239 @@ bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
     uint32 extra_startup_account_id,
     const GBE_DotaCustomGameDetails *custom_game,
     std::string &message);
+
+
+// --- Phase 2.9: payload-helper statics promoted to external ---
+// These symbols were file-scope static helpers in steam_game_coordinator.cpp
+// and are now defined in gbe_dota_gc_payload_helpers.cpp. The main GC TU
+// still references them, so they have external linkage with extern
+// declarations here. List X helpers (only referenced from other moved
+// helpers) remain `static` inside the payload-helpers TU and are not
+// declared here.
+
+// Forward declaration for the lobby-objects builder signature below.
+namespace gbe::gc_message { struct DotaPracticeLobbyObjects; }
+
+extern const char *GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex;
+extern const uint8 GBE_kDotaPracticeLobbyCacheSubscribedTemplate[];
+
+void GBE_LogGCProtoBoundary(const char *scope, const char *direction, void *self, bool is_server, uint32 emsg, const void *data, uint32 size);
+
+bool GBE_ForceDotaLobbyUpdateOwnerSOID(std::string &message, uint64 lobby_id);
+
+bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
+    std::string &message,
+    uint32 account_id,
+    uint64 steam_id,
+    uint64 lobby_id,
+    uint64 server_id,
+    uint64 match_id,
+    uint32 game_start_time,
+    const std::string &connect,
+    bool patch_server_id,
+    bool patch_game_start_time,
+    bool patch_connect,
+    const char *stage_note);
+
+bool GBE_PatchDotaLobbyTemplateIdentifiers(std::string &message, uint32 account_id, uint64 steam_id, uint64 lobby_id);
+
+bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
+    std::string &message,
+    uint32 account_id,
+    uint64 steam_id,
+    uint64 lobby_id,
+    bool rewrite_runtime_fields,
+    uint32 lobby_state,
+    uint32 lobby_game_state,
+    uint64 server_id,
+    uint64 match_id,
+    uint32 game_start_time,
+    const std::string &connect,
+    const std::string &player_name,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
+    uint32 owner_hero_id,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
+    bool rewrite_2015,
+    uint32 extra_startup_account_id,
+    const std::string &pass_key,
+    const GBE_DotaCustomGameDetails *custom_game = nullptr);
+
+void GBE_ComposeDotaPracticeLobbySOObjects(
+    uint64 steam_id,
+    uint64 lobby_id,
+    uint32 lobby_state,
+    uint32 lobby_game_state,
+    uint64 server_id,
+    uint64 match_id,
+    uint32 game_start_time,
+    const std::string &connect,
+    const std::string &player_name,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
+    uint32 owner_hero_id,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
+    bool has_broadcast_channel,
+    uint32 broadcast_channel_id,
+    const std::string &broadcast_country_code,
+    const std::string &broadcast_description,
+    const std::string &broadcast_language_code,
+    const std::string &pass_key,
+    uint32 extra_startup_account_id,
+    const GBE_DotaCustomGameDetails *custom_game,
+    gbe::gc_message::DotaPracticeLobbyObjects &lobby_objects);
+
+bool GBE_AdaptDotaTopCustomGamesListPayload(class Settings *settings, std::string &message, size_t &game_count);
+
+bool GBE_IsDotaOtherLeftChannelPayloadForChannel(const std::string &message, uint64 channel_id);
+
+bool GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload(
+    uint64 steam_id,
+    uint64 lobby_id,
+    uint32 lobby_state,
+    uint32 lobby_game_state,
+    uint64 server_id,
+    uint64 match_id,
+    uint32 game_start_time,
+    const std::string &connect,
+    const std::string &player_name,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
+    uint32 owner_hero_id,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
+    bool has_broadcast_channel,
+    uint32 broadcast_channel_id,
+    const std::string &broadcast_country_code,
+    const std::string &broadcast_description,
+    const std::string &broadcast_language_code,
+    const std::string &pass_key,
+    uint32 extra_startup_account_id,
+    std::string &message,
+    const GBE_DotaCustomGameDetails *custom_game = nullptr);
+
+bool GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload(
+    uint64 steam_id,
+    uint64 lobby_id,
+    uint32 lobby_state,
+    uint32 lobby_game_state,
+    uint64 server_id,
+    uint64 match_id,
+    uint32 game_start_time,
+    const std::string &connect,
+    const std::string &player_name,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
+    uint32 owner_hero_id,
+    const std::vector<GBE_DotaLobbyMemberState> &members,
+    bool has_broadcast_channel,
+    uint32 broadcast_channel_id,
+    const std::string &broadcast_country_code,
+    const std::string &broadcast_description,
+    const std::string &broadcast_language_code,
+    const std::string &pass_key,
+    uint32 extra_startup_account_id,
+    bool include_server_lobby_placeholder,
+    std::string &message,
+    const GBE_DotaCustomGameDetails *custom_game = nullptr);
+
+bool GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate(
+    const char *wrapped_template_hex,
+    const char *template_note,
+    bool require_lobby_identifiers,
+    bool rewrite_runtime_fields,
+    bool force_lobby_owner_soid,
+    bool rewrite_2015,
+    uint32 account_id,
+    uint64 steam_id,
+    uint64 lobby_id,
+    uint32 lobby_state,
+    uint32 lobby_game_state,
+    uint64 server_id,
+    uint64 match_id,
+    uint32 game_start_time,
+    const std::string &connect,
+    const std::string &player_name,
+    const std::string &room_name,
+    uint32 game_mode,
+    uint32 server_region,
+    bool lan,
+    const std::string &lan_host_ping_location,
+    bool allow_cheats,
+    bool fill_with_bots,
+    bool allow_spectating,
+    uint32 visibility,
+    uint32 bot_difficulty_radiant,
+    uint32 bot_difficulty_dire,
+    uint64 bot_radiant,
+    uint64 bot_dire,
+    uint32 owner_team,
+    uint32 owner_slot,
+    uint32 owner_hero_id,
+    const std::string &pass_key,
+    uint32 extra_startup_account_id,
+    std::string &message,
+    const GBE_DotaCustomGameDetails *custom_game = nullptr);
+
+bool GBE_ExtractDotaHelloContext(const void *pubData, uint32 cubData, GBE_DotaHelloContext &context);
+
+bool GBE_ExtractDirectDotaHelloContext(uint32 unMsgType, const void *pubData, uint32 cubData, GBE_DotaHelloContext &context);
+
+bool GBE_ExtractDirectDotaServerHelloContext(uint32 unMsgType, const void *pubData, uint32 cubData, GBE_DotaServerHelloContext &context);
+
+bool GBE_BuildDirectDotaClientWelcome(uint64 steam_id, uint32 app_id, uint32 account_id, const GBE_DotaHelloContext &context, std::string &message);
+
+bool GBE_ComposeDotaClientWelcome(uint64 steam_id, uint32 app_id, uint32 account_id, const GBE_DotaHelloContext &context, std::string &message);
 
 #endif // __INCLUDED_GBE_DOTA_GC_INTERNAL_H__
