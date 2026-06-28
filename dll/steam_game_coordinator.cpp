@@ -798,20 +798,6 @@ struct GCMsgHdr_t
     uint64  m_ulSteamID;                // User's SteamID
 };
 
-//-----------------------------------------------------------------------------
-// Purpose: Header for messages from a client or gameserver to or from the GC
-//          That contains source and destination jobs for the purpose of
-//          replying messages.
-//-----------------------------------------------------------------------------
-struct GCMsgHdrEx_t
-{
-    uint32  m_eMsg;                     // The message type
-    uint64  m_ulSteamID;                // User's SteamID
-    uint16  m_nHdrVersion;
-    JobID_t m_JobIDTarget;
-    JobID_t m_JobIDSource;
-};
-
 #pragma pack(pop)
 
 

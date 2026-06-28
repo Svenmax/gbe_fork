@@ -34,7 +34,16 @@ struct DotaGcRequestContext;
 class Steam_User_Items;
 class Steam_GameServer_Items;
 struct GCMsgHdr_t;
-struct GCMsgHdrEx_t;
+#pragma pack( push, 1 )
+struct GCMsgHdrEx_t
+{
+    uint32  m_eMsg;                     // The message type
+    uint64  m_ulSteamID;                // User's SteamID
+    uint16  m_nHdrVersion;
+    JobID_t m_JobIDTarget;
+    JobID_t m_JobIDSource;
+};
+#pragma pack(pop)
 struct ProtoBufMsgHeader_t;
 class CMsgProtoBufHeader;
 
