@@ -55,12 +55,6 @@
 using namespace gamecoordinator::tf2;
 
 constexpr int GC_MIN_VERSION = 20091217;
-bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
-    Steam_Game_Coordinator *target_gc,
-    const CSteamID &player_steam_id,
-    const std::vector<Econ_Item> &source_items,
-    bool unsubscribe_first,
-    const char *reason);
 
 GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 bool GBE_recent_dota_reconnect_context_valid = false;

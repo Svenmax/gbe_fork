@@ -92,19 +92,6 @@ void GBE_ComposeDotaPracticeLobbySOObjects(
     const GBE_DotaCustomGameDetails *custom_game,
     gbe::gc_message::DotaPracticeLobbyObjects &lobby_objects);
 
-struct GBE_DotaGenericLobbyEntry {
-    CSteamID generic_lobby_id{};
-    uint64 dota_lobby_id{};
-    uint32 owner_account_id{};
-    std::string owner_name;
-    std::string room_name;
-    uint32 game_mode{};
-    uint32 server_region{};
-    std::string lan_host_ping_location;
-    std::string pass_key;
-    uint32 player_count{};
-    uint32 max_player_count{};
-};
 static const uint8 GBE_kDotaClientWelcomeTemplate[] = {
     0x4D, 0x15, 0x00, 0x80, 0x14, 0x00, 0x00, 0x00, 0x09, 0xF5, 0xB6, 0x21, 0x08, 0x01, 0x00, 0x10,
     0x01, 0x10, 0xEB, 0xFC, 0x88, 0xA1, 0xF8, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x08, 0xBA, 0x04, 0x10,
