@@ -144,7 +144,7 @@ struct GBE_DotaGenericLobbyEntry {
     uint32 max_player_count{};
 };
 
-static GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
+GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 bool GBE_recent_dota_reconnect_context_valid = false;
 GBE_DotaReconnectContext GBE_recent_dota_reconnect_context{};
 static bool GBE_pending_dota_normal_signout_finalize_after_25 = false;
@@ -202,14 +202,6 @@ bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64_t local_steam_i
     return steam_client->steam_game_coordinator->GBE_TryRecoverDotaReconnectContextFromGenericLobbies(local_steam_id, out);
 }
 // --- End Dota reconnect shared state ---
-
-enum : uint32 {
-    GBE_kDotaLaunchPhaseNone = 0u,
-    GBE_kDotaLaunchPhaseRequested = 1u,
-    GBE_kDotaLaunchPhaseSetupSynced = 2u,
-    GBE_kDotaLaunchPhaseRunQueued = 3u,
-    GBE_kDotaLaunchPhaseLoaded = 4u,
-};
 
 const char *GBE_DescribeDotaLaunchPhase(uint32 phase)
 {

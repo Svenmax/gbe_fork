@@ -35,4 +35,8 @@ bool GBE_AdaptDotaJoinChatChannelResponsePayload(
 extern bool GBE_recent_dota_reconnect_context_valid;
 extern GBE_DotaReconnectContext GBE_recent_dota_reconnect_context;
 
+// Shared lobby state cache (defined in steam_game_coordinator.cpp)
+struct GBE_SharedDotaLobbyState;
+extern GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
+
 #endif // __INCLUDED_GBE_DOTA_GC_INTERNAL_H__

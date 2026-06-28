@@ -159,4 +159,12 @@ inline constexpr const char *GBE_kDotaGenericLobbyMemberHeroKey = "gbe_dota_memb
 inline constexpr const char *GBE_kDotaGenericLobbyMemberConnectedKey = "gbe_dota_member_connected";
 inline constexpr const char *GBE_kDotaGenericLobbyMemberNameKey = "gbe_dota_member_name";
 
+// --- Dota launch phase ids --------------------------------------------------
+
+inline constexpr std::uint32_t GBE_kDotaLaunchPhaseNone = 0u;
+inline constexpr std::uint32_t GBE_kDotaLaunchPhaseRequested = 1u;
+inline constexpr std::uint32_t GBE_kDotaLaunchPhaseSetupSynced = 2u;
+inline constexpr std::uint32_t GBE_kDotaLaunchPhaseRunQueued = 3u;
+inline constexpr std::uint32_t GBE_kDotaLaunchPhaseLoaded = 4u;
+
 #endif // GBE_DOTA_PROTOCOL_CONSTANTS_H
