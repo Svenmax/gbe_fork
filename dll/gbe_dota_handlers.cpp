@@ -54,6 +54,52 @@
 
 using namespace gamecoordinator::tf2;
 
+// Type aliases for proto-wire request/response shapes. These mirror the
+// aliases defined in steam_game_coordinator.cpp and are needed by the
+// handlers below. They are alias-declarations (no linkage), so duplicating
+// them across TUs is safe.
+using GBE_DotaPracticeLobbyDetailsRequest = gbe::proto_wire::DotaPracticeLobbyDetailsRequest;
+using GBE_DotaPracticeLobbyCreateRequest = gbe::proto_wire::DotaPracticeLobbyCreateRequest;
+using GBE_DotaPracticeLobbyJoinRequest = gbe::proto_wire::DotaPracticeLobbyJoinRequest;
+using GBE_DotaInviteToLobbyRequest = gbe::proto_wire::DotaInviteToLobbyRequest;
+using GBE_DotaLobbyInviteResponseRequest = gbe::proto_wire::DotaLobbyInviteResponseRequest;
+using GBE_DotaPracticeLobbySetTeamSlotRequest = gbe::proto_wire::DotaPracticeLobbySetTeamSlotRequest;
+using GBE_DotaPracticeLobbyKickRequest = gbe::proto_wire::DotaPracticeLobbyKickRequest;
+
+using GBE_DotaPracticeLobbyBroadcastChannelRequest = gbe::proto_wire::DotaPracticeLobbyBroadcastChannelRequest;
+
+using GBE_DotaJoinChatChannelRequest = gbe::proto_wire::DotaJoinChatChannelRequest;
+using GBE_DotaLeaveChatChannelRequest = gbe::proto_wire::DotaLeaveChatChannelRequest;
+using GBE_DotaChatMessageRequest = gbe::proto_wire::DotaChatMessageRequest;
+using GBE_Dota8053Result = gbe::proto_wire::Dota8053Result;
+
+using GBE_DotaEmptyRequestShape = gbe::proto_wire::DotaEmptyRequestShape;
+using GBE_DotaRankRequestShape = gbe::proto_wire::DotaRankRequestShape;
+using GBE_Dota7034ConnectedPlayer = gbe::proto_wire::Dota7034ConnectedPlayer;
+using GBE_Dota7034DisconnectedPlayer = gbe::proto_wire::Dota7034DisconnectedPlayer;
+using GBE_Dota7034RequestShape = gbe::proto_wire::Dota7034RequestShape;
+
+// Proto field locator used by handler template-replay patching.
+// Moved here from steam_game_coordinator.cpp (now handler-only).
+struct GBE_ProtoField
+{
+    bool found{};
+    uint32 field_number{};
+    uint32 wire_type{};
+    size_t value_offset{};
+    size_t value_size{};
+
+    gbe::proto_wire::Field as_proto_wire_field() const
+    {
+        gbe::proto_wire::Field field{};
+        field.number = field_number;
+        field.wire_type = wire_type;
+        field.value_offset = value_offset;
+        field.value_size = value_size;
+        return field;
+    }
+};
+
 // --- List A: handler-only static helpers (moved from steam_game_coordinator.cpp) ---
 
 static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;

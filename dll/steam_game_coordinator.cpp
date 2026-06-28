@@ -1047,25 +1047,6 @@ static T deser_var(const char *&p)
     return output;
 }
 
-struct GBE_ProtoField
-{
-    bool found{};
-    uint32 field_number{};
-    uint32 wire_type{};
-    size_t value_offset{};
-    size_t value_size{};
-
-    gbe::proto_wire::Field as_proto_wire_field() const
-    {
-        gbe::proto_wire::Field field{};
-        field.number = field_number;
-        field.wire_type = wire_type;
-        field.value_offset = value_offset;
-        field.value_size = value_size;
-        return field;
-    }
-};
-
 struct GBE_DotaHelloContext
 {
     bool valid{};
