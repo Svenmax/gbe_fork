@@ -405,7 +405,7 @@ bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
 namespace gbe::gc_message { struct DotaPracticeLobbyObjects; }
 
 extern const char *GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex;
-extern const uint8 GBE_kDotaPracticeLobbyCacheSubscribedTemplate[];
+extern const uint8 GBE_kDotaPracticeLobbyCacheSubscribedTemplate[312];
 
 void GBE_LogGCProtoBoundary(const char *scope, const char *direction, void *self, bool is_server, uint32 emsg, const void *data, uint32 size);
 

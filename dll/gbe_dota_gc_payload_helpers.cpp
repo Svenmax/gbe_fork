@@ -167,7 +167,7 @@ static const std::array<uint8, 2> GBE_kOldDotaVersionVarint = { 0xEB, 0x34 };
 static const std::array<uint8, 8> GBE_kOldDotaPracticeLobbyLobbyIdVarint = { 0x83, 0xCF, 0xA2, 0xB4, 0xA2, 0xFF, 0xF9, 0x34 };
 static const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyGameStartTimeVarint = { 0xAE, 0xBB, 0xA3, 0xCF, 0x06 };
 static constexpr const char *GBE_kOldDotaPracticeLobbyConnect = "117.157.79.194:27015 10.110.4.21:27015";
-const char *GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex =
+extern const char *GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex =
     "4d15008014000000090eac2b7cdec1400110dbc3fdeafdffffffff0108ba041098808080081ae9061800008000000000\n"
     "12bd0108d40f12b70108d6f9ac9f95a6fc3418012001310eac2b7cdec1400159f5b62108010010016001680070008201\n"
     "0531313131318a010240008a01024000a80100e00100f001bbca9fe020f80100a00203d00200d80200e00200f00200f8\n"
@@ -188,7 +188,7 @@ const char *GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex =
     "0138006000d00100d80100e001001a1c0827121808f5ed864110001800200138006000d00100d80100e001001a1d0838\n"
     "121908f5ed864110e8071800200138016000d00100d80100e0010019e0a6ef5331f16900220b080310d6f9ac9f95a6fc\n"
     "34";
-const uint8 GBE_kDotaPracticeLobbyCacheSubscribedTemplate[] = {
+extern const uint8 GBE_kDotaPracticeLobbyCacheSubscribedTemplate[] = {
     0x18, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x12, 0xC2, 0x01, 0x08, 0xD4, 0x0F, 0x12, 0xBC,
     0x01, 0x08, 0x9D, 0x97, 0xF8, 0x9E, 0x95, 0xD7, 0xF7, 0x34, 0x18, 0x01, 0x20, 0x00, 0x59, 0xF5,
     0xB6, 0x21, 0x08, 0x01, 0x00, 0x10, 0x01, 0x60, 0x01, 0x68, 0x00, 0x70, 0x01, 0x82, 0x01, 0x05,
@@ -417,7 +417,7 @@ bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
     bool rewrite_2015,
     uint32 extra_startup_account_id,
     const std::string &pass_key,
-    const GBE_DotaCustomGameDetails *custom_game = nullptr)
+    const GBE_DotaCustomGameDetails *custom_game)
 {
     (void)account_id;
 
@@ -894,7 +894,7 @@ bool GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload(
     const std::string &pass_key,
     uint32 extra_startup_account_id,
     std::string &message,
-    const GBE_DotaCustomGameDetails *custom_game = nullptr)
+    const GBE_DotaCustomGameDetails *custom_game)
 {
     gbe::gc_message::DotaPracticeLobbyObjects lobby_objects;
     GBE_ComposeDotaPracticeLobbySOObjects(
@@ -972,7 +972,7 @@ bool GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload(
     uint32 extra_startup_account_id,
     bool include_server_lobby_placeholder,
     std::string &message,
-    const GBE_DotaCustomGameDetails *custom_game = nullptr)
+    const GBE_DotaCustomGameDetails *custom_game)
 {
     if (steam_id == 0 || lobby_id == 0)
         return false;
@@ -1053,7 +1053,7 @@ bool GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate(
     const std::string &pass_key,
     uint32 extra_startup_account_id,
     std::string &message,
-    const GBE_DotaCustomGameDetails *custom_game = nullptr)
+    const GBE_DotaCustomGameDetails *custom_game)
 {
     std::string wrapped_message;
     if (!wrapped_template_hex || !gbe::proto_wire::decode_hex_string(wrapped_template_hex, wrapped_message)) {
