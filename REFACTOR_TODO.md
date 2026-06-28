@@ -3,7 +3,7 @@
 > 本文件记录对 `dll/steam_game_coordinator.cpp`(原始 15029 行的"巨石"文件)进行分阶段拆分重构的完整进度与后续计划,便于会话切换后快速恢复上下文。
 >
 > **当前分支**: `trae/agent-inRF11`
-> **最后提交**: `fe08e73` — fix(gc): add explicit parse_protomsg instantiations for split TU linkage (phase 2.7)
+> **最后提交**: `adc8e04` — refactor(gc): extract welcome/hello functions to gbe_dota_welcome_coordinator.cpp (phase 2.8)
 
 ---
 
@@ -121,84 +121,95 @@
   - 第 1 轮 `be7d394` 构建 #967 失败 — C2079/C2027:新 TU 使用 `GCMsgHdrEx_t`(by value)但仅有 forward declaration,完整定义在主文件 .cpp 内。修复 `cf3b94f`:将 `GCMsgHdrEx_t` 结构体定义(含 `#pragma pack`)移到 [dll/dll/steam_game_coordinator.h](file:///workspace/dll/dll/steam_game_coordinator.h) 替换 forward declaration(`JobID_t` 已通过 `base.h` 可用);主文件仅保留 `GCMsgHdr_t`。脚本:[_phase27_fix_struct_visibility.py](file:///workspace/tools/_phase27_fix_struct_visibility.py)
   - 第 2 轮 `cf3b94f` 构建 #968 失败 — LNK2019:新 TU 调用 `parse_protomsg<T>`(member function template),但模板定义在主文件 .cpp,其他 TU 无法实例化。修复 `fe08e73`:在主文件模板定义后追加 2 行 explicit instantiation(`CMsgAdjustItemEquippedState` / `CMsgSetItemPositions`),强制编译器生成符号供链接器解析
 
+### Phase 2.8 — 提取 welcome/hello 函数到新 TU(2026-06-28,当前 HEAD)
+
+提交:`adc8e04` refactor(gc): extract welcome/hello functions to gbe_dota_welcome_coordinator.cpp (phase 2.8)
+
+- 脚本:[tools/_phase28_analyze.py](file:///workspace/tools/_phase28_analyze.py)、[_phase28_extract.py](file:///workspace/tools/_phase28_extract.py)
+- 耦合分析报告:[tools/_phase28_coupling_report.txt](file:///workspace/tools/_phase28_coupling_report.txt)
+- 新增 [dll/gbe_dota_welcome_coordinator.cpp](file:///workspace/dll/gbe_dota_welcome_coordinator.cpp)(979 行)
+- 移走 5 个 welcome/hello/login-sync 成员函数(452 行):`GBE_PatchDotaLoginCacheSubscribedInventory` / `callback_client_welcome` / `callback_server_welcome` / `GBE_MaybePrimeDotaServerWelcomeFromCache` / `GBE_PushDotaLoginSyncMessages`
+- 移走 1 个 List X static 符号(保持 `static`,作为新 TU 内部符号):`GBE_kDotaCacheSubscribedTemplate`(`static const uint8[]` 字节模板,470 行)。验证无传递依赖 List Z(纯数据数组,无函数调用)
+- **List Y = 0** — 无需 externalize,早期阶段(2.2/2.3a/2.4a/2.5)已覆盖所有跨 TU 共享需求,header 无改动
+- **分析脚本修复**:初版 `collect_static_symbols` 的正则 `[\(\{=;]` 无法匹配数组定义(`NAME[]`),漏掉 3 个 `static const uint8[]` 数组。修复为 `[\(\{=;\[]` 后正确识别 1 个 List X + 2 个 List Z
+- 主文件:`5666 → 4738` 行(-928 行)
+- 累计缩减:原始 15029 行 → 当前 4738 行,**缩减 68.5%**
+- **构建一次通过**(commit `adc8e04`,无需修复)
+
 ---
 
 ## 3. 当前文件布局
 
-> 以下反映 Phase 2.7 提交后的状态。
+> 以下反映 Phase 2.8 提交后的状态。
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
-| [dll/steam_game_coordinator.cpp](file:///workspace/dll/steam_game_coordinator.cpp) | 5666 | GC 类核心:基础设施(SendMessage_/RetrieveMessage/network_callback/RunCallbacks)、lobby-state 状态机、welcome/cache/payload 构造、路由分发、`handle_dota_client_message` |
+| [dll/steam_game_coordinator.cpp](file:///workspace/dll/steam_game_coordinator.cpp) | 4738 | GC 类核心:基础设施(SendMessage_/RetrieveMessage/network_callback/RunCallbacks)、lobby-state 状态机、payload 构造、路由分发、`handle_dota_client_message` |
 | [dll/gbe_dota_handlers.cpp](file:///workspace/dll/gbe_dota_handlers.cpp) | 6335 | 62 个 `GBE_HandleDota*` 请求 handler + 23 个 handler-only static 符号 |
+| [dll/gbe_dota_welcome_coordinator.cpp](file:///workspace/dll/gbe_dota_welcome_coordinator.cpp) | 979 | 5 个 welcome/hello/login-sync 成员函数 + 1 个 List X static(`GBE_kDotaCacheSubscribedTemplate`)(Phase 2.8 新增) |
 | [dll/gbe_dota_inventory_coordinator.cpp](file:///workspace/dll/gbe_dota_inventory_coordinator.cpp) | 909 | 20 个 inventory/item 成员函数 + 1 个 List X static(`ser_varstring`)(Phase 2.7 新增) |
 | [dll/gbe_dota_lobby_launch_coordinator.cpp](file:///workspace/dll/gbe_dota_lobby_launch_coordinator.cpp) | 722 | 13 个 lobby launch/teardown 流程成员函数 + 2 个 List X static 符号(Phase 2.6 新增) |
 | [dll/gbe_dota_lobby_flow_coordinator.cpp](file:///workspace/dll/gbe_dota_lobby_flow_coordinator.cpp) | 702 | 10 个 lobby-flow helper 成员函数 + 4 个 List X static 常量(Phase 2.4b 新增) |
 | [dll/gbe_dota_lobby_snapshot_coordinator.cpp](file:///workspace/dll/gbe_dota_lobby_snapshot_coordinator.cpp) | 683 | 10 个 lobby-snapshot/build helper 成员函数(Phase 2.5 新增) |
 | [dll/gbe_dota_lobby_state_coordinator.cpp](file:///workspace/dll/gbe_dota_lobby_state_coordinator.cpp) | 1701 | lobby-state 成员管理 |
 | [dll/gbe_dota_gc_internal.h](file:///workspace/dll/gbe_dota_gc_internal.h) | 384 | 跨 TU 共享的内部头:外部链接符号声明、`GBE_DotaServerHelloContext` 结构、`ser_var`/`deser_var` 模板 |
-| **合计** | **17102** | |
+| **合计** | **17153** | |
 
-> Phase 2.7 变更:主文件 -844 行,新 TU +909 行(含 78 行 license/include 头),header +10 行(`deser_var` 模板 + `<cstring>`)。原始主文件 15029 行 → 当前 5666 行,累计缩减 62.3%。
+> Phase 2.8 变更:主文件 -928 行,新 TU +979 行(含 84 行 license/include 头),header 无改动。原始主文件 15029 行 → 当前 4738 行,累计缩减 68.5%。
 
 主文件 `steam_game_coordinator.cpp` 当前剩余的 `Steam_Game_Coordinator::` 成员函数布局(行号 → 函数):
 
 ```
-L3166  GBE_DispatchDotaPostLoginRequest
-L3241  gc_enabled / client_items / server_items / parse_gc_config / is_welcome_message
-L3302  GBE_ApplyQueuedLobbyState
-L3373  push_incoming
-L3402  GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon
-L3418  GBE_DiscardQueuedDotaLaunchMessagesForAbandon
-L3471  GBE_ShouldSuppressDotaAbandonedLobby
-L3476  GBE_MarkDotaAbandonedLobbySuppressed
-L3507  GBE_ClearDotaAbandonedLobbySuppression
-L3523  push_incoming_now
-L3555  build_msg_header / parse_msg_header / build_protomsg_header / parse_protomsg (template)
-       (+ L3615/L3616 显式实例化: CMsgAdjustItemEquippedState / CMsgSetItemPositions)
-L3618  GBE_PatchDotaLoginCacheSubscribedInventory
-L3901  handle_motd_request / handle_respawn
-L3935  callback_client_welcome / callback_server_welcome
-L3966  GBE_MaybePrimeDotaServerWelcomeFromCache
-L4073  callback_respawn_request
-L4085  steam_network_callback / steam_run_every_runcb
-L4152  initialize_gc / shutdown_gc / on_appid_changed
-L4262  on_client_connected / on_client_disconnected
-L4364  GBE_PushDotaLoginSyncMessages
-L4579  GBE_GetDotaJoinableCustomLobbiesHTTPJSON
-L4630  ResetGCMemory
-L4686  GBE_GetDotaLobbyOwnerName
-L4700  handle_dota_client_message            ← 核心分发,留在主文件
-L4903  SendMessage_                          ← 核心基础设施,留在主文件
-L4973  IsMessageAvailable
-L5010  RetrieveMessage
-L5140  network_callback_inventory_request
-L5203  network_callback_inventory_response
-L5327  network_callback_item_update
-L5383  network_callback_item_deletion
-L5424  network_callback_respawn_request
-L5437  network_callback
-L5510  RunCallbacks
+L2695  GBE_DispatchDotaPostLoginRequest
+L2770  gc_enabled / client_items / server_items / parse_gc_config / is_welcome_message
+L2831  GBE_ApplyQueuedLobbyState
+L2902  push_incoming
+L2931  GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon
+L2947  GBE_DiscardQueuedDotaLaunchMessagesForAbandon
+L3000  GBE_ShouldSuppressDotaAbandonedLobby
+L3005  GBE_MarkDotaAbandonedLobbySuppressed
+L3036  GBE_ClearDotaAbandonedLobbySuppression
+L3052  push_incoming_now
+L3084  build_msg_header / parse_msg_header / build_protomsg_header / parse_protomsg (template)
+       (+ L3144/L3145 显式实例化: CMsgAdjustItemEquippedState / CMsgSetItemPositions)
+L3147  handle_motd_request / handle_respawn
+L3181  callback_respawn_request
+L3193  steam_network_callback / steam_run_every_runcb
+L3260  initialize_gc / shutdown_gc / on_appid_changed
+L3370  on_client_connected / on_client_disconnected
+L3651  GBE_GetDotaJoinableCustomLobbiesHTTPJSON
+L3702  ResetGCMemory
+L3758  GBE_GetDotaLobbyOwnerName
+L3772  handle_dota_client_message            ← 核心分发,留在主文件
+L3975  SendMessage_                          ← 核心基础设施,留在主文件
+L4045  IsMessageAvailable
+L4082  RetrieveMessage
+L4212  network_callback_inventory_request
+L4275  network_callback_inventory_response
+L4399  network_callback_item_update
+L4455  network_callback_item_deletion
+L4496  network_callback_respawn_request
+L4509  network_callback
+L4582  RunCallbacks
 ```
 
-> 注:Phase 2.7 移走了 20 个 inventory/item 成员函数(原 L3928–L5208 区间交错)+ 1 个 List X static(`ser_varstring`),共 -828 行;externalize `deser_var` 模板 -9 行;`GCMsgHdrEx_t` 结构体定义移到 header -14 行;新增 2 行 `parse_protomsg` 显式实例化 +7 行。合计 -844 行。主文件现仅剩核心基础设施、welcome/hello 相关与 `handle_dota_client_message` 分发,后续可按 Phase 2.8/2.9 继续拆分。
+> 注:Phase 2.8 移走了 5 个 welcome/hello 成员函数(原 L3618–L4398 区间交错)+ 1 个 List X static(`GBE_kDotaCacheSubscribedTemplate`,470 行字节模板),共 -928 行(含尾随空行)。主文件现仅剩核心基础设施、lobby-state 状态机、payload static helpers 与 `handle_dota_client_message` 分发,后续可按 Phase 2.9 继续拆分 static helpers。
 
 ---
 
 ## 4. 待完成任务
 
-### Phase 2.5 / 2.6 / 2.7 — 已完成 ✅
+### Phase 2.5 / 2.6 / 2.7 / 2.8 — 已完成 ✅
 
-详见 §2 完成记录。提交:`a9be325`(Phase 2.5)、`88e5cb4`(Phase 2.6)、`be7d394`+`cf3b94f`+`fe08e73`(Phase 2.7)。
+详见 §2 完成记录。提交:`a9be325`(Phase 2.5)、`88e5cb4`(Phase 2.6)、`be7d394`+`cf3b94f`+`fe08e73`(Phase 2.7)、`adc8e04`(Phase 2.8)。
 
-### Phase 2.8+ — 后续路线图(待规划,优先级递减)
+### Phase 2.9+ — 后续路线图(待规划,优先级递减)
 
-主文件 5666 行仍然偏大,后续可继续按职责拆分。候选方向(需各自做耦合分析后再定):
+主文件 4738 行仍然偏大,后续可继续按职责拆分。候选方向(需各自做耦合分析后再定):
 
-- **2.8**:提取 welcome/hello 相关函数(`GBE_PatchDotaLoginCacheSubscribedInventory` / `callback_client_welcome` / `callback_server_welcome` / `GBE_MaybePrimeDotaServerWelcomeFromCache` / `GBE_PushDotaLoginSyncMessages`)— 当前 L3618–L4579 区间
 - **2.9**:把主文件中剩余的纯函数 static helpers(`GBE_PatchDota*` / `GBE_ReplayDota*` / `GBE_AdaptDota*` / `GBE_ExtractDota*` / `GBE_PrepareDota*` / `GBE_BuildDirectDota*Welcome` / `GBE_ComposeDota*Welcome`)按主题归并到对应 TU,或单独建 `gbe_dota_gc_payload_helpers.cpp`
 
-完成 2.8–2.9 后,主文件预期可缩减至 ~2000 行,仅保留 GC 类的核心基础设施(初始化、消息收发骨架、回调路由、网络回调入口)与 `handle_dota_client_message` 顶层分发。
+完成 2.9 后,主文件预期可缩减至 ~2000 行,仅保留 GC 类的核心基础设施(初始化、消息收发骨架、回调路由、网络回调入口)与 `handle_dota_client_message` 顶层分发。
 
 ---
 
@@ -221,4 +232,5 @@ L5510  RunCallbacks
 - Phase 2.5 耦合分析报告:[tools/_phase25_coupling_report.txt](file:///workspace/tools/_phase25_coupling_report.txt)
 - Phase 2.6 耦合分析报告:[tools/_phase26_coupling_report.txt](file:///workspace/tools/_phase26_coupling_report.txt)
 - Phase 2.7 耦合分析报告:[tools/_phase27_coupling_report.txt](file:///workspace/tools/_phase27_coupling_report.txt)
-- 各阶段脚本:[tools/_phase23a_externalize.py](file:///workspace/tools/_phase23a_externalize.py)、[_phase23b_extract_handlers.py](file:///workspace/tools/_phase23b_extract_handlers.py)、[_phase24a_delete_dead.py](file:///workspace/tools/_phase24a_delete_dead.py)、[_phase24b_extract.py](file:///workspace/tools/_phase24b_extract.py)、[_phase25_externalize.py](file:///workspace/tools/_phase25_externalize.py)、[_phase25_extract.py](file:///workspace/tools/_phase25_extract.py)、[_phase25_fix_default_args.py](file:///workspace/tools/_phase25_fix_default_args.py)、[_phase26_analyze.py](file:///workspace/tools/_phase26_analyze.py)、[_phase26_extract.py](file:///workspace/tools/_phase26_extract.py)、[_phase27_analyze.py](file:///workspace/tools/_phase27_analyze.py)、[_phase27_externalize.py](file:///workspace/tools/_phase27_externalize.py)、[_phase27_extract.py](file:///workspace/tools/_phase27_extract.py)、[_phase27_fix_struct_visibility.py](file:///workspace/tools/_phase27_fix_struct_visibility.py)
+- Phase 2.8 耦合分析报告:[tools/_phase28_coupling_report.txt](file:///workspace/tools/_phase28_coupling_report.txt)
+- 各阶段脚本:[tools/_phase23a_externalize.py](file:///workspace/tools/_phase23a_externalize.py)、[_phase23b_extract_handlers.py](file:///workspace/tools/_phase23b_extract_handlers.py)、[_phase24a_delete_dead.py](file:///workspace/tools/_phase24a_delete_dead.py)、[_phase24b_extract.py](file:///workspace/tools/_phase24b_extract.py)、[_phase25_externalize.py](file:///workspace/tools/_phase25_externalize.py)、[_phase25_extract.py](file:///workspace/tools/_phase25_extract.py)、[_phase25_fix_default_args.py](file:///workspace/tools/_phase25_fix_default_args.py)、[_phase26_analyze.py](file:///workspace/tools/_phase26_analyze.py)、[_phase26_extract.py](file:///workspace/tools/_phase26_extract.py)、[_phase27_analyze.py](file:///workspace/tools/_phase27_analyze.py)、[_phase27_externalize.py](file:///workspace/tools/_phase27_externalize.py)、[_phase27_extract.py](file:///workspace/tools/_phase27_extract.py)、[_phase27_fix_struct_visibility.py](file:///workspace/tools/_phase27_fix_struct_visibility.py)、[_phase28_analyze.py](file:///workspace/tools/_phase28_analyze.py)、[_phase28_extract.py](file:///workspace/tools/_phase28_extract.py)
