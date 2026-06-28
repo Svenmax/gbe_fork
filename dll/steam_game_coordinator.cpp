@@ -3608,6 +3608,13 @@ std::tuple<ProtoBufMsgHeader_t, CMsgProtoBufHeader, T, bool> Steam_Game_Coordina
     return { context.hdr, context.protohdr, protomsg, true };
 }
 
+// Explicit instantiations of parse_protomsg<T> for types used by split TUs
+// (gbe_dota_inventory_coordinator.cpp). The template definition lives here;
+// these force the compiler to emit the symbols so the linker can resolve
+// cross-TU references.
+template std::tuple<ProtoBufMsgHeader_t, CMsgProtoBufHeader, gamecoordinator::tf2::CMsgAdjustItemEquippedState, bool> Steam_Game_Coordinator::parse_protomsg<gamecoordinator::tf2::CMsgAdjustItemEquippedState>(const void *, uint32);
+template std::tuple<ProtoBufMsgHeader_t, CMsgProtoBufHeader, gamecoordinator::tf2::CMsgSetItemPositions, bool> Steam_Game_Coordinator::parse_protomsg<gamecoordinator::tf2::CMsgSetItemPositions>(const void *, uint32);
+
 bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::string &message)
 {
     GBE_DirectProtoContext context{};
