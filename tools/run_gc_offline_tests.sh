@@ -62,6 +62,31 @@ printf '[run] %s practice_lobby\n' gc_replay_test
     tools/gc_replay_test/fixtures/practice_lobby.txt \
     --expect tools/gc_replay_test/fixtures/practice_lobby.expected.txt
 
+printf '[run] %s chat_channel\n' gc_replay_test
+"$BUILD_DIR/gc_replay_test" \
+    tools/gc_replay_test/fixtures/chat_channel.txt \
+    --expect tools/gc_replay_test/fixtures/chat_channel.expected.txt
+
+printf '[run] %s lobby_lifecycle\n' gc_replay_test
+"$BUILD_DIR/gc_replay_test" \
+    tools/gc_replay_test/fixtures/lobby_lifecycle.txt \
+    --expect tools/gc_replay_test/fixtures/lobby_lifecycle.expected.txt
+
+printf '[run] %s game_flow\n' gc_replay_test
+"$BUILD_DIR/gc_replay_test" \
+    tools/gc_replay_test/fixtures/game_flow.txt \
+    --expect tools/gc_replay_test/fixtures/game_flow.expected.txt
+
+printf '[run] %s cache_and_items\n' gc_replay_test
+"$BUILD_DIR/gc_replay_test" \
+    tools/gc_replay_test/fixtures/cache_and_items.txt \
+    --expect tools/gc_replay_test/fixtures/cache_and_items.expected.txt
+
+printf '[run] %s wire_edge_cases\n' gc_replay_test
+"$BUILD_DIR/gc_replay_test" \
+    tools/gc_replay_test/fixtures/wire_edge_cases.txt \
+    --expect tools/gc_replay_test/fixtures/wire_edge_cases.expected.txt
+
 build_and_run \
     gbe_dota_lobby_flow_test \
     tools/gbe_dota_lobby_flow_test/gbe_dota_lobby_flow_test.cpp \

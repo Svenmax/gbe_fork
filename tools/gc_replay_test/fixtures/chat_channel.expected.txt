@@ -1,0 +1,65 @@
+gc_replay_test summary v1
+cases=7
+case 1
+label=chat_join_allchat
+emsg=2147490657
+masked_emsg=7009
+proto=1
+size=19
+fnv1a64=0xf5ffb215a2829c0a
+body_size=19
+fields=12:1:8=0x080000000000001b,0:1:8=0x6168636c6c610712
+case 2
+label=chat_join_team_chat
+emsg=2147490657
+masked_emsg=7009
+proto=1
+size=28
+fnv1a64=0xeb0442832a8f33fd
+body_size=28
+fields=12:1:8=0x080000000000001b
+case 3
+label=chat_message_hello
+emsg=7273
+masked_emsg=7273
+proto=0
+size=16
+fnv1a64=0x55c7b7c3e7bf2ee7
+body_size=16
+fields=1:0:2=12345,3:2:11=0x68656c6c6f20776f...
+case 4
+label=chat_message_gg
+emsg=7273
+masked_emsg=7273
+proto=0
+size=13
+fnv1a64=0x1b97280a42abcd0e
+body_size=13
+fields=1:0:2=999,3:2:8=0x474720676c206866
+case 5
+label=chat_leave
+emsg=2147490920
+masked_emsg=7272
+proto=1
+size=11
+fnv1a64=0xf70ec176e2026b5a
+body_size=11
+fields=13:0:1=28
+case 6
+label=chat_other_joined
+emsg=2147490661
+masked_emsg=7013
+proto=1
+size=29
+fnv1a64=0x644379a5ce29eb78
+body_size=29
+fields=12:5:4=0x0000001b
+case 7
+label=chat_other_left
+emsg=2147490662
+masked_emsg=7014
+proto=1
+size=20
+fnv1a64=0xa5fbdcb03c8649b1
+body_size=20
+fields=none

@@ -1,0 +1,56 @@
+gc_replay_test summary v1
+cases=6
+case 1
+label=lobby_launch_allpick
+emsg=2147490689
+masked_emsg=7041
+proto=1
+size=19
+fnv1a64=0x18417076a1df752c
+body_size=19
+fields=432:1:8=0x8309000000000000
+case 2
+label=game_signout
+emsg=2147490652
+masked_emsg=7004
+proto=1
+size=19
+fnv1a64=0x970d8349583f3eb1
+body_size=19
+fields=none
+case 3
+label=leaver_detected
+emsg=2147490720
+masked_emsg=7072
+proto=1
+size=14
+fnv1a64=0x21acd98f1b846e0d
+body_size=14
+fields=436:0:1=0
+case 4
+label=abandon_game
+emsg=2147490683
+masked_emsg=7035
+proto=1
+size=10
+fnv1a64=0x8119dd70da957411
+body_size=10
+fields=none
+case 5
+label=lobby_response_success
+emsg=2147490703
+masked_emsg=7055
+proto=1
+size=19
+fnv1a64=0x0b59bb0e42674c79
+body_size=19
+fields=none
+case 6
+label=lobby_response_fail
+emsg=2147490703
+masked_emsg=7055
+proto=1
+size=10
+fnv1a64=0xd256087bd68dd0e7
+body_size=10
+fields=none
