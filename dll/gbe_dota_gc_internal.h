@@ -71,8 +71,6 @@ inline T deser_var(const char *&p)
 }
 
 // Shared mutable state
-extern bool GBE_pending_dota_normal_signout_finalize_after_25;
-extern uint64 GBE_pending_dota_normal_signout_finalize_lobby_id;
 extern GBE_DotaLootListData GBE_vpk_loot_data;
 
 // Shared const data tables

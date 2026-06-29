@@ -101,6 +101,8 @@ public ISteamGameCoordinator
     uint64 GBE_suppressed_dota_abandon_lobby_id{};
     bool GBE_pending_dota_abandon_finalize_after_7014{};
     uint64 GBE_pending_dota_abandon_finalize_lobby_id{};
+    bool GBE_pending_dota_normal_signout_finalize_after_25{};
+    uint64 GBE_pending_dota_normal_signout_finalize_lobby_id{};
     std::string GBE_last_dota_launch_persona_signature;
     std::string GBE_last_dota_direct_connect_callback_signature;
     std::chrono::high_resolution_clock::time_point GBE_last_lobby_poll_time{};
@@ -126,6 +128,7 @@ public ISteamGameCoordinator
     Steam_GameServer_Items *server_items();
     void parse_gc_config();
     bool is_welcome_message(const GC_Message &message);
+    void clear_dota_runtime_state(bool preserve_reconnect_context);
     void GBE_ApplyQueuedLobbyState(const GC_Message &message);
     bool GBE_ShouldSuppressDotaAbandonedLobby(uint64 lobby_id) const;
     void GBE_MarkDotaAbandonedLobbySuppressed(uint64 lobby_id, const char *reason);

@@ -59,8 +59,6 @@ constexpr int GC_MIN_VERSION = 20091217;
 GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 bool GBE_recent_dota_reconnect_context_valid = false;
 GBE_DotaReconnectContext GBE_recent_dota_reconnect_context{};
-bool GBE_pending_dota_normal_signout_finalize_after_25 = false;
-uint64 GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
 GBE_DotaLootListData GBE_vpk_loot_data;
 
 // --- Dota reconnect shared state ---
@@ -1480,6 +1478,20 @@ void Steam_Game_Coordinator::initialize_gc()
     }
 }
 
+void Steam_Game_Coordinator::clear_dota_runtime_state(bool preserve_reconnect_context)
+{
+    GBE_local_lobby = GBE_LocalLobby{};
+    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+    if (!preserve_reconnect_context) {
+        GBE_recent_dota_reconnect_context_valid = false;
+        GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
+    }
+    GBE_dota_private_lobby_snapshot_replayed = false;
+    GBE_last_dota_launch_state_pushed_game_state = 0;
+    GBE_pending_dota_normal_signout_finalize_after_25 = false;
+    GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+}
+
 void Steam_Game_Coordinator::shutdown_gc()
 {
     if (!gc_initialized)
@@ -1517,12 +1529,7 @@ void Steam_Game_Coordinator::shutdown_gc()
     if (gc_profile == GC_PROFILE_DOTA2) {
         const uint64 previous_lobby_id = GBE_local_lobby.lobby_id;
         GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-        GBE_local_lobby = GBE_LocalLobby{};
-        GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-        GBE_recent_dota_reconnect_context_valid = false;
-        GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
-        GBE_pending_dota_normal_signout_finalize_after_25 = false;
-        GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+        clear_dota_runtime_state(false);
         if (settings && settings->get_lobby().ConvertToUint64() != 0)
             settings->set_lobby(k_steamIDNil);
         GBE_GC_DebugLog(
@@ -1630,18 +1637,11 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
         pending_message_sequence = 0;
     }
 
-    GBE_local_lobby = GBE_LocalLobby{};
-    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-    if (!reason || std::strcmp(reason, "7035_disconnect_current_game_after_25") != 0) {
-        GBE_recent_dota_reconnect_context_valid = false;
-        GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
-    }
-    GBE_dota_private_lobby_snapshot_replayed = false;
-    GBE_last_dota_launch_state_pushed_game_state = 0;
+    bool preserve_reconnect = reason && std::strcmp(reason, "7035_disconnect_current_game_after_25") == 0;
+    clear_dota_runtime_state(preserve_reconnect);
+
     GBE_pending_reset_after_cache_unsubscribed = false;
     GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
-    GBE_pending_dota_normal_signout_finalize_after_25 = false;
-    GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
     if (previous_lobby_id != 0 && GBE_suppressed_dota_abandon_lobby_id != previous_lobby_id)
         GBE_ClearDotaAbandonedLobbySuppression(previous_lobby_id, reason ? reason : "reset_gc_memory");
     GBE_pending_dota_abandon_finalize_after_7014 = false;
