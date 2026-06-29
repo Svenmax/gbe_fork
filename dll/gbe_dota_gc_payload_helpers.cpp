@@ -2768,3 +2768,146 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
     );
     return true;
 }
+
+// =====================================================================
+// Phase 2.13: Extracted pure functions from gbe_dota_handlers.cpp
+// These functions contain hand-written protobuf wire parsing and bit
+// manipulation logic that is error-prone and benefits from unit testing.
+// =====================================================================
+
+// --- GBE_ParseDotaEquipOps ---
+// Parses a ClientToGCEquipItemsRequest body into a list of equip operations.
+//
+// Body layout: repeated field 1 (tag 0x0a, length-delimited) sub-messages.
+// Each sub-message contains varint fields:
+//   1 = item_id (uint64)
+//   2 = new_class (uint32)
+//   3 = new_slot (uint32)
+//   4 = style_index (uint32, optional, defaults to 255 = no style change)
+bool GBE_ParseDotaEquipOps(const uint8 *body, size_t body_size, std::vector<GBE_DotaEquipOp> &equip_ops)
+{
+    equip_ops.clear();
+
+    if (!body || body_size == 0)
+        return false;
+
+    size_t offset = 0;
+    while (offset < body_size) {
+        // Each equip op is field 1, wire type 2 (length-delimited) -> tag = 0x0a
+        if (body[offset] != 0x0a)
+            break;
+        offset++;
+
+        // Read varint length of the sub-message
+        uint64_t sub_len = 0;
+        unsigned shift = 0;
+        while (offset < body_size) {
+            uint8_t b = body[offset++];
+            sub_len |= (uint64_t)(b & 0x7F) << shift;
+            shift += 7;
+            if (!(b & 0x80))
+                break;
+        }
+        if (offset + sub_len > body_size)
+            break;
+
+        // Parse the sub-message fields
+        const uint8_t *sub = body + offset;
+        size_t sub_off = 0;
+        GBE_DotaEquipOp op{};
+        op.style_index = 255u;  // default: no style change
+
+        while (sub_off < sub_len) {
+            uint8_t tag = sub[sub_off++];
+            uint32_t field_num = tag >> 3;
+            uint32_t wire_type = tag & 0x07;
+
+            if (wire_type == 0) {
+                // Varint
+                uint64_t val = 0;
+                unsigned s = 0;
+                while (sub_off < sub_len) {
+                    uint8_t b = sub[sub_off++];
+                    val |= (uint64_t)(b & 0x7F) << s;
+                    s += 7;
+                    if (!(b & 0x80))
+                        break;
+                }
+                if (field_num == 1) op.item_id = val;
+                else if (field_num == 2) op.new_class = (uint32_t)val;
+                else if (field_num == 3) op.new_slot = (uint32_t)val;
+                else if (field_num == 4) op.style_index = (uint32_t)val;
+            } else {
+                // Unknown wire type, skip this sub-message
+                break;
+            }
+        }
+
+        offset += (size_t)sub_len;
+        equip_ops.push_back(op);
+    }
+
+    return true;
+}
+
+// --- GBE_ApplyDotaUnlockStyleBitmask ---
+// Updates an item's attr 400 (unlocked styles bitmask) by OR-ing in the
+// style_index bit. If attr 400 doesn't exist, creates it with all bits set
+// (0xFFFFFFFF, LAN behavior = unlock all styles). Also sets item.style
+// to the requested index.
+bool GBE_ApplyDotaUnlockStyleBitmask(Econ_Item &item, uint32 style_index)
+{
+    // Set the item's current style
+    item.style = static_cast<uint8>(style_index);
+
+    // Find or create attr 400 (unlocked styles bitmask)
+    for (auto &attr : item.attributes) {
+        if (attr.def == 400u) {
+            uint32_t current_val = 0;
+            if (attr.value_bytes.size() >= 4) {
+                memcpy(&current_val, attr.value_bytes.data(), 4);
+            }
+            current_val |= (1u << style_index);
+            attr.value_bytes.assign(reinterpret_cast<const char *>(&current_val), 4);
+            return true;
+        }
+    }
+
+    // Attr 400 not found, create it with all bits set (LAN behavior)
+    Econ_Item_Attribute unlock_attr;
+    unlock_attr.def = 400u;
+    uint32_t val = 0xFFFFFFFFu;
+    unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&val), 4);
+    unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+    item.attributes.push_back(unlock_attr);
+    return true;
+}
+
+// --- GBE_BuildSOSingleObjectFromItem ---
+// Serializes an Econ_Item into a CMsgSOSingleObject protobuf message string.
+// type_id is set to 1 (econ item), object_data is the item's GC protobuf
+// serialization.
+bool GBE_BuildSOSingleObjectFromItem(const Econ_Item &item, const CSteamID &steam_id, std::string &output)
+{
+    CSOEconItem proto_item;
+    proto_item.set_id(item.id);
+    proto_item.set_account_id(steam_id.GetAccountID());
+    proto_item.set_def_index(item.def);
+    proto_item.set_inventory(item.inv_pos);
+    proto_item.set_quantity(item.quantity);
+    proto_item.set_level(item.level);
+    proto_item.set_quality((uint32)item.quality);
+    proto_item.set_flags(item.flags);
+    proto_item.set_origin(item.origin);
+    proto_item.set_in_use(item.in_use);
+    proto_item.set_style(item.style);
+    proto_item.set_original_id(item.original_id);
+
+    CMsgSOSingleObject so_msg;
+    so_msg.set_type_id(1);
+    so_msg.set_object_data(proto_item.SerializeAsString());
+    so_msg.set_version(0);
+
+    output = so_msg.SerializeAsString();
+    return true;
+}

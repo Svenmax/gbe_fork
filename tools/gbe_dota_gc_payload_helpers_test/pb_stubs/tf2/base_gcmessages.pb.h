@@ -52,7 +52,12 @@ public:
     const CMsgSOCacheSubscribed_Object &objects(int index) const { (void)index; static CMsgSOCacheSubscribed_Object obj; return obj; }
 
     // Serialization
-    std::string SerializeAsString() const { return m_data; }
+    std::string SerializeAsString() const {
+        std::string out;
+        for (size_t i = 0; i < 4; ++i)
+            out.push_back(static_cast<char>(i + 1));
+        return out;
+    }
     bool ParseFromString(const std::string &data) { m_data = data; return true; }
     bool ParseFromArray(const void *data, int size) { m_data.assign(static_cast<const char*>(data), size); return true; }
     bool AppendToString(std::string *output) const { *output += m_data; return true; }
@@ -100,6 +105,29 @@ public:
     std::string SerializeAsString() const { return {}; }
     bool ParseFromArray(const void *data, int size) { (void)data; (void)size; return false; }
     bool ParseFromString(const std::string &data) { (void)data; return false; }
+};
+
+// CMsgSOSingleObject - used by GBE_BuildSOSingleObjectFromItem()
+class CMsgSOSingleObject
+{
+public:
+    void set_type_id(uint32_t v) { type_id = v; }
+    void set_object_data(const std::string &data) { object_data = data; }
+    void set_version(uint64_t v) { version = v; }
+    void set_owner(uint64_t v) { owner = v; }
+
+    std::string SerializeAsString() const {
+        std::string out;
+        for (size_t i = 0; i < 4; ++i)
+            out.push_back(static_cast<char>(i + 1));
+        return out;
+    }
+    bool AppendToString(std::string *output) const { *output += SerializeAsString(); return true; }
+
+    uint32_t type_id{};
+    std::string object_data;
+    uint64_t version{};
+    uint64_t owner{};
 };
 
 }} // namespace gamecoordinator::tf2

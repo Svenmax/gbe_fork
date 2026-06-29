@@ -656,6 +656,136 @@ TEST_CASE(test_patch_dota_practice_lobby_launch_template)
 }
 
 // =====================================================================
+// Test: GBE_ParseDotaEquipOps
+// =====================================================================
+
+TEST_CASE(test_parse_dota_equip_ops)
+{
+    // Build a body with 2 equip ops:
+    // field 1 (tag 0x0a), sub-message containing:
+    //   field 1 (varint) = 123456789, field 2 (varint) = 1, field 3 (varint) = 0
+    std::vector<uint8> body;
+
+    // Op 1: item_id=123456789, class=1, slot=0, style=3
+    {
+        std::string sub;
+        gbe::proto_wire::append_varint_field(sub, 1, 123456789ULL);
+        gbe::proto_wire::append_varint_field(sub, 2, 1u);
+        gbe::proto_wire::append_varint_field(sub, 3, 0u);
+        gbe::proto_wire::append_varint_field(sub, 4, 3u);
+        body.push_back(0x0a);
+        body.push_back(static_cast<uint8>(sub.size()));
+        body.insert(body.end(), sub.begin(), sub.end());
+    }
+
+    // Op 2: item_id=987654321, class=2, slot=1, no style (default 255)
+    {
+        std::string sub;
+        gbe::proto_wire::append_varint_field(sub, 1, 987654321ULL);
+        gbe::proto_wire::append_varint_field(sub, 2, 2u);
+        gbe::proto_wire::append_varint_field(sub, 3, 1u);
+        body.push_back(0x0a);
+        body.push_back(static_cast<uint8>(sub.size()));
+        body.insert(body.end(), sub.begin(), sub.end());
+    }
+
+    std::vector<GBE_DotaEquipOp> ops;
+    bool result = GBE_ParseDotaEquipOps(body.data(), body.size(), ops);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(ops.size() == 2);
+
+    // Op 1
+    EXPECT_TRUE(ops[0].item_id == 123456789ULL);
+    EXPECT_TRUE(ops[0].new_class == 1u);
+    EXPECT_TRUE(ops[0].new_slot == 0u);
+    EXPECT_TRUE(ops[0].style_index == 3u);
+
+    // Op 2 (style should default to 255)
+    EXPECT_TRUE(ops[1].item_id == 987654321ULL);
+    EXPECT_TRUE(ops[1].new_class == 2u);
+    EXPECT_TRUE(ops[1].new_slot == 1u);
+    EXPECT_TRUE(ops[1].style_index == 255u);
+
+    // Empty body
+    std::vector<GBE_DotaEquipOp> empty_ops;
+    EXPECT_FALSE(GBE_ParseDotaEquipOps(nullptr, 0, empty_ops));
+}
+
+// =====================================================================
+// Test: GBE_ApplyDotaUnlockStyleBitmask
+// =====================================================================
+
+TEST_CASE(test_apply_dota_unlock_style_bitmask)
+{
+    // Case 1: Item without attr 400 -> creates with all bits set
+    Econ_Item item1{};
+    item1.id = 12345;
+    bool result1 = GBE_ApplyDotaUnlockStyleBitmask(item1, 2u);
+    EXPECT_TRUE(result1);
+    EXPECT_TRUE(item1.style == 2);
+    EXPECT_TRUE(item1.attributes.size() == 1);
+    EXPECT_TRUE(item1.attributes[0].def == 400u);
+
+    // Verify all bits set (0xFFFFFFFF)
+    uint32_t val = 0;
+    memcpy(&val, item1.attributes[0].value_bytes.data(), 4);
+    EXPECT_TRUE(val == 0xFFFFFFFFu);
+
+    // Case 2: Item with existing attr 400 -> OR in new bit
+    Econ_Item item2{};
+    item2.id = 67890;
+    // Pre-set attr 400 with value 0x00000001 (bit 0 set)
+    Econ_Item_Attribute attr;
+    attr.def = 400u;
+    uint32_t initial_val = 0x00000001u;
+    attr.value_bytes.assign(reinterpret_cast<const char *>(&initial_val), 4);
+    attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+    item2.attributes.push_back(attr);
+
+    bool result2 = GBE_ApplyDotaUnlockStyleBitmask(item2, 3u);
+    EXPECT_TRUE(result2);
+    EXPECT_TRUE(item2.style == 3);
+    EXPECT_TRUE(item2.attributes.size() == 1); // no new attr added
+
+    // Verify bit 3 was OR-ed in: 0x00000001 | 0x00000008 = 0x00000009
+    uint32_t val2 = 0;
+    memcpy(&val2, item2.attributes[0].value_bytes.data(), 4);
+    EXPECT_TRUE(val2 == 0x00000009u);
+
+    // Case 3: Second unlock on same item should accumulate bits
+    GBE_ApplyDotaUnlockStyleBitmask(item2, 5u);
+    uint32_t val3 = 0;
+    memcpy(&val3, item2.attributes[0].value_bytes.data(), 4);
+    EXPECT_TRUE(val3 == 0x00000029u); // 0x09 | (1<<5) = 0x29
+}
+
+// =====================================================================
+// Test: GBE_BuildSOSingleObjectFromItem
+// =====================================================================
+
+TEST_CASE(test_build_so_single_object_from_item)
+{
+    Econ_Item item{};
+    item.id = 0x5000000100000001ULL;
+    item.def = 1234;
+    item.level = 5;
+    item.quality = static_cast<EItemQuality>(4);
+    item.inv_pos = 3;
+    item.quantity = 1;
+    item.flags = 0;
+    item.origin = 2;
+    item.in_use = false;
+    item.original_id = 0x5000000100000001ULL;
+    item.style = 0;
+
+    CSteamID steam_id(76561198000000000ULL);
+    std::string output;
+    bool result = GBE_BuildSOSingleObjectFromItem(item, steam_id, output);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(!output.empty());
+}
+
+// =====================================================================
 // Main entry point
 // =====================================================================
 
@@ -732,7 +862,16 @@ int main()
     test_patch_dota_practice_lobby_cache_subscribed_template_state();
     test_patch_dota_practice_lobby_launch_template();
 
-    std::printf("[22/22] All payload helper tests complete.\n\n");
+    std::printf("[22/25] GBE_ParseDotaEquipOps...\n");
+    test_parse_dota_equip_ops();
+
+    std::printf("[24/25] GBE_ApplyDotaUnlockStyleBitmask...\n");
+    test_apply_dota_unlock_style_bitmask();
+
+    std::printf("[25/25] GBE_BuildSOSingleObjectFromItem...\n");
+    test_build_so_single_object_from_item();
+
+    std::printf("All payload helper tests complete.\n\n");
 
     std::printf("Results: %d/%d passed, %d failed\n",
         g_tests_passed, g_tests_run, g_tests_failed);

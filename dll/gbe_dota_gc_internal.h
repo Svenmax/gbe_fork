@@ -624,4 +624,28 @@ bool GBE_BuildDirectDotaClientWelcome(uint64 steam_id, uint32 app_id, uint32 acc
 
 bool GBE_ComposeDotaClientWelcome(uint64 steam_id, uint32 app_id, uint32 account_id, const GBE_DotaHelloContext &context, std::string &message);
 
+// --- Extracted pure functions from gbe_dota_handlers.cpp ---
+
+struct GBE_DotaEquipOp {
+    uint64_t item_id{};
+    uint32_t new_class{};
+    uint32_t new_slot{};
+    uint32_t style_index{255u};
+};
+
+// Parses repeated equip operations from a ClientToGCEquipItemsRequest body.
+// Body layout: repeated field 1 (tag 0x0a, length-delimited) sub-messages,
+// each containing varint fields 1=item_id, 2=new_class, 3=new_slot, 4=style_index.
+bool GBE_ParseDotaEquipOps(const uint8 *body, size_t body_size, std::vector<GBE_DotaEquipOp> &equip_ops);
+
+// Updates an item's attr 400 (unlocked styles bitmask) by OR-ing in the
+// style_index bit. If attr 400 doesn't exist, creates it with all bits set
+// (LAN behavior). Also sets item.style to the requested index.
+// Returns true if the item was found and modified.
+bool GBE_ApplyDotaUnlockStyleBitmask(Econ_Item &item, uint32 style_index);
+
+// Builds a CMsgSOSingleObject serialized string from an Econ_Item.
+// type_id is set to 1, object_data is the item's protobuf serialization.
+bool GBE_BuildSOSingleObjectFromItem(const Econ_Item &item, const CSteamID &steam_id, std::string &output);
+
 #endif // __INCLUDED_GBE_DOTA_GC_INTERNAL_H__

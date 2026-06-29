@@ -1732,30 +1732,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaUnlockItemStyleRequest(const uint8 *b
     if (unlock_item_id != 0 && unlock_style_index != 255u) {
         for (Econ_Item &item : items) {
             if (item.id == unlock_item_id) {
-                // Also update item.style to the requested style
-                item.style = static_cast<uint8>(unlock_style_index);
-                // Find or create attr 400
-                bool found_attr = false;
-                for (auto &attr : item.attributes) {
-                    if (attr.def == 400u) {
-                        uint32_t current_val = 0;
-                        if (attr.value_bytes.size() >= 4) {
-                            memcpy(&current_val, attr.value_bytes.data(), 4);
-                        }
-                        current_val |= (1u << unlock_style_index);
-                        attr.value_bytes.assign(reinterpret_cast<const char *>(&current_val), 4);
-                        found_attr = true;
-                        break;
-                    }
-                }
-                if (!found_attr) {
-                    Econ_Item_Attribute unlock_attr;
-                    unlock_attr.def = 400u;
-                    uint32_t val = 0xFFFFFFFFu; // unlock all styles in LAN
-                    unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&val), 4);
-                    unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
-                    item.attributes.push_back(unlock_attr);
-                }
+                GBE_ApplyDotaUnlockStyleBitmask(item, unlock_style_index);
                 // Push SO update immediately (emsg=22 CMsgSOSingleObject) via push_incoming_now
                 {
                     uint32 msg_type_so = ESOMsg::k_ESOMsg_Update | protobuf_mask;
@@ -2526,26 +2503,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                     items.push_back(item);
 
                     // Notify client via SOCreate (msg 21 = k_ESOMsg_Create)
-                    CSOEconItem proto_item;
-                    proto_item.set_id(new_item_id);
-                    proto_item.set_account_id(account_id);
-                    proto_item.set_def_index(purchased_def);
-                    proto_item.set_inventory(seq);
-                    proto_item.set_quantity(1);
-                    proto_item.set_level(1);
-                    proto_item.set_quality(4);
-                    proto_item.set_flags(0);
-                    proto_item.set_origin(2);
-                    proto_item.set_in_use(false);
-                    proto_item.set_style(0);
-                    proto_item.set_original_id(new_item_id);
-
-                    CMsgSOSingleObject create_msg;
-                    create_msg.set_type_id(1);
-                    create_msg.set_object_data(proto_item.SerializeAsString());
-                    create_msg.set_version(0);
-
-                    std::string create_body = create_msg.SerializeAsString();
+                    std::string create_body;
+                    GBE_BuildSOSingleObjectFromItem(item, player_steam_id, create_body);
                     std::string create_response;
                     gbe::gc_message::build_dota_zero_header_payload(21u, create_body, create_response);
                     push_incoming_now(21u | GBE_kProtoMask, create_response);
@@ -2677,25 +2636,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 new_item.style = 0;
                 items.push_back(new_item);
 
-                CSOEconItem proto_item;
-                proto_item.set_id(new_item_id);
-                proto_item.set_account_id(account_id);
-                proto_item.set_def_index(granted_def);
-                proto_item.set_inventory(seq);
-                proto_item.set_quantity(1);
-                proto_item.set_level(1);
-                proto_item.set_quality(4);
-                proto_item.set_flags(0);
-                proto_item.set_origin(8);
-                proto_item.set_in_use(false);
-                proto_item.set_style(0);
-                proto_item.set_original_id(new_item_id);
-
-                CMsgSOSingleObject create_msg;
-                create_msg.set_type_id(1);
-                create_msg.set_object_data(proto_item.SerializeAsString());
-                create_msg.set_version(0);
-                std::string create_body = create_msg.SerializeAsString();
+                std::string create_body;
+                GBE_BuildSOSingleObjectFromItem(new_item, player_steam_id, create_body);
                 std::string create_response;
                 gbe::gc_message::build_dota_zero_header_payload(21u, create_body, create_response);
                 push_incoming_now(21u | GBE_kProtoMask, create_response);
@@ -2776,25 +2718,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 new_item.style = 0;
                 items.push_back(new_item);
 
-                CSOEconItem proto_item;
-                proto_item.set_id(new_item_id);
-                proto_item.set_account_id(account_id);
-                proto_item.set_def_index(gdef);
-                proto_item.set_inventory(seq);
-                proto_item.set_quantity(1);
-                proto_item.set_level(1);
-                proto_item.set_quality(4);
-                proto_item.set_flags(0);
-                proto_item.set_origin(8);
-                proto_item.set_in_use(false);
-                proto_item.set_style(0);
-                proto_item.set_original_id(new_item_id);
-
-                CMsgSOSingleObject create_msg;
-                create_msg.set_type_id(1);
-                create_msg.set_object_data(proto_item.SerializeAsString());
-                create_msg.set_version(0);
-                std::string create_body = create_msg.SerializeAsString();
+                std::string create_body;
+                GBE_BuildSOSingleObjectFromItem(new_item, player_steam_id, create_body);
                 std::string create_response;
                 gbe::gc_message::build_dota_zero_header_payload(21u, create_body, create_response);
                 push_incoming_now(21u | GBE_kProtoMask, create_response);
@@ -2866,25 +2791,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 new_item.style = 0;
                 items.push_back(new_item);
 
-                CSOEconItem proto_item;
-                proto_item.set_id(new_item_id);
-                proto_item.set_account_id(account_id2);
-                proto_item.set_def_index(gdef);
-                proto_item.set_inventory(seq);
-                proto_item.set_quantity(1);
-                proto_item.set_level(1);
-                proto_item.set_quality(4);
-                proto_item.set_flags(0);
-                proto_item.set_origin(8);
-                proto_item.set_in_use(false);
-                proto_item.set_style(0);
-                proto_item.set_original_id(new_item_id);
-
-                CMsgSOSingleObject create_msg;
-                create_msg.set_type_id(1);
-                create_msg.set_object_data(proto_item.SerializeAsString());
-                create_msg.set_version(0);
-                std::string create_body = create_msg.SerializeAsString();
+                std::string create_body;
+                GBE_BuildSOSingleObjectFromItem(new_item, player_steam_id2, create_body);
                 std::string create_response;
                 gbe::gc_message::build_dota_zero_header_payload(21u, create_body, create_response);
                 push_incoming_now(21u | GBE_kProtoMask, create_response);
@@ -3047,50 +2955,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
 
 bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job) {
     // Parse the repeated equips (field 1, length-delimited sub-messages)
-    struct EquipOp { uint64_t item_id; uint32_t new_class; uint32_t new_slot; uint32_t style_index; };
-    std::vector<EquipOp> equip_ops;
-    {
-        size_t offset = 0;
-        while (offset < body_size) {
-            if (body[offset] != 0x0a) break;
-            offset++;
-            uint64_t sub_len = 0;
-            unsigned shift = 0;
-            while (offset < body_size) {
-                uint8_t b = body[offset++];
-                sub_len |= (uint64_t)(b & 0x7F) << shift;
-                shift += 7;
-                if (!(b & 0x80)) break;
-            }
-            if (offset + sub_len > body_size) break;
-            const uint8_t *sub = body + offset;
-            size_t sub_off = 0;
-            EquipOp op{0, 0, 0, 255};
-            while (sub_off < sub_len) {
-                uint8_t tag = sub[sub_off++];
-                uint32_t field_num = tag >> 3;
-                uint32_t wire_type = tag & 0x07;
-                if (wire_type == 0) {
-                    uint64_t val = 0;
-                    unsigned s = 0;
-                    while (sub_off < sub_len) {
-                        uint8_t b = sub[sub_off++];
-                        val |= (uint64_t)(b & 0x7F) << s;
-                        s += 7;
-                        if (!(b & 0x80)) break;
-                    }
-                    if (field_num == 1) op.item_id = val;
-                    else if (field_num == 2) op.new_class = (uint32_t)val;
-                    else if (field_num == 3) op.new_slot = (uint32_t)val;
-                    else if (field_num == 4) op.style_index = (uint32_t)val;
-                } else {
-                    break;
-                }
-            }
-            offset += (size_t)sub_len;
-            equip_ops.push_back(op);
-        }
-    }
+    std::vector<GBE_DotaEquipOp> equip_ops;
+    GBE_ParseDotaEquipOps(body, body_size, equip_ops);
 
     // Apply equip logic and track which items were modified
     std::unordered_set<uint64_t> modified_item_ids;
