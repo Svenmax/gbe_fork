@@ -78,4 +78,24 @@ build_and_run \
     dll/gbe_dota_custom_lobby_http.cpp \
     dll/gbe_proto_wire.cpp
 
+printf '[build] %s\n' gbe_dota_gc_payload_helpers_test
+"$CXX_BIN" "${COMMON_FLAGS[@]}" \
+    -Itools/gbe_dota_gc_payload_helpers_test \
+    -Itools/gbe_dota_gc_payload_helpers_test/pb_stubs \
+    tools/gbe_dota_gc_payload_helpers_test/test_wrapper.cpp \
+    tools/gbe_dota_gc_payload_helpers_test/gbe_dota_gc_payload_helpers_test.cpp \
+    dll/gbe_proto_wire.cpp \
+    dll/gbe_gc_message_utils.cpp \
+    dll/gbe_dota_lobby_flow.cpp \
+    dll/gbe_dota_lobby_publish.cpp \
+    dll/gbe_dota_lobby_snapshot.cpp \
+    dll/gbe_dota_custom_game.cpp \
+    dll/gbe_dota_custom_lobby_http.cpp \
+    dll/gbe_dota_gc_wire.cpp \
+    dll/gbe_dota_gc_router.cpp \
+    -o "$BUILD_DIR/gbe_dota_gc_payload_helpers_test"
+
+printf '[run] %s\n' gbe_dota_gc_payload_helpers_test
+"$BUILD_DIR/gbe_dota_gc_payload_helpers_test"
+
 printf 'all GC offline tests passed\n'
