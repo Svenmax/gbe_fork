@@ -11,10 +11,13 @@ namespace gamecoordinator { namespace tf2 {
 class CMsgSOIDOwner
 {
 public:
-    void set_type(uint32_t type) { (void)type; }
-    void set_id(uint64_t id) { (void)id; }
-    uint32_t type() const { return 0; }
-    uint64_t id() const { return 0; }
+    void set_type(uint32_t type) { m_type = type; }
+    void set_id(uint64_t id) { m_id = id; }
+    uint32_t type() const { return m_type; }
+    uint64_t id() const { return m_id; }
+
+    uint32_t m_type{};
+    uint64_t m_id{};
 };
 
 class CMsgSOCacheSubscribed_Object
@@ -115,11 +118,19 @@ public:
     void set_object_data(const std::string &data) { object_data = data; }
     void set_version(uint64_t v) { version = v; }
     void set_owner(uint64_t v) { owner = v; }
+    CMsgSOIDOwner *mutable_owner_soid() { has_owner_soid_value = true; return &owner_soid; }
 
     std::string SerializeAsString() const {
         std::string out;
-        for (size_t i = 0; i < 4; ++i)
-            out.push_back(static_cast<char>(i + 1));
+        out.append(reinterpret_cast<const char *>(&type_id), sizeof(type_id));
+        out.append(reinterpret_cast<const char *>(&version), sizeof(version));
+        out.append(reinterpret_cast<const char *>(&owner), sizeof(owner));
+        out.push_back(has_owner_soid_value ? 1 : 0);
+        out.append(reinterpret_cast<const char *>(&owner_soid.m_type), sizeof(owner_soid.m_type));
+        out.append(reinterpret_cast<const char *>(&owner_soid.m_id), sizeof(owner_soid.m_id));
+        const uint32_t object_data_size = static_cast<uint32_t>(object_data.size());
+        out.append(reinterpret_cast<const char *>(&object_data_size), sizeof(object_data_size));
+        out.append(object_data);
         return out;
     }
     bool AppendToString(std::string *output) const { *output += SerializeAsString(); return true; }
@@ -128,6 +139,8 @@ public:
     std::string object_data;
     uint64_t version{};
     uint64_t owner{};
+    bool has_owner_soid_value{};
+    CMsgSOIDOwner owner_soid;
 };
 
 }} // namespace gamecoordinator::tf2

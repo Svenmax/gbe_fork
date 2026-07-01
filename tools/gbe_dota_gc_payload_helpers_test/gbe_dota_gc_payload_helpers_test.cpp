@@ -69,6 +69,7 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <functional>
 
 // =====================================================================
 // Test infrastructure
@@ -709,6 +710,33 @@ TEST_CASE(test_parse_dota_equip_ops)
     // Empty body
     std::vector<GBE_DotaEquipOp> empty_ops;
     EXPECT_FALSE(GBE_ParseDotaEquipOps(nullptr, 0, empty_ops));
+
+    // Malformed varint should fail instead of overflowing shifts.
+    std::vector<uint8> malformed_varint = { 0x0a, 0x0b };
+    for (int i = 0; i < 11; ++i)
+        malformed_varint.push_back(0x80);
+    EXPECT_FALSE(GBE_ParseDotaEquipOps(malformed_varint.data(), malformed_varint.size(), empty_ops));
+
+    // Truncated length-delimited sub-message should fail.
+    std::vector<uint8> truncated = { 0x0a, 0x05, 0x08, 0x01 };
+    EXPECT_FALSE(GBE_ParseDotaEquipOps(truncated.data(), truncated.size(), empty_ops));
+
+    // Missing required new_slot should fail rather than producing a default op.
+    std::string missing_slot_sub;
+    gbe::proto_wire::append_varint_field(missing_slot_sub, 1, 123ULL);
+    gbe::proto_wire::append_varint_field(missing_slot_sub, 2, 1u);
+    std::vector<uint8> missing_slot = { 0x0a, static_cast<uint8>(missing_slot_sub.size()) };
+    missing_slot.insert(missing_slot.end(), missing_slot_sub.begin(), missing_slot_sub.end());
+    EXPECT_FALSE(GBE_ParseDotaEquipOps(missing_slot.data(), missing_slot.size(), empty_ops));
+
+    // Class/slot are stored as uint16 in Econ_Item and must reject narrowing.
+    std::string class_overflow_sub;
+    gbe::proto_wire::append_varint_field(class_overflow_sub, 1, 123ULL);
+    gbe::proto_wire::append_varint_field(class_overflow_sub, 2, 70000u);
+    gbe::proto_wire::append_varint_field(class_overflow_sub, 3, 1u);
+    std::vector<uint8> class_overflow = { 0x0a, static_cast<uint8>(class_overflow_sub.size()) };
+    class_overflow.insert(class_overflow.end(), class_overflow_sub.begin(), class_overflow_sub.end());
+    EXPECT_FALSE(GBE_ParseDotaEquipOps(class_overflow.data(), class_overflow.size(), empty_ops));
 }
 
 // =====================================================================
@@ -757,6 +785,16 @@ TEST_CASE(test_apply_dota_unlock_style_bitmask)
     uint32_t val3 = 0;
     memcpy(&val3, item2.attributes[0].value_bytes.data(), 4);
     EXPECT_TRUE(val3 == 0x00000029u); // 0x09 | (1<<5) = 0x29
+
+    // Invalid style indexes must fail without changing style or bitmask.
+    EXPECT_FALSE(GBE_ApplyDotaUnlockStyleBitmask(item2, 32u));
+    EXPECT_TRUE(item2.style == 5);
+    uint32_t val4 = 0;
+    memcpy(&val4, item2.attributes[0].value_bytes.data(), 4);
+    EXPECT_TRUE(val4 == 0x00000029u);
+
+    EXPECT_FALSE(GBE_ApplyDotaUnlockStyleBitmask(item2, 255u));
+    EXPECT_TRUE(item2.style == 5);
 }
 
 // =====================================================================
@@ -777,12 +815,37 @@ TEST_CASE(test_build_so_single_object_from_item)
     item.in_use = false;
     item.original_id = 0x5000000100000001ULL;
     item.style = 0;
+    item.custom_name = "custom name";
+    item.custom_desc = "custom desc";
+    item.equip_states.insert_or_assign(1, 2);
+    Econ_Item_Attribute attr;
+    attr.def = 400u;
+    uint32_t attr_value = 0x00000003u;
+    attr.value_bytes.assign(reinterpret_cast<const char *>(&attr_value), 4);
+    attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+    item.attributes.push_back(attr);
 
     CSteamID steam_id(76561198000000000ULL);
     std::string output;
     bool result = GBE_BuildSOSingleObjectFromItem(item, steam_id, output);
     EXPECT_TRUE(result);
     EXPECT_TRUE(!output.empty());
+
+    auto contains_u64 = [](const std::string &data, uint64_t value) {
+        const char *needle = reinterpret_cast<const char *>(&value);
+        return data.find(std::string(needle, sizeof(value))) != std::string::npos;
+    };
+    auto contains_u32 = [](const std::string &data, uint32_t value) {
+        const char *needle = reinterpret_cast<const char *>(&value);
+        return data.find(std::string(needle, sizeof(value))) != std::string::npos;
+    };
+
+    EXPECT_TRUE(contains_u64(output, steam_id.ConvertToUint64()));
+    EXPECT_TRUE(contains_u64(output, item.id));
+    EXPECT_TRUE(contains_u32(output, item.def));
+    EXPECT_TRUE(output.find("custom name") != std::string::npos);
+    EXPECT_TRUE(output.find("custom desc") != std::string::npos);
+    EXPECT_TRUE(output.find(std::string(reinterpret_cast<const char *>(&attr_value), 4)) != std::string::npos);
 }
 
 // =====================================================================
@@ -793,82 +856,82 @@ int main()
 {
     std::printf("=== gbe_dota_gc_payload_helpers_test ===\n\n");
 
-    std::printf("[1/22] GBE_DescribeDotaLaunchPhase...\n");
+    std::printf("[1/24] GBE_DescribeDotaLaunchPhase...\n");
     test_describe_dota_launch_phase();
 
-    std::printf("[2/22] GBE_GetDotaReconnectContext...\n");
+    std::printf("[2/24] GBE_GetDotaReconnectContext...\n");
     test_get_dota_reconnect_context();
 
-    std::printf("[3/22] GBE_IsDotaArcadeLobbyActive...\n");
+    std::printf("[3/24] GBE_IsDotaArcadeLobbyActive...\n");
     test_is_dota_arcade_lobby_active();
 
-    std::printf("[4/22] GBE_DotaCustomGameDisplayName...\n");
+    std::printf("[4/24] GBE_DotaCustomGameDisplayName...\n");
     test_dota_custom_game_display_name();
 
-    std::printf("[5/22] GBE_RewriteAccountIdVarintInDirectProtoBody...\n");
+    std::printf("[5/24] GBE_RewriteAccountIdVarintInDirectProtoBody...\n");
     test_rewrite_account_id_varint();
 
-    std::printf("[6/22] GBE_TryPatchDotaAccountIdVarint...\n");
+    std::printf("[6/24] GBE_TryPatchDotaAccountIdVarint...\n");
     test_try_patch_dota_account_id_varint();
 
-    std::printf("[7/22] GBE_TryPatchDotaAccountIdFixed32...\n");
+    std::printf("[7/24] GBE_TryPatchDotaAccountIdFixed32...\n");
     test_try_patch_dota_account_id_fixed32();
 
-    std::printf("[8/22] GBE_PatchDotaLobbyTemplateIdentifiers...\n");
+    std::printf("[8/24] GBE_PatchDotaLobbyTemplateIdentifiers...\n");
     test_patch_dota_lobby_template_identifiers();
 
-    std::printf("[9/22] GBE_PatchDotaTemplateIdentifiers...\n");
+    std::printf("[9/24] GBE_PatchDotaTemplateIdentifiers...\n");
     test_patch_dota_template_identifiers();
 
-    std::printf("[10/22] GBE_ForceDotaLobbyUpdateOwnerSOID...\n");
+    std::printf("[10/24] GBE_ForceDotaLobbyUpdateOwnerSOID...\n");
     test_force_dota_lobby_update_owner_soid();
 
-    std::printf("[11/22] GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage...\n");
+    std::printf("[11/24] GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage...\n");
     test_prepare_dota_practice_lobby_launch_peripheral();
 
-    std::printf("[12/22] GBE_PrepareDotaPersonaStatePeripheralMessage...\n");
+    std::printf("[12/24] GBE_PrepareDotaPersonaStatePeripheralMessage...\n");
     test_prepare_dota_persona_state_peripheral();
 
-    std::printf("[13/22] GBE_AdaptDotaJoinChatChannelResponsePayload...\n");
+    std::printf("[13/24] GBE_AdaptDotaJoinChatChannelResponsePayload...\n");
     test_adapt_dota_join_chat_channel_response();
 
-    std::printf("[14/22] GBE_LogDotaSOCacheSubscribedSummary...\n");
+    std::printf("[14/24] GBE_LogDotaSOCacheSubscribedSummary...\n");
     test_log_dota_socache_subscribed_summary();
 
-    std::printf("[15/22] GBE_LogDotaResponsePacket...\n");
+    std::printf("[15/24] GBE_LogDotaResponsePacket...\n");
     test_log_dota_response_packet();
 
-    std::printf("[16/22] Const data tables...\n");
+    std::printf("[16/24] Const data tables...\n");
     test_const_data_tables();
 
-    std::printf("[17/22] GBE_ExtractDotaHelloContext...\n");
+    std::printf("[17/24] GBE_ExtractDotaHelloContext...\n");
     test_extract_dota_hello_context();
 
-    std::printf("[18/22] GBE_ExtractDirectDotaHelloContext...\n");
+    std::printf("[18/24] GBE_ExtractDirectDotaHelloContext...\n");
     test_extract_direct_dota_hello_context();
 
-    std::printf("[19/22] GBE_ExtractDirectDotaServerHelloContext...\n");
+    std::printf("[19/24] GBE_ExtractDirectDotaServerHelloContext...\n");
     test_extract_direct_dota_server_hello_context();
 
-    std::printf("[20/22] Hello/Welcome builders...\n");
+    std::printf("[20/24] Hello/Welcome builders...\n");
     test_build_direct_dota_client_welcome();
     test_compose_dota_client_welcome();
     test_build_direct_dota_server_welcome();
 
-    std::printf("[21/22] Payload adaptation functions...\n");
+    std::printf("[21/24] Payload adaptation functions...\n");
     test_is_dota_other_left_channel_payload();
     test_adapt_dota_top_custom_games_list_payload();
     test_prepare_dota_direct_replay_message();
     test_patch_dota_practice_lobby_cache_subscribed_template_state();
     test_patch_dota_practice_lobby_launch_template();
 
-    std::printf("[22/25] GBE_ParseDotaEquipOps...\n");
+    std::printf("[22/24] GBE_ParseDotaEquipOps...\n");
     test_parse_dota_equip_ops();
 
-    std::printf("[24/25] GBE_ApplyDotaUnlockStyleBitmask...\n");
+    std::printf("[23/24] GBE_ApplyDotaUnlockStyleBitmask...\n");
     test_apply_dota_unlock_style_bitmask();
 
-    std::printf("[25/25] GBE_BuildSOSingleObjectFromItem...\n");
+    std::printf("[24/24] GBE_BuildSOSingleObjectFromItem...\n");
     test_build_so_single_object_from_item();
 
     std::printf("All payload helper tests complete.\n\n");

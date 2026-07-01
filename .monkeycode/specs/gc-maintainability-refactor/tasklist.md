@@ -143,8 +143,8 @@
     - 每个新模块至少有一个离线测试入口或被现有离线测试覆盖。
     - 聚合测试脚本作为每次 GC 改动后的默认回归命令。
     - 默认回归命令：`tools/run_gc_offline_tests.sh`。
-    - 覆盖入口：`gc_message_utils_test`、`gbe_gc_config_test`、`gbe_proto_wire_test`、`gc_replay_test minimal`、`gc_replay_test practice_lobby`、`gbe_dota_lobby_flow_test`、`gbe_dota_custom_game_test`。
-    - 新增模块覆盖：router/outbound/state/launch plan 由 `gbe_proto_wire_test` 覆盖，GC config 由 `gbe_gc_config_test` 覆盖，custom lobby HTTP JSON 由 `gbe_dota_custom_game_test` 覆盖。
+    - 覆盖入口：`gc_message_utils_test`、`gbe_gc_config_test`、`gbe_proto_wire_test`、`gc_replay_test minimal`、`gc_replay_test practice_lobby`、`gc_replay_test chat_channel`、`gc_replay_test lobby_lifecycle`、`gc_replay_test game_flow`、`gc_replay_test cache_and_items`、`gc_replay_test wire_edge_cases`、`gbe_dota_lobby_flow_test`、`gbe_dota_custom_game_test`、`gbe_dota_gc_payload_helpers_test`。
+    - 新增模块覆盖：router/outbound/state/launch plan 由 `gbe_proto_wire_test` 覆盖，GC config 由 `gbe_gc_config_test` 覆盖，custom lobby HTTP JSON 由 `gbe_dota_custom_game_test` 覆盖，payload helper 与 handler 纯函数由 `gbe_dota_gc_payload_helpers_test` 覆盖。
   - [x] 12.3 记录行为兼容清单
     - 每个迁移阶段记录受影响 emsg、响应顺序、关键日志 reason、状态字段。
     - 用 fixture 或测试覆盖可稳定验证的部分。
@@ -157,3 +157,4 @@
   - 确保所有测试通过,如有疑问请询问用户
   - 已通过：`tools/run_gc_offline_tests.sh`。
   - 已通过：`git diff --check`。
+  - 审查修复后已通过：`tools/run_gc_offline_tests.sh`，payload helper 测试结果为 `92/92 passed`。

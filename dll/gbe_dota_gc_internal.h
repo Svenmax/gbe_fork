@@ -631,6 +631,9 @@ struct GBE_DotaEquipOp {
     uint32_t new_class{};
     uint32_t new_slot{};
     uint32_t style_index{255u};
+    bool has_item_id{};
+    bool has_new_class{};
+    bool has_new_slot{};
 };
 
 // Parses repeated equip operations from a ClientToGCEquipItemsRequest body.
@@ -641,11 +644,13 @@ bool GBE_ParseDotaEquipOps(const uint8 *body, size_t body_size, std::vector<GBE_
 // Updates an item's attr 400 (unlocked styles bitmask) by OR-ing in the
 // style_index bit. If attr 400 doesn't exist, creates it with all bits set
 // (LAN behavior). Also sets item.style to the requested index.
-// Returns true if the item was found and modified.
+// Returns true if style_index is in range and the item was modified.
 bool GBE_ApplyDotaUnlockStyleBitmask(Econ_Item &item, uint32 style_index);
 
 // Builds a CMsgSOSingleObject serialized string from an Econ_Item.
 // type_id is set to 1, object_data is the item's protobuf serialization.
 bool GBE_BuildSOSingleObjectFromItem(const Econ_Item &item, const CSteamID &steam_id, std::string &output);
+
+std::string GBE_SerializeEconItemToGcprotobuf(const Econ_Item &item, CSteamID steam_id, uint32 gc_version, bool is_portal2);
 
 #endif // __INCLUDED_GBE_DOTA_GC_INTERNAL_H__

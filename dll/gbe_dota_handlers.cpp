@@ -1732,7 +1732,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaUnlockItemStyleRequest(const uint8 *b
     if (unlock_item_id != 0 && unlock_style_index != 255u) {
         for (Econ_Item &item : items) {
             if (item.id == unlock_item_id) {
-                GBE_ApplyDotaUnlockStyleBitmask(item, unlock_style_index);
+                if (!GBE_ApplyDotaUnlockStyleBitmask(item, unlock_style_index)) {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_DIRECT",
+                        "2571 unlock: rejected invalid style_index=%u for item 0x%llx",
+                        unlock_style_index,
+                        static_cast<unsigned long long>(unlock_item_id)
+                    );
+                    return true;
+                }
                 // Push SO update immediately (emsg=22 CMsgSOSingleObject) via push_incoming_now
                 {
                     uint32 msg_type_so = ESOMsg::k_ESOMsg_Update | protobuf_mask;
@@ -2956,7 +2964,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
 bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job) {
     // Parse the repeated equips (field 1, length-delimited sub-messages)
     std::vector<GBE_DotaEquipOp> equip_ops;
-    GBE_ParseDotaEquipOps(body, body_size, equip_ops);
+    if (!GBE_ParseDotaEquipOps(body, body_size, equip_ops)) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "failed parsing direct 2569 EquipItems source_job=%llu body_size=%zu",
+            static_cast<unsigned long long>(source_job),
+            body_size
+        );
+        return true;
+    }
 
     // Apply equip logic and track which items were modified
     std::unordered_set<uint64_t> modified_item_ids;
@@ -2965,14 +2981,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         bool found_target = false;
         for (Econ_Item &item : items) {
             if (op.item_id != UINT64_MAX && op.item_id != 0 && item.id == op.item_id) {
-                item.equip_states.insert_or_assign(op.new_class, op.new_slot);
+                item.equip_states.insert_or_assign(static_cast<uint16>(op.new_class), static_cast<uint16>(op.new_slot));
                 if (op.style_index != 255u)
                     item.style = static_cast<uint8>(op.style_index);
                 modified_item_ids.insert(item.id);
                 found_target = true;
             } else {
-                auto it = item.equip_states.find(op.new_class);
-                if (it == item.equip_states.end() || it->second != op.new_slot)
+                auto it = item.equip_states.find(static_cast<uint16>(op.new_class));
+                if (it == item.equip_states.end() || it->second != static_cast<uint16>(op.new_slot))
                     continue;
                 item.equip_states.erase(it);
                 modified_item_ids.insert(item.id);
@@ -6197,5 +6213,3 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         &context.outer_session_field_raw
     );
 }
-
-

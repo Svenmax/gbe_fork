@@ -150,61 +150,7 @@ std::string Steam_Game_Coordinator::item_to_gcstruct(const Econ_Item &item, CSte
 
 std::string Steam_Game_Coordinator::item_to_gcprotobuf(const Econ_Item &item, CSteamID steam_id)
 {
-    CSOEconItem proto_item;
-    proto_item.set_id(item.id);
-    proto_item.set_account_id(steam_id.GetAccountID());
-    proto_item.set_inventory(item.inv_pos);
-    proto_item.set_def_index(item.def);
-    proto_item.set_quantity(item.quantity);
-    proto_item.set_level(item.level);
-    proto_item.set_quality(item.quality);
-    proto_item.set_flags(item.flags);
-    proto_item.set_origin(item.origin);
-
-    if (!item.custom_name.empty())
-        proto_item.set_custom_name(item.custom_name);
-
-    if (!item.custom_desc.empty())
-        proto_item.set_custom_desc(item.custom_desc);
-
-    proto_item.set_in_use(item.in_use);
-    proto_item.set_style(item.style);
-    proto_item.set_original_id(item.original_id);
-
-    // Only declare equipped_state presence when the item actually has equip
-    // data.  Setting contains_equipped_state=true on items with an empty
-    // equipped_state list causes the engine to "lock in" the item as
-    // unequipped in the SO cache established by the login CacheSubscribed.
-    // Subsequent emsg=26 (UpdateMultiple) cannot override this because the
-    // shared SO cache is already marked [in cache].  By omitting the flag
-    // for items without equip_states, the engine treats their equip status
-    // as unknown, allowing later updates to take effect.
-    if (!item.equip_states.empty()) {
-        proto_item.set_contains_equipped_state(true);
-        proto_item.set_contains_equipped_state_v2(true);
-    }
-
-    for (const auto &[class_id, slot_id] : item.equip_states) {
-        auto proto_equip = proto_item.add_equipped_state();
-        proto_equip->set_new_class(class_id);
-        proto_equip->set_new_slot(slot_id);
-    }
-
-    // Serialize all item attributes (including attr=400 for style unlock)
-    for (const Econ_Item_Attribute &attr : item.attributes) {
-        auto proto_attr = proto_item.add_attribute();
-        proto_attr->set_def_index(attr.def);
-        if (gc_version < 20130319 || is_portal2) {
-            // Derp.
-            uint32 value;
-            memcpy(&value, &attr.value, sizeof(uint32));
-            proto_attr->set_value(value);
-        } else {
-            proto_attr->set_value_bytes(attr.value_bytes);
-        }
-    }
-
-    return proto_item.SerializeAsString();
+    return GBE_SerializeEconItemToGcprotobuf(item, steam_id, gc_version, is_portal2);
 }
 
 
@@ -905,5 +851,4 @@ void Steam_Game_Coordinator::remove_user_items(CSteamID steam_id)
 
     callback_items_removed(steam_id);
 }
-
 

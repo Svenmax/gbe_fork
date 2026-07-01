@@ -2793,61 +2793,60 @@ bool GBE_ParseDotaEquipOps(const uint8 *body, size_t body_size, std::vector<GBE_
 
     size_t offset = 0;
     while (offset < body_size) {
-        // Each equip op is field 1, wire type 2 (length-delimited) -> tag = 0x0a
-        if (body[offset] != 0x0a)
-            break;
-        offset++;
+        gbe::proto_wire::Field outer{};
+        if (!gbe::proto_wire::read_next_field(body, body_size, offset, outer))
+            return false;
+        if (outer.number != 1u || outer.wire_type != 2u)
+            return false;
 
-        // Read varint length of the sub-message
-        uint64_t sub_len = 0;
-        unsigned shift = 0;
-        while (offset < body_size) {
-            uint8_t b = body[offset++];
-            sub_len |= (uint64_t)(b & 0x7F) << shift;
-            shift += 7;
-            if (!(b & 0x80))
-                break;
-        }
-        if (offset + sub_len > body_size)
-            break;
-
-        // Parse the sub-message fields
-        const uint8_t *sub = body + offset;
+        const uint8_t *sub = body + outer.value_offset;
+        const size_t sub_len = outer.value_size;
         size_t sub_off = 0;
         GBE_DotaEquipOp op{};
         op.style_index = 255u;  // default: no style change
 
         while (sub_off < sub_len) {
-            uint8_t tag = sub[sub_off++];
-            uint32_t field_num = tag >> 3;
-            uint32_t wire_type = tag & 0x07;
+            gbe::proto_wire::Field field{};
+            if (!gbe::proto_wire::read_next_field(sub, sub_len, sub_off, field))
+                return false;
 
-            if (wire_type == 0) {
-                // Varint
-                uint64_t val = 0;
-                unsigned s = 0;
-                while (sub_off < sub_len) {
-                    uint8_t b = sub[sub_off++];
-                    val |= (uint64_t)(b & 0x7F) << s;
-                    s += 7;
-                    if (!(b & 0x80))
-                        break;
-                }
-                if (field_num == 1) op.item_id = val;
-                else if (field_num == 2) op.new_class = (uint32_t)val;
-                else if (field_num == 3) op.new_slot = (uint32_t)val;
-                else if (field_num == 4) op.style_index = (uint32_t)val;
-            } else {
-                // Unknown wire type, skip this sub-message
-                break;
+            if (field.number < 1u || field.number > 4u)
+                continue;
+
+            if (field.wire_type != 0u)
+                return false;
+
+            uint64_t val = 0;
+            if (!gbe::proto_wire::read_field_uint64(sub, sub_len, field, val))
+                return false;
+
+            if (field.number == 1u) {
+                op.item_id = val;
+                op.has_item_id = true;
+            } else if (field.number == 2u) {
+                if (val > UINT16_MAX)
+                    return false;
+                op.new_class = static_cast<uint32_t>(val);
+                op.has_new_class = true;
+            } else if (field.number == 3u) {
+                if (val > UINT16_MAX)
+                    return false;
+                op.new_slot = static_cast<uint32_t>(val);
+                op.has_new_slot = true;
+            } else if (field.number == 4u) {
+                if (val > UINT8_MAX)
+                    return false;
+                op.style_index = static_cast<uint32_t>(val);
             }
         }
 
-        offset += (size_t)sub_len;
+        if (!op.has_item_id || !op.has_new_class || !op.has_new_slot)
+            return false;
+
         equip_ops.push_back(op);
     }
 
-    return true;
+    return !equip_ops.empty();
 }
 
 // --- GBE_ApplyDotaUnlockStyleBitmask ---
@@ -2857,6 +2856,9 @@ bool GBE_ParseDotaEquipOps(const uint8 *body, size_t body_size, std::vector<GBE_
 // to the requested index.
 bool GBE_ApplyDotaUnlockStyleBitmask(Econ_Item &item, uint32 style_index)
 {
+    if (style_index >= 32u)
+        return false;
+
     // Set the item's current style
     item.style = static_cast<uint8>(style_index);
 
@@ -2887,25 +2889,63 @@ bool GBE_ApplyDotaUnlockStyleBitmask(Econ_Item &item, uint32 style_index)
 // Serializes an Econ_Item into a CMsgSOSingleObject protobuf message string.
 // type_id is set to 1 (econ item), object_data is the item's GC protobuf
 // serialization.
-bool GBE_BuildSOSingleObjectFromItem(const Econ_Item &item, const CSteamID &steam_id, std::string &output)
+std::string GBE_SerializeEconItemToGcprotobuf(const Econ_Item &item, CSteamID steam_id, uint32 gc_version, bool is_portal2)
 {
     CSOEconItem proto_item;
     proto_item.set_id(item.id);
     proto_item.set_account_id(steam_id.GetAccountID());
-    proto_item.set_def_index(item.def);
     proto_item.set_inventory(item.inv_pos);
+    proto_item.set_def_index(item.def);
     proto_item.set_quantity(item.quantity);
     proto_item.set_level(item.level);
-    proto_item.set_quality((uint32)item.quality);
+    proto_item.set_quality(item.quality);
     proto_item.set_flags(item.flags);
     proto_item.set_origin(item.origin);
+
+    if (!item.custom_name.empty())
+        proto_item.set_custom_name(item.custom_name);
+
+    if (!item.custom_desc.empty())
+        proto_item.set_custom_desc(item.custom_desc);
+
     proto_item.set_in_use(item.in_use);
     proto_item.set_style(item.style);
     proto_item.set_original_id(item.original_id);
 
+    if (!item.equip_states.empty()) {
+        proto_item.set_contains_equipped_state(true);
+        proto_item.set_contains_equipped_state_v2(true);
+    }
+
+    for (const auto &[class_id, slot_id] : item.equip_states) {
+        auto proto_equip = proto_item.add_equipped_state();
+        proto_equip->set_new_class(class_id);
+        proto_equip->set_new_slot(slot_id);
+    }
+
+    for (const Econ_Item_Attribute &attr : item.attributes) {
+        auto proto_attr = proto_item.add_attribute();
+        proto_attr->set_def_index(attr.def);
+        if (gc_version < 20130319 || is_portal2) {
+            uint32 value;
+            memcpy(&value, &attr.value, sizeof(uint32));
+            proto_attr->set_value(value);
+        } else {
+            proto_attr->set_value_bytes(attr.value_bytes);
+        }
+    }
+
+    return proto_item.SerializeAsString();
+}
+
+bool GBE_BuildSOSingleObjectFromItem(const Econ_Item &item, const CSteamID &steam_id, std::string &output)
+{
     CMsgSOSingleObject so_msg;
+    auto *owner = so_msg.mutable_owner_soid();
+    owner->set_type(1u);
+    owner->set_id(steam_id.ConvertToUint64());
     so_msg.set_type_id(1);
-    so_msg.set_object_data(proto_item.SerializeAsString());
+    so_msg.set_object_data(GBE_SerializeEconItemToGcprotobuf(item, steam_id, 0u, false));
     so_msg.set_version(0);
 
     output = so_msg.SerializeAsString();

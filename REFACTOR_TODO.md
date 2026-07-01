@@ -3,7 +3,8 @@
 > 本文件记录对 `dll/steam_game_coordinator.cpp`(原始 15029 行的"巨石"文件)进行分阶段拆分重构的完整进度与后续计划,便于会话切换后快速恢复上下文。
 >
 > **当前分支**: `trae/agent-inRF11`
-> **最后提交**: `daa5bea` — refactor(gc): remove dead code and redundant forward declaration (cleanup)
+> **最后提交**: `d097614` — refactor: extract 3 pure functions from gbe_dota_handlers.cpp
+> **当前工作区**: 已应用 GC 重构审查修复,详见 `.monkeycode/specs/gc-refactor-review-fixes/tasklist.md`
 
 ---
 
@@ -257,29 +258,45 @@
 - 累计缩减:原始 15029 行 → 当前 2278 行,**缩减 84.8%**
 - **构建一次通过**(commit `daa5bea`,无需修复)
 
+### Phase 2.13 — 提取 handler 纯函数并完成审查修复(2026-06-29 / 2026-07-01,当前工作区)
+
+提交:`d097614` refactor: extract 3 pure functions from gbe_dota_handlers.cpp
+
+- 新增/强化 `dll/gbe_dota_gc_payload_helpers.cpp` 中 3 个 handler 纯函数:`GBE_ParseDotaEquipOps`、`GBE_ApplyDotaUnlockStyleBitmask`、`GBE_BuildSOSingleObjectFromItem`。
+- 审查修复已完成:
+  - `GBE_ParseDotaEquipOps` 改为复用 `gbe::proto_wire::read_next_field` / `read_field_uint64`,畸形 varint、截断 sub-message、缺失必需字段、class/slot 窄化越界均返回失败。
+  - `GBE_HandleDotaEquipItemsRequest` 检查解析结果,解析失败时记录日志并停止处理该请求。
+  - `GBE_ApplyDotaUnlockStyleBitmask` 增加 `style_index < 32` 校验,避免左移未定义行为和 `uint8` 截断写入。
+  - `GBE_HandleDotaUnlockItemStyleRequest` 检查 unlock helper 返回值,非法 style 不推送 SO update。
+  - 新增 `GBE_SerializeEconItemToGcprotobuf` 作为共享 item serializer,`item_to_gcprotobuf` 与 `GBE_BuildSOSingleObjectFromItem` 复用同一字段映射。
+  - `GBE_BuildSOSingleObjectFromItem` 设置 `owner_soid { type=1, id=steam64 }`,并保留 attributes、equip states、custom name/desc 等字段。
+  - `gbe_dota_gc_payload_helpers_test` 补充 malformed equip op、style 越界、SO owner/item 字段断言,测试结果从 `77/77` 提升到 `92/92`。
+- 当前关键文件行数:`dll/steam_game_coordinator.cpp` 1490 行,`dll/gbe_dota_handlers.cpp` 6215 行,`dll/gbe_dota_gc_payload_helpers.cpp` 2953 行,`dll/gbe_dota_gc_internal.h` 656 行,`tools/gbe_dota_gc_payload_helpers_test/gbe_dota_gc_payload_helpers_test.cpp` 943 行。
+- 已通过:`tools/run_gc_offline_tests.sh`。
+
 ---
 
 ## 3. 当前文件布局
 
-> 以下反映清理提交 `daa5bea` 后的状态。
+> 以下反映 Phase 2.13 审查修复后的当前工作区状态。
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
-| [dll/steam_game_coordinator.cpp](file:///workspace/dll/steam_game_coordinator.cpp) | 2278 | GC 类核心:基础设施(SendMessage_/RetrieveMessage/RunCallbacks)、lobby-state 状态机、路由分发、`handle_dota_client_message`、模板 patch 工具(`GBE_PatchDotaTemplateIdentifiers`/`GBE_ReplayDotaPracticeLobbyOfficial26Payload`)。不再含 payload 改写 free function(已归并至 payload_helpers TU) |
-| [dll/gbe_dota_handlers.cpp](file:///workspace/dll/gbe_dota_handlers.cpp) | 6335 | 62 个 `GBE_HandleDota*` 请求 handler + 23 个 handler-only static 符号 |
-| [dll/gbe_dota_gc_payload_helpers.cpp](file:///workspace/dll/gbe_dota_gc_payload_helpers.cpp) | 1989 | **全部 payload 改写逻辑集中地**:28 个 file-scope static helpers(Phase 2.9)+ 6 个 payload 改写 free function(Phase 2.12 追加) |
+| [dll/steam_game_coordinator.cpp](file:///workspace/dll/steam_game_coordinator.cpp) | 1490 | GC 类核心:基础设施(SendMessage_/RetrieveMessage/RunCallbacks)、lobby-state 状态机、路由分发、`handle_dota_client_message`、模板 patch 工具。 |
+| [dll/gbe_dota_handlers.cpp](file:///workspace/dll/gbe_dota_handlers.cpp) | 6215 | 62 个 `GBE_HandleDota*` 请求 handler + handler-only static 符号,已将 3 个 error-prone 纯逻辑块下沉到 payload helper。 |
+| [dll/gbe_dota_gc_payload_helpers.cpp](file:///workspace/dll/gbe_dota_gc_payload_helpers.cpp) | 2953 | payload 改写逻辑集中地 + Phase 2.13 handler 纯函数,包含 equip op 解析、style bitmask、SO single object 构造与共享 item serializer。 |
 | [dll/gbe_dota_welcome_coordinator.cpp](file:///workspace/dll/gbe_dota_welcome_coordinator.cpp) | 979 | 5 个 welcome/hello/login-sync 成员函数 + 1 个 List X static(`GBE_kDotaCacheSubscribedTemplate`)(Phase 2.8 新增) |
-| [dll/gbe_dota_inventory_coordinator.cpp](file:///workspace/dll/gbe_dota_inventory_coordinator.cpp) | 909 | 20 个 inventory/item 成员函数 + 1 个 List X static(`ser_varstring`)(Phase 2.7 新增) |
+| [dll/gbe_dota_inventory_coordinator.cpp](file:///workspace/dll/gbe_dota_inventory_coordinator.cpp) | 854 | 20 个 inventory/item 成员函数 + 1 个 List X static(`ser_varstring`),`item_to_gcprotobuf` 复用共享 item serializer。 |
 | [dll/gbe_dota_lobby_launch_coordinator.cpp](file:///workspace/dll/gbe_dota_lobby_launch_coordinator.cpp) | 722 | 13 个 lobby launch/teardown 流程成员函数 + 2 个 List X static 符号(Phase 2.6 新增) |
 | [dll/gbe_dota_lobby_flow_coordinator.cpp](file:///workspace/dll/gbe_dota_lobby_flow_coordinator.cpp) | 702 | 10 个 lobby-flow helper 成员函数 + 4 个 List X static 常量(Phase 2.4b 新增) |
 | [dll/gbe_dota_lobby_snapshot_coordinator.cpp](file:///workspace/dll/gbe_dota_lobby_snapshot_coordinator.cpp) | 683 | 10 个 lobby-snapshot/build helper 成员函数(Phase 2.5 新增) |
 | [dll/gbe_dota_network_callbacks.cpp](file:///workspace/dll/gbe_dota_network_callbacks.cpp) | 426 | 6 个 network_callback_* 成员函数(inventory request/response、item update/deletion、respawn request、顶层 dispatcher)(Phase 2.10 新增) |
 | [dll/gbe_dota_connection_lifecycle.cpp](file:///workspace/dll/gbe_dota_connection_lifecycle.cpp) | 157 | 2 个连接生命周期成员函数(`on_client_connected`/`on_client_disconnected`)(Phase 2.11 新增) |
 | [dll/gbe_dota_lobby_state_coordinator.cpp](file:///workspace/dll/gbe_dota_lobby_state_coordinator.cpp) | 1701 | lobby-state 成员管理 |
-| [dll/gbe_dota_gc_internal.h](file:///workspace/dll/gbe_dota_gc_internal.h) | 629 | 跨 TU 共享的内部头:外部链接符号声明、`GBE_DotaServerHelloContext`/`GBE_DotaHelloContext` 结构、`ser_var`/`deser_var` 模板 |
-| **合计** | **17181** | |
+| [dll/gbe_dota_gc_internal.h](file:///workspace/dll/gbe_dota_gc_internal.h) | 656 | 跨 TU 共享的内部头:外部链接符号声明、`GBE_DotaServerHelloContext`/`GBE_DotaHelloContext` 结构、`ser_var`/`deser_var` 模板、Phase 2.13 helper 声明 |
+| **合计** | **17538** | |
 
-> 清理变更:主文件 -6 行(删除冗余前向声明),payload TU -13 行(删除死代码 `GBE_DotaGenericLobbyEntry`)。原始主文件 15029 行 → 当前 2278 行,累计缩减 84.8%。
+> 当前主文件 1490 行。原始主文件 15029 行 → 当前 1490 行,累计缩减 90.1%。
 
 主文件 `steam_game_coordinator.cpp` 当前剩余的 `Steam_Game_Coordinator::` 成员函数布局(行号 → 函数):
 
@@ -316,20 +333,20 @@ L2123  RunCallbacks
 
 ## 4. 待完成任务
 
-### Phase 2.5 / 2.6 / 2.7 / 2.8 / 2.9 / 2.10 / 2.11 / 2.12 — 已完成 ✅
+### Phase 2.5 / 2.6 / 2.7 / 2.8 / 2.9 / 2.10 / 2.11 / 2.12 / 2.13 — 已完成 ✅
 
-详见 §2 完成记录。提交:`a9be325`(Phase 2.5)、`88e5cb4`(Phase 2.6)、`be7d394`+`cf3b94f`+`fe08e73`(Phase 2.7)、`adc8e04`(Phase 2.8)、`65a0466`+`4d1d5c5`(Phase 2.9)、`a4e7eaf`(Phase 2.10)、`ca6fc2a`(Phase 2.11)、`4d86398`(Phase 2.12)。
+详见 §2 完成记录。提交:`a9be325`(Phase 2.5)、`88e5cb4`(Phase 2.6)、`be7d394`+`cf3b94f`+`fe08e73`(Phase 2.7)、`adc8e04`(Phase 2.8)、`65a0466`+`4d1d5c5`(Phase 2.9)、`a4e7eaf`(Phase 2.10)、`ca6fc2a`(Phase 2.11)、`4d86398`(Phase 2.12)、`d097614`(Phase 2.13)。
 
-### 重构收尾状态(2026-06-28)
+### 重构收尾状态(2026-07-01)
 
-Phase 2.12 完成后,主文件降至 2284 行(累计缩减 84.8%),已达成模块化目标。剩余主文件内容均为 GC 类核心职责,继续拆分 ROI 为负:
+Phase 2.13 审查修复后,主文件为 1490 行(累计缩减 90.1%),已达成模块化目标。剩余主文件内容均为 GC 类核心职责,继续拆分 ROI 为负:
 
 - **核心基础设施**(`SendMessage_`/`RetrieveMessage`/`IsMessageAvailable`/`RunCallbacks`):GC 类入口,应留在主文件
 - **`handle_dota_client_message`**(~200 行):顶层分发中枢,应留在主文件
 - **lobby-state 状态机 + 初始化**:内聚于 GC 类生命周期,拆出得不偿失
 - **少量模板 patch 工具**(`GBE_PatchDotaTemplateIdentifiers`/`GBE_ReplayDotaPracticeLobbyOfficial26Payload`):被主文件成员函数直接调用,留在主文件减少跨 TU 跳转
 
-**重构标记为完成。** 后续如需进一步优化,应转向其他维度(如 handlers.cpp 的 62 个 handler 按业务域分组索引、或文档化各 TU 的依赖关系图),而非继续拆分主文件。
+**重构标记为完成。** 后续如需进一步优化,应转向其他维度,例如 handlers.cpp 的 62 个 handler 按业务域分组索引、payload helper 的剩余 smoke 测试强断言化、或文档化各 TU 的依赖关系图。
 
 ---
 
