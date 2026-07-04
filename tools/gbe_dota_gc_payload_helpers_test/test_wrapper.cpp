@@ -38,5 +38,22 @@
 // types to satisfy the test's references.
 #include "dll/gbe_dota_payload_item_helpers.cpp"
 
+// Include the pure wire payload helpers TU inline (Phase 3.2.2).
+// gbe_dota_gc_payload_helpers.cpp no longer defines the 14 pure wire helpers
+// (GBE_PatchDotaLobbyTemplateIdentifiers, GBE_ForceDotaLobbyCacheOwnerSOID,
+// GBE_PrepareDotaWelcomeBody, GBE_PrepareDotaDirectReplayMessage,
+// GBE_RewriteAccountIdVarintInDirectProtoBody, GBE_TryPatchDotaAccountIdVarint,
+// GBE_TryPatchDotaAccountIdFixed32, GBE_PatchDotaTemplateIdentifiers,
+// GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState,
+// GBE_PatchDotaPracticeLobbyLaunchTemplate, GBE_ForceDotaLobbyUpdateOwnerSOID,
+// GBE_PatchDotaLobbyTemplateIdentifiersIfPresent, GBE_PatchDotaWelcomeAccountObjects,
+// GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage,
+// GBE_PrepareDotaPersonaStatePeripheralMessage) -- they moved to
+// dll/gbe_dota_payload_wire_helpers.cpp. We compile that TU inline here against
+// the stub CMsgProtoBufHeader / CMsgSOCacheSubscribed / CMsgSOMultipleObjects /
+// CMsgSOIDOwner / CMsgServerWelcome types so the test's references resolve to
+// the real wire logic instead of duplicated stubs.
+#include "dll/gbe_dota_payload_wire_helpers.cpp"
+
 // Include the actual payload_helpers TU inline
 #include "dll/gbe_dota_gc_payload_helpers.cpp"
