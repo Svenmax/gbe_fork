@@ -104,24 +104,31 @@ using GBE_Dota7034RequestShape = gbe::proto_wire::Dota7034RequestShape;
 //
 // The Dota post-login dispatcher routes incoming GC requests (identified by
 // `inner_emsg`) to the appropriate `GBE_HandleDota*Request` member function.
-// Before Phase 3.3 this was a 17-arm switch where every arm repeated the same
+// Before Phase 3.3 this was a 16-arm switch where every arm repeated the same
 // shape: `log_lobby_request(); return GBE_HandleDotaXxx(...);`. Adding a new
 // handler meant editing the switch and re-deriving the call site by hand.
 //
-// The table below replaces that switch. Each entry maps an `emsg` to a tiny
-// adapter function that translates the canonical `DotaGcRequestContext` into
-// the handler's existing signature. Handler signatures are intentionally NOT
-// normalized: the 17 handlers have heterogeneous parameter lists (some take
-// `request_job_id` / `has_request_job`, some don't; `Launch` reorders them).
-// Forcing a common signature would require semantic edits across chat/lobby
-// handlers that have no per-domain offline test coverage (Tier B deferred per
-// Phase 3.1 tiering). The adapter indirection keeps the table scannable
-// without touching handler bodies.
+// The table inside GBE_DispatchDotaPostLoginRequest replaces that switch. Each
+// entry maps an `emsg` to a tiny adapter lambda that translates the canonical
+// `DotaGcRequestContext` into the handler's existing signature. Handler
+// signatures are intentionally NOT normalized: the 16 handlers have
+// heterogeneous parameter lists (some take `request_job_id` / `has_request_job`,
+// some don't; `Launch` reorders them). Forcing a common signature would require
+// semantic edits across chat/lobby handlers that have no per-domain offline
+// test coverage (Tier B deferred per Phase 3.1 tiering). The adapter
+// indirection keeps the table scannable without touching handler bodies.
+//
+// The adapters are defined as local lambdas inside the member function (not as
+// free functions in an anonymous namespace) because the handlers are private
+// members of Steam_Game_Coordinator. A lambda defined inside a member function
+// can access that class's private members; a free function cannot. Each
+// adapter is a captureless lambda so it converts to a plain function pointer
+// for cheap table storage.
 //
 // Adding a new simple post-login handler now requires only:
 //   1. implement `GBE_HandleDotaXxxRequest` in its domain .cpp
 //   2. declare it in `dll/dll/steam_game_coordinator.h`
-//   3. add one `adapt_xxx` function and one table entry below
+//   3. add one `adapt_xxx` lambda and one table entry below
 // No switch arm edits, no `log_lobby_request` duplication.
 //
 // Special-case handlers that need custom context shaping (e.g. direct-path
@@ -129,103 +136,96 @@ using GBE_Dota7034RequestShape = gbe::proto_wire::Dota7034RequestShape;
 // wrapped-path abandon / signout / custom-game in `GBE_HandleDotaWrappedPostLoginRequest`)
 // stay as explicit `if` branches in their own functions — they were never part
 // of this switch and do not belong in the table.
-namespace {
-
-struct DotaPostLoginHandlerEntry {
-    std::uint32_t emsg;
-    bool (*adapter)(Steam_Game_Coordinator *self,
-                    const gbe::dota_gc_router::DotaGcRequestContext &context,
-                    const std::string *outer_session_field_raw);
-};
-
-inline bool adapt_join_chat_channel(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaJoinChatChannelRequest(c.body, c.wrapped, sess);
-}
-inline bool adapt_practice_lobby_create(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaPracticeLobbyCreateRequest(c.body, c.request_job_id, c.has_request_job, c.wrapped, sess);
-}
-inline bool adapt_lobby_list(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaLobbyListRequest(c.has_request_job, c.request_job_id, c.wrapped, sess);
-}
-inline bool adapt_custom_lobby_list(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaCustomLobbyListRequest(c.body, c.wrapped, sess);
-}
-inline bool adapt_friend_practice_lobby_list(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaFriendPracticeLobbyListRequest(c.wrapped, sess);
-}
-inline bool adapt_invite_to_lobby(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaInviteToLobbyRequest(c.body, c.wrapped, sess);
-}
-inline bool adapt_lobby_invite_response(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaLobbyInviteResponseRequest(c.body, c.wrapped, sess);
-}
-inline bool adapt_practice_lobby_join(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaPracticeLobbyJoinRequest(c.body, c.request_job_id, c.has_request_job, c.wrapped, sess);
-}
-inline bool adapt_practice_lobby_leave(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaPracticeLobbyLeaveRequest(c.wrapped, sess);
-}
-inline bool adapt_practice_lobby_launch(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaPracticeLobbyLaunchRequest(c.body, c.wrapped, sess, c.has_request_job, c.request_job_id);
-}
-inline bool adapt_practice_lobby_set_details(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaPracticeLobbySetDetailsRequest(c.body, c.wrapped, sess);
-}
-inline bool adapt_practice_lobby_set_team_slot(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaPracticeLobbySetTeamSlotRequest(c.body, c.request_job_id, c.has_request_job, c.wrapped, sess);
-}
-inline bool adapt_practice_lobby_kick(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaPracticeLobbyKickRequest(c.body, c.wrapped, sess);
-}
-inline bool adapt_practice_lobby_join_broadcast(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest(c.body, c.request_job_id, c.has_request_job, c.wrapped, sess);
-}
-inline bool adapt_lobby_update_broadcast_info(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest(c.body, c.wrapped, sess);
-}
-inline bool adapt_practice_lobby_close_broadcast(Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) {
-    return self->GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest(c.body, c.wrapped, sess);
-}
-
-// Order follows the original switch arm order (chat -> lobby lifecycle ->
-// broadcast) to preserve the historical scan sequence. Linear lookup is fine:
-// the table has 17 entries and runs at most once per inbound GC message.
-constexpr DotaPostLoginHandlerEntry kDotaPostLoginHandlers[] = {
-    { GBE_kDotaJoinChatChannel,                     &adapt_join_chat_channel           },
-    { GBE_kDotaPracticeLobbyCreate,                 &adapt_practice_lobby_create       },
-    { GBE_kDotaLobbyList,                           &adapt_lobby_list                  },
-    { GBE_kDotaCustomLobbyListRequest,              &adapt_custom_lobby_list           },
-    { GBE_kDotaFriendPracticeLobbyListRequest,      &adapt_friend_practice_lobby_list  },
-    { GBE_kGCInviteToLobby,                         &adapt_invite_to_lobby             },
-    { GBE_kGCLobbyInviteResponse,                   &adapt_lobby_invite_response       },
-    { GBE_kDotaPracticeLobbyJoin,                   &adapt_practice_lobby_join         },
-    { GBE_kDotaPracticeLobbyLeave,                  &adapt_practice_lobby_leave        },
-    { GBE_kDotaPracticeLobbyLaunch,                 &adapt_practice_lobby_launch       },
-    { GBE_kDotaPracticeLobbySetDetails,             &adapt_practice_lobby_set_details  },
-    { GBE_kDotaPracticeLobbySetTeamSlot,            &adapt_practice_lobby_set_team_slot},
-    { GBE_kDotaPracticeLobbyKick,                   &adapt_practice_lobby_kick         },
-    { GBE_kDotaPracticeLobbyJoinBroadcastChannel,   &adapt_practice_lobby_join_broadcast },
-    { GBE_kDotaLobbyUpdateBroadcastChannelInfo,     &adapt_lobby_update_broadcast_info },
-    { GBE_kDotaPracticeLobbyCloseBroadcastChannel,  &adapt_practice_lobby_close_broadcast },
-};
-
-const DotaPostLoginHandlerEntry *find_dota_post_login_handler(std::uint32_t emsg)
-{
-    for (const auto &entry : kDotaPostLoginHandlers) {
-        if (entry.emsg == emsg)
-            return &entry;
-    }
-    return nullptr;
-}
-
-} // namespace
 
 bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc_router::DotaGcRequestContext &context)
 {
     if (!context.valid)
         return false;
 
-    const DotaPostLoginHandlerEntry *entry = find_dota_post_login_handler(context.inner_emsg);
+    using Adapter = bool (*)(Steam_Game_Coordinator *self,
+                             const gbe::dota_gc_router::DotaGcRequestContext &c,
+                             const std::string *outer_session_field_raw);
+    struct Entry { std::uint32_t emsg; Adapter adapter; };
+
+    auto adapt_join_chat_channel = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaJoinChatChannelRequest(c.body, c.wrapped, sess);
+    };
+    auto adapt_practice_lobby_create = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaPracticeLobbyCreateRequest(c.body, c.request_job_id, c.has_request_job, c.wrapped, sess);
+    };
+    auto adapt_lobby_list = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaLobbyListRequest(c.has_request_job, c.request_job_id, c.wrapped, sess);
+    };
+    auto adapt_custom_lobby_list = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaCustomLobbyListRequest(c.body, c.wrapped, sess);
+    };
+    auto adapt_friend_practice_lobby_list = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaFriendPracticeLobbyListRequest(c.wrapped, sess);
+    };
+    auto adapt_invite_to_lobby = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaInviteToLobbyRequest(c.body, c.wrapped, sess);
+    };
+    auto adapt_lobby_invite_response = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaLobbyInviteResponseRequest(c.body, c.wrapped, sess);
+    };
+    auto adapt_practice_lobby_join = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaPracticeLobbyJoinRequest(c.body, c.request_job_id, c.has_request_job, c.wrapped, sess);
+    };
+    auto adapt_practice_lobby_leave = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaPracticeLobbyLeaveRequest(c.wrapped, sess);
+    };
+    auto adapt_practice_lobby_launch = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaPracticeLobbyLaunchRequest(c.body, c.wrapped, sess, c.has_request_job, c.request_job_id);
+    };
+    auto adapt_practice_lobby_set_details = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaPracticeLobbySetDetailsRequest(c.body, c.wrapped, sess);
+    };
+    auto adapt_practice_lobby_set_team_slot = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaPracticeLobbySetTeamSlotRequest(c.body, c.request_job_id, c.has_request_job, c.wrapped, sess);
+    };
+    auto adapt_practice_lobby_kick = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaPracticeLobbyKickRequest(c.body, c.wrapped, sess);
+    };
+    auto adapt_practice_lobby_join_broadcast = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest(c.body, c.request_job_id, c.has_request_job, c.wrapped, sess);
+    };
+    auto adapt_lobby_update_broadcast_info = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest(c.body, c.wrapped, sess);
+    };
+    auto adapt_practice_lobby_close_broadcast = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
+        return self->GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest(c.body, c.wrapped, sess);
+    };
+
+    // Order follows the original switch arm order (chat -> lobby lifecycle ->
+    // broadcast) to preserve the historical scan sequence. Linear lookup is
+    // fine: the table has 16 entries and runs at most once per inbound GC
+    // message. `static const` avoids re-initializing on every call.
+    static const Entry kTable[] = {
+        { GBE_kDotaJoinChatChannel,                     adapt_join_chat_channel           },
+        { GBE_kDotaPracticeLobbyCreate,                 adapt_practice_lobby_create       },
+        { GBE_kDotaLobbyList,                           adapt_lobby_list                  },
+        { GBE_kDotaCustomLobbyListRequest,              adapt_custom_lobby_list           },
+        { GBE_kDotaFriendPracticeLobbyListRequest,      adapt_friend_practice_lobby_list  },
+        { GBE_kGCInviteToLobby,                         adapt_invite_to_lobby             },
+        { GBE_kGCLobbyInviteResponse,                   adapt_lobby_invite_response       },
+        { GBE_kDotaPracticeLobbyJoin,                   adapt_practice_lobby_join         },
+        { GBE_kDotaPracticeLobbyLeave,                  adapt_practice_lobby_leave        },
+        { GBE_kDotaPracticeLobbyLaunch,                 adapt_practice_lobby_launch       },
+        { GBE_kDotaPracticeLobbySetDetails,             adapt_practice_lobby_set_details  },
+        { GBE_kDotaPracticeLobbySetTeamSlot,            adapt_practice_lobby_set_team_slot},
+        { GBE_kDotaPracticeLobbyKick,                   adapt_practice_lobby_kick         },
+        { GBE_kDotaPracticeLobbyJoinBroadcastChannel,   adapt_practice_lobby_join_broadcast },
+        { GBE_kDotaLobbyUpdateBroadcastChannelInfo,     adapt_lobby_update_broadcast_info },
+        { GBE_kDotaPracticeLobbyCloseBroadcastChannel,  adapt_practice_lobby_close_broadcast },
+    };
+
+    const Entry *entry = nullptr;
+    for (const auto &e : kTable) {
+        if (e.emsg == context.inner_emsg) {
+            entry = &e;
+            break;
+        }
+    }
     if (!entry)
         return false;
 
