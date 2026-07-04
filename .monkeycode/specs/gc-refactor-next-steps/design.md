@@ -32,6 +32,78 @@
 4. 逐步收缩 `gbe_dota_gc_internal.h` 的共享声明边界。
 5. 保持每一步小批量可验证，默认验证命令为 `tools/run_gc_offline_tests.sh --full` 和 `git diff --check`。
 
+## 推进原则
+
+后续执行以“先保护行为，再移动逻辑”为主线。每轮变更都应能回答三个问题：当前保护了哪个可观察行为、移动了哪个逻辑边界、验证命令证明了哪些不变式。
+
+执行约束：
+
+- 每轮只选择一个 stage、一个 handler 或一个小型共享边界。
+- 进入逻辑重构前，先补齐对应 handler 的顺序测试或 payload/helper focused tests。
+- 生产入口保持 `Steam_Game_Coordinator` 对外签名稳定，内部逐步收口。
+- 副作用执行顺序保持显式代码路径，避免隐藏到析构、回调、全局 setter 或通用框架中。
+- 大型 canned payload、template replay bytes、protobuf patch 行为先补 ownership 和 focused tests，再考虑迁移。
+- 发现测试 harness 需要大幅增加 fake 行为时，优先收缩 harness seam 或补 wire/helper 测试。
+- 每轮结束同步更新 `tasklist.md` 的状态、验证命令和残余风险。
+
+## 阶段路线
+
+### Stage 0：基线保护和清理
+
+目标是让后续每一步具备稳定验证入口。优先完成构建警告清理、Premake 可选测试工程验证、测试脚本和工程源列表一致性检查。
+
+进入条件：当前分支离线测试通过，工作区只包含本轮目标文件。
+
+退出条件：默认/full GC 离线测试通过，`git diff --check` 通过，涉及 Premake 的变更在具备工具环境记录验证结果。
+
+### Stage 1：Inventory pilot
+
+目标是在 `GBE_HandleDotaEquipItemsRequest` 上验证 plan/executor 模式。该 handler 已有较强测试覆盖，适合作为后续逻辑收口模板。
+
+进入条件：equip basic、empty、full forward 测试能证明当前副作用顺序、server GC 参数、job/session 和 reason。
+
+退出条件：planner 无 I/O 副作用，executor 保持原顺序执行，相关 handler tests 和 full offline tests 通过。
+
+### Stage 2：测试覆盖加深和 harness 收缩
+
+目标是继续加深 match/lobby/chat 关键路径测试，同时控制 `stubs.h` 膨胀。该阶段为 lobby state machine 和 protocol DTO 化提供安全垫。
+
+进入条件：新增测试能使用现有 recorder 或轻量字段扩展表达关键行为。
+
+退出条件：7034、lobby lifecycle、7070/8052/8053 的关键顺序和 payload 字段具备回归保护，harness section 或拆分边界清晰。
+
+### Stage 3：Lobby 和 launch state decision 收口
+
+目标是把 abandon、teardown、launch、reconnect 等状态判断提取成小型 decision helper。handler 继续负责执行和日志。
+
+进入条件：对应路径已有顺序测试和 state mutation 时机断言。
+
+退出条件：decision helper 只返回结构化决策，handler 按原顺序执行 response、publish、pending flag、network/server GC 副作用。
+
+### Stage 4：Protocol DTO 和 routing 收口
+
+目标是减少裸 wire 字段读取和 direct/wrapped routing 重复逻辑。优先处理 7034、7070、8052、8053、7035 的 request DTO 和简单 request-response adapter。
+
+进入条件：DTO parse 失败、字段缺失、重复字段、truncated varint 等边界有 focused tests。
+
+退出条件：handler 使用结构化 DTO 或 request context，unsupported emsg fallback、wrapped/direct job/session 透传保持测试保护。
+
+### Stage 5：Global state、dependency seam 和 persistence 边界
+
+目标是收敛 extern/global state 读写点，并把 save、network、server GC、lobby publish 等外部依赖放入显式 seam。
+
+进入条件：已有状态读写点清单，目标状态组对应 handler tests 覆盖关键行为。
+
+退出条件：至少一个状态组通过函数级访问接口读写，persistence 只在 executor/coordinator 层触发，错误分类和 fallback 语义有文档或测试覆盖。
+
+### Stage 6：持续治理和 CI 固化
+
+目标是把已经稳定的离线测试、审计和 Premake gate 收口为可重复执行流程，并持续治理 template/replay、logging/trace、平台构建等价性。
+
+进入条件：本地脚本和文档 checklist 已稳定使用。
+
+退出条件：适合 CI 的 gate 已明确，默认主 CI 成本可控，`--with-gc-tests` 路径在工具可用环境可验证。
+
 ## 非目标
 
 - 不一次性引入大型 class hierarchy、Command framework 或通用 executor 框架。
@@ -329,6 +401,20 @@ premake5 --with-gc-tests gmake2
 - 纯 helper 先放在当前 domain `.cpp` anonymous namespace，等复用明确后再提取文件。
 - 不通过“让 stub 返回成功”掩盖真实行为；stub 应记录参数，测试断言关键字段。
 - 遇到测试难以表达的真实 protobuf 行为时，优先补 wire/helper 测试，再推进 handler 重构。
+
+### 停止推进信号
+
+出现以下任一情况时，本轮应停在测试或诊断层，不继续扩大重构范围：
+
+- 新增测试需要大量模拟生产逻辑才能通过。
+- handler 重构导致 action 顺序、job/session、reason、payload size 或 publish 时机出现非预期变化。
+- planner 开始直接调用 coordinator、network、file save、server GC 或 global setter。
+- 为了复用而引入跨领域公共 executor，但只有一个调用点。
+- canned payload 输出变化缺少 focused test 或 fixture 兼容说明。
+
+### 回退策略
+
+每轮变更应保持可局部回退：测试补强提交和生产逻辑重构提交分开；当生产逻辑重构失败时，保留新增测试和文档，回退对应生产改动后重新选择更小切片。
 
 ## 交付标准
 

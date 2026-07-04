@@ -1,5 +1,73 @@
 # GC 重构后续实施任务清单
 
+## 推进索引
+
+按阶段推进，完成当前阶段的必要任务和验证后再进入下一阶段。标记为 `*` 的任务是增强项，可在必要任务完成后执行。
+
+### Stage 0：基线保护和清理
+
+- 覆盖任务：6、11、14、16。
+- 目标：确认验证入口稳定，减少构建噪音，保证 Premake 可选测试工程和 shell 离线测试源列表一致。
+- 必要验证：`tools/run_gc_offline_tests.sh`、`tools/run_gc_offline_tests.sh --full`、`git diff --check`。
+- 具备工具环境追加验证：`premake5 --with-gc-tests gmake2`。
+- 完成标准：默认/full 离线测试通过，Premake GC test target 仍为可选生成，任务清单记录残余平台验证风险。
+
+### Stage 1：Inventory action-list pilot
+
+- 覆盖任务：1。
+- 目标：在 `GBE_HandleDotaEquipItemsRequest` 上验证 pure planner + explicit executor 模式。
+- 必要前置：equip basic、empty、full forward 测试能证明 response、save、server GC forward、network broadcast、snapshot refresh 的顺序。
+- 必要验证：默认/full 离线测试和 `git diff --check`。
+- 完成标准：planner 不触达 coordinator/network/file/server GC，executor 显式保持原副作用顺序，相关 reason/job/session 断言保持通过。
+
+### Stage 2：测试覆盖加深和 harness 收缩
+
+- 覆盖任务：2、3、4、13.4。
+- 目标：加深 7034、lobby lifecycle、launch loading 路径测试，同时控制 `stubs.h` 膨胀。
+- 必要前置：新增测试只需要 recorder 字段或轻量 stub 扩展即可表达行为。
+- 必要验证：默认/full 离线测试和 `git diff --check`。
+- 完成标准：match/lobby/chat 关键顺序、payload 关键字段、reason 稳定性具备测试保护，harness 分区清晰。
+
+### Stage 3：Lobby 和 launch state decision 收口
+
+- 覆盖任务：8、9。
+- 目标：把 abandon、teardown、launch、reconnect 的状态判断收口到无副作用 decision helper 和函数级 state access。
+- 必要前置：对应路径已有顺序测试和 state mutation 时机断言。
+- 必要验证：默认/full 离线测试、`git diff --check`，涉及声明迁移时执行 `python3 tools/_audit_gc_refactor.py`。
+- 完成标准：decision helper 只返回结构化结果，handler/executor 继续显式执行 response、publish、pending flag 和外部副作用。
+
+### Stage 4：Protocol DTO 和 routing 收口
+
+- 覆盖任务：7、10。
+- 目标：减少裸 wire 字段读取和 direct/wrapped routing 重复 adapter。
+- 必要前置：DTO parse 边界和 routing fallback 具备 focused tests。
+- 必要验证：默认/full 离线测试、`git diff --check`，涉及新增 helper 或声明迁移时执行审计脚本。
+- 完成标准：7034、7070、8052、8053、7035 使用结构化 request/response 输入，unsupported emsg 和 job/session 透传保持测试保护。
+
+### Stage 5：Dependency seam、persistence 和 template 治理
+
+- 覆盖任务：12、15。
+- 目标：收敛 save、network、server GC、lobby publish 等外部依赖边界，并治理 template/replay ownership。
+- 必要前置：外部依赖触点和 template/replay 常量 ownership 已盘点。
+- 必要验证：默认/full 离线测试、`git diff --check`，template 变更需有 focused tests 或 fixture 对齐。
+- 完成标准：pure helper 不写文件、不发送网络、不触发 server GC；canned payload 的用途、patch 点和兼容风险可追踪。
+
+### Stage 6：持续治理和 CI 固化
+
+- 覆盖任务：5、11、14。
+- 目标：在前面阶段稳定后继续收缩 internal header、固化验证 pipeline 和平台构建等价性。
+- 必要前置：测试覆盖能保护被迁移的 helper 或 header 边界。
+- 必要验证：默认/full 离线测试、`git diff --check`、`python3 tools/_audit_gc_refactor.py`，具备工具环境执行 Premake gate。
+- 完成标准：新增文件和声明迁移进入正确构建入口，默认 CI 成本保持可控，可选 GC test path 可验证。
+
+## 执行规则
+
+- 每轮只处理一个 stage 中的一个必要任务或一个增强任务。
+- 测试补强和生产逻辑重构分开提交。
+- 任务完成时勾选对应条目，并在条目下记录实际验证命令。
+- 出现顺序、job/session、payload、reason 或 publish 时机变化时，先停在测试诊断，不继续扩大范围。
+- 如果某个任务需要显著扩大 stub 行为，先拆小任务补 wire/helper 测试或 recorder 字段。
+
 - [ ] 1. Inventory action-list pilot
   - [ ] 1.1 记录 `GBE_HandleDotaEquipItemsRequest` 当前副作用顺序
     - 目标文件：`dll/gbe_dota_inventory_handlers.cpp`
