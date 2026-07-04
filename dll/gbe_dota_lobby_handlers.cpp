@@ -77,6 +77,260 @@ using GBE_DotaPracticeLobbySetTeamSlotRequest = gbe::proto_wire::DotaPracticeLob
 using GBE_DotaPracticeLobbyKickRequest = gbe::proto_wire::DotaPracticeLobbyKickRequest;
 
 
+// ============================================================================
+// Side-effect order documentation (see dll/gbe_dota_action_model.h for the
+// canonical action type and cross-domain ordering invariants).
+// ============================================================================
+//
+// Cross-handler boundary note: this file owns per-handler request
+// parsing/mutation/response/side-effect sequencing. Cross-handler lobby state
+// machine consolidation (launch/teardown/reconnect transitions sequenced
+// across handlers) belongs to Phase 3.4, not here.
+//
+// GBE_HandleDotaPracticeLobbyCreateRequest (emsg 7038 -> 24 + 7055):
+//   1. Parse pre-reset request, apply custom game details (pure)
+//   2. compose_create_lobby_reset_plan (pure decision)
+//   3. ResetGCMEMORY("7038_create", true, true) [coordinator]
+//   4. If reset_plan.unsubscribe_previous_practice_lobby:
+//      push_incoming_now(25, cache unsubscribed) [coordinator]
+//   5. Re-parse request, compose_create_lobby_plan (pure) -> GBE_local_lobby
+//   6. If custom_game_create: clear reconnect context [coordinator mutation]
+//   7. CreateLobbyImmediate (generic lobby) [coordinator + matchmaking]
+//   8. PublishDotaPracticeLobbyLocalMemberData + SyncSettingsLobby +
+//      PublishSharedDotaLobbyState + PublishDotaPracticeLobbyMetadata [publish]
+//   9. Build 24 template (pure: GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay)
+//   10. Build 7055 (pure: build_dota_practice_lobby_response_payload)
+//   11. RecordDotaLobbyCacheSubscriptionState [coordinator]
+//   12. PushDotaResponse(24) [coordinator: push_incoming_now]
+//   13. PushDotaResponse(7055) [coordinator]
+//   Invariant: reset(25) precedes new-lobby(24) precedes ack(7055).
+//   Custom game state is normalized before generic lobby creation.
+//
+// GBE_HandleDotaLobbyListRequest (emsg 7040 -> 7055 + optional 24/25):
+//   1. Compute finishing_leave from pending_leave_after_7040 [coordinator read]
+//   2. If !active || lobby_id==0: build 7055 empty-list payload, push, return
+//   3. If finishing_leave: push_incoming_now(25) [coordinator], clear pending
+//   4. Build 24 cache subscribed (pure)
+//   5. Build 7055 lobby list payload (pure)
+//   6. push_incoming_now(24) [coordinator]
+//   7. push_incoming_now(7055) [coordinator]
+//   Invariant: leave-teardown(25) precedes list(24) precedes ack(7055).
+//
+// GBE_HandleDotaCustomLobbyListRequest (emsg 7046 -> 7055):
+//   1. Parse: custom_game_id (field 1)
+//   2. Build 7055 custom lobby list payload (pure)
+//   3. PushDotaResponse(7055) [coordinator]
+//
+// GBE_HandleDotaFriendPracticeLobbyListRequest (emsg 7048 -> 7055):
+//   1. Build 7055 friend lobby list payload (pure)
+//   2. PushDotaResponse(7055) [coordinator]
+//
+// GBE_HandleDotaPracticeLobbyJoinRequest (emsg 7044 -> 24 + 7113):
+//   1. Parse: lobby_id (field 1), pass_key (field 2)
+//   2. FindDotaGenericLobbyByDotaLobbyId (coordinator read); if not found and
+//      has lobby_id, FindLobbyByDotaLobbyIdForInvite + JoinLobby +
+//      RefreshLobbyCallbacksForDota + re-find [coordinator + matchmaking]
+//   3. If !matched && !has_lobby_id && !active: generate lobby_id (pure)
+//   4. compose_join_lobby_merge_plan (pure) -> GBE_local_lobby
+//   5. If matched_generic_lobby: JoinLobby + SyncSettingsLobby [coordinator]
+//   6. If has_pass_key: GBE_local_lobby.pass_key = pass_key [coordinator mutation]
+//   7. PublishDotaPracticeLobbyLocalMemberData + PublishSharedDotaLobbyState [publish]
+//   8. Build 24 (pure: GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed)
+//   9. If send_join_response: build 7113 (pure)
+//   10. build_outbound_message(24) + build_outbound_message(7113) (pure)
+//   11. RecordDotaLobbyCacheSubscriptionState [coordinator]
+//   12. push_incoming_now(24) [coordinator]
+//   13. If send_join_response: push_incoming_now(7113) [coordinator]
+//   Invariant: cache(24) precedes join-ack(7113) when both sent.
+//
+// GBE_HandleDotaInviteToLobbyRequest (emsg 4512 -> 7055):
+//   1. Parse: invitee_steam_id (field 1)
+//   2. Build 2011 lobby invite cache subscribed (pure helper)
+//   3. Build 7055 ack (pure)
+//   4. If generic_lobby_id != 0: network->sendToAll(invite msg) [network broadcast]
+//   5. push_incoming_now(2011) [coordinator]
+//   6. push_incoming_now(7055) [coordinator]
+//   Invariant: invite(2011) precedes ack(7055).
+//
+// GBE_HandleDotaLobbyInviteResponseRequest (emsg 4513 -> decline: 26 + 25;
+// accept: delegate to 7044 + 26 + 25):
+//   1. Parse: lobby_id, accept, client_version
+//   2. Find matched generic lobby (coordinator read + matchmaking)
+//   3. If declined:
+//      a. Build remove-2011 (pure)
+//      b. If !wrapped || outer_session_field_raw: PushDotaResponse(26, remove-2011)
+//      c. Build 25 (pure)
+//      d. If !wrapped || outer_session_field_raw: PushDotaResponse(25)
+//      e. return
+//   4. If accepted:
+//      a. Delegate to GBE_HandleDotaPracticeLobbyJoinRequest (emits 24 + 7113)
+//      b. Build remove-2011 (pure) + PushDotaResponse(26)
+//      c. Build 25 (pure) + PushDotaResponse(25)
+//   Invariant: join(24) precedes remove-2011(26) precedes 25 on accept path.
+//
+// GBE_HandleDotaFriendLobbyInviteMessage (incoming friend_messages network msg):
+//   1. Validate msg, gc_initialized, gc_profile==DOTA2
+//   2. Parse invite payload from friend_messages.message()
+//   3. If invite is for a known generic lobby: JoinLobby + sync [coordinator]
+//   4. Build 2011 invite cache subscribed (pure)
+//   5. push_incoming_now(2011) [coordinator]
+//   Invariant: validate before parse before queue push.
+//
+// GBE_HandleDotaNetworkLobbyInviteMessage (incoming steam_messages network msg):
+//   1. Validate msg, gc_initialized, gc_profile==DOTA2
+//   2. Extract inner_emsg, validate == GBE_kDotaPracticeLobbyInvite
+//   3. Build 2011 from network payload (pure: GBE_AdaptDotaLobbyInviteCacheSubscribedPayload)
+//   4. push_incoming_now(2011) [coordinator]
+//
+// GBE_HandleDotaAbandonCurrentGameRequest (emsg 7035 -> 25 + postgame 7010):
+//   1. Compute abandon decision (pure: compute_abandon_decision)
+//   2. If !active || lobby_id==0: early return
+//   3. If arcade_launch_failed_before_connect && within grace window: return
+//   4. If arcade_launch_failed_before_connect (past grace):
+//      a. Build 25 (pure)
+//      b. GBE_DiscardQueuedDotaLaunchMessagesForAbandon [coordinator]
+//      c. Set GBE_pending_reset_after_cache_unsubscribed flags [coordinator mutation]
+//      d. GBE_MarkDotaAbandonedLobbySuppressed [coordinator]
+//      e. push_incoming_now(25) [coordinator]
+//      f. return (skip postgame)
+//   5. If !ready_for_abandon_teardown:
+//      a. If treat_as_current_game_disconnect: queue 25 + deferred reset
+//      b. Else: log + return
+//   6. If ready_for_abandon_teardown:
+//      a. GBE_DiscardQueuedDotaLaunchMessagesForAbandon [coordinator]
+//      b. GBE_MarkDotaAbandonedLobbySuppressed [coordinator]
+//      c. GBE_QueueDotaPostGameTeardown (emits 25 + postgame 7010) [coordinator]
+//   Invariant: 25 precedes postgame 7010; arcade-failed path skips postgame.
+//   Grace window check must happen before arcade-failed teardown.
+//
+// GBE_HandleDotaGameMatchSignOutRequest (emsg 7004 -> 7055):
+//   1. If !active || lobby_id==0: build 7055 empty, push, return
+//   2. Build 7055 signout payload (pure)
+//   3. GBE_QueueDotaPostGameTeardown [coordinator: emits 25 + postgame 7010]
+//   4. PushDotaResponse(7055) [coordinator]
+//   Invariant: postgame teardown precedes ack(7055).
+//
+// GBE_HandleDotaPracticeLobbyLeaveRequest (emsg 7042 -> 25 + postgame 7010):
+//   1. If !active || lobby_id==0: early return
+//   2. Build 25 (pure)
+//   3. GBE_MarkDotaAbandonedLobbySuppressed [coordinator]
+//   4. GBE_QueueDotaPostGameTeardown [coordinator: emits 25 + postgame 7010]
+//   Invariant: 25 precedes postgame 7010.
+//
+// GBE_HandleDotaPracticeLobbyLaunchRequest (emsg 7041 -> 26 + optional 8052):
+//   1. If !active || lobby_id==0: early return
+//   2. If wrapped && !outer_session_field_raw: early return
+//   3. GBE_ResetDotaPracticeLobbyLaunchPeripheralState [coordinator]
+//   4. compose_launch_init_plan (pure) -> GBE_local_lobby
+//   5. PublishSharedDotaLobbyState("7041_launch_init") [publish]
+//   6. If custom_game: compose_launch_serversetup_presence_event (pure) +
+//      UpdateRichPresence + MaybeQueuePersonaState [coordinator]
+//   7. If custom_game && GBE_SendDotaCustomGameLaunchSetupFlow (emits 8052):
+//      return (deferred to 8052)
+//   8. compose_practice_lobby_launch_event_plan (pure)
+//   9. Build 26 (pure: GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate)
+//   10. PushDotaResponse(26) [coordinator]
+//   11. If steam_auth_ack.queue: MaybeQueueSteamAuthAck [coordinator]
+//   12. If presence.update: UpdateRichPresence + MaybeQueuePersonaState [coordinator]
+//   Invariant: launch-init publish precedes 26 details update; custom game
+//   path defers to 8052 and skips the 26 details update.
+//
+// GBE_HandleDotaPracticeLobbySetDetailsRequest (emsg 7050 -> 26 + 7055):
+//   1. Parse: lobby details (pass-through to compose_set_details_plan)
+//   2. compose_set_details_plan (pure) -> GBE_local_lobby + changed flags
+//   3. PublishSharedDotaLobbyState("7050_set_details") [publish]
+//   4. GBE_SendDotaPracticeLobbyDetailsUpdate (emits 26) [coordinator]
+//   5. If has_request_job: build 7055 + PushDotaResponse(7055) [coordinator]
+//   Invariant: state mutation precedes publish precedes 26 precedes 7055.
+//
+// GBE_HandleDotaPracticeLobbySetTeamSlotRequest (emsg 7047 -> 26 + 7055):
+//   1. Parse: team, slot, bot_difficulty
+//   2. If local_is_owner: update owner_team/owner_slot [coordinator mutation]
+//   3. apply_lobby_member_team_slot_update (pure) -> members
+//   4. If has_bot_difficulty: update bot_difficulty_{radiant,dire} [coordinator]
+//   5. NormalizeDotaArcadeLobbyMemberSlots [coordinator]
+//   6. PublishLocalMemberData + PublishSharedDotaLobbyState [publish]
+//   7. GBE_SendDotaPracticeLobbyDetailsUpdate (emits 26) [coordinator]
+//   8. If has_request_job: build 7055 + PushDotaResponse(7055) [coordinator]
+//   Invariant: mutation precedes publish precedes 26 precedes 7055.
+//
+// GBE_HandleDotaPracticeLobbyKickRequest (emsg 7081 -> 26 + 7055):
+//   1. Parse: target_steam_id
+//   2. If !active || generic_lobby_id==0: early return
+//   3. Find target member; if not found: build 7055 + push + return
+//   4. Remove target from members [coordinator mutation]
+//   5. PublishSharedDotaLobbyState [publish]
+//   6. GBE_SendDotaPracticeLobbyDetailsUpdate (emits 26) [coordinator]
+//   7. If has_request_job: build 7055 + PushDotaResponse(7055) [coordinator]
+//   Invariant: member removal precedes publish precedes 26 precedes 7055.
+//
+// GBE_HandleDotaDestroyLobbyRequest (emsg 8246 -> 25 + 7055):
+//   1. If !active || lobby_id==0: build 7055 empty, push, return
+//   2. Build 25 (pure)
+//   3. push_incoming_now(25) [coordinator]
+//   4. GBE_MarkDotaAbandonedLobbySuppressed [coordinator]
+//   5. GBE_local_lobby = {} [coordinator mutation]
+//   6. GBE_LeaveGenericLobby [coordinator]
+//   7. If has_request_job: build 7055 + PushDotaResponse(7055) [coordinator]
+//   Invariant: 25 precedes lobby clear precedes generic lobby leave.
+// ============================================================================
+
+namespace {
+
+// Pure abandon-current-game decision helper.
+//
+// Reads the local lobby state, the wrapped flag, and is_server, returns all
+// derived decision flags needed by the 7035 abandon handler. Keeping this
+// pure lets the handler focus on executing the decision's side effects in
+// the documented order without interleaving boolean derivation logic.
+struct AbandonDecision {
+    uint64 lobby_id{};
+    uint32 lobby_state{};
+    uint32 lobby_game_state{};
+    uint32 abandon_game_state_threshold{};  // 1 for wrapped/client, 2 for direct server
+    bool treat_as_current_game_disconnect{};
+    bool ready_for_abandon_teardown{};
+    bool arcade_launch_failed_before_connect{};
+};
+
+inline AbandonDecision compute_abandon_decision(
+    const GBE_LocalLobby &lobby,
+    bool wrapped,
+    bool is_server)
+{
+    AbandonDecision d;
+    d.lobby_id = lobby.lobby_id;
+    d.lobby_state = lobby.state;
+    d.lobby_game_state = lobby.game_state;
+    // Wrapped 7035 (user clicked Leave Game) can abandon at game_state >= 1
+    // so players can leave during WAIT_FOR_PLAYERS_TO_LOAD if loading stalls.
+    // Direct 7035 on a listen server (engine automatic state sync) requires
+    // game_state >= 2 to avoid premature abandon during HERO_SELECTION.
+    // Direct 7035 on a client (non-host) also uses game_state >= 1 because
+    // the client has no engine-initiated 7035 -- it is always user-triggered.
+    d.abandon_game_state_threshold = (wrapped || !is_server) ? 1u : 2u;
+    d.treat_as_current_game_disconnect =
+        is_server &&
+        lobby.owner_connected &&
+        d.lobby_state == 2u &&
+        (lobby.server_id != 0 || d.lobby_game_state >= 1u);
+    d.ready_for_abandon_teardown =
+        d.lobby_state == 2u &&
+        d.lobby_game_state >= d.abandon_game_state_threshold;
+    d.arcade_launch_failed_before_connect =
+        gbe::dota_custom_game::has_custom_game_details(lobby.custom_game) &&
+        !wrapped &&
+        !lobby.owner_connected &&
+        d.lobby_state == 2u &&
+        d.lobby_game_state >= 2u &&
+        lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued &&
+        lobby.launch_phase < GBE_kDotaLaunchPhaseLoaded;
+    return d;
+}
+
+} // anonymous namespace
+
+
 static void GBE_ApplyDotaCustomGameDetailsRequest(const GBE_DotaPracticeLobbyDetailsRequest &request, GBE_DotaCustomGameDetails &custom_game)
 {
     if (request.has_custom_game_mode)
@@ -981,41 +1235,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     }
 
-    const uint64 lobby_id = GBE_local_lobby.lobby_id;
-    const uint32 lobby_state = GBE_local_lobby.state;
-    const uint32 lobby_game_state = GBE_local_lobby.game_state;
-    const bool treat_as_current_game_disconnect =
-        is_server &&
-        GBE_local_lobby.owner_connected &&
-        lobby_state == 2u &&
-        (GBE_local_lobby.server_id != 0 || lobby_game_state >= 1u);
-    // Wrapped 7035 (user clicked Leave Game) can abandon at game_state >= 1
-    // so players can leave during WAIT_FOR_PLAYERS_TO_LOAD if loading stalls.
-    // Direct 7035 on a listen server (engine automatic state sync) requires
-    // game_state >= 2 to avoid premature abandon during HERO_SELECTION.
-    // Direct 7035 on a client (non-host) also uses game_state >= 1 because
-    // the client has no engine-initiated 7035 -- it is always user-triggered.
-    const uint32 abandon_game_state_threshold = (wrapped || !is_server) ? 1u : 2u;
-    const bool ready_for_abandon_teardown =
-        lobby_state == 2u &&
-        lobby_game_state >= abandon_game_state_threshold;
-    const bool arcade_launch_failed_before_connect =
-        gbe::dota_custom_game::has_custom_game_details(GBE_local_lobby.custom_game) &&
-        !wrapped &&
-        !GBE_local_lobby.owner_connected &&
-        lobby_state == 2u &&
-        lobby_game_state >= 2u &&
-        GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued &&
-        GBE_local_lobby.launch_phase < GBE_kDotaLaunchPhaseLoaded;
-    if (arcade_launch_failed_before_connect && GBE_local_lobby.game_start_time != 0u) {
+    const AbandonDecision d = compute_abandon_decision(GBE_local_lobby, wrapped, is_server);
+
+    if (d.arcade_launch_failed_before_connect && GBE_local_lobby.game_start_time != 0u) {
         const uint32 now = static_cast<uint32>(std::time(nullptr));
         if (now <= GBE_local_lobby.game_start_time + 5u) {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Ignoring early arcade direct 7035 during launch grace window LobbyID=%llu state=%u game_state=%u launch_phase=%s start_time=%u now=%u",
-                static_cast<unsigned long long>(lobby_id),
-                lobby_state,
-                lobby_game_state,
+                static_cast<unsigned long long>(d.lobby_id),
+                d.lobby_state,
+                d.lobby_game_state,
                 GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
                 GBE_local_lobby.game_start_time,
                 now
@@ -1023,48 +1253,48 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
             return true;
         }
     }
-    if (arcade_launch_failed_before_connect) {
+    if (d.arcade_launch_failed_before_connect) {
         std::string response_25;
-        if (!gbe::gc_message::build_dota_lobby_cache_unsubscribed_payload(lobby_id, response_25)) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for arcade launch failed 7035 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
+        if (!gbe::gc_message::build_dota_lobby_cache_unsubscribed_payload(d.lobby_id, response_25)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for arcade launch failed 7035 LobbyID=%llu", static_cast<unsigned long long>(d.lobby_id));
             return true;
         }
 
         GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_arcade_launch_failed_before_connect");
         GBE_pending_reset_after_cache_unsubscribed = true;
-        GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
-        GBE_MarkDotaAbandonedLobbySuppressed(lobby_id, "7035_arcade_launch_failed_before_connect");
+        GBE_pending_reset_after_cache_unsubscribed_lobby_id = d.lobby_id;
+        GBE_MarkDotaAbandonedLobbySuppressed(d.lobby_id, "7035_arcade_launch_failed_before_connect");
         push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
 
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Treated arcade launch 7035 before connect as failed launch. queued 25 and skipped postgame LobbyID=%llu state=%u game_state=%u launch_phase=%s",
-            static_cast<unsigned long long>(lobby_id),
-            lobby_state,
-            lobby_game_state,
+            static_cast<unsigned long long>(d.lobby_id),
+            d.lobby_state,
+            d.lobby_game_state,
             GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
         );
         return true;
     }
-    if (!ready_for_abandon_teardown) {
-        if (treat_as_current_game_disconnect) {
+    if (!d.ready_for_abandon_teardown) {
+        if (d.treat_as_current_game_disconnect) {
             std::string response_25;
-            if (!gbe::gc_message::build_dota_lobby_cache_unsubscribed_payload(lobby_id, response_25)) {
-                GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for current-game 7035 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
+            if (!gbe::gc_message::build_dota_lobby_cache_unsubscribed_payload(d.lobby_id, response_25)) {
+                GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for current-game 7035 LobbyID=%llu", static_cast<unsigned long long>(d.lobby_id));
                 return true;
             }
 
             GBE_pending_reset_after_cache_unsubscribed = true;
-            GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
-            GBE_MarkDotaAbandonedLobbySuppressed(lobby_id, "7035_current_game_disconnect");
+            GBE_pending_reset_after_cache_unsubscribed_lobby_id = d.lobby_id;
+            GBE_MarkDotaAbandonedLobbySuppressed(d.lobby_id, "7035_current_game_disconnect");
             push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
 
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Treated 7035 as current-game disconnect. queued 25 and deferred reset until retrieval LobbyID=%llu state=%u game_state=%u owner_connected=%u",
-                static_cast<unsigned long long>(lobby_id),
-                lobby_state,
-                lobby_game_state,
+                static_cast<unsigned long long>(d.lobby_id),
+                d.lobby_state,
+                d.lobby_game_state,
                 GBE_local_lobby.owner_connected ? 1u : 0u
             );
             return true;
@@ -1073,9 +1303,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Ignoring early 7035 before launch reaches a current-game stage LobbyID=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
-            static_cast<unsigned long long>(lobby_id),
-            lobby_state,
-            lobby_game_state,
+            static_cast<unsigned long long>(d.lobby_id),
+            d.lobby_state,
+            d.lobby_game_state,
             static_cast<unsigned long long>(GBE_local_lobby.match_id),
             static_cast<unsigned long long>(GBE_local_lobby.server_id)
         );
@@ -1088,7 +1318,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     }
 
     GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_ready_for_abandon_teardown");
-    GBE_MarkDotaAbandonedLobbySuppressed(lobby_id, "7035_ready_for_abandon_teardown");
+    GBE_MarkDotaAbandonedLobbySuppressed(d.lobby_id, "7035_ready_for_abandon_teardown");
 
     if (!GBE_QueueDotaPostGameTeardown("7035_abandon_current_game", wrapped, outer_session_field_raw, true, true, true))
         return true;
@@ -1097,7 +1327,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         "GC_DOTA_LOBBY",
         "[LOBBY] Processed 7035. sent 25 and postgame 7010 wrapped=%d LobbyID=%llu",
         wrapped ? 1 : 0,
-        static_cast<unsigned long long>(lobby_id)
+        static_cast<unsigned long long>(d.lobby_id)
     );
     return true;
 }
