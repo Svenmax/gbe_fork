@@ -31,6 +31,7 @@
 #include <atomic>
 #include <chrono>
 #include <functional>
+#include <memory>
 
 // =====================================================================
 // Include real lightweight GBE headers for type definitions
@@ -76,6 +77,20 @@ using JobID_t = uint64_t;
 static const PublishedFileId_t k_PublishedFileIdInvalid = 0;
 static const JobID_t k_GIDNil = 0;
 
+enum EUniverse : uint32 { k_EUniverseInvalid = 0, k_EUniversePublic = 1 };
+enum EAccountType : uint32 {
+    k_EAccountTypeInvalid = 0,
+    k_EAccountTypeIndividual = 1,
+    k_EAccountTypeGameServer = 3,
+    k_EAccountTypeClan = 7,
+    k_EAccountTypeChat = 8,
+    k_EAccountTypeConsoleUser = 9,
+};
+
+static const uint32 k_unSteamUserDefaultInstance = 1;
+static const uint32 k_unSteamAccountInstanceMask = 0x000FFFFF;
+static const uint32 k_EChatInstanceFlagLobby = (k_unSteamAccountInstanceMask + 1) >> 2;
+
 // Enums needed by Econ_Item and Mod_entry
 enum EItemQuality : uint32 { k_EItemQuality_Any = 0 };
 enum EWorkshopFileType : uint32 { k_EWorkshopFileTypeCommunity = 0 };
@@ -90,22 +105,35 @@ class CSteamID
 public:
     CSteamID() : m_steamID(0) {}
     CSteamID(uint64_t steamID) : m_steamID(steamID) {}
-    CSteamID(uint32_t unAccountID, uint32_t unAccountInstance, uint32_t unAccountType, uint32_t unUniverse)
-        : m_steamID(0) { (void)unAccountID; (void)unAccountInstance; (void)unAccountType; (void)unUniverse; }
+    CSteamID(uint32_t unAccountID, uint32_t unAccountInstance, uint32_t unUniverse, uint32_t unAccountType)
+    {
+        InstancedSet(unAccountID, unAccountInstance, unUniverse, unAccountType);
+    }
 
     uint64_t ConvertToUint64() const { return m_steamID; }
     operator uint64_t() const { return m_steamID; }
     uint32_t GetAccountID() const { return static_cast<uint32_t>(m_steamID & 0xFFFFFFFF); }
 
     bool IsValid() const { return m_steamID != 0; }
-    bool IsLobby() const { return false; }
-    bool BIndividualAccount() const { return IsValid(); }
+    bool IsLobby() const { return GetAccountType() == k_EAccountTypeChat && (GetAccountInstance() & k_EChatInstanceFlagLobby) != 0; }
+    bool BIndividualAccount() const { return GetAccountType() == k_EAccountTypeIndividual || GetAccountType() == k_EAccountTypeConsoleUser; }
 
     bool operator==(const CSteamID &other) const { return m_steamID == other.m_steamID; }
     bool operator!=(const CSteamID &other) const { return m_steamID != other.m_steamID; }
     bool operator<(const CSteamID &other) const { return m_steamID < other.m_steamID; }
 
 private:
+    void InstancedSet(uint32_t account_id, uint32_t instance, uint32_t universe, uint32_t account_type)
+    {
+        m_steamID = static_cast<uint64_t>(account_id)
+            | (static_cast<uint64_t>(instance & 0x000FFFFF) << 32)
+            | (static_cast<uint64_t>(account_type & 0x0F) << 52)
+            | (static_cast<uint64_t>(universe & 0xFF) << 56);
+    }
+
+    uint32_t GetAccountInstance() const { return static_cast<uint32_t>((m_steamID >> 32) & 0x000FFFFF); }
+    uint32_t GetAccountType() const { return static_cast<uint32_t>((m_steamID >> 52) & 0x0F); }
+
     uint64_t m_steamID;
 };
 
@@ -230,6 +258,8 @@ struct RecordedAction
     uint64 steam_id{};           // CallbackItemUpdated / ServerGcForward
     uint64 item_id{};            // CallbackItemUpdated
     std::string reason;          // LobbySnapshotRefresh
+    int callback_id{};           // CallbackResult
+    uint64 source_id{};          // NetworkBroadcast
 
     const char *type_name() const
     {
@@ -302,6 +332,14 @@ public:
         actions.push_back(std::move(a));
     }
 
+    void record_network_broadcast(uint64 source_id)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::NetworkBroadcast;
+        a.source_id = source_id;
+        actions.push_back(std::move(a));
+    }
+
     void record_lobby_snapshot_refresh(const char *reason)
     {
         RecordedAction a;
@@ -341,17 +379,58 @@ public:
 // Using a pointer so the test can create/destroy recorders per test case.
 inline ActionRecorder *g_action_recorder = nullptr;
 
+class SteamCallBacks
+{
+public:
+    void addCBResult(int iCallback, void *result, unsigned int size, double timeout)
+    {
+        (void)result; (void)size; (void)timeout;
+        if (g_action_recorder) {
+            RecordedAction a;
+            a.type = GBE_DotaActionType::PushIncoming;
+            a.callback_id = iCallback;
+            g_action_recorder->actions.push_back(std::move(a));
+        }
+    }
+};
+
 // =====================================================================
 // Networking stub
 // =====================================================================
 
 class GameServer_Items_Messages;
 
+class Steam_Messages
+{
+public:
+    enum Types
+    {
+        FRIEND_CHAT = 1,
+    };
+
+    void set_type(Types type) { m_type = type; }
+    Types type() const { return m_type; }
+    void set_message(const std::string &message) { m_message = message; }
+    const std::string &message() const { return m_message; }
+
+private:
+    Types m_type{};
+    std::string m_message;
+};
+
 class Common_Message
 {
 public:
     void set_allocated_gameserver_items_messages(GameServer_Items_Messages *msg);
-    void set_source_id(uint64_t id) { (void)id; }
+    void set_allocated_steam_messages(Steam_Messages *msg) { m_steam_messages.reset(msg); }
+    void set_source_id(uint64_t id) { m_source_id = id; }
+    uint64 source_id() const { return m_source_id; }
+    bool has_steam_messages() const { return static_cast<bool>(m_steam_messages); }
+    const Steam_Messages &steam_messages() const { return *m_steam_messages; }
+
+private:
+    uint64 m_source_id{};
+    std::unique_ptr<Steam_Messages> m_steam_messages;
 };
 
 class Networking
@@ -366,6 +445,14 @@ public:
         (void)msg; (void)reliable;
         if (g_action_recorder)
             g_action_recorder->record_network_broadcast();
+        return true;
+    }
+
+    bool sendToAll(Common_Message *msg, bool reliable)
+    {
+        (void)reliable;
+        if (g_action_recorder)
+            g_action_recorder->record_network_broadcast(msg ? msg->source_id() : 0u);
         return true;
     }
 };
@@ -440,11 +527,16 @@ inline void Common_Message::set_allocated_gameserver_items_messages(GameServer_I
 // =====================================================================
 
 class Steam_Game_Coordinator; // forward declaration
+class Steam_Matchmaking;
+class Steam_Friends;
 
 class Steam_Client
 {
 public:
     Steam_Client() {}
+    Steam_Matchmaking *steam_matchmaking{};
+    Steam_Friends *steam_friends{};
+    Steam_Game_Coordinator *steam_game_coordinator{};
     Steam_Game_Coordinator *steam_gameserver_game_coordinator{};
 };
 
@@ -469,6 +561,12 @@ struct GC_Message
     bool apply_lobby_state{};
     uint32_t lobby_state{};
     uint32_t lobby_game_state{};
+};
+
+struct GCMessageAvailable_t
+{
+    enum { k_iCallback = 1701 };
+    uint32 m_nMessageSize{};
 };
 
 // =====================================================================
@@ -518,12 +616,17 @@ public:
     Settings *settings{};
     Networking *network{};
     void *local_storage{};       // opaque, not used by handler tests
-    void *callbacks{};           // opaque
+    SteamCallBacks *callbacks{};
     bool is_server{};
 
     GBE_LocalLobby GBE_local_lobby{};
     std::vector<Econ_Item> items;
+    std::map<CSteamID, std::vector<Econ_Item>> all_user_items;
+    std::queue<GC_Message> incoming_messages;
     bool items_loaded{};
+    bool gc_initialized{true};
+    bool GBE_pending_dota_abandon_finalize_after_7014{};
+    uint64 GBE_pending_dota_abandon_finalize_lobby_id{};
 
     GC_Profile gc_profile{};
     bool GBE_dota_private_lobby_snapshot_replayed{};
@@ -549,6 +652,15 @@ public:
         (void)delay; (void)apply_lobby_state; (void)lobby_state; (void)lobby_game_state;
         if (g_action_recorder)
             g_action_recorder->record_push_incoming(msg_type, message);
+    }
+
+    bool GBE_PushDotaResponse(uint32 inner_emsg, const std::string &inner_message, bool wrapped, const std::string *outer_session_field_raw, const char *reason, bool apply_lobby_state = false, uint32 lobby_state = 0, uint32 lobby_game_state = 0, std::string *out_wrapped_message = nullptr)
+    {
+        (void)wrapped; (void)outer_session_field_raw; (void)reason;
+        push_incoming_now(inner_emsg | protobuf_mask, inner_message, apply_lobby_state, lobby_state, lobby_game_state);
+        if (out_wrapped_message)
+            *out_wrapped_message = inner_message;
+        return true;
     }
 
     void save_items_to_file()
@@ -614,6 +726,23 @@ public:
             g_action_recorder->record_lobby_snapshot_refresh(reason);
     }
 
+    bool GBE_HasDotaLaunchServerSetupSync() const { return false; }
+    bool GBE_TryAdvanceDotaLaunchToRun(const char *, uint32, uint64, const char *, uint32 = 0u) { return false; }
+    void GBE_PublishSharedDotaLobbyState(const char *reason)
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_lobby_snapshot_refresh(reason);
+    }
+    bool GBE_TrySyncDotaLobbyServerIdFromGameServer(const char *) { return false; }
+    bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool, const std::string *, const char *) { return true; }
+    bool GBE_CaptureCurrentDotaLobbyState(const char *, GBE_LocalLobby &snapshot, bool = true) { snapshot = GBE_local_lobby; return GBE_local_lobby.active; }
+    void GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *, const char *, bool, bool = true) {}
+    void GBE_LeaveGenericLobby() { GBE_local_lobby = GBE_LocalLobby{}; }
+    bool GBE_MaybeHandleDotaPracticeLobbyKicked(const char *) { return false; }
+    uint64 GBE_GetDotaLobbyOwnerSteamId() const { return GBE_local_lobby.owner_steam_id; }
+    const std::vector<Econ_Item> &get_items() { return items; }
+    std::string serialize_item_to_gcprotobuf(const Econ_Item &item, CSteamID steam_id) { return item_to_gcprotobuf(item, steam_id); }
+
     // --- Test-only controls ---
     void test_set_active_server_lobby(bool v) { m_test_has_active_server_lobby = v; }
 
@@ -622,6 +751,34 @@ public:
     bool GBE_HandleDotaUnlockItemStyleRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaSetItemStyleRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaEquipItemsRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+
+    // Misc domain
+    bool GBE_HandleDotaMinimalVarintSuccessRequest(uint32 request_emsg, uint32 response_emsg, const char *log_note, const char *push_note, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDota7427NotificationsRequest(bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaUploadRateRequest(bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaProfileCardRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaLookupAccountNameRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaEmoticonDataRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaConductScorecardRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaCoachingSummaryRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaRankRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaLaunchAdvanceOrConsume(uint32 request_emsg, const char *advance_reason, const char *advance_phase, const char *consume_note, uint64 source_job, size_t body_size);
+    bool GBE_HandleDota8870LaunchMarkerRequest(uint32 request_emsg, uint64 source_job);
+    bool GBE_HandleDotaLanServerAvailableRequest(uint32 request_emsg, const uint8 *body, size_t body_size, uint64 source_job);
+    bool GBE_HandleDotaBatchPlayerResourcesRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaCacheSubscriptionRefreshRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaLeaverDetectedRequest(const uint8 *body, size_t body_size, uint64 source_job);
+    bool GBE_HandleDotaSignOutPermissionRequest(bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaSubmitPlayerReportV2Request(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+
+    // Chat domain
+    bool GBE_HandleDotaJoinChatChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaChatMessageRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaNetworkChatMessage(Common_Message *msg);
+    bool GBE_HandleDotaLeaveChatChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
 
     // Other handlers declared in the real header but not defined in the
     // inventory TU - we don't need them here. If a future domain test
@@ -651,6 +808,7 @@ class Steam_Matchmaking
 public:
     const char *GetLobbyMemberData(const CSteamID &lobby, const CSteamID &member, const char *key)
     { (void)lobby; (void)member; (void)key; return ""; }
+    void RefreshLobbyCallbacksForDota() {}
 };
 
 #endif // GBE_DOTA_HANDLER_TEST_STUBS_H

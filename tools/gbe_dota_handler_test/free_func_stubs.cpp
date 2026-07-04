@@ -12,6 +12,7 @@
 
 #include "stubs.h"
 #include "dll/gbe_dota_gc_internal.h"
+#include "dll/gbe_proto_wire.h"
 
 #include <cstdarg>
 #include <cstdio>
@@ -23,6 +24,32 @@
 void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)
 {
     (void)scope; (void)fmt;
+}
+
+const char *GBE_DescribeDotaLaunchPhase(uint32 phase)
+{
+    switch (phase) {
+        case 0: return "none";
+        case 1: return "requested";
+        case 2: return "serversetup_synced";
+        case 3: return "run_queued";
+        case 4: return "loaded";
+        default: return "none";
+    }
+}
+
+GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
+const char *GBE_kDotaAbandonPersonaStateInitHex = "";
+
+bool GBE_PrepareDotaPersonaStatePeripheralMessage(
+    const char *template_hex,
+    uint64 steam_id,
+    uint64 lobby_id,
+    std::string &message)
+{
+    (void)template_hex; (void)steam_id; (void)lobby_id;
+    message.clear();
+    return true;
 }
 
 // --- Steam_Client accessor stub ---
@@ -52,6 +79,26 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
     (void)unsubscribe_first; (void)reason;
     if (g_action_recorder)
         g_action_recorder->record_server_gc_forward(0); // emsg=0 = cache push
+    return true;
+}
+
+bool GBE_AdaptDotaJoinChatChannelResponsePayload(
+    uint64 steam_id,
+    uint64 generic_lobby_id,
+    uint64 channel_id,
+    const std::string &channel_name,
+    const std::string &player_name,
+    const std::vector<GBE_DotaLobbyMemberState> &channel_members,
+    uint64 owner_steam_id,
+    const std::string &owner_name,
+    uint32 channel_type,
+    std::string &message)
+{
+    (void)steam_id; (void)generic_lobby_id; (void)channel_name;
+    (void)player_name; (void)channel_members; (void)owner_steam_id;
+    (void)owner_name; (void)channel_type;
+    message.clear();
+    gbe::proto_wire::append_varint_field(message, 1u, channel_id);
     return true;
 }
 

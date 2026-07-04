@@ -61,6 +61,20 @@ using UGCHandle_t = uint64_t;
 
 static const PublishedFileId_t k_PublishedFileIdInvalid = 0;
 
+enum EUniverse : uint32 { k_EUniverseInvalid = 0, k_EUniversePublic = 1 };
+enum EAccountType : uint32 {
+    k_EAccountTypeInvalid = 0,
+    k_EAccountTypeIndividual = 1,
+    k_EAccountTypeGameServer = 3,
+    k_EAccountTypeClan = 7,
+    k_EAccountTypeChat = 8,
+    k_EAccountTypeConsoleUser = 9,
+};
+
+static const uint32 k_unSteamUserDefaultInstance = 1;
+static const uint32 k_unSteamAccountInstanceMask = 0x000FFFFF;
+static const uint32 k_EChatInstanceFlagLobby = (k_unSteamAccountInstanceMask + 1) >> 2;
+
 // Enums needed by Econ_Item and Mod_entry
 enum EItemQuality : uint32 { k_EItemQuality_Any = 0 };
 enum EWorkshopFileType : uint32 { k_EWorkshopFileTypeCommunity = 0 };
@@ -75,21 +89,34 @@ class CSteamID
 public:
     CSteamID() : m_steamID(0) {}
     CSteamID(uint64_t steamID) : m_steamID(steamID) {}
-    CSteamID(uint32_t unAccountID, uint32_t unAccountInstance, uint32_t unAccountType, uint32_t unUniverse)
-        : m_steamID(0) { (void)unAccountID; (void)unAccountInstance; (void)unAccountType; (void)unUniverse; }
+    CSteamID(uint32_t unAccountID, uint32_t unAccountInstance, uint32_t unUniverse, uint32_t unAccountType)
+    {
+        InstancedSet(unAccountID, unAccountInstance, unUniverse, unAccountType);
+    }
 
     uint64_t ConvertToUint64() const { return m_steamID; }
     operator uint64_t() const { return m_steamID; }
     uint32_t GetAccountID() const { return static_cast<uint32_t>(m_steamID & 0xFFFFFFFF); }
 
     bool IsValid() const { return m_steamID != 0; }
-    bool IsLobby() const { return false; }
-    bool BIndividualAccount() const { return IsValid(); }
+    bool IsLobby() const { return GetAccountType() == k_EAccountTypeChat && (GetAccountInstance() & k_EChatInstanceFlagLobby) != 0; }
+    bool BIndividualAccount() const { return GetAccountType() == k_EAccountTypeIndividual || GetAccountType() == k_EAccountTypeConsoleUser; }
 
     bool operator==(const CSteamID &other) const { return m_steamID == other.m_steamID; }
     bool operator!=(const CSteamID &other) const { return m_steamID != other.m_steamID; }
 
 private:
+    void InstancedSet(uint32_t account_id, uint32_t instance, uint32_t universe, uint32_t account_type)
+    {
+        m_steamID = static_cast<uint64_t>(account_id)
+            | (static_cast<uint64_t>(instance & 0x000FFFFF) << 32)
+            | (static_cast<uint64_t>(account_type & 0x0F) << 52)
+            | (static_cast<uint64_t>(universe & 0xFF) << 56);
+    }
+
+    uint32_t GetAccountInstance() const { return static_cast<uint32_t>((m_steamID >> 32) & 0x000FFFFF); }
+    uint32_t GetAccountType() const { return static_cast<uint32_t>((m_steamID >> 52) & 0x0F); }
+
     uint64_t m_steamID;
 };
 

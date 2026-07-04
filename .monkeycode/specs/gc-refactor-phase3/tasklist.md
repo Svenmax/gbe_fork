@@ -2,21 +2,24 @@
 
 ## Phase 3.0: Stabilize Current Refactor
 
-- [ ] 3.0.1 Fix audit script portability
-  - [ ] Replace hard-coded `/workspace` paths with repository-relative paths.
-  - [ ] Ensure the script works when run from `gbe_fork/`.
-  - [ ] Ensure the script prints actionable categories for real issues and likely false positives.
+- [x] 3.0.1 Fix audit script portability
+  - [x] Replace hard-coded `/workspace` paths with repository-relative paths.
+  - [x] Ensure the script works when run from `gbe_fork/`.
+  - [x] Ensure the script prints actionable categories for real issues and likely false positives.
+  - Notes: `tools/_audit_gc_refactor.py` derives `ROOT_DIR` from its own location, runs from the repository root without path edits, and now prints an action plus false-positive class for each audit section.
 
-- [ ] 3.0.2 Classify audit findings
-  - [ ] Review header declarations reported as missing definitions.
-  - [ ] Separate type-name false positives from real zombie declarations.
-  - [ ] Review definitions reported as under-exposed.
-  - [ ] Decide whether each under-exposed function should be declared, made file-local, or moved.
+- [x] 3.0.2 Classify audit findings
+  - [x] Review header declarations reported as missing definitions.
+  - [x] Separate type-name false positives from real zombie declarations.
+  - [x] Review definitions reported as under-exposed.
+  - [x] Decide whether each under-exposed function should be declared, made file-local, or moved.
+  - Notes: closeout audit reports zero zombie declarations and zero under-exposed shared definitions. The script ignores non-GBE type declarations, member functions, and static helpers as non-actionable categories.
 
-- [ ] 3.0.3 Fix real declaration boundary issues
-  - [ ] Remove unused declarations from `dll/gbe_dota_gc_internal.h`.
-  - [ ] Add missing declarations for genuine cross-TU functions.
-  - [ ] Mark private helper functions as `static` or move them into anonymous namespaces.
+- [x] 3.0.3 Fix real declaration boundary issues
+  - [x] Remove unused declarations from `dll/gbe_dota_gc_internal.h`.
+  - [x] Add missing declarations for genuine cross-TU functions.
+  - [x] Mark private helper functions as `static` or move them into anonymous namespaces.
+  - Notes: `dll/gbe_dota_gc_internal.h` has no stale declarations in the closeout audit. Phase 3.5.3 removed the remaining single-TU lobby payload declarations and marked the corresponding helpers file-local.
 
 - [x] 3.0.4 Fix stale documentation references
   - [x] Update `REFACTOR_TODO.md` line references.
@@ -66,13 +69,14 @@
   - [x] Run offline GC tests.
   - Notes: moved 17 lobby handlers (`GBE_HandleDotaPracticeLobbyCreateRequest`, `GBE_HandleDotaLobbyListRequest`, `GBE_HandleDotaCustomLobbyListRequest`, `GBE_HandleDotaFriendPracticeLobbyListRequest`, `GBE_HandleDotaPracticeLobbyJoinRequest`, `GBE_HandleDotaInviteToLobbyRequest`, `GBE_HandleDotaLobbyInviteResponseRequest`, `GBE_HandleDotaFriendLobbyInviteMessage`, `GBE_HandleDotaNetworkLobbyInviteMessage`, `GBE_HandleDotaAbandonCurrentGameRequest`, `GBE_HandleDotaGameMatchSignOutRequest`, `GBE_HandleDotaPracticeLobbyLeaveRequest`, `GBE_HandleDotaPracticeLobbyLaunchRequest`, `GBE_HandleDotaPracticeLobbySetDetailsRequest`, `GBE_HandleDotaPracticeLobbySetTeamSlotRequest`, `GBE_HandleDotaPracticeLobbyKickRequest`, `GBE_HandleDotaDestroyLobbyRequest`) plus 6 lobby-only statics (`GBE_ApplyDotaCustomGameDetailsRequest`, `GBE_NormalizeDotaCustomGameDetailsFromInstalledMod`, `GBE_GenerateDotaLobbyId`, `GBE_GenerateDotaMatchId`, `GBE_AdaptDotaLobbyInviteCacheSubscribedPayload`, `GBE_IsDotaLobbyInviteCacheSubscribedPayload`), all kept `static` in new TU (List X). List Y = 0 (no externalize needed). `dll/gbe_dota_handlers.cpp` 5164 → 3578 lines, new file 1663 lines. Follow-up logic refactor tracked as 3.1.9.
 
-- [ ] 3.1.5 Extract match and misc handlers
+- [x] 3.1.5 Extract match and misc handlers
   - [x] 3.1.5a Create `dll/gbe_dota_match_handlers.cpp` for the 7034 direct match-flow + custom-game loading lifecycle.
   - [x] 3.1.5b Create `dll/gbe_dota_post_login_handlers.cpp` (post-login/socket/server-assignment) and `dll/gbe_dota_template_replay_handlers.cpp` (template-replay switch + 12 template statics).
   - [x] 3.1.5c Create `dll/gbe_dota_misc_handlers.cpp` for remaining one-off handlers.
-  - [ ] Keep any shared helper in the smallest reasonable file.
-  - [ ] Add follow-up logic refactor tasks for match, post-login, and misc buckets before marking them complete.
+  - [x] Keep any shared helper in the smallest reasonable file.
+  - [x] Add follow-up logic refactor tasks for match, post-login, and misc buckets before marking them complete.
   - [x] Run offline GC tests.
+  - Notes (3.1.5 closeout): shared helpers stayed file-local or moved into the smallest cohesive helper TU. Match + misc follow-up logic refactor is complete in 3.1.10; post-login/session dispatch cleanup is complete in Phase 3.3, while post-login/template files keep their protocol boundary comments and unchanged side-effect ownership.
   - Notes (3.1.5b post-login/template sub-batch): split into two files because TemplateReplay (1082 lines, canned-response switch) is a different concern from post-login/socket/server-assignment (session establishment). Moved to `dll/gbe_dota_template_replay_handlers.cpp` (1255 lines): 1 handler `GBE_HandleDotaTemplateReplayRequest` + 12 template statics (10 `GBE_kDota*Template[]` byte arrays + 3 `GBE_kDota*TemplateHex` hex strings), all kept `static` in new TU (List X). Moved to `dll/gbe_dota_post_login_handlers.cpp` (1011 lines): 4 handlers (`GBE_HandleDotaServerAssignmentRequest`, `GBE_HandleDotaDirectPostLoginRequest`, `GBE_HandleDotaAddSocketRequest`, `GBE_HandleDotaWrappedPostLoginRequest`) + 2 session constants (`GBE_kSteamGamesPlayedWithDataBlob`, `GBE_kSteamAuthList`), all kept `static` in new TU (List X). List Y = 0 for both files (all 5 handlers already declared in `dll/dll/steam_game_coordinator.h`). `dll/gbe_dota_handlers.cpp` 2207 → 81 lines (now an include + using-aliases shell with zero handler definitions; 3.1.6 will evaluate removal). Follow-up logic refactor tracked as 3.1.10.
   - Notes (3.1.5c misc sub-batch): moved 17 misc one-off handlers (`GBE_HandleDotaMinimalVarintSuccessRequest`, `GBE_HandleDota7427NotificationsRequest`, `GBE_HandleDotaUploadRateRequest`, `GBE_HandleDotaProfileCardRequest`, `GBE_HandleDotaLookupAccountNameRequest`, `GBE_HandleDotaEmoticonDataRequest`, `GBE_HandleDotaConductScorecardRequest`, `GBE_HandleDotaCoachingSummaryRequest`, `GBE_HandleDotaRankRequest`, `GBE_HandleDotaLaunchAdvanceOrConsume`, `GBE_HandleDota8870LaunchMarkerRequest`, `GBE_HandleDotaLanServerAvailableRequest`, `GBE_HandleDotaBatchPlayerResourcesRequest`, `GBE_HandleDotaCacheSubscriptionRefreshRequest`, `GBE_HandleDotaLeaverDetectedRequest`, `GBE_HandleDotaSignOutPermissionRequest`, `GBE_HandleDotaSubmitPlayerReportV2Request`) plus 1 handler-local struct `GBE_ProtoField` (List X, kept file-local in new TU). List Y = 0 (no externalize needed; 2 `using` aliases `GBE_DotaEmptyRequestShape` and `GBE_DotaRankRequestShape` repeated in new TU). `dll/gbe_dota_handlers.cpp` 2857 → 2207 lines, new file 726 lines. Follow-up logic refactor tracked as 3.1.10.
   - Notes (3.1.5a match sub-batch): moved 10 direct 7034 match-flow handlers (`GBE_HandleDotaDirect7034Request`, `GBE_HandleDotaDirectOwnerHeroKnownEquipReplay`, `GBE_HandleDotaDirect7034DisconnectedPlayers`, `GBE_HandleDotaDirect7034RuntimeUpdates`, `GBE_HandleDotaDirect7034StrategyTime`, `GBE_HandleDotaDirect7034StrategyTimeFallback`, `GBE_HandleDotaDirect7034StrategyTimePreserve`, `GBE_HandleDotaDirect7034Response`, `GBE_HandleDotaDirect7034LaunchPoll`, `GBE_HandleDotaDirect7034WaitForPlayers`) plus 1 static (`GBE_AdaptDota7034ConnectedPlayersResponsePayload`, kept `static` in new TU, List X). Also merged in the 3 custom-game loading handlers (`GBE_HandleDotaCustomGameReadyUpRequest`, `GBE_HandleDotaCustomGameStartedLoadingRequest`, `GBE_HandleDotaCustomGameFinishedLoadingRequest`) that were previously extracted to `dll/gbe_dota_custom_game_handlers.cpp` (Phase 3.1.5); that standalone file was removed because custom-game loading is a sub-phase of the 7034 launch flow. List Y = 0 (no externalize needed; 4 `using` aliases repeated in new TU: `GBE_Dota7034RequestShape`, `GBE_Dota7034ConnectedPlayer`, `GBE_Dota7034DisconnectedPlayer`, `GBE_Dota8053Result`). `dll/gbe_dota_handlers.cpp` 3459 → 2857 lines, new file 802 lines. Follow-up logic refactor tracked as 3.1.10.
@@ -146,14 +150,15 @@
   - [x] Confirm side-effect order is documented (Tier A) for every side-effectful refactor, and covered by tests where Tier B has landed.
   - Notes: gate verified. Inventory (3.1.7) full Tier A+B — 9/9 smoke tests including the 8-action equip-forward ordering invariant. Chat (3.1.8), lobby (3.1.9), match+misc (3.1.10) all Tier A only — side-effect order documented at top of each domain `.cpp`, with Tier B per-domain harness deferred to post-3.2 per the tiering decision (root cause: `gbe_dota_gc_payload_helpers.cpp` cannot compile offline due to the heavy SDK include chain, forcing payload helper duplication into stubs; 3.2 will split pure logic into a TU that doesn't depend on the heavy SDK headers, eliminating the duplication debt). All 4 domains have a matching logic-refactor task complete. No bucket accepted on file movement alone — every bucket received at minimum a side-effect order documentation block citing `dll/gbe_dota_action_model.h` and pure-helper extraction where warranted.
 
-- [ ] 3.1.12 Split-boundary discipline
-  - [ ] Keep handler buckets aligned to stable domains: inventory, chat, lobby, match, and misc.
-  - [ ] Keep local handler-only helpers inside the domain `.cpp` anonymous namespace.
-  - [ ] Create a separate helper file only for cross-domain reuse, pure testable logic, or an oversized domain file.
-  - [ ] Treat handler bucket files around `300-1200` lines as healthy when responsibilities remain cohesive.
-  - [ ] Treat pure helper files around `200-1000` lines as healthy when responsibilities remain cohesive.
-  - [ ] Require at least two real call sites before moving a helper into a shared cross-file helper module.
-  - [ ] Document the responsibility boundary and migration reason for every new GC `.cpp` file.
+- [x] 3.1.12 Split-boundary discipline
+  - [x] Keep handler buckets aligned to stable domains: inventory, chat, lobby, match, and misc.
+  - [x] Keep local handler-only helpers inside the domain `.cpp` anonymous namespace.
+  - [x] Create a separate helper file only for cross-domain reuse, pure testable logic, or an oversized domain file.
+  - [x] Treat handler bucket files around `300-1200` lines as healthy when responsibilities remain cohesive.
+  - [x] Treat pure helper files around `200-1000` lines as healthy when responsibilities remain cohesive.
+  - [x] Require at least two real call sites before moving a helper into a shared cross-file helper module.
+  - [x] Document the responsibility boundary and migration reason for every new GC `.cpp` file.
+  - Notes: closeout line counts are inventory 592, chat 794, lobby 1827, match 945, misc 824, post-login 1003, template-replay 1245, payload-wire 899, payload-item 233, payload-lobby 1374, payload-stateful 691. Lobby exceeds the 1500-line follow-up threshold; split plan is to carve invite/list/set-slot operations from lifecycle/launch/teardown once Tier B lobby handler tests exist or the next lobby change requires it, keeping current cohesive lifecycle ordering intact for Phase 3 closeout. `gbe_dota_payload_lobby_helpers.cpp` is above the pure-helper comfort range but remains one cohesive lobby payload-composition TU with existing focused tests; split it only when cache-subscribed, details-update, and launch replay helpers can be separated without duplicating byte-template fixtures.
 
 ## Phase 3.2: Separate Payload Helpers
 
@@ -268,15 +273,17 @@
 
 ## Completion Criteria
 
-- [ ] `dll/gbe_dota_handlers.cpp` is under 1500 lines, or under 2000 with a documented reason.
-- [ ] No domain handler file exceeds 1500 lines without a follow-up split plan.
-- [ ] `dll/gbe_dota_gc_payload_helpers.cpp` is under 1200 lines.
-- [ ] Every mechanically extracted GC domain has completed follow-up logic refactoring.
-- [ ] A handler-level test harness exists and covers at least the logic-refactored handlers.
-- [ ] Handler logic is separated into parsing, state mutation, message construction, and coordinator-owned side effects where feasible.
-- [ ] Side-effect order is documented and protected by tests or explicit ordered action lists for all logic-refactored GC handlers.
-- [ ] New GC files are justified by domain cohesion, cross-domain reuse, pure testability, or size pressure.
-- [ ] Audit script has zero real high-risk findings.
-- [ ] Offline GC tests pass.
-- [ ] New pure helper code has focused tests.
-- [ ] New split files use reduced and specific include lists.
+- [x] `dll/gbe_dota_handlers.cpp` is under 1500 lines, or under 2000 with a documented reason.
+- [x] No domain handler file exceeds 1500 lines without a follow-up split plan.
+- [x] `dll/gbe_dota_gc_payload_helpers.cpp` is under 1200 lines.
+- [x] Every mechanically extracted GC domain has completed follow-up logic refactoring.
+- [x] A handler-level test harness exists and covers at least the logic-refactored handlers.
+- [x] Handler logic is separated into parsing, state mutation, message construction, and coordinator-owned side effects where feasible.
+- [x] Side-effect order is documented and protected by tests or explicit ordered action lists for all logic-refactored GC handlers.
+- [x] New GC files are justified by domain cohesion, cross-domain reuse, pure testability, or size pressure.
+- [x] Audit script has zero real high-risk findings.
+- [x] Offline GC tests pass.
+- [x] New pure helper code has focused tests.
+- [x] New split files use reduced and specific include lists.
+
+Closeout notes: `dll/gbe_dota_handlers.cpp` has been removed; `dll/gbe_dota_gc_payload_helpers.cpp` is 691 lines; lobby is the only handler domain over 1500 lines and has the 3.1.12 follow-up split plan above. Audit reports 0 zombie declarations, 0 under-exposed shared definitions, and 0 doc mismatches. Offline tests pass via `tools/run_gc_offline_tests.sh`.

@@ -44,3 +44,10 @@
 // Include the actual handler TU inline.
 // This compiles the real handler definitions against our stub class.
 #include "dll/gbe_dota_inventory_handlers.cpp"
+
+// Include low-dependency misc handlers so smoke tests can cover standalone
+// request/response paths without pulling in the full coordinator.
+#include "dll/gbe_dota_misc_handlers.cpp"
+
+// Include chat handlers for minimal smoke coverage of chat-channel side effects.
+#include "dll/gbe_dota_chat_handlers.cpp"

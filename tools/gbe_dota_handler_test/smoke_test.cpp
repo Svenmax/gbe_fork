@@ -120,6 +120,13 @@ static void encode_equip_op(std::string &out, uint64_t item_id, uint32_t new_cla
     encode_length_delimited(out, 1, sub);
 }
 
+static bool has_single_push(const ActionRecorder &recorder, uint32 expected_emsg)
+{
+    return recorder.actions.size() == 1u &&
+        recorder.actions[0].type == GBE_DotaActionType::PushIncomingNow &&
+        (recorder.actions[0].msg_type & ~Steam_Game_Coordinator::protobuf_mask) == expected_emsg;
+}
+
 // =====================================================================
 // Test fixture: create a coordinator with test items
 // =====================================================================
@@ -129,12 +136,14 @@ struct TestFixture
     Steam_Game_Coordinator gc;
     Settings settings;
     Networking network;
+    SteamCallBacks callbacks;
     ActionRecorder recorder;
 
     TestFixture()
     {
         gc.settings = &settings;
         gc.network = &network;
+        gc.callbacks = &callbacks;
         gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
         gc.is_server = false;
         g_action_recorder = &recorder;
@@ -153,6 +162,7 @@ struct TestFixture
         gc.GBE_dota_private_lobby_snapshot_replayed = false;
         gc.test_set_active_server_lobby(false);
         // Clear the global server-GC hook so each test starts from a clean slate.
+        g_test_steam_client.steam_game_coordinator = nullptr;
         g_test_steam_client.steam_gameserver_game_coordinator = nullptr;
     }
 
@@ -172,6 +182,24 @@ struct TestFixture
 // =====================================================================
 // Inventory domain smoke tests
 // =====================================================================
+
+static void test_csteamid_stub_behavior()
+{
+    CSteamID lobby_id(42u, k_EChatInstanceFlagLobby, k_EUniversePublic, k_EAccountTypeChat);
+    CSteamID ordinary_chat_id(43u, 1u, k_EUniversePublic, k_EAccountTypeChat);
+    CSteamID individual_id(44u, k_unSteamUserDefaultInstance, k_EUniversePublic, k_EAccountTypeIndividual);
+    CSteamID console_user_id(45u, k_unSteamUserDefaultInstance, k_EUniversePublic, k_EAccountTypeConsoleUser);
+    CSteamID game_server_id(46u, 1u, k_EUniversePublic, k_EAccountTypeGameServer);
+
+    TEST_ASSERT(lobby_id.IsLobby(), "chat ID with lobby flag should be a lobby");
+    TEST_ASSERT(!ordinary_chat_id.IsLobby(), "chat ID without lobby flag should not be a lobby");
+    TEST_ASSERT(individual_id.BIndividualAccount(), "individual account should be individual");
+    TEST_ASSERT(console_user_id.BIndividualAccount(), "console user account should be individual-compatible");
+    TEST_ASSERT(!game_server_id.BIndividualAccount(), "game server account should not be individual-compatible");
+    TEST_ASSERT_EQ(lobby_id.GetAccountID(), 42u, "account id should round-trip");
+
+    ++g_tests_passed;
+}
 
 // Test: UnlockItemStyle with a valid item and a consumable.
 // Expected action sequence:
@@ -514,11 +542,93 @@ static void test_inventory_equip_full_forward()
 // =====================================================================
 // Chat domain smoke test
 // =====================================================================
-// NOTE: The chat handler smoke test requires compiling gbe_dota_chat_handlers.cpp
-// against extended stubs. This will be added during Phase 3.1.8 (chat logic
-// refactor) when the chat pure helpers are extracted and the stub surface
-// is finalized. For now, the harness infrastructure (ActionRecorder, fixture
-// loader, recording coordinator) is proven by the inventory smoke tests above.
+
+static void test_chat_join_channel()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0xCAFEu;
+    tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.get_local_steam_id().ConvertToUint64();
+    tf.gc.GBE_local_lobby.owner_name = "tester";
+
+    std::string body;
+    encode_length_delimited(body, 2u, "dota_lobby_chat");
+    encode_varint_field(body, 4u, 3u);
+
+    bool result = tf.gc.GBE_HandleDotaJoinChatChannelRequest(body, false, nullptr);
+
+    TEST_ASSERT(result, "handler should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.has_chat_channel, "join chat should mark chat channel active");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.chat_channel_type, 3u, "join chat should keep channel type");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "join chat should publish and push response");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "publish should happen before response");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::PushIncomingNow, "response should be pushed");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].msg_type & ~Steam_Game_Coordinator::protobuf_mask, GBE_kDotaJoinChatChannelResponse, "response should be 7010");
+
+    ++g_tests_passed;
+}
+
+// =====================================================================
+// Misc domain smoke tests
+// =====================================================================
+
+static void test_misc_minimal_varint_success()
+{
+    TestFixture tf;
+    tf.reset();
+
+    bool result = tf.gc.GBE_HandleDotaMinimalVarintSuccessRequest(1234u, 5678u, "test", "test", true, 9001u);
+
+    TEST_ASSERT(result, "handler should return true");
+    TEST_ASSERT(has_single_push(tf.recorder, 5678u), "minimal varint success should push one response");
+
+    ++g_tests_passed;
+}
+
+static void test_misc_7427_notifications()
+{
+    TestFixture tf;
+    tf.reset();
+
+    bool result = tf.gc.GBE_HandleDota7427NotificationsRequest(true, 9002u);
+
+    TEST_ASSERT(result, "handler should return true");
+    TEST_ASSERT(has_single_push(tf.recorder, 7428u), "7427 notification request should push 7428 response");
+
+    ++g_tests_passed;
+}
+
+static void test_misc_upload_rate()
+{
+    TestFixture tf;
+    tf.reset();
+
+    bool result = tf.gc.GBE_HandleDotaUploadRateRequest(true, 9003u);
+
+    TEST_ASSERT(result, "handler should return true");
+    TEST_ASSERT(has_single_push(tf.recorder, 4524u), "upload-rate request should push 4524 response");
+
+    ++g_tests_passed;
+}
+
+static void test_misc_rank()
+{
+    TestFixture tf;
+    tf.reset();
+
+    std::string body;
+    encode_varint_field(body, 1, 1u);
+    encode_varint_field(body, 2, 5u);
+
+    bool result = tf.gc.GBE_HandleDotaRankRequest(
+        reinterpret_cast<const uint8 *>(body.data()), body.size(), true, 9004u);
+
+    TEST_ASSERT(result, "handler should return true");
+    TEST_ASSERT(has_single_push(tf.recorder, 8880u), "rank request should push 8880 response");
+
+    ++g_tests_passed;
+}
 
 // =====================================================================
 // Lobby domain smoke test
@@ -541,6 +651,9 @@ static void test_inventory_equip_full_forward()
 int main()
 {
     std::printf("=== gbe_dota_handler_test ===\n");
+
+    std::printf("[run] test_csteamid_stub_behavior\n");
+    RUN_TEST(test_csteamid_stub_behavior);
 
     std::printf("[run] test_inventory_unlock_style_with_consumable\n");
     RUN_TEST(test_inventory_unlock_style_with_consumable);
@@ -568,6 +681,21 @@ int main()
 
     std::printf("[run] test_inventory_equip_full_forward\n");
     RUN_TEST(test_inventory_equip_full_forward);
+
+    std::printf("[run] test_chat_join_channel\n");
+    RUN_TEST(test_chat_join_channel);
+
+    std::printf("[run] test_misc_minimal_varint_success\n");
+    RUN_TEST(test_misc_minimal_varint_success);
+
+    std::printf("[run] test_misc_7427_notifications\n");
+    RUN_TEST(test_misc_7427_notifications);
+
+    std::printf("[run] test_misc_upload_rate\n");
+    RUN_TEST(test_misc_upload_rate);
+
+    std::printf("[run] test_misc_rank\n");
+    RUN_TEST(test_misc_rank);
 
     std::printf("\n=== Results: %d passed, %d failed, %d total ===\n",
                 g_tests_passed, g_tests_failed, g_tests_run);

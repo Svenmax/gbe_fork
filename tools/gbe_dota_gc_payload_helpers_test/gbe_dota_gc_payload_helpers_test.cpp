@@ -134,6 +134,26 @@ std::string get_full_program_path() { return "."; }
 // Test: GBE_DescribeDotaLaunchPhase
 // =====================================================================
 
+TEST_CASE(test_csteamid_stub_behavior)
+{
+    CSteamID lobby_id(42u, k_EChatInstanceFlagLobby, k_EUniversePublic, k_EAccountTypeChat);
+    CSteamID ordinary_chat_id(43u, 1u, k_EUniversePublic, k_EAccountTypeChat);
+    CSteamID individual_id(44u, k_unSteamUserDefaultInstance, k_EUniversePublic, k_EAccountTypeIndividual);
+    CSteamID console_user_id(45u, k_unSteamUserDefaultInstance, k_EUniversePublic, k_EAccountTypeConsoleUser);
+    CSteamID game_server_id(46u, 1u, k_EUniversePublic, k_EAccountTypeGameServer);
+
+    EXPECT_TRUE(lobby_id.IsLobby());
+    EXPECT_FALSE(ordinary_chat_id.IsLobby());
+    EXPECT_TRUE(individual_id.BIndividualAccount());
+    EXPECT_TRUE(console_user_id.BIndividualAccount());
+    EXPECT_FALSE(game_server_id.BIndividualAccount());
+    EXPECT_TRUE(lobby_id.GetAccountID() == 42u);
+}
+
+// =====================================================================
+// Test: GBE_DescribeDotaLaunchPhase
+// =====================================================================
+
 TEST_CASE(test_describe_dota_launch_phase)
 {
     EXPECT_STR_EQ("none", GBE_DescribeDotaLaunchPhase(0));
@@ -856,82 +876,85 @@ int main()
 {
     std::printf("=== gbe_dota_gc_payload_helpers_test ===\n\n");
 
-    std::printf("[1/24] GBE_DescribeDotaLaunchPhase...\n");
+    std::printf("[1/25] CSteamID stub behavior...\n");
+    test_csteamid_stub_behavior();
+
+    std::printf("[2/25] GBE_DescribeDotaLaunchPhase...\n");
     test_describe_dota_launch_phase();
 
-    std::printf("[2/24] GBE_GetDotaReconnectContext...\n");
+    std::printf("[3/25] GBE_GetDotaReconnectContext...\n");
     test_get_dota_reconnect_context();
 
-    std::printf("[3/24] GBE_IsDotaArcadeLobbyActive...\n");
+    std::printf("[4/25] GBE_IsDotaArcadeLobbyActive...\n");
     test_is_dota_arcade_lobby_active();
 
-    std::printf("[4/24] GBE_DotaCustomGameDisplayName...\n");
+    std::printf("[5/25] GBE_DotaCustomGameDisplayName...\n");
     test_dota_custom_game_display_name();
 
-    std::printf("[5/24] GBE_RewriteAccountIdVarintInDirectProtoBody...\n");
+    std::printf("[6/25] GBE_RewriteAccountIdVarintInDirectProtoBody...\n");
     test_rewrite_account_id_varint();
 
-    std::printf("[6/24] GBE_TryPatchDotaAccountIdVarint...\n");
+    std::printf("[7/25] GBE_TryPatchDotaAccountIdVarint...\n");
     test_try_patch_dota_account_id_varint();
 
-    std::printf("[7/24] GBE_TryPatchDotaAccountIdFixed32...\n");
+    std::printf("[8/25] GBE_TryPatchDotaAccountIdFixed32...\n");
     test_try_patch_dota_account_id_fixed32();
 
-    std::printf("[8/24] GBE_PatchDotaLobbyTemplateIdentifiers...\n");
+    std::printf("[9/25] GBE_PatchDotaLobbyTemplateIdentifiers...\n");
     test_patch_dota_lobby_template_identifiers();
 
-    std::printf("[9/24] GBE_PatchDotaTemplateIdentifiers...\n");
+    std::printf("[10/25] GBE_PatchDotaTemplateIdentifiers...\n");
     test_patch_dota_template_identifiers();
 
-    std::printf("[10/24] GBE_ForceDotaLobbyUpdateOwnerSOID...\n");
+    std::printf("[11/25] GBE_ForceDotaLobbyUpdateOwnerSOID...\n");
     test_force_dota_lobby_update_owner_soid();
 
-    std::printf("[11/24] GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage...\n");
+    std::printf("[12/25] GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage...\n");
     test_prepare_dota_practice_lobby_launch_peripheral();
 
-    std::printf("[12/24] GBE_PrepareDotaPersonaStatePeripheralMessage...\n");
+    std::printf("[13/25] GBE_PrepareDotaPersonaStatePeripheralMessage...\n");
     test_prepare_dota_persona_state_peripheral();
 
-    std::printf("[13/24] GBE_AdaptDotaJoinChatChannelResponsePayload...\n");
+    std::printf("[14/25] GBE_AdaptDotaJoinChatChannelResponsePayload...\n");
     test_adapt_dota_join_chat_channel_response();
 
-    std::printf("[14/24] GBE_LogDotaSOCacheSubscribedSummary...\n");
+    std::printf("[15/25] GBE_LogDotaSOCacheSubscribedSummary...\n");
     test_log_dota_socache_subscribed_summary();
 
-    std::printf("[15/24] GBE_LogDotaResponsePacket...\n");
+    std::printf("[16/25] GBE_LogDotaResponsePacket...\n");
     test_log_dota_response_packet();
 
-    std::printf("[16/24] Const data tables...\n");
+    std::printf("[17/25] Const data tables...\n");
     test_const_data_tables();
 
-    std::printf("[17/24] GBE_ExtractDotaHelloContext...\n");
+    std::printf("[18/25] GBE_ExtractDotaHelloContext...\n");
     test_extract_dota_hello_context();
 
-    std::printf("[18/24] GBE_ExtractDirectDotaHelloContext...\n");
+    std::printf("[19/25] GBE_ExtractDirectDotaHelloContext...\n");
     test_extract_direct_dota_hello_context();
 
-    std::printf("[19/24] GBE_ExtractDirectDotaServerHelloContext...\n");
+    std::printf("[20/25] GBE_ExtractDirectDotaServerHelloContext...\n");
     test_extract_direct_dota_server_hello_context();
 
-    std::printf("[20/24] Hello/Welcome builders...\n");
+    std::printf("[21/25] Hello/Welcome builders...\n");
     test_build_direct_dota_client_welcome();
     test_compose_dota_client_welcome();
     test_build_direct_dota_server_welcome();
 
-    std::printf("[21/24] Payload adaptation functions...\n");
+    std::printf("[22/25] Payload adaptation functions...\n");
     test_is_dota_other_left_channel_payload();
     test_adapt_dota_top_custom_games_list_payload();
     test_prepare_dota_direct_replay_message();
     test_patch_dota_practice_lobby_cache_subscribed_template_state();
     test_patch_dota_practice_lobby_launch_template();
 
-    std::printf("[22/24] GBE_ParseDotaEquipOps...\n");
+    std::printf("[23/25] GBE_ParseDotaEquipOps...\n");
     test_parse_dota_equip_ops();
 
-    std::printf("[23/24] GBE_ApplyDotaUnlockStyleBitmask...\n");
+    std::printf("[24/25] GBE_ApplyDotaUnlockStyleBitmask...\n");
     test_apply_dota_unlock_style_bitmask();
 
-    std::printf("[24/24] GBE_BuildSOSingleObjectFromItem...\n");
+    std::printf("[25/25] GBE_BuildSOSingleObjectFromItem...\n");
     test_build_so_single_object_from_item();
 
     std::printf("All payload helper tests complete.\n\n");

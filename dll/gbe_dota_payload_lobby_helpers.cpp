@@ -1371,4 +1371,3 @@ bool GBE_ReplayDotaPracticeLobbyOfficial26Payload(
     message.swap(inner_payload);
     return GBE_ForceDotaLobbyUpdateOwnerSOID(message, lobby_id);
 }
-

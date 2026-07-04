@@ -4,8 +4,8 @@
 Checks:
   1. Every GBE_* declaration in gbe_dota_gc_internal.h has a matching
      definition somewhere in the GC TUs (find zombie declarations).
-  2. Every GBE_* free-function definition in main file + payload_helpers TU
-     has a declaration in the header (find under-exposed definitions).
+  2. Every shared GBE_* free-function definition has a declaration in the
+     header, while member/static helpers are classified as non-actionable.
   3. Doc line numbers in REFACTOR_TODO.md match actual code.
 """
 import os
@@ -20,6 +20,25 @@ PUBLIC_HEADERS = [
 MAIN_CPP = os.path.join(ROOT_DIR, "dll", "steam_game_coordinator.cpp")
 TODO_MD = os.path.join(ROOT_DIR, "REFACTOR_TODO.md")
 GC_TUS = sorted(glob.glob(os.path.join(ROOT_DIR, "dll", "gbe_dota_*.cpp"))) + [MAIN_CPP]
+
+POST_LOGIN_DISPATCH_ENTRIES = [
+    ("GBE_kDotaJoinChatChannel", "adapt_join_chat_channel", "GBE_HandleDotaJoinChatChannelRequest"),
+    ("GBE_kDotaPracticeLobbyCreate", "adapt_practice_lobby_create", "GBE_HandleDotaPracticeLobbyCreateRequest"),
+    ("GBE_kDotaLobbyList", "adapt_lobby_list", "GBE_HandleDotaLobbyListRequest"),
+    ("GBE_kDotaCustomLobbyListRequest", "adapt_custom_lobby_list", "GBE_HandleDotaCustomLobbyListRequest"),
+    ("GBE_kDotaFriendPracticeLobbyListRequest", "adapt_friend_practice_lobby_list", "GBE_HandleDotaFriendPracticeLobbyListRequest"),
+    ("GBE_kGCInviteToLobby", "adapt_invite_to_lobby", "GBE_HandleDotaInviteToLobbyRequest"),
+    ("GBE_kGCLobbyInviteResponse", "adapt_lobby_invite_response", "GBE_HandleDotaLobbyInviteResponseRequest"),
+    ("GBE_kDotaPracticeLobbyJoin", "adapt_practice_lobby_join", "GBE_HandleDotaPracticeLobbyJoinRequest"),
+    ("GBE_kDotaPracticeLobbyLeave", "adapt_practice_lobby_leave", "GBE_HandleDotaPracticeLobbyLeaveRequest"),
+    ("GBE_kDotaPracticeLobbyLaunch", "adapt_practice_lobby_launch", "GBE_HandleDotaPracticeLobbyLaunchRequest"),
+    ("GBE_kDotaPracticeLobbySetDetails", "adapt_practice_lobby_set_details", "GBE_HandleDotaPracticeLobbySetDetailsRequest"),
+    ("GBE_kDotaPracticeLobbySetTeamSlot", "adapt_practice_lobby_set_team_slot", "GBE_HandleDotaPracticeLobbySetTeamSlotRequest"),
+    ("GBE_kDotaPracticeLobbyKick", "adapt_practice_lobby_kick", "GBE_HandleDotaPracticeLobbyKickRequest"),
+    ("GBE_kDotaPracticeLobbyJoinBroadcastChannel", "adapt_practice_lobby_join_broadcast", "GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest"),
+    ("GBE_kDotaLobbyUpdateBroadcastChannelInfo", "adapt_lobby_update_broadcast_info", "GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest"),
+    ("GBE_kDotaPracticeLobbyCloseBroadcastChannel", "adapt_practice_lobby_close_broadcast", "GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest"),
+]
 
 
 def read(path):
@@ -107,6 +126,35 @@ def extract_defined_symbols(tu_paths):
     return defined
 
 
+def audit_post_login_dispatch(main_text):
+    start = main_text.find("bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest")
+    if start < 0:
+        return ["GBE_DispatchDotaPostLoginRequest definition not found"]
+    end = main_text.find("bool Steam_Game_Coordinator::gc_enabled", start)
+    dispatch_text = main_text[start:end if end >= 0 else len(main_text)]
+
+    issues = []
+    for emsg, adapter, handler in POST_LOGIN_DISPATCH_ENTRIES:
+        table_pattern = re.compile(r"\{\s*" + re.escape(emsg) + r"\s*,\s*" + re.escape(adapter) + r"\s*\}")
+        if not table_pattern.search(dispatch_text):
+            issues.append(f"{emsg}: missing table entry for {adapter}")
+
+        adapter_pattern = re.compile(
+            r"auto\s+" + re.escape(adapter) + r"\s*=.*?return\s+self->" + re.escape(handler) + r"\s*\(",
+            re.DOTALL,
+        )
+        if not adapter_pattern.search(dispatch_text):
+            issues.append(f"{adapter}: missing adapter call to {handler}")
+
+    found_entries = re.findall(r"\{\s*(GBE_k[A-Za-z0-9_]+)\s*,\s*(adapt_[A-Za-z0-9_]+)\s*\}", dispatch_text)
+    expected_pairs = {(emsg, adapter) for emsg, adapter, _ in POST_LOGIN_DISPATCH_ENTRIES}
+    found_pairs = set(found_entries)
+    for emsg, adapter in sorted(found_pairs - expected_pairs):
+        issues.append(f"{emsg}: unexpected dispatch table adapter {adapter}")
+
+    return issues
+
+
 def main():
     header_text = read(INTERNAL_H)
     real_decls = extract_header_symbols(header_text)
@@ -120,6 +168,8 @@ def main():
     print("=" * 70)
     print("AUDIT 1: Header declarations WITHOUT any definition (zombie decls)")
     print("=" * 70)
+    print("  Action: remove stale declarations or restore the missing definition.")
+    print("  False-positive class: declarations for non-GBE types are ignored.")
     zombies = sorted(real_decls - set(defined.keys()))
     if not zombies:
         print("  (none) - all header declarations have a definition")
@@ -131,8 +181,10 @@ def main():
     print("=" * 70)
     print("AUDIT 2: Definitions WITHOUT header declaration (under-exposed)")
     print("=" * 70)
-    # Only check free functions and extern vars in main + payload_helpers,
-    # since those are the "shared" TUs. Member functions are visible via class header.
+    print("  Action: declare shared helpers, or make private helpers file-local.")
+    print("  False-positive class: member functions and static helpers are non-actionable.")
+    # Only check free functions in shared orchestration TUs. Member functions are
+    # visible via class headers, and static helpers intentionally stay file-local.
     underexposed = []
     for name, (f, ln, kind) in sorted(defined.items(), key=lambda x: (x[1][0], x[1][1])):
         if name not in all_declared_symbols:
@@ -151,7 +203,10 @@ def main():
     print("=" * 70)
     print("AUDIT 3: Doc line-number accuracy (REFACTOR_TODO.md vs actual)")
     print("=" * 70)
-    main_lines = read(MAIN_CPP).splitlines()
+    print("  Action: update fragile line references or replace them with function names.")
+    print("  False-positive class: function-name references without L<num> are ignored.")
+    main_text = read(MAIN_CPP)
+    main_lines = main_text.splitlines()
     todo_text = read(TODO_MD)
     # Extract doc-claimed member function positions: "L<digits>  <name>"
     doc_fns = {}
@@ -176,6 +231,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 4: Post-login dispatch table mapping")
+    print("=" * 70)
+    print("  Action: keep the dispatch table aligned with the original post-login switch mapping.")
+    dispatch_issues = audit_post_login_dispatch(main_text)
+    if not dispatch_issues:
+        print(f"  All {len(POST_LOGIN_DISPATCH_ENTRIES)} dispatch entries map to the expected handlers")
+    else:
+        for issue in dispatch_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -184,6 +251,7 @@ def main():
     print(f"  Zombie declarations (no def):        {len(zombies)}")
     print(f"  Under-exposed definitions:           {len(underexposed)}")
     print(f"  Doc line-number mismatches:          {len(mismatches)}")
+    print(f"  Dispatch table mismatches:           {len(dispatch_issues)}")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,29 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${TMPDIR:-/tmp}/opencode/gbe_gc_offline_tests"
 CXX_BIN="${CXX:-c++}"
+FULL=0
+
+usage() {
+    printf 'usage: %s [--full]\n' "$(basename "$0")"
+    printf '  default  run fast high-signal GC offline tests\n'
+    printf '  --full   run the complete GC offline test suite\n'
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        --full)
+            FULL=1
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
 
 mkdir -p "$BUILD_DIR"
 cd "$ROOT_DIR"
@@ -62,16 +85,6 @@ printf '[run] %s practice_lobby\n' gc_replay_test
     tools/gc_replay_test/fixtures/practice_lobby.txt \
     --expect tools/gc_replay_test/fixtures/practice_lobby.expected.txt
 
-printf '[run] %s chat_channel\n' gc_replay_test
-"$BUILD_DIR/gc_replay_test" \
-    tools/gc_replay_test/fixtures/chat_channel.txt \
-    --expect tools/gc_replay_test/fixtures/chat_channel.expected.txt
-
-printf '[run] %s lobby_lifecycle\n' gc_replay_test
-"$BUILD_DIR/gc_replay_test" \
-    tools/gc_replay_test/fixtures/lobby_lifecycle.txt \
-    --expect tools/gc_replay_test/fixtures/lobby_lifecycle.expected.txt
-
 printf '[run] %s game_flow\n' gc_replay_test
 "$BUILD_DIR/gc_replay_test" \
     tools/gc_replay_test/fixtures/game_flow.txt \
@@ -82,35 +95,47 @@ printf '[run] %s cache_and_items\n' gc_replay_test
     tools/gc_replay_test/fixtures/cache_and_items.txt \
     --expect tools/gc_replay_test/fixtures/cache_and_items.expected.txt
 
-printf '[run] %s wire_edge_cases\n' gc_replay_test
-"$BUILD_DIR/gc_replay_test" \
-    tools/gc_replay_test/fixtures/wire_edge_cases.txt \
-    --expect tools/gc_replay_test/fixtures/wire_edge_cases.expected.txt
+if [[ "$FULL" -eq 1 ]]; then
+    printf '[run] %s chat_channel\n' gc_replay_test
+    "$BUILD_DIR/gc_replay_test" \
+        tools/gc_replay_test/fixtures/chat_channel.txt \
+        --expect tools/gc_replay_test/fixtures/chat_channel.expected.txt
 
-build_and_run \
-    gbe_dota_lobby_flow_test \
-    tools/gbe_dota_lobby_flow_test/gbe_dota_lobby_flow_test.cpp \
-    dll/gbe_dota_lobby_flow.cpp \
-    dll/gbe_dota_lobby_publish.cpp \
-    dll/gbe_dota_lobby_snapshot.cpp \
-    dll/gbe_dota_custom_game.cpp \
-    dll/gbe_proto_wire.cpp
+    printf '[run] %s lobby_lifecycle\n' gc_replay_test
+    "$BUILD_DIR/gc_replay_test" \
+        tools/gc_replay_test/fixtures/lobby_lifecycle.txt \
+        --expect tools/gc_replay_test/fixtures/lobby_lifecycle.expected.txt
 
-build_and_run \
-    gbe_dota_lobby_state_test \
-    tools/gbe_dota_lobby_state_test/gbe_dota_lobby_state_test.cpp \
-    dll/gbe_dota_lobby_state.cpp \
-    dll/gbe_dota_lobby_flow.cpp \
-    dll/gbe_dota_custom_game.cpp \
-    dll/gbe_dota_gc_wire.cpp \
-    dll/gbe_proto_wire.cpp
+    printf '[run] %s wire_edge_cases\n' gc_replay_test
+    "$BUILD_DIR/gc_replay_test" \
+        tools/gc_replay_test/fixtures/wire_edge_cases.txt \
+        --expect tools/gc_replay_test/fixtures/wire_edge_cases.expected.txt
 
-build_and_run \
-    gbe_dota_custom_game_test \
-    tools/gbe_dota_custom_game_test/gbe_dota_custom_game_test.cpp \
-    dll/gbe_dota_custom_game.cpp \
-    dll/gbe_dota_custom_lobby_http.cpp \
-    dll/gbe_proto_wire.cpp
+    build_and_run \
+        gbe_dota_lobby_flow_test \
+        tools/gbe_dota_lobby_flow_test/gbe_dota_lobby_flow_test.cpp \
+        dll/gbe_dota_lobby_flow.cpp \
+        dll/gbe_dota_lobby_publish.cpp \
+        dll/gbe_dota_lobby_snapshot.cpp \
+        dll/gbe_dota_custom_game.cpp \
+        dll/gbe_proto_wire.cpp
+
+    build_and_run \
+        gbe_dota_lobby_state_test \
+        tools/gbe_dota_lobby_state_test/gbe_dota_lobby_state_test.cpp \
+        dll/gbe_dota_lobby_state.cpp \
+        dll/gbe_dota_lobby_flow.cpp \
+        dll/gbe_dota_custom_game.cpp \
+        dll/gbe_dota_gc_wire.cpp \
+        dll/gbe_proto_wire.cpp
+
+    build_and_run \
+        gbe_dota_custom_game_test \
+        tools/gbe_dota_custom_game_test/gbe_dota_custom_game_test.cpp \
+        dll/gbe_dota_custom_game.cpp \
+        dll/gbe_dota_custom_lobby_http.cpp \
+        dll/gbe_proto_wire.cpp
+fi
 
 printf '[build] %s\n' gbe_dota_gc_payload_helpers_test
 "$CXX_BIN" "${COMMON_FLAGS[@]}" \
@@ -153,4 +178,8 @@ printf '[build] %s\n' gbe_dota_handler_test
 printf '[run] %s\n' gbe_dota_handler_test
 "$BUILD_DIR/gbe_dota_handler_test"
 
-printf 'all GC offline tests passed\n'
+if [[ "$FULL" -eq 1 ]]; then
+    printf 'all GC offline tests passed (--full)\n'
+else
+    printf 'fast GC offline tests passed\n'
+fi

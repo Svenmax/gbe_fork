@@ -688,7 +688,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             // StorePurchaseInit - client wants to buy an item from the store.
             // Parse the request to get item_def_id, then respond with success
             // and grant the item to the player's inventory.
-            
+
             // Parse line_items (field 4) to get item_def_id
             uint32_t purchased_def = 0;
             uint32_t purchased_qty = 1;
@@ -1241,5 +1241,3 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
 
     return true;
 }
-
-
