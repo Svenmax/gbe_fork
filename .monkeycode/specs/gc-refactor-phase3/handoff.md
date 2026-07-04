@@ -41,7 +41,7 @@
   - Split into two files because TemplateReplay (canned-response switch) is a different concern from post-login/socket/server-assignment (session establishment); keeping them together would have produced a 2193-line file exceeding the 2000-line tolerance.
   - List Y = 0 for both files (all 5 handlers already declared in `dll/dll/steam_game_coordinator.h`).
 - Handler signatures and function bodies were kept unchanged.
-- `dll/gbe_dota_handlers.cpp` is currently 81 lines (down from 2207 after the 3.1.5b sub-batch). It is now an include + using-aliases shell with zero handler definitions. Phase 3.1.6 will evaluate whether to remove it entirely or keep it as a shared alias/include hub.
+- `dll/gbe_dota_handlers.cpp` has been **removed entirely** (Phase 3.1.6 complete). The original 5757-line monolith is fully decomposed into 7 domain files: inventory (513), chat (653), lobby (1663), match (802), misc (726), template_replay (1255), post_login (1011). Total ~6623 lines across 7 files. All 62 handlers extracted, zero handler-local statics remain orphaned.
 - `premake5.lua` uses `dll/**` in `common_files`, so the new cpp file is included by the main build source glob.
 
 ## Verification
@@ -56,8 +56,9 @@
 
 ## Recommended Next Step
 
-- Phase 3.1.5 mechanical extraction is fully complete (3.1.5a match + 3.1.5b post-login/template + 3.1.5c misc). All 62 handlers now live in domain-specific files; `dll/gbe_dota_handlers.cpp` is an 81-line shell with zero handler definitions.
-- Next step is Phase 3.1.6: decide whether to remove `dll/gbe_dota_handlers.cpp` entirely (the using-aliases are dead code now) or keep it as a shared alias/include hub. Then proceed to 3.1.6.5 (handler test harness) and 3.1.6.6 (action model) as prerequisites for the logic refactors 3.1.7-3.1.10.
+- Phase 3.1.5 mechanical extraction is fully complete (3.1.5a match + 3.1.5b post-login/template + 3.1.5c misc). All 62 handlers now live in 7 domain-specific files.
+- Phase 3.1.6 complete: `dll/gbe_dota_handlers.cpp` removed entirely (was an 81-line shell with zero definitions).
+- Next step is 3.1.6.5 (handler test harness) and 3.1.6.6 (action model) as prerequisites for the logic refactors 3.1.7-3.1.10. These two tasks are the regression-protection foundation; without them, logic refactoring has no safety net.
 - **Plan revisions (2026-07-04)**: Phase 3 plan was reviewed end-to-end. Key changes: (1) handler-file target relaxed from 1000 to 1500 lines because post-login/socket/template handlers share protocol state that resists splitting before 3.3; (2) added task 3.1.6.5 "Build handler-level test harness" as a prerequisite for 3.1.7-3.1.10, because the existing 92 offline tests are payload-helper-level only and provide zero handler-behavior coverage; (3) moved the side-effect action model (was 3.1.12) ahead to 3.1.6.6 so the action contract is defined once before any logic refactor; (4) added a boundary note to 3.1.9 clarifying that per-handler restructuring stays in 3.1.9 while cross-handler state-machine consolidation belongs to 3.4; (5) added a "good enough" stop condition to Success Metrics so the last 20% of file-size reduction does not drive unjustified abstractions. Remaining gaps (payload helper call-graph analysis, dispatch-table signature normalization risk, domain-specific line-count calibration) will be addressed at the start of 3.2 / 3.3 respectively.
 - Treat mechanical extraction as an intermediate step only. Every GC domain moved into a new file must receive a follow-up logic refactor before that domain is considered complete.
 - For each extracted domain, separate request parsing, state mutation, message/response construction, coordinator-owned side effects, and focused tests.
