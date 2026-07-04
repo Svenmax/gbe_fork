@@ -64,6 +64,169 @@
 
 using namespace gamecoordinator::tf2;
 
+// ============================================================================
+// Side-effect order documentation (see dll/gbe_dota_action_model.h for the
+// canonical action type and cross-domain ordering invariants).
+// ============================================================================
+//
+// GBE_HandleDotaJoinChatChannelRequest (emsg 7009 -> 7010):
+//   1. Parse: channel_name (field 1), channel_type (field 2, optional)
+//   2. If no local lobby: early return (no side effects)
+//   3. Mutate GBE_local_lobby: has_chat_channel=true, chat_channel_id
+//      (generate if 0), chat_channel_name, chat_channel_type [coordinator]
+//   4. If generic_lobby_id != 0: RefreshLobbyCallbacksForDota() [coordinator]
+//   5. GBE_PublishSharedDotaLobbyState("7009_join_chat") [network publish]
+//   6. GBE_CaptureCurrentDotaLobbyState -> lobby_snapshot [coordinator read]
+//   7. Build 7010 payload (pure: GBE_AdaptDotaJoinChatChannelResponsePayload)
+//   8. GBE_PushDotaResponse(7010) [coordinator: push_incoming_now]
+//   9. Log
+//   Invariant: lobby mutation precedes publish precedes response.
+//
+// GBE_HandleDotaChatMessageRequest (emsg 7273, outgoing):
+//   1. Parse: text (field 1), channel_id (field 2), account_id (field 3),
+//      persona_name (field 4)
+//   2. If no local lobby: early return
+//   3. Resolve channel_id/account_id/persona_name (defaults from request or
+//      settings) [coordinator read]
+//   4. Build 7273 chat payload (pure: build_dota_chat_message_payload)
+//   5. If network && generic_lobby_id != 0:
+//      network->sendToAll(Steam_Messages{FRIEND_CHAT}) [network broadcast]
+//   6. Log
+//   Note: no local GC queue push (local echo suppressed); relay is network-only.
+//
+// GBE_HandleDotaNetworkChatMessage (incoming 7273 from network):
+//   1. Validate msg, gc_initialized, gc_profile==DOTA2, lobby active
+//   2. Extract inner_emsg from message, validate == GBE_kDotaChatMessage
+//   3. Parse request (pure)
+//   4. Rewrite channel_id varint to local channel (pure: rewrite_varint_fields)
+//   5. Resolve sender_name [coordinator read: settings/steam_client/members]
+//   6. If sender_name resolved: append field 3 (pure: append_bytes_field)
+//   7. Build local_channel_message (pure: build_dota_zero_header_payload)
+//   8. push_incoming_now(7273 | proto_mask) [coordinator]
+//   9. Log
+//   Invariant: local channel rewrite happens before push_incoming_now so the
+//   client sees the local channel id, not the remote sender's channel id.
+//
+// GBE_HandleDotaLeaveChatChannelRequest (emsg 7272 -> 7014, plus 7010 in
+// postgame-signout path):
+//   1. Parse: channel_id (field 1, optional)
+//   2. Compute leave-chat decision (pure: compute_leave_chat_decision)
+//   3. If !active || !has_chat_channel (stale path):
+//      a. If channel_id == 0: early return
+//      b. Build 7014 stale payload (pure)
+//      c. GBE_PushDotaResponse(7014) [coordinator]
+//      d. return
+//   4. If channel_id == 0: early return
+//   5. If leaving_legacy_channel_after_signout:
+//      a. Build 7010 postgame payload (pure)
+//      b. GBE_PushDotaResponse(7010) [coordinator]
+//   6. If leaving_non_current_channel_during_abandon:
+//      Set GBE_pending_dota_abandon_finalize flags [coordinator mutation]
+//   7. Build 7014 payload (pure)
+//   8. GBE_PushDotaResponse(7014) [coordinator]
+//   9. If leaving_postgame_channel:
+//      a. If !matches_current_postgame_channel: return
+//      b. GBE_UpdateDotaPracticeLobbyLaunchRichPresence [coordinator]
+//      c. Clear chat channel state in GBE_local_lobby [coordinator mutation]
+//      d. Build persona_message (GBE_PrepareDotaPersonaStatePeripheralMessage)
+//      e. Log (do NOT queue 766 -- rich presence handled via SetRichPresence)
+//   10. Else (not postgame):
+//       a. If request_matches_local: clear chat state [coordinator mutation]
+//       b. Else: return (preserve state, stale 7272 for previous game)
+//   11. If leaving_postgame_channel && matches_current && !shared_state.valid:
+//       a. GBE_LeaveGenericLobby [coordinator]
+//       b. GBE_local_lobby = {} [coordinator mutation]
+//       Else: GBE_PublishSharedDotaLobbyState("7272_leave_chat") [publish]
+//   12. GBE_MaybeHandleDotaPracticeLobbyKicked [coordinator]
+//   13. Log
+//   Invariant: response(7014) precedes lobby state clear precedes publish.
+//   Stale-path response(7014) is sent without mutating any lobby state.
+//
+// GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest (emsg 7149 -> 7055):
+//   1. Parse: channel (field 1), country_code/description/language_code (opt)
+//   2. If no local lobby: early return
+//   3. Mutate GBE_local_lobby: has_broadcast_channel=true, broadcast_channel_id,
+//      broadcast_country_code/description/language_code [coordinator]
+//   4. GBE_PublishSharedDotaLobbyState("7149_join_broadcast") [publish]
+//   5. GBE_SendDotaPracticeLobbyDetailsUpdate [coordinator: pushes details]
+//   6. If has_request_job:
+//      a. Build 7055 payload (pure)
+//      b. GBE_PushDotaResponse(7055) [coordinator]
+//   7. Log
+//   Invariant: lobby mutation precedes publish precedes details update precedes
+//   response.
+//
+// GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest (emsg 7367):
+//   1. Parse: channel (field 1), country_code/description/language_code (opt)
+//   2. If no local lobby: early return
+//   3. Mutate GBE_local_lobby: has_broadcast_channel=true, broadcast_channel_id,
+//      (conditional) broadcast_country_code/description/language_code [coordinator]
+//   4. GBE_PublishSharedDotaLobbyState("7367_update_broadcast") [publish]
+//   5. GBE_SendDotaPracticeLobbyDetailsUpdate [coordinator]
+//   6. Log
+//   Invariant: mutation precedes publish precedes details update.
+//
+// GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest (emsg 8054):
+//   1. Parse: channel (field 1)
+//   2. If no local lobby: early return
+//   3. Mutate GBE_local_lobby: has_broadcast_channel=false, broadcast_channel_id=
+//      request.channel, clear country/description/language [coordinator]
+//   4. GBE_PublishSharedDotaLobbyState("8054_close_broadcast") [publish]
+//   5. GBE_SendDotaPracticeLobbyDetailsUpdate [coordinator]
+//   6. Log
+//   Invariant: mutation precedes publish precedes details update.
+// ============================================================================
+
+namespace {
+
+// Pure leave-chat decision helper.
+//
+// Reads the request channel id and the local lobby's chat/postgame state,
+// returns all derived decision flags needed by the leave-chat handler. Keeping
+// this pure lets the handler focus on executing the decision's side effects in
+// the documented order without interleaving boolean derivation logic.
+struct LeaveChatDecision {
+    uint64 channel_id{};                      // resolved request channel (or local)
+    uint64 local_channel_id{};                // GBE_local_lobby.chat_channel_id
+    uint64 pre_postgame_channel_id{};         // abandon_pre_postgame_chat_channel_id
+    bool leaving_postgame_channel{};          // active postgame abandon + has chat + type==18
+    bool matches_current_postgame_channel{};  // request channel == local channel
+    bool matches_pre_postgame_channel{};      // request channel == pre-postgame channel
+    bool leaving_non_current_channel_during_abandon{};  // postgame + !current + pre
+    bool leaving_legacy_channel_after_signout{};        // postgame + !current + pre==0
+    bool request_matches_local{};             // request channel == local channel
+};
+
+inline LeaveChatDecision compute_leave_chat_decision(
+    const GBE_DotaLeaveChatChannelRequest &request,
+    const GBE_LocalLobby &lobby)
+{
+    LeaveChatDecision d;
+    d.local_channel_id = lobby.chat_channel_id;
+    d.channel_id = request.channel_id != 0 ? request.channel_id : d.local_channel_id;
+    d.pre_postgame_channel_id = lobby.abandon_pre_postgame_chat_channel_id;
+    d.leaving_postgame_channel =
+        lobby.abandon_postgame_active &&
+        lobby.has_chat_channel &&
+        d.local_channel_id != 0 &&
+        lobby.chat_channel_type == 18u;
+    d.matches_current_postgame_channel = (d.channel_id == d.local_channel_id);
+    d.matches_pre_postgame_channel =
+        d.pre_postgame_channel_id != 0 && d.channel_id == d.pre_postgame_channel_id;
+    d.leaving_non_current_channel_during_abandon =
+        d.leaving_postgame_channel &&
+        !d.matches_current_postgame_channel &&
+        d.matches_pre_postgame_channel;
+    d.leaving_legacy_channel_after_signout =
+        d.leaving_postgame_channel &&
+        !d.matches_current_postgame_channel &&
+        d.pre_postgame_channel_id == 0;
+    d.request_matches_local = (d.channel_id == d.local_channel_id);
+    return d;
+}
+
+} // anonymous namespace
+
 static uint64 GBE_GenerateDotaChatChannelId()
 {
     std::random_device device;
@@ -315,36 +478,28 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         return true;
     }
 
-    const uint64 local_channel_id = GBE_local_lobby.chat_channel_id;
-    const uint64 channel_id = request.channel_id != 0 ? request.channel_id : local_channel_id;
+    const LeaveChatDecision d = compute_leave_chat_decision(request, GBE_local_lobby);
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
-    const uint64 pre_postgame_channel_id = GBE_local_lobby.abandon_pre_postgame_chat_channel_id;
-    const bool leaving_postgame_channel =
-        GBE_local_lobby.abandon_postgame_active &&
-        GBE_local_lobby.has_chat_channel &&
-        local_channel_id != 0 &&
-        GBE_local_lobby.chat_channel_type == 18u;
-    const bool matches_current_postgame_channel = channel_id == local_channel_id;
-    const bool matches_pre_postgame_channel = pre_postgame_channel_id != 0 && channel_id == pre_postgame_channel_id;
+
     if (!GBE_local_lobby.active || !GBE_local_lobby.has_chat_channel) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Replying 7014 for stale 7272 after lobby reset without restoring lobby state. request_channel=%llu active=%u has_chat=%u local_channel=%llu",
-            static_cast<unsigned long long>(channel_id),
+            static_cast<unsigned long long>(d.channel_id),
             GBE_local_lobby.active ? 1u : 0u,
             GBE_local_lobby.has_chat_channel ? 1u : 0u,
-            static_cast<unsigned long long>(local_channel_id)
+            static_cast<unsigned long long>(d.local_channel_id)
         );
 
-        if (channel_id == 0) {
+        if (d.channel_id == 0) {
             GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring stale 7272 after lobby reset because no request channel is available");
             return true;
         }
 
         std::string stale_response_7014;
-        if (!gbe::gc_message::build_dota_other_left_channel_payload(channel_id, settings->get_local_steam_id().ConvertToUint64(), stale_response_7014)) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building stale 7014 payload for channel=%llu", static_cast<unsigned long long>(channel_id));
+        if (!gbe::gc_message::build_dota_other_left_channel_payload(d.channel_id, settings->get_local_steam_id().ConvertToUint64(), stale_response_7014)) {
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building stale 7014 payload for channel=%llu", static_cast<unsigned long long>(d.channel_id));
             return true;
         }
 
@@ -353,74 +508,66 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
 
         return true;
     }
-    if (channel_id == 0) {
+    if (d.channel_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7272 because no chat channel is active");
         return true;
     }
 
-    const bool leaving_non_current_channel_during_abandon =
-        leaving_postgame_channel &&
-        !matches_current_postgame_channel &&
-        matches_pre_postgame_channel;
-    const bool leaving_legacy_channel_after_signout =
-        leaving_postgame_channel &&
-        !matches_current_postgame_channel &&
-        pre_postgame_channel_id == 0;
-    if (leaving_legacy_channel_after_signout) {
+    if (d.leaving_legacy_channel_after_signout) {
         std::string response_7010_postgame;
         if (gbe::gc_message::build_dota_post_game_join_chat_channel_response_payload(
                 steam_id,
-                local_channel_id,
+                d.local_channel_id,
                 GBE_local_lobby.chat_channel_name,
                 std::string(settings->get_local_name()),
                 response_7010_postgame)) {
             if (wrapped && !outer_session_field_raw) {
-                GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for postgame 7010 after signout channel=%llu", static_cast<unsigned long long>(channel_id));
+                GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for postgame 7010 after signout channel=%llu", static_cast<unsigned long long>(d.channel_id));
                 return true;
             }
             GBE_PushDotaResponse(GBE_kDotaJoinChatChannelResponse, response_7010_postgame, wrapped, outer_session_field_raw, "postgame_7010_after_signout");
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Queued postgame 7010 after normal signout legacy 7272 request_channel=%llu post_channel=%llu lobby_id=%llu",
-                static_cast<unsigned long long>(channel_id),
-                static_cast<unsigned long long>(local_channel_id),
+                static_cast<unsigned long long>(d.channel_id),
+                static_cast<unsigned long long>(d.local_channel_id),
                 static_cast<unsigned long long>(lobby_id)
             );
         } else {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building postgame 7010 after signout channel=%llu", static_cast<unsigned long long>(channel_id));
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building postgame 7010 after signout channel=%llu", static_cast<unsigned long long>(d.channel_id));
         }
     }
-    if (leaving_non_current_channel_during_abandon) {
+    if (d.leaving_non_current_channel_during_abandon) {
         GBE_pending_dota_abandon_finalize_after_7014 = true;
         GBE_pending_dota_abandon_finalize_lobby_id = lobby_id;
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Handling pre-postgame 7272 during abandon teardown (replying 7014, reset after retrieval). request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu matched_pre=%u lobby_id=%llu",
-            static_cast<unsigned long long>(channel_id),
-            static_cast<unsigned long long>(local_channel_id),
-            static_cast<unsigned long long>(GBE_local_lobby.abandon_pre_postgame_chat_channel_id),
-            matches_pre_postgame_channel ? 1u : 0u,
+            static_cast<unsigned long long>(d.channel_id),
+            static_cast<unsigned long long>(d.local_channel_id),
+            static_cast<unsigned long long>(d.pre_postgame_channel_id),
+            d.matches_pre_postgame_channel ? 1u : 0u,
             static_cast<unsigned long long>(lobby_id)
         );
     }
 
     std::string response_7014;
-    if (!gbe::gc_message::build_dota_other_left_channel_payload(channel_id, settings->get_local_steam_id().ConvertToUint64(), response_7014)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7014 payload for channel=%llu", static_cast<unsigned long long>(channel_id));
+    if (!gbe::gc_message::build_dota_other_left_channel_payload(d.channel_id, settings->get_local_steam_id().ConvertToUint64(), response_7014)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7014 payload for channel=%llu", static_cast<unsigned long long>(d.channel_id));
         return true;
     }
 
     if (!GBE_PushDotaResponse(GBE_kDotaOtherLeftChannel, response_7014, wrapped, outer_session_field_raw, "7272_7014"))
         return true;
 
-    if (leaving_postgame_channel) {
-        if (!matches_current_postgame_channel) {
+    if (d.leaving_postgame_channel) {
+        if (!d.matches_current_postgame_channel) {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Handled non-current 7272 during postgame teardown. request_channel=%llu local_channel=%llu pre_postgame_channel=%llu",
                 static_cast<unsigned long long>(request.channel_id),
-                static_cast<unsigned long long>(local_channel_id),
-                static_cast<unsigned long long>(pre_postgame_channel_id)
+                static_cast<unsigned long long>(d.local_channel_id),
+                static_cast<unsigned long long>(d.pre_postgame_channel_id)
             );
             return true;
         }
@@ -469,8 +616,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         // lobby's chat state -- doing so causes the next abandon to lose pre_channel context,
         // which prevents the postgame 7272/7014 from triggering ResetGCMemory and the
         // client never sees the score screen.
-        const bool request_matches_local = (channel_id == local_channel_id);
-        if (request_matches_local) {
+        if (d.request_matches_local) {
             GBE_local_lobby.has_chat_channel = false;
             GBE_local_lobby.chat_channel_id = 0;
             GBE_local_lobby.chat_channel_name.clear();
@@ -479,8 +625,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Ignoring stale 7272 for non-current channel; preserving current chat state. request_channel=%llu local_channel=%llu lobby_id=%llu state=%u game_state=%u",
-                static_cast<unsigned long long>(channel_id),
-                static_cast<unsigned long long>(local_channel_id),
+                static_cast<unsigned long long>(d.channel_id),
+                static_cast<unsigned long long>(d.local_channel_id),
                 static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                 GBE_local_lobby.state,
                 GBE_local_lobby.game_state
@@ -491,7 +637,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
 
     // If shared state was already cleared by the normal signout finalize (GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed),
     // do not re-publish stale local lobby state back into it. Instead, leave the generic lobby and clear local state.
-    if (leaving_postgame_channel && matches_current_postgame_channel && !GBE_shared_dota_lobby_state.valid) {
+    if (d.leaving_postgame_channel && d.matches_current_postgame_channel && !GBE_shared_dota_lobby_state.valid) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Skipping publish after postgame 7272 because shared state was already cleared by signout finalize LobbyID=%llu",
@@ -507,7 +653,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Chat channel left. channel=%llu wrapped=%d",
-            static_cast<unsigned long long>(channel_id),
+            static_cast<unsigned long long>(d.channel_id),
             wrapped ? 1 : 0
         );
         return true;
@@ -516,7 +662,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Chat channel left. channel=%llu wrapped=%d",
-        static_cast<unsigned long long>(channel_id),
+        static_cast<unsigned long long>(d.channel_id),
         wrapped ? 1 : 0
     );
     return true;
