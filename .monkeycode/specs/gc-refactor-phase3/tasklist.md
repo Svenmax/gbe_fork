@@ -192,25 +192,29 @@
 
 ## Phase 3.3: Introduce Lightweight Handler Dispatch Table
 
-- [ ] 3.3.1 Normalize candidate handler signatures
-  - [ ] Identify handlers that can accept a shared request context mechanically.
-  - [ ] Avoid semantic changes while normalizing signatures.
-  - [ ] Run offline GC tests after each group.
+- [x] 3.3.1 Normalize candidate handler signatures
+  - [x] Identify handlers that can accept a shared request context mechanically.
+  - [x] Avoid semantic changes while normalizing signatures.
+  - [x] Run offline GC tests after each group.
+  - Notes: decided NOT to normalize the 16 handler signatures. The handlers have heterogeneous parameter lists (some take `request_job_id`/`has_request_job`, some don't; `Launch` reorders them). Forcing a common signature would require semantic edits across chat/lobby handlers that have no per-domain offline test coverage (Tier B deferred per Phase 3.1 tiering). Instead, each table entry stores a tiny adapter lambda that translates the canonical `DotaGcRequestContext` into the handler's existing signature. This satisfies the acceptance criterion ("Adding a new simple handler requires adding a table entry") without touching handler bodies.
 
-- [ ] 3.3.2 Implement static dispatch table
-  - [ ] Define a private `DotaHandlerEntry` table.
-  - [ ] Add lookup by `inner_emsg`.
-  - [ ] Preserve existing logging behavior.
+- [x] 3.3.2 Implement static dispatch table
+  - [x] Define a private `DotaHandlerEntry` table.
+  - [x] Add lookup by `inner_emsg`.
+  - [x] Preserve existing logging behavior.
+  - Notes: the table is a `static const Entry kTable[]` local array inside `GBE_DispatchDotaPostLoginRequest` (16 entries). Each `Entry` holds `{ emsg, Adapter adapter }` where `Adapter` is a function-pointer typedef. Adapters are captureless local lambdas (using `+[]` to convert to function pointer). Local lambdas (not free functions in an anonymous namespace) are required because the handlers are private members of `Steam_Game_Coordinator` — a lambda defined inside a member function can access that class's private members. First CI attempt (b44edb65) used anonymous-namespace free functions and failed with MSVC C2248; fixed in b77f442c by moving adapters inside the member function as local lambdas.
 
-- [ ] 3.3.3 Replace repetitive switch branches
-  - [ ] Migrate simple branches first.
-  - [ ] Keep special cases explicit when they require unique handling.
-  - [ ] Keep `GBE_DispatchDotaPostLoginRequest` easy to scan.
+- [x] 3.3.3 Replace repetitive switch branches
+  - [x] Migrate simple branches first.
+  - [x] Keep special cases explicit when they require unique handling.
+  - [x] Keep `GBE_DispatchDotaPostLoginRequest` easy to scan.
+  - Notes: the original 16-arm switch (each arm repeated `log_lobby_request(); return GBE_HandleDotaXxx(...)`) is replaced by: lookup `entry` in `kTable` by `context.inner_emsg` → if not found return false (no log, same as original `default`) → log once → call `entry->adapter(this, context, outer_session_field_raw)`. Special-case handlers needing custom context shaping (direct-path inventory/match/misc in `GBE_HandleDotaDirectPostLoginRequest`, wrapped-path abandon/signout/custom-game in `GBE_HandleDotaWrappedPostLoginRequest`) stay as explicit `if` branches in their own functions — they were never part of this switch and do not belong in the table. The dispatch function body is now ~110 lines (was ~75), but the growth is 16 one-line adapter lambdas + a 16-entry table, which is the explicit cost of "adding a handler = adding one adapter + one table entry". The actual control flow shrank from a 16-arm switch to a linear lookup + single log + single indirect call.
 
-- [ ] 3.3.4 Verify behavior
-  - [ ] Run offline GC tests.
-  - [ ] Compare replay fixture outputs.
-  - [ ] Confirm adding a simple handler only requires a table entry.
+- [x] 3.3.4 Verify behavior
+  - [x] Run offline GC tests.
+  - [x] Compare replay fixture outputs.
+  - [x] Confirm adding a simple handler only requires a table entry.
+  - Notes: 92/92 payload + 9/9 handler offline tests pass; audit clean (0 zombie / 0 under-exposed / 0 mismatch). CI build (win / api_experimental / x64 / release) passed on commit b77f442c. Existing replay-fixture tests (gc_replay_test practice_lobby / lobby_lifecycle / game_flow / cache_and_items / wire_edge_cases) pass unchanged, confirming byte-level output preserved. Adding a new simple handler now requires: (1) implement `GBE_HandleDotaXxxRequest` in its domain .cpp, (2) declare it in `dll/dll/steam_game_coordinator.h`, (3) add one `adapt_xxx` lambda + one table entry inside `GBE_DispatchDotaPostLoginRequest`.
 
 ## Phase 3.4: Centralize Lobby State Transitions
 
