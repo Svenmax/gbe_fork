@@ -1,98 +1,103 @@
 # GC 重构后续实施任务清单
 
-- [ ] 1. 收缩 `gbe_dota_gc_internal.h` 的共享边界
-  - [ ] 1.1 盘点 `gbe_dota_gc_internal.h` 中的 extern 全局状态、extern 常量和 free helper 声明
-    - 输出按调用域分类的保留、下沉、拆分清单
-    - 目标文件：`dll/gbe_dota_gc_internal.h`
-  - [ ] 1.2 新建或复用更小的内部头文件承载 wire/payload helper
-    - 将 wire patch、template replay、payload composition 声明迁移到专用 header
-    - 更新 `gbe_dota_payload_*_helpers.cpp` 和调用方 include
-  - [ ] 1.3 新建或复用 lobby state/cache 内部头文件
-    - 将 shared lobby、recent reconnect、server hello 等状态访问收敛到明确边界
-    - 优先暴露函数接口，减少跨 TU 直接读写全局变量
-  - [ ] 1.4 删除迁移后失去调用点的 stale declaration
-    - 运行 `python3 tools/_audit_gc_refactor.py`
-    - 运行 `git diff --check c5dd26d..HEAD -- dll tools premake5.lua`
-
-- [ ] 2. 将 inventory 多副作用 handler 落地为 planner/executor 模式
-  - [ ] 2.1 为 inventory 请求定义 plan/action DTO
+- [ ] 1. Inventory action-list pilot
+  - [ ] 1.1 记录 `GBE_HandleDotaEquipItemsRequest` 当前副作用顺序
+    - 目标文件：`dll/gbe_dota_inventory_handlers.cpp`
+    - 对齐 `tools/gbe_dota_handler_test/smoke_test.cpp` 中 equip basic、empty、full forward 测试
+    - 明确 SO update、2570 response、save、server GC forward、network broadcast、lobby snapshot refresh 的顺序约束
+  - [ ] 1.2 为 equip 请求定义局部 plan 数据结构
+    - 放在 `dll/gbe_dota_inventory_handlers.cpp` anonymous namespace
     - 复用 `GBE_DotaActionType` 和 `GBE_DotaActionList`
-    - 补齐 action payload 所需字段，覆盖 SO update、SO destroy、response、persist、server forward、network broadcast、snapshot refresh
-  - [ ] 2.2 抽出 `UnlockItemStyle` planner
-    - planner 负责解析请求、验证 style、生成有序 action list 和 item mutation plan
-    - coordinator 负责执行真实 mutation、push、save、callback
-  - [ ] 2.3 抽出 `SetItemStyle` planner
-    - planner 负责解析请求、定位目标、生成 callback/save/response action
-    - 保持 response 行为和 source job 语义
-  - [ ] 2.4 抽出 `EquipItems` planner
-    - planner 负责 equip ops 应用决策、modified item 集合、response cache version 计划
-    - executor 负责 server GC forward、network broadcast、snapshot refresh
-  - [ ]* 2.5 为 inventory planner 增加单元测试
-    - 覆盖 unlock valid、invalid style、item missing、consumable missing
-    - 覆盖 set style found/missing
-    - 覆盖 equip empty、single op、多 item swap
-  - [ ]* 2.6 为 inventory action 顺序增加属性测试
-    - 验证任意有效 unlock plan 中 SO update 在 destroy 和 response 前
-    - 验证任意 set-style plan 中 callback 在 save 和 response 前
-    - 验证任意 equip plan 中 local response 在 server/network/snapshot action 前
+    - plan 字段覆盖 modified item ids、response body、cache version、server forward 参数、broadcast/snapshot reason
+  - [ ] 1.3 提取 equip pure planner
+    - planner 输入为请求 body、当前 item 列表、lobby/server 状态快照和 source job
+    - planner 输出 item mutation 结果和有序 action list
+    - planner 不调用 coordinator 方法、不访问 `get_steam_client()`、不发送消息、不保存文件
+  - [ ] 1.4 将 coordinator equip handler 改为执行 plan
+    - coordinator 负责应用 item mutation、push response、save、server GC forward、network broadcast、snapshot refresh
+    - 保持现有日志、reason、payload、job/session 行为
+    - 保持当前 handler tests 全部通过
+  - [ ]* 1.5 补 equip planner focused tests
+    - 覆盖空请求、单 item equip、多 item equip、item missing、style bitmask 输入
+    - 验证 plan 中 local response 位于外部副作用之前
 
-- [ ] 3. 检查点 - 确保所有测试通过
-  - 确保所有测试通过,如有疑问请询问用户
-  - 执行 `bash tools/run_gc_offline_tests.sh`
-  - 执行 `python3 tools/_audit_gc_refactor.py`
-  - 执行 `git diff --check c5dd26d..HEAD -- dll tools premake5.lua`
+- [ ] 2. 扩展 match 7034 真实路径测试
+  - [ ] 2.1 构造 7034 connected player 请求 body
+    - 目标文件：`tools/gbe_dota_handler_test/smoke_test.cpp`
+    - 使用现有 varint/length-delimited helper 构造真实 wire body
+    - 断言 member runtime state、hero id、response payload 和 source job
+  - [ ] 2.2 构造 7034 disconnected player 请求 body
+    - 覆盖 disconnected player 导致的 member runtime state 更新
+    - 断言 queued lobby update 或 response 的顺序
+  - [ ] 2.3 覆盖 7034 game_state runtime update
+    - 构造包含 game_state/send_reason 的请求
+    - 断言 26 runtime lobby details update 的 emsg、source job 和 payload 非空
+  - [ ] 2.4 覆盖 7034 launch poll 最小路径
+    - 设置 `GBE_local_lobby.launch_phase` 为 run queued 或 loaded 前状态
+    - 断言 launch poll 不破坏 7070/8052/8053 已有顺序测试
 
-- [ ] 4. 统一 post-login 路由模型
-  - [ ] 4.1 提取 direct/wrapped post-login routing entry 定义
-    - 将 emsg、path、adapter、domain 名称放入统一 registry
-    - 保留特殊 context shaping 的显式 adapter
-  - [ ] 4.2 将当前 `GBE_DispatchDotaPostLoginRequest` table 迁入统一 registry
-    - 覆盖现有 16 个 table entry
-    - 保持原日志字段和 wrapped/direct session 语义
-  - [ ] 4.3 将 direct if-chain 中可表驱动的 handler 迁入 registry
-    - 优先迁移 inventory、misc minimal success、profile/rank 类纯 request-response handler
-    - 保留 7034 match-flow 等复杂 handler 的独立 adapter
-  - [ ] 4.4 将 AddSocket/ServerAssignment 等业务逻辑移出 post-login 聚合文件
-    - 放入 misc 或 match 相关 domain 文件
-    - post-login 文件只保留解包、路由和 fallback
-  - [ ]* 4.5 增加 routing registry 测试
-    - 验证 direct/wrapped 同一 emsg 能落到同一 handler adapter
-    - 验证 unsupported emsg 返回 false
-    - 验证 request job、outer session、body 透传完整
+- [ ] 3. 扩展 lobby lifecycle 顺序测试
+  - [ ] 3.1 为 7042 leave lobby 添加最小 handler 测试
+    - 覆盖 response、CacheUnsubscribed、shared state publish 或 reset 标志
+    - 断言 reason 和 session/wrapped 保留
+  - [ ] 3.2 为 8246 destroy lobby 添加最小 handler 测试
+    - 覆盖 host destroy 路径的 response 和 state cleanup
+    - 断言 lobby id、pending reset 或 suppress 标志
+  - [ ] 3.3 为 7047 kick 添加最小 handler 测试
+    - 覆盖 kick target 解析和 response/publish 顺序
+    - 使用 stub 记录 target steam id 或 account id
+  - [ ] 3.4 为 7050 set details 添加最小 handler 测试
+    - 覆盖 lobby metadata mutation 发生在 details update publish 前
+    - 断言 room name、server region 或 custom game 字段
 
-- [ ] 5. 扩展 handler 级测试覆盖
-  - [ ] 5.1 为 chat domain 建立 handler smoke test
-    - 覆盖 join chat、leave chat、chat message 的基础副作用顺序
-    - 使用真实 handler TU 和最小 stub
-  - [ ] 5.2 为 lobby domain 建立 handler smoke test
-    - 覆盖 create、join、leave、launch、set details、set team slot
-    - 验证 lobby state mutation、response push、shared state publish 的顺序
-  - [ ] 5.3 为 match domain 建立 handler smoke test
-    - 覆盖 7034 runtime update、strategy time、launch poll 的代表性路径
-    - 验证 queued lobby update 和 response 的顺序
-  - [ ] 5.4 调整 `tools/run_gc_offline_tests.sh`
-    - 将新 domain handler tests 加入统一离线套件
-    - 保持失败即停和清晰的 build/run 输出
-  - [ ]* 5.5 增加真实 include/link 边界编译测试
-    - 为每个新 split TU 添加最小 compile-only target
-    - 覆盖 production header include 顺序
+- [ ] 4. 收缩 handler test harness 边界
+  - [ ] 4.1 整理 `stubs.h` 内部 section
+    - 按 core、inventory、chat/lobby、match、free globals 分区
+    - 只移动声明和注释，不改变行为
+  - [ ] 4.2 抽出可复用 wire body builder helper
+    - 目标文件：`tools/gbe_dota_handler_test/smoke_test.cpp`
+    - 统一 varint、fixed32、fixed64、length-delimited、nested message 构造
+    - 保持现有测试输入字节不变
+  - [ ] 4.3 评估是否拆分 stub header
+    - 如果 `stubs.h` 继续超过可维护范围，拆成 core/inventory/lobby/match header
+    - 每次拆分只移动声明，不新增测试语义
+  - [ ]* 4.4 为 ActionRecorder 增加字段读取 helper
+    - 封装 emsg mask、header job 读取、payload 非空断言
+    - 降低 smoke test 重复代码
 
-- [ ] 6. 清理代码质量问题
-  - [ ] 6.1 修复 `git diff --check` 报告的空白问题
-    - 目标文件：`gbe_dota_payload_lobby_helpers.cpp`
-    - 目标文件：`gbe_dota_template_replay_handlers.cpp`
-  - [ ] 6.2 修复 `extern` 变量初始化警告
-    - 将 `extern const char *... =` 改为合法 definition 形式
-    - 同步 header declaration 的 const-correctness
-  - [ ] 6.3 精简 split TU 的重复 include
-    - 每个 domain 文件只保留实际使用的 header
-    - 优先处理 inventory、chat、lobby、match、misc 文件
-  - [ ] 6.4 运行格式和审计验证
-    - 执行 `git diff --check c5dd26d..HEAD -- dll tools premake5.lua`
-    - 执行 `bash tools/run_gc_offline_tests.sh`
+- [ ] 5. 收缩 `gbe_dota_gc_internal.h` 共享边界
+  - [ ] 5.1 盘点当前 internal header 声明
+    - 按 wire payload、item payload、lobby payload、stateful orchestration、logging、extern data 分类
+    - 输出保留、迁移、删除清单到本任务文档或代码注释
+  - [ ] 5.2 为 payload helper 建立更窄 header
+    - 视调用点拆分或复用 `gbe_dota_payload_wire_helpers.h`、`gbe_dota_payload_item_helpers.h`、`gbe_dota_payload_lobby_helpers.h`
+    - 更新调用方 include
+  - [ ] 5.3 下沉 file-local helper 声明
+    - 能进入 anonymous namespace 的 helper 不留在 internal header
+    - 删除迁移后失去调用点的 stale declarations
+  - [ ] 5.4 运行审计验证
+    - 执行 `python3 tools/_audit_gc_refactor.py`
+    - 执行 `tools/run_gc_offline_tests.sh --full`
+
+- [ ] 6. 清理编译警告和构建配置验证
+  - [ ] 6.1 修复 payload helper `extern const char *` 初始化警告
+    - 目标文件：`dll/gbe_dota_gc_payload_helpers.cpp`
+    - 同步 header declaration 和 definition 的 const-correctness
+    - 保持 payload helper tests 通过
+  - [ ] 6.2 校验测试脚本和 Premake 源列表一致
+    - 对比 `tools/run_gc_offline_tests.sh` 和 `premake5.lua` 中两个 test target 的源列表
+    - 确保新增测试依赖同时进入 shell 和 Premake 配置
+  - [ ] 6.3 在具备工具环境验证 Premake 生成
+    - 执行 `premake5 gmake2`
+    - 验证 `tool_gbe_dota_gc_payload_helpers_test` 和 `tool_gbe_dota_handler_test` 工程存在
+  - [ ] 6.4 精简 touched files include
+    - 只处理本轮修改过的 domain 文件和 test harness 文件
+    - 避免跨领域批量 include 清理造成审查困难
 
 - [ ] 7. 检查点 - 确保所有测试通过
   - 确保所有测试通过,如有疑问请询问用户
-  - 执行 `bash tools/run_gc_offline_tests.sh`
-  - 执行 `python3 tools/_audit_gc_refactor.py`
+  - 执行 `tools/run_gc_offline_tests.sh`
+  - 执行 `tools/run_gc_offline_tests.sh --full`
+  - 执行 `git diff --check`
+  - 涉及声明迁移时执行 `python3 tools/_audit_gc_refactor.py`
   - 检查 `git status --short`，确认只包含本轮目标文件变更
