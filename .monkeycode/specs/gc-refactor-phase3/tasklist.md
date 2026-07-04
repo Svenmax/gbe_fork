@@ -76,9 +76,25 @@
   - Notes (3.1.5a match sub-batch): moved 10 direct 7034 match-flow handlers (`GBE_HandleDotaDirect7034Request`, `GBE_HandleDotaDirectOwnerHeroKnownEquipReplay`, `GBE_HandleDotaDirect7034DisconnectedPlayers`, `GBE_HandleDotaDirect7034RuntimeUpdates`, `GBE_HandleDotaDirect7034StrategyTime`, `GBE_HandleDotaDirect7034StrategyTimeFallback`, `GBE_HandleDotaDirect7034StrategyTimePreserve`, `GBE_HandleDotaDirect7034Response`, `GBE_HandleDotaDirect7034LaunchPoll`, `GBE_HandleDotaDirect7034WaitForPlayers`) plus 1 static (`GBE_AdaptDota7034ConnectedPlayersResponsePayload`, kept `static` in new TU, List X). Also merged in the 3 custom-game loading handlers (`GBE_HandleDotaCustomGameReadyUpRequest`, `GBE_HandleDotaCustomGameStartedLoadingRequest`, `GBE_HandleDotaCustomGameFinishedLoadingRequest`) that were previously extracted to `dll/gbe_dota_custom_game_handlers.cpp` (Phase 3.1.5); that standalone file was removed because custom-game loading is a sub-phase of the 7034 launch flow. List Y = 0 (no externalize needed; 4 `using` aliases repeated in new TU: `GBE_Dota7034RequestShape`, `GBE_Dota7034ConnectedPlayer`, `GBE_Dota7034DisconnectedPlayer`, `GBE_Dota8053Result`). `dll/gbe_dota_handlers.cpp` 3459 → 2857 lines, new file 802 lines. Follow-up logic refactor tracked as 3.1.10.
 
 - [ ] 3.1.6 Reduce or remove original handler file
-  - [ ] Keep `dll/gbe_dota_handlers.cpp` under 1000 lines.
+  - [ ] Keep `dll/gbe_dota_handlers.cpp` under 1500 lines, or under 2000 with a documented reason (post-login/socket/template handlers share protocol state that resists splitting before 3.3).
   - [ ] Remove it only if no coherent shared content remains.
   - [ ] Verify the build still picks up all new translation units.
+
+- [ ] 3.1.6.5 Build handler-level test harness (prerequisite for 3.1.7-3.1.10)
+  - [ ] Add a minimal fixture loader that can replay a captured request body + lobby state into a handler call.
+  - [ ] Add an action recorder that captures `push_incoming_now`, `save_items_to_file`, server-GC calls, network broadcast, and lobby snapshot refresh calls in order, without executing real side effects.
+  - [ ] Add at least one smoke test per already-extracted domain (inventory, chat, lobby, match) that drives a representative handler and asserts on the recorded action sequence.
+  - [ ] Document the harness in `tools/` so future logic-refactor tasks can extend it.
+  - [ ] Run audit script and offline GC tests.
+  - Notes: the existing 92 offline tests are payload-helper-level only and provide zero handler-behavior coverage. Without this harness, 3.1.7-3.1.10 "focused tests" and "action ordering tests" are unexecutable. This task is the regression-protection foundation for the rest of Phase 3.
+
+- [ ] 3.1.6.6 Define side-effect action model (prerequisite for 3.1.7-3.1.10)
+  - [ ] Define a minimal local action type only when a handler has multiple observable side effects.
+  - [ ] Include action type, emsg, payload, target, job id, and reason fields only when needed by tests or execution.
+  - [ ] Keep action execution in coordinator-owned code.
+  - [ ] Preserve protocol-sensitive order such as `CacheSubscribed` before `emsg21/26`, SO update before response, and full item cache before create/update.
+  - [ ] Add action-order assertions before changing legacy side-effect sequences.
+  - Notes: moved ahead of 3.1.7-3.1.10 because the action model is the contract between pure helpers and coordinator methods. Defining it per-domain would cause inconsistency.
 
 - [ ] 3.1.7 Refactor inventory handler logic
   - [ ] Document current side-effect order for all three inventory handlers before changing their internals.
@@ -100,6 +116,7 @@
   - [ ] Run audit script and offline GC tests.
 
 - [ ] 3.1.9 Refactor lobby handler logic after extraction
+  - Notes: scope is **per-handler** internal restructuring (parsing/mutation/response/side-effect split inside each lobby handler). Cross-handler state-machine consolidation (launch/teardown/reconnect) belongs to Phase 3.4, not here. Boundary rule: 3.1.9 may extract pure helpers that read lobby state and return decisions/payloads; 3.4 owns the transition table that sequences those decisions across handlers. If a 3.1.9 change touches more than one handler's state-transition interaction, move it to 3.4.
   - [ ] Document current lobby side-effect order before changing handler internals.
   - [ ] Split request parsing, lobby state mutation, lobby snapshot construction, response construction, invite/kick decisions, and coordinator side effects.
   - [ ] Model side effects as an ordered action list where feasible, then execute the list from the coordinator method.
@@ -121,14 +138,7 @@
   - [ ] Confirm each bucket has focused tests or a documented reason why existing replay/offline fixtures are the strongest available coverage.
   - [ ] Confirm side-effect order is documented and covered by tests or explicit ordered action lists for every side-effectful refactor.
 
-- [ ] 3.1.12 Side-effect action model
-  - [ ] Define a minimal local action type only when a handler has multiple observable side effects.
-  - [ ] Include action type, emsg, payload, target, job id, and reason fields only when needed by tests or execution.
-  - [ ] Keep action execution in coordinator-owned code.
-  - [ ] Preserve protocol-sensitive order such as `CacheSubscribed` before `emsg21/26`, SO update before response, and full item cache before create/update.
-  - [ ] Add action-order assertions before changing legacy side-effect sequences.
-
-- [ ] 3.1.13 Split-boundary discipline
+- [ ] 3.1.12 Split-boundary discipline
   - [ ] Keep handler buckets aligned to stable domains: inventory, chat, lobby, match, and misc.
   - [ ] Keep local handler-only helpers inside the domain `.cpp` anonymous namespace.
   - [ ] Create a separate helper file only for cross-domain reuse, pure testable logic, or an oversized domain file.
@@ -233,9 +243,11 @@
 
 ## Completion Criteria
 
-- [ ] `dll/gbe_dota_handlers.cpp` is under 1000 lines or removed.
+- [ ] `dll/gbe_dota_handlers.cpp` is under 1500 lines, or under 2000 with a documented reason.
+- [ ] No domain handler file exceeds 1500 lines without a follow-up split plan.
 - [ ] `dll/gbe_dota_gc_payload_helpers.cpp` is under 1200 lines.
 - [ ] Every mechanically extracted GC domain has completed follow-up logic refactoring.
+- [ ] A handler-level test harness exists and covers at least the logic-refactored handlers.
 - [ ] Handler logic is separated into parsing, state mutation, message construction, and coordinator-owned side effects where feasible.
 - [ ] Side-effect order is documented and protected by tests or explicit ordered action lists for all logic-refactored GC handlers.
 - [ ] New GC files are justified by domain cohesion, cross-domain reuse, pure testability, or size pressure.

@@ -77,10 +77,12 @@ Reduce `gbe_dota_handlers.cpp` from a second large file into smaller domain-spec
 
 ### Acceptance Criteria
 
-- `dll/gbe_dota_handlers.cpp` is under 1000 lines or removed.
+- `dll/gbe_dota_handlers.cpp` is under 1500 lines, or under 2000 lines with a documented reason why further splitting would harm cohesion (e.g. remaining handlers share post-login protocol context that cannot be split without a dispatch-table refactor). The original 1000-line target proved unrealistic because the post-login/socket/template-replay handlers share protocol-level state that resists mechanical splitting before Phase 3.3.
+- No domain handler file exceeds 1500 lines without a follow-up split plan. If a domain file (e.g. lobby) exceeds 1200 lines after logic refactoring, split it by sub-domain (e.g. invite / lifecycle / set-details) before marking the phase complete.
 - No new public API is introduced just for file movement.
 - Each new handler file has a clear domain responsibility.
 - Offline GC tests pass after each group move.
+- A handler-level test harness exists before Phase 3.1.7 logic refactoring begins (see tasklist 3.1.6.5).
 
 ## Phase 3.2: Separate Pure Payload Helpers From Stateful Helpers
 
@@ -195,12 +197,14 @@ Reduce compile-time coupling introduced by mechanical splits.
 
 ## Success Metrics
 
-- `gbe_dota_handlers.cpp` under 1000 lines or removed.
+- `gbe_dota_handlers.cpp` under 1500 lines (or under 2000 with documented reason).
 - `gbe_dota_gc_payload_helpers.cpp` under 1200 lines.
 - Audit script reports zero real high-risk findings.
 - Offline GC tests pass after every phase.
+- A handler-level test harness covers at least the logic-refactored handlers.
 - New pure helper code has focused tests.
 - Include lists are meaningfully smaller in newly touched files.
+- "Good enough" stop condition: when a file is within 20% of its target and further splitting would require introducing abstractions not yet justified by repeated patterns, document the trade-off and stop. Do not pursue the last 20% at the cost of architectural complexity.
 
 ## Risk Management
 
