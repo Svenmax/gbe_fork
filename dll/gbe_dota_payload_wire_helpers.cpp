@@ -63,6 +63,7 @@
 #include <steam/steamclientpublic.h>
 #include <steammessages.pb.h>
 #include <tf2/base_gcmessages.pb.h>
+#include <tf2/gcsdk_gcmessages.pb.h>
 
 using namespace gamecoordinator::tf2;
 
