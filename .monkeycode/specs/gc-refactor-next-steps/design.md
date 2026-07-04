@@ -15,11 +15,11 @@
 - `tools/gbe_dota_gc_payload_helpers_test` 覆盖 payload helper、wire helper、item helper、lobby payload helper 的真实路径和边界路径。
 - `tools/gbe_dota_handler_test` 已接入真实 handler TU：inventory、misc、chat、lobby、match。
 - handler test harness 已记录关键副作用字段：action type、emsg、payload、wrapped、session、source job、target job、reason、server GC forward 参数。
-- `premake5.lua` 已包含 `tool_gbe_dota_gc_payload_helpers_test` 和 `tool_gbe_dota_handler_test` 两个测试工程。
+- `premake5.lua` 通过 `--with-gc-tests` 可选生成 `tool_gbe_dota_gc_payload_helpers_test` 和 `tool_gbe_dota_handler_test` 两个测试工程，默认主工程生成路径保持轻量。
 
 ### 已知限制
 
-- 当前环境缺少 `premake5` 和 `lua`，Premake 工程配置只能通过代码审阅和离线脚本间接验证。
+- 当前环境缺少 `premake5` 和 `lua`，Premake 工程配置只能通过代码审阅和离线脚本间接验证；具备工具的环境需额外验证 `premake5 --with-gc-tests gmake2`。
 - handler test harness 仍依赖较大的 `stubs.h`，后续继续扩展时需要控制 stub 边界。
 - `gbe_dota_gc_payload_helpers.cpp` 中仍有 `extern const char *... =` 形式的既有编译警告，测试通过但输出噪音较大。
 - 部分 lobby/match 路径只覆盖最小代表性顺序，尚未覆盖 7034 runtime 的复杂 payload 字段和更多 lobby lifecycle 分支。
@@ -133,7 +133,7 @@ Inventory 是最适合作为下一轮逻辑收口模板的领域，因为现有�
 - 修复 `extern const char *... =` 编译警告。
 - 清理重复 include。
 - 将 handler test 工程配置和 shell script 源列表保持一致。
-- 在具备工具的环境中实际运行 Premake 生成，验证新增测试工程。
+- 在具备工具的环境中实际运行 `premake5 --with-gc-tests gmake2`，验证可选测试工程。
 
 ### 工作流 F：Post-login Routing 收口
 
@@ -216,7 +216,7 @@ handler 中仍存在大量裸 wire 字段读取和 ad-hoc response composition�
 - Full gate：`tools/run_gc_offline_tests.sh --full`。
 - Style gate：`git diff --check`。
 - Refactor audit gate：`python3 tools/_audit_gc_refactor.py`。
-- Build config gate：具备 Premake 环境时运行 `premake5 gmake2`，并验证测试工程存在。
+- Build config gate：具备 Premake 环境时运行 `premake5 --with-gc-tests gmake2`，并验证测试工程存在；默认 Premake 生成路径保持主工程轻量。
 
 设计边界：
 
@@ -258,6 +258,42 @@ Dota GC 调试高度依赖 reason string、proto boundary trace 和 response pac
 - 不为了统一命名批量修改所有 reason；只在触及相关 handler 时同步治理。
 - 不在纯 helper 中直接写日志，除非该 helper 现有职责已经是 wire/log boundary。
 
+### 工作流 M：平台和构建等价性
+
+当前离线测试主要在 Linux shell 路径验证，生产构建和 PR CI 以 Windows Premake/MSBuild 路径为主。后续架构重构涉及新增文件、header 拆分和可选测试工程时，需要把平台差异作为显式风险管理对象。
+
+治理目标：
+
+- 新增源文件同时进入 shell test、Premake test target 和生产 project 的正确源列表。
+- Windows/Linux 路径分隔、宏条件、include 顺序和链接顺序保持可审查。
+- 可选 GC test target 只在 `--with-gc-tests` 下生成，主 CI 的默认 project matrix 保持当前成本模型。
+- 每次触及 Premake、workflow 或跨平台宏时，记录本地可执行验证和需要 CI 镜像验证的部分。
+
+设计边界：
+
+- 平台兼容修复以最小条件分支为主，避免为了测试支架引入生产编译宏扩散。
+- 测试工程需要复用真实生产 `.cpp`，避免形成独立的替代实现。
+- CI 接入先从离线 smoke gate 开始，Premake GC test gate 依赖工具可用性单独启用。
+
+### 工作流 N：依赖注入 seam 和持久化边界
+
+当前 handler 仍直接触达 `Steam_Client`、networking、settings、file save、global runtime state 和 template replay 数据。后续 plan/decision 重构需要先建立小型 seam，让 pure planner 能读取快照并返回副作用意图，executor 再统一触达外部依赖。
+
+治理目标：
+
+- 为 `Steam_Client`、network broadcast、server GC forward、item save、lobby publish 建立最小函数级 seam。
+- 明确数据 ownership、生命周期和线程访问假设，尤其是 shared lobby、item cache、recent reconnect context、pending flags。
+- 将 save/persistence 触发点从 decision helper 中剥离，集中在 executor 或 coordinator 层。
+- 建立错误分类和 fallback 语义，例如 parse failure、missing lobby、missing item、server GC unavailable、template patch failure。
+- 为 replay/template payload 和大型 cached bytes 建立性能预算与内存复制约束，避免重构时引入重复拷贝。
+- 为测试 fixture 和 canned payload 建立版本标记或来源注释，便于协议数据更新时判断兼容性。
+
+设计边界：
+
+- 先提取函数级 seam，再评估对象级 dependency injection。
+- seam 以生产行为稳定为先，测试 harness 通过记录参数验证副作用，而不是替换核心决策。
+- persistence 和 network seam 保持显式调用顺序，避免隐藏在析构、回调或全局 setter 中。
+
 ## 验证矩阵
 
 每个后续批次至少执行：
@@ -283,7 +319,7 @@ python3 tools/_audit_gc_refactor.py
 涉及 Premake 配置时，在具备工具的环境执行：
 
 ```bash
-premake5 gmake2
+premake5 --with-gc-tests gmake2
 ```
 
 ## 风险控制

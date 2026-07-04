@@ -86,9 +86,9 @@
     - 保持 payload helper tests 通过
   - [ ] 6.2 校验测试脚本和 Premake 源列表一致
     - 对比 `tools/run_gc_offline_tests.sh` 和 `premake5.lua` 中两个 test target 的源列表
-    - 确保新增测试依赖同时进入 shell 和 Premake 配置
+    - 确保新增测试依赖同时进入 shell 和 `--with-gc-tests` Premake 配置
   - [ ] 6.3 在具备工具环境验证 Premake 生成
-    - 执行 `premake5 gmake2`
+    - 执行 `premake5 --with-gc-tests gmake2`
     - 验证 `tool_gbe_dota_gc_payload_helpers_test` 和 `tool_gbe_dota_handler_test` 工程存在
   - [ ] 6.4 精简 touched files include
     - 只处理本轮修改过的 domain 文件和 test harness 文件
@@ -159,7 +159,7 @@
     - 增加可选 audit/style wrapper 时避免破坏现有脚本行为
   - [ ] 11.3 评估 CI 接入条件
     - 只包含离线测试和无需凭据的检查
-    - Premake gate 在 CI 镜像具备工具时启用
+    - Premake gate 使用 `--with-gc-tests` 并在 CI 镜像具备工具时启用
 
 - [ ] 12. Template/Replay 数据治理
   - [ ] 12.1 盘点 template/replay 常量 ownership
@@ -190,7 +190,42 @@
     - 对高风险 handler 的关键 action reason 做断言
     - 避免重构后日志语义漂移
 
-- [ ] 14. 检查点 - 确保所有测试通过
+- [ ] 14. 平台和构建等价性治理
+  - [ ] 14.1 盘点 GC 相关源列表入口
+    - 覆盖 `tools/run_gc_offline_tests.sh`、`premake5.lua`、生产 project 和 workflow matrix
+    - 记录新增 `.cpp` 应进入哪些入口，测试专用 `.cpp` 只进入可选 test target
+  - [ ] 14.2 验证默认 Premake 路径保持轻量
+    - 默认 `premake5 gmake2` 不生成 GC test targets
+    - `premake5 --with-gc-tests gmake2` 生成两个 GC test targets
+  - [ ] 14.3 维护 Windows/Linux 构建差异清单
+    - 盘点路径、宏、include 顺序、链接顺序相关风险
+    - 涉及跨平台宏时补充对应离线或 CI 验证说明
+  - [ ]* 14.4 评估 PR CI smoke gate
+    - 优先接入无需凭据的 GC offline fast gate
+    - 保持默认 project matrix 构建时间可控
+
+- [ ] 15. 依赖 seam、持久化和错误边界治理
+  - [ ] 15.1 盘点 handler 外部依赖触点
+    - 覆盖 `Steam_Client`、network broadcast、server GC forward、settings、item save、lobby publish
+    - 按 pure planner 输入、executor 副作用、global runtime state 三类记录
+  - [ ] 15.2 建立函数级 dependency seam
+    - 先封装 item save、server GC forward、network broadcast、lobby publish 等高风险副作用
+    - seam 记录调用参数并保持显式顺序
+  - [ ] 15.3 明确数据 ownership 和生命周期
+    - 覆盖 shared lobby、item cache、recent reconnect context、pending flags、template replay bytes
+    - 记录线程访问假设和不得跨 action 持有的引用
+  - [ ] 15.4 收口 persistence 触发点
+    - 确认 save 只在 executor/coordinator 层触发
+    - pure decision/helper 返回保存意图，不直接写文件
+  - [ ] 15.5 建立错误分类和 fallback 清单
+    - 覆盖 parse failure、missing lobby、missing item、server GC unavailable、template patch failure
+    - 对每类错误明确 response、log、state mutation 和 return value 语义
+  - [ ] 15.6 建立 replay/template 性能和 fixture 版本治理
+    - 为大型 payload/template 避免重复拷贝设定局部约束
+    - 为 canned payload 添加来源、用途或版本注释
+    - 变更 fixture 时同步 focused tests
+
+- [ ] 16. 检查点 - 确保所有测试通过
   - 确保所有测试通过,如有疑问请询问用户
   - 执行 `tools/run_gc_offline_tests.sh`
   - 执行 `tools/run_gc_offline_tests.sh --full`

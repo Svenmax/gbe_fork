@@ -124,6 +124,12 @@ newoption {
     description = "Add all header files from the third-party dependencies in the projects (no impact on build)",
 }
 
+newoption {
+    category = "tests",
+    trigger = "with-gc-tests",
+    description = "Generate optional Dota GC offline test projects",
+}
+
 -- windows options
 if os.target() == 'windows' then
 
@@ -1367,6 +1373,9 @@ project "tool_gbe_dota_lobby_state_test"
 -- End tool_gbe_dota_lobby_state_test
 
 
+if _OPTIONS["with-gc-tests"] then
+group "tools/tests"
+
 -- Project tool_gbe_dota_gc_payload_helpers_test
 project "tool_gbe_dota_gc_payload_helpers_test"
     kind "ConsoleApp"
@@ -1448,6 +1457,9 @@ project "tool_gbe_dota_handler_test"
         "dll/gbe_proto_wire.h",
     }
 -- End tool_gbe_dota_handler_test
+
+group ""
+end
 
 
 -- Project lib_steamnetworkingsockets START
