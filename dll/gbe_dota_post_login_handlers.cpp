@@ -66,6 +66,8 @@
 
 using namespace gamecoordinator::tf2;
 
+using GBE_Dota8053Result = gbe::proto_wire::Dota8053Result;
+
 // --- List A: handler-only static helpers (moved from steam_game_coordinator.cpp) ---
 
 static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;

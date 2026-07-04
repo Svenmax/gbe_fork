@@ -90,7 +90,7 @@ using GBE_DotaPracticeLobbyKickRequest = gbe::proto_wire::DotaPracticeLobbyKickR
 // GBE_HandleDotaPracticeLobbyCreateRequest (emsg 7038 -> 24 + 7055):
 //   1. Parse pre-reset request, apply custom game details (pure)
 //   2. compose_create_lobby_reset_plan (pure decision)
-//   3. ResetGCMEMORY("7038_create", true, true) [coordinator]
+//   3. ResetGCMemory("7038_create", true, true) [coordinator]
 //   4. If reset_plan.unsubscribe_previous_practice_lobby:
 //      push_incoming_now(25, cache unsubscribed) [coordinator]
 //   5. Re-parse request, compose_create_lobby_plan (pure) -> GBE_local_lobby
@@ -474,7 +474,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
 
     const gbe::dota_lobby_state::CreateLobbyResetPlan reset_plan = gbe::dota_lobby_state::compose_create_lobby_reset_plan(GBE_local_lobby, pre_reset_custom_game);
 
-    ResetGCMEMORY("7038_create", true, true);
+    ResetGCMemory("7038_create", true, true);
 
     if (reset_plan.unsubscribe_previous_practice_lobby) {
         std::string response_25;
@@ -691,7 +691,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyListRequest(bool has_request_job
 
     if (finishing_leave) {
         GBE_PushDotaResponse(GBE_kDotaCacheUnsubscribed, response_25, wrapped, outer_session_field_raw, "7040_leave_after_lobby_list_25");
-        ResetGCMEMORY("7040_leave_after_lobby_list", true, false);
+        ResetGCMemory("7040_leave_after_lobby_list", true, false);
     }
 
     if (!GBE_PushDotaResponse(GBE_kDotaLobbyListResponse, response_8012, wrapped, outer_session_field_raw, "8012_lobby_list"))
@@ -1446,7 +1446,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
 
     if (!GBE_PushDotaResponse(GBE_kDotaCacheUnsubscribed, response_25, wrapped, outer_session_field_raw, "7040_leave_25"))
         return true;
-    ResetGCMEMORY("7040_leave", true, false);
+    ResetGCMemory("7040_leave", true, false);
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -1873,7 +1873,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDestroyLobbyRequest(uint64 request_jo
         return true;
     }
 
-    ResetGCMEMORY("8246_destroy", true, true);
+    ResetGCMemory("8246_destroy", true, true);
     push_incoming_now(outbound_25.emsg, outbound_25.payload);
     GBE_LogDotaResponsePacket("8246_destroy_25", GBE_kDotaCacheUnsubscribed, wrapped, response_25, outbound_25.payload, lobby_id, 0u, 0u);
     if (has_request_job) {

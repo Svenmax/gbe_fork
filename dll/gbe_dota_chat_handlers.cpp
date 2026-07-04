@@ -64,6 +64,11 @@
 
 using namespace gamecoordinator::tf2;
 
+using GBE_DotaJoinChatChannelRequest = gbe::proto_wire::DotaJoinChatChannelRequest;
+using GBE_DotaLeaveChatChannelRequest = gbe::proto_wire::DotaLeaveChatChannelRequest;
+using GBE_DotaChatMessageRequest = gbe::proto_wire::DotaChatMessageRequest;
+using GBE_DotaPracticeLobbyBroadcastChannelRequest = gbe::proto_wire::DotaPracticeLobbyBroadcastChannelRequest;
+
 // ============================================================================
 // Side-effect order documentation (see dll/gbe_dota_action_model.h for the
 // canonical action type and cross-domain ordering invariants).
