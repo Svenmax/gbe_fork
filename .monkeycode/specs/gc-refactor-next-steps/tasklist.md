@@ -1,0 +1,98 @@
+# GC 重构后续实施任务清单
+
+- [ ] 1. 收缩 `gbe_dota_gc_internal.h` 的共享边界
+  - [ ] 1.1 盘点 `gbe_dota_gc_internal.h` 中的 extern 全局状态、extern 常量和 free helper 声明
+    - 输出按调用域分类的保留、下沉、拆分清单
+    - 目标文件：`dll/gbe_dota_gc_internal.h`
+  - [ ] 1.2 新建或复用更小的内部头文件承载 wire/payload helper
+    - 将 wire patch、template replay、payload composition 声明迁移到专用 header
+    - 更新 `gbe_dota_payload_*_helpers.cpp` 和调用方 include
+  - [ ] 1.3 新建或复用 lobby state/cache 内部头文件
+    - 将 shared lobby、recent reconnect、server hello 等状态访问收敛到明确边界
+    - 优先暴露函数接口，减少跨 TU 直接读写全局变量
+  - [ ] 1.4 删除迁移后失去调用点的 stale declaration
+    - 运行 `python3 tools/_audit_gc_refactor.py`
+    - 运行 `git diff --check c5dd26d..HEAD -- dll tools premake5.lua`
+
+- [ ] 2. 将 inventory 多副作用 handler 落地为 planner/executor 模式
+  - [ ] 2.1 为 inventory 请求定义 plan/action DTO
+    - 复用 `GBE_DotaActionType` 和 `GBE_DotaActionList`
+    - 补齐 action payload 所需字段，覆盖 SO update、SO destroy、response、persist、server forward、network broadcast、snapshot refresh
+  - [ ] 2.2 抽出 `UnlockItemStyle` planner
+    - planner 负责解析请求、验证 style、生成有序 action list 和 item mutation plan
+    - coordinator 负责执行真实 mutation、push、save、callback
+  - [ ] 2.3 抽出 `SetItemStyle` planner
+    - planner 负责解析请求、定位目标、生成 callback/save/response action
+    - 保持 response 行为和 source job 语义
+  - [ ] 2.4 抽出 `EquipItems` planner
+    - planner 负责 equip ops 应用决策、modified item 集合、response cache version 计划
+    - executor 负责 server GC forward、network broadcast、snapshot refresh
+  - [ ]* 2.5 为 inventory planner 增加单元测试
+    - 覆盖 unlock valid、invalid style、item missing、consumable missing
+    - 覆盖 set style found/missing
+    - 覆盖 equip empty、single op、多 item swap
+  - [ ]* 2.6 为 inventory action 顺序增加属性测试
+    - 验证任意有效 unlock plan 中 SO update 在 destroy 和 response 前
+    - 验证任意 set-style plan 中 callback 在 save 和 response 前
+    - 验证任意 equip plan 中 local response 在 server/network/snapshot action 前
+
+- [ ] 3. 检查点 - 确保所有测试通过
+  - 确保所有测试通过,如有疑问请询问用户
+  - 执行 `bash tools/run_gc_offline_tests.sh`
+  - 执行 `python3 tools/_audit_gc_refactor.py`
+  - 执行 `git diff --check c5dd26d..HEAD -- dll tools premake5.lua`
+
+- [ ] 4. 统一 post-login 路由模型
+  - [ ] 4.1 提取 direct/wrapped post-login routing entry 定义
+    - 将 emsg、path、adapter、domain 名称放入统一 registry
+    - 保留特殊 context shaping 的显式 adapter
+  - [ ] 4.2 将当前 `GBE_DispatchDotaPostLoginRequest` table 迁入统一 registry
+    - 覆盖现有 16 个 table entry
+    - 保持原日志字段和 wrapped/direct session 语义
+  - [ ] 4.3 将 direct if-chain 中可表驱动的 handler 迁入 registry
+    - 优先迁移 inventory、misc minimal success、profile/rank 类纯 request-response handler
+    - 保留 7034 match-flow 等复杂 handler 的独立 adapter
+  - [ ] 4.4 将 AddSocket/ServerAssignment 等业务逻辑移出 post-login 聚合文件
+    - 放入 misc 或 match 相关 domain 文件
+    - post-login 文件只保留解包、路由和 fallback
+  - [ ]* 4.5 增加 routing registry 测试
+    - 验证 direct/wrapped 同一 emsg 能落到同一 handler adapter
+    - 验证 unsupported emsg 返回 false
+    - 验证 request job、outer session、body 透传完整
+
+- [ ] 5. 扩展 handler 级测试覆盖
+  - [ ] 5.1 为 chat domain 建立 handler smoke test
+    - 覆盖 join chat、leave chat、chat message 的基础副作用顺序
+    - 使用真实 handler TU 和最小 stub
+  - [ ] 5.2 为 lobby domain 建立 handler smoke test
+    - 覆盖 create、join、leave、launch、set details、set team slot
+    - 验证 lobby state mutation、response push、shared state publish 的顺序
+  - [ ] 5.3 为 match domain 建立 handler smoke test
+    - 覆盖 7034 runtime update、strategy time、launch poll 的代表性路径
+    - 验证 queued lobby update 和 response 的顺序
+  - [ ] 5.4 调整 `tools/run_gc_offline_tests.sh`
+    - 将新 domain handler tests 加入统一离线套件
+    - 保持失败即停和清晰的 build/run 输出
+  - [ ]* 5.5 增加真实 include/link 边界编译测试
+    - 为每个新 split TU 添加最小 compile-only target
+    - 覆盖 production header include 顺序
+
+- [ ] 6. 清理代码质量问题
+  - [ ] 6.1 修复 `git diff --check` 报告的空白问题
+    - 目标文件：`gbe_dota_payload_lobby_helpers.cpp`
+    - 目标文件：`gbe_dota_template_replay_handlers.cpp`
+  - [ ] 6.2 修复 `extern` 变量初始化警告
+    - 将 `extern const char *... =` 改为合法 definition 形式
+    - 同步 header declaration 的 const-correctness
+  - [ ] 6.3 精简 split TU 的重复 include
+    - 每个 domain 文件只保留实际使用的 header
+    - 优先处理 inventory、chat、lobby、match、misc 文件
+  - [ ] 6.4 运行格式和审计验证
+    - 执行 `git diff --check c5dd26d..HEAD -- dll tools premake5.lua`
+    - 执行 `bash tools/run_gc_offline_tests.sh`
+
+- [ ] 7. 检查点 - 确保所有测试通过
+  - 确保所有测试通过,如有疑问请询问用户
+  - 执行 `bash tools/run_gc_offline_tests.sh`
+  - 执行 `python3 tools/_audit_gc_refactor.py`
+  - 检查 `git status --short`，确认只包含本轮目标文件变更
