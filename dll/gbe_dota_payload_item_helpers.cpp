@@ -35,7 +35,7 @@
 // common_helpers/os_detector.h), the test harness can link the real TU
 // directly instead of duplicating the implementations into stubs.
 
-#include "dll/dll/econ_item.h"
+#include "dll/econ_item.h"
 #include "gbe_dota_gc_internal.h"
 #include "gbe_proto_wire.h"
 

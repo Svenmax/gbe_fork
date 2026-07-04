@@ -21,6 +21,7 @@
 #define __INCLUDED_ECON_ITEM_H__
 #define __INCLUDED_COMMON_INCLUDES__
 #define STEAMCLIENTPUBLIC_H
+#define STEAMTYPES_H
 
 // Prevent protobuf headers from being included (we provide stubs)
 #define STEAMMESSAGES_PB_H

@@ -45,6 +45,14 @@ using int16 = int16_t;
 using int32 = int32_t;
 using int64 = int64_t;
 
+// Prevent the real sdk/steam/steamtypes.h from being included after our stub
+// typedefs are in place. gbe_dota_gc_internal.h includes <sdk/steam/steamtypes.h>
+// for self-containment in production builds; in the test environment we provide
+// equivalent typedefs above. Defining the guard here makes any subsequent
+// #include <sdk/steam/steamtypes.h> a no-op so the two declarations don't
+// conflict (typedef vs using).
+#define STEAMTYPES_H
+
 using PublishedFileId_t = uint64_t;
 using SteamAPICall_t = uint64_t;
 using AppId_t = uint32_t;

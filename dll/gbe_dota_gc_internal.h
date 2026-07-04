@@ -5,6 +5,14 @@
 #include <string>
 #include <vector>
 
+// Steam SDK typedefs (uint8/uint16/uint32/uint64). This header uses those
+// typedefs in its declarations, so it must be self-contained. The minimal
+// steamtypes.h is included (rather than the heavier steamclientpublic.h) so
+// that pure payload-helper TUs (gbe_dota_payload_wire_helpers.cpp,
+// gbe_dota_payload_lobby_helpers.cpp, gbe_dota_payload_item_helpers.cpp) can
+// include this header without pulling in the full Steam SDK chain.
+#include <sdk/steam/steamtypes.h>
+
 #include "gbe_dota_types.h"
 #include "dll/gbe_dota_reconnect_shared.h"
 
