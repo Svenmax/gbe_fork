@@ -5,7 +5,7 @@ This inventory records the current `Steam_Game_Coordinator::GBE_HandleDota*` fun
 ## Current State
 
 - Source file: `dll/gbe_dota_handlers.cpp`
-- Handler member functions: 62 originally; 3 inventory (Phase 3.1.2) + 7 chat/broadcast (Phase 3.1.3) + 17 lobby (Phase 3.1.4) extracted, leaving 35 in `dll/gbe_dota_handlers.cpp`.
+- Handler member functions: 62 originally; 3 inventory (Phase 3.1.2) + 7 chat/broadcast (Phase 3.1.3) + 17 lobby (Phase 3.1.4) + 3 custom-game loading (Phase 3.1.5) extracted, leaving 32 in `dll/gbe_dota_handlers.cpp`.
 - Handler-local static symbols: 23 originally; 1 chat-only static (`GBE_GenerateDotaChatChannelId`) moved with the chat handlers (Phase 3.1.3) + 6 lobby-only statics moved with the lobby handlers (Phase 3.1.4), leaving 15.
 - Primary risk: static helper/data placement when handlers are moved into domain-specific files.
 
@@ -92,11 +92,13 @@ These functions form the largest coherent business group. Extract them after inv
 
 ## Custom Game Loading Handlers
 
+**EXTRACTED to `dll/gbe_dota_custom_game_handlers.cpp` (Phase 3.1.5).** No handler-local statics moved with this group (List X = 0); no cross-TU externalization was needed (List Y = 0, only the `GBE_Dota8053Result` alias was repeated in the new TU).
+
 These are compact and can move into either a custom-game handler file or the direct/protocol group depending on future dispatch-table shape.
 
-- `GBE_HandleDotaCustomGameReadyUpRequest`
-- `GBE_HandleDotaCustomGameStartedLoadingRequest`
-- `GBE_HandleDotaCustomGameFinishedLoadingRequest`
+- `GBE_HandleDotaCustomGameReadyUpRequest` — **moved to `dll/gbe_dota_custom_game_handlers.cpp` (Phase 3.1.5)**.
+- `GBE_HandleDotaCustomGameStartedLoadingRequest` — **moved to `dll/gbe_dota_custom_game_handlers.cpp` (Phase 3.1.5)**.
+- `GBE_HandleDotaCustomGameFinishedLoadingRequest` — **moved to `dll/gbe_dota_custom_game_handlers.cpp` (Phase 3.1.5)**.
 
 ## Handler-Local Static Symbols
 

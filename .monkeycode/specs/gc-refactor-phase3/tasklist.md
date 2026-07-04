@@ -67,11 +67,13 @@
   - Notes: moved 17 lobby handlers (`GBE_HandleDotaPracticeLobbyCreateRequest`, `GBE_HandleDotaLobbyListRequest`, `GBE_HandleDotaCustomLobbyListRequest`, `GBE_HandleDotaFriendPracticeLobbyListRequest`, `GBE_HandleDotaPracticeLobbyJoinRequest`, `GBE_HandleDotaInviteToLobbyRequest`, `GBE_HandleDotaLobbyInviteResponseRequest`, `GBE_HandleDotaFriendLobbyInviteMessage`, `GBE_HandleDotaNetworkLobbyInviteMessage`, `GBE_HandleDotaAbandonCurrentGameRequest`, `GBE_HandleDotaGameMatchSignOutRequest`, `GBE_HandleDotaPracticeLobbyLeaveRequest`, `GBE_HandleDotaPracticeLobbyLaunchRequest`, `GBE_HandleDotaPracticeLobbySetDetailsRequest`, `GBE_HandleDotaPracticeLobbySetTeamSlotRequest`, `GBE_HandleDotaPracticeLobbyKickRequest`, `GBE_HandleDotaDestroyLobbyRequest`) plus 6 lobby-only statics (`GBE_ApplyDotaCustomGameDetailsRequest`, `GBE_NormalizeDotaCustomGameDetailsFromInstalledMod`, `GBE_GenerateDotaLobbyId`, `GBE_GenerateDotaMatchId`, `GBE_AdaptDotaLobbyInviteCacheSubscribedPayload`, `GBE_IsDotaLobbyInviteCacheSubscribedPayload`), all kept `static` in new TU (List X). List Y = 0 (no externalize needed). `dll/gbe_dota_handlers.cpp` 5164 → 3578 lines, new file 1663 lines. Follow-up logic refactor tracked as 3.1.9.
 
 - [ ] 3.1.5 Extract match and misc handlers
+  - [x] Create `dll/gbe_dota_custom_game_handlers.cpp` for the 7070/8052/8053 custom-game loading flow (sub-batch of 3.1.5).
   - [ ] Create `dll/gbe_dota_match_handlers.cpp` when there is a coherent match group.
   - [ ] Create `dll/gbe_dota_misc_handlers.cpp` for remaining one-off handlers.
   - [ ] Keep any shared helper in the smallest reasonable file.
-  - [ ] Add follow-up logic refactor tasks for match and misc buckets before marking them complete.
+  - [ ] Add follow-up logic refactor tasks for custom-game, match, and misc buckets before marking them complete.
   - [ ] Run offline GC tests.
+  - Notes (custom-game sub-batch): moved 3 handlers (`GBE_HandleDotaCustomGameReadyUpRequest`, `GBE_HandleDotaCustomGameStartedLoadingRequest`, `GBE_HandleDotaCustomGameFinishedLoadingRequest`). List X = 0 (no statics), List Y = 0 (no externalize needed; only `GBE_Dota8053Result` alias repeated in new TU). `dll/gbe_dota_handlers.cpp` 3578 → 3459 lines, new file 187 lines. Match and misc sub-buckets still pending. Follow-up logic refactor tracked as 3.1.10.
 
 - [ ] 3.1.6 Reduce or remove original handler file
   - [ ] Keep `dll/gbe_dota_handlers.cpp` under 1000 lines.
