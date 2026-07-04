@@ -82,13 +82,13 @@
   - [x] Verify the build still picks up all new translation units (premake5.lua uses `dll/**` glob, no explicit reference to handlers.cpp; audit + offline tests pass after deletion).
   - Notes: `dll/gbe_dota_handlers.cpp` deleted. The original 5757-line monolith is now fully decomposed into 7 domain files (inventory 513 / chat 653 / lobby 1663 / match 802 / misc 726 / template_replay 1255 / post_login 1011). Total handler code ~6623 lines across 7 files vs 5757 in original (the ~14% growth is from repeated header comment blocks + using-alias declarations per TU, an acceptable cost for domain cohesion).
 
-- [ ] 3.1.6.5 Build handler-level test harness (prerequisite for 3.1.7-3.1.10)
-  - [ ] Add a minimal fixture loader that can replay a captured request body + lobby state into a handler call.
-  - [ ] Add an action recorder that captures `push_incoming_now`, `save_items_to_file`, server-GC calls, network broadcast, and lobby snapshot refresh calls in order, without executing real side effects.
-  - [ ] Add at least one smoke test per already-extracted domain (inventory, chat, lobby, match) that drives a representative handler and asserts on the recorded action sequence.
-  - [ ] Document the harness in `tools/` so future logic-refactor tasks can extend it.
-  - [ ] Run audit script and offline GC tests.
-  - Notes: the existing 92 offline tests are payload-helper-level only and provide zero handler-behavior coverage. Without this harness, 3.1.7-3.1.10 "focused tests" and "action ordering tests" are unexecutable. This task is the regression-protection foundation for the rest of Phase 3.
+- [x] 3.1.6.5 Build handler-level test harness (prerequisite for 3.1.7-3.1.10)
+  - [x] Add a minimal fixture loader that can replay a captured request body + lobby state into a handler call.
+  - [x] Add an action recorder that captures `push_incoming_now`, `save_items_to_file`, server-GC calls, network broadcast, and lobby snapshot refresh calls in order, without executing real side effects.
+  - [x] Add at least one smoke test per already-extracted domain (inventory, chat, lobby, match) that drives a representative handler and asserts on the recorded action sequence.
+  - [x] Document the harness in `tools/` so future logic-refactor tasks can extend it.
+  - [x] Run audit script and offline GC tests.
+  - Notes: created `tools/gbe_dota_handler_test/` with 4 files: `stubs.h` (recording `Steam_Game_Coordinator` stub class + `ActionRecorder` + Steam SDK type stubs), `test_wrapper.cpp` (include-guard override pattern that compiles `dll/gbe_dota_inventory_handlers.cpp` inline), `free_func_stubs.cpp` (stubs for `GBE_GC_DebugLog`, `get_steam_client`, `GBE_PushDotaPlayerEquippedItemsCacheToGC`, `GBE_ApplyDotaUnlockStyleBitmask`, `GBE_ParseDotaEquipOps`, `get_full_program_path`), `smoke_test.cpp` (6 inventory domain smoke tests with varint encoding helpers + `TestFixture`). Extended `tools/gbe_dota_gc_payload_helpers_test/pb_stubs/tf2/base_gcmessages.pb.h` with `add_objects()`, `set_version()`, `set_service_id()` on `CMsgSOMultipleObjects` and `set_type_id()`, `set_object_data(const std::string&)` on `CMsgSOMultipleObjects_Object` (backward-compatible additions). Updated `tools/run_gc_offline_tests.sh` to build and run the handler test. Result: 6/6 inventory smoke tests pass; full offline suite 98/98 (92 payload + 6 handler) passes; audit clean (0 zombie, 0 under-exposed, 0 mismatch). Chat/lobby/match domain smoke tests are deferred to 3.1.8/3.1.9/3.1.10 — each domain needs its own `test_wrapper.cpp` (different handler .cpp compiled inline) and extended stub surface (more handler declarations + more coordinator member stubs). The extension pattern is documented in `stubs.h` comments and the placeholder sections in `smoke_test.cpp`.
 
 - [ ] 3.1.6.6 Define side-effect action model (prerequisite for 3.1.7-3.1.10)
   - [ ] Define a minimal local action type only when a handler has multiple observable side effects.

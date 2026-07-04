@@ -72,12 +72,15 @@ public:
 class CMsgSOMultipleObjects_Object
 {
 public:
-    uint32_t type_id() const { return 0; }
+    uint32_t type_id() const { return m_type_id; }
+    void set_type_id(uint32_t v) { m_type_id = v; }
     int object_data_size() const { return 0; }
     std::string object_data() const { return m_data; }
     std::string object_data(int index) const { (void)index; return m_data; }
     std::string *mutable_object_data(int index) { (void)index; return &m_data; }
+    void set_object_data(const std::string &data) { m_data = data; }
     void set_object_data(int index, const std::string &data) { (void)index; m_data = data; }
+    uint32_t m_type_id{};
     std::string m_data;
 };
 
@@ -86,15 +89,21 @@ class CMsgSOMultipleObjects
 public:
     CMsgSOIDOwner *mutable_owner_soid() { return &m_owner_soid; }
     void clear_owner() {}
-    void clear_objects() {}
-    int objects_size() const { return 0; }
+    void clear_objects() { m_objects.clear(); }
+    int objects_size() const { return static_cast<int>(m_objects.size()); }
     CMsgSOMultipleObjects_Object *mutable_objects(int index) { (void)index; static CMsgSOMultipleObjects_Object obj; return &obj; }
+    CMsgSOMultipleObjects_Object *add_objects() { m_objects.emplace_back(); return &m_objects.back(); }
+    void set_version(uint64_t v) { m_version = v; }
+    void set_service_id(uint32_t v) { m_service_id = v; }
     std::string SerializeAsString() const { return m_data; }
     bool ParseFromString(const std::string &data) { m_data = data; return true; }
     bool ParseFromArray(const void *data, int size) { m_data.assign(static_cast<const char*>(data), size); return true; }
     bool AppendToString(std::string *output) const { *output += m_data; return true; }
 
     CMsgSOIDOwner m_owner_soid;
+    std::vector<CMsgSOMultipleObjects_Object> m_objects;
+    uint64_t m_version{};
+    uint32_t m_service_id{};
     std::string m_data;
 };
 
