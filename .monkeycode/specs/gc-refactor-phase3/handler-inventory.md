@@ -5,24 +5,31 @@ This inventory records the current `Steam_Game_Coordinator::GBE_HandleDota*` fun
 ## Current State
 
 - Source file: `dll/gbe_dota_handlers.cpp`
-- Handler member functions: 62 originally; 3 inventory (Phase 3.1.2) + 7 chat/broadcast (Phase 3.1.3) + 17 lobby (Phase 3.1.4) + 3 custom-game loading (Phase 3.1.5) extracted, leaving 32 in `dll/gbe_dota_handlers.cpp`.
-- Handler-local static symbols: 23 originally; 1 chat-only static (`GBE_GenerateDotaChatChannelId`) moved with the chat handlers (Phase 3.1.3) + 6 lobby-only statics moved with the lobby handlers (Phase 3.1.4), leaving 15.
+- Handler member functions: 62 originally; 3 inventory (Phase 3.1.2) + 7 chat/broadcast (Phase 3.1.3) + 17 lobby (Phase 3.1.4) + 10 direct 7034 match-flow + 3 custom-game loading (Phase 3.1.5a) extracted, leaving 22 in `dll/gbe_dota_handlers.cpp`.
+- Handler-local static symbols: 23 originally; 1 chat-only static (`GBE_GenerateDotaChatChannelId`) moved with the chat handlers (Phase 3.1.3) + 6 lobby-only statics moved with the lobby handlers (Phase 3.1.4) + 1 match-flow static (`GBE_AdaptDota7034ConnectedPlayersResponsePayload`) moved with the match handlers (Phase 3.1.5a), leaving 14.
 - Primary risk: static helper/data placement when handlers are moved into domain-specific files.
 
 ## Direct / Post-Login / Protocol Handlers
 
 These functions handle direct GC request routing, direct 7034 flow, generic direct replies, and template replay. They should remain together until the direct request dispatch path is better covered by tests.
 
-- `GBE_HandleDotaDirect7034Request`
-- `GBE_HandleDotaDirectOwnerHeroKnownEquipReplay`
-- `GBE_HandleDotaDirect7034DisconnectedPlayers`
-- `GBE_HandleDotaDirect7034RuntimeUpdates`
-- `GBE_HandleDotaDirect7034StrategyTime`
-- `GBE_HandleDotaDirect7034StrategyTimeFallback`
-- `GBE_HandleDotaDirect7034StrategyTimePreserve`
-- `GBE_HandleDotaDirect7034Response`
-- `GBE_HandleDotaDirect7034LaunchPoll`
-- `GBE_HandleDotaDirect7034WaitForPlayers`
+### Direct 7034 Match-Flow Handlers
+
+**EXTRACTED to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a).** The single match-flow static `GBE_AdaptDota7034ConnectedPlayersResponsePayload` moved with them (List X, kept `static` in new TU); no cross-TU externalization was needed (List Y = 0).
+
+- `GBE_HandleDotaDirect7034Request` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
+- `GBE_HandleDotaDirectOwnerHeroKnownEquipReplay` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
+- `GBE_HandleDotaDirect7034DisconnectedPlayers` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
+- `GBE_HandleDotaDirect7034RuntimeUpdates` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
+- `GBE_HandleDotaDirect7034StrategyTime` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
+- `GBE_HandleDotaDirect7034StrategyTimeFallback` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
+- `GBE_HandleDotaDirect7034StrategyTimePreserve` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
+- `GBE_HandleDotaDirect7034Response` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
+- `GBE_HandleDotaDirect7034LaunchPoll` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
+- `GBE_HandleDotaDirect7034WaitForPlayers` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
+
+### Remaining Direct / Post-Login / Misc Handlers
+
 - `GBE_HandleDotaMinimalVarintSuccessRequest`
 - `GBE_HandleDota7427NotificationsRequest`
 - `GBE_HandleDotaUploadRateRequest`
@@ -92,13 +99,11 @@ These functions form the largest coherent business group. Extract them after inv
 
 ## Custom Game Loading Handlers
 
-**EXTRACTED to `dll/gbe_dota_custom_game_handlers.cpp` (Phase 3.1.5).** No handler-local statics moved with this group (List X = 0); no cross-TU externalization was needed (List Y = 0, only the `GBE_Dota8053Result` alias was repeated in the new TU).
+**MERGED into `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a).** These handlers were first extracted to a standalone `dll/gbe_dota_custom_game_handlers.cpp` (Phase 3.1.5), then merged into the match-flow file because they are a sub-phase of the 7034 launch flow (they share `GBE_local_lobby.launch_phase` and `GBE_TryAdvanceDotaLaunchToRun` with the 7034 path). The standalone 187-line file was below the 300-line healthy lower bound and was removed. No handler-local statics moved with this group (List X = 0); no cross-TU externalization was needed (List Y = 0, only the `GBE_Dota8053Result` alias was repeated in the new TU).
 
-These are compact and can move into either a custom-game handler file or the direct/protocol group depending on future dispatch-table shape.
-
-- `GBE_HandleDotaCustomGameReadyUpRequest` — **moved to `dll/gbe_dota_custom_game_handlers.cpp` (Phase 3.1.5)**.
-- `GBE_HandleDotaCustomGameStartedLoadingRequest` — **moved to `dll/gbe_dota_custom_game_handlers.cpp` (Phase 3.1.5)**.
-- `GBE_HandleDotaCustomGameFinishedLoadingRequest` — **moved to `dll/gbe_dota_custom_game_handlers.cpp` (Phase 3.1.5)**.
+- `GBE_HandleDotaCustomGameReadyUpRequest` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a, via Phase 3.1.5)**.
+- `GBE_HandleDotaCustomGameStartedLoadingRequest` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a, via Phase 3.1.5)**.
+- `GBE_HandleDotaCustomGameFinishedLoadingRequest` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a, via Phase 3.1.5)**.
 
 ## Handler-Local Static Symbols
 
@@ -116,7 +121,7 @@ These are compact and can move into either a custom-game handler file or the dir
 - `GBE_kDota8079Template`: used by `GBE_HandleDotaTemplateReplayRequest`
 - `GBE_kDota8854Template`: used by `GBE_HandleDotaTemplateReplayRequest`
 - `GBE_kDota9024Template`: used by `GBE_HandleDotaTemplateReplayRequest`
-- `GBE_AdaptDota7034ConnectedPlayersResponsePayload`: used by `GBE_HandleDotaDirect7034Response`
+- `GBE_AdaptDota7034ConnectedPlayersResponsePayload`: used by `GBE_HandleDotaDirect7034Response` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
 
 ### Lobby Statics
 
