@@ -55,5 +55,23 @@
 // the real wire logic instead of duplicated stubs.
 #include "dll/gbe_dota_payload_wire_helpers.cpp"
 
+// Include the pure lobby payload helpers TU inline (Phase 3.2.4).
+// gbe_dota_gc_payload_helpers.cpp no longer defines the 15 pure lobby
+// composition functions (GBE_ComposeDotaPracticeLobbySOObjects,
+// GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload,
+// GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload,
+// GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate,
+// GBE_ExtractDotaHelloContext, GBE_ExtractDirectDotaHelloContext,
+// GBE_ExtractDirectDotaServerHelloContext, GBE_BuildDirectDotaClientWelcome,
+// GBE_ComposeDotaClientWelcome, GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedTemplate,
+// GBE_AdaptDotaPracticeLobbyDetailsUpdatePayload, GBE_BuildDirectDotaServerWelcome,
+// GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl,
+// GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl,
+// GBE_ReplayDotaPracticeLobbyOfficial26Payload) -- they moved to
+// dll/gbe_dota_payload_lobby_helpers.cpp. We compile that TU inline here against
+// the stub CMsgProtoBufHeader / CMsgServerHello / CMsgServerWelcome types so
+// the test's references resolve to the real lobby logic.
+#include "dll/gbe_dota_payload_lobby_helpers.cpp"
+
 // Include the actual payload_helpers TU inline
 #include "dll/gbe_dota_gc_payload_helpers.cpp"
