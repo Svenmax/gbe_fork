@@ -11,7 +11,7 @@
 // that pure payload-helper TUs (gbe_dota_payload_wire_helpers.cpp,
 // gbe_dota_payload_lobby_helpers.cpp, gbe_dota_payload_item_helpers.cpp) can
 // include this header without pulling in the full Steam SDK chain.
-#include <sdk/steam/steamtypes.h>
+#include <steam/steamtypes.h>
 
 #include "gbe_dota_types.h"
 #include "dll/gbe_dota_reconnect_shared.h"

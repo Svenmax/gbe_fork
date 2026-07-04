@@ -60,7 +60,7 @@
 #include <string>
 #include <vector>
 
-#include <sdk/steam/steamclientpublic.h>
+#include <steam/steamclientpublic.h>
 #include <steammessages.pb.h>
 #include <tf2/base_gcmessages.pb.h>
 

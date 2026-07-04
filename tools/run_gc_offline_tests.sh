@@ -8,7 +8,7 @@ CXX_BIN="${CXX:-c++}"
 mkdir -p "$BUILD_DIR"
 cd "$ROOT_DIR"
 
-COMMON_FLAGS=(-std=c++17 -I. -Ilibs)
+COMMON_FLAGS=(-std=c++17 -I. -Isdk -Ilibs)
 
 build_and_run() {
     local name="$1"
