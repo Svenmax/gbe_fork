@@ -64,9 +64,9 @@
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
-#include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -226,7 +226,7 @@ void GBE_ComposeDotaPracticeLobbySOObjects(
     gbe::gc_message::build_dota_practice_lobby_objects(lobby_object_options, lobby_objects);
 }
 
-bool GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload(
+static bool GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload(
     uint64 steam_id,
     uint64 lobby_id,
     uint32 lobby_state,
@@ -304,7 +304,7 @@ bool GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload(
     return gbe::gc_message::build_dota_practice_lobby_cache_subscribed_payload_from_objects(lobby_id, lobby_objects.object_2004, lobby_objects.object_2015, lobby_objects.object_2014, lobby_objects.object_2016, message);
 }
 
-bool GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload(
+static bool GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload(
     uint64 steam_id,
     uint64 lobby_id,
     uint32 lobby_state,
@@ -386,7 +386,7 @@ bool GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload(
     return gbe::gc_message::build_dota_practice_lobby_details_update_payload_from_objects(lobby_id, lobby_objects.object_2014, lobby_objects.object_2015, lobby_objects.object_2004, lobby_objects.object_2016, include_server_lobby_placeholder, message);
 }
 
-bool GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate(
+static bool GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate(
     const char *wrapped_template_hex,
     const char *template_note,
     bool require_lobby_identifiers,

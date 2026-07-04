@@ -243,24 +243,28 @@
 
 ## Phase 3.5: Tighten Includes And Internal Boundaries
 
-- [ ] 3.5.1 Reduce includes in touched handler files
-  - [ ] Remove copy-pasted includes that are unused.
-  - [ ] Add precise includes for each new file.
-  - [ ] Use forward declarations where safe.
+- [x] 3.5.1 Reduce includes in touched handler files
+  - [x] Remove copy-pasted includes that are unused.
+  - [x] Add precise includes for each new file.
+  - [x] Use forward declarations where safe.
+  - Notes: Applied identical verified removals to all 7 handler .cpp files (chat, match, misc, template_replay, post_login, inventory, lobby). Removed 4 GBE headers per file (`gbe_proto_buf_header.h`, `gbe_dota_custom_lobby_http.h`, `gbe_dota_gc_wire.h`, `gbe_gc_config.h`) — all confirmed zero symbol usage via grep. Removed 6 std headers per file (`<atomic>`, `<array>`, `<cctype>`, `<cstdarg>`, `<sstream>`, `<iomanip>`) — all transitively provided by the first two includes (`dll/steam_game_coordinator.h` + `dll/dll.h`). Kept `<unordered_set>` only in `gbe_dota_inventory_handlers.cpp` (genuinely used at lines 147, 151, 377). Kept `<ctime>`/`<random>`/`<cstdlib>` where directly used.
 
-- [ ] 3.5.2 Reduce includes in touched payload helper files
-  - [ ] Keep pure helper files independent from `Steam_Game_Coordinator`.
-  - [ ] Avoid including broad application headers in pure utility files.
+- [x] 3.5.2 Reduce includes in touched payload helper files
+  - [x] Keep pure helper files independent from `Steam_Game_Coordinator`.
+  - [x] Avoid including broad application headers in pure utility files.
+  - Notes: Verified `gbe_dota_payload_wire_helpers.cpp` and `gbe_dota_payload_item_helpers.cpp` already have precise includes from Phase 3.2.2/3.2.3 work. Removed unused `#include "gbe_gc_config.h"` from `gbe_dota_payload_lobby_helpers.cpp` (verified zero usage of `gc_config::`, `Profile::`, `DotaFallbackReason`, `ParseResult`, `parse_gc_config`). Added direct `#include <algorithm>` to `gbe_dota_payload_lobby_helpers.cpp` after removing the `gbe_gc_config.h` transitive provider — `std::remove_if` is used at line 133 and was previously pulled in via `<json/json.hpp>` from `gbe_gc_config.h`.
 
-- [ ] 3.5.3 Clean internal header boundaries
-  - [ ] Keep `gbe_dota_gc_internal.h` limited to cross-TU declarations.
-  - [ ] Move local-only declarations into `.cpp` files.
-  - [ ] Move repeated aliases to one place only when shared by multiple files.
+- [x] 3.5.3 Clean internal header boundaries
+  - [x] Keep `gbe_dota_gc_internal.h` limited to cross-TU declarations.
+  - [x] Move local-only declarations into `.cpp` files.
+  - [x] Move repeated aliases to one place only when shared by multiple files.
+  - Notes: A search agent cross-referenced all 68 symbols in `gbe_dota_gc_internal.h` against all .cpp files in `dll/`. Found 7 single-TU candidates; verified 4 of those (`GBE_RewriteAccountIdVarintInDirectProtoBody`, `GBE_TryPatchDotaAccountIdVarint`, `GBE_TryPatchDotaAccountIdFixed32`, `GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage`) are called from test code (`tools/gbe_dota_gc_payload_helpers_test/gbe_dota_gc_payload_helpers_test.cpp`) so cannot move. The remaining 3 (`GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload`, `GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload`, `GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate`) are genuinely single-TU across production + tests: marked their definitions `static` in `gbe_dota_payload_lobby_helpers.cpp` and removed the 3 declarations (was lines 525-636) from `gbe_dota_gc_internal.h`, leaving a brief explanatory comment. Header shrank by 113 lines (119 deletions / 7 insertions including the comment).
 
-- [ ] 3.5.4 Final verification
-  - [ ] Run audit script.
-  - [ ] Run `tools/run_gc_offline_tests.sh`.
-  - [ ] Confirm no touched file uses the full legacy include block without need.
+- [x] 3.5.4 Final verification
+  - [x] Run audit script.
+  - [x] Run `tools/run_gc_offline_tests.sh`.
+  - [x] Confirm no touched file uses the full legacy include block without need.
+  - Notes: All offline tests pass — 92/92 payload helper tests, 9/9 handler tests, plus gc_message_utils / gbe_gc_config / gbe_proto_wire / gc_replay (7 fixture comparisons) / gbe_dota_lobby_flow / gbe_dota_lobby_state / gbe_dota_custom_game. Each of the 7 handler .cpp files now has only the includes it actually needs (verified per-file via grep before removal). `gbe_dota_gc_internal.h` now contains only genuine cross-TU declarations.
 
 ## Completion Criteria
 
