@@ -110,36 +110,37 @@
   - [x] Run audit script and offline GC tests.
   - Notes: refactored `dll/gbe_dota_inventory_handlers.cpp` with an anonymous namespace of pure helpers (`parse_unlock_style_request`, `parse_set_style_request`, `apply_equip_ops_to_items`, `build_equip_response_body`, `find_item_by_id`, `erase_item_by_id`) and a side-effect order documentation block citing `dll/gbe_dota_action_model.h`. All 3 handlers now delegate parsing/mutation/building to the pure helpers while the coordinator methods keep ownership of `push_incoming_now`, `save_items_to_file`, `callback_item_updated`, server-GC forward, network broadcast, and lobby snapshot refresh. The action list stays a plain `std::vector<GBE_DotaAction>` alias (no builder wrapper) — the side-effect sequence is enforced by tests, not by a runtime executor, because each handler's side effects are short and protocol-sensitive. Test harness changes: (1) `tools/gbe_dota_handler_test/free_func_stubs.cpp` now compiles the real implementations of `GBE_ParseDotaEquipOps` and `GBE_ApplyDotaUnlockStyleBitmask` inline (copied from `dll/gbe_dota_gc_payload_helpers.cpp` lines 2778-2886) instead of stubs, because the full `gbe_dota_gc_payload_helpers.cpp` TU pulls in the heavy SDK include chain (`steam_game_coordinator.h` -> `dll.h` -> `common_includes.h` -> `common_helpers/os_detector.h`) which is not available offline; a `TODO(phase-3.2)` comment marks this duplicate for removal once payload helpers are split into a pure-logic TU; (2) `g_test_steam_client` was promoted from `static` to `extern` (declared in `stubs.h`) so the full-forward equip smoke test can wire a server GC into it; (3) fixed a `free(): invalid size` crash in the `Networking::sendToAllGameservers` stub — it was `delete`-ing the `Common_Message*` even though the equip handler passes a stack address (the inner `GameServer_Items_Messages` is already freed by `set_allocated_*`); the stub now just records the broadcast without freeing. Added 3 equip smoke tests to `tools/gbe_dota_handler_test/smoke_test.cpp`: `test_inventory_equip_basic` (is_server=true path: PushIncomingNow(26) -> PushIncomingNow(2570) -> SaveItemsToFile + equip_states mutation check), `test_inventory_equip_empty` (parse failure early return: 0 actions), `test_inventory_equip_full_forward` (full server-GC-forward + network-broadcast + lobby-snapshot-refresh path, asserting the documented 8-action ordering invariant: PushIncomingNow(26) -> PushIncomingNow(2570) -> SaveItemsToFile -> ServerGcForward(0=cache) -> ServerGcForward(21) -> ServerGcForward(26) -> NetworkBroadcast -> LobbySnapshotRefresh). Total: 9/9 handler tests pass, 92/92 payload tests pass, audit clean (0 zombie / 0 under-exposed / 0 mismatch).
 
-- [ ] 3.1.8 Refactor chat handler logic after extraction
-  - [ ] Document current chat side-effect order before changing handler internals.
-  - [ ] Split request parsing, channel lookup/mutation, response construction, broadcast construction, and coordinator side effects.
-  - [ ] Model side effects as an ordered action list where feasible, then execute the list from the coordinator method.
-  - [ ] Move pure chat payload construction into a small helper file when reused by multiple chat handlers.
-  - [ ] Add focused tests for join, leave, duplicate join, missing channel, broadcast payload shape, and action ordering.
-  - [ ] Run audit script and offline GC tests.
+- [ ] 3.1.8 Refactor chat handler logic after extraction (Tier A only)
+  - Notes: per the plan's logic-refactor tiering, 3.1.8-3.1.10 apply only Tier A (side-effect order docs + anonymous-namespace pure helper extraction). Tier B (per-domain test harness) is deferred to post-3.2 because the 3.1.7 pilot showed that adding per-domain harness now would require duplicating real payload helper implementations into stubs (heavy SDK include chain blocks compiling the real TU offline), multiplying test debt before 3.2 resolves the root cause. Ordering invariants are protected by documentation + code review + the existing 3.1.7 inventory smoke tests until Tier B lands.
+  - [ ] Document current chat side-effect order before changing handler internals (side-effect block at top of `dll/gbe_dota_chat_handlers.cpp` citing `dll/gbe_dota_action_model.h`).
+  - [ ] Split request parsing, channel lookup/mutation, response construction, broadcast construction, and coordinator side effects via anonymous-namespace pure helpers where genuinely pure.
+  - [ ] Keep coordinator methods responsible for owning side effects: `push_incoming_now`, `save_items_to_file`, network broadcast, etc.
+  - [ ] Do NOT add a per-domain `test_wrapper.cpp` / extended stubs / ordering smoke tests in this task — deferred to post-3.2 Tier B.
+  - [ ] Run audit script and offline GC tests (existing payload + 3.1.7 inventory handler tests must still pass).
 
-- [ ] 3.1.9 Refactor lobby handler logic after extraction
-  - Notes: scope is **per-handler** internal restructuring (parsing/mutation/response/side-effect split inside each lobby handler). Cross-handler state-machine consolidation (launch/teardown/reconnect) belongs to Phase 3.4, not here. Boundary rule: 3.1.9 may extract pure helpers that read lobby state and return decisions/payloads; 3.4 owns the transition table that sequences those decisions across handlers. If a 3.1.9 change touches more than one handler's state-transition interaction, move it to 3.4.
-  - [ ] Document current lobby side-effect order before changing handler internals.
-  - [ ] Split request parsing, lobby state mutation, lobby snapshot construction, response construction, invite/kick decisions, and coordinator side effects.
-  - [ ] Model side effects as an ordered action list where feasible, then execute the list from the coordinator method.
+- [ ] 3.1.9 Refactor lobby handler logic after extraction (Tier A only)
+  - Notes: scope is **per-handler** internal restructuring (parsing/mutation/response/side-effect split inside each lobby handler). Cross-handler state-machine consolidation (launch/teardown/reconnect) belongs to Phase 3.4, not here. Boundary rule: 3.1.9 may extract pure helpers that read lobby state and return decisions/payloads; 3.4 owns the transition table that sequences those decisions across handlers. If a 3.1.9 change touches more than one handler's state-transition interaction, move it to 3.4. Tier A only — no per-domain harness (see 3.1.8 notes).
+  - [ ] Document current lobby side-effect order before changing handler internals (side-effect block at top of `dll/gbe_dota_lobby_handlers.cpp`).
+  - [ ] Split request parsing, lobby state mutation, lobby snapshot construction, response construction, invite/kick decisions, and coordinator side effects via anonymous-namespace pure helpers where genuinely pure.
   - [ ] Keep lobby decision helpers pure where they can return explicit decisions instead of mutating global state.
-  - [ ] Add focused tests for create, join, leave, set-details, invite, kick, member state updates, snapshot output stability, and action ordering.
+  - [ ] Keep coordinator methods responsible for owning side effects.
+  - [ ] Do NOT add a per-domain `test_wrapper.cpp` / extended stubs / ordering smoke tests in this task — deferred to post-3.2 Tier B.
   - [ ] Run audit script and offline GC tests.
 
-- [ ] 3.1.10 Refactor match and misc handler logic after extraction
-  - [ ] Document current match/misc side-effect order before changing handler internals.
-  - [ ] Split request parsing, state decisions, response construction, and side effects for every moved match/misc handler.
-  - [ ] Model side effects as an ordered action list where feasible, then execute the list from the coordinator method.
+- [ ] 3.1.10 Refactor match and misc handler logic after extraction (Tier A only)
+  - Notes: Tier A only — no per-domain harness (see 3.1.8 notes).
+  - [ ] Document current match/misc side-effect order before changing handler internals (side-effect block at top of `dll/gbe_dota_match_handlers.cpp` and `dll/gbe_dota_misc_handlers.cpp`).
+  - [ ] Split request parsing, state decisions, response construction, and side effects for every moved match/misc handler via anonymous-namespace pure helpers where genuinely pure.
+  - [ ] Keep coordinator methods responsible for owning side effects.
   - [ ] Group shared pure helpers by actual reuse, not by convenience.
-  - [ ] Add focused tests for each handler group that changes logic boundaries, including action ordering for side-effectful paths.
+  - [ ] Do NOT add a per-domain `test_wrapper.cpp` / extended stubs / ordering smoke tests in this task — deferred to post-3.2 Tier B.
   - [ ] Run audit script and offline GC tests.
 
 - [ ] 3.1.11 Domain bucket completion gate
-  - [ ] Confirm every extracted GC handler bucket has a matching logic refactor task completed.
+  - [ ] Confirm every extracted GC handler bucket has a matching logic refactor task completed (Tier A minimum for chat/lobby/match; full Tier A+B for inventory).
   - [ ] Confirm no bucket is accepted as complete based on mechanical file movement alone.
-  - [ ] Confirm each bucket has focused tests or a documented reason why existing replay/offline fixtures are the strongest available coverage.
-  - [ ] Confirm side-effect order is documented and covered by tests or explicit ordered action lists for every side-effectful refactor.
+  - [ ] Confirm each bucket has either focused tests OR a documented Tier B deferral reason citing the 3.2 dependency.
+  - [ ] Confirm side-effect order is documented (Tier A) for every side-effectful refactor, and covered by tests where Tier B has landed.
 
 - [ ] 3.1.12 Split-boundary discipline
   - [ ] Keep handler buckets aligned to stable domains: inventory, chat, lobby, match, and misc.

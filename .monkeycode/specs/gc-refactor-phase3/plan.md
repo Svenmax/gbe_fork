@@ -189,22 +189,43 @@ Reduce compile-time coupling introduced by mechanical splits.
 ## Recommended Execution Order
 
 1. Phase 3.0 stabilization.
-2. Phase 3.1 handler split.
+2. Phase 3.1 handler split + per-domain logic refactor.
 3. Phase 3.2 payload helper split.
 4. Phase 3.5 include and boundary cleanup for files touched by 3.1 and 3.2.
 5. Phase 3.3 dispatch table after handler signatures are easier to normalize.
 6. Phase 3.4 state transition consolidation after tests cover current state behavior.
 
+### Logic-refactor tiering (3.1.7-3.1.10)
+
+Phase 3.1.7 (inventory) was the pilot for the full "pure helpers + per-domain test harness" approach. The pilot surfaced two cost signals: (1) `free_func_stubs.cpp` had to duplicate real implementations of `GBE_ParseDotaEquipOps` / `GBE_ApplyDotaUnlockStyleBitmask` because the full `gbe_dota_gc_payload_helpers.cpp` TU cannot compile offline (heavy SDK include chain); (2) each new domain needs its own `test_wrapper.cpp` + extended stub surface, and stub/SDK drift risk grows linearly with domain count.
+
+Based on that evidence, the remaining logic refactors (3.1.8 chat / 3.1.9 lobby / 3.1.10 match+misc) are **tiered** instead of uniformly applying the 3.1.7 template:
+
+- **Tier A (always do, high value / low cost):**
+  - Side-effect order documentation block at the top of each domain `.cpp`, citing `dll/gbe_dota_action_model.h` and listing each handler's step-by-step side-effect sequence with invariant annotations.
+  - Anonymous-namespace pure helper extraction (request parsers, response body builders, item lookup helpers) where the helper is genuinely pure (no coordinator state access).
+
+- **Tier B (defer until after Phase 3.2):**
+  - Per-domain `test_wrapper.cpp` + extended `stubs.h` surface + `GBE_DotaActionType` ordering smoke tests for chat/lobby/match domains.
+
+  Rationale: Phase 3.2 (payload helper split) will move pure logic like `GBE_ParseDotaEquipOps` / `GBE_ApplyDotaUnlockStyleBitmask` into a TU that does not depend on the heavy SDK include chain. Once that TU can be linked directly into tests, the `free_func_stubs.cpp` duplication debt disappears and per-domain test coverage becomes cheap to add. Adding per-domain harness now would multiply the duplication debt before 3.2 resolves the root cause.
+
+- **Tier C (skip unless triggered):**
+  - `GBE_DotaActionList` builder/executor wrapper. The inventory pilot confirmed the side-effect sequence is short and protocol-sensitive per handler; plain `std::vector<GBE_DotaAction>` + test assertions is sufficient. A builder/executor is only justified if a future handler has 10+ ordered side effects or needs cross-handler action composition.
+
+- **Ordering invariant protection:** until Tier B tests land, protocol-sensitive ordering invariants (e.g. `CacheSubscribed` before `emsg21/26`, SO update before response, full item cache before create/update) are protected by (a) the documentation block, (b) code review, and (c) the existing 3.1.7 inventory smoke tests that cover the canonical ordering patterns. New ordering violations in chat/lobby/match will be caught at the next offline test run if they affect payload helper behavior, and at code review otherwise.
+
 ## Success Metrics
 
 - `gbe_dota_handlers.cpp` under 1500 lines (or under 2000 with documented reason).
-- `gbe_dota_gc_payload_helpers.cpp` under 1200 lines.
+- `dll/gbe_dota_gc_payload_helpers.cpp` under 1200 lines.
 - Audit script reports zero real high-risk findings.
 - Offline GC tests pass after every phase.
-- A handler-level test harness covers at least the logic-refactored handlers.
+- A handler-level test harness covers at least the inventory logic-refactored handlers (3.1.7). Per-domain harness for chat/lobby/match is deferred to post-3.2, when the duplication debt is resolved.
 - New pure helper code has focused tests.
 - Include lists are meaningfully smaller in newly touched files.
 - "Good enough" stop condition: when a file is within 20% of its target and further splitting would require introducing abstractions not yet justified by repeated patterns, document the trade-off and stop. Do not pursue the last 20% at the cost of architectural complexity.
+- "Test debt" stop condition: do not add a per-domain test harness if doing so requires duplicating real implementations into stubs (as 3.1.7 did for `GBE_ParseDotaEquipOps` / `GBE_ApplyDotaUnlockStyleBitmask`). Instead, defer the harness until the dependency root cause (heavy SDK include chain in payload helpers) is resolved by Phase 3.2.
 
 ## Risk Management
 
