@@ -5,8 +5,8 @@ This inventory records the current `Steam_Game_Coordinator::GBE_HandleDota*` fun
 ## Current State
 
 - Source file: `dll/gbe_dota_handlers.cpp`
-- Handler member functions: 62 originally; 3 inventory (Phase 3.1.2) + 7 chat/broadcast (Phase 3.1.3) + 17 lobby (Phase 3.1.4) + 10 direct 7034 match-flow + 3 custom-game loading (Phase 3.1.5a) + 17 misc one-off (Phase 3.1.5c) extracted, leaving 5 in `dll/gbe_dota_handlers.cpp`.
-- Handler-local static symbols: 23 originally; 1 chat-only static (`GBE_GenerateDotaChatChannelId`) moved with the chat handlers (Phase 3.1.3) + 6 lobby-only statics moved with the lobby handlers (Phase 3.1.4) + 1 match-flow static (`GBE_AdaptDota7034ConnectedPlayersResponsePayload`) moved with the match handlers (Phase 3.1.5a), leaving 15. Plus 1 handler-local struct `GBE_ProtoField` moved with the misc handlers (Phase 3.1.5c).
+- Handler member functions: 62 originally; 3 inventory (Phase 3.1.2) + 7 chat/broadcast (Phase 3.1.3) + 17 lobby (Phase 3.1.4) + 10 direct 7034 match-flow + 3 custom-game loading (Phase 3.1.5a) + 17 misc one-off (Phase 3.1.5c) + 1 template-replay + 4 post-login/socket/server-assignment (Phase 3.1.5b) extracted, leaving 0 in `dll/gbe_dota_handlers.cpp` (now an 81-line include + using-aliases shell).
+- Handler-local static symbols: 23 originally; 1 chat-only static + 6 lobby-only statics + 1 match-flow static + 1 handler-local struct (`GBE_ProtoField`) + 12 template statics + 2 session constants all moved with their respective handler groups. Zero handler-local statics remain in `dll/gbe_dota_handlers.cpp`.
 - Primary risk: static helper/data placement when handlers are moved into domain-specific files.
 
 ## Direct / Post-Login / Protocol Handlers
@@ -52,11 +52,13 @@ These functions handle direct GC request routing, direct 7034 flow, generic dire
 
 ### Remaining Post-Login / Socket / Template Handlers
 
-- `GBE_HandleDotaTemplateReplayRequest`
-- `GBE_HandleDotaServerAssignmentRequest`
-- `GBE_HandleDotaDirectPostLoginRequest`
-- `GBE_HandleDotaAddSocketRequest`
-- `GBE_HandleDotaWrappedPostLoginRequest`
+**EXTRACTED (Phase 3.1.5b).** Split into two files because TemplateReplay (canned-response switch) is a different concern from post-login/socket/server-assignment (session establishment).
+
+- `GBE_HandleDotaTemplateReplayRequest` — **moved to `dll/gbe_dota_template_replay_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_HandleDotaServerAssignmentRequest` — **moved to `dll/gbe_dota_post_login_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_HandleDotaDirectPostLoginRequest` — **moved to `dll/gbe_dota_post_login_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_HandleDotaAddSocketRequest` — **moved to `dll/gbe_dota_post_login_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_HandleDotaWrappedPostLoginRequest` — **moved to `dll/gbe_dota_post_login_handlers.cpp` (Phase 3.1.5b)**.
 
 ## Inventory / Item Handlers
 
@@ -114,18 +116,18 @@ These functions form the largest coherent business group. Extract them after inv
 
 ### Direct / Protocol Statics
 
-- `GBE_kSteamGamesPlayedWithDataBlob`: used by `GBE_HandleDotaDirectPostLoginRequest`
-- `GBE_kSteamAuthList`: used by `GBE_HandleDotaDirectPostLoginRequest`
-- `GBE_kDota8678Template`: used by `GBE_HandleDotaTemplateReplayRequest`
-- `GBE_kDota8136Template`: used by `GBE_HandleDotaTemplateReplayRequest`
-- `GBE_kDota2538Template`: used by `GBE_HandleDotaTemplateReplayRequest`
-- `GBE_kDota2618Template`: used by `GBE_HandleDotaTemplateReplayRequest`
-- `GBE_kDota8674Template`: used by `GBE_HandleDotaTemplateReplayRequest`
-- `GBE_kDota8677Template`: used by `GBE_HandleDotaTemplateReplayRequest`
-- `GBE_kDota7198Template`: used by `GBE_HandleDotaTemplateReplayRequest`
-- `GBE_kDota8079Template`: used by `GBE_HandleDotaTemplateReplayRequest`
-- `GBE_kDota8854Template`: used by `GBE_HandleDotaTemplateReplayRequest`
-- `GBE_kDota9024Template`: used by `GBE_HandleDotaTemplateReplayRequest`
+- `GBE_kSteamGamesPlayedWithDataBlob`: used by `GBE_HandleDotaDirectPostLoginRequest` — **moved to `dll/gbe_dota_post_login_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_kSteamAuthList`: used by `GBE_HandleDotaDirectPostLoginRequest` — **moved to `dll/gbe_dota_post_login_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_kDota8678Template`: used by `GBE_HandleDotaTemplateReplayRequest` — **moved to `dll/gbe_dota_template_replay_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_kDota8136Template`: used by `GBE_HandleDotaTemplateReplayRequest` — **moved to `dll/gbe_dota_template_replay_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_kDota2538Template`: used by `GBE_HandleDotaTemplateReplayRequest` — **moved to `dll/gbe_dota_template_replay_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_kDota2618Template`: used by `GBE_HandleDotaTemplateReplayRequest` — **moved to `dll/gbe_dota_template_replay_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_kDota8674Template`: used by `GBE_HandleDotaTemplateReplayRequest` — **moved to `dll/gbe_dota_template_replay_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_kDota8677Template`: used by `GBE_HandleDotaTemplateReplayRequest` — **moved to `dll/gbe_dota_template_replay_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_kDota7198Template`: used by `GBE_HandleDotaTemplateReplayRequest` — **moved to `dll/gbe_dota_template_replay_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_kDota8079Template`: used by `GBE_HandleDotaTemplateReplayRequest` — **moved to `dll/gbe_dota_template_replay_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_kDota8854Template`: used by `GBE_HandleDotaTemplateReplayRequest` — **moved to `dll/gbe_dota_template_replay_handlers.cpp` (Phase 3.1.5b)**.
+- `GBE_kDota9024Template`: used by `GBE_HandleDotaTemplateReplayRequest` — **moved to `dll/gbe_dota_template_replay_handlers.cpp` (Phase 3.1.5b)**.
 - `GBE_AdaptDota7034ConnectedPlayersResponsePayload`: used by `GBE_HandleDotaDirect7034Response` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
 
 ### Lobby Statics
