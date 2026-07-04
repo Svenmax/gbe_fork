@@ -96,6 +96,30 @@ static void encode_varint_field(std::string &out, uint32_t field_number, uint64_
     encode_varint(out, value);
 }
 
+// Encode a length-delimited sub-message (wire type 2) for a given field number.
+// Used to build ClientToGCEquipItemsRequest bodies (repeated field 1 sub-messages).
+static void encode_length_delimited(std::string &out, uint32_t field_number, const std::string &sub_message)
+{
+    uint32_t tag = (field_number << 3) | 2; // wire type 2 = length-delimited
+    encode_varint(out, tag);
+    encode_varint(out, sub_message.size());
+    out += sub_message;
+}
+
+// Encode a single equip op into a ClientToGCEquipItemsRequest body.
+// Sub-message layout: field 1 = item_id, field 2 = new_class,
+// field 3 = new_slot, field 4 = style_index (optional, omitted when 255).
+static void encode_equip_op(std::string &out, uint64_t item_id, uint32_t new_class, uint32_t new_slot, uint32_t style_index = 255u)
+{
+    std::string sub;
+    encode_varint_field(sub, 1, item_id);
+    encode_varint_field(sub, 2, new_class);
+    encode_varint_field(sub, 3, new_slot);
+    if (style_index != 255u)
+        encode_varint_field(sub, 4, style_index);
+    encode_length_delimited(out, 1, sub);
+}
+
 // =====================================================================
 // Test fixture: create a coordinator with test items
 // =====================================================================
@@ -128,6 +152,8 @@ struct TestFixture
         gc.GBE_local_lobby = GBE_LocalLobby{};
         gc.GBE_dota_private_lobby_snapshot_replayed = false;
         gc.test_set_active_server_lobby(false);
+        // Clear the global server-GC hook so each test starts from a clean slate.
+        g_test_steam_client.steam_gameserver_game_coordinator = nullptr;
     }
 
     Econ_Item &add_item(uint64_t id, uint32_t def_index = 100)
@@ -351,6 +377,140 @@ static void test_inventory_set_style_item_not_found()
     ++g_tests_passed;
 }
 
+// Test: EquipItems with one valid op, is_server=true (skips server-GC
+// forward, network broadcast, and lobby snapshot refresh paths).
+// Expected action sequence:
+//   1. PushIncomingNow(emsg=26)   — SO UpdateMultiple for modified item
+//   2. PushIncomingNow(emsg=2570) — Response with cache version
+//   3. SaveItemsToFile
+static void test_inventory_equip_basic()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.add_item(0xAAA1, 200);
+    tf.gc.is_server = true; // Skip server-GC-forward + network + snapshot paths
+
+    std::string body;
+    encode_equip_op(body, 0xAAA1, 2u, 3u);
+
+    bool result = tf.gc.GBE_HandleDotaEquipItemsRequest(
+        reinterpret_cast<const uint8 *>(body.data()), body.size(), false, 0);
+
+    TEST_ASSERT(result, "handler should return true");
+
+    // Verify the item's equip_states was updated
+    bool equip_updated = false;
+    for (const auto &item : tf.gc.items) {
+        if (item.id == 0xAAA1) {
+            auto it = item.equip_states.find(2u);
+            if (it != item.equip_states.end() && it->second == 3u)
+                equip_updated = true;
+        }
+    }
+    TEST_ASSERT(equip_updated, "item equip_states should have (class=2, slot=3)");
+
+    // Verify action sequence: PushIncomingNow(26) -> PushIncomingNow(2570) -> SaveItemsToFile
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "should record 3 actions");
+
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::PushIncomingNow, "first action should be PushIncomingNow");
+    TEST_ASSERT_EQ((tf.recorder.actions[0].msg_type & ~0x80000000u), 26u, "first push should be SO UpdateMultiple (emsg=26)");
+
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::PushIncomingNow, "second action should be PushIncomingNow");
+    TEST_ASSERT_EQ((tf.recorder.actions[1].msg_type & ~0x80000000u), 2570u, "second push should be response (emsg=2570)");
+
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::SaveItemsToFile, "third action should be SaveItemsToFile");
+
+    ++g_tests_passed;
+}
+
+// Test: EquipItems with empty body (parse fails, handler returns true early).
+// Expected: no side effects recorded.
+static void test_inventory_equip_empty()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.add_item(0xAAA1, 200);
+    tf.gc.is_server = true;
+
+    bool result = tf.gc.GBE_HandleDotaEquipItemsRequest(
+        reinterpret_cast<const uint8 *>(""), 0, false, 0);
+
+    TEST_ASSERT(result, "handler should return true even on parse failure");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 0u, "should record 0 actions (parse failure, early return)");
+
+    ++g_tests_passed;
+}
+
+// Test: EquipItems with full server-GC-forward + network-broadcast +
+// lobby-snapshot-refresh path. Verifies the documented ordering invariant:
+// local response(2570) precedes server-GC forward, network broadcast, and
+// lobby snapshot refresh. Full item cache (CacheSubscribed) precedes emsg
+// 21/26 when forwarding to server GC.
+//
+// Expected action sequence:
+//   1. PushIncomingNow(emsg=26)     — local SO UpdateMultiple
+//   2. PushIncomingNow(emsg=2570)   — local response
+//   3. SaveItemsToFile
+//   4. ServerGcForward(emsg=0)      — full cache push (CacheSubscribed)
+//   5. ServerGcForward(emsg=21)     — SO Create for modified item
+//   6. ServerGcForward(emsg=26)     — SO UpdateMultiple forward
+//   7. NetworkBroadcast             — broadcast equipped items to gameservers
+//   8. LobbySnapshotRefresh         — refresh stale lobby snapshot
+static void test_inventory_equip_full_forward()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.add_item(0xAAA1, 200);
+    tf.gc.is_server = false;
+    tf.gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
+
+    // Wire a server GC that owns an active lobby
+    Steam_Game_Coordinator server_gc;
+    server_gc.test_set_active_server_lobby(true);
+    g_test_steam_client.steam_gameserver_game_coordinator = &server_gc;
+
+    // Configure local lobby so the lobby-snapshot-refresh path fires
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 1;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 2u;
+    tf.gc.GBE_dota_private_lobby_snapshot_replayed = true;
+
+    std::string body;
+    encode_equip_op(body, 0xAAA1, 2u, 3u);
+
+    bool result = tf.gc.GBE_HandleDotaEquipItemsRequest(
+        reinterpret_cast<const uint8 *>(body.data()), body.size(), false, 0);
+
+    TEST_ASSERT(result, "handler should return true");
+
+    // Verify the full documented action sequence
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 8u, "should record 8 actions for full forward path");
+
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::PushIncomingNow, "1: PushIncomingNow (SO UpdateMultiple)");
+    TEST_ASSERT_EQ((tf.recorder.actions[0].msg_type & ~0x80000000u), 26u, "1: emsg=26");
+
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::PushIncomingNow, "2: PushIncomingNow (response)");
+    TEST_ASSERT_EQ((tf.recorder.actions[1].msg_type & ~0x80000000u), 2570u, "2: emsg=2570");
+
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::SaveItemsToFile, "3: SaveItemsToFile");
+
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::ServerGcForward, "4: ServerGcForward (cache push)");
+    TEST_ASSERT_EQ((tf.recorder.actions[3].msg_type & ~0x80000000u), 0u, "4: emsg=0 (CacheSubscribed)");
+
+    TEST_ASSERT_EQ(tf.recorder.actions[4].type, GBE_DotaActionType::ServerGcForward, "5: ServerGcForward (SO Create)");
+    TEST_ASSERT_EQ((tf.recorder.actions[4].msg_type & ~0x80000000u), 21u, "5: emsg=21");
+
+    TEST_ASSERT_EQ(tf.recorder.actions[5].type, GBE_DotaActionType::ServerGcForward, "6: ServerGcForward (SO UpdateMultiple forward)");
+    TEST_ASSERT_EQ((tf.recorder.actions[5].msg_type & ~0x80000000u), 26u, "6: emsg=26");
+
+    TEST_ASSERT_EQ(tf.recorder.actions[6].type, GBE_DotaActionType::NetworkBroadcast, "7: NetworkBroadcast");
+
+    TEST_ASSERT_EQ(tf.recorder.actions[7].type, GBE_DotaActionType::LobbySnapshotRefresh, "8: LobbySnapshotRefresh");
+
+    ++g_tests_passed;
+}
+
 // =====================================================================
 // Chat domain smoke test
 // =====================================================================
@@ -399,6 +559,15 @@ int main()
 
     std::printf("[run] test_inventory_set_style_item_not_found\n");
     RUN_TEST(test_inventory_set_style_item_not_found);
+
+    std::printf("[run] test_inventory_equip_basic\n");
+    RUN_TEST(test_inventory_equip_basic);
+
+    std::printf("[run] test_inventory_equip_empty\n");
+    RUN_TEST(test_inventory_equip_empty);
+
+    std::printf("[run] test_inventory_equip_full_forward\n");
+    RUN_TEST(test_inventory_equip_full_forward);
 
     std::printf("\n=== Results: %d passed, %d failed, %d total ===\n",
                 g_tests_passed, g_tests_failed, g_tests_run);

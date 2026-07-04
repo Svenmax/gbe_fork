@@ -65,14 +65,30 @@
     4. equip flow: SO Update(26) -> Response(2570) -> ServerGcForward -> NetworkBroadcast -> LobbySnapshotRefresh
   - Aligned the test harness: `stubs.h` includes the real header and `RecordedAction::type` uses `GBE_DotaActionType` directly (removed the duplicate nested enum); `smoke_test.cpp` assertions reference `GBE_DotaActionType::*` so test code and the action-list contract share one name source.
   - No handler code changed — the model is defined and ready for 3.1.7-3.1.10 to adopt as they refactor handlers into pure-helper + coordinator-execution pairs.
+- Phase 3.1.7 inventory handler logic refactor is complete.
+  - Refactored `dll/gbe_dota_inventory_handlers.cpp` with an anonymous namespace of pure helpers and a side-effect order documentation block citing `dll/gbe_dota_action_model.h`:
+    - `parse_unlock_style_request` / `parse_set_style_request` — pure request parsers (read item_id, style_index, consumable_id from protobuf wire).
+    - `apply_equip_ops_to_items` — pure mutation on a passed-in items vector, returns the set of modified item IDs.
+    - `build_equip_response_body` — pure response body builder for emsg 2570.
+    - `find_item_by_id` / `erase_item_by_id` — pure item lookup/erase helpers.
+  - All 3 handlers (`GBE_HandleDotaUnlockItemStyleRequest`, `GBE_HandleDotaSetItemStyleRequest`, `GBE_HandleDotaEquipItemsRequest`) now delegate parsing/mutation/building to the pure helpers while the coordinator methods keep ownership of `push_incoming_now`, `save_items_to_file`, `callback_item_updated`, server-GC forward, network broadcast, and lobby snapshot refresh.
+  - The action list stays a plain `std::vector<GBE_DotaAction>` alias (no builder wrapper) — the side-effect sequence is enforced by tests, not by a runtime executor, because each handler's side effects are short and protocol-sensitive.
+  - Test harness changes:
+    - `tools/gbe_dota_handler_test/free_func_stubs.cpp` now compiles the real implementations of `GBE_ParseDotaEquipOps` and `GBE_ApplyDotaUnlockStyleBitmask` inline (copied from `dll/gbe_dota_gc_payload_helpers.cpp` lines 2778-2886) instead of stubs. The full `gbe_dota_gc_payload_helpers.cpp` TU cannot be compiled in the offline test environment because it pulls in the heavy SDK include chain (`steam_game_coordinator.h` -> `dll.h` -> `common_includes.h` -> `common_helpers/os_detector.h`). A `TODO(phase-3.2)` comment marks this duplicate for removal once payload helpers are split into a pure-logic TU.
+    - `g_test_steam_client` was promoted from `static` to `extern` (declared in `stubs.h`) so the full-forward equip smoke test can wire a server GC into it.
+    - Fixed a `free(): invalid size` crash in the `Networking::sendToAllGameservers` stub — it was `delete`-ing the `Common_Message*` even though the equip handler passes a stack address (the inner `GameServer_Items_Messages` is already freed by `set_allocated_*`); the stub now just records the broadcast without freeing.
+  - Added 3 equip smoke tests to `tools/gbe_dota_handler_test/smoke_test.cpp`:
+    - `test_inventory_equip_basic` — is_server=true path: PushIncomingNow(26) -> PushIncomingNow(2570) -> SaveItemsToFile + equip_states mutation check.
+    - `test_inventory_equip_empty` — parse failure early return: 0 actions.
+    - `test_inventory_equip_full_forward` — full server-GC-forward + network-broadcast + lobby-snapshot-refresh path, asserting the documented 8-action ordering invariant: PushIncomingNow(26) -> PushIncomingNow(2570) -> SaveItemsToFile -> ServerGcForward(0=cache) -> ServerGcForward(21) -> ServerGcForward(26) -> NetworkBroadcast -> LobbySnapshotRefresh.
 
 ## Verification
 
 - `python3 tools/_audit_gc_refactor.py` passed.
 - `tools/run_gc_offline_tests.sh` passed.
 - Payload helper test result: `92/92 passed`.
-- Handler test result: `6/6 passed` (inventory domain smoke tests).
-- Full offline suite: `98/98 passed` (92 payload + 6 handler).
+- Handler test result: `9/9 passed` (6 original inventory smoke tests + 3 new equip smoke tests).
+- Full offline suite: `101/101 passed` (92 payload + 9 handler).
 - Audit result:
   - Zombie declarations: `0`
   - Under-exposed definitions: `0`
@@ -82,9 +98,10 @@
 
 - Phase 3.1.5 mechanical extraction is fully complete (3.1.5a match + 3.1.5b post-login/template + 3.1.5c misc). All 62 handlers now live in 7 domain-specific files.
 - Phase 3.1.6 complete: `dll/gbe_dota_handlers.cpp` removed entirely (was an 81-line shell with zero definitions).
-- Phase 3.1.6.5 complete: handler-level test harness built with 6/6 inventory smoke tests passing. Chat/lobby/match domain smoke tests deferred to their respective logic-refactor tasks (3.1.8/3.1.9/3.1.10) where the stub surface will be extended.
+- Phase 3.1.6.5 complete: handler-level test harness built with 9/9 inventory smoke tests passing. Chat/lobby/match domain smoke tests deferred to their respective logic-refactor tasks (3.1.8/3.1.9/3.1.10) where the stub surface will be extended.
 - Phase 3.1.6.6 complete: side-effect action model defined in `dll/gbe_dota_action_model.h`; test harness aligned to use the canonical `GBE_DotaActionType`.
-- Both prerequisites (3.1.6.5 + 3.1.6.6) are done. Next step is the first logic refactor: 3.1.7 (inventory handler logic). The inventory domain is the smallest (3 handlers, 513 lines) and already has 6 passing smoke tests, making it the lowest-risk target for the first pure-helper extraction + action-list adoption.
+- Phase 3.1.7 complete: inventory handler logic refactored into pure helpers + coordinator-owned side effects, with 9/9 smoke tests (including the full 8-action equip forward ordering invariant) protecting the documented side-effect sequences.
+- Next step is the second logic refactor: **3.1.8 (chat handler logic)**. The chat domain has 7 handlers in `dll/gbe_dota_chat_handlers.cpp` (653 lines). The 3.1.7 pattern (anonymous namespace pure helpers + side-effect order documentation + smoke tests asserting the `GBE_DotaActionType` sequence) is the template. The chat domain will need its own `test_wrapper.cpp` (compiling `gbe_dota_chat_handlers.cpp` inline via the include-guard override pattern) and extended stub surface in `stubs.h` (chat handler declarations + chat-specific coordinator member stubs like `GBE_GenerateDotaChatChannelId` access). The `TODO(phase-3.2)` in `free_func_stubs.cpp` is also a future cleanup target once payload helpers are split.
 - **Plan revisions (2026-07-04)**: Phase 3 plan was reviewed end-to-end. Key changes: (1) handler-file target relaxed from 1000 to 1500 lines because post-login/socket/template handlers share protocol state that resists splitting before 3.3; (2) added task 3.1.6.5 "Build handler-level test harness" as a prerequisite for 3.1.7-3.1.10, because the existing 92 offline tests are payload-helper-level only and provide zero handler-behavior coverage; (3) moved the side-effect action model (was 3.1.12) ahead to 3.1.6.6 so the action contract is defined once before any logic refactor; (4) added a boundary note to 3.1.9 clarifying that per-handler restructuring stays in 3.1.9 while cross-handler state-machine consolidation belongs to 3.4; (5) added a "good enough" stop condition to Success Metrics so the last 20% of file-size reduction does not drive unjustified abstractions. Remaining gaps (payload helper call-graph analysis, dispatch-table signature normalization risk, domain-specific line-count calibration) will be addressed at the start of 3.2 / 3.3 respectively.
 - Treat mechanical extraction as an intermediate step only. Every GC domain moved into a new file must receive a follow-up logic refactor before that domain is considered complete.
 - For each extracted domain, separate request parsing, state mutation, message/response construction, coordinator-owned side effects, and focused tests.

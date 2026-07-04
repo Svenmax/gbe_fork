@@ -352,8 +352,10 @@ public:
     Networking() {}
     bool sendToAllGameservers(Common_Message *msg, bool reliable)
     {
-        (void)reliable;
-        delete msg;
+        // The equip handler passes a stack-allocated Common_Message, so we
+        // must NOT delete it. The inner GameServer_Items_Messages is already
+        // freed by Common_Message::set_allocated_gameserver_items_messages.
+        (void)msg; (void)reliable;
         if (g_action_recorder)
             g_action_recorder->record_network_broadcast();
         return true;
@@ -439,6 +441,11 @@ public:
 };
 
 Steam_Client *get_steam_client();
+
+// Test-only: the static Steam_Client instance returned by get_steam_client().
+// Exposed so smoke tests can wire a server GC into it (set
+// steam_gameserver_game_coordinator) to exercise the server-GC-forward path.
+extern Steam_Client g_test_steam_client;
 
 // =====================================================================
 // GC message types

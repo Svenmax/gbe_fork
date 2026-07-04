@@ -55,90 +55,231 @@
 
 using namespace gamecoordinator::tf2;
 
+// ============================================================================
+// Side-effect order documentation (see dll/gbe_dota_action_model.h for the
+// canonical action type and cross-domain ordering invariants).
+// ============================================================================
+//
+// GBE_HandleDotaUnlockItemStyleRequest (emsg 2571 -> 2572):
+//   1. Parse: item_id (field 1), style_index (field 2), consumable_id (field 3)
+//   2. If item found and style valid:
+//      a. GBE_ApplyDotaUnlockStyleBitmask(item, style_index)   [pure mutation]
+//      b. PushIncomingNow(emsg=22, SO Update for item)          [coordinator]
+//      - If style invalid: return early (no response, no further side effects)
+//   3. If consumable found:
+//      a. Erase consumable from items                          [coordinator mutation]
+//      b. PushIncomingNow(emsg=24, SO Destroy for consumable)   [coordinator]
+//   4. PushIncomingNow(emsg=2572, response)                     [coordinator]
+//   Invariant: SO Update(22) precedes SO Destroy(24) precedes Response(2572).
+//
+// GBE_HandleDotaSetItemStyleRequest (emsg 2577 -> 2578):
+//   1. Parse: item_id (field 1), style_index (field 2)
+//   2. If item found:
+//      a. item.style = style_index                             [coordinator mutation]
+//      b. CallbackItemUpdated(steam_id, item)                  [coordinator]
+//      c. If DOTA2 + !is_server + server_gc has active lobby:
+//           GBE_PushDotaPlayerEquippedItemsCacheToGC(...)      [coordinator]
+//      d. SaveItemsToFile()                                     [coordinator]
+//   3. PushIncomingNow(emsg=2578, response)                     [coordinator]
+//   Invariant: CallbackItemUpdated precedes SaveItemsToFile precedes Response.
+//   Note: response is always sent (even if item not found).
+//
+// GBE_HandleDotaEquipItemsRequest (emsg 2569 -> 2570 + 26):
+//   1. Parse: GBE_ParseDotaEquipOps(body) -> equip_ops          [pure]
+//   2. apply_equip_ops(equip_ops, items) -> modified_item_ids   [pure on items]
+//   3. Generate equip_cache_version (coordinator static)
+//   4. If modified:
+//      PushIncomingNow(emsg=26, CMsgSOMultipleObjects)          [coordinator]
+//   5. PushIncomingNow(emsg=2570, response with cache version)  [coordinator]
+//   6. SaveItemsToFile()                                         [coordinator]
+//   7. If DOTA2 + !is_server + modified:
+//      a. If server_gc has active lobby:
+//         - GBE_PushDotaPlayerEquippedItemsCacheToGC (full cache) [coordinator]
+//         - For each modified item: server_gc->push_incoming_message(21) [coordinator]
+//         - server_gc->push_incoming_message(26)                   [coordinator]
+//      b. If equipped items exist:
+//         - network->sendToAllGameservers(gameserver items msg)   [coordinator]
+//   8. If DOTA2 + !is_server + lobby active + in-game + snapshot replayed:
+//      GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot("equip_items_refresh") [coordinator]
+//   Invariant: local response(2570) precedes server-GC forward, network
+//   broadcast, and lobby snapshot refresh. Full item cache (CacheSubscribed)
+//   precedes emsg 21/26 when forwarding to server GC.
+// ============================================================================
+
+namespace {
+
+// --- Pure request parsers ---
+
+struct UnlockStyleRequest {
+    uint64 item_id{};
+    uint32 style_index{255u};
+    uint64 consumable_id{};
+};
+
+inline UnlockStyleRequest parse_unlock_style_request(const uint8 *body, size_t body_size)
+{
+    UnlockStyleRequest req;
+    gbe::proto_wire::read_uint64_field(body, body_size, 1u, req.item_id);
+    gbe::proto_wire::read_uint32_field(body, body_size, 2u, req.style_index);
+    gbe::proto_wire::read_uint64_field(body, body_size, 3u, req.consumable_id);
+    return req;
+}
+
+struct SetStyleRequest {
+    uint64 item_id{};
+    uint32 style_index{255u};
+};
+
+inline SetStyleRequest parse_set_style_request(const uint8 *body, size_t body_size)
+{
+    SetStyleRequest req;
+    gbe::proto_wire::read_uint64_field(body, body_size, 1u, req.item_id);
+    gbe::proto_wire::read_uint32_field(body, body_size, 2u, req.style_index);
+    return req;
+}
+
+// --- Pure equip-op application ---
+// Applies equip ops to a passed-in items vector. For each op:
+//   - If item.id == op.item_id: set equip_state[class]=slot, optionally set style.
+//   - Else: if item has matching (class, slot) equipped, remove it (swap logic).
+// Returns the set of modified item IDs.
+
+inline std::unordered_set<uint64_t> apply_equip_ops_to_items(
+    const std::vector<GBE_DotaEquipOp> &ops,
+    std::vector<Econ_Item> &items)
+{
+    std::unordered_set<uint64_t> modified;
+    for (size_t ei = 0; ei < ops.size(); ++ei) {
+        const auto &op = ops[ei];
+        bool found_target = false;
+        for (Econ_Item &item : items) {
+            if (op.item_id != UINT64_MAX && op.item_id != 0 && item.id == op.item_id) {
+                item.equip_states.insert_or_assign(static_cast<uint16>(op.new_class), static_cast<uint16>(op.new_slot));
+                if (op.style_index != 255u)
+                    item.style = static_cast<uint8>(op.style_index);
+                modified.insert(item.id);
+                found_target = true;
+            } else {
+                auto it = item.equip_states.find(static_cast<uint16>(op.new_class));
+                if (it == item.equip_states.end() || it->second != static_cast<uint16>(op.new_slot))
+                    continue;
+                item.equip_states.erase(it);
+                modified.insert(item.id);
+            }
+        }
+    }
+    return modified;
+}
+
+// --- Pure response body builder for equip (emsg 2570) ---
+// Body: field 1, wire type 1 (fixed64) -> tag 0x09 + 8 bytes cache version.
+
+inline std::string build_equip_response_body(uint64_t cache_version)
+{
+    std::string body;
+    body.push_back(0x09);
+    body.append(reinterpret_cast<const char *>(&cache_version), sizeof(cache_version));
+    return body;
+}
+
+// --- Pure item lookup helpers ---
+
+inline Econ_Item *find_item_by_id(std::vector<Econ_Item> &items, uint64 id)
+{
+    for (auto &item : items)
+        if (item.id == id) return &item;
+    return nullptr;
+}
+
+inline bool erase_item_by_id(std::vector<Econ_Item> &items, uint64 id)
+{
+    for (auto it = items.begin(); it != items.end(); ++it) {
+        if (it->id == id) {
+            items.erase(it);
+            return true;
+        }
+    }
+    return false;
+}
+
+} // anonymous namespace
+
+// ============================================================================
+// Handler implementations
+// ============================================================================
+
 bool Steam_Game_Coordinator::GBE_HandleDotaUnlockItemStyleRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job) {
-    uint64 unlock_item_id = 0;
-    uint32 unlock_style_index = 255u;
-    uint64 consumable_item_id = 0;
-    gbe::proto_wire::read_uint64_field(body, body_size, 1u, unlock_item_id);
-    gbe::proto_wire::read_uint32_field(body, body_size, 2u, unlock_style_index);
-    gbe::proto_wire::read_uint64_field(body, body_size, 3u, consumable_item_id);
+    auto req = parse_unlock_style_request(body, body_size);
 
     GBE_GC_DebugLog(
         "GC_DOTA_DIRECT",
         "received direct 2571 UnlockItemStyle source_job=%llu item_id=0x%llx style_index=%u consumable=0x%llx body_size=%zu",
         static_cast<unsigned long long>(source_job),
-        static_cast<unsigned long long>(unlock_item_id),
-        unlock_style_index,
-        static_cast<unsigned long long>(consumable_item_id),
+        static_cast<unsigned long long>(req.item_id),
+        req.style_index,
+        static_cast<unsigned long long>(req.consumable_id),
         body_size
     );
 
     // Step 1: Update item's attr 400 (unlocked styles bitmask) BEFORE replying
-    if (unlock_item_id != 0 && unlock_style_index != 255u) {
-        for (Econ_Item &item : items) {
-            if (item.id == unlock_item_id) {
-                if (!GBE_ApplyDotaUnlockStyleBitmask(item, unlock_style_index)) {
-                    GBE_GC_DebugLog(
-                        "GC_DOTA_DIRECT",
-                        "2571 unlock: rejected invalid style_index=%u for item 0x%llx",
-                        unlock_style_index,
-                        static_cast<unsigned long long>(unlock_item_id)
-                    );
-                    return true;
-                }
-                // Push SO update immediately (emsg=22 CMsgSOSingleObject) via push_incoming_now
-                {
-                    uint32 msg_type_so = ESOMsg::k_ESOMsg_Update | protobuf_mask;
-                    std::string so_message = build_protomsg_header(msg_type_so);
-                    CMsgSOSingleObject so_msg;
-                    so_msg.set_owner(settings->get_local_steam_id().ConvertToUint64());
-                    so_msg.set_type_id(1);
-                    so_msg.set_object_data(item_to_gcprotobuf(item, settings->get_local_steam_id()));
-                    so_msg.AppendToString(&so_message);
-                    push_incoming_now(msg_type_so, so_message);
-                }
+    if (req.item_id != 0 && req.style_index != 255u) {
+        Econ_Item *item = find_item_by_id(items, req.item_id);
+        if (item) {
+            if (!GBE_ApplyDotaUnlockStyleBitmask(*item, req.style_index)) {
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
-                    "2571 unlock: updated attr=400 for item 0x%llx style_bit=%u and pushed SO update (immediate)",
-                    static_cast<unsigned long long>(unlock_item_id),
-                    unlock_style_index
+                    "2571 unlock: rejected invalid style_index=%u for item 0x%llx",
+                    req.style_index,
+                    static_cast<unsigned long long>(req.item_id)
                 );
-                break;
+                return true;
             }
+            // Push SO update immediately (emsg=22 CMsgSOSingleObject) via push_incoming_now
+            {
+                uint32 msg_type_so = ESOMsg::k_ESOMsg_Update | protobuf_mask;
+                std::string so_message = build_protomsg_header(msg_type_so);
+                CMsgSOSingleObject so_msg;
+                so_msg.set_owner(settings->get_local_steam_id().ConvertToUint64());
+                so_msg.set_type_id(1);
+                so_msg.set_object_data(item_to_gcprotobuf(*item, settings->get_local_steam_id()));
+                so_msg.AppendToString(&so_message);
+                push_incoming_now(msg_type_so, so_message);
+            }
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "2571 unlock: updated attr=400 for item 0x%llx style_bit=%u and pushed SO update (immediate)",
+                static_cast<unsigned long long>(req.item_id),
+                req.style_index
+            );
         }
     }
 
     // Step 2: Consume the consumable item (delete from inventory + push SO Destroy immediately)
-    if (consumable_item_id != 0) {
-        for (auto it = items.begin(); it != items.end(); ++it) {
-            if (it->id == consumable_item_id) {
-                items.erase(it);
-                // Push SO Destroy immediately (emsg=24 CMsgSOSingleObject)
-                {
-                    uint32 msg_type_del = ESOMsg::k_ESOMsg_Destroy | protobuf_mask;
-                    std::string del_message = build_protomsg_header(msg_type_del);
-                    CMsgSOSingleObject del_msg;
-                    del_msg.set_owner(settings->get_local_steam_id().ConvertToUint64());
-                    del_msg.set_type_id(1);
-                    CSOEconItem del_proto_item;
-                    del_proto_item.set_id(consumable_item_id);
-                    del_msg.set_object_data(del_proto_item.SerializeAsString());
-                    del_msg.AppendToString(&del_message);
-                    push_incoming_now(msg_type_del, del_message);
-                }
-                GBE_GC_DebugLog(
-                    "GC_DOTA_DIRECT",
-                    "2571 unlock: consumed item 0x%llx (SO Destroy pushed immediate)",
-                    static_cast<unsigned long long>(consumable_item_id)
-                );
-                break;
-            }
+    if (req.consumable_id != 0) {
+        if (erase_item_by_id(items, req.consumable_id)) {
+            // Push SO Destroy immediately (emsg=24 CMsgSOSingleObject)
+            uint32 msg_type_del = ESOMsg::k_ESOMsg_Destroy | protobuf_mask;
+            std::string del_message = build_protomsg_header(msg_type_del);
+            CMsgSOSingleObject del_msg;
+            del_msg.set_owner(settings->get_local_steam_id().ConvertToUint64());
+            del_msg.set_type_id(1);
+            CSOEconItem del_proto_item;
+            del_proto_item.set_id(req.consumable_id);
+            del_msg.set_object_data(del_proto_item.SerializeAsString());
+            del_msg.AppendToString(&del_message);
+            push_incoming_now(msg_type_del, del_message);
+
+            GBE_GC_DebugLog(
+                "GC_DOTA_DIRECT",
+                "2571 unlock: consumed item 0x%llx (SO Destroy pushed immediate)",
+                static_cast<unsigned long long>(req.consumable_id)
+            );
         }
     }
 
     // Step 3: Build and send 2572 response
     std::string resp_body;
-    gbe::gc_message::build_dota_unlock_item_style_response_body(unlock_item_id, unlock_style_index, resp_body);
+    gbe::gc_message::build_dota_unlock_item_style_response_body(req.item_id, req.style_index, resp_body);
 
     std::string response_message;
     gbe::gc_message::build_dota_job_reply_or_zero_header_payload(GBE_kDotaUnlockItemStyleResponse, has_source_job, source_job, resp_body, response_message);
@@ -148,8 +289,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaUnlockItemStyleRequest(const uint8 *b
         "replying req=2571 resp=2572 source_job=%llu size=%zu note=unlock style success item_id=0x%llx style_index=%u",
         static_cast<unsigned long long>(source_job),
         response_message.size(),
-        static_cast<unsigned long long>(unlock_item_id),
-        unlock_style_index
+        static_cast<unsigned long long>(req.item_id),
+        req.style_index
     );
     push_incoming_now(GBE_kDotaUnlockItemStyleResponse | GBE_kProtoMask, response_message);
 
@@ -158,30 +299,26 @@ bool Steam_Game_Coordinator::GBE_HandleDotaUnlockItemStyleRequest(const uint8 *b
 
 
 bool Steam_Game_Coordinator::GBE_HandleDotaSetItemStyleRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job) {
-    uint64 style_item_id = 0;
-    uint32 style_index = 255u;
-    gbe::proto_wire::read_uint64_field(body, body_size, 1u, style_item_id);
-    gbe::proto_wire::read_uint32_field(body, body_size, 2u, style_index);
+    auto req = parse_set_style_request(body, body_size);
 
     GBE_GC_DebugLog(
         "GC_DOTA_DIRECT",
         "received direct 2577 SetItemStyle source_job=%llu item_id=0x%llx style_index=%u body_size=%zu",
         static_cast<unsigned long long>(source_job),
-        static_cast<unsigned long long>(style_item_id),
-        style_index,
+        static_cast<unsigned long long>(req.item_id),
+        req.style_index,
         body_size
     );
 
     bool found = false;
-    if (style_item_id != 0 && style_index != 255u) {
-        for (Econ_Item &item : items) {
-            if (item.id != style_item_id)
-                continue;
-            item.style = static_cast<uint8>(style_index);
+    if (req.item_id != 0 && req.style_index != 255u) {
+        Econ_Item *item = find_item_by_id(items, req.item_id);
+        if (item) {
+            item->style = static_cast<uint8>(req.style_index);
             found = true;
 
-            // Push SO update (emsg=21) so the client immediately sees the style change
-            callback_item_updated(settings->get_local_steam_id(), item);
+            // Notify callback so the client immediately sees the style change
+            callback_item_updated(settings->get_local_steam_id(), *item);
 
             // Forward style change to server GC if active
             if (gc_profile == GC_PROFILE_DOTA2 && !is_server) {
@@ -195,10 +332,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaSetItemStyleRequest(const uint8 *body
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
                 "applied style: item_id=0x%llx new_style=%u",
-                static_cast<unsigned long long>(style_item_id),
-                style_index
+                static_cast<unsigned long long>(req.item_id),
+                req.style_index
             );
-            break;
         }
         if (found)
             save_items_to_file();
@@ -217,7 +353,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaSetItemStyleRequest(const uint8 *body
         static_cast<unsigned long long>(source_job),
         response_message.size(),
         (int)found,
-        style_index
+        req.style_index
     );
     push_incoming_now(GBE_kDotaSetItemStyleResponse | GBE_kProtoMask, response_message);
     return true;
@@ -225,7 +361,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaSetItemStyleRequest(const uint8 *body
 
 
 bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job) {
-    // Parse the repeated equips (field 1, length-delimited sub-messages)
+    // Step 1: Parse equip ops (pure helper in gbe_dota_gc_payload_helpers.cpp)
     std::vector<GBE_DotaEquipOp> equip_ops;
     if (!GBE_ParseDotaEquipOps(body, body_size, equip_ops)) {
         GBE_GC_DebugLog(
@@ -237,45 +373,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         return true;
     }
 
-    // Apply equip logic and track which items were modified
-    std::unordered_set<uint64_t> modified_item_ids;
-    for (size_t ei = 0; ei < equip_ops.size(); ei++) {
-        const auto &op = equip_ops[ei];
-        bool found_target = false;
-        for (Econ_Item &item : items) {
-            if (op.item_id != UINT64_MAX && op.item_id != 0 && item.id == op.item_id) {
-                item.equip_states.insert_or_assign(static_cast<uint16>(op.new_class), static_cast<uint16>(op.new_slot));
-                if (op.style_index != 255u)
-                    item.style = static_cast<uint8>(op.style_index);
-                modified_item_ids.insert(item.id);
-                found_target = true;
-            } else {
-                auto it = item.equip_states.find(static_cast<uint16>(op.new_class));
-                if (it == item.equip_states.end() || it->second != static_cast<uint16>(op.new_slot))
-                    continue;
-                item.equip_states.erase(it);
-                modified_item_ids.insert(item.id);
-            }
-        }
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "equip op[%zu]: item_id=0x%llx (%llu) new_class=%u new_slot=%u style_index=%u found=%d items_count=%zu",
-            ei,
-            static_cast<unsigned long long>(op.item_id),
-            static_cast<unsigned long long>(op.item_id),
-            op.new_class, op.new_slot,
-            op.style_index,
-            (int)found_target,
-            items.size()
-        );
-    }
+    // Step 2: Apply equip ops to inventory (pure helper on items vector)
+    std::unordered_set<uint64_t> modified_item_ids = apply_equip_ops_to_items(equip_ops, items);
+
     GBE_GC_DebugLog(
         "GC_DOTA_DIRECT",
         "equip result: modified_items=%zu total_ops=%zu",
         modified_item_ids.size(), equip_ops.size()
     );
 
-    // Generate a cache version (monotonically increasing timestamp-based)
+    // Step 3: Generate cache version (coordinator-owned static state)
     static uint64_t equip_cache_version = 0;
     if (equip_cache_version == 0) {
         equip_cache_version = static_cast<uint64_t>(
@@ -286,18 +393,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
     }
     equip_cache_version++;
 
-    // Build msg 26 (k_ESOMsg_UpdateMultiple = CMsgSOMultipleObjects)
-    // Contains: objects_modified (field 2), version (field 3), owner_soid (field 6), service_id (field 7)
+    // Step 4: Build and push SO UpdateMultiple (emsg=26) if items were modified
     std::string update_message;
     if (!modified_item_ids.empty()) {
         CMsgSOMultipleObjects update_msg;
 
-        // owner_soid: type=1, id=steam_id
         auto *owner = update_msg.mutable_owner_soid();
         owner->set_type(1u);
         owner->set_id(settings->get_local_steam_id().ConvertToUint64());
 
-        // Add modified items (field 2 = repeated SingleObject objects)
         for (uint64_t mid : modified_item_ids) {
             for (const Econ_Item &item : items) {
                 if (item.id != mid) continue;
@@ -311,10 +415,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         update_msg.set_version(equip_cache_version);
         update_msg.set_service_id(1u);
 
-        // Serialize into GC message format: emsg(4) + proto_hdr_len(4) + proto_hdr + body
         {
             uint32_t flagged_emsg = 26u | GBE_kProtoMask;
-            // Empty proto header (matching official capture)
             uint32_t hdr_len = 0;
             update_message.resize(sizeof(flagged_emsg) + sizeof(hdr_len));
             memcpy(&update_message[0], &flagged_emsg, sizeof(flagged_emsg));
@@ -332,12 +434,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         push_incoming_now(26u | GBE_kProtoMask, update_message);
     }
 
-    // Build msg 2570 (CMsgClientToGCEquipItemsResponse) with so_cache_version_id
+    // Step 5: Build and push local response (emsg=2570) using pure body builder
     {
-        std::string resp_body;
-        // field 1, wire type 1 (fixed64) -> tag = 0x09
-        resp_body.push_back(0x09);
-        resp_body.append(reinterpret_cast<const char*>(&equip_cache_version), 8);
+        std::string resp_body = build_equip_response_body(equip_cache_version);
 
         std::string response_message;
         uint32_t flagged_emsg = 2570u | GBE_kProtoMask;
@@ -366,28 +465,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         push_incoming_now(2570u | GBE_kProtoMask, response_message);
     }
 
+    // Step 6: Persist inventory
     save_items_to_file();
 
-    // Forward item equip changes to the server GC so the dedicated server
-    // can update wearables in real-time (e.g. during strategy phase).
+    // Step 7: Forward to server GC + broadcast via network (only when local GC
+    // is a DOTA2 client, not a server, and items were modified).
     //
     // [FIX] The server GC's settings->get_local_steam_id() returns the
-    // game-server steam ID, not the lobby owner's personal steam ID.  At
-    // 7450 time (batch player resources) the server therefore fails to
-    // recognise the host as "local" and falls through to all_user_items,
-    // which may have no equip_states yet.  Even when equip_states arrive
-    // later via network inventory response, the Source 2 engine only
-    // creates wearable entities from a CacheSubscribed (emsg=24) that
-    // establishes the player's SO cache.  Bare emsg=21/26 arriving
-    // *before* any CacheSubscribed for that owner are silently dropped by
-    // the engine because no SO cache exists for the owner yet.
+    // game-server steam ID, not the lobby owner's personal steam ID. At
+    // 7450 time the server fails to recognise the host as "local". Even
+    // when equip_states arrive later, the Source 2 engine only creates
+    // wearable entities from a CacheSubscribed (emsg=24) that establishes
+    // the player's SO cache. Bare emsg=21/26 arriving *before* any
+    // CacheSubscribed for that owner are silently dropped.
     //
     // Fix: before pushing emsg=21/26, always push a full player-item
     // CacheSubscribed (emsg=24, owner_type=1) containing ALL currently
-    // equipped items.  This guarantees the engine has a valid SO cache
-    // for the player before the individual Create/Update messages arrive,
-    // and – crucially – provides the engine with the loadout data it
-    // needs to build wearable entities at hero-spawn time.
+    // equipped items. This guarantees the engine has a valid SO cache
+    // for the player before the individual Create/Update messages arrive.
     if (!is_server && gc_profile == GC_PROFILE_DOTA2 && !update_message.empty()) {
         Steam_Client *steam_client = get_steam_client();
         Steam_Game_Coordinator *server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
@@ -395,10 +490,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
             const uint64 player_steam64 = settings->get_local_steam_id().ConvertToUint64();
             const CSteamID player_steam_id = settings->get_local_steam_id();
 
-            // Push to server GC so remote players see host cosmetics
+            // Push full item cache first (CacheSubscribed) so engine has SO cache
             GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, player_steam_id, items, true, "equip_forward_host_resubscribe_server");
 
-            // Step 1: Send emsg=21 (k_ESOMsg_Create) for each modified item
+            // Then send emsg=21 (k_ESOMsg_Create) for each modified item
             uint64_t create_version = equip_cache_version - modified_item_ids.size();
             for (uint64_t mid : modified_item_ids) {
                 for (const Econ_Item &item : items) {
@@ -420,7 +515,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
                 }
             }
 
-            // Step 2: Send emsg=26 (CMsgSOMultipleObjects) with all modified items
+            // Then send emsg=26 (CMsgSOMultipleObjects) with all modified items
             server_gc->push_incoming_message(26u | GBE_kProtoMask, update_message);
 
             GBE_GC_DebugLog(
@@ -434,8 +529,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
 
         // Also broadcast equipped items via network so the remote server GC
         // (on the host machine in LAN mode) can build CacheSubscribed for us.
-        // This handles the case where we are a remote player and the server GC
-        // is in a different process.
         {
             std::vector<const Econ_Item *> equipped_items;
             for (const auto &item : items) {
@@ -495,12 +588,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         }
     }
 
-    // [FIX] When the local player (host) equips items during an active game,
-    // the lobby snapshot that was previously replayed is now stale.  Reset the
-    // flag so the next GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot call will
-    // rebuild and push a fresh Lobby CacheSubscribed (emsg=24) containing the
-    // updated equipped items.  Without this, the host's game client never
-    // receives the updated wearable data for its own hero.
+    // Step 8: Refresh lobby snapshot if in an active game (the snapshot is now
+    // stale because equipped items changed).
     if (!is_server && gc_profile == GC_PROFILE_DOTA2 &&
         GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
         GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 2u &&
