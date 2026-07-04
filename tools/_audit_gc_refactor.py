@@ -12,10 +12,14 @@ import os
 import re
 import glob
 
-INTERNAL_H = "/workspace/dll/gbe_dota_gc_internal.h"
-MAIN_CPP = "/workspace/dll/steam_game_coordinator.cpp"
-TODO_MD = "/workspace/REFACTOR_TODO.md"
-GC_TUS = sorted(glob.glob("/workspace/dll/gbe_dota_*.cpp")) + [MAIN_CPP]
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+INTERNAL_H = os.path.join(ROOT_DIR, "dll", "gbe_dota_gc_internal.h")
+PUBLIC_HEADERS = [
+    os.path.join(ROOT_DIR, "dll", "dll", "gbe_dota_reconnect_shared.h"),
+]
+MAIN_CPP = os.path.join(ROOT_DIR, "dll", "steam_game_coordinator.cpp")
+TODO_MD = os.path.join(ROOT_DIR, "REFACTOR_TODO.md")
+GC_TUS = sorted(glob.glob(os.path.join(ROOT_DIR, "dll", "gbe_dota_*.cpp"))) + [MAIN_CPP]
 
 
 def read(path):
@@ -23,15 +27,34 @@ def read(path):
         return f.read()
 
 
-def extract_header_decls(header_text):
-    """Extract GBE_* identifiers from declaration lines in header."""
-    decls = set()
-    for m in re.finditer(r"\b(GBE_\w+)\b", header_text):
-        name = m.group(1)
-        # Skip struct/typedef names that are types, not functions/vars.
-        # We only care about callable extern symbols; keep all and filter later.
-        decls.add(name)
-    return decls
+def extract_header_symbols(header_text):
+    """Extract external GBE_* function/variable declarations from the header."""
+    symbols = set()
+    declaration = ""
+    for raw_line in header_text.splitlines():
+        line = raw_line.split("//", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith(("struct ", "class ", "using ", "template ", "#")):
+            declaration = ""
+            continue
+
+        declaration = (declaration + " " + line).strip()
+        if ";" not in declaration:
+            continue
+
+        decl = declaration.replace("\t", " ")
+        declaration = ""
+
+        function_match = re.search(r"\b(GBE_\w+)\s*\(", decl)
+        if function_match:
+            symbols.add(function_match.group(1))
+            continue
+
+        variable_match = re.match(r"^extern\s+.*\b(GBE_\w+)\b\s*(?:\[[^\]]*\])?\s*;", decl)
+        if variable_match:
+            symbols.add(variable_match.group(1))
+    return symbols
 
 
 def extract_defined_symbols(tu_paths):
@@ -43,11 +66,23 @@ def extract_defined_symbols(tu_paths):
     NOT terminated with ';' on the first line (i.e., multi-line def) OR are
     single-line `= ...` assignments.
     """
-    defined = {}  # name -> (file, lineno)
+    defined = {}  # name -> (file, lineno, kind)
     for path in tu_paths:
         lines = read(path).splitlines()
         n = len(lines)
         for i, ln in enumerate(lines):
+            # member function definitions: "Type Steam_Game_Coordinator::GBE_Foo("
+            m = re.match(r"^[A-Za-z_][\w:&*\s<>,]*\bSteam_Game_Coordinator::(GBE_\w+)\s*\(", ln)
+            if m and not ln.rstrip().endswith(";"):
+                name = m.group(1)
+                for j in range(i, min(i + 40, n)):
+                    if "{" in lines[j]:
+                        defined[name] = (os.path.basename(path), i + 1, "member_function")
+                        break
+                    if lines[j].rstrip().endswith(";"):
+                        break
+                continue
+
             # function definition: "<type> GBE_Foo(" not ending with ';'
             m = re.match(r"^[A-Za-z_][\w:&*\s<>,]*\b(GBE_\w+)\s*\(", ln)
             if m and not ln.rstrip().endswith(";"):
@@ -55,7 +90,8 @@ def extract_defined_symbols(tu_paths):
                 # Confirm there's a '{' within next few lines (definition body).
                 for j in range(i, min(i + 40, n)):
                     if "{" in lines[j]:
-                        defined[name] = (os.path.basename(path), i + 1)
+                        kind = "static_function" if ln.lstrip().startswith("static ") else "free_function"
+                        defined[name] = (os.path.basename(path), i + 1, kind)
                         break
                     if lines[j].rstrip().endswith(";"):
                         break  # declaration, not definition
@@ -63,38 +99,21 @@ def extract_defined_symbols(tu_paths):
             # extern const var definition: "extern const ... GBE_Foo ="
             m = re.match(r"^extern\s+.*\b(GBE_\w+)\s*=", ln)
             if m:
-                defined[m.group(1)] = (os.path.basename(path), i + 1)
+                defined[m.group(1)] = (os.path.basename(path), i + 1, "variable")
                 continue
-            # non-extern const var definition that's a List Y (has extern in header)
-            # e.g. "const char *GBE_Foo = " (no extern prefix but externally linked via header)
-            # Skip these; they're internal. We only track extern-prefixed or function defs.
-        # member function definitions: "Type Steam_Game_Coordinator::GBE_Foo("
-        for i, ln in enumerate(lines):
-            m = re.match(r"^[A-Za-z_][\w:&*\s<>,]*\bSteam_Game_Coordinator::(GBE_\w+)\s*\(", ln)
-            if m and not ln.rstrip().endswith(";"):
-                name = m.group(1)
-                for j in range(i, min(i + 40, n)):
-                    if "{" in lines[j]:
-                        defined[name] = (os.path.basename(path), i + 1)
-                        break
-                    if lines[j].rstrip().endswith(";"):
-                        break
+            m = re.match(r"^(?!static\b)[A-Za-z_][\w:&*\s<>,]*\b(GBE_\w+)\s*(?:\[[^\]]*\])?\s*(?:\{|=|;)", ln)
+            if m:
+                defined[m.group(1)] = (os.path.basename(path), i + 1, "variable")
     return defined
 
 
 def main():
     header_text = read(INTERNAL_H)
-    header_decls = extract_header_decls(header_text)
-    # Filter header decls to only function/variable-like (exclude pure type names
-    # that appear only in struct/using/typedef). Heuristic: a decl is "external
-    # symbol" if it appears on a line starting with a type keyword or 'extern'.
-    real_decls = set()
-    for ln in header_text.splitlines():
-        s = ln.strip()
-        if re.match(r"^(extern\s+|bool\s+|void\s+|std::string\s+|uint\d+\s+|const\s+|int\s+|size_t\s+)", s):
-            for m in re.finditer(r"\b(GBE_\w+)\b", s):
-                real_decls.add(m.group(1))
-        # also template/struct member decls are not extern symbols; skip.
+    real_decls = extract_header_symbols(header_text)
+    all_declared_symbols = set(real_decls)
+    for header in PUBLIC_HEADERS:
+        if os.path.exists(header):
+            all_declared_symbols.update(extract_header_symbols(read(header)))
 
     defined = extract_defined_symbols(GC_TUS)
 
@@ -115,12 +134,12 @@ def main():
     # Only check free functions and extern vars in main + payload_helpers,
     # since those are the "shared" TUs. Member functions are visible via class header.
     underexposed = []
-    for name, (f, ln) in sorted(defined.items(), key=lambda x: (x[1][0], x[1][1])):
-        if name not in real_decls:
+    for name, (f, ln, kind) in sorted(defined.items(), key=lambda x: (x[1][0], x[1][1])):
+        if name not in all_declared_symbols:
             # Check if it's a member function (visible via class header, OK)
             # or a static (internal, OK). We approximate: if defined in main/payload
             # TU as a free function and not in header, flag it.
-            if f in ("steam_game_coordinator.cpp", "gbe_dota_gc_payload_helpers.cpp"):
+            if kind == "free_function" and f in ("steam_game_coordinator.cpp", "gbe_dota_gc_payload_helpers.cpp"):
                 underexposed.append((name, f, ln))
     if not underexposed:
         print("  (none) - all shared free-function/extern-var definitions are header-declared")
@@ -160,6 +179,7 @@ def main():
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
+    print(f"  Known public header declarations:     {len(all_declared_symbols)}")
     print(f"  Definitions found across all TUs:    {len(defined)}")
     print(f"  Zombie declarations (no def):        {len(zombies)}")
     print(f"  Under-exposed definitions:           {len(underexposed)}")
