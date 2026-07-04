@@ -81,6 +81,159 @@ using GBE_Dota7034DisconnectedPlayer = gbe::proto_wire::Dota7034DisconnectedPlay
 using GBE_Dota8053Result = gbe::proto_wire::Dota8053Result;
 
 
+// ============================================================================
+// Side-effect order documentation (see dll/gbe_dota_action_model.h for the
+// canonical action type and cross-domain ordering invariants).
+// ============================================================================
+//
+// Cross-handler boundary note: this file owns per-handler request
+// parsing/mutation/response/side-effect sequencing for the 7034 match-flow
+// family and the custom-game loading lifecycle. The 7034 entry handler fans
+// out to internal helper methods (OwnerHeroKnownEquipReplay,
+// DisconnectedPlayers, RuntimeUpdates -> WaitForPlayers / StrategyTime ->
+// Fallback / Preserve / LaunchPoll, Response) which together form the 7034
+// side-effect sequence; callers should not interleave other state mutations
+// between these helpers. Cross-handler lobby state machine consolidation
+// (launch/teardown/reconnect transitions sequenced across handlers) belongs to
+// Phase 3.4, not here.
+//
+// GBE_AdaptDota7034ConnectedPlayersResponsePayload (file-local static, pure):
+//   Builds the 7034 connected-players response payload. Reads request shape +
+//   lobby member state; writes response_message. No coordinator state access.
+//
+// GBE_HandleDotaDirect7034Request (emsg 7034, runtime match-flow):
+//   Active-lobby branch:
+//   1. parse_dota7034_request_shape (pure)
+//   2. If !custom_game_launch && draft_steam_id==owner: update owner_team /
+//      owner_slot; if changed: PublishSharedDotaLobbyState [publish]
+//   3. For each connected_player: GBE_SetDotaLobbyMemberRuntimeState
+//      [coordinator mutation]; if member updated: PublishSharedDotaLobbyState
+//      [publish]; if owner hero changed: GBE_HandleDotaDirectOwnerHeroKnownEquipReplay
+//   4. If custom_game_launch: CaptureCurrentDotaLobbyState +
+//      NormalizeDotaArcadeLobbyMemberSlots [coordinator read + mutation]; if
+//      normalized: PublishSharedDotaLobbyState [publish]
+//   5. GBE_HandleDotaDirectOwnerHeroKnownEquipReplay (if owner hero updated)
+//   6. GBE_HandleDotaDirect7034DisconnectedPlayers (per-player mutation + publish)
+//   7. If state==1 && game_state==0 && launch_phase>=SetupSynced &&
+//      launch_4511_seen: GBE_TryAdvanceDotaLaunchToRun [coordinator: emits 26]
+//   8. GBE_HandleDotaDirect7034RuntimeUpdates (queues runtime 26 updates; calls
+//      WaitForPlayers / StrategyTime / LaunchPoll)
+//   9. If custom_game_launch: return early (no 7034 response)
+//   Else / fallthrough: parse_dota7034_request_shape (pure) ->
+//      GBE_HandleDotaDirect7034Response
+//   Invariant: member mutation + publish precedes launch advance precedes
+//   runtime update precedes response. Custom-game path returns without 7034
+//   response.
+//
+// GBE_HandleDotaDirectOwnerHeroKnownEquipReplay (helper, server-GC only):
+//   1. Read client_gc->get_items() [coordinator read]
+//   2. GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, owner, items)
+//      [coordinator]
+//   Invariant: no lobby mutation; only re-pushes host equipped items to server
+//   GC cache after owner hero becomes known.
+//
+// GBE_HandleDotaDirect7034DisconnectedPlayers (helper):
+//   1. For each disconnected_player: GBE_SetDotaLobbyMemberRuntimeState(steam_id,
+//      false, 0, false) [coordinator mutation]; if updated:
+//      PublishSharedDotaLobbyState [publish]
+//   Invariant: per-player mutation precedes per-player publish.
+//
+// GBE_HandleDotaDirect7034RuntimeUpdates (helper, dispatcher):
+//   1. If custom_game_launch && state==2 && launch_phase>=RunQueued &&
+//      request_game_state>lobby_game_state:
+//      GBE_TryQueueDotaRuntimeLobbyDetailsUpdate [coordinator: emits 26]
+//   2. GBE_HandleDotaDirect7034WaitForPlayers
+//   3. If !custom_game_launch && state==2 && game_state==0 &&
+//      launch_phase>=RunQueued: GBE_TryQueueDotaPrelaunch021 [coordinator:
+//      emits 26]
+//   4. GBE_HandleDotaDirect7034StrategyTime
+//   5. GBE_HandleDotaDirect7034LaunchPoll
+//   Invariant: queue ordering is custom-runtime -> wait_for_players ->
+//   prelaunch021 -> strategy_time -> launch_poll.
+//
+// GBE_HandleDotaDirect7034StrategyTime (helper, dispatcher):
+//   1. GBE_HandleDotaDirect7034StrategyTimeFallback
+//   2. GBE_HandleDotaDirect7034StrategyTimePreserve
+//
+// GBE_HandleDotaDirect7034StrategyTimeFallback (helper):
+//   1. If !custom_game_launch && state==2 && game_state==2 &&
+//      request_game_state==2 && send_reason==2 && game_mode==1:
+//      a. GBE_ShouldHoldDotaLanLaunchForRemoteMembers(3) [coordinator read]
+//      b. If !hold: GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("AP hero_selection
+//         fallback", state=2, game_state=3) [coordinator: emits 26]
+//   Invariant: AP fallback only fires on game_mode==1 with send_reason==2.
+//
+// GBE_HandleDotaDirect7034StrategyTimePreserve (helper):
+//   1. If state==2 && game_state==3: log preserve note + set
+//      queued_runtime_lobby_update=true
+//   Invariant: no state mutation; only suppresses official 032 follow-up.
+//
+// GBE_HandleDotaDirect7034Response (emsg 7034 response builder):
+//   1. If is_server && !host_showcase_equip_pushed && request_game_state>=4 &&
+//      state==2: GBE_PushDotaPlayerEquippedItemsCacheToGC [coordinator]; set
+//      host_showcase_equip_pushed=true
+//   2. GBE_AdaptDota7034ConnectedPlayersResponsePayload (pure)
+//   3. push_incoming_now(7034 | kProtoMask, response_message) [coordinator]
+//   Invariant: showcase equip repush precedes response. Single response push.
+//
+// GBE_HandleDotaDirect7034LaunchPoll (helper):
+//   1. If state==2 && game_state==10: return (no poll)
+//   2. GBE_SendDotaPracticeLobbyDetailsUpdate [coordinator: emits 26]
+//   Invariant: poll suppressed once game_state reaches 10.
+//
+// GBE_HandleDotaDirect7034WaitForPlayers (helper):
+//   1. If custom_game_launch || state!=2 || game_state!=1: return
+//   2. GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("wait_for_players", state=2,
+//      game_state=1) [coordinator: emits 26]; if !queued: return
+//   3. If !request_advances_to_hero_selection: return
+//   4. GBE_ShouldHoldDotaLanLaunchForRemoteMembers(2) [coordinator read]; if
+//      !hold: GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("hero_selection",
+//      state=2, game_state=2) [coordinator: emits 26]
+//   Invariant: wait_for_players precedes hero_selection; hero_selection is
+//   suppressed while remote members not yet connected.
+//
+// GBE_HandleDotaCustomGameReadyUpRequest (emsg 7070 -> 7170 + state mutation):
+//   1. Parse: ready_state (field 1)
+//   2. build_dota_ready_up_status_payload (pure) -> push_incoming_now(7170)
+//      [coordinator]
+//   3. If ready_state==1 && state==2 && game_state<1 &&
+//      launch_phase>=RunQueued:
+//      a. GBE_local_lobby.game_state = 1 [coordinator mutation]
+//      b. PublishSharedDotaLobbyState [publish]
+//      c. GBE_SendDotaPracticeLobbyDetailsUpdate [coordinator: emits 26]
+//   Invariant: 7170 precedes state mutation; mutation precedes publish precedes
+//   details update.
+//
+// GBE_HandleDotaCustomGameStartedLoadingRequest (emsg 8052 -> launch advance OR
+// publish + details update):
+//   1. Parse: lobby_id (field 1), custom_game_id (field 2), start_time (field 4)
+//   2. If lobby_id matches:
+//      a. If custom_game_id!=0: GBE_local_lobby.custom_game.game_id =
+//         custom_game_id [coordinator mutation]
+//      b. If start_time!=0: GBE_local_lobby.game_start_time = start_time
+//         [coordinator mutation]
+//      c. GBE_TryAdvanceDotaLaunchToRun [coordinator: emits 26]; if !advanced:
+//         PublishSharedDotaLobbyState [publish] +
+//         GBE_SendDotaPracticeLobbyDetailsUpdate [coordinator: emits 26]
+//   Invariant: launch advance attempt precedes publish+details fallback.
+//
+// GBE_HandleDotaCustomGameFinishedLoadingRequest (emsg 8053 -> state mutation +
+// publish + details update):
+//   1. parse_dota8053_result (pure)
+//   2. If lobby_id matches:
+//      a. If launch_phase>=RunQueued: state=2; if game_state<1: game_state=1
+//         [coordinator mutation]
+//      b. Else if state<2: state=2 [coordinator mutation]
+//      c. dota8053_indicates_load_failure (pure decision)
+//      d. If !load_failed: GBE_SetDotaLobbyMemberRuntimeState(local, true, 0,
+//         false) [coordinator mutation] + GBE_MarkDotaLaunchPhase(Loaded) +
+//         PublishDotaPracticeLobbyLocalMemberData [publish]
+//      e. PublishSharedDotaLobbyState [publish]
+//      f. GBE_SendDotaPracticeLobbyDetailsUpdate [coordinator: emits 26]
+//   Invariant: state mutation precedes local member data publish precedes
+//   shared lobby publish precedes details update.
+// ============================================================================
+
 static bool GBE_AdaptDota7034ConnectedPlayersResponsePayload(
     uint64 steam_id,
     uint32 lobby_state,

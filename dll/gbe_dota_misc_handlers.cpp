@@ -74,6 +74,114 @@ using namespace gamecoordinator::tf2;
 using GBE_DotaEmptyRequestShape = gbe::proto_wire::DotaEmptyRequestShape;
 using GBE_DotaRankRequestShape = gbe::proto_wire::DotaRankRequestShape;
 
+// ============================================================================
+// Side-effect order documentation (see dll/gbe_dota_action_model.h for the
+// canonical action type and cross-domain ordering invariants).
+// ============================================================================
+//
+// GBE_HandleDotaMinimalVarintSuccessRequest (generic -> response_emsg):
+//   1. Build varint response payload (pure: build_dota_varint_response_payload)
+//   2. PushDotaResponse(response_emsg) [coordinator: push_incoming_now]
+//   Invariant: single response, no state mutation.
+//
+// GBE_HandleDota7427NotificationsRequest (emsg 7427 -> 7428):
+//   1. Build 7428 notifications payload (pure)
+//   2. PushDotaResponse(7428) [coordinator]
+//
+// GBE_HandleDotaUploadRateRequest (emsg 7440 -> 7441):
+//   1. Build 7441 upload rate payload (pure)
+//   2. PushDotaResponse(7441) [coordinator]
+//
+// GBE_HandleDotaProfileCardRequest (emsg 7485 -> 7486):
+//   1. Build 7486 profile card payload (pure)
+//   2. PushDotaResponse(7486) [coordinator]
+//
+// GBE_HandleDotaLookupAccountNameRequest (emsg 7537 -> 7538):
+//   1. Parse: steam_id (field 1)
+//   2. Resolve account_name via steam_friends (coordinator read)
+//   3. Build 7538 lookup response (pure)
+//   4. PushDotaResponse(7538) [coordinator]
+//
+// GBE_HandleDotaEmoticonDataRequest (emsg 7563 -> 7564):
+//   1. Build 7564 emoticon data payload (pure)
+//   2. PushDotaResponse(7564) [coordinator]
+//
+// GBE_HandleDotaConductScorecardRequest (emsg 7591 -> 7592):
+//   1. Build 7592 conduct scorecard payload (pure)
+//   2. PushDotaResponse(7592) [coordinator]
+//
+// GBE_HandleDotaCoachingSummaryRequest (emsg 7812 -> 7813):
+//   1. Build 7813 coaching summary payload (pure)
+//   2. PushDotaResponse(7813) [coordinator]
+//
+// GBE_HandleDotaRankRequest (emsg 7674 -> 7675):
+//   1. Parse: rank params (account_id, rank_type)
+//   2. Build 7675 rank payload (pure)
+//   3. PushDotaResponse(7675) [coordinator]
+//
+// GBE_HandleDotaLaunchAdvanceOrConsume (4506/5429 -> optional launch advance):
+//   1. If state==1 && game_state==0 && HasDotaLaunchServerSetupSync:
+//      GBE_TryAdvanceDotaLaunchToRun (emits 26) [coordinator]; if advanced,
+//      return early
+//   2. Else: log consume note + return
+//   Invariant: launch advance is the only side effect when it fires; no
+//   response is pushed.
+//
+// GBE_HandleDota8870LaunchMarkerRequest (emsg 8870):
+//   1. Log consume note (no side effects)
+//
+// GBE_HandleDotaLanServerAvailableRequest (emsg 4511):
+//   1. Parse: lobby_id (field 1)
+//   2. If matches_local_lobby:
+//      a. If !launch_4511_seen: set launch_4511_seen=true + PublishSharedDotaLobbyState [publish]
+//      b. GBE_TrySyncDotaLobbyServerIdFromGameServer [coordinator]
+//   3. If matches_local_lobby && !incoming_messages.empty():
+//      callbacks->addCBResult(GCMessageAvailable_t) [coordinator callback]
+//   4. Log
+//   Invariant: state mutation + publish precedes callback repost.
+//
+// GBE_HandleDotaBatchPlayerResourcesRequest (emsg 7450 -> 7451 + per-player
+// CacheSubscribed when on server GC):
+//   1. Parse: packed account_ids (field 1); fallback to local account_id
+//   2. Build 7451 batch response (pure)
+//   3. PushDotaResponse(7451) [coordinator]
+//   4. If is_server && DOTA2: for each account_id:
+//      a. Resolve equipped items (host: client_gc->get_items; remote:
+//         all_user_items) [coordinator read]
+//      b. If equipped_items empty: log + continue
+//      c. Build per-player CacheSubscribed (pure: append_*_field)
+//      d. push_incoming_now(CacheSubscribed) [coordinator]
+//   Invariant: 7451 precedes per-player CacheSubscribed; per-player push only
+//   on server GC profile.
+//
+// GBE_HandleDotaCacheSubscriptionRefreshRequest (emsg 2008 -> 2009):
+//   1. Parse: owner_soid (field 2) -> owner_type, owner_id
+//   2. Compute matches_lobby_owner (owner_type==3 && owner_id==local lobby_id)
+//   3. Log observation
+//   4. If matches_lobby_owner:
+//      a. Build 2009 up-to-date payload (pure)
+//      b. PushDotaResponse(2009) [coordinator]
+//   Invariant: response only when owner matches local lobby; no state mutation.
+//
+// GBE_HandleDotaLeaverDetectedRequest (emsg 7072):
+//   1. If !active || lobby_id==0: early return
+//   2. Parse: steam_id (field 1), leaver_status (field 2), disconnect_reason
+//      (field 6)
+//   3. GBE_SetDotaLobbyMemberRuntimeState(steam_id, false, 0, false) [coordinator]
+//   4. If member updated: PublishSharedDotaLobbyState [publish]
+//   5. Log
+//   Invariant: member mutation precedes publish.
+//
+// GBE_HandleDotaSignOutPermissionRequest (emsg 7027 -> 7028):
+//   1. Build 7028 signout permission payload (pure)
+//   2. PushDotaResponse(7028) [coordinator]
+//
+// GBE_HandleDotaSubmitPlayerReportV2Request (emsg 7925 -> 7926):
+//   1. Parse: target_account_id, report_type
+//   2. Build 7926 report ack payload (pure)
+//   3. PushDotaResponse(7926) [coordinator]
+// ============================================================================
+
 struct GBE_ProtoField
 {
     bool found{};
