@@ -17,8 +17,13 @@
   - Moved 7 chat/broadcast handlers: `GBE_HandleDotaJoinChatChannelRequest`, `GBE_HandleDotaChatMessageRequest`, `GBE_HandleDotaNetworkChatMessage`, `GBE_HandleDotaLeaveChatChannelRequest`, `GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest`, `GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest`, `GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest`.
   - Moved chat-only static `GBE_GenerateDotaChatChannelId` (List X, kept `static` in new TU).
   - List Y = 0: no cross-TU externalization needed; all shared symbols already declared in existing headers.
+- Phase 3.1.4 lobby handler extraction is complete.
+  - Added `dll/gbe_dota_lobby_handlers.cpp` (1663 lines).
+  - Moved 17 lobby handlers covering create/list/join/invite/invite-response/friend-invite/network-invite/abandon/signout/leave/launch/set-details/set-team-slot/kick/destroy.
+  - Moved 6 lobby-only statics (`GBE_ApplyDotaCustomGameDetailsRequest`, `GBE_NormalizeDotaCustomGameDetailsFromInstalledMod`, `GBE_GenerateDotaLobbyId`, `GBE_GenerateDotaMatchId`, `GBE_AdaptDotaLobbyInviteCacheSubscribedPayload`, `GBE_IsDotaLobbyInviteCacheSubscribedPayload`), all kept `static` in new TU (List X).
+  - List Y = 0: no cross-TU externalization needed; all shared symbols already declared in existing headers.
 - Handler signatures and function bodies were kept unchanged.
-- `dll/gbe_dota_handlers.cpp` is currently 5164 lines (down from 5757 after 3.1.3).
+- `dll/gbe_dota_handlers.cpp` is currently 3578 lines (down from 5164 after 3.1.4).
 - `premake5.lua` uses `dll/**` in `common_files`, so the new cpp file is included by the main build source glob.
 
 ## Verification
@@ -33,7 +38,7 @@
 
 ## Recommended Next Step
 
-- Continue mechanical extraction in Phase 3.1.4 (lobby handlers) or start the follow-up logic refactor for an already-extracted bucket (3.1.7 inventory logic refactor, 3.1.8 chat logic refactor).
+- Continue mechanical extraction in Phase 3.1.5 (match/misc handlers) or start the follow-up logic refactor for an already-extracted bucket (3.1.7 inventory, 3.1.8 chat, 3.1.9 lobby logic refactor).
 - Treat mechanical extraction as an intermediate step only. Every GC domain moved into a new file must receive a follow-up logic refactor before that domain is considered complete.
 - For each extracted domain, separate request parsing, state mutation, message/response construction, coordinator-owned side effects, and focused tests.
 - Before changing handler internals, document the current side-effect order and preserve it with action-order tests or an explicit ordered action list.

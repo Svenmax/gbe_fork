@@ -58,12 +58,13 @@
   - [x] Run offline GC tests.
   - Notes: moved 7 chat/broadcast handlers (`GBE_HandleDotaJoinChatChannelRequest`, `GBE_HandleDotaChatMessageRequest`, `GBE_HandleDotaNetworkChatMessage`, `GBE_HandleDotaLeaveChatChannelRequest`, `GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest`, `GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest`, `GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest`) plus chat-only static `GBE_GenerateDotaChatChannelId`. List Y = 0 (no externalize needed). `dll/gbe_dota_handlers.cpp` 5757 → 5164 lines, new file 653 lines. Follow-up logic refactor tracked as 3.1.8.
 
-- [ ] 3.1.4 Extract lobby handlers
-  - [ ] Create `dll/gbe_dota_lobby_handlers.cpp`.
-  - [ ] Move lobby create, join, leave, list, invite, kick, and set-details handlers.
-  - [ ] Keep signatures unchanged.
-  - [ ] Add a follow-up lobby logic refactor task before marking the lobby bucket complete.
-  - [ ] Run offline GC tests.
+- [x] 3.1.4 Extract lobby handlers
+  - [x] Create `dll/gbe_dota_lobby_handlers.cpp`.
+  - [x] Move lobby create, join, leave, list, invite, kick, and set-details handlers.
+  - [x] Keep signatures unchanged.
+  - [x] Add a follow-up lobby logic refactor task before marking the lobby bucket complete.
+  - [x] Run offline GC tests.
+  - Notes: moved 17 lobby handlers (`GBE_HandleDotaPracticeLobbyCreateRequest`, `GBE_HandleDotaLobbyListRequest`, `GBE_HandleDotaCustomLobbyListRequest`, `GBE_HandleDotaFriendPracticeLobbyListRequest`, `GBE_HandleDotaPracticeLobbyJoinRequest`, `GBE_HandleDotaInviteToLobbyRequest`, `GBE_HandleDotaLobbyInviteResponseRequest`, `GBE_HandleDotaFriendLobbyInviteMessage`, `GBE_HandleDotaNetworkLobbyInviteMessage`, `GBE_HandleDotaAbandonCurrentGameRequest`, `GBE_HandleDotaGameMatchSignOutRequest`, `GBE_HandleDotaPracticeLobbyLeaveRequest`, `GBE_HandleDotaPracticeLobbyLaunchRequest`, `GBE_HandleDotaPracticeLobbySetDetailsRequest`, `GBE_HandleDotaPracticeLobbySetTeamSlotRequest`, `GBE_HandleDotaPracticeLobbyKickRequest`, `GBE_HandleDotaDestroyLobbyRequest`) plus 6 lobby-only statics (`GBE_ApplyDotaCustomGameDetailsRequest`, `GBE_NormalizeDotaCustomGameDetailsFromInstalledMod`, `GBE_GenerateDotaLobbyId`, `GBE_GenerateDotaMatchId`, `GBE_AdaptDotaLobbyInviteCacheSubscribedPayload`, `GBE_IsDotaLobbyInviteCacheSubscribedPayload`), all kept `static` in new TU (List X). List Y = 0 (no externalize needed). `dll/gbe_dota_handlers.cpp` 5164 → 3578 lines, new file 1663 lines. Follow-up logic refactor tracked as 3.1.9.
 
 - [ ] 3.1.5 Extract match and misc handlers
   - [ ] Create `dll/gbe_dota_match_handlers.cpp` when there is a coherent match group.

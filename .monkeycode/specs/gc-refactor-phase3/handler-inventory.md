@@ -5,8 +5,8 @@ This inventory records the current `Steam_Game_Coordinator::GBE_HandleDota*` fun
 ## Current State
 
 - Source file: `dll/gbe_dota_handlers.cpp`
-- Handler member functions: 62 originally; 3 inventory (Phase 3.1.2) + 7 chat/broadcast (Phase 3.1.3) extracted, leaving 52 in `dll/gbe_dota_handlers.cpp`.
-- Handler-local static symbols: 23 originally; 1 chat-only static (`GBE_GenerateDotaChatChannelId`) moved with the chat handlers (Phase 3.1.3), leaving 22.
+- Handler member functions: 62 originally; 3 inventory (Phase 3.1.2) + 7 chat/broadcast (Phase 3.1.3) + 17 lobby (Phase 3.1.4) extracted, leaving 35 in `dll/gbe_dota_handlers.cpp`.
+- Handler-local static symbols: 23 originally; 1 chat-only static (`GBE_GenerateDotaChatChannelId`) moved with the chat handlers (Phase 3.1.3) + 6 lobby-only statics moved with the lobby handlers (Phase 3.1.4), leaving 15.
 - Primary risk: static helper/data placement when handlers are moved into domain-specific files.
 
 ## Direct / Post-Login / Protocol Handlers
@@ -55,6 +55,8 @@ These are the best first extraction candidates because their domain is narrow an
 - `GBE_HandleDotaEquipItemsRequest`
 
 ## Lobby Handlers
+
+**EXTRACTED to `dll/gbe_dota_lobby_handlers.cpp` (Phase 3.1.4).** Six lobby-only statics (`GBE_ApplyDotaCustomGameDetailsRequest`, `GBE_NormalizeDotaCustomGameDetailsFromInstalledMod`, `GBE_GenerateDotaLobbyId`, `GBE_GenerateDotaMatchId`, `GBE_AdaptDotaLobbyInviteCacheSubscribedPayload`, `GBE_IsDotaLobbyInviteCacheSubscribedPayload`) moved with them; no cross-TU externalization was needed (List Y = 0).
 
 These functions form the largest coherent business group. Extract them after inventory handlers because they share more local helpers and mutable lobby state.
 
@@ -116,12 +118,12 @@ These are compact and can move into either a custom-game handler file or the dir
 
 ### Lobby Statics
 
-- `GBE_ApplyDotaCustomGameDetailsRequest`: used by `GBE_HandleDotaPracticeLobbyCreateRequest` and `GBE_HandleDotaPracticeLobbySetDetailsRequest`
-- `GBE_NormalizeDotaCustomGameDetailsFromInstalledMod`: used by `GBE_HandleDotaPracticeLobbyCreateRequest` and `GBE_HandleDotaPracticeLobbySetDetailsRequest`
-- `GBE_GenerateDotaLobbyId`: used by `GBE_HandleDotaPracticeLobbyCreateRequest` and `GBE_HandleDotaPracticeLobbyJoinRequest`
-- `GBE_GenerateDotaMatchId`: used by `GBE_HandleDotaPracticeLobbyLaunchRequest`
-- `GBE_AdaptDotaLobbyInviteCacheSubscribedPayload`: used by `GBE_HandleDotaFriendLobbyInviteMessage`
-- `GBE_IsDotaLobbyInviteCacheSubscribedPayload`: used by `GBE_HandleDotaNetworkLobbyInviteMessage`
+- `GBE_ApplyDotaCustomGameDetailsRequest`: used by `GBE_HandleDotaPracticeLobbyCreateRequest` and `GBE_HandleDotaPracticeLobbySetDetailsRequest` — **moved to `dll/gbe_dota_lobby_handlers.cpp` (Phase 3.1.4)**.
+- `GBE_NormalizeDotaCustomGameDetailsFromInstalledMod`: used by `GBE_HandleDotaPracticeLobbyCreateRequest` and `GBE_HandleDotaPracticeLobbySetDetailsRequest` — **moved to `dll/gbe_dota_lobby_handlers.cpp` (Phase 3.1.4)**.
+- `GBE_GenerateDotaLobbyId`: used by `GBE_HandleDotaPracticeLobbyCreateRequest` and `GBE_HandleDotaPracticeLobbyJoinRequest` — **moved to `dll/gbe_dota_lobby_handlers.cpp` (Phase 3.1.4)**.
+- `GBE_GenerateDotaMatchId`: used by `GBE_HandleDotaPracticeLobbyLaunchRequest` — **moved to `dll/gbe_dota_lobby_handlers.cpp` (Phase 3.1.4)**.
+- `GBE_AdaptDotaLobbyInviteCacheSubscribedPayload`: used by `GBE_HandleDotaFriendLobbyInviteMessage` — **moved to `dll/gbe_dota_lobby_handlers.cpp` (Phase 3.1.4)**.
+- `GBE_IsDotaLobbyInviteCacheSubscribedPayload`: used by `GBE_HandleDotaNetworkLobbyInviteMessage` — **moved to `dll/gbe_dota_lobby_handlers.cpp` (Phase 3.1.4)**.
 
 ### Chat Statics
 
