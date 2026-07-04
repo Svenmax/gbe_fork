@@ -275,61 +275,6 @@ using GBE_DotaPracticeLobbyKickRequest = gbe::proto_wire::DotaPracticeLobbyKickR
 //   Invariant: 25 precedes lobby clear precedes generic lobby leave.
 // ============================================================================
 
-namespace {
-
-// Pure abandon-current-game decision helper.
-//
-// Reads the local lobby state, the wrapped flag, and is_server, returns all
-// derived decision flags needed by the 7035 abandon handler. Keeping this
-// pure lets the handler focus on executing the decision's side effects in
-// the documented order without interleaving boolean derivation logic.
-struct AbandonDecision {
-    uint64 lobby_id{};
-    uint32 lobby_state{};
-    uint32 lobby_game_state{};
-    uint32 abandon_game_state_threshold{};  // 1 for wrapped/client, 2 for direct server
-    bool treat_as_current_game_disconnect{};
-    bool ready_for_abandon_teardown{};
-    bool arcade_launch_failed_before_connect{};
-};
-
-inline AbandonDecision compute_abandon_decision(
-    const GBE_LocalLobby &lobby,
-    bool wrapped,
-    bool is_server)
-{
-    AbandonDecision d;
-    d.lobby_id = lobby.lobby_id;
-    d.lobby_state = lobby.state;
-    d.lobby_game_state = lobby.game_state;
-    // Wrapped 7035 (user clicked Leave Game) can abandon at game_state >= 1
-    // so players can leave during WAIT_FOR_PLAYERS_TO_LOAD if loading stalls.
-    // Direct 7035 on a listen server (engine automatic state sync) requires
-    // game_state >= 2 to avoid premature abandon during HERO_SELECTION.
-    // Direct 7035 on a client (non-host) also uses game_state >= 1 because
-    // the client has no engine-initiated 7035 -- it is always user-triggered.
-    d.abandon_game_state_threshold = (wrapped || !is_server) ? 1u : 2u;
-    d.treat_as_current_game_disconnect =
-        is_server &&
-        lobby.owner_connected &&
-        d.lobby_state == 2u &&
-        (lobby.server_id != 0 || d.lobby_game_state >= 1u);
-    d.ready_for_abandon_teardown =
-        d.lobby_state == 2u &&
-        d.lobby_game_state >= d.abandon_game_state_threshold;
-    d.arcade_launch_failed_before_connect =
-        gbe::dota_custom_game::has_custom_game_details(lobby.custom_game) &&
-        !wrapped &&
-        !lobby.owner_connected &&
-        d.lobby_state == 2u &&
-        d.lobby_game_state >= 2u &&
-        lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued &&
-        lobby.launch_phase < GBE_kDotaLaunchPhaseLoaded;
-    return d;
-}
-
-} // anonymous namespace
-
 
 static void GBE_ApplyDotaCustomGameDetailsRequest(const GBE_DotaPracticeLobbyDetailsRequest &request, GBE_DotaCustomGameDetails &custom_game)
 {
@@ -1235,7 +1180,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     }
 
-    const AbandonDecision d = compute_abandon_decision(GBE_local_lobby, wrapped, is_server);
+    const gbe::dota_lobby_state::AbandonDecision d = gbe::dota_lobby_state::compute_abandon_decision(GBE_local_lobby, wrapped, is_server);
 
     if (d.arcade_launch_failed_before_connect && GBE_local_lobby.game_start_time != 0u) {
         const uint32 now = static_cast<uint32>(std::time(nullptr));

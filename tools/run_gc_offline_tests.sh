@@ -97,6 +97,15 @@ build_and_run \
     dll/gbe_proto_wire.cpp
 
 build_and_run \
+    gbe_dota_lobby_state_test \
+    tools/gbe_dota_lobby_state_test/gbe_dota_lobby_state_test.cpp \
+    dll/gbe_dota_lobby_state.cpp \
+    dll/gbe_dota_lobby_flow.cpp \
+    dll/gbe_dota_custom_game.cpp \
+    dll/gbe_dota_gc_wire.cpp \
+    dll/gbe_proto_wire.cpp
+
+build_and_run \
     gbe_dota_custom_game_test \
     tools/gbe_dota_custom_game_test/gbe_dota_custom_game_test.cpp \
     dll/gbe_dota_custom_game.cpp \

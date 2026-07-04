@@ -218,24 +218,28 @@
 
 ## Phase 3.4: Centralize Lobby State Transitions
 
-- [ ] 3.4.1 Inventory state transition logic
-  - [ ] Locate launch, teardown, reconnect, abandon suppression, owner disconnect, and member disconnect decision logic.
-  - [ ] Identify pure decisions and mutation sites.
+- [x] 3.4.1 Inventory state transition logic
+  - [x] Locate launch, teardown, reconnect, abandon suppression, owner disconnect, and member disconnect decision logic.
+  - [x] Identify pure decisions and mutation sites.
+  - Notes: assessment found that the bulk of lobby state transition logic was already centralized in `gbe::dota_lobby_state` across prior phases — `compose_create_lobby_plan`, `compose_create_lobby_reset_plan`, `compose_join_lobby_merge_plan`, `compose_launch_init_plan`, `compose_custom_game_launch_setup_plan`, `has_launch_server_setup_sync`, `compose_launch_run_plan`, `compose_queued_lobby_state_apply_plan`, `compose_launch_serversetup_presence_event`, `compose_practice_lobby_launch_event_plan`, `compose_custom_game_launch_setup_event_plan`, `publish_local_lobby_to_shared`, `adopt_shared_lobby_to_local`, `build_reconnect_context` are all pure and live in `dll/gbe_dota_lobby_state.{h,cpp}`. The abandon-suppression stateful helpers (`GBE_ShouldSuppressDotaAbandonedLobby`, `GBE_MarkDotaAbandonedLobbySuppressed`, `GBE_ClearDotaAbandonedLobbySuppression`, `GBE_DiscardQueuedDotaLaunchMessagesForAbandon`) are coordinator-owned mutations and stay in the coordinator. The one remaining pure transition decision still in a handler file's anonymous namespace was `compute_abandon_decision` (in `dll/gbe_dota_lobby_handlers.cpp`, added during Phase 3.1.9 Tier A). 3.4.2 moves it.
 
-- [ ] 3.4.2 Extract pure transition helpers
-  - [ ] Create a small state transition module.
-  - [ ] Keep coordinator mutation in coordinator methods.
-  - [ ] Return explicit decision values instead of mutating global state.
+- [x] 3.4.2 Extract pure transition helpers
+  - [x] Create a small state transition module.
+  - [x] Keep coordinator mutation in coordinator methods.
+  - [x] Return explicit decision values instead of mutating global state.
+  - Notes: moved `AbandonDecision` struct + `compute_abandon_decision` from `dll/gbe_dota_lobby_handlers.cpp` anonymous namespace to `gbe::dota_lobby_state` (`dll/gbe_dota_lobby_state.h` declaration + `dll/gbe_dota_lobby_state.cpp` implementation). The `gbe_dota_lobby_state.cpp` TU gained a `gbe_dota_protocol_constants.h` include for `GBE_kDotaLaunchPhaseRunQueued` / `GBE_kDotaLaunchPhaseLoaded`. The 7035 abandon handler call site now reads `gbe::dota_lobby_state::AbandonDecision d = gbe::dota_lobby_state::compute_abandon_decision(...)`; the handler still owns all side effects (`GBE_DiscardQueuedDotaLaunchMessagesForAbandon`, `GBE_MarkDotaAbandonedLobbySuppressed`, `GBE_pending_reset_after_cache_unsubscribed` mutation, `push_incoming_now(25)`, `GBE_QueueDotaPostGameTeardown`). `gbe_dota_lobby_state.h` is transitively visible in the handlers TU via `dll/dll/steam_game_coordinator.h` (line 23), so no new include was needed there. The empty anonymous-namespace block left behind by the extraction was removed. No behavior change (verified: 92/92 payload + 9/9 handler + 4/4 lobby-state offline tests, audit clean 0/0/0).
 
-- [ ] 3.4.3 Add focused transition tests
-  - [ ] Cover valid launch progression.
-  - [ ] Cover stale generic lobby state regression.
-  - [ ] Cover owner disconnect and reconnect.
-  - [ ] Cover post-game teardown suppression.
+- [x] 3.4.3 Add focused transition tests
+  - [x] Cover valid launch progression.
+  - [x] Cover stale generic lobby state regression.
+  - [x] Cover owner disconnect and reconnect.
+  - [x] Cover post-game teardown suppression.
+  - Notes: created `tools/gbe_dota_lobby_state_test/gbe_dota_lobby_state_test.cpp` (637 lines, 4 test functions covering the 4 required categories). (1) `test_valid_launch_progression` exercises `compose_launch_init_plan` (connect-prefer logic + match_id/server_id/game_start_time/launch_phase population), `has_launch_server_setup_sync` (all 5 gating conditions: active/lobby_id/match_id/game_start_time/connect), `compose_launch_run_plan` (blocked when no sync, blocked when phase < setup_synced, advances + bumps phase to run_queued, keeps phase when already loaded), `compose_queued_lobby_state_apply_plan` (state=1 setup_synced bump, state=2 run_queued bump, no bump for nonzero game_state). (2) `test_stale_generic_lobby_state_regression` exercises `adopt_shared_lobby_to_local` `normalize_custom_readyup_run_state` (state=4+game_state>=2+custom→state=2 normalization, and the 3 negative cases: non-custom / game_state<2 / state!=4), `clear_server_id_without_match` (clears when match_id==0, keeps when match_id!=0), and `compose_queued_lobby_state_apply_plan` `preserve_monotonic_game_state` (preserves current game_state when state==2 + game_state>0 + queued game_state==0, and the 3 negative cases: current zero / current state!=2 / flag disabled). (3) `test_owner_disconnect_and_reconnect` exercises `compute_abandon_decision` `treat_as_current_game_disconnect` (true when is_server + owner_connected + state==2 + (server_id!=0 || game_state>=1); false when owner disconnected / client / state!=2) and `build_reconnect_context` (valid when active + (state>=2 || game_state>=2) + server_id!=0 + connect non-empty; rejected for inactive / game not started / server_id==0 / empty connect; accepted via game_state>=2 alone). (4) `test_post_game_teardown_suppression` exercises the abandon threshold (wrapped/client=1, direct server=2), `ready_for_abandon_teardown` (true at game_state>=threshold+state==2; false when state!=2 / game_state<threshold), and `arcade_launch_failed_before_connect` (true for stuck custom-game launch in [RunQueued, Loaded) with owner disconnected on direct path; false when Loaded / before RunQueued / wrapped / owner connected / non-custom / game_state<2). Wired into `tools/run_gc_offline_tests.sh` (builds+runs `gbe_dota_lobby_state_test` against `dll/gbe_dota_lobby_state.cpp` + `gbe_dota_lobby_flow.cpp` + `gbe_dota_custom_game.cpp` + `gbe_dota_gc_wire.cpp` + `gbe_proto_wire.cpp`) and `premake5.lua` (new `tool_gbe_dota_lobby_state_test` project mirroring `tool_gbe_dota_lobby_flow_test`).
 
-- [ ] 3.4.4 Verify existing flow
-  - [ ] Run lobby lifecycle replay fixture.
-  - [ ] Run full offline GC test script.
+- [x] 3.4.4 Verify existing flow
+  - [x] Run lobby lifecycle replay fixture.
+  - [x] Run full offline GC test script.
+  - Notes: `tools/run_gc_offline_tests.sh` passes end-to-end (script uses `set -euo pipefail`, so all stages succeeded): 92/92 payload helper tests, gc_replay_test fixtures (minimal / practice_lobby / lobby_lifecycle / game_flow / cache_and_items / wire_edge_cases) all pass byte-level output, 9/9 handler smoke tests, 19/19 lobby-flow tests, 4/4 lobby-state transition tests, custom-game tests. Audit clean (0 zombie / 0 under-exposed / 0 mismatch).
 
 ## Phase 3.5: Tighten Includes And Internal Boundaries
 

@@ -236,6 +236,26 @@ void adopt_shared_lobby_to_local(
     bool normalize_custom_readyup_run_state,
     GBE_LocalLobby &local);
 bool build_reconnect_context(const GBE_LocalLobby &local, GBE_DotaReconnectContext &context);
+
+// Pure abandon-current-game decision (emsg 7035). Reads the local lobby state,
+// the wrapped flag, and is_server; returns all derived decision flags needed by
+// the abandon handler. Kept pure so the handler only executes the decision's
+// side effects in the documented order without interleaving boolean derivation.
+struct AbandonDecision {
+    std::uint64_t lobby_id{};
+    std::uint32_t lobby_state{};
+    std::uint32_t lobby_game_state{};
+    std::uint32_t abandon_game_state_threshold{};  // 1 for wrapped/client, 2 for direct server
+    bool treat_as_current_game_disconnect{};
+    bool ready_for_abandon_teardown{};
+    bool arcade_launch_failed_before_connect{};
+};
+
+AbandonDecision compute_abandon_decision(
+    const GBE_LocalLobby &lobby,
+    bool wrapped,
+    bool is_server);
+
 CreateLobbyPlan compose_create_lobby_plan(
     const proto_wire::DotaPracticeLobbyCreateRequest &request,
     std::uint64_t lobby_id,
