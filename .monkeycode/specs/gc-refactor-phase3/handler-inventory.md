@@ -5,8 +5,8 @@ This inventory records the current `Steam_Game_Coordinator::GBE_HandleDota*` fun
 ## Current State
 
 - Source file: `dll/gbe_dota_handlers.cpp`
-- Handler member functions: 62 originally; 3 inventory (Phase 3.1.2) + 7 chat/broadcast (Phase 3.1.3) + 17 lobby (Phase 3.1.4) + 10 direct 7034 match-flow + 3 custom-game loading (Phase 3.1.5a) extracted, leaving 22 in `dll/gbe_dota_handlers.cpp`.
-- Handler-local static symbols: 23 originally; 1 chat-only static (`GBE_GenerateDotaChatChannelId`) moved with the chat handlers (Phase 3.1.3) + 6 lobby-only statics moved with the lobby handlers (Phase 3.1.4) + 1 match-flow static (`GBE_AdaptDota7034ConnectedPlayersResponsePayload`) moved with the match handlers (Phase 3.1.5a), leaving 14.
+- Handler member functions: 62 originally; 3 inventory (Phase 3.1.2) + 7 chat/broadcast (Phase 3.1.3) + 17 lobby (Phase 3.1.4) + 10 direct 7034 match-flow + 3 custom-game loading (Phase 3.1.5a) + 17 misc one-off (Phase 3.1.5c) extracted, leaving 5 in `dll/gbe_dota_handlers.cpp`.
+- Handler-local static symbols: 23 originally; 1 chat-only static (`GBE_GenerateDotaChatChannelId`) moved with the chat handlers (Phase 3.1.3) + 6 lobby-only statics moved with the lobby handlers (Phase 3.1.4) + 1 match-flow static (`GBE_AdaptDota7034ConnectedPlayersResponsePayload`) moved with the match handlers (Phase 3.1.5a), leaving 15. Plus 1 handler-local struct `GBE_ProtoField` moved with the misc handlers (Phase 3.1.5c).
 - Primary risk: static helper/data placement when handlers are moved into domain-specific files.
 
 ## Direct / Post-Login / Protocol Handlers
@@ -28,25 +28,30 @@ These functions handle direct GC request routing, direct 7034 flow, generic dire
 - `GBE_HandleDotaDirect7034LaunchPoll` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
 - `GBE_HandleDotaDirect7034WaitForPlayers` — **moved to `dll/gbe_dota_match_handlers.cpp` (Phase 3.1.5a)**.
 
-### Remaining Direct / Post-Login / Misc Handlers
+### Misc One-Off Handlers
 
-- `GBE_HandleDotaMinimalVarintSuccessRequest`
-- `GBE_HandleDota7427NotificationsRequest`
-- `GBE_HandleDotaUploadRateRequest`
-- `GBE_HandleDotaProfileCardRequest`
-- `GBE_HandleDotaLookupAccountNameRequest`
-- `GBE_HandleDotaEmoticonDataRequest`
-- `GBE_HandleDotaConductScorecardRequest`
-- `GBE_HandleDotaCoachingSummaryRequest`
-- `GBE_HandleDotaRankRequest`
-- `GBE_HandleDotaLaunchAdvanceOrConsume`
-- `GBE_HandleDota8870LaunchMarkerRequest`
-- `GBE_HandleDotaLanServerAvailableRequest`
-- `GBE_HandleDotaBatchPlayerResourcesRequest`
-- `GBE_HandleDotaCacheSubscriptionRefreshRequest`
-- `GBE_HandleDotaLeaverDetectedRequest`
-- `GBE_HandleDotaSignOutPermissionRequest`
-- `GBE_HandleDotaSubmitPlayerReportV2Request`
+**EXTRACTED to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c).** No handler-local statics moved with this group (List X = 0, the handler-local struct `GBE_ProtoField` moved with the group and is kept file-local in the new TU); no cross-TU externalization was needed (List Y = 0, only the `GBE_DotaEmptyRequestShape` and `GBE_DotaRankRequestShape` aliases were repeated in the new TU).
+
+- `GBE_HandleDotaMinimalVarintSuccessRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDota7427NotificationsRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaUploadRateRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaProfileCardRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaLookupAccountNameRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaEmoticonDataRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaConductScorecardRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaCoachingSummaryRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaRankRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaLaunchAdvanceOrConsume` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDota8870LaunchMarkerRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaLanServerAvailableRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaBatchPlayerResourcesRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaCacheSubscriptionRefreshRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaLeaverDetectedRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaSignOutPermissionRequest` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+- `GBE_HandleDotaSubmitPlayerReportV2Request` — **moved to `dll/gbe_dota_misc_handlers.cpp` (Phase 3.1.5c)**.
+
+### Remaining Post-Login / Socket / Template Handlers
+
 - `GBE_HandleDotaTemplateReplayRequest`
 - `GBE_HandleDotaServerAssignmentRequest`
 - `GBE_HandleDotaDirectPostLoginRequest`

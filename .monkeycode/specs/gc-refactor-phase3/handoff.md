@@ -22,14 +22,19 @@
   - Moved 17 lobby handlers covering create/list/join/invite/invite-response/friend-invite/network-invite/abandon/signout/leave/launch/set-details/set-team-slot/kick/destroy.
   - Moved 6 lobby-only statics (`GBE_ApplyDotaCustomGameDetailsRequest`, `GBE_NormalizeDotaCustomGameDetailsFromInstalledMod`, `GBE_GenerateDotaLobbyId`, `GBE_GenerateDotaMatchId`, `GBE_AdaptDotaLobbyInviteCacheSubscribedPayload`, `GBE_IsDotaLobbyInviteCacheSubscribedPayload`), all kept `static` in new TU (List X).
   - List Y = 0: no cross-TU externalization needed; all shared symbols already declared in existing headers.
-- Phase 3.1.5a match-flow sub-batch is complete (post-login and misc sub-buckets still pending).
+- Phase 3.1.5a match-flow sub-batch is complete (post-login sub-bucket still pending, misc sub-bucket done).
   - Added `dll/gbe_dota_match_handlers.cpp` (802 lines).
   - Moved 10 direct 7034 match-flow handlers: `GBE_HandleDotaDirect7034Request`, `GBE_HandleDotaDirectOwnerHeroKnownEquipReplay`, `GBE_HandleDotaDirect7034DisconnectedPlayers`, `GBE_HandleDotaDirect7034RuntimeUpdates`, `GBE_HandleDotaDirect7034StrategyTime`, `GBE_HandleDotaDirect7034StrategyTimeFallback`, `GBE_HandleDotaDirect7034StrategyTimePreserve`, `GBE_HandleDotaDirect7034Response`, `GBE_HandleDotaDirect7034LaunchPoll`, `GBE_HandleDotaDirect7034WaitForPlayers`.
   - Moved 1 static `GBE_AdaptDota7034ConnectedPlayersResponsePayload` (List X, kept `static` in new TU).
   - Merged in the 3 custom-game loading handlers (`GBE_HandleDotaCustomGameReadyUpRequest` 7070, `GBE_HandleDotaCustomGameStartedLoadingRequest` 8052, `GBE_HandleDotaCustomGameFinishedLoadingRequest` 8053) that were previously extracted to `dll/gbe_dota_custom_game_handlers.cpp`; that standalone file was removed because custom-game loading is a sub-phase of the 7034 launch flow, not an independent domain (the prior 187-line file was below the 300-line healthy lower bound).
   - List Y = 0 (no cross-TU externalization; 4 `using` aliases repeated in new TU: `GBE_Dota7034RequestShape`, `GBE_Dota7034ConnectedPlayer`, `GBE_Dota7034DisconnectedPlayer`, `GBE_Dota8053Result`).
+- Phase 3.1.5c misc sub-batch is complete (post-login sub-bucket still pending).
+  - Added `dll/gbe_dota_misc_handlers.cpp` (726 lines).
+  - Moved 17 misc one-off handlers: `GBE_HandleDotaMinimalVarintSuccessRequest`, `GBE_HandleDota7427NotificationsRequest`, `GBE_HandleDotaUploadRateRequest`, `GBE_HandleDotaProfileCardRequest`, `GBE_HandleDotaLookupAccountNameRequest`, `GBE_HandleDotaEmoticonDataRequest`, `GBE_HandleDotaConductScorecardRequest`, `GBE_HandleDotaCoachingSummaryRequest`, `GBE_HandleDotaRankRequest`, `GBE_HandleDotaLaunchAdvanceOrConsume`, `GBE_HandleDota8870LaunchMarkerRequest`, `GBE_HandleDotaLanServerAvailableRequest`, `GBE_HandleDotaBatchPlayerResourcesRequest`, `GBE_HandleDotaCacheSubscriptionRefreshRequest`, `GBE_HandleDotaLeaverDetectedRequest`, `GBE_HandleDotaSignOutPermissionRequest`, `GBE_HandleDotaSubmitPlayerReportV2Request`.
+  - Moved 1 handler-local struct `GBE_ProtoField` (List X, kept file-local in new TU; only used by `GBE_HandleDotaBatchPlayerResourcesRequest`).
+  - List Y = 0 (no cross-TU externalization; 2 `using` aliases repeated in new TU: `GBE_DotaEmptyRequestShape`, `GBE_DotaRankRequestShape`).
 - Handler signatures and function bodies were kept unchanged.
-- `dll/gbe_dota_handlers.cpp` is currently 2857 lines (down from 3459 after the 3.1.5a match sub-batch).
+- `dll/gbe_dota_handlers.cpp` is currently 2207 lines (down from 2857 after the 3.1.5c misc sub-batch). Remaining handlers: 5 post-login/socket/template-replay handlers + their static templates.
 - `premake5.lua` uses `dll/**` in `common_files`, so the new cpp file is included by the main build source glob.
 
 ## Verification
@@ -44,7 +49,7 @@
 
 ## Recommended Next Step
 
-- Continue mechanical extraction in Phase 3.1.5: the 3.1.5a match-flow sub-batch is done, next sub-buckets are 3.1.5b (post-login/socket/template-replay handlers + their static templates) and 3.1.5c (misc one-off handlers); or start the follow-up logic refactor for an already-extracted bucket (3.1.7 inventory, 3.1.8 chat, 3.1.9 lobby, 3.1.10 match/misc logic refactor).
+- Continue mechanical extraction in Phase 3.1.5: 3.1.5a match-flow and 3.1.5c misc sub-batches are done; the only remaining sub-bucket is 3.1.5b (post-login/socket/template-replay handlers + their static templates). After 3.1.5b, handlers.cpp should converge to ~1500-1800 lines and 3.1.6 can be evaluated; then start the follow-up logic refactor for an already-extracted bucket (3.1.7 inventory, 3.1.8 chat, 3.1.9 lobby, 3.1.10 match/misc logic refactor), gated on 3.1.6.5 (handler test harness) and 3.1.6.6 (action model).
 - **Plan revisions (2026-07-04)**: Phase 3 plan was reviewed end-to-end. Key changes: (1) handler-file target relaxed from 1000 to 1500 lines because post-login/socket/template handlers share protocol state that resists splitting before 3.3; (2) added task 3.1.6.5 "Build handler-level test harness" as a prerequisite for 3.1.7-3.1.10, because the existing 92 offline tests are payload-helper-level only and provide zero handler-behavior coverage; (3) moved the side-effect action model (was 3.1.12) ahead to 3.1.6.6 so the action contract is defined once before any logic refactor; (4) added a boundary note to 3.1.9 clarifying that per-handler restructuring stays in 3.1.9 while cross-handler state-machine consolidation belongs to 3.4; (5) added a "good enough" stop condition to Success Metrics so the last 20% of file-size reduction does not drive unjustified abstractions. Remaining gaps (payload helper call-graph analysis, dispatch-table signature normalization risk, domain-specific line-count calibration) will be addressed at the start of 3.2 / 3.3 respectively.
 - Treat mechanical extraction as an intermediate step only. Every GC domain moved into a new file must receive a follow-up logic refactor before that domain is considered complete.
 - For each extracted domain, separate request parsing, state mutation, message/response construction, coordinator-owned side effects, and focused tests.
