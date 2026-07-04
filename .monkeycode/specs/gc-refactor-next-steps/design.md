@@ -135,6 +135,129 @@ Inventory 是最适合作为下一轮逻辑收口模板的领域，因为现有�
 - 将 handler test 工程配置和 shell script 源列表保持一致。
 - 在具备工具的环境中实际运行 Premake 生成，验证新增测试工程。
 
+### 工作流 F：Post-login Routing 收口
+
+当前 post-login dispatch 已经从大块分支推进到更清晰的路由结构，但 direct/wrapped routing、特殊 adapter、request context shaping 仍然存在分散逻辑。后续目标是把路由层稳定为轻量 registry，让新增简单 handler 的成本主要是增加 table entry。
+
+设计边界：
+
+- `DotaGcRequestContext` 应承载 emsg、body、wrapped、outer session、source job、target job、request path 等路由所需上下文。
+- 简单 request-response handler 使用统一 adapter。
+- 复杂流程 handler，例如 7034 match flow、template replay、server assignment，保留显式 adapter。
+- registry 只决定“调用谁”和“如何传递上下文”，不处理业务状态机。
+
+优先收口点：
+
+- direct post-login if-chain 中纯 request-response 类 handler。
+- wrapped/direct 同 emsg 的重复 adapter。
+- unsupported emsg fallback 的日志和返回语义。
+
+### 工作流 G：Lobby State Machine 集中化
+
+当前 lobby state transition 已有部分 pure helper 和 state module，但 abandon、teardown、launch、reconnect、owner/member disconnect 仍散落在 chat/lobby/match/misc handler 的分支中。后续目标是逐步建立小型 transition decision 层，让 handler 读取 decision，而不是重复组合状态条件。
+
+建议先集中以下 transition：
+
+- Abandon/teardown：7035、7014、25、pending reset/finalize。
+- Launch lifecycle：7041、7070、8052、8053、7034 runtime game_state。
+- Reconnect eligibility：recent reconnect context、server id、owner connected、launch phase。
+- Lobby lifecycle：create/join/leave/destroy/kick/set details 对 shared state publish 的影响。
+
+设计边界：
+
+- transition helper 接受 `GBE_LocalLobby`、request shape、runtime flags，返回 decision struct。
+- transition helper 不发送 GC message，不修改全局状态，不触发 network/server GC。
+- coordinator 或 domain handler 负责执行 decision 并记录日志。
+- 先从 `compute_abandon_decision` 已有模式扩展，不直接引入完整 State Pattern。
+
+### 工作流 H：Coordinator 和 Global State 解耦
+
+`Steam_Game_Coordinator` 仍是 Dota GC 的胖 facade，同时跨 TU 全局状态承担了 shared lobby、pending reset、recent reconnect、launch flags 等职责。后续目标是把状态访问点收敛到小型 runtime state facade，降低 handler 对成员变量和 extern globals 的直接耦合。
+
+候选状态分组：
+
+- Shared lobby state：`GBE_shared_dota_lobby_state` 和 publish/snapshot 相关操作。
+- Pending flow state：abandon reset、normal signout finalize、postgame teardown。
+- Reconnect state：recent reconnect context、reconnect eligibility。
+- Launch state：launch phase、server setup sync、host showcase equip pushed。
+
+设计边界：
+
+- 先建立函数级访问接口，例如 `read_pending_abandon_state`、`mark_pending_reset_after_cache_unsubscribed`。
+- 在调用点稳定后，再考虑结构体封装，例如 `DotaGcRuntimeState`。
+- 不在一次变更中迁移所有 globals。
+- 不改变 `Steam_Game_Coordinator` 作为外部入口的角色。
+
+### 工作流 I：Protocol Codec DTO 化
+
+handler 中仍存在大量裸 wire 字段读取和 ad-hoc response composition。后续目标是为高风险协议建立小型 request/response DTO，让 handler 和 decision helper 处理结构化语义。
+
+优先 DTO：
+
+- `Dota7034RuntimeRequest`：connected/disconnected players、game_state、send_reason、kill/building state。
+- `Dota7070ReadyUpRequest`：lobby id、ready state、source job。
+- `Dota8052StartedLoadingRequest`：lobby id、custom game id、start time。
+- `Dota8053FinishedLoadingRequest`：lobby id、duration、result code、result text、signon state。
+- `Dota7035AbandonRequestContext`：wrapped、session、server/client、current lobby state。
+
+设计边界：
+
+- DTO parse/build 放在现有 `gbe_proto_wire` 或领域内 anonymous namespace，取决于复用范围。
+- 同一 DTO 至少被 handler 和 test 共同使用时，再提取到公共 header。
+- DTO 层只表达协议字段，不读取 coordinator 或 global state。
+
+### 工作流 J：Verification Pipeline 固化
+
+当前验证依赖人工运行脚本。后续目标是把可重复验证步骤收口成稳定 pipeline，使后续架构重构具备明确 gate。
+
+建议 gate：
+
+- Fast gate：`tools/run_gc_offline_tests.sh`。
+- Full gate：`tools/run_gc_offline_tests.sh --full`。
+- Style gate：`git diff --check`。
+- Refactor audit gate：`python3 tools/_audit_gc_refactor.py`。
+- Build config gate：具备 Premake 环境时运行 `premake5 gmake2`，并验证测试工程存在。
+
+设计边界：
+
+- 先形成本地 pre-merge checklist，再接入 CI。
+- CI 只运行不需要外部服务和平台凭据的离线测试。
+- 对当前环境缺失的 Premake 工具，文档中保留手动验证项。
+
+### 工作流 K：Template/Replay 数据治理
+
+`gbe_dota_template_replay_handlers.cpp`、payload helper 和若干 canned bytes/hex 常量仍然承载大量协议样板数据。它们对行为兼容很重要，但当前 ownership、来源和 patch 点并不总是直观。后续目标是让 template/replay 数据成为可追踪资产，降低修改 canned payload 时破坏客户端握手、lobby replay 或 post-login replay 的风险。
+
+治理目标：
+
+- 每个 template 常量有明确用途，例如 client welcome、server welcome、practice lobby cache subscribed、persona state、official 26 replay。
+- 每个 template 的 patch 点清晰，例如 account id、steam id、lobby id、match id、owner SOID、game start time。
+- template 数据的 ownership 固定在 template/replay 或 payload helper 领域，避免新增 handler 直接复制 hex blob。
+- focused tests 覆盖 template patch 后的关键字段，而不是只断言 payload 非空。
+
+设计边界：
+
+- 不重新生成或替换 canned bytes，除非有测试证明新输出与现有客户端行为兼容。
+- 不把 template 数据迁移到运行时配置文件；当前先保持编译期常量，减少部署复杂度。
+- 可以新增轻量 metadata 注释或结构体索引，但不引入大型 template registry。
+
+### 工作流 L：Logging/Trace 边界治理
+
+Dota GC 调试高度依赖 reason string、proto boundary trace 和 response packet log。后续架构重构会移动 handler 内部逻辑，如果日志语义漂移，会降低线上问题排查能力。目标是让关键副作用 reason 稳定、可搜索、可测试。
+
+治理目标：
+
+- reason string 命名遵循 `emsg_or_flow_event` 风格，例如 `8053_finished_loading`、`7272_leave_chat`。
+- 每个高风险 action 的 reason 表达业务触发点，而不表达临时代码结构。
+- `GBE_GC_DebugLog` 负责上下文型调试输出，`GBE_LogDotaResponsePacket` 负责 outbound response 观察，proto boundary trace 负责 wire 层边界。
+- handler tests 对高风险 reason 做断言，防止重构后日志语义漂移。
+
+设计边界：
+
+- 不把所有日志改为结构化 logging；当前代码仍以字符串日志为主。
+- 不为了统一命名批量修改所有 reason；只在触及相关 handler 时同步治理。
+- 不在纯 helper 中直接写日志，除非该 helper 现有职责已经是 wire/log boundary。
+
 ## 验证矩阵
 
 每个后续批次至少执行：

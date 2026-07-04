@@ -94,7 +94,103 @@
     - 只处理本轮修改过的 domain 文件和 test harness 文件
     - 避免跨领域批量 include 清理造成审查困难
 
-- [ ] 7. 检查点 - 确保所有测试通过
+- [ ] 7. Post-login routing 收口
+  - [ ] 7.1 盘点 direct/wrapped routing 重复分支
+    - 目标文件：`dll/gbe_dota_post_login_handlers.cpp`
+    - 输出 simple adapter、special adapter、fallback 三类清单
+    - 保留 7034、template replay、server assignment 等复杂路径的显式 adapter
+  - [ ] 7.2 扩展统一 request context
+    - 确认 `DotaGcRequestContext` 或等价结构包含 emsg、body、wrapped、outer session、source job、target job、request path
+    - 避免 handler 直接重新解析路由层上下文
+  - [ ] 7.3 将简单 direct handler 迁入 routing registry
+    - 优先迁移 misc minimal response、rank/profile、inventory simple request-response 路径
+    - 保持日志字段和 fallback 返回语义
+  - [ ]* 7.4 增加 routing registry tests
+    - 验证 unsupported emsg 返回 false
+    - 验证 wrapped/direct 同 emsg adapter 保持 body、job、session 透传
+
+- [ ] 8. Lobby state machine 集中化
+  - [ ] 8.1 扩展 abandon/teardown transition decision
+    - 基于现有 `compute_abandon_decision` 模式
+    - 覆盖 7035、7014、25、pending reset/finalize 的 decision fields
+    - helper 不发送消息、不写全局状态
+  - [ ] 8.2 提取 launch lifecycle transition decision
+    - 覆盖 7041、7070、8052、8053、7034 runtime game_state
+    - 输出 next state、next game_state、launch phase、publish reason
+  - [ ] 8.3 提取 reconnect eligibility decision
+    - 覆盖 recent reconnect context、server id、owner connected、launch phase
+    - 保持现有 reconnect payload 行为
+  - [ ]* 8.4 为 transition helpers 添加 focused tests
+    - 覆盖 valid/invalid transition、stale lobby、owner disconnect、launch failed before connect
+
+- [ ] 9. Coordinator 和 global state 解耦
+  - [ ] 9.1 盘点 Dota GC extern/global state 读写点
+    - 覆盖 shared lobby、pending reset、recent reconnect、launch flags、host showcase flags
+    - 输出按状态分组的读写调用点清单
+  - [ ] 9.2 为 pending flow state 建立函数级访问接口
+    - 先封装 abandon reset、normal signout finalize、postgame teardown 标志
+    - 调用方通过函数读写，不直接访问 extern global
+  - [ ] 9.3 为 reconnect state 建立函数级访问接口
+    - 封装 recent reconnect context 和 reconnect eligibility
+    - 保持现有 payload helper 与 lobby state helper 行为
+  - [ ] 9.4 评估 `DotaGcRuntimeState` 结构体迁移门槛
+    - 至少两个状态组稳定通过函数访问后再考虑结构体封装
+    - 不一次性迁移所有 globals
+
+- [ ] 10. Protocol codec DTO 化
+  - [ ] 10.1 定义 7034 runtime request DTO
+    - 覆盖 connected/disconnected players、game_state、send_reason、kill/building state
+    - parse 逻辑不读取 coordinator 或 global state
+  - [ ] 10.2 定义 7070/8052/8053 launch DTO
+    - 覆盖 ready state、lobby id、custom game id、start time、duration、result code、result text
+    - handler 使用 DTO 字段替代裸 `read_uint*_field` 分散读取
+  - [ ] 10.3 定义 7035 abandon request context DTO
+    - 覆盖 wrapped、session、server/client、lobby state、game state、launch phase
+    - 作为 transition decision 输入
+  - [ ]* 10.4 为 DTO parse 添加 malformed wire tests
+    - 覆盖空 body、truncated varint、unknown wire type、字段重复
+
+- [ ] 11. Verification pipeline 固化
+  - [ ] 11.1 新增本地 pre-merge checklist 文档
+    - 记录 fast/full/style/audit/Premake gate
+    - 放在 `.monkeycode/specs/gc-refactor-next-steps/` 或 `.monkeycode/docs/`
+  - [ ] 11.2 将验证命令收口到脚本或 Make target
+    - 保留 `tools/run_gc_offline_tests.sh` 作为主入口
+    - 增加可选 audit/style wrapper 时避免破坏现有脚本行为
+  - [ ] 11.3 评估 CI 接入条件
+    - 只包含离线测试和无需凭据的检查
+    - Premake gate 在 CI 镜像具备工具时启用
+
+- [ ] 12. Template/Replay 数据治理
+  - [ ] 12.1 盘点 template/replay 常量 ownership
+    - 覆盖 `gbe_dota_template_replay_handlers.cpp` 和 payload helper 中的 canned bytes/hex 常量
+    - 为 client welcome、server welcome、practice lobby cache subscribed、persona state、official 26 replay 分类
+  - [ ] 12.2 标注文档化 patch 点
+    - 记录 account id、steam id、lobby id、match id、owner SOID、game start time 等 patch 字段
+    - 优先使用代码附近注释或小型 metadata 表达，不引入大型 registry
+  - [ ] 12.3 增加 template patch focused tests
+    - 覆盖 patch 后关键字段可解析
+    - 保持现有 replay fixture 输出不变
+  - [ ] 12.4 防止新 handler 复制 hex blob
+    - 新增 template/replay 数据时优先放在 template/replay 或 payload helper 领域
+    - handler 通过 helper 调用，不直接持有大型 canned bytes
+
+- [ ] 13. Logging/Trace 边界治理
+  - [ ] 13.1 盘点高风险 reason string
+    - 覆盖 inventory equip、chat leave、lobby abandon、match 7034、7070、8052、8053
+    - 输出保留、重命名、补断言清单
+  - [ ] 13.2 统一新增 reason 命名规则
+    - 使用 `emsg_or_flow_event` 风格
+    - reason 表达业务触发点，避免绑定临时代码结构
+  - [ ] 13.3 梳理日志函数职责边界
+    - `GBE_GC_DebugLog` 保留上下文调试输出
+    - `GBE_LogDotaResponsePacket` 保留 outbound response 观察
+    - proto boundary trace 保留 wire 层边界观察
+  - [ ]* 13.4 增加 reason stability tests
+    - 对高风险 handler 的关键 action reason 做断言
+    - 避免重构后日志语义漂移
+
+- [ ] 14. 检查点 - 确保所有测试通过
   - 确保所有测试通过,如有疑问请询问用户
   - 执行 `tools/run_gc_offline_tests.sh`
   - 执行 `tools/run_gc_offline_tests.sh --full`
