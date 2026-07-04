@@ -16,6 +16,7 @@
 #define __INCLUDED_CALLSYSTEM_H__
 #define __INCLUDED_ECON_ITEM_H__
 #define __INCLUDED_COMMON_INCLUDES__
+#define STEAMCLIENTPUBLIC_H
 
 // Prevent protobuf headers from being included (we provide stubs)
 #define STEAMMESSAGES_PB_H
@@ -27,6 +28,15 @@
 
 // Provide stub types before including the TU
 #include "stubs.h"
+
+// Include the pure item payload helpers TU inline (Phase 3.2.3).
+// gbe_dota_gc_payload_helpers.cpp no longer defines GBE_ParseDotaEquipOps /
+// GBE_ApplyDotaUnlockStyleBitmask / GBE_SerializeEconItemToGcprotobuf /
+// GBE_BuildSOSingleObjectFromItem (they moved to
+// dll/gbe_dota_payload_item_helpers.cpp), so we compile that TU inline here
+// against the stub CSteamID / Econ_Item / CSOEconItem / CMsgSOSingleObject
+// types to satisfy the test's references.
+#include "dll/gbe_dota_payload_item_helpers.cpp"
 
 // Include the actual payload_helpers TU inline
 #include "dll/gbe_dota_gc_payload_helpers.cpp"

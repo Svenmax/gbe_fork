@@ -20,6 +20,7 @@
 #define __INCLUDED_CALLSYSTEM_H__
 #define __INCLUDED_ECON_ITEM_H__
 #define __INCLUDED_COMMON_INCLUDES__
+#define STEAMCLIENTPUBLIC_H
 
 // Prevent protobuf headers from being included (we provide stubs)
 #define STEAMMESSAGES_PB_H
@@ -31,6 +32,13 @@
 
 // Provide stub types before including the TU
 #include "stubs.h"
+
+// Include the pure item payload helpers TU inline (Phase 3.2.3).
+// This compiles the real GBE_ParseDotaEquipOps / GBE_ApplyDotaUnlockStyleBitmask
+// / GBE_SerializeEconItemToGcprotobuf / GBE_BuildSOSingleObjectFromItem against
+// our stub CSteamID / Econ_Item / CSOEconItem / CMsgSOSingleObject types,
+// replacing the previous stub duplication in free_func_stubs.cpp.
+#include "dll/gbe_dota_payload_item_helpers.cpp"
 
 // Include the actual handler TU inline.
 // This compiles the real handler definitions against our stub class.

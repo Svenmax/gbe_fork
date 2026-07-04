@@ -130,6 +130,59 @@
   - Chat (3.1.8), lobby (3.1.9), match+misc (3.1.10) — Tier A only: side-effect order documented at top of each domain `.cpp`. Tier B per-domain harness deferred to post-3.2 per the tiering decision (root cause: `gbe_dota_gc_payload_helpers.cpp` cannot compile offline due to the heavy SDK include chain, forcing payload helper duplication into stubs).
   - All 4 domains have a matching logic-refactor task complete. No bucket accepted on file movement alone.
 - Next step is **Phase 3.2 (separate payload helpers)**: start with 3.2.1 inventory of pure wire / item serialization / lobby payload composition / stateful functions in `dll/gbe_dota_gc_payload_helpers.cpp`, then 3.2.2-3.2.4 split pure logic into TUs that don't depend on the heavy SDK include chain. This unblocks Tier B per-domain test harness for chat/lobby/match (eliminates the `TODO(phase-3.2)` stub duplication in `tools/gbe_dota_handler_test/free_func_stubs.cpp`) and is the prerequisite for Phase 3.3 (lightweight handler dispatch table) and Phase 3.4 (centralized lobby state transitions).
+- **Phase 3.2.1 payload helper inventory complete.** `dll/gbe_dota_gc_payload_helpers.cpp` is 2953 lines with ~40 functions. Classified into 4 buckets:
+  - **Stateful (stay in gbe_dota_gc_payload_helpers.cpp)** — depend on `Steam_Game_Coordinator`, `Steam_Client`/`get_steam_client()`, `Settings*`, or `GBE_shared_dota_lobby_state`:
+    - `GBE_GetDotaReconnectContext` (reads `GBE_shared_dota_lobby_state`)
+    - `GBE_IsDotaArcadeLobbyActive` (reads `GBE_shared_dota_lobby_state`)
+    - `GBE_TryRecoverDotaReconnectContextFromGenericLobbies` (reads `get_steam_client()->steam_game_coordinator`)
+    - `GBE_DescribeDotaLaunchPhase` (pure string lookup but trivial 35 lines — keep with stateful reconnect group for cohesion)
+    - `GBE_GC_DebugLog` (mutable global log; varargs)
+    - `GBE_LogGCProtoBoundary` / `GBE_LogDotaSOCacheSubscribedSummary` / `GBE_LogDotaResponsePacket` (logging)
+    - `GBE_AdaptDotaTopCustomGamesListPayload` (reads `settings->modSet()`)
+    - `GBE_DotaCustomGameDisplayName` (reads `settings->isModInstalled` / `settings->getMod`)
+    - `GBE_PushDotaPlayerEquippedItemsCacheToGC` (takes `Steam_Game_Coordinator*`, calls `push_incoming_now`)
+    - `GBE_AdaptDotaJoinChatChannelResponsePayload` (reads `get_steam_client()->steam_friends->GetFriendPersonaName`)
+    - `GBE_IsDotaOtherLeftChannelPayloadForChannel` (pure byte scan but trivial 25 lines + chat-domain; keep with stateful chat adaptation group)
+  - **Pure wire (move to `dll/gbe_dota_payload_wire_helpers.cpp`)** — byte/varint/field parsing & patching, no coordinator/global state, only depends on `gbe::proto_wire` / `gbe::gc_message` / string ops:
+    - `GBE_RewriteAccountIdVarintInDirectProtoBody` (L2106)
+    - `GBE_TryPatchDotaAccountIdVarint` (L2136)
+    - `GBE_TryPatchDotaAccountIdFixed32` (L2221)
+    - `GBE_PatchDotaTemplateIdentifiers` (L2251)
+    - `GBE_PatchDotaLobbyTemplateIdentifiers` (L292) + its 2 static helpers `GBE_PatchDotaLobbyTemplateIdentifiersIfPresent` (L315), `GBE_ForceDotaLobbyCacheOwnerSOID` (L334)
+    - `GBE_ForceDotaLobbyUpdateOwnerSOID` (L354)
+    - `GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState` (L374)
+    - `GBE_PatchDotaPracticeLobbyLaunchTemplate` (L527)
+    - `GBE_PatchDotaWelcomeAccountObjects` (static, L200)
+    - `GBE_PrepareDotaWelcomeBody` (static, L1352)
+    - `GBE_PrepareDotaDirectReplayMessage` (L1721)
+    - `GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage` (L2572)
+    - `GBE_PrepareDotaPersonaStatePeripheralMessage` (L2604)
+    - 4 static byte arrays: `GBE_kDotaClientWelcomeTemplate` (L95), `GBE_kOldDotaVersionVarint` (L153), `GBE_kOldDotaPracticeLobbyLobbyIdVarint` (L154), `GBE_kOldDotaPracticeLobbyGameStartTimeVarint` (L155), `GBE_kOldDotaPracticeLobbyConnect` (L156)
+    - Note: these functions call `GBE_GC_DebugLog` for failure logging — the logging call stays (it's a free function, not coordinator state); the pure byte logic is what matters for testability.
+  - **Pure item (move to `dll/gbe_dota_payload_item_helpers.cpp`)** — operate on `Econ_Item` / `GBE_DotaEquipOp` types, no coordinator state:
+    - `GBE_ParseDotaEquipOps` (L2787) — **this is the TODO(phase-3.2) target** that `free_func_stubs.cpp` currently duplicates
+    - `GBE_ApplyDotaUnlockStyleBitmask` (L2857) — **this is the second TODO(phase-3.2) target** that `free_func_stubs.cpp` duplicates
+    - `GBE_SerializeEconItemToGcprotobuf` (L2892)
+    - `GBE_BuildSOSingleObjectFromItem` (L2941)
+  - **Pure lobby (move to `dll/gbe_dota_payload_lobby_helpers.cpp`)** — lobby cache-subscribed / details-update / launch replay payload composition, take `GBE_LocalLobby`/`GBE_DotaLobbyMemberState`/context structs as input, no coordinator state:
+    - `GBE_ComposeDotaPracticeLobbySOObjects` (declared L58, defined L704) — pure lobby member → SO object composition
+    - `GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload` (L849)
+    - `GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload` (L926)
+    - `GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate` (L1007)
+    - `GBE_ExtractDotaHelloContext` (L1143)
+    - `GBE_ExtractDirectDotaHelloContext` (L1238)
+    - `GBE_ExtractDirectDotaServerHelloContext` (L1276)
+    - `GBE_BuildDirectDotaClientWelcome` (L1408)
+    - `GBE_ComposeDotaClientWelcome` (L1436)
+    - `GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedTemplate` (L1483)
+    - `GBE_AdaptDotaPracticeLobbyDetailsUpdatePayload` (L1556)
+    - `GBE_BuildDirectDotaServerWelcome` (L1767)
+    - `GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl` (L1819)
+    - `GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl` (L1913)
+    - `GBE_ReplayDotaPracticeLobbyOfficial26Payload` (L2471)
+  - **Line-count estimate after split**: pure wire ~1100 lines, pure item ~165 lines, pure lobby ~1500 lines, stateful orchestration ~190 lines. Final `gbe_dota_gc_payload_helpers.cpp` should land well under the 1200-line target (3.2.5).
+  - **Include-chain analysis**: the heavy SDK include chain that blocks offline compilation comes from `#include "dll/steam_game_coordinator.h"` (line 18) → `dll.h` → `common_includes.h` → `common_helpers/os_detector.h`. The pure TUs will replace this with: `gbe_proto_wire.h`, `gbe_gc_message_utils.h`, `gbe_dota_protocol_constants.h`, `gbe_dota_gc_internal.h` (for `GBE_LocalLobby`/`GBE_DotaLobbyMemberState` types), `<tf2/econ_gcmessages.pb.h>` (for `Econ_Item`), `<string>`/`<vector>`/`<cstring>`. No `Steam_Game_Coordinator` include → no heavy chain → offline-compilable.
+  - **3.2.2 first target**: extract `GBE_ParseDotaEquipOps` + `GBE_ApplyDotaUnlockStyleBitmask` + `GBE_SerializeEconItemToGcprotobuf` + `GBE_BuildSOSingleObjectFromItem` to `dll/gbe_dota_payload_item_helpers.cpp`. This is the smallest pure group and the highest-value extraction because it removes the `TODO(phase-3.2)` stub duplication in `tools/gbe_dota_handler_test/free_func_stubs.cpp`.
 - **Plan revisions (2026-07-04)**: Phase 3 plan was reviewed end-to-end. Key changes: (1) handler-file target relaxed from 1000 to 1500 lines because post-login/socket/template handlers share protocol state that resists splitting before 3.3; (2) added task 3.1.6.5 "Build handler-level test harness" as a prerequisite for 3.1.7-3.1.10, because the existing 92 offline tests are payload-helper-level only and provide zero handler-behavior coverage; (3) moved the side-effect action model (was 3.1.12) ahead to 3.1.6.6 so the action contract is defined once before any logic refactor; (4) added a boundary note to 3.1.9 clarifying that per-handler restructuring stays in 3.1.9 while cross-handler state-machine consolidation belongs to 3.4; (5) added a "good enough" stop condition to Success Metrics so the last 20% of file-size reduction does not drive unjustified abstractions. Remaining gaps (payload helper call-graph analysis, dispatch-table signature normalization risk, domain-specific line-count calibration) will be addressed at the start of 3.2 / 3.3 respectively.
 - Treat mechanical extraction as an intermediate step only. Every GC domain moved into a new file must receive a follow-up logic refactor before that domain is considered complete.
 - For each extracted domain, separate request parsing, state mutation, message/response construction, coordinator-owned side effects, and focused tests.

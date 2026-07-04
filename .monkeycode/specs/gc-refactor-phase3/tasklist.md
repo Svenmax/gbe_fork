@@ -157,11 +157,12 @@
 
 ## Phase 3.2: Separate Payload Helpers
 
-- [ ] 3.2.1 Inventory payload helper inventory
-  - [ ] List pure wire parsing functions.
-  - [ ] List pure item serialization functions.
-  - [ ] List lobby payload composition functions.
-  - [ ] List functions that depend on coordinator or global state.
+- [x] 3.2.1 Inventory payload helper inventory
+  - [x] List pure wire parsing functions.
+  - [x] List pure item serialization functions.
+  - [x] List lobby payload composition functions.
+  - [x] List functions that depend on coordinator or global state.
+  - Notes: `dll/gbe_dota_gc_payload_helpers.cpp` is 2953 lines with ~40 functions. Classified into 4 buckets: pure wire (~1100 lines, 14 functions + 5 static byte arrays — varint/field patching), pure item (~165 lines, 4 functions — `Econ_Item`/`GBE_DotaEquipOp` ops), pure lobby (~1500 lines, 15 functions — lobby cache-subscribed/details/launch payload composition), stateful (~190 lines, 11 functions — depend on `Steam_Game_Coordinator`/`Steam_Client`/`Settings*`/`GBE_shared_dota_lobby_state`). Full classification recorded in `handoff.md`. 3.2.2 will extract the pure-item group first (highest value: removes the `TODO(phase-3.2)` stub duplication in `tools/gbe_dota_handler_test/free_func_stubs.cpp`).
 
 - [ ] 3.2.2 Extract pure wire helpers
   - [ ] Create `dll/gbe_dota_payload_wire_helpers.cpp` and matching internal header if needed.
@@ -169,11 +170,12 @@
   - [ ] Add tests for malformed varint, truncation, unknown wire type, and valid round trip.
   - [ ] Run offline GC tests.
 
-- [ ] 3.2.3 Extract item payload helpers
-  - [ ] Create `dll/gbe_dota_payload_item_helpers.cpp`.
-  - [ ] Move shared item serialization helpers.
-  - [ ] Add tests for owner, attributes, equip states, custom name, and custom description.
-  - [ ] Run offline GC tests.
+- [x] 3.2.3 Extract item payload helpers
+  - [x] Create `dll/gbe_dota_payload_item_helpers.cpp`.
+  - [x] Move shared item serialization helpers.
+  - [x] Add tests for owner, attributes, equip states, custom name, and custom description.
+  - [x] Run offline GC tests.
+  - Notes: extracted 4 pure item functions (`GBE_ParseDotaEquipOps`, `GBE_ApplyDotaUnlockStyleBitmask`, `GBE_SerializeEconItemToGcprotobuf`, `GBE_BuildSOSingleObjectFromItem`) from `dll/gbe_dota_gc_payload_helpers.cpp` (2953 -> 2779 lines) to new `dll/gbe_dota_payload_item_helpers.cpp` (232 lines). The new TU has a minimal include list (`dll/dll/econ_item.h`, `gbe_dota_gc_internal.h`, `gbe_proto_wire.h`, `<sdk/steam/steamclientpublic.h>`, `<tf2/base_gcmessages.pb.h>`, `<tf2/econ_gcmessages.pb.h>`) — no `Steam_Game_Coordinator` / `Steam_Client` / `Settings` / `GBE_shared_dota_lobby_state` dependency, no heavy SDK include chain. Resolved the `TODO(phase-3.2)` stub duplication: `tools/gbe_dota_handler_test/free_func_stubs.cpp` no longer duplicates `GBE_ParseDotaEquipOps` / `GBE_ApplyDotaUnlockStyleBitmask`; instead, `tools/gbe_dota_handler_test/test_wrapper.cpp` and `tools/gbe_dota_gc_payload_helpers_test/test_wrapper.cpp` both pre-define `STEAMCLIENTPUBLIC_H` and inline-include the new pure item TU against the stub `CSteamID` / `Econ_Item` / `CSOEconItem` / `CMsgSOSingleObject` types. Existing test coverage (`test_parse_dota_equip_ops`, `test_apply_dota_unlock_style_bitmask`, `test_build_so_single_object_from_item`) already verifies owner (steam_id), attributes (attr 400 bitmask), equip_states, custom_name, and custom_desc — satisfies the 3.2.3 test requirement. No behavior change (verified: 92/92 payload + 9/9 handler, audit clean 0/0/0).
 
 - [ ] 3.2.4 Extract lobby payload helpers
   - [ ] Create `dll/gbe_dota_payload_lobby_helpers.cpp`.
