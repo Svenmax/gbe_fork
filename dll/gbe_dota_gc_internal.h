@@ -425,6 +425,19 @@ bool GBE_PatchDotaPracticeLobbyLaunchTemplate(
 
 bool GBE_PatchDotaLobbyTemplateIdentifiers(std::string &message, uint32 account_id, uint64 steam_id, uint64 lobby_id);
 
+// --- Phase 3.2.2: wire helpers promoted from file-scope static to external ---
+// These symbols were file-scope `static` helpers in gbe_dota_gc_payload_helpers.cpp
+// and are now defined in gbe_dota_payload_wire_helpers.cpp. The pure lobby TU
+// (which still lives in gbe_dota_gc_payload_helpers.cpp) calls them, so they
+// have external linkage with extern declarations here. GBE_PatchDotaWelcomeAccountObjects
+// remains `static` inside the wire TU because it is only called from
+// GBE_PrepareDotaWelcomeBody within that TU.
+bool GBE_PatchDotaLobbyTemplateIdentifiersIfPresent(std::string &message, uint64 steam_id, uint64 lobby_id);
+
+bool GBE_ForceDotaLobbyCacheOwnerSOID(std::string &message, uint64 lobby_id);
+
+bool GBE_PrepareDotaWelcomeBody(uint64 steam_id, uint32 account_id, const GBE_DotaHelloContext &context, std::string &inner_body);
+
 bool GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
     std::string &message,
     uint32 account_id,
