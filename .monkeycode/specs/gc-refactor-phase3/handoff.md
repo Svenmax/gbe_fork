@@ -49,6 +49,14 @@
 
 ## Recommended Next Step
 
+- Treat mechanical extraction as an intermediate step only. Every GC domain moved into a new file must receive a follow-up logic refactor before that domain is considered complete.
+- For each extracted domain, separate request parsing, state mutation, message/response construction, coordinator-owned side effects, and focused tests.
+- Before changing handler internals, document the current side-effect order and preserve it with action-order tests or an explicit ordered action list.
+- Pure helper code should build decisions, payloads, mutations, or action lists. Coordinator methods should execute real side effects serially.
+- Preserve protocol-sensitive order such as `CacheSubscribed` before `emsg21/26`, SO update before response, and full item cache before create/update.
+- Keep file splits domain-cohesive. Prefer local helpers inside the domain `.cpp`; create new helper files for cross-domain reuse, pure testable logic, or size pressure.
+- Treat handler buckets around `300-1200` lines and pure helpers around `200-1000` lines as healthy when responsibilities remain clear.
+- Require a documented responsibility boundary and migration reason for every new GC `.cpp` file.
 - Continue with Phase 3.1.3 or Phase 3.2 using the same low-risk workflow.
 - Pick the next small group of low-coupling handlers from `handler-inventory.md`.
 - Prefer handlers without handler-local static dependencies.
