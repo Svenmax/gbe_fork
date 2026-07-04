@@ -36,6 +36,10 @@
 // Include real lightweight GBE headers for type definitions
 // =====================================================================
 
+// Action model header defines the canonical GBE_DotaActionType enum used by
+// RecordedAction below. It is dependency-free (only std headers).
+#include "dll/gbe_dota_action_model.h"
+
 #include "dll/gbe_dota_types.h"
 // gbe_dota_lobby_state.h transitively includes gbe_dota_reconnect_shared.h
 // which provides GBE_DotaReconnectContext, GBE_SharedDotaLobbyState, etc.
@@ -210,18 +214,9 @@ public:
 
 struct RecordedAction
 {
-    enum Type
-    {
-        PushIncomingNow,
-        PushIncoming,
-        SaveItemsToFile,
-        CallbackItemUpdated,
-        ServerGcForward,
-        NetworkBroadcast,
-        LobbySnapshotRefresh,
-    };
-
-    Type type{};
+    // Type uses the canonical GBE_DotaActionType from dll/gbe_dota_action_model.h
+    // so test assertions reference the same names the action-list contract uses.
+    GBE_DotaActionType type{};
     uint32 msg_type{};           // PushIncomingNow / PushIncoming / ServerGcForward
     std::string msg_body;        // PushIncomingNow / PushIncoming (truncated to first 64 bytes for assertions)
     uint64 steam_id{};           // CallbackItemUpdated / ServerGcForward
@@ -231,13 +226,13 @@ struct RecordedAction
     const char *type_name() const
     {
         switch (type) {
-            case PushIncomingNow:       return "PushIncomingNow";
-            case PushIncoming:          return "PushIncoming";
-            case SaveItemsToFile:       return "SaveItemsToFile";
-            case CallbackItemUpdated:   return "CallbackItemUpdated";
-            case ServerGcForward:       return "ServerGcForward";
-            case NetworkBroadcast:      return "NetworkBroadcast";
-            case LobbySnapshotRefresh:  return "LobbySnapshotRefresh";
+            case GBE_DotaActionType::PushIncomingNow:       return "PushIncomingNow";
+            case GBE_DotaActionType::PushIncoming:          return "PushIncoming";
+            case GBE_DotaActionType::SaveItemsToFile:       return "SaveItemsToFile";
+            case GBE_DotaActionType::CallbackItemUpdated:   return "CallbackItemUpdated";
+            case GBE_DotaActionType::ServerGcForward:       return "ServerGcForward";
+            case GBE_DotaActionType::NetworkBroadcast:      return "NetworkBroadcast";
+            case GBE_DotaActionType::LobbySnapshotRefresh:  return "LobbySnapshotRefresh";
         }
         return "Unknown";
     }
@@ -253,7 +248,7 @@ public:
     void record_push_incoming_now(uint32 msg_type, const std::string &msg_body)
     {
         RecordedAction a;
-        a.type = RecordedAction::PushIncomingNow;
+        a.type = GBE_DotaActionType::PushIncomingNow;
         a.msg_type = msg_type;
         a.msg_body = msg_body.size() > 64 ? msg_body.substr(0, 64) : msg_body;
         actions.push_back(std::move(a));
@@ -262,7 +257,7 @@ public:
     void record_push_incoming(uint32 msg_type, const std::string &msg_body)
     {
         RecordedAction a;
-        a.type = RecordedAction::PushIncoming;
+        a.type = GBE_DotaActionType::PushIncoming;
         a.msg_type = msg_type;
         a.msg_body = msg_body.size() > 64 ? msg_body.substr(0, 64) : msg_body;
         actions.push_back(std::move(a));
@@ -271,14 +266,14 @@ public:
     void record_save_items()
     {
         RecordedAction a;
-        a.type = RecordedAction::SaveItemsToFile;
+        a.type = GBE_DotaActionType::SaveItemsToFile;
         actions.push_back(std::move(a));
     }
 
     void record_callback_item_updated(uint64 steam_id, uint64 item_id)
     {
         RecordedAction a;
-        a.type = RecordedAction::CallbackItemUpdated;
+        a.type = GBE_DotaActionType::CallbackItemUpdated;
         a.steam_id = steam_id;
         a.item_id = item_id;
         actions.push_back(std::move(a));
@@ -287,7 +282,7 @@ public:
     void record_server_gc_forward(uint32 msg_type)
     {
         RecordedAction a;
-        a.type = RecordedAction::ServerGcForward;
+        a.type = GBE_DotaActionType::ServerGcForward;
         a.msg_type = msg_type;
         actions.push_back(std::move(a));
     }
@@ -295,19 +290,19 @@ public:
     void record_network_broadcast()
     {
         RecordedAction a;
-        a.type = RecordedAction::NetworkBroadcast;
+        a.type = GBE_DotaActionType::NetworkBroadcast;
         actions.push_back(std::move(a));
     }
 
     void record_lobby_snapshot_refresh(const char *reason)
     {
         RecordedAction a;
-        a.type = RecordedAction::LobbySnapshotRefresh;
+        a.type = GBE_DotaActionType::LobbySnapshotRefresh;
         a.reason = reason ? reason : "";
         actions.push_back(std::move(a));
     }
 
-    size_t count_type(RecordedAction::Type t) const
+    size_t count_type(GBE_DotaActionType t) const
     {
         size_t count = 0;
         for (const auto &a : actions)
@@ -322,9 +317,9 @@ public:
         for (size_t i = 0; i < actions.size(); ++i) {
             if (i > 0) seq += " -> ";
             seq += actions[i].type_name();
-            if (actions[i].type == RecordedAction::PushIncomingNow ||
-                actions[i].type == RecordedAction::PushIncoming ||
-                actions[i].type == RecordedAction::ServerGcForward) {
+            if (actions[i].type == GBE_DotaActionType::PushIncomingNow ||
+                actions[i].type == GBE_DotaActionType::PushIncoming ||
+                actions[i].type == GBE_DotaActionType::ServerGcForward) {
                 seq += "(emsg=";
                 seq += std::to_string(actions[i].msg_type & ~0x80000000u);
                 seq += ")";

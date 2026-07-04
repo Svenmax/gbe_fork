@@ -172,13 +172,13 @@ static void test_inventory_unlock_style_with_consumable()
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "should record 3 actions");
 
     // Verify action sequence
-    TEST_ASSERT_EQ(tf.recorder.actions[0].type, RecordedAction::PushIncomingNow, "first action should be PushIncomingNow");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::PushIncomingNow, "first action should be PushIncomingNow");
     TEST_ASSERT_EQ((tf.recorder.actions[0].msg_type & ~0x80000000u), 22u, "first push should be SO Update (emsg=22)");
 
-    TEST_ASSERT_EQ(tf.recorder.actions[1].type, RecordedAction::PushIncomingNow, "second action should be PushIncomingNow");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::PushIncomingNow, "second action should be PushIncomingNow");
     TEST_ASSERT_EQ((tf.recorder.actions[1].msg_type & ~0x80000000u), 24u, "second push should be SO Destroy (emsg=24)");
 
-    TEST_ASSERT_EQ(tf.recorder.actions[2].type, RecordedAction::PushIncomingNow, "third action should be PushIncomingNow");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::PushIncomingNow, "third action should be PushIncomingNow");
     TEST_ASSERT_EQ((tf.recorder.actions[2].msg_type & ~0x80000000u), 2572u, "third push should be response (emsg=2572)");
 
     // Verify the consumable was deleted from items
@@ -298,15 +298,15 @@ static void test_inventory_set_style_success()
 
     for (size_t i = 0; i < tf.recorder.actions.size(); ++i) {
         const auto &a = tf.recorder.actions[i];
-        if (a.type == RecordedAction::CallbackItemUpdated) {
+        if (a.type == GBE_DotaActionType::CallbackItemUpdated) {
             found_callback = true;
             callback_idx = static_cast<int>(i);
         }
-        if (a.type == RecordedAction::SaveItemsToFile) {
+        if (a.type == GBE_DotaActionType::SaveItemsToFile) {
             found_save = true;
             save_idx = static_cast<int>(i);
         }
-        if (a.type == RecordedAction::PushIncomingNow && (a.msg_type & ~0x80000000u) == 2578u) {
+        if (a.type == GBE_DotaActionType::PushIncomingNow && (a.msg_type & ~0x80000000u) == 2578u) {
             found_response = true;
             response_idx = static_cast<int>(i);
         }
@@ -341,11 +341,11 @@ static void test_inventory_set_style_item_not_found()
         reinterpret_cast<const uint8 *>(body.data()), body.size(), false, 0);
 
     TEST_ASSERT(result, "handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.count_type(RecordedAction::CallbackItemUpdated), 0u,
+    TEST_ASSERT_EQ(tf.recorder.count_type(GBE_DotaActionType::CallbackItemUpdated), 0u,
                    "should NOT record CallbackItemUpdated (item not found)");
-    TEST_ASSERT_EQ(tf.recorder.count_type(RecordedAction::SaveItemsToFile), 0u,
+    TEST_ASSERT_EQ(tf.recorder.count_type(GBE_DotaActionType::SaveItemsToFile), 0u,
                    "should NOT record SaveItemsToFile (item not found)");
-    TEST_ASSERT_EQ(tf.recorder.count_type(RecordedAction::PushIncomingNow), 1u,
+    TEST_ASSERT_EQ(tf.recorder.count_type(GBE_DotaActionType::PushIncomingNow), 1u,
                    "should still push response");
 
     ++g_tests_passed;

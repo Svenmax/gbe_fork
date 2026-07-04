@@ -53,6 +53,18 @@
   - Updated `tools/run_gc_offline_tests.sh` to build and run `gbe_dota_handler_test`.
   - Architecture: handlers are private member functions of `Steam_Game_Coordinator` with deep coupling to coordinator state. The include-guard override + recording stub class approach allows real handler code to compile and execute in an offline test environment without the full Steam SDK. The `ActionRecorder` captures side effects in order for sequence assertions.
   - Extension pattern for future domains (3.1.8 chat / 3.1.9 lobby / 3.1.10 match): each domain needs its own `test_wrapper.cpp` (different handler .cpp compiled inline via include-guard override), extended stub surface in `stubs.h` (more handler declarations + more coordinator member stubs), and smoke tests in `smoke_test.cpp`. The existing `stubs.h` already documents this pattern in comments.
+- Phase 3.1.6.6 side-effect action model is complete.
+  - Created `dll/gbe_dota_action_model.h` (dependency-free: only `<cstdint>`, `<string>`, `<vector>`) defining:
+    - `enum class GBE_DotaActionType` — 7 canonical action types (PushIncomingNow, PushIncoming, SaveItemsToFile, CallbackItemUpdated, ServerGcForward, NetworkBroadcast, LobbySnapshotRefresh).
+    - `struct GBE_DotaAction` — type + emsg + payload + target_steam_id + item_id + job_id + reason (fields filled only when relevant to the type).
+    - `using GBE_DotaActionList = std::vector<GBE_DotaAction>` — plain alias, no builder wrapper (deferred until repeated patterns justify helpers).
+  - The header documents: the contract (pure helpers build action lists without touching coordinator state; coordinator methods consume and execute serially), the usage rule (only when a handler has multiple observable side effects), and 4 protocol-sensitive ordering invariants grounded in tested behavior:
+    1. unlock flow: SO Update(22) -> SO Destroy(24) -> Response(2572)
+    2. set-style flow: CallbackItemUpdated -> SaveItemsToFile -> Response(2578)
+    3. full item cache (CacheSubscribed) before create/update SO messages when bootstrapping a remote GC
+    4. equip flow: SO Update(26) -> Response(2570) -> ServerGcForward -> NetworkBroadcast -> LobbySnapshotRefresh
+  - Aligned the test harness: `stubs.h` includes the real header and `RecordedAction::type` uses `GBE_DotaActionType` directly (removed the duplicate nested enum); `smoke_test.cpp` assertions reference `GBE_DotaActionType::*` so test code and the action-list contract share one name source.
+  - No handler code changed — the model is defined and ready for 3.1.7-3.1.10 to adopt as they refactor handlers into pure-helper + coordinator-execution pairs.
 
 ## Verification
 
@@ -71,7 +83,8 @@
 - Phase 3.1.5 mechanical extraction is fully complete (3.1.5a match + 3.1.5b post-login/template + 3.1.5c misc). All 62 handlers now live in 7 domain-specific files.
 - Phase 3.1.6 complete: `dll/gbe_dota_handlers.cpp` removed entirely (was an 81-line shell with zero definitions).
 - Phase 3.1.6.5 complete: handler-level test harness built with 6/6 inventory smoke tests passing. Chat/lobby/match domain smoke tests deferred to their respective logic-refactor tasks (3.1.8/3.1.9/3.1.10) where the stub surface will be extended.
-- Next step is 3.1.6.6 (side-effect action model) as the final prerequisite before logic refactors 3.1.7-3.1.10. The action model defines the contract between pure helpers and coordinator methods; defining it once (before any logic refactor) ensures cross-domain consistency.
+- Phase 3.1.6.6 complete: side-effect action model defined in `dll/gbe_dota_action_model.h`; test harness aligned to use the canonical `GBE_DotaActionType`.
+- Both prerequisites (3.1.6.5 + 3.1.6.6) are done. Next step is the first logic refactor: 3.1.7 (inventory handler logic). The inventory domain is the smallest (3 handlers, 513 lines) and already has 6 passing smoke tests, making it the lowest-risk target for the first pure-helper extraction + action-list adoption.
 - **Plan revisions (2026-07-04)**: Phase 3 plan was reviewed end-to-end. Key changes: (1) handler-file target relaxed from 1000 to 1500 lines because post-login/socket/template handlers share protocol state that resists splitting before 3.3; (2) added task 3.1.6.5 "Build handler-level test harness" as a prerequisite for 3.1.7-3.1.10, because the existing 92 offline tests are payload-helper-level only and provide zero handler-behavior coverage; (3) moved the side-effect action model (was 3.1.12) ahead to 3.1.6.6 so the action contract is defined once before any logic refactor; (4) added a boundary note to 3.1.9 clarifying that per-handler restructuring stays in 3.1.9 while cross-handler state-machine consolidation belongs to 3.4; (5) added a "good enough" stop condition to Success Metrics so the last 20% of file-size reduction does not drive unjustified abstractions. Remaining gaps (payload helper call-graph analysis, dispatch-table signature normalization risk, domain-specific line-count calibration) will be addressed at the start of 3.2 / 3.3 respectively.
 - Treat mechanical extraction as an intermediate step only. Every GC domain moved into a new file must receive a follow-up logic refactor before that domain is considered complete.
 - For each extracted domain, separate request parsing, state mutation, message/response construction, coordinator-owned side effects, and focused tests.
