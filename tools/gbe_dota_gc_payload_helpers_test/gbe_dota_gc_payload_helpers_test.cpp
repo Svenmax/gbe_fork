@@ -116,6 +116,31 @@ static int g_tests_failed = 0;
 
 #define TEST_CASE(name) static void name()
 
+static std::string make_direct_proto_message(uint32_t emsg, const std::string &body, const std::string &header = std::string())
+{
+    std::string message;
+    message.append(reinterpret_cast<const char *>(&emsg), sizeof(emsg));
+    const uint32_t header_len = static_cast<uint32_t>(header.size());
+    message.append(reinterpret_cast<const char *>(&header_len), sizeof(header_len));
+    message.append(header);
+    message.append(body);
+    return message;
+}
+
+static std::string make_fixed64_bytes(uint64_t value)
+{
+    std::string bytes;
+    bytes.append(reinterpret_cast<const char *>(&value), sizeof(value));
+    return bytes;
+}
+
+static std::string make_fixed32_bytes(uint32_t value)
+{
+    std::string bytes;
+    bytes.append(reinterpret_cast<const char *>(&value), sizeof(value));
+    return bytes;
+}
+
 // =====================================================================
 // Global state needed by payload_helpers TU
 // =====================================================================
@@ -270,20 +295,20 @@ TEST_CASE(test_rewrite_account_id_varint)
 
 TEST_CASE(test_try_patch_dota_account_id_varint)
 {
-    std::string message;
-    for (int i = 0; i < 8; ++i)
-        message.push_back('\0');
-
-    message.push_back(static_cast<char>(0x08));
-    message.push_back(static_cast<char>(0xB9));
-    message.push_back(static_cast<char>(0x60));
+    std::string body;
+    body.push_back(static_cast<char>(0x08));
+    body.append(reinterpret_cast<const char *>(GBE_kOldDotaAccountIdVarint.data()), GBE_kOldDotaAccountIdVarint.size());
+    std::string message = make_direct_proto_message(7009u | GBE_kProtoMask, body);
 
     bool result = GBE_TryPatchDotaAccountIdVarint(
         message, 54321u, "TEST", 7009u, 7009u,
         message.size() - 8, "test_patch_varint");
 
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(message.find(std::string(reinterpret_cast<const char *>(GBE_kOldDotaAccountIdVarint.data()), GBE_kOldDotaAccountIdVarint.size())) == std::string::npos);
+    std::string encoded_account;
+    gbe::proto_wire::append_varuint(encoded_account, 54321u);
+    EXPECT_TRUE(message.find(encoded_account) != std::string::npos);
 }
 
 // =====================================================================
@@ -292,19 +317,14 @@ TEST_CASE(test_try_patch_dota_account_id_varint)
 
 TEST_CASE(test_try_patch_dota_account_id_fixed32)
 {
-    std::string message;
-    for (int i = 0; i < 8; ++i)
-        message.push_back('\0');
-
-    message.push_back(static_cast<char>(0x0D));
-    message.push_back(static_cast<char>(0x39));
-    message.push_back(static_cast<char>(0x30));
-    message.push_back(static_cast<char>(0x00));
-    message.push_back(static_cast<char>(0x00));
+    std::string message(reinterpret_cast<const char *>(GBE_kOldDotaAccountIdFixed32.data()), GBE_kOldDotaAccountIdFixed32.size());
 
     bool result = GBE_TryPatchDotaAccountIdFixed32(message, 54321u, "TEST");
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(message.find(std::string(reinterpret_cast<const char *>(GBE_kOldDotaAccountIdFixed32.data()), GBE_kOldDotaAccountIdFixed32.size())) == std::string::npos);
+    uint32_t patched_account = 0;
+    std::memcpy(&patched_account, message.data(), sizeof(patched_account));
+    EXPECT_TRUE(patched_account == 54321u);
 }
 
 // =====================================================================
@@ -314,15 +334,15 @@ TEST_CASE(test_try_patch_dota_account_id_fixed32)
 TEST_CASE(test_patch_dota_lobby_template_identifiers)
 {
     std::string message;
-    for (int i = 0; i < 8; ++i)
-        message.push_back('\0');
-    message += "AAAA";
+    message.append(reinterpret_cast<const char *>(GBE_kOldDotaLobbyIdVarint.data()), GBE_kOldDotaLobbyIdVarint.size());
+    message.append(make_fixed64_bytes(76561198000000000ULL));
 
     bool result = GBE_PatchDotaLobbyTemplateIdentifiers(
         message, 54321u, 76561198000000000ULL, 12345ULL);
 
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_FALSE(result);
+    EXPECT_TRUE(message.find(std::string(reinterpret_cast<const char *>(GBE_kOldDotaLobbyIdVarint.data()), GBE_kOldDotaLobbyIdVarint.size())) != std::string::npos);
+    EXPECT_TRUE(message.find(make_fixed64_bytes(76561198000000000ULL)) != std::string::npos);
 }
 
 // =====================================================================
@@ -332,17 +352,19 @@ TEST_CASE(test_patch_dota_lobby_template_identifiers)
 TEST_CASE(test_patch_dota_template_identifiers)
 {
     std::string message;
-    for (int i = 0; i < 8; ++i)
-        message.push_back('\0');
-    message += "AAAA";
+    message.append(reinterpret_cast<const char *>(GBE_kOldDotaAccountIdVarint.data()), GBE_kOldDotaAccountIdVarint.size());
+    message.append(make_fixed32_bytes(34567u));
+    message.append(reinterpret_cast<const char *>(GBE_kOldDotaSteamIdVarint.data()), GBE_kOldDotaSteamIdVarint.size());
 
     bool result = GBE_PatchDotaTemplateIdentifiers(
         message, 54321u, 76561198000000000ULL,
         true, true, 7009u, 7009u,
         message.size() - 8, "test_template_patch");
 
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(message.find(std::string(reinterpret_cast<const char *>(GBE_kOldDotaAccountIdVarint.data()), GBE_kOldDotaAccountIdVarint.size())) != std::string::npos);
+    EXPECT_TRUE(message.find(std::string(reinterpret_cast<const char *>(GBE_kOldDotaSteamIdVarint.data()), GBE_kOldDotaSteamIdVarint.size())) == std::string::npos);
+    EXPECT_TRUE(message.find(make_fixed32_bytes(34567u)) != std::string::npos);
 }
 
 // =====================================================================
@@ -361,9 +383,10 @@ TEST_CASE(test_force_dota_lobby_update_owner_soid)
     // Body: minimal SOMultipleObjects protobuf (just an empty message)
     message.push_back('\0');
 
+    const std::string original = message;
     bool result = GBE_ForceDotaLobbyUpdateOwnerSOID(message, 12345ULL);
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(message.size() >= original.size());
 }
 
 // =====================================================================
@@ -383,8 +406,8 @@ TEST_CASE(test_prepare_dota_practice_lobby_launch_peripheral)
         true,
         message);
 
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_FALSE(result);
+    EXPECT_TRUE(!message.empty());
 }
 
 // =====================================================================
@@ -402,8 +425,8 @@ TEST_CASE(test_prepare_dota_persona_state_peripheral)
         12345ULL,
         message);
 
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_FALSE(result);
+    EXPECT_TRUE(!message.empty());
 }
 
 // =====================================================================
@@ -427,8 +450,11 @@ TEST_CASE(test_adapt_dota_join_chat_channel_response)
         1u,
         message);
 
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(!message.empty());
+    EXPECT_TRUE(message.find("test_channel") != std::string::npos);
+    EXPECT_TRUE(message.find("TestPlayer") != std::string::npos);
+    EXPECT_TRUE(message.find("test_channel") != std::string::npos || message.find("TestPlayer") != std::string::npos);
 }
 
 // =====================================================================
@@ -442,7 +468,7 @@ TEST_CASE(test_log_dota_socache_subscribed_summary)
         message.push_back(static_cast<char>(i));
 
     GBE_LogDotaSOCacheSubscribedSummary("TEST", "test_label", message);
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(message.size() == 32u);
 }
 
 // =====================================================================
@@ -457,7 +483,8 @@ TEST_CASE(test_log_dota_response_packet)
     GBE_LogDotaResponsePacket("test_reason", 7009u, false,
         inner_payload, outbound_payload,
         12345ULL, 2u, 0u);
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(!inner_payload.empty());
+    EXPECT_TRUE(!outbound_payload.empty());
 }
 
 // =====================================================================
@@ -490,13 +517,22 @@ TEST_CASE(test_const_data_tables)
 TEST_CASE(test_extract_dota_hello_context)
 {
     GBE_DotaHelloContext ctx{};
-    std::string payload;
-    gbe::proto_wire::append_varint_field(payload, 1, 1u);
+    std::string inner_body;
+    gbe::proto_wire::append_varint_field(inner_body, 1, 123u);
+    std::string inner_payload = make_direct_proto_message(GBE_kEMsgGCClientHello | GBE_kProtoMask, inner_body);
+    std::string outer_header;
+    const std::string session_raw("session-token");
+    gbe::proto_wire::append_bytes_field(outer_header, 2u, session_raw);
+    std::string outer_body;
+    gbe::proto_wire::append_bytes_field(outer_body, 3u, inner_payload);
+    std::string payload = make_direct_proto_message(GBE_kEMsgClientToGC | GBE_kProtoMask, outer_body, outer_header);
 
     bool result = GBE_ExtractDotaHelloContext(
         payload.data(), static_cast<uint32>(payload.size()), ctx);
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(ctx.valid);
+    EXPECT_TRUE(ctx.version == 123u);
+    EXPECT_TRUE(ctx.outer_session_field_raw == session_raw);
 }
 
 // =====================================================================
@@ -506,13 +542,15 @@ TEST_CASE(test_extract_dota_hello_context)
 TEST_CASE(test_extract_direct_dota_hello_context)
 {
     GBE_DotaHelloContext ctx{};
-    std::string payload;
-    gbe::proto_wire::append_varint_field(payload, 1, 1u);
+    std::string body;
+    gbe::proto_wire::append_varint_field(body, 1, 456u);
+    std::string payload = make_direct_proto_message(GBE_kEMsgGCClientHello | GBE_kProtoMask, body);
 
     bool result = GBE_ExtractDirectDotaHelloContext(
-        4006u, payload.data(), static_cast<uint32>(payload.size()), ctx);
-    (void)result;
-    EXPECT_TRUE(true);
+        GBE_kEMsgGCClientHello | GBE_kProtoMask, payload.data(), static_cast<uint32>(payload.size()), ctx);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(ctx.valid);
+    EXPECT_TRUE(ctx.version == 456u);
 }
 
 // =====================================================================
@@ -522,13 +560,14 @@ TEST_CASE(test_extract_direct_dota_hello_context)
 TEST_CASE(test_extract_direct_dota_server_hello_context)
 {
     GBE_DotaServerHelloContext ctx{};
-    std::string payload;
-    gbe::proto_wire::append_varint_field(payload, 1, 1u);
+    std::string body;
+    gbe::proto_wire::append_varint_field(body, 1, 789u);
+    std::string payload = make_direct_proto_message(GBE_kEMsgGCServerHello | GBE_kProtoMask, body);
 
     bool result = GBE_ExtractDirectDotaServerHelloContext(
-        4007u, payload.data(), static_cast<uint32>(payload.size()), ctx);
-    (void)result;
-    EXPECT_TRUE(true);
+        GBE_kEMsgGCServerHello | GBE_kProtoMask, payload.data(), static_cast<uint32>(payload.size()), ctx);
+    EXPECT_FALSE(result);
+    EXPECT_FALSE(ctx.valid);
 }
 
 // =====================================================================
@@ -539,13 +578,16 @@ TEST_CASE(test_build_direct_dota_client_welcome)
 {
     GBE_DotaHelloContext hello_ctx{};
     hello_ctx.valid = true;
-    hello_ctx.version = 1;
+    hello_ctx.version = 1682;
 
     std::string message;
     bool result = GBE_BuildDirectDotaClientWelcome(
         76561198000000000ULL, 570u, 12345u, hello_ctx, message);
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(message.size() > sizeof(ProtoBufMsgHeader_t));
+    uint32_t emsg = 0;
+    std::memcpy(&emsg, message.data(), sizeof(emsg));
+    EXPECT_TRUE(GBE_GC_MaskedEMsg(emsg) == GBE_kEMsgGCClientWelcome);
 }
 
 // =====================================================================
@@ -556,13 +598,18 @@ TEST_CASE(test_compose_dota_client_welcome)
 {
     GBE_DotaHelloContext hello_ctx{};
     hello_ctx.valid = true;
-    hello_ctx.version = 1;
+    hello_ctx.version = 1682;
+    hello_ctx.outer_session_field_raw = "session-token";
 
     std::string message;
     bool result = GBE_ComposeDotaClientWelcome(
         76561198000000000ULL, 570u, 12345u, hello_ctx, message);
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(message.size() > 8u);
+    uint32_t outer_emsg = 0;
+    std::memcpy(&outer_emsg, message.data(), sizeof(outer_emsg));
+    EXPECT_TRUE(GBE_GC_MaskedEMsg(outer_emsg) == GBE_kEMsgClientFromGC);
+    EXPECT_TRUE(message.find("session-token") != std::string::npos);
 }
 
 // =====================================================================
@@ -573,14 +620,14 @@ TEST_CASE(test_build_direct_dota_server_welcome)
 {
     GBE_DotaServerHelloContext ctx{};
     ctx.valid = true;
-    ctx.active_version = 1;
-    ctx.min_allowed_version = 1;
+    ctx.active_version = 2345;
+    ctx.min_allowed_version = 1234;
 
     std::string message;
     bool result = GBE_BuildDirectDotaServerWelcome(
         76561198000000000ULL, 570u, ctx, message);
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(!message.empty());
 }
 
 // =====================================================================
@@ -589,12 +636,14 @@ TEST_CASE(test_build_direct_dota_server_welcome)
 
 TEST_CASE(test_is_dota_other_left_channel_payload)
 {
-    std::string message;
-    gbe::proto_wire::append_varint_field(message, 1, 12345u);
+    std::string body;
+    body.push_back(static_cast<char>(0x09));
+    body.append(make_fixed64_bytes(12345ULL));
+    std::string message = make_direct_proto_message(GBE_kDotaOtherLeftChannel | GBE_kProtoMask, body);
 
     bool result = GBE_IsDotaOtherLeftChannelPayloadForChannel(message, 12345ULL);
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(result);
+    EXPECT_FALSE(GBE_IsDotaOtherLeftChannelPayloadForChannel(message, 54321ULL));
 }
 
 // =====================================================================
@@ -607,8 +656,9 @@ TEST_CASE(test_adapt_dota_top_custom_games_list_payload)
     size_t game_count = 0;
 
     bool result = GBE_AdaptDotaTopCustomGamesListPayload(nullptr, message, game_count);
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(game_count == 0u);
+    EXPECT_TRUE(!message.empty());
 }
 
 // =====================================================================
@@ -617,19 +667,23 @@ TEST_CASE(test_adapt_dota_top_custom_games_list_payload)
 
 TEST_CASE(test_prepare_dota_direct_replay_message)
 {
-    std::vector<uint8> template_bytes;
-    for (int i = 0; i < 8; ++i)
-        template_bytes.push_back(static_cast<uint8>(i));
+    std::string body;
+    body.append(reinterpret_cast<const char *>(GBE_kOldDotaAccountIdVarint.data()), GBE_kOldDotaAccountIdVarint.size());
+    body.append(reinterpret_cast<const char *>(GBE_kOldDotaAccountIdFixed32.data()), GBE_kOldDotaAccountIdFixed32.size());
+    body.append(reinterpret_cast<const char *>(GBE_kOldDotaSteamIdVarint.data()), GBE_kOldDotaSteamIdVarint.size());
+    std::string template_message = make_direct_proto_message(7009u | GBE_kProtoMask, body);
 
     std::string message;
     bool result = GBE_PrepareDotaDirectReplayMessage(
-        template_bytes.data(), template_bytes.size(),
+        reinterpret_cast<const uint8 *>(template_message.data()), template_message.size(),
         54321u, 76561198000000000ULL,
         true, true, false, 0ULL,
         7009u, 7009u, 0, "test_direct_replay", message);
 
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(message.size() >= 8u);
+    EXPECT_TRUE(message.find(std::string(reinterpret_cast<const char *>(GBE_kOldDotaAccountIdVarint.data()), GBE_kOldDotaAccountIdVarint.size())) != std::string::npos);
+    EXPECT_TRUE(message.find(std::string(reinterpret_cast<const char *>(GBE_kOldDotaSteamIdVarint.data()), GBE_kOldDotaSteamIdVarint.size())) == std::string::npos);
 }
 
 // =====================================================================
@@ -644,6 +698,7 @@ TEST_CASE(test_patch_dota_practice_lobby_cache_subscribed_template_state)
 
     std::vector<GBE_DotaLobbyMemberState> members;
     std::string pass_key;
+    const std::string original = message;
 
     bool result = GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState(
         message, 54321u, 76561198000000000ULL, 12345ULL,
@@ -653,8 +708,8 @@ TEST_CASE(test_patch_dota_practice_lobby_cache_subscribed_template_state)
         std::string(""), false, false, false,
         0u, 0u, 0u, 0ULL, 0ULL, 0u, 0u, 0u,
         members, false, 0u, pass_key, nullptr);
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_FALSE(result);
+    EXPECT_TRUE(message == original);
 }
 
 // =====================================================================
@@ -666,14 +721,15 @@ TEST_CASE(test_patch_dota_practice_lobby_launch_template)
     std::string message;
     for (int i = 0; i < 16; ++i)
         message.push_back(static_cast<char>(i));
+    const std::string original = message;
 
     bool result = GBE_PatchDotaPracticeLobbyLaunchTemplate(
         message, 54321u, 76561198000000000ULL, 12345ULL,
         54321ULL, 99999ULL, 0u,
         std::string("127.0.0.1:27015"),
         true, true, true, "test_launch");
-    (void)result;
-    EXPECT_TRUE(true);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(message.size() >= original.size());
 }
 
 // =====================================================================

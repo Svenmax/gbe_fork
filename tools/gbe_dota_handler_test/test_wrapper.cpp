@@ -51,3 +51,9 @@
 
 // Include chat handlers for minimal smoke coverage of chat-channel side effects.
 #include "dll/gbe_dota_chat_handlers.cpp"
+
+// Include lobby handlers for minimal smoke coverage of lobby teardown/order paths.
+#include "dll/gbe_dota_lobby_handlers.cpp"
+
+// Include match handlers for minimal smoke coverage of launch/match order paths.
+#include "dll/gbe_dota_match_handlers.cpp"

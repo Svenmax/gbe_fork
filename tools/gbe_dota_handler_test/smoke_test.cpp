@@ -37,6 +37,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -120,11 +121,28 @@ static void encode_equip_op(std::string &out, uint64_t item_id, uint32_t new_cla
     encode_length_delimited(out, 1, sub);
 }
 
+static std::string make_leave_chat_body(uint64_t channel_id)
+{
+    std::string body;
+    encode_varint_field(body, 1u, channel_id);
+    return body;
+}
+
 static bool has_single_push(const ActionRecorder &recorder, uint32 expected_emsg)
 {
     return recorder.actions.size() == 1u &&
         recorder.actions[0].type == GBE_DotaActionType::PushIncomingNow &&
         (recorder.actions[0].msg_type & ~Steam_Game_Coordinator::protobuf_mask) == expected_emsg;
+}
+
+static bool read_header_jobs(const std::string &message, uint32_t &msg_type, JobID_t &target_job, JobID_t &source_job)
+{
+    if (message.size() < sizeof(uint32_t) + sizeof(JobID_t) + sizeof(JobID_t))
+        return false;
+    std::memcpy(&msg_type, message.data(), sizeof(msg_type));
+    std::memcpy(&target_job, message.data() + sizeof(msg_type), sizeof(target_job));
+    std::memcpy(&source_job, message.data() + sizeof(msg_type) + sizeof(target_job), sizeof(source_job));
+    return true;
 }
 
 // =====================================================================
@@ -234,6 +252,15 @@ static void test_inventory_unlock_style_with_consumable()
 
     TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::PushIncomingNow, "third action should be PushIncomingNow");
     TEST_ASSERT_EQ((tf.recorder.actions[2].msg_type & ~0x80000000u), 2572u, "third push should be response (emsg=2572)");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].source_job, 0u, "response should not be synthetic header action");
+
+    uint32_t header_msg_type = 0;
+    JobID_t target_job = 0;
+    JobID_t source_job = 0;
+    TEST_ASSERT(read_header_jobs(tf.recorder.actions[0].msg_body, header_msg_type, target_job, source_job), "SO update should carry test header");
+    TEST_ASSERT_EQ(header_msg_type & ~Steam_Game_Coordinator::protobuf_mask, 22u, "SO update header emsg should be 22");
+    TEST_ASSERT_EQ(target_job, k_GIDNil, "SO update currently uses nil target job");
+    TEST_ASSERT_EQ(source_job, k_GIDNil, "SO update should use nil source job");
 
     // Verify the consumable was deleted from items
     bool consumable_found = false;
@@ -445,6 +472,8 @@ static void test_inventory_equip_basic()
 
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::PushIncomingNow, "second action should be PushIncomingNow");
     TEST_ASSERT_EQ((tf.recorder.actions[1].msg_type & ~0x80000000u), 2570u, "second push should be response (emsg=2570)");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "", "direct equip response should be sent without GBE_PushDotaResponse reason metadata");
+    TEST_ASSERT(!tf.recorder.actions[1].wrapped, "equip response should be unwrapped in direct handler test");
 
     TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::SaveItemsToFile, "third action should be SaveItemsToFile");
 
@@ -525,6 +554,10 @@ static void test_inventory_equip_full_forward()
 
     TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::ServerGcForward, "4: ServerGcForward (cache push)");
     TEST_ASSERT_EQ((tf.recorder.actions[3].msg_type & ~0x80000000u), 0u, "4: emsg=0 (CacheSubscribed)");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].item_id, 1u, "4: cache push should target a server GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].server_gc_source_item_count, 1u, "4: cache push should include source items");
+    TEST_ASSERT(tf.recorder.actions[3].server_gc_unsubscribe_first, "4: cache push should unsubscribe before subscribe");
+    TEST_ASSERT(tf.recorder.actions[3].reason == "equip_forward_host_resubscribe_server", "4: cache push reason should identify equip forward");
 
     TEST_ASSERT_EQ(tf.recorder.actions[4].type, GBE_DotaActionType::ServerGcForward, "5: ServerGcForward (SO Create)");
     TEST_ASSERT_EQ((tf.recorder.actions[4].msg_type & ~0x80000000u), 21u, "5: emsg=21");
@@ -556,7 +589,8 @@ static void test_chat_join_channel()
     encode_length_delimited(body, 2u, "dota_lobby_chat");
     encode_varint_field(body, 4u, 3u);
 
-    bool result = tf.gc.GBE_HandleDotaJoinChatChannelRequest(body, false, nullptr);
+    const std::string session_raw = "outer-session-token";
+    bool result = tf.gc.GBE_HandleDotaJoinChatChannelRequest(body, true, &session_raw);
 
     TEST_ASSERT(result, "handler should return true");
     TEST_ASSERT(tf.gc.GBE_local_lobby.has_chat_channel, "join chat should mark chat channel active");
@@ -565,6 +599,98 @@ static void test_chat_join_channel()
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "publish should happen before response");
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::PushIncomingNow, "response should be pushed");
     TEST_ASSERT_EQ(tf.recorder.actions[1].msg_type & ~Steam_Game_Coordinator::protobuf_mask, GBE_kDotaJoinChatChannelResponse, "response should be 7010");
+    TEST_ASSERT(tf.recorder.actions[1].wrapped, "7010 response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[1].session_raw == session_raw, "7010 response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7009_7010", "7010 response should record reason");
+    TEST_ASSERT(!tf.recorder.actions[1].msg_body.empty(), "7010 response should carry payload");
+
+    ++g_tests_passed;
+}
+
+static void test_chat_leave_postgame_channel_order()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0xCAFEu;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0xBEEFu;
+    tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.get_local_steam_id().ConvertToUint64();
+    tf.gc.GBE_local_lobby.owner_name = "tester";
+    tf.gc.GBE_local_lobby.has_chat_channel = true;
+    tf.gc.GBE_local_lobby.chat_channel_id = 0x7014u;
+    tf.gc.GBE_local_lobby.chat_channel_name = "postgame";
+    tf.gc.GBE_local_lobby.chat_channel_type = 18u;
+    tf.gc.GBE_local_lobby.abandon_postgame_active = true;
+    GBE_shared_dota_lobby_state.valid = true;
+
+    const std::string session_raw = "leave-session-token";
+    const std::string body = make_leave_chat_body(tf.gc.GBE_local_lobby.chat_channel_id);
+    bool result = tf.gc.GBE_HandleDotaLeaveChatChannelRequest(body, true, &session_raw);
+
+    TEST_ASSERT(result, "leave chat handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "postgame leave should push 7014 then publish state");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::PushIncomingNow, "first action should be 7014 response");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].msg_type & ~Steam_Game_Coordinator::protobuf_mask, GBE_kDotaOtherLeftChannel, "first response should be 7014");
+    TEST_ASSERT(tf.recorder.actions[0].wrapped, "7014 response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[0].session_raw == session_raw, "7014 response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7272_7014", "7014 response should record reason");
+    TEST_ASSERT(!tf.recorder.actions[0].msg_body.empty(), "7014 response should carry payload");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "second action should publish lobby state");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7272_leave_chat", "publish reason should identify leave chat");
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.has_chat_channel, "postgame leave should clear local chat channel after 7014");
+    GBE_shared_dota_lobby_state.valid = false;
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_abandon_current_game_disconnect_queues_25()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.is_server = true;
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7035u;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 1u;
+    tf.gc.GBE_local_lobby.server_id = 0x55u;
+    tf.gc.GBE_local_lobby.owner_connected = true;
+    GBE_pending_reset_after_cache_unsubscribed = false;
+    GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
+
+    bool result = tf.gc.GBE_HandleDotaAbandonCurrentGameRequest(false, nullptr);
+
+    TEST_ASSERT(result, "abandon handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "current-game disconnect should queue only 25");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::PushIncomingNow, "queued action should be push");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].msg_type & ~Steam_Game_Coordinator::protobuf_mask, GBE_kDotaCacheUnsubscribed, "queued response should be 25");
+    TEST_ASSERT(!tf.recorder.actions[0].msg_body.empty(), "25 response should carry payload");
+    TEST_ASSERT(GBE_pending_reset_after_cache_unsubscribed, "25 should mark reset pending");
+    TEST_ASSERT_EQ(GBE_pending_reset_after_cache_unsubscribed_lobby_id, 0x7035u, "pending reset should record lobby id");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_abandon_ready_teardown_queues_postgame_response()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.is_server = false;
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7036u;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 1u;
+    tf.gc.GBE_local_lobby.chat_channel_id = 0x7014u;
+
+    const std::string session_raw = "abandon-session";
+    bool result = tf.gc.GBE_HandleDotaAbandonCurrentGameRequest(true, &session_raw);
+
+    TEST_ASSERT(result, "ready abandon handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "ready teardown should queue postgame response via stub");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::PushIncomingNow, "teardown action should be push");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].msg_type & ~Steam_Game_Coordinator::protobuf_mask, GBE_kDotaOtherLeftChannel, "teardown response should be 7014 in stub");
+    TEST_ASSERT(tf.recorder.actions[0].wrapped, "teardown response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[0].session_raw == session_raw, "teardown response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "postgame_teardown_7014", "teardown response should record reason");
 
     ++g_tests_passed;
 }
@@ -582,6 +708,9 @@ static void test_misc_minimal_varint_success()
 
     TEST_ASSERT(result, "handler should return true");
     TEST_ASSERT(has_single_push(tf.recorder, 5678u), "minimal varint success should push one response");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "test", "minimal response should record push note");
+    TEST_ASSERT(!tf.recorder.actions[0].wrapped, "minimal response should be unwrapped");
+    TEST_ASSERT(!tf.recorder.actions[0].msg_body.empty(), "minimal response should include payload");
 
     ++g_tests_passed;
 }
@@ -626,23 +755,94 @@ static void test_misc_rank()
 
     TEST_ASSERT(result, "handler should return true");
     TEST_ASSERT(has_single_push(tf.recorder, 8880u), "rank request should push 8880 response");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "8879_8880", "rank response should record reason");
+    TEST_ASSERT(!tf.recorder.actions[0].msg_body.empty(), "rank response should include payload");
 
     ++g_tests_passed;
 }
 
 // =====================================================================
-// Lobby domain smoke test
+// Match domain smoke tests
 // =====================================================================
-// NOTE: The lobby handler smoke test requires compiling gbe_dota_lobby_handlers.cpp
-// against extended stubs (17 lobby handlers + 6 statics, deeper lobby-state
-// coupling). This will be added during Phase 3.1.9 (lobby logic refactor).
 
-// =====================================================================
-// Match domain smoke test
-// =====================================================================
-// NOTE: The match handler smoke test requires compiling gbe_dota_match_handlers.cpp
-// against extended stubs (7034 launch flow, custom-game loading). This will
-// be added during Phase 3.1.10 (match/misc logic refactor).
+static void setup_custom_game_lobby(TestFixture &tf)
+{
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x805300u;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 0u;
+    tf.gc.GBE_local_lobby.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+    tf.gc.GBE_local_lobby.custom_game.game_id = 0xBEEF00u;
+}
+
+static void test_match_ready_up_queues_7170_then_runtime_update()
+{
+    TestFixture tf;
+    tf.reset();
+    setup_custom_game_lobby(tf);
+
+    std::string body;
+    encode_varint_field(body, 1u, 1u);
+    bool result = tf.gc.GBE_HandleDotaCustomGameReadyUpRequest(
+        reinterpret_cast<const uint8 *>(body.data()), body.size(), true, 0x7070u);
+
+    TEST_ASSERT(result, "ready-up handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "ready-up should queue response then publish runtime state");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::PushIncomingNow, "first action should be 7170 response");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].msg_type & ~Steam_Game_Coordinator::protobuf_mask, 7170u, "first response should be 7170");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "second action should publish lobby state");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7070_custom_game_ready_up_run_ack", "publish reason should identify ready-up ack");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, 1u, "ready-up should advance to wait-for-players");
+
+    ++g_tests_passed;
+}
+
+static void test_match_started_loading_updates_custom_game_before_publish()
+{
+    TestFixture tf;
+    tf.reset();
+    setup_custom_game_lobby(tf);
+
+    std::string body;
+    encode_varint_field(body, 1u, tf.gc.GBE_local_lobby.lobby_id);
+    encode_varint_field(body, 2u, 0x8052u);
+    encode_varint_field(body, 4u, 12345u);
+    bool result = tf.gc.GBE_HandleDotaCustomGameStartedLoadingRequest(
+        reinterpret_cast<const uint8 *>(body.data()), body.size(), true, 0x8052u);
+
+    TEST_ASSERT(result, "started-loading handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "8052 should publish one lobby state refresh when run advance stub declines");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "8052 action should publish lobby state");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "8052_started_loading", "8052 publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.custom_game.game_id, 0x8052u, "8052 should update custom game id before publish");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_start_time, 12345u, "8052 should update start time before publish");
+
+    ++g_tests_passed;
+}
+
+static void test_match_finished_loading_marks_loaded_before_publish()
+{
+    TestFixture tf;
+    tf.reset();
+    setup_custom_game_lobby(tf);
+
+    std::string body;
+    encode_varint_field(body, 1u, tf.gc.GBE_local_lobby.lobby_id);
+    encode_varint_field(body, 2u, 33u);
+    encode_varint_field(body, 3u, 0u);
+    encode_varint_field(body, 4u, 4u);
+    bool result = tf.gc.GBE_HandleDotaCustomGameFinishedLoadingRequest(
+        reinterpret_cast<const uint8 *>(body.data()), body.size(), true, 0x8053u);
+
+    TEST_ASSERT(result, "finished-loading handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "8053 success should publish one lobby state refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "8053 action should publish lobby state");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "8053_finished_loading", "8053 publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.launch_phase, GBE_kDotaLaunchPhaseLoaded, "8053 should mark launch loaded before publish");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, 1u, "8053 should ensure at least wait-for-players state");
+
+    ++g_tests_passed;
+}
 
 // =====================================================================
 // Main
@@ -685,6 +885,15 @@ int main()
     std::printf("[run] test_chat_join_channel\n");
     RUN_TEST(test_chat_join_channel);
 
+    std::printf("[run] test_chat_leave_postgame_channel_order\n");
+    RUN_TEST(test_chat_leave_postgame_channel_order);
+
+    std::printf("[run] test_lobby_abandon_current_game_disconnect_queues_25\n");
+    RUN_TEST(test_lobby_abandon_current_game_disconnect_queues_25);
+
+    std::printf("[run] test_lobby_abandon_ready_teardown_queues_postgame_response\n");
+    RUN_TEST(test_lobby_abandon_ready_teardown_queues_postgame_response);
+
     std::printf("[run] test_misc_minimal_varint_success\n");
     RUN_TEST(test_misc_minimal_varint_success);
 
@@ -696,6 +905,15 @@ int main()
 
     std::printf("[run] test_misc_rank\n");
     RUN_TEST(test_misc_rank);
+
+    std::printf("[run] test_match_ready_up_queues_7170_then_runtime_update\n");
+    RUN_TEST(test_match_ready_up_queues_7170_then_runtime_update);
+
+    std::printf("[run] test_match_started_loading_updates_custom_game_before_publish\n");
+    RUN_TEST(test_match_started_loading_updates_custom_game_before_publish);
+
+    std::printf("[run] test_match_finished_loading_marks_loaded_before_publish\n");
+    RUN_TEST(test_match_finished_loading_marks_loaded_before_publish);
 
     std::printf("\n=== Results: %d passed, %d failed, %d total ===\n",
                 g_tests_passed, g_tests_failed, g_tests_run);

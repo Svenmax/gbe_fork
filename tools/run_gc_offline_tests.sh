@@ -146,6 +146,7 @@ printf '[build] %s\n' gbe_dota_gc_payload_helpers_test
     dll/gbe_proto_wire.cpp \
     dll/gbe_gc_message_utils.cpp \
     dll/gbe_dota_lobby_flow.cpp \
+    dll/gbe_dota_lobby_state.cpp \
     dll/gbe_dota_lobby_publish.cpp \
     dll/gbe_dota_lobby_snapshot.cpp \
     dll/gbe_dota_custom_game.cpp \
@@ -167,6 +168,7 @@ printf '[build] %s\n' gbe_dota_handler_test
     dll/gbe_proto_wire.cpp \
     dll/gbe_gc_message_utils.cpp \
     dll/gbe_dota_lobby_flow.cpp \
+    dll/gbe_dota_lobby_state.cpp \
     dll/gbe_dota_lobby_publish.cpp \
     dll/gbe_dota_lobby_snapshot.cpp \
     dll/gbe_dota_custom_game.cpp \

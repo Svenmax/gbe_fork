@@ -1367,6 +1367,89 @@ project "tool_gbe_dota_lobby_state_test"
 -- End tool_gbe_dota_lobby_state_test
 
 
+-- Project tool_gbe_dota_gc_payload_helpers_test
+project "tool_gbe_dota_gc_payload_helpers_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_gc_payload_helpers_test"))
+    targetname "gbe_dota_gc_payload_helpers_test_%{cfg.platform}"
+
+    includedirs {
+        "tools/gbe_dota_gc_payload_helpers_test",
+        "tools/gbe_dota_gc_payload_helpers_test/pb_stubs",
+    }
+
+    files {
+        "tools/gbe_dota_gc_payload_helpers_test/test_wrapper.cpp",
+        "tools/gbe_dota_gc_payload_helpers_test/gbe_dota_gc_payload_helpers_test.cpp",
+        "tools/gbe_dota_gc_payload_helpers_test/stubs.h",
+        "tools/gbe_dota_gc_payload_helpers_test/pb_stubs/**.h",
+        "dll/gbe_dota_custom_game.cpp",
+        "dll/gbe_dota_custom_game.h",
+        "dll/gbe_dota_custom_lobby_http.cpp",
+        "dll/gbe_dota_custom_lobby_http.h",
+        "dll/gbe_dota_gc_router.cpp",
+        "dll/gbe_dota_gc_router.h",
+        "dll/gbe_dota_gc_wire.cpp",
+        "dll/gbe_dota_gc_wire.h",
+        "dll/gbe_dota_lobby_flow.cpp",
+        "dll/gbe_dota_lobby_flow.h",
+        "dll/gbe_dota_lobby_state.cpp",
+        "dll/gbe_dota_lobby_state.h",
+        "dll/gbe_dota_lobby_publish.cpp",
+        "dll/gbe_dota_lobby_publish.h",
+        "dll/gbe_dota_lobby_snapshot.cpp",
+        "dll/gbe_dota_lobby_snapshot.h",
+        "dll/gbe_gc_message_utils.cpp",
+        "dll/gbe_gc_message_utils.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gbe_dota_gc_payload_helpers_test
+
+
+-- Project tool_gbe_dota_handler_test
+project "tool_gbe_dota_handler_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_handler_test"))
+    targetname "gbe_dota_handler_test_%{cfg.platform}"
+
+    includedirs {
+        "tools/gbe_dota_handler_test",
+        "tools/gbe_dota_gc_payload_helpers_test/pb_stubs",
+    }
+
+    files {
+        "tools/gbe_dota_handler_test/test_wrapper.cpp",
+        "tools/gbe_dota_handler_test/free_func_stubs.cpp",
+        "tools/gbe_dota_handler_test/smoke_test.cpp",
+        "tools/gbe_dota_handler_test/stubs.h",
+        "tools/gbe_dota_gc_payload_helpers_test/pb_stubs/**.h",
+        "dll/gbe_dota_custom_game.cpp",
+        "dll/gbe_dota_custom_game.h",
+        "dll/gbe_dota_custom_lobby_http.cpp",
+        "dll/gbe_dota_custom_lobby_http.h",
+        "dll/gbe_dota_gc_router.cpp",
+        "dll/gbe_dota_gc_router.h",
+        "dll/gbe_dota_gc_wire.cpp",
+        "dll/gbe_dota_gc_wire.h",
+        "dll/gbe_dota_lobby_flow.cpp",
+        "dll/gbe_dota_lobby_flow.h",
+        "dll/gbe_dota_lobby_state.cpp",
+        "dll/gbe_dota_lobby_state.h",
+        "dll/gbe_dota_lobby_publish.cpp",
+        "dll/gbe_dota_lobby_publish.h",
+        "dll/gbe_dota_lobby_snapshot.cpp",
+        "dll/gbe_dota_lobby_snapshot.h",
+        "dll/gbe_gc_message_utils.cpp",
+        "dll/gbe_gc_message_utils.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gbe_dota_handler_test
+
+
 -- Project lib_steamnetworkingsockets START
 project "lib_steamnetworkingsockets"
     kind "SharedLib"
