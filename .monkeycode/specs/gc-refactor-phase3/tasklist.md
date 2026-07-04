@@ -50,12 +50,13 @@
   - [x] Run offline GC tests.
   - [x] Confirm `dll/gbe_dota_handlers.cpp` decreased to 5757 lines and `dll/gbe_dota_inventory_handlers.cpp` is 513 lines.
 
-- [ ] 3.1.3 Extract chat handlers
-  - [ ] Create `dll/gbe_dota_chat_handlers.cpp`.
-  - [ ] Move chat join, leave, and message handlers.
-  - [ ] Move chat-only constants and helpers.
-  - [ ] Add a follow-up chat logic refactor task before marking the chat bucket complete.
-  - [ ] Run offline GC tests.
+- [x] 3.1.3 Extract chat handlers
+  - [x] Create `dll/gbe_dota_chat_handlers.cpp`.
+  - [x] Move chat join, leave, and message handlers.
+  - [x] Move chat-only constants and helpers.
+  - [x] Add a follow-up chat logic refactor task before marking the chat bucket complete.
+  - [x] Run offline GC tests.
+  - Notes: moved 7 chat/broadcast handlers (`GBE_HandleDotaJoinChatChannelRequest`, `GBE_HandleDotaChatMessageRequest`, `GBE_HandleDotaNetworkChatMessage`, `GBE_HandleDotaLeaveChatChannelRequest`, `GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest`, `GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest`, `GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest`) plus chat-only static `GBE_GenerateDotaChatChannelId`. List Y = 0 (no externalize needed). `dll/gbe_dota_handlers.cpp` 5757 → 5164 lines, new file 653 lines. Follow-up logic refactor tracked as 3.1.8.
 
 - [ ] 3.1.4 Extract lobby handlers
   - [ ] Create `dll/gbe_dota_lobby_handlers.cpp`.
