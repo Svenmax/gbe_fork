@@ -26,6 +26,7 @@
   - Added `dll/gbe_dota_custom_game_handlers.cpp` (187 lines).
   - Moved 3 custom-game loading handlers: `GBE_HandleDotaCustomGameReadyUpRequest` (7070), `GBE_HandleDotaCustomGameStartedLoadingRequest` (8052), `GBE_HandleDotaCustomGameFinishedLoadingRequest` (8053).
   - List X = 0 (no handler-local statics), List Y = 0 (no cross-TU externalization; only `GBE_Dota8053Result` alias repeated in new TU).
+  - Note: 187 lines is below the 300-line healthy lower bound. Decision: keep as a temporary standalone file; when the match/7034 sub-bucket is extracted next, merge these 3 custom-game loading handlers into `dll/gbe_dota_match_handlers.cpp` (they are part of the match launch flow and share `GBE_local_lobby.launch_phase` / `GBE_TryAdvanceDotaLaunchToRun` with the 7034 path).
 - Handler signatures and function bodies were kept unchanged.
 - `dll/gbe_dota_handlers.cpp` is currently 3459 lines (down from 3578 after the 3.1.5 custom-game sub-batch).
 - `premake5.lua` uses `dll/**` in `common_files`, so the new cpp file is included by the main build source glob.
