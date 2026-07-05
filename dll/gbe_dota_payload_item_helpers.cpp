@@ -37,6 +37,7 @@
 
 #include "dll/econ_item.h"
 #include "gbe_dota_gc_internal.h"
+#include "gbe_dota_payload_item_helpers.h"
 #include "gbe_proto_wire.h"
 
 #include <cstring>

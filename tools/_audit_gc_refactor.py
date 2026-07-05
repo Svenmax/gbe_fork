@@ -11,6 +11,7 @@ Checks:
 import os
 import re
 import glob
+import sys
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 INTERNAL_H = os.path.join(ROOT_DIR, "dll", "gbe_dota_gc_internal.h")
@@ -20,6 +21,10 @@ PUBLIC_HEADERS = [
 MAIN_CPP = os.path.join(ROOT_DIR, "dll", "steam_game_coordinator.cpp")
 TODO_MD = os.path.join(ROOT_DIR, "REFACTOR_TODO.md")
 GC_TUS = sorted(glob.glob(os.path.join(ROOT_DIR, "dll", "gbe_dota_*.cpp"))) + [MAIN_CPP]
+TEMPLATE_BLOB_OWNER_FILES = {
+    "gbe_dota_template_replay_handlers.cpp",
+    "gbe_dota_gc_payload_helpers.cpp",
+}
 
 POST_LOGIN_DISPATCH_ENTRIES = [
     ("GBE_kDotaJoinChatChannel", "adapt_join_chat_channel", "GBE_HandleDotaJoinChatChannelRequest"),
@@ -38,6 +43,12 @@ POST_LOGIN_DISPATCH_ENTRIES = [
     ("GBE_kDotaPracticeLobbyJoinBroadcastChannel", "adapt_practice_lobby_join_broadcast", "GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest"),
     ("GBE_kDotaLobbyUpdateBroadcastChannelInfo", "adapt_lobby_update_broadcast_info", "GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest"),
     ("GBE_kDotaPracticeLobbyCloseBroadcastChannel", "adapt_practice_lobby_close_broadcast", "GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest"),
+]
+
+POST_LOGIN_DIRECT_DISPATCH_ENTRIES = [
+    ("7427u", "adapt_direct_7427_notifications", "GBE_HandleDota7427NotificationsRequest"),
+    ("4523u", "adapt_direct_upload_rate", "GBE_HandleDotaUploadRateRequest"),
+    ("8879u", "adapt_direct_rank", "GBE_HandleDotaRankRequest"),
 ]
 
 
@@ -146,12 +157,42 @@ def audit_post_login_dispatch(main_text):
         if not adapter_pattern.search(dispatch_text):
             issues.append(f"{adapter}: missing adapter call to {handler}")
 
-    found_entries = re.findall(r"\{\s*(GBE_k[A-Za-z0-9_]+)\s*,\s*(adapt_[A-Za-z0-9_]+)\s*\}", dispatch_text)
+    for emsg, adapter, handler in POST_LOGIN_DIRECT_DISPATCH_ENTRIES:
+        table_pattern = re.compile(r"\{\s*" + re.escape(emsg) + r"\s*,\s*" + re.escape(adapter) + r"\s*\}")
+        if not table_pattern.search(dispatch_text):
+            issues.append(f"{emsg}: missing direct-only table entry for {adapter}")
+
+        adapter_pattern = re.compile(
+            r"auto\s+" + re.escape(adapter) +
+            r"\s*=.*?DotaGcRequestPath::Direct.*?return\s+self->" + re.escape(handler) + r"\s*\(",
+            re.DOTALL,
+        )
+        if not adapter_pattern.search(dispatch_text):
+            issues.append(f"{adapter}: missing direct path guard or call to {handler}")
+
+    found_entries = re.findall(r"\{\s*(GBE_k[A-Za-z0-9_]+|\d+u)\s*,\s*(adapt_[A-Za-z0-9_]+)\s*\}", dispatch_text)
     expected_pairs = {(emsg, adapter) for emsg, adapter, _ in POST_LOGIN_DISPATCH_ENTRIES}
+    expected_pairs.update((emsg, adapter) for emsg, adapter, _ in POST_LOGIN_DIRECT_DISPATCH_ENTRIES)
     found_pairs = set(found_entries)
     for emsg, adapter in sorted(found_pairs - expected_pairs):
         issues.append(f"{emsg}: unexpected dispatch table adapter {adapter}")
 
+    return issues
+
+
+def audit_template_blob_ownership(tu_paths):
+    """Keep large canned template/replay blobs out of ordinary handlers."""
+    issues = []
+    long_hex_literal = re.compile(r'"[0-9a-fA-F]{80,}"')
+    for path in tu_paths:
+        base = os.path.basename(path)
+        if base in TEMPLATE_BLOB_OWNER_FILES:
+            continue
+        if not base.startswith("gbe_dota_") or not base.endswith("_handlers.cpp"):
+            continue
+        for line_no, line in enumerate(read(path).splitlines(), 1):
+            if long_hex_literal.search(line):
+                issues.append((base, line_no, "large hex literal"))
     return issues
 
 
@@ -236,10 +277,23 @@ def main():
     print("  Action: keep the dispatch table aligned with the original post-login switch mapping.")
     dispatch_issues = audit_post_login_dispatch(main_text)
     if not dispatch_issues:
-        print(f"  All {len(POST_LOGIN_DISPATCH_ENTRIES)} dispatch entries map to the expected handlers")
+        total_entries = len(POST_LOGIN_DISPATCH_ENTRIES) + len(POST_LOGIN_DIRECT_DISPATCH_ENTRIES)
+        print(f"  All {total_entries} dispatch entries map to the expected handlers")
     else:
         for issue in dispatch_issues:
             print(f"  {issue}")
+    print()
+
+    print("=" * 70)
+    print("AUDIT 5: Template/replay canned blob ownership")
+    print("=" * 70)
+    print("  Action: keep large canned template/replay hex in the template replay or payload helper owners.")
+    template_blob_issues = audit_template_blob_ownership(GC_TUS)
+    if not template_blob_issues:
+        print("  (none) - ordinary handler files do not define large canned hex literals")
+    else:
+        for f, ln, reason in template_blob_issues:
+            print(f"  {f}:{ln}: {reason}; move canned data behind the template/replay or payload helper boundary")
     print()
 
     print("=" * 70)
@@ -252,6 +306,10 @@ def main():
     print(f"  Under-exposed definitions:           {len(underexposed)}")
     print(f"  Doc line-number mismatches:          {len(mismatches)}")
     print(f"  Dispatch table mismatches:           {len(dispatch_issues)}")
+    print(f"  Template blob ownership issues:      {len(template_blob_issues)}")
+
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -50,14 +50,14 @@ static const char *GBE_FormatSteamUserDotaContext(char *buffer, size_t buffer_si
             (unsigned long long)ctx.custom_game_id,
             (unsigned long long)ctx.owner_steam_id,
             ctx.connect,
-            GBE_dota_reconnect_eligible.load() ? 1u : 0u
+            GBE_IsDotaReconnectEligible() ? 1u : 0u
         );
     } else {
         std::snprintf(
             buffer,
             buffer_size,
             "has_ctx=0 eligible=%u",
-            GBE_dota_reconnect_eligible.load() ? 1u : 0u
+            GBE_IsDotaReconnectEligible() ? 1u : 0u
         );
     }
 
@@ -712,8 +712,8 @@ HAuthTicket Steam_User::GetAuthSessionTicket( void *pTicket, int cbMaxTicket, ui
     // Clear reconnect eligibility -- a new auth session means a fresh connection is being established.
     // Reset reconnect interception flag: new connection established,
     // ready for next disconnect+reconnect cycle
-    if (!GBE_dota_reconnect_eligible.load()) {
-        GBE_dota_reconnect_eligible.store(true);
+    if (!GBE_IsDotaReconnectEligible()) {
+        GBE_SetDotaReconnectEligible(true);
         GBE_ReconnectLog("GBE_RECONNECT", "GetAuthSessionTicket: reset reconnect_eligible=true (new connection)");
     }
 
@@ -798,7 +798,7 @@ void Steam_User::CancelAuthTicket( HAuthTicket hAuthTicket )
     {
         GBE_DotaReconnectContext ctx{};
         if (GBE_GetDotaReconnectContext(&ctx) && GBE_DotaReconnectContextIsStarted(ctx)) {
-            GBE_dota_reconnect_eligible.store(true);
+            GBE_SetDotaReconnectEligible(true);
             GBE_ReconnectLog("GBE_RECONNECT", "CancelAuthTicket: set reconnect_eligible=true server_id=%llu connect=%s",
                 (unsigned long long)ctx.server_id, ctx.connect);
         }

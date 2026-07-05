@@ -25,6 +25,7 @@
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -62,7 +63,7 @@ using namespace gamecoordinator::tf2;
 // GBE_kOldDotaPracticeLobbyConnect.
 
 
-extern const char *GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex =
+const char * const GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex =
     "4d15008014000000090eac2b7cdec1400110dbc3fdeafdffffffff0108ba041098808080081ae9061800008000000000\n"
     "12bd0108d40f12b70108d6f9ac9f95a6fc3418012001310eac2b7cdec1400159f5b62108010010016001680070008201\n"
     "0531313131318a010240008a01024000a80100e00100f001bbca9fe020f80100a00203d00200d80200e00200f00200f8\n"
@@ -220,11 +221,17 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
     if (!out)
         return false;
 
-    if (GBE_shared_dota_lobby_state.valid &&
-        GBE_shared_dota_lobby_state.active &&
-        (GBE_shared_dota_lobby_state.state >= 2u || GBE_shared_dota_lobby_state.game_state >= 2u) &&
-        !GBE_shared_dota_lobby_state.connect.empty() &&
-        GBE_shared_dota_lobby_state.server_id != 0) {
+    const auto shared_eligibility = gbe::dota_lobby_state::compute_reconnect_eligibility_decision(
+        GBE_shared_dota_lobby_state.valid,
+        GBE_shared_dota_lobby_state.active,
+        GBE_shared_dota_lobby_state.state,
+        GBE_shared_dota_lobby_state.game_state,
+        GBE_shared_dota_lobby_state.server_id,
+        !GBE_shared_dota_lobby_state.connect.empty(),
+        GBE_shared_dota_lobby_state.custom_game.game_id,
+        GBE_shared_dota_lobby_state.owner_connected,
+        GBE_shared_dota_lobby_state.launch_phase);
+    if (shared_eligibility.context_eligible) {
         out->server_id = GBE_shared_dota_lobby_state.server_id;
         out->lobby_state = GBE_shared_dota_lobby_state.state;
         out->game_state = GBE_shared_dota_lobby_state.game_state;
@@ -236,11 +243,20 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
         return true;
     }
 
-    if (GBE_recent_dota_reconnect_context_valid &&
-        GBE_DotaReconnectContextIsStarted(GBE_recent_dota_reconnect_context) &&
-        GBE_recent_dota_reconnect_context.connect[0] != '\0' &&
-        GBE_recent_dota_reconnect_context.server_id != 0) {
-        *out = GBE_recent_dota_reconnect_context;
+    GBE_DotaReconnectContext recent_context{};
+    const bool has_recent_context = GBE_GetRecentDotaReconnectContext(&recent_context);
+    const auto recent_eligibility = gbe::dota_lobby_state::compute_reconnect_eligibility_decision(
+        has_recent_context,
+        true,
+        recent_context.lobby_state,
+        recent_context.game_state,
+        recent_context.server_id,
+        recent_context.connect[0] != '\0',
+        recent_context.custom_game_id,
+        false,
+        0u);
+    if (recent_eligibility.context_eligible) {
+        *out = recent_context;
         return true;
     }
 
@@ -280,20 +296,20 @@ const char *GBE_DescribeDotaLaunchPhase(uint32 phase)
     }
 }
 
-extern const std::array<uint8, 4> GBE_kOldDotaAccountIdVarint = { 0xF5, 0xED, 0x86, 0x41 };
-extern const std::array<uint8, 9> GBE_kOldDotaSteamIdVarint = { 0xF5, 0xED, 0x86, 0xC1, 0x90, 0x80, 0x80, 0x88, 0x01 };
-extern const std::array<uint8, 8> GBE_kOldDotaLobbyIdVarint = { 0x9D, 0x97, 0xF8, 0x9E, 0x95, 0xD7, 0xF7, 0x34 };
-extern const std::array<uint8, 8> GBE_kOldDotaSteamIdFixed64 = { 0xF5, 0xB6, 0x21, 0x08, 0x01, 0x00, 0x10, 0x01 };
-extern const std::array<uint8, 8> GBE_kOldDotaPersonaSteamIdFixed64 = { 0x91, 0x1D, 0xDF, 0x05, 0x01, 0x00, 0x10, 0x01 };
-extern const std::array<uint8, 4> GBE_kOldDotaAccountIdFixed32 = { 0xF5, 0xB6, 0x21, 0x08 };
-extern const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyMatchIdVarint = { 0xDF, 0xF8, 0xBB, 0xDB, 0x20 };
-extern const std::array<uint8, 8> GBE_kOldDotaPracticeLobbyServerIdFixed64 = { 0x01, 0x7C, 0x58, 0xCA, 0x8F, 0xC1, 0x40, 0x01 };
-extern const char *GBE_kOldDotaPracticeLobbyLobbyIdText = "29809934128949123";
-extern const char *GBE_kOldDotaPracticeLobbyLobbyIdTextAlt = "29822498642855090";
-extern const uint32 GBE_kSteamTicketAuthComplete = 5429u;
-extern const char *GBE_kDotaAbandonPersonaStateInitHex =
+const std::array<uint8, 4> GBE_kOldDotaAccountIdVarint = { 0xF5, 0xED, 0x86, 0x41 };
+const std::array<uint8, 9> GBE_kOldDotaSteamIdVarint = { 0xF5, 0xED, 0x86, 0xC1, 0x90, 0x80, 0x80, 0x88, 0x01 };
+const std::array<uint8, 8> GBE_kOldDotaLobbyIdVarint = { 0x9D, 0x97, 0xF8, 0x9E, 0x95, 0xD7, 0xF7, 0x34 };
+const std::array<uint8, 8> GBE_kOldDotaSteamIdFixed64 = { 0xF5, 0xB6, 0x21, 0x08, 0x01, 0x00, 0x10, 0x01 };
+const std::array<uint8, 8> GBE_kOldDotaPersonaSteamIdFixed64 = { 0x91, 0x1D, 0xDF, 0x05, 0x01, 0x00, 0x10, 0x01 };
+const std::array<uint8, 4> GBE_kOldDotaAccountIdFixed32 = { 0xF5, 0xB6, 0x21, 0x08 };
+const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyMatchIdVarint = { 0xDF, 0xF8, 0xBB, 0xDB, 0x20 };
+const std::array<uint8, 8> GBE_kOldDotaPracticeLobbyServerIdFixed64 = { 0x01, 0x7C, 0x58, 0xCA, 0x8F, 0xC1, 0x40, 0x01 };
+const char * const GBE_kOldDotaPracticeLobbyLobbyIdText = "29809934128949123";
+const char * const GBE_kOldDotaPracticeLobbyLobbyIdTextAlt = "29822498642855090";
+const uint32 GBE_kSteamTicketAuthComplete = 5429u;
+const char * const GBE_kDotaAbandonPersonaStateInitHex =
     "fe0200800f00000009911ddf050100100110c9dbfdd20408dfe60112a50209911ddf0501001001100118ba04300138017a0a636c6f7665726c6f7665c9010000000000000000fa01140000000000000000000000000000000000000000e802a6c7dacf06f00281c8dacf06f802a6c7dacf06ba0300c1033a02000000000000e20300ba04170a06737461747573120d23444f54415f52505f494e4954ba041e0a0d737465616d5f646973706c6179120d23444f54415f52505f494e4954ba040f0a0a6e756d5f706172616d73120130ba04120a0d4576656e744c6576656c5f3236120130ba04120a0d4576656e744c6576656c5f3339120130ba04120a0d4576656e744c6576656c5f3536120131ba04120a0d4576656e744c6576656c5f3535120131c1040000000000000000c9040000000000000000f80400800500880500980501";
-extern const char *GBE_kDotaOfficial032PracticeLobby26Hex =
+const char * const GBE_kDotaOfficial032PracticeLobby26Hex =
     "4d15008014000000090eac2b7cdec1400110dbc3fdeafdffffffff0108ba04109a808080081a80041a00008000000000120508dd0f120012e90108d40f12e30108d6f9ac9f95a6fc34180120022a273138322e34322e3232342e31333a3237303135203139322e3136382e342e3136383a3237303135310eac2b7cdec1400159f5b621080100100160016800700082010531313131318a010240008a01024000a80100b0010ae00100f001bbca9fe020f80100a00203d00200d80200e00200f00200f80200800300980300a80300c80301f2030708f54412020800880400d80400900500b805f7e6cbcf06c00500e80503f00500f80500880600b80600c00637f00600880700c2070d09f5b621080100100118003801c80700f807008008d5e6cbcf06121208de0f120d0a090a075376656e6d61781000120708df0f12020a0012cf0108e00f12c9010a3509f5b62108010010014800580060e1ac8b84d0854068008501000000e085014128d9f585015706000098010098010098010098010015000000001a300813122c08f5ed864110001800200038006000d00100d80100e00100fa0106080f100a180afa0108081c10e80718e8071a1c081a121808f5ed864110001800200138006000d00100d80100e001001a1c0827121808f5ed864110001800200138006000d00100d80100e001001a1d0838121908f5ed864110e8071800200138016000d00100d80100e00100190439f15331f16900320b080310d6f9ac9f95a6fc34";
 // Removed: GBE_kDota7388Profile20Template (had owned=0, caused "Unavailable")
 // Removed: GBE_kDota7388Profile37Template (had owned=1 but used hardcoded account_id)

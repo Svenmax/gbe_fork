@@ -45,6 +45,58 @@
 // This compiles the real handler definitions against our stub class.
 #include "dll/gbe_dota_inventory_handlers.cpp"
 
+struct TestEquipPlannerSummary {
+    bool parse_failed{};
+    size_t equip_op_count{};
+    size_t modified_item_count{};
+    size_t action_count{};
+    bool has_server_forward{};
+    bool broadcast_equipped_items{};
+    const char *snapshot_refresh_reason{};
+    uint16 first_item_slot{};
+    uint8 first_item_style{};
+    GBE_DotaActionType actions[8]{};
+    uint32 action_emsgs[8]{};
+};
+
+TestEquipPlannerSummary test_plan_equip_items_request(
+    const uint8 *body,
+    size_t body_size,
+    const std::vector<Econ_Item> &items,
+    uint64_t cache_version,
+    bool is_dota_client,
+    bool server_gc_has_active_lobby,
+    bool lobby_snapshot_refresh_available)
+{
+    EquipItemsPlanningContext context{};
+    context.is_dota_client = is_dota_client;
+    context.server_gc_has_active_lobby = server_gc_has_active_lobby;
+    context.lobby_snapshot_refresh_available = lobby_snapshot_refresh_available;
+
+    EquipItemsPlan plan = plan_equip_items_request(body, body_size, items, cache_version, context);
+
+    TestEquipPlannerSummary summary{};
+    summary.parse_failed = plan.parse_failed;
+    summary.equip_op_count = plan.equip_ops.size();
+    summary.modified_item_count = plan.modified_item_ids.size();
+    summary.action_count = plan.actions.size();
+    summary.has_server_forward = plan.server_forward.enabled;
+    summary.broadcast_equipped_items = plan.broadcast_equipped_items;
+    summary.snapshot_refresh_reason = plan.snapshot_refresh_reason;
+    if (!plan.items_after_mutation.empty()) {
+        auto it = plan.items_after_mutation[0].equip_states.find(2u);
+        if (it != plan.items_after_mutation[0].equip_states.end())
+            summary.first_item_slot = it->second;
+        summary.first_item_style = plan.items_after_mutation[0].style;
+    }
+    const size_t max_actions = sizeof(summary.actions) / sizeof(summary.actions[0]);
+    for (size_t i = 0; i < plan.actions.size() && i < max_actions; ++i) {
+        summary.actions[i] = plan.actions[i].type;
+        summary.action_emsgs[i] = plan.actions[i].emsg;
+    }
+    return summary;
+}
+
 // Include low-dependency misc handlers so smoke tests can cover standalone
 // request/response paths without pulling in the full coordinator.
 #include "dll/gbe_dota_misc_handlers.cpp"

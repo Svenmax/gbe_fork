@@ -392,7 +392,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
 
     const bool reconnect_eligible_after_trigger = arcade_custom_launch;
     if (!reconnect_eligible_after_trigger)
-        GBE_dota_reconnect_eligible.store(false);
+        GBE_SetDotaReconnectEligible(false);
     GBE_last_dota_direct_connect_callback_signature = signature;
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
@@ -698,5 +698,4 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
         );
     }
 }
-
 

@@ -67,7 +67,14 @@ bool extract_wrapped_post_login_request(
         context.has_request_job = true;
     }
 
+    std::uint64_t target_job_id = 0;
+    if (proto_wire::read_uint64_field(inner_header, inner_header_length, 10u, target_job_id)) {
+        context.target_job_id = target_job_id;
+        context.has_target_job = true;
+    }
+
     context.wrapped = true;
+    context.path = DotaGcRequestPath::Wrapped;
     context.valid = true;
     return true;
 }

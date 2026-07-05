@@ -8,13 +8,22 @@ namespace gbe::dota_gc_router {
 
 // Routes Dota direct/wrapped GC requests and responses without owning queue or lobby side effects.
 
+enum class DotaGcRequestPath {
+    Unknown,
+    Direct,
+    Wrapped,
+};
+
 struct DotaGcRequestContext {
     bool valid{};
     std::uint32_t inner_emsg{};
     std::string body;
     std::uint64_t request_job_id{};
     bool has_request_job{};
+    std::uint64_t target_job_id{};
+    bool has_target_job{};
     bool wrapped{};
+    DotaGcRequestPath path{DotaGcRequestPath::Unknown};
     std::string outer_session_field_raw;
 };
 

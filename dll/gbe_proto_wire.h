@@ -35,6 +35,33 @@ struct Dota8053Result {
     std::string result_text;
 };
 
+struct Dota7070ReadyUpRequest {
+    std::uint32_t ready_state{};
+    bool has_ready_state{};
+};
+
+struct Dota8052StartedLoadingRequest {
+    std::uint64_t lobby_id{};
+    std::uint64_t custom_game_id{};
+    std::uint64_t start_time{};
+    bool has_lobby_id{};
+    bool has_custom_game_id{};
+    bool has_start_time{};
+};
+
+struct Dota8053FinishedLoadingRequest {
+    std::uint64_t lobby_id{};
+    std::uint64_t loading_duration{};
+    std::uint64_t result_code{};
+    std::uint64_t signon_states{};
+    std::string result_text;
+    bool has_lobby_id{};
+    bool has_loading_duration{};
+    bool has_result_code{};
+    bool has_result_text{};
+    bool has_signon_states{};
+};
+
 struct Dota7034ConnectedPlayer {
     std::uint64_t steam_id{};
     std::uint32_t hero_id{};
@@ -52,6 +79,34 @@ struct Dota7034DisconnectedPlayer {
 };
 
 struct Dota7034RequestShape {
+    std::uint32_t game_state{};
+    std::uint32_t send_reason{};
+    std::uint32_t first_blood_happened{};
+    std::uint32_t radiant_kills{};
+    std::uint32_t dire_kills{};
+    std::uint32_t radiant_lead{};
+    std::uint32_t building_state{};
+    std::uint64_t draft_steam_id{};
+    std::uint32_t draft_team{};
+    std::uint32_t draft_team_slot{};
+    std::vector<Dota7034ConnectedPlayer> connected_players;
+    std::vector<Dota7034DisconnectedPlayer> disconnected_players;
+    bool has_game_state{};
+    bool has_send_reason{};
+    bool has_first_blood_happened{};
+    bool has_radiant_kills{};
+    bool has_dire_kills{};
+    bool has_radiant_lead{};
+    bool has_building_state{};
+    bool has_connected_player{};
+    bool has_draft{};
+    bool has_draft_steam_id{};
+    bool has_draft_team{};
+    bool has_draft_team_slot{};
+    bool has_disconnected_player{};
+};
+
+struct Dota7034RuntimeRequest {
     std::uint32_t game_state{};
     std::uint32_t send_reason{};
     std::uint32_t first_blood_happened{};
@@ -217,6 +272,13 @@ struct PatchTemplateIdentifierResult {
     std::size_t steam_id_fixed64_match_count{};
 };
 
+// Practice lobby launch template patch points:
+// - SteamID fixed64: required owner/local SteamID replacement
+// - lobby_id varint: required when require_lobby_id is set by caller
+// - match_id varint: optional size-checked replacement
+// - server_id fixed64: optional replacement guarded by patch_server_id
+// - game_start_time varint: optional size-checked replacement
+// - connect string: optional same-length endpoint replacement
 struct DotaPracticeLobbyLaunchTemplatePatchResult {
     std::size_t steam_id_fixed64_match_count{};
     bool lobby_id_size_ok{};
@@ -230,6 +292,10 @@ struct DotaPracticeLobbyLaunchTemplatePatchResult {
     std::size_t connect_match_count{};
 };
 
+// Practice lobby peripheral/persona patch points:
+// - SteamID fixed64: required replacement for owner/persona identity
+// - server_id fixed64: optional replacement guarded by patch_server_id
+// - lobby_id text: optional same-length decimal text replacement
 struct DotaPracticeLobbyPeripheralTemplatePatchResult {
     std::size_t steam_id_fixed64_match_count{};
     std::size_t server_id_fixed64_match_count{};
@@ -251,8 +317,12 @@ bool read_bytes_field(const std::uint8_t *data, std::size_t size, std::uint32_t 
 bool extract_packed_uint32_field(const std::uint8_t *data, std::size_t size, const Field &field, std::vector<std::uint32_t> &values);
 DotaEmptyRequestShape parse_dota_empty_request_shape(const std::uint8_t *data, std::size_t size);
 DotaRankRequestShape parse_dota_rank_request_shape(const std::uint8_t *data, std::size_t size);
+Dota7070ReadyUpRequest parse_dota7070_ready_up_request(const std::uint8_t *data, std::size_t size);
+Dota8052StartedLoadingRequest parse_dota8052_started_loading_request(const std::uint8_t *data, std::size_t size);
+Dota8053FinishedLoadingRequest parse_dota8053_finished_loading_request(const std::uint8_t *data, std::size_t size);
 Dota8053Result parse_dota8053_result(const std::uint8_t *data, std::size_t size);
 Dota7034RequestShape parse_dota7034_request_shape(const std::uint8_t *data, std::size_t size);
+Dota7034RuntimeRequest parse_dota7034_runtime_request(const std::uint8_t *data, std::size_t size);
 bool parse_dota_practice_lobby_set_team_slot_body(const std::uint8_t *data, std::size_t size, DotaPracticeLobbySetTeamSlotRequest &request);
 bool parse_dota_practice_lobby_kick_body(const std::uint8_t *data, std::size_t size, DotaPracticeLobbyKickRequest &request);
 bool parse_dota_practice_lobby_join_body(const std::uint8_t *data, std::size_t size, DotaPracticeLobbyJoinRequest &request);

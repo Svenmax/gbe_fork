@@ -34,7 +34,7 @@
 #include <memory>
 
 // =====================================================================
-// Include real lightweight GBE headers for type definitions
+// Core type surface: real lightweight GBE headers
 // =====================================================================
 
 // Action model header defines the canonical GBE_DotaActionType enum used by
@@ -55,7 +55,7 @@ extern uint64_t GBE_pending_dota_normal_signout_finalize_lobby_id;
 extern bool GBE_dota_host_showcase_equip_pushed;
 
 // =====================================================================
-// Steam SDK type aliases
+// Core type surface: Steam SDK aliases and constants
 // =====================================================================
 
 using uint8 = uint8_t;
@@ -106,7 +106,7 @@ enum ERemoteStoragePublishedFileVisibility : uint32 { k_ERemoteStoragePublishedF
 enum ELobbyType : uint32 { k_ELobbyTypeInvisible = 0 };
 
 // =====================================================================
-// CSteamID stub
+// Core type surface: CSteamID stub
 // =====================================================================
 
 class CSteamID
@@ -149,7 +149,7 @@ private:
 static const CSteamID k_steamIDNil;
 
 // =====================================================================
-// Econ_Item stub (matching real definition in dll/econ_item.h)
+// Inventory model stubs: Econ_Item and Mod_entry
 // =====================================================================
 
 struct Econ_Item_Attribute
@@ -187,7 +187,6 @@ struct Econ_Item
 };
 
 // =====================================================================
-// Mod_entry stub (minimal, matching settings.h)
 // =====================================================================
 
 struct Mod_entry
@@ -225,7 +224,7 @@ struct Mod_entry
 };
 
 // =====================================================================
-// Settings stub
+// Core service stubs: Settings
 // =====================================================================
 
 class Settings
@@ -254,7 +253,7 @@ public:
 };
 
 // =====================================================================
-// Action Recorder - captures side effects in order
+// Core recorder: captures side effects and domain-specific observations
 // =====================================================================
 
 struct RecordedAction
@@ -291,12 +290,70 @@ struct RecordedAction
     }
 };
 
+struct RecordedRuntimeState
+{
+    uint64 steam_id{};
+    bool connected{};
+    uint32 hero_id{};
+    bool has_hero_id{};
+};
+
+struct RecordedPracticeLobbyDetailsUpdate
+{
+    bool preserve_server_id{};
+    std::string message_override;
+    std::string reason;
+};
+
+struct RecordedLobbyKick
+{
+    uint64 lobby_id{};
+    uint64 member_id{};
+};
+
 class ActionRecorder
 {
 public:
     std::vector<RecordedAction> actions;
+    std::vector<RecordedRuntimeState> runtime_states;
+    std::vector<RecordedPracticeLobbyDetailsUpdate> practice_lobby_details_updates;
+    std::vector<RecordedLobbyKick> lobby_kicks;
 
-    void clear() { actions.clear(); }
+    void clear()
+    {
+        actions.clear();
+        runtime_states.clear();
+        practice_lobby_details_updates.clear();
+        lobby_kicks.clear();
+    }
+
+    void record_runtime_state(uint64 steam_id, bool connected, uint32 hero_id, bool has_hero_id)
+    {
+        RecordedRuntimeState state;
+        state.steam_id = steam_id;
+        state.connected = connected;
+        state.hero_id = hero_id;
+        state.has_hero_id = has_hero_id;
+        runtime_states.push_back(state);
+    }
+
+    void record_practice_lobby_details_update(bool preserve_server_id, const std::string *message_override, const char *reason)
+    {
+        RecordedPracticeLobbyDetailsUpdate update;
+        update.preserve_server_id = preserve_server_id;
+        if (message_override)
+            update.message_override = *message_override;
+        update.reason = reason ? reason : "";
+        practice_lobby_details_updates.push_back(std::move(update));
+    }
+
+    void record_lobby_kick(uint64 lobby_id, uint64 member_id)
+    {
+        RecordedLobbyKick kick;
+        kick.lobby_id = lobby_id;
+        kick.member_id = member_id;
+        lobby_kicks.push_back(kick);
+    }
 
     void record_push_incoming_now(uint32 msg_type, const std::string &msg_body)
     {
@@ -445,7 +502,7 @@ public:
 };
 
 // =====================================================================
-// Networking stub
+// Core service stubs: Networking and outbound common messages
 // =====================================================================
 
 class GameServer_Items_Messages;
@@ -532,7 +589,7 @@ public:
 };
 
 // =====================================================================
-// GameServer_Items_Messages protobuf stub
+// Inventory protobuf stubs: GameServer_Items_Messages
 // =====================================================================
 
 class GameServer_Items_Messages
@@ -597,7 +654,7 @@ public:
 inline void Common_Message::set_allocated_gameserver_items_messages(GameServer_Items_Messages *msg) { delete msg; }
 
 // =====================================================================
-// Steam_Client stub
+// Core service stubs: Steam_Client singleton surface
 // =====================================================================
 
 class Steam_Game_Coordinator; // forward declaration
@@ -622,7 +679,7 @@ Steam_Client *get_steam_client();
 extern Steam_Client g_test_steam_client;
 
 // =====================================================================
-// GC message types
+// Core GC queue and callback types
 // =====================================================================
 
 struct GC_Message
@@ -653,7 +710,7 @@ namespace google { namespace protobuf {
 }}
 
 // =====================================================================
-// ESOMsg stub (not in pb_stubs/gcsystemmsgs.pb.h which is empty)
+// Inventory protobuf enum stubs
 // =====================================================================
 
 namespace gamecoordinator { namespace tf2 {
@@ -670,7 +727,7 @@ enum ESOMsg {
 }} // namespace gamecoordinator::tf2
 
 // =====================================================================
-// Steam_Game_Coordinator stub with recording side effects
+// Coordinator seam: shared state, side-effect methods, and domain hooks
 // =====================================================================
 
 class Steam_Game_Coordinator
@@ -702,10 +759,62 @@ public:
     bool GBE_pending_dota_abandon_finalize_after_7014{};
     uint64 GBE_pending_dota_abandon_finalize_lobby_id{};
 
+    bool GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel() const { return GBE_pending_dota_abandon_finalize_after_7014; }
+    bool GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed() const { return GBE_pending_dota_normal_signout_finalize_after_25; }
+    bool GBE_HasPendingResetAfterCacheUnsubscribed() const { return GBE_pending_reset_after_cache_unsubscribed; }
+    void GBE_SetPendingDotaAbandonFinalizeAfterOtherLeftChannel(uint64 lobby_id)
+    {
+        GBE_pending_dota_abandon_finalize_after_7014 = true;
+        GBE_pending_dota_abandon_finalize_lobby_id = lobby_id;
+    }
+    uint64 GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel()
+    {
+        const uint64 lobby_id = GBE_pending_dota_abandon_finalize_lobby_id;
+        GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel();
+        return lobby_id;
+    }
+    void GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel()
+    {
+        GBE_pending_dota_abandon_finalize_after_7014 = false;
+        GBE_pending_dota_abandon_finalize_lobby_id = 0;
+    }
+    void GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(uint64 lobby_id)
+    {
+        GBE_pending_dota_normal_signout_finalize_after_25 = true;
+        GBE_pending_dota_normal_signout_finalize_lobby_id = lobby_id;
+    }
+    uint64 GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed()
+    {
+        const uint64 lobby_id = GBE_pending_dota_normal_signout_finalize_lobby_id;
+        GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
+        return lobby_id;
+    }
+    void GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed()
+    {
+        GBE_pending_dota_normal_signout_finalize_after_25 = false;
+        GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+    }
+    void GBE_SetPendingResetAfterCacheUnsubscribed(uint64 lobby_id)
+    {
+        GBE_pending_reset_after_cache_unsubscribed = true;
+        GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
+    }
+    void GBE_ClearPendingResetAfterCacheUnsubscribed(uint64 retained_lobby_id = 0)
+    {
+        GBE_pending_reset_after_cache_unsubscribed = false;
+        GBE_pending_reset_after_cache_unsubscribed_lobby_id = retained_lobby_id;
+    }
+    uint64 GBE_ConsumePendingResetAfterCacheUnsubscribed()
+    {
+        const uint64 lobby_id = GBE_pending_reset_after_cache_unsubscribed_lobby_id;
+        GBE_ClearPendingResetAfterCacheUnsubscribed();
+        return lobby_id;
+    }
+
     GC_Profile gc_profile{};
     bool GBE_dota_private_lobby_snapshot_replayed{};
 
-    // --- Recording side-effect methods ---
+    // --- Core recording side-effect methods ---
 
     void push_incoming_now(uint32 msg_type, const std::string &message,
                            bool apply_lobby_state = false,
@@ -743,6 +852,8 @@ public:
         if (g_action_recorder)
             g_action_recorder->record_save_items();
     }
+
+    void GBE_SaveDotaItemsFromExecutor(const char *reason);
 
     std::string build_protomsg_header(uint32 msg_type,
                                       JobID_t target_job = k_GIDNil,
@@ -797,12 +908,16 @@ public:
     void callback_client_welcome() {}
     void callback_server_welcome() {}
 
+    // --- Inventory hooks ---
+
     // Member function used by equip handler - stub records the call.
     void GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(const char *reason)
     {
         if (g_action_recorder)
             g_action_recorder->record_lobby_snapshot_refresh(reason);
     }
+
+    // --- Match and launch hooks ---
 
     bool GBE_HasDotaLaunchServerSetupSync() const { return false; }
     bool GBE_TryAdvanceDotaLaunchToRun(const char *, uint32, uint64, const char *, uint32 = 0u) { return false; }
@@ -812,7 +927,12 @@ public:
             g_action_recorder->record_lobby_snapshot_refresh(reason);
     }
     bool GBE_TrySyncDotaLobbyServerIdFromGameServer(const char *) { return false; }
-    bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool, const std::string *, const char *) { return true; }
+    bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool preserve_server_id, const std::string *message_override, const char *reason)
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_practice_lobby_details_update(preserve_server_id, message_override, reason);
+        return true;
+    }
     bool GBE_CaptureCurrentDotaLobbyState(const char *, GBE_LocalLobby &snapshot, bool = true) { snapshot = GBE_local_lobby; return GBE_local_lobby.active; }
     void GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *, const char *, bool, bool = true) {}
     void ResetGCMemory(const char *, bool = true, bool = true) { GBE_local_lobby = GBE_LocalLobby{}; }
@@ -831,6 +951,8 @@ public:
     { generic_lobby_id = CSteamID(0xBEEF); if (matched_lobby) { *matched_lobby = GBE_local_lobby; matched_lobby->lobby_id = lobby_id; } return GBE_local_lobby.active && GBE_local_lobby.lobby_id == lobby_id; }
     void GBE_DiscardQueuedDotaLaunchMessagesForAbandon(const char *) {}
     void GBE_MarkDotaAbandonedLobbySuppressed(uint64, const char *) {}
+    // --- Lobby/chat hooks ---
+
     bool GBE_QueueDotaPostGameTeardown(const char *, bool wrapped, const std::string *outer_session_field_raw, bool, bool, bool)
     {
         if (GBE_local_lobby.chat_channel_id != 0)
@@ -845,7 +967,13 @@ public:
     bool GBE_MaybeHandleDotaPracticeLobbyKicked(const char *) { return false; }
     bool GBE_SetDotaLobbyMemberRuntimeState(uint64 steam_id, bool connected, uint32 hero_id, bool has_hero_id)
     {
-        (void)steam_id; (void)connected; (void)hero_id; (void)has_hero_id;
+        if (g_action_recorder)
+            g_action_recorder->record_runtime_state(steam_id, connected, hero_id, has_hero_id);
+        if (steam_id == GBE_local_lobby.owner_steam_id) {
+            GBE_local_lobby.owner_connected = connected;
+            if (has_hero_id)
+                GBE_local_lobby.owner_hero_id = hero_id;
+        }
         return true;
     }
     bool GBE_ShouldHoldDotaLanLaunchForRemoteMembers(uint32 next_game_state, uint32 *remote_count_out, uint32 *connected_remote_count_out) const
@@ -934,9 +1062,9 @@ public:
     bool GBE_HandleDotaDirect7034Request(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     void GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(uint64 owner_steam_id, uint64 source_job);
     void GBE_HandleDotaDirect7034DisconnectedPlayers(const std::vector<gbe::proto_wire::Dota7034DisconnectedPlayer> &disconnected_players, uint64 source_job);
-    void GBE_HandleDotaDirect7034RuntimeUpdates(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RequestShape &shape, bool has_source_job, uint64 source_job, bool &queued_runtime_lobby_update);
-    void GBE_HandleDotaDirect7034StrategyTime(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RequestShape &shape, bool has_source_job, uint64 source_job, bool &queued_runtime_lobby_update);
-    void GBE_HandleDotaDirect7034StrategyTimeFallback(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RequestShape &shape, bool has_source_job, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034RuntimeUpdates(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RuntimeRequest &request, bool has_source_job, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034StrategyTime(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RuntimeRequest &request, bool has_source_job, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034StrategyTimeFallback(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RuntimeRequest &request, bool has_source_job, uint64 source_job, bool &queued_runtime_lobby_update);
     void GBE_HandleDotaDirect7034StrategyTimePreserve(uint32 request_emsg, uint64 source_job, bool &queued_runtime_lobby_update);
     bool GBE_HandleDotaDirect7034Response(uint32 request_emsg, const gbe::proto_wire::Dota7034RequestShape &shape, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     void GBE_HandleDotaDirect7034LaunchPoll(uint32 request_emsg, uint64 source_job, bool &queued_runtime_lobby_update);
@@ -955,7 +1083,7 @@ private:
 };
 
 // =====================================================================
-// Steam_Friends stub (needed by some handler TUs)
+// Platform service stubs: Steam_Friends and Steam_Matchmaking
 // =====================================================================
 
 class Steam_Friends
@@ -965,7 +1093,6 @@ public:
 };
 
 // =====================================================================
-// Steam_Matchmaking stub
 // =====================================================================
 
 class Steam_Matchmaking
@@ -990,7 +1117,11 @@ public:
     std::vector<CSteamID> GetLobbyMemberListSnapshot(CSteamID lobby_id)
     { (void)lobby_id; return {}; }
     bool KickLobbyMemberForDota(CSteamID lobby_id, CSteamID member_id)
-    { (void)lobby_id; (void)member_id; return true; }
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_lobby_kick(lobby_id.ConvertToUint64(), member_id.ConvertToUint64());
+        return true;
+    }
 };
 
 #endif // GBE_DOTA_HANDLER_TEST_STUBS_H

@@ -39,10 +39,6 @@ bool GBE_AdaptDotaJoinChatChannelResponsePayload(
     uint32 channel_type,
     std::string &message);
 
-// Reconnect context cache (defined in steam_game_coordinator.cpp)
-extern bool GBE_recent_dota_reconnect_context_valid;
-extern GBE_DotaReconnectContext GBE_recent_dota_reconnect_context;
-
 // Shared lobby state cache (defined in steam_game_coordinator.cpp)
 struct GBE_SharedDotaLobbyState;
 extern GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
@@ -90,10 +86,10 @@ extern const std::array<uint8, 8> GBE_kOldDotaPersonaSteamIdFixed64;
 extern const std::array<uint8, 4> GBE_kOldDotaAccountIdFixed32;
 extern const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyMatchIdVarint;
 extern const std::array<uint8, 8> GBE_kOldDotaPracticeLobbyServerIdFixed64;
-extern const char *GBE_kOldDotaPracticeLobbyLobbyIdText;
-extern const char *GBE_kOldDotaPracticeLobbyLobbyIdTextAlt;
+extern const char * const GBE_kOldDotaPracticeLobbyLobbyIdText;
+extern const char * const GBE_kOldDotaPracticeLobbyLobbyIdTextAlt;
 extern const uint32 GBE_kSteamTicketAuthComplete;
-extern const char *GBE_kDotaAbandonPersonaStateInitHex;
+extern const char * const GBE_kDotaAbandonPersonaStateInitHex;
 
 // Shared helper functions (defined in steam_game_coordinator.cpp)
 bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
@@ -220,7 +216,7 @@ extern GBE_DotaServerHelloContext GBE_last_dota_server_hello_context;
 // helpers have transitive dependencies on List Z statics that stay in the
 // main file, so their definitions cannot move with the target member
 // functions — only external linkage is granted here.
-extern const char *GBE_kDotaOfficial032PracticeLobby26Hex;
+extern const char * const GBE_kDotaOfficial032PracticeLobby26Hex;
 
 bool GBE_ReplayDotaPracticeLobbyOfficial26Payload(
     const char *wrapped_template_hex,
@@ -410,7 +406,7 @@ bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl(
 // Forward declaration for the lobby-objects builder signature below.
 namespace gbe::gc_message { struct DotaPracticeLobbyObjects; }
 
-extern const char *GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex;
+extern const char * const GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex;
 extern const uint8 GBE_kDotaPracticeLobbyCacheSubscribedTemplate[312];
 
 void GBE_LogGCProtoBoundary(const char *scope, const char *direction, void *self, bool is_server, uint32 emsg, const void *data, uint32 size);
@@ -539,34 +535,5 @@ bool GBE_ExtractDirectDotaServerHelloContext(uint32 unMsgType, const void *pubDa
 bool GBE_BuildDirectDotaClientWelcome(uint64 steam_id, uint32 app_id, uint32 account_id, const GBE_DotaHelloContext &context, std::string &message);
 
 bool GBE_ComposeDotaClientWelcome(uint64 steam_id, uint32 app_id, uint32 account_id, const GBE_DotaHelloContext &context, std::string &message);
-
-// --- Extracted pure functions from gbe_dota_handlers.cpp ---
-
-struct GBE_DotaEquipOp {
-    uint64_t item_id{};
-    uint32_t new_class{};
-    uint32_t new_slot{};
-    uint32_t style_index{255u};
-    bool has_item_id{};
-    bool has_new_class{};
-    bool has_new_slot{};
-};
-
-// Parses repeated equip operations from a ClientToGCEquipItemsRequest body.
-// Body layout: repeated field 1 (tag 0x0a, length-delimited) sub-messages,
-// each containing varint fields 1=item_id, 2=new_class, 3=new_slot, 4=style_index.
-bool GBE_ParseDotaEquipOps(const uint8 *body, size_t body_size, std::vector<GBE_DotaEquipOp> &equip_ops);
-
-// Updates an item's attr 400 (unlocked styles bitmask) by OR-ing in the
-// style_index bit. If attr 400 doesn't exist, creates it with all bits set
-// (LAN behavior). Also sets item.style to the requested index.
-// Returns true if style_index is in range and the item was modified.
-bool GBE_ApplyDotaUnlockStyleBitmask(Econ_Item &item, uint32 style_index);
-
-// Builds a CMsgSOSingleObject serialized string from an Econ_Item.
-// type_id is set to 1, object_data is the item's protobuf serialization.
-bool GBE_BuildSOSingleObjectFromItem(const Econ_Item &item, const CSteamID &steam_id, std::string &output);
-
-std::string GBE_SerializeEconItemToGcprotobuf(const Econ_Item &item, CSteamID steam_id, uint32 gc_version, bool is_portal2);
 
 #endif // __INCLUDED_GBE_DOTA_GC_INTERNAL_H__

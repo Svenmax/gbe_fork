@@ -18,10 +18,12 @@
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
 #include "gbe_dota_protocol_constants.h"
+#include "gbe_dota_action_model.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_payload_item_helpers.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_shared.h"
@@ -172,6 +174,89 @@ inline std::string build_equip_response_body(uint64_t cache_version)
     return body;
 }
 
+struct EquipItemsServerForwardPlan {
+    bool enabled{};
+    bool unsubscribe_first{};
+    const char *cache_reason{};
+};
+
+struct EquipItemsPlanningContext {
+    bool is_dota_client{};
+    bool server_gc_has_active_lobby{};
+    bool lobby_snapshot_refresh_available{};
+};
+
+struct EquipItemsPlan {
+    bool parse_failed{};
+    std::vector<GBE_DotaEquipOp> equip_ops;
+    std::vector<Econ_Item> items_after_mutation;
+    std::unordered_set<uint64_t> modified_item_ids;
+    std::string response_body;
+    uint64_t cache_version{};
+    EquipItemsServerForwardPlan server_forward;
+    bool broadcast_equipped_items{};
+    const char *snapshot_refresh_reason{};
+    GBE_DotaActionList actions;
+};
+
+inline EquipItemsPlan plan_equip_items_request(
+    const uint8 *body,
+    size_t body_size,
+    const std::vector<Econ_Item> &current_items,
+    uint64_t cache_version,
+    const EquipItemsPlanningContext &context)
+{
+    EquipItemsPlan plan;
+    plan.cache_version = cache_version;
+    plan.items_after_mutation = current_items;
+
+    if (!GBE_ParseDotaEquipOps(body, body_size, plan.equip_ops)) {
+        plan.parse_failed = true;
+        return plan;
+    }
+
+    plan.modified_item_ids = apply_equip_ops_to_items(plan.equip_ops, plan.items_after_mutation);
+    plan.response_body = build_equip_response_body(cache_version);
+
+    if (!plan.modified_item_ids.empty()) {
+        plan.actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, 26u | GBE_kProtoMask });
+    }
+    plan.actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, 2570u | GBE_kProtoMask, plan.response_body });
+    plan.actions.push_back(GBE_DotaAction{ GBE_DotaActionType::SaveItemsToFile });
+
+    if (context.is_dota_client && !plan.modified_item_ids.empty()) {
+        if (context.server_gc_has_active_lobby) {
+            plan.server_forward.enabled = true;
+            plan.server_forward.unsubscribe_first = true;
+            plan.server_forward.cache_reason = "equip_forward_host_resubscribe_server";
+            plan.actions.push_back(GBE_DotaAction{ GBE_DotaActionType::ServerGcForward, 0u, std::string(), 0u, 0u, 0u, plan.server_forward.cache_reason });
+            for (size_t i = 0; i < plan.modified_item_ids.size(); ++i) {
+                plan.actions.push_back(GBE_DotaAction{ GBE_DotaActionType::ServerGcForward, 21u | GBE_kProtoMask });
+            }
+            plan.actions.push_back(GBE_DotaAction{ GBE_DotaActionType::ServerGcForward, 26u | GBE_kProtoMask });
+        }
+
+        bool has_equipped_items = false;
+        for (const auto &item : plan.items_after_mutation) {
+            if (!item.equip_states.empty()) {
+                has_equipped_items = true;
+                break;
+            }
+        }
+        plan.broadcast_equipped_items = has_equipped_items;
+        if (plan.broadcast_equipped_items) {
+            plan.actions.push_back(GBE_DotaAction{ GBE_DotaActionType::NetworkBroadcast });
+        }
+    }
+
+    if (context.lobby_snapshot_refresh_available) {
+        plan.snapshot_refresh_reason = "equip_items_refresh";
+        plan.actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LobbySnapshotRefresh, 0u, std::string(), 0u, 0u, 0u, plan.snapshot_refresh_reason });
+    }
+
+    return plan;
+}
+
 // --- Pure item lookup helpers ---
 
 inline Econ_Item *find_item_by_id(std::vector<Econ_Item> &items, uint64 id)
@@ -193,6 +278,12 @@ inline bool erase_item_by_id(std::vector<Econ_Item> &items, uint64 id)
 }
 
 } // anonymous namespace
+
+void Steam_Game_Coordinator::GBE_SaveDotaItemsFromExecutor(const char *reason)
+{
+    GBE_GC_DebugLog("GC_DOTA_DIRECT", "persisting Dota items from executor reason=%s", reason ? reason : "");
+    save_items_to_file();
+}
 
 // ============================================================================
 // Handler implementations
@@ -351,9 +442,42 @@ bool Steam_Game_Coordinator::GBE_HandleDotaSetItemStyleRequest(const uint8 *body
 
 
 bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job) {
-    // Step 1: Parse equip ops (pure helper in gbe_dota_gc_payload_helpers.cpp)
-    std::vector<GBE_DotaEquipOp> equip_ops;
-    if (!GBE_ParseDotaEquipOps(body, body_size, equip_ops)) {
+    // Generate a candidate cache version without committing it until parse succeeds.
+    static uint64_t equip_cache_version = 0;
+    uint64_t next_cache_version = equip_cache_version;
+    if (next_cache_version == 0) {
+        next_cache_version = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::system_clock::now().time_since_epoch()
+            ).count()
+        );
+    }
+    next_cache_version++;
+
+    Steam_Client *steam_client = nullptr;
+    Steam_Game_Coordinator *server_gc = nullptr;
+    const bool is_dota_client = !is_server && gc_profile == GC_PROFILE_DOTA2;
+    if (is_dota_client) {
+        steam_client = get_steam_client();
+        server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
+    }
+
+    EquipItemsPlanningContext planning_context{};
+    planning_context.is_dota_client = is_dota_client;
+    planning_context.server_gc_has_active_lobby = server_gc && server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id);
+    planning_context.lobby_snapshot_refresh_available = is_dota_client &&
+        GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
+        GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 2u &&
+        GBE_dota_private_lobby_snapshot_replayed;
+
+    EquipItemsPlan plan = plan_equip_items_request(
+        body,
+        body_size,
+        items,
+        next_cache_version,
+        planning_context);
+
+    if (plan.parse_failed) {
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "failed parsing direct 2569 EquipItems source_job=%llu body_size=%zu",
@@ -363,36 +487,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         return true;
     }
 
-    // Step 2: Apply equip ops to inventory (pure helper on items vector)
-    std::unordered_set<uint64_t> modified_item_ids = apply_equip_ops_to_items(equip_ops, items);
+    equip_cache_version = next_cache_version;
+    items = plan.items_after_mutation;
 
-    GBE_GC_DebugLog(
-        "GC_DOTA_DIRECT",
-        "equip result: modified_items=%zu total_ops=%zu",
-        modified_item_ids.size(), equip_ops.size()
-    );
-
-    // Step 3: Generate cache version (coordinator-owned static state)
-    static uint64_t equip_cache_version = 0;
-    if (equip_cache_version == 0) {
-        equip_cache_version = static_cast<uint64_t>(
-            std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::system_clock::now().time_since_epoch()
-            ).count()
-        );
-    }
-    equip_cache_version++;
-
-    // Step 4: Build and push SO UpdateMultiple (emsg=26) if items were modified
     std::string update_message;
-    if (!modified_item_ids.empty()) {
+    if (!plan.modified_item_ids.empty()) {
         CMsgSOMultipleObjects update_msg;
 
         auto *owner = update_msg.mutable_owner_soid();
         owner->set_type(1u);
         owner->set_id(settings->get_local_steam_id().ConvertToUint64());
 
-        for (uint64_t mid : modified_item_ids) {
+        for (uint64_t mid : plan.modified_item_ids) {
             for (const Econ_Item &item : items) {
                 if (item.id != mid) continue;
                 auto *obj = update_msg.add_objects();
@@ -402,32 +508,37 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
             }
         }
 
-        update_msg.set_version(equip_cache_version);
+        update_msg.set_version(plan.cache_version);
         update_msg.set_service_id(1u);
 
-        {
-            uint32_t flagged_emsg = 26u | GBE_kProtoMask;
-            uint32_t hdr_len = 0;
-            update_message.resize(sizeof(flagged_emsg) + sizeof(hdr_len));
-            memcpy(&update_message[0], &flagged_emsg, sizeof(flagged_emsg));
-            memcpy(&update_message[sizeof(flagged_emsg)], &hdr_len, sizeof(hdr_len));
-            update_msg.AppendToString(&update_message);
-        }
+        uint32_t flagged_emsg = 26u | GBE_kProtoMask;
+        uint32_t hdr_len = 0;
+        update_message.resize(sizeof(flagged_emsg) + sizeof(hdr_len));
+        memcpy(&update_message[0], &flagged_emsg, sizeof(flagged_emsg));
+        memcpy(&update_message[sizeof(flagged_emsg)], &hdr_len, sizeof(hdr_len));
+        update_msg.AppendToString(&update_message);
+    }
 
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "equip result: modified_items=%zu total_ops=%zu",
+        plan.modified_item_ids.size(), plan.equip_ops.size()
+    );
+
+    // Step 4: Push planned SO UpdateMultiple (emsg=26) if items were modified.
+    if (!update_message.empty()) {
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "replying req=2569 resp=26 source_job=%llu size=%zu note=SO cache update modified_items=%zu",
             static_cast<unsigned long long>(source_job),
             update_message.size(),
-            modified_item_ids.size()
+            plan.modified_item_ids.size()
         );
         push_incoming_now(26u | GBE_kProtoMask, update_message);
     }
 
-    // Step 5: Build and push local response (emsg=2570) using pure body builder
+    // Step 5: Build and push local response (emsg=2570) using planned body.
     {
-        std::string resp_body = build_equip_response_body(equip_cache_version);
-
         std::string response_message;
         uint32_t flagged_emsg = 2570u | GBE_kProtoMask;
         CMsgProtoBufHeader response_protohdr;
@@ -442,21 +553,21 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         memcpy(&response_message[0], &flagged_emsg, sizeof(flagged_emsg));
         memcpy(&response_message[sizeof(flagged_emsg)], &hdr_len, sizeof(hdr_len));
         response_message += serialized_protohdr;
-        response_message += resp_body;
+        response_message += plan.response_body;
 
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "replying req=2569 resp=2570 source_job=%llu size=%zu note=equip response count=%zu version=%llu",
             static_cast<unsigned long long>(source_job),
             response_message.size(),
-            equip_ops.size(),
-            static_cast<unsigned long long>(equip_cache_version)
+            plan.equip_ops.size(),
+            static_cast<unsigned long long>(plan.cache_version)
         );
         push_incoming_now(2570u | GBE_kProtoMask, response_message);
     }
 
     // Step 6: Persist inventory
-    save_items_to_file();
+    GBE_SaveDotaItemsFromExecutor("equip_items");
 
     // Step 7: Forward to server GC + broadcast via network (only when local GC
     // is a DOTA2 client, not a server, and items were modified).
@@ -473,19 +584,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
     // CacheSubscribed (emsg=24, owner_type=1) containing ALL currently
     // equipped items. This guarantees the engine has a valid SO cache
     // for the player before the individual Create/Update messages arrive.
-    if (!is_server && gc_profile == GC_PROFILE_DOTA2 && !update_message.empty()) {
-        Steam_Client *steam_client = get_steam_client();
-        Steam_Game_Coordinator *server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
-        if (server_gc && server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id)) {
+    if (plan.server_forward.enabled) {
+        if (server_gc) {
             const uint64 player_steam64 = settings->get_local_steam_id().ConvertToUint64();
             const CSteamID player_steam_id = settings->get_local_steam_id();
 
             // Push full item cache first (CacheSubscribed) so engine has SO cache
-            GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, player_steam_id, items, true, "equip_forward_host_resubscribe_server");
+            GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, player_steam_id, items, plan.server_forward.unsubscribe_first, plan.server_forward.cache_reason);
 
             // Then send emsg=21 (k_ESOMsg_Create) for each modified item
-            uint64_t create_version = equip_cache_version - modified_item_ids.size();
-            for (uint64_t mid : modified_item_ids) {
+            uint64_t create_version = plan.cache_version - plan.modified_item_ids.size();
+            for (uint64_t mid : plan.modified_item_ids) {
                 for (const Econ_Item &item : items) {
                     if (item.id != mid) continue;
 
@@ -511,7 +620,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
                 "forwarded equip to server GC: emsg21_count=%zu emsg26_size=%zu lobby_id=%llu",
-                modified_item_ids.size(),
+                plan.modified_item_ids.size(),
                 update_message.size(),
                 static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
             );
@@ -580,12 +689,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
 
     // Step 8: Refresh lobby snapshot if in an active game (the snapshot is now
     // stale because equipped items changed).
-    if (!is_server && gc_profile == GC_PROFILE_DOTA2 &&
-        GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
-        GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 2u &&
-        GBE_dota_private_lobby_snapshot_replayed) {
+    if (plan.snapshot_refresh_reason) {
         GBE_dota_private_lobby_snapshot_replayed = false;
-        GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot("equip_items_refresh");
+        GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(plan.snapshot_refresh_reason);
     }
 
     return true;

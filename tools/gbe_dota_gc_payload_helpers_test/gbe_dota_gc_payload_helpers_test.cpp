@@ -50,6 +50,7 @@
 
 // Include GBE headers for function declarations
 #include "dll/gbe_dota_gc_internal.h"
+#include "dll/gbe_dota_payload_item_helpers.h"
 #include "dll/gbe_dota_protocol_constants.h"
 #include "dll/gbe_dota_request_router.h"
 #include "dll/gbe_proto_buf_header.h"
@@ -152,6 +153,42 @@ GBE_DotaReconnectContext GBE_recent_dota_reconnect_context{};
 GBE_DotaServerHelloContext GBE_last_dota_server_hello_context{};
 std::atomic<bool> GBE_dota_reconnect_eligible{true};
 
+bool GBE_GetRecentDotaReconnectContext(GBE_DotaReconnectContext *out)
+{
+    if (!out || !GBE_recent_dota_reconnect_context_valid)
+        return false;
+    *out = GBE_recent_dota_reconnect_context;
+    return true;
+}
+
+void GBE_SetRecentDotaReconnectContext(const GBE_DotaReconnectContext &ctx)
+{
+    GBE_recent_dota_reconnect_context = ctx;
+    GBE_recent_dota_reconnect_context_valid = true;
+}
+
+void GBE_ClearRecentDotaReconnectContext()
+{
+    GBE_recent_dota_reconnect_context_valid = false;
+    GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
+}
+
+bool GBE_IsDotaReconnectEligible()
+{
+    return GBE_dota_reconnect_eligible.load();
+}
+
+void GBE_SetDotaReconnectEligible(bool eligible)
+{
+    GBE_dota_reconnect_eligible.store(eligible);
+}
+
+bool GBE_ConsumeDotaReconnectEligibility()
+{
+    bool expected = true;
+    return GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false);
+}
+
 // Stub for get_full_program_path (defined in dll/base.cpp which has heavy deps)
 std::string get_full_program_path() { return "."; }
 
@@ -198,7 +235,7 @@ TEST_CASE(test_get_dota_reconnect_context)
     EXPECT_FALSE(GBE_GetDotaReconnectContext(nullptr));
 
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-    GBE_recent_dota_reconnect_context_valid = false;
+    GBE_ClearRecentDotaReconnectContext();
 
     GBE_DotaReconnectContext ctx{};
     EXPECT_FALSE(GBE_GetDotaReconnectContext(&ctx));
@@ -924,6 +961,75 @@ TEST_CASE(test_build_so_single_object_from_item)
     EXPECT_TRUE(output.find(std::string(reinterpret_cast<const char *>(&attr_value), 4)) != std::string::npos);
 }
 
+TEST_CASE(test_parse_dota7034_runtime_request)
+{
+    std::string connected_player;
+    gbe::proto_wire::append_varint_field(connected_player, 1u, 76561198000000001ULL);
+    gbe::proto_wire::append_varint_field(connected_player, 2u, 42u);
+
+    std::string leaver_state;
+    gbe::proto_wire::append_varint_field(leaver_state, 1u, 3u);
+    gbe::proto_wire::append_varint_field(leaver_state, 2u, 10u);
+
+    std::string disconnected_player;
+    gbe::proto_wire::append_varint_field(disconnected_player, 1u, 76561198000000002ULL);
+    gbe::proto_wire::append_bytes_field(disconnected_player, 3u, leaver_state);
+
+    std::string draft;
+    gbe::proto_wire::append_varint_field(draft, 1u, 76561198000000003ULL);
+    gbe::proto_wire::append_varint_field(draft, 2u, 2u);
+    gbe::proto_wire::append_varint_field(draft, 3u, 4u);
+
+    std::string body;
+    gbe::proto_wire::append_bytes_field(body, 1u, connected_player);
+    gbe::proto_wire::append_varint_field(body, 2u, 4u);
+    gbe::proto_wire::append_varint_field(body, 6u, 1u);
+    gbe::proto_wire::append_bytes_field(body, 7u, disconnected_player);
+    gbe::proto_wire::append_varint_field(body, 8u, 2u);
+    gbe::proto_wire::append_varint_field(body, 11u, 12u);
+    gbe::proto_wire::append_varint_field(body, 12u, 9u);
+    gbe::proto_wire::append_varint_field(body, 14u, 3u);
+    gbe::proto_wire::append_varint_field(body, 15u, 99u);
+    gbe::proto_wire::append_bytes_field(body, 16u, draft);
+
+    const auto request = gbe::proto_wire::parse_dota7034_runtime_request(
+        reinterpret_cast<const std::uint8_t *>(body.data()),
+        body.size());
+
+    EXPECT_TRUE(request.has_connected_player);
+    EXPECT_TRUE(request.connected_players.size() == 1u);
+    EXPECT_TRUE(request.connected_players[0].has_steam_id);
+    EXPECT_EQ(request.connected_players[0].steam_id, 76561198000000001ULL);
+    EXPECT_TRUE(request.connected_players[0].has_hero_id);
+    EXPECT_EQ(request.connected_players[0].hero_id, 42u);
+    EXPECT_TRUE(request.has_disconnected_player);
+    EXPECT_TRUE(request.disconnected_players.size() == 1u);
+    EXPECT_EQ(request.disconnected_players[0].steam_id, 76561198000000002ULL);
+    EXPECT_EQ(request.disconnected_players[0].lobby_state, 3u);
+    EXPECT_EQ(request.disconnected_players[0].game_state, 10u);
+    EXPECT_TRUE(request.has_game_state);
+    EXPECT_EQ(request.game_state, 4u);
+    EXPECT_TRUE(request.has_send_reason);
+    EXPECT_EQ(request.send_reason, 2u);
+    EXPECT_TRUE(request.has_first_blood_happened);
+    EXPECT_EQ(request.first_blood_happened, 1u);
+    EXPECT_TRUE(request.has_radiant_kills);
+    EXPECT_EQ(request.radiant_kills, 12u);
+    EXPECT_TRUE(request.has_dire_kills);
+    EXPECT_EQ(request.dire_kills, 9u);
+    EXPECT_TRUE(request.has_radiant_lead);
+    EXPECT_EQ(request.radiant_lead, 3u);
+    EXPECT_TRUE(request.has_building_state);
+    EXPECT_EQ(request.building_state, 99u);
+    EXPECT_TRUE(request.has_draft);
+    EXPECT_TRUE(request.has_draft_steam_id);
+    EXPECT_EQ(request.draft_steam_id, 76561198000000003ULL);
+    EXPECT_TRUE(request.has_draft_team);
+    EXPECT_EQ(request.draft_team, 2u);
+    EXPECT_TRUE(request.has_draft_team_slot);
+    EXPECT_EQ(request.draft_team_slot, 4u);
+}
+
 // =====================================================================
 // Main entry point
 // =====================================================================
@@ -1010,8 +1116,11 @@ int main()
     std::printf("[24/25] GBE_ApplyDotaUnlockStyleBitmask...\n");
     test_apply_dota_unlock_style_bitmask();
 
-    std::printf("[25/25] GBE_BuildSOSingleObjectFromItem...\n");
+    std::printf("[25/26] GBE_BuildSOSingleObjectFromItem...\n");
     test_build_so_single_object_from_item();
+
+    std::printf("[26/26] parse_dota7034_runtime_request...\n");
+    test_parse_dota7034_runtime_request();
 
     std::printf("All payload helper tests complete.\n\n");
 

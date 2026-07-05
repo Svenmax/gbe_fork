@@ -18,6 +18,7 @@
 #include "dll/steam_networking_socketsserialized.h"
 #include "dll/steam_networking_sockets.h"
 #include "dll/gbe_dota_reconnect_shared.h"
+#include "gbe_dota_lobby_state.h"
 
 #include <cstdio>
 #include <cstdint>
@@ -517,12 +518,13 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
         GBE_DotaReconnectContext ctx{};
         const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
         const std::string selected_endpoint = GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(ctx.connect, local_id, ctx.owner_steam_id);
-        const bool remote_matches = has_ctx && remote_id == ctx.server_id;
-        const bool state_ready = has_ctx && GBE_DotaReconnectContextIsStarted(ctx);
-        const bool has_connect = has_ctx && ctx.connect[0] != '\0';
-        const bool is_arcade_context = has_ctx && ctx.custom_game_id != 0ull;
-        const bool local_is_owner = local_id != 0ull && local_id == ctx.owner_steam_id;
-        const bool eligible_before = GBE_dota_reconnect_eligible.load();
+        const bool eligible_before = GBE_IsDotaReconnectEligible();
+        const auto decision = gbe::dota_lobby_state::compute_reconnect_interception_decision(
+            ctx,
+            has_ctx,
+            local_id,
+            remote_id,
+            eligible_before);
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
             "SendP2PRendezvous gate local_id=%llu remote_id=%llu connection_id=%u size=%u has_ctx=%u server_id=%llu game_state=%u custom_game_id=%llu arcade=%u remote_matches=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s endpoint_raw=%s local_is_owner=%u",
@@ -534,25 +536,24 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
             (unsigned long long)ctx.server_id,
             ctx.game_state,
             (unsigned long long)ctx.custom_game_id,
-            is_arcade_context ? 1u : 0u,
-            remote_matches ? 1u : 0u,
-            state_ready ? 1u : 0u,
-            has_connect ? 1u : 0u,
+            decision.arcade_context ? 1u : 0u,
+            decision.remote_matches_server ? 1u : 0u,
+            decision.state_ready ? 1u : 0u,
+            decision.has_connect ? 1u : 0u,
             eligible_before ? 1u : 0u,
             selected_endpoint.c_str(),
             ctx.connect,
-            local_is_owner ? 1u : 0u
+            decision.local_is_owner ? 1u : 0u
         );
-        if (remote_matches && state_ready && has_connect && !local_is_owner) {
-            bool expected = true;
-            if (GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false)) {
+        if (decision.p2p_rendezvous_candidate) {
+            if (GBE_ConsumeDotaReconnectEligibility()) {
                 GBE_ReconnectLog("GBE_RECONNECT",
                     "Intercepted SendP2PRendezvous: remote_id=%llu matches server_id=%llu, firing GameServerChangeRequested_t endpoint=%s endpoint_raw=%s local_is_owner=%u",
                     (unsigned long long)remote_id,
                     (unsigned long long)ctx.server_id,
                     selected_endpoint.c_str(),
                     ctx.connect,
-                    local_is_owner ? 1u : 0u);
+                    decision.local_is_owner ? 1u : 0u);
 
                 GameServerChangeRequested_t server_change{};
                 std::strncpy(server_change.m_rgchServer, selected_endpoint.c_str(), sizeof(server_change.m_rgchServer) - 1);
@@ -747,7 +748,7 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     if (has_ctx && ctx.custom_game_id == 0ull)
         return;
 
-    const bool eligible_before = GBE_dota_reconnect_eligible.load();
+    const bool eligible_before = GBE_IsDotaReconnectEligible();
     if (!eligible_before)
         return;
 
@@ -777,10 +778,12 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     const std::string payload_fields = GBE_FormatSerializedPayloadFields(pMsg, cbMsg);
     const std::string payload_details = GBE_FormatSerializedStateDetails(pMsg, cbMsg);
     const std::string endpoint = GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(ctx.connect, local_id, ctx.owner_steam_id);
-    const bool state_ready = has_ctx && GBE_DotaReconnectContextIsStarted(ctx);
-    const bool has_connect = has_ctx && ctx.connect[0] != '\0';
-    const bool is_arcade_context = has_ctx && ctx.custom_game_id != 0ull;
-    const bool local_is_owner = local_id != 0ull && local_id == ctx.owner_steam_id;
+    const auto decision = gbe::dota_lobby_state::compute_reconnect_interception_decision(
+        ctx,
+        has_ctx,
+        local_id,
+        ctx.server_id,
+        eligible_before);
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
         "PostConnectionStateMsg gate size=%u prefix=%s fields=%s details=%s has_ctx=%u server_id=%llu game_state=%u custom_game_id=%llu arcade=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s endpoint_raw=%s local_is_owner=%u",
@@ -792,19 +795,19 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         (unsigned long long)ctx.server_id,
         ctx.game_state,
         (unsigned long long)ctx.custom_game_id,
-        is_arcade_context ? 1u : 0u,
-        state_ready ? 1u : 0u,
-        has_connect ? 1u : 0u,
+        decision.arcade_context ? 1u : 0u,
+        decision.state_ready ? 1u : 0u,
+        decision.has_connect ? 1u : 0u,
         eligible_before ? 1u : 0u,
         endpoint.c_str(),
         ctx.connect,
-        local_is_owner ? 1u : 0u
+        decision.local_is_owner ? 1u : 0u
     );
 
-    if (!state_ready || !has_connect)
+    if (!decision.state_ready || !decision.has_connect)
         return;
 
-    if (!eligible_before) {
+    if (!decision.reconnect_eligible) {
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
             "skipping PostConnectionStateMsg direct connect reason=reconnect_not_eligible server_id=%llu endpoint=%s endpoint_raw=%s",
@@ -815,7 +818,7 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         return;
     }
 
-    if (local_is_owner) {
+    if (decision.local_is_owner) {
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
             "skipping PostConnectionStateMsg direct connect for local owner server_id=%llu endpoint=%s endpoint_raw=%s",

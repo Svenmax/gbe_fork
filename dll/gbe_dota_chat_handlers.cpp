@@ -533,8 +533,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         }
     }
     if (d.leaving_non_current_channel_during_abandon) {
-        GBE_pending_dota_abandon_finalize_after_7014 = true;
-        GBE_pending_dota_abandon_finalize_lobby_id = lobby_id;
+        GBE_SetPendingDotaAbandonFinalizeAfterOtherLeftChannel(lobby_id);
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Handling pre-postgame 7272 during abandon teardown (replying 7014, reset after retrieval). request_channel=%llu current_postgame_channel=%llu pre_postgame_channel=%llu matched_pre=%u lobby_id=%llu",

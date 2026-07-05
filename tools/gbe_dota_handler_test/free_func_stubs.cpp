@@ -14,9 +14,6 @@
 #include "dll/gbe_dota_gc_internal.h"
 #include "dll/gbe_proto_wire.h"
 
-#include <cstdarg>
-#include <cstdio>
-#include <cstring>
 #include <array>
 
 // --- Logging stub (no-op) ---
@@ -40,7 +37,7 @@ const char *GBE_DescribeDotaLaunchPhase(uint32 phase)
 }
 
 GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
-const char *GBE_kDotaAbandonPersonaStateInitHex = "";
+const char * const GBE_kDotaAbandonPersonaStateInitHex = "";
 bool GBE_pending_reset_after_cache_unsubscribed = false;
 uint64 GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
 bool GBE_pending_dota_normal_signout_finalize_after_25 = false;
@@ -51,6 +48,42 @@ std::atomic<bool> GBE_dota_reconnect_eligible{true};
 bool GBE_dota_host_showcase_equip_pushed = false;
 const std::array<uint8, 8> GBE_kOldDotaLobbyIdVarint = { 0x83, 0xcf, 0xa2, 0xb4, 0xa2, 0xff, 0xf9, 0x34 };
 const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyMatchIdVarint = { 0xae, 0xbb, 0xa3, 0xcf, 0x06 };
+
+bool GBE_GetRecentDotaReconnectContext(GBE_DotaReconnectContext *out)
+{
+    if (!out || !GBE_recent_dota_reconnect_context_valid)
+        return false;
+    *out = GBE_recent_dota_reconnect_context;
+    return true;
+}
+
+void GBE_SetRecentDotaReconnectContext(const GBE_DotaReconnectContext &ctx)
+{
+    GBE_recent_dota_reconnect_context = ctx;
+    GBE_recent_dota_reconnect_context_valid = true;
+}
+
+void GBE_ClearRecentDotaReconnectContext()
+{
+    GBE_recent_dota_reconnect_context_valid = false;
+    GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
+}
+
+bool GBE_IsDotaReconnectEligible()
+{
+    return GBE_dota_reconnect_eligible.load();
+}
+
+void GBE_SetDotaReconnectEligible(bool eligible)
+{
+    GBE_dota_reconnect_eligible.store(eligible);
+}
+
+bool GBE_ConsumeDotaReconnectEligibility()
+{
+    bool expected = true;
+    return GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false);
+}
 
 void GBE_LogDotaResponsePacket(const char *reason, uint32 inner_emsg, bool wrapped, const std::string &inner_payload, const std::string &outbound_payload, uint64 job_id, uint32 lobby_state, uint32 lobby_game_state)
 {

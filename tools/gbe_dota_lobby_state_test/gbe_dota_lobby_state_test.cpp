@@ -15,6 +15,7 @@
 #include "dll/dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_protocol_constants.h"
 
+#include <cstring>
 #include <iostream>
 #include <string>
 
@@ -209,6 +210,177 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(plan.launch_phase, GBE_kDotaLaunchPhaseSetupSynced, "queued apply no bump for nonzero game_state");
     }
 
+    // compose_practice_lobby_launch_event_plan: 7041 emits the initial details update and setup presence intent.
+    {
+        auto plan = gbe::dota_lobby_state::compose_practice_lobby_launch_event_plan(26u);
+        ok &= expect_true(plan.initial_details.send, "7041 initial details is sent");
+        ok &= expect_eq_u32(plan.initial_details.emsg, 26u, "7041 initial details emsg");
+        ok &= expect_eq_str(plan.initial_details.reason, "7041_initial_26", "7041 initial details reason");
+        ok &= expect_true(plan.presence.update, "7041 presence update intent");
+        ok &= expect_eq_str(plan.presence.persona_reason, "7041_launch_init", "7041 persona reason");
+    }
+
+    return ok;
+}
+
+bool test_launch_lifecycle_transition_decision()
+{
+    bool ok = true;
+
+    // 7070 ready-up: custom game RUN state advances to wait-for-players and requests publish + details update.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.custom_game.game_id = 500ull;
+        lobby.state = 2u;
+        lobby.game_state = 0u;
+        lobby.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+        auto d = gbe::dota_lobby_state::compute_custom_game_ready_up_transition(
+            lobby,
+            1u,
+            GBE_kDotaLaunchPhaseRunQueued,
+            "7070_custom_game_ready_up_run_ack");
+        ok &= expect_true(d.apply_lobby_state, "7070 applies lobby state");
+        ok &= expect_eq_u32(d.next_state, 2u, "7070 next state");
+        ok &= expect_eq_u32(d.next_game_state, 1u, "7070 next game_state");
+        ok &= expect_true(d.publish_shared_state, "7070 publishes shared state");
+        ok &= expect_true(d.send_details_update, "7070 sends details update");
+        ok &= expect_eq_str(d.reason, "7070_custom_game_ready_up_run_ack", "7070 reason");
+    }
+
+    // 7070 ready_state=0 only sends the ready-up status response at the handler layer.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.custom_game.game_id = 500ull;
+        lobby.state = 2u;
+        lobby.game_state = 0u;
+        lobby.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+        auto d = gbe::dota_lobby_state::compute_custom_game_ready_up_transition(
+            lobby,
+            0u,
+            GBE_kDotaLaunchPhaseRunQueued,
+            "7070_custom_game_ready_up_run_ack");
+        ok &= expect_false(d.apply_lobby_state, "7070 ready_state zero skips transition");
+        ok &= expect_false(d.send_details_update, "7070 ready_state zero skips details update");
+    }
+
+    // 8052 after server setup sync advances to RUN through the runtime update queue.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.custom_game.game_id = 500ull;
+        lobby.state = 1u;
+        lobby.game_state = 0u;
+        lobby.match_id = 600ull;
+        lobby.game_start_time = 111u;
+        lobby.connect = "1.2.3.4:27015";
+        lobby.launch_phase = GBE_kDotaLaunchPhaseSetupSynced;
+        auto d = gbe::dota_lobby_state::compute_custom_game_started_loading_transition(
+            lobby,
+            true,
+            GBE_kDotaLaunchPhaseSetupSynced,
+            GBE_kDotaLaunchPhaseRunQueued,
+            "8052_started_loading");
+        ok &= expect_true(d.apply_lobby_state, "8052 applies run state");
+        ok &= expect_true(d.mark_launch_phase, "8052 marks run phase");
+        ok &= expect_eq_u32(d.launch_phase, GBE_kDotaLaunchPhaseRunQueued, "8052 launch phase");
+        ok &= expect_eq_u32(d.next_state, 2u, "8052 next state");
+        ok &= expect_eq_u32(d.next_game_state, 0u, "8052 next game_state");
+        ok &= expect_true(d.queue_runtime_lobby_update, "8052 queues runtime update");
+        ok &= expect_false(d.publish_shared_state, "8052 run advance skips fallback publish intent");
+    }
+
+    // 8052 before setup sync falls back to publish + details update.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.custom_game.game_id = 500ull;
+        lobby.state = 2u;
+        lobby.game_state = 0u;
+        lobby.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+        auto d = gbe::dota_lobby_state::compute_custom_game_started_loading_transition(
+            lobby,
+            true,
+            GBE_kDotaLaunchPhaseSetupSynced,
+            GBE_kDotaLaunchPhaseRunQueued,
+            "8052_started_loading");
+        ok &= expect_false(d.queue_runtime_lobby_update, "8052 fallback skips runtime queue");
+        ok &= expect_true(d.publish_shared_state, "8052 fallback publishes shared state");
+        ok &= expect_true(d.send_details_update, "8052 fallback sends details update");
+    }
+
+    // 8053 success marks Loaded and keeps game_state at least wait-for-players.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.custom_game.game_id = 500ull;
+        lobby.state = 1u;
+        lobby.game_state = 0u;
+        lobby.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+        auto d = gbe::dota_lobby_state::compute_custom_game_finished_loading_transition(
+            lobby,
+            true,
+            false,
+            GBE_kDotaLaunchPhaseRunQueued,
+            GBE_kDotaLaunchPhaseLoaded,
+            "8053_finished_loading");
+        ok &= expect_true(d.apply_lobby_state, "8053 applies lobby state");
+        ok &= expect_eq_u32(d.next_state, 2u, "8053 next state");
+        ok &= expect_eq_u32(d.next_game_state, 1u, "8053 next game_state floor");
+        ok &= expect_true(d.mark_launch_phase, "8053 success marks loaded");
+        ok &= expect_eq_u32(d.launch_phase, GBE_kDotaLaunchPhaseLoaded, "8053 loaded phase");
+        ok &= expect_true(d.publish_shared_state, "8053 publishes shared state");
+        ok &= expect_true(d.send_details_update, "8053 sends details update");
+    }
+
+    // 8053 load failure publishes state/details without marking the launch loaded.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.custom_game.game_id = 500ull;
+        lobby.state = 2u;
+        lobby.game_state = 0u;
+        lobby.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+        auto d = gbe::dota_lobby_state::compute_custom_game_finished_loading_transition(
+            lobby,
+            true,
+            true,
+            GBE_kDotaLaunchPhaseRunQueued,
+            GBE_kDotaLaunchPhaseLoaded,
+            "8053_load_failed");
+        ok &= expect_false(d.mark_launch_phase, "8053 failure leaves phase unchanged");
+        ok &= expect_true(d.publish_shared_state, "8053 failure publishes shared state");
+        ok &= expect_true(d.send_details_update, "8053 failure sends details update");
+    }
+
+    // 7034 custom game runtime game_state advances through the runtime update queue.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.custom_game.game_id = 500ull;
+        lobby.state = 2u;
+        lobby.game_state = 1u;
+        lobby.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+        auto d = gbe::dota_lobby_state::compute_runtime_game_state_transition(
+            lobby,
+            true,
+            true,
+            3u,
+            GBE_kDotaLaunchPhaseRunQueued,
+            "custom game 7034 game_state");
+        ok &= expect_true(d.queue_runtime_lobby_update, "7034 runtime queues update");
+        ok &= expect_eq_u32(d.next_state, 2u, "7034 runtime next state");
+        ok &= expect_eq_u32(d.next_game_state, 3u, "7034 runtime next game_state");
+    }
+
+    // 7034 launch poll emits a details-update intent except at terminal game_state 10.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.state = 1u;
+        lobby.game_state = 0u;
+        auto d = gbe::dota_lobby_state::compute_launch_poll_transition(lobby, "7034_launch_poll");
+        ok &= expect_true(d.send_details_update, "7034 launch poll details intent");
+
+        lobby.state = 2u;
+        lobby.game_state = 10u;
+        d = gbe::dota_lobby_state::compute_launch_poll_transition(lobby, "7034_launch_poll");
+        ok &= expect_false(d.send_details_update, "7034 terminal state skips launch poll details");
+    }
+
     return ok;
 }
 
@@ -351,6 +523,9 @@ bool test_owner_disconnect_and_reconnect()
         auto d = gbe::dota_lobby_state::compute_abandon_decision(lobby, false, true);
         ok &= expect_true(d.treat_as_current_game_disconnect, "current-game disconnect with server allocated");
         ok &= expect_false(d.ready_for_abandon_teardown, "not ready for teardown at game_state 0 on direct server");
+        ok &= expect_true(d.queue_cache_unsubscribed, "current-game disconnect queues 25");
+        ok &= expect_true(d.set_pending_reset_after_cache_unsubscribed, "current-game disconnect marks pending reset");
+        ok &= expect_false(d.queue_postgame_teardown, "current-game disconnect skips postgame teardown");
     }
 
     // compute_abandon_decision: treat_as_current_game_disconnect true when game_state>=1 and owner connected.
@@ -374,6 +549,11 @@ bool test_owner_disconnect_and_reconnect()
         auto d = gbe::dota_lobby_state::compute_abandon_decision(lobby, false, true);
         ok &= expect_false(d.treat_as_current_game_disconnect, "no current-game disconnect when owner disconnected");
         ok &= expect_true(d.ready_for_abandon_teardown, "ready for teardown when owner disconnected and game_state>=2");
+        ok &= expect_true(d.queue_postgame_teardown, "ready abandon queues postgame teardown");
+        ok &= expect_true(d.discard_queued_launch_messages, "ready abandon discards queued launch messages");
+        ok &= expect_true(d.suppress_abandoned_lobby, "ready abandon suppresses abandoned lobby");
+        ok &= expect_true(d.push_postgame_cache_unsubscribed, "ready abandon pushes 25 through teardown");
+        ok &= expect_true(d.push_postgame_join, "ready abandon pushes postgame join through teardown");
     }
 
     // compute_abandon_decision: not a current-game disconnect on client (non-server) even if owner connected.
@@ -475,11 +655,288 @@ bool test_owner_disconnect_and_reconnect()
     return ok;
 }
 
+bool test_reconnect_eligibility_decision()
+{
+    bool ok = true;
+
+    {
+        auto d = gbe::dota_lobby_state::compute_reconnect_eligibility_decision(
+            true,
+            true,
+            2u,
+            2u,
+            700ull,
+            true,
+            500ull,
+            true,
+            GBE_kDotaLaunchPhaseLoaded);
+        ok &= expect_true(d.context_eligible, "reconnect shared context eligible");
+        ok &= expect_true(d.custom_game, "reconnect custom game flagged");
+        ok &= expect_true(d.owner_connected, "reconnect owner connected recorded");
+        ok &= expect_true(d.launch_run_or_later, "reconnect launch run-or-later recorded");
+        ok &= expect_true(d.launch_loaded, "reconnect launch loaded recorded");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_reconnect_eligibility_decision(
+            false,
+            true,
+            2u,
+            2u,
+            700ull,
+            true,
+            0ull,
+            false,
+            0u);
+        ok &= expect_false(d.context_eligible, "reconnect rejects invalid source");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_reconnect_eligibility_decision(
+            true,
+            false,
+            2u,
+            2u,
+            700ull,
+            true,
+            0ull,
+            false,
+            0u);
+        ok &= expect_false(d.context_eligible, "reconnect rejects inactive source");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_reconnect_eligibility_decision(
+            true,
+            true,
+            1u,
+            1u,
+            700ull,
+            true,
+            0ull,
+            false,
+            0u);
+        ok &= expect_false(d.started, "reconnect not started below thresholds");
+        ok &= expect_false(d.context_eligible, "reconnect rejects not-started source");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_reconnect_eligibility_decision(
+            true,
+            true,
+            1u,
+            2u,
+            700ull,
+            true,
+            0ull,
+            false,
+            0u);
+        ok &= expect_true(d.started, "reconnect game_state threshold starts context");
+        ok &= expect_true(d.context_eligible, "reconnect accepts started game_state");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_reconnect_eligibility_decision(
+            true,
+            true,
+            2u,
+            2u,
+            0ull,
+            true,
+            0ull,
+            false,
+            0u);
+        ok &= expect_false(d.has_server_id, "reconnect missing server id recorded");
+        ok &= expect_false(d.context_eligible, "reconnect rejects missing server id");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_reconnect_eligibility_decision(
+            true,
+            true,
+            2u,
+            2u,
+            700ull,
+            false,
+            0ull,
+            false,
+            0u);
+        ok &= expect_false(d.has_connect, "reconnect missing connect recorded");
+        ok &= expect_false(d.context_eligible, "reconnect rejects missing connect");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_reconnect_eligibility_decision(
+            true,
+            true,
+            2u,
+            2u,
+            700ull,
+            true,
+            500ull,
+            false,
+            GBE_kDotaLaunchPhaseSetupSynced);
+        ok &= expect_true(d.context_eligible, "reconnect keeps existing payload eligibility before run phase");
+        ok &= expect_false(d.launch_run_or_later, "reconnect launch before run recorded");
+        ok &= expect_false(d.launch_loaded, "reconnect launch before loaded recorded");
+    }
+
+    return ok;
+}
+
+bool test_reconnect_interception_decision()
+{
+    bool ok = true;
+
+    GBE_DotaReconnectContext ctx{};
+    ctx.server_id = 700ull;
+    ctx.lobby_state = 2u;
+    ctx.game_state = 2u;
+    ctx.custom_game_id = 500ull;
+    std::strncpy(ctx.connect, "1.2.3.4:27015", sizeof(ctx.connect) - 1);
+    ctx.owner_steam_id = 42ull;
+
+    {
+        auto d = gbe::dota_lobby_state::compute_reconnect_interception_decision(
+            ctx,
+            true,
+            100ull,
+            700ull,
+            true);
+        ok &= expect_true(d.remote_matches_server, "intercept remote server match");
+        ok &= expect_true(d.state_ready, "intercept state ready");
+        ok &= expect_true(d.has_connect, "intercept has connect");
+        ok &= expect_true(d.arcade_context, "intercept arcade context");
+        ok &= expect_false(d.local_is_owner, "intercept remote player is not owner");
+        ok &= expect_true(d.p2p_rendezvous_candidate, "intercept attempts p2p rendezvous");
+        ok &= expect_true(d.can_post_connection_state, "intercept can post connection state");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_reconnect_interception_decision(
+            ctx,
+            true,
+            42ull,
+            700ull,
+            true);
+        ok &= expect_true(d.local_is_owner, "intercept owner detected");
+        ok &= expect_false(d.p2p_rendezvous_candidate, "intercept owner skips p2p rendezvous");
+        ok &= expect_false(d.can_post_connection_state, "intercept owner skips post connection state");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_reconnect_interception_decision(
+            ctx,
+            true,
+            100ull,
+            123ull,
+            true);
+        ok &= expect_false(d.remote_matches_server, "intercept remote mismatch recorded");
+        ok &= expect_false(d.p2p_rendezvous_candidate, "intercept remote mismatch skips p2p rendezvous");
+        ok &= expect_true(d.can_post_connection_state, "intercept post connection does not require remote id");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_reconnect_interception_decision(
+            ctx,
+            true,
+            100ull,
+            700ull,
+            false);
+        ok &= expect_false(d.reconnect_eligible, "intercept eligibility flag recorded");
+        ok &= expect_true(d.p2p_rendezvous_candidate, "intercept p2p candidate keeps atomic eligibility behavior");
+        ok &= expect_false(d.can_post_connection_state, "intercept ineligible skips post connection state");
+    }
+
+    {
+        GBE_DotaReconnectContext non_arcade = ctx;
+        non_arcade.custom_game_id = 0ull;
+        auto d = gbe::dota_lobby_state::compute_reconnect_interception_decision(
+            non_arcade,
+            true,
+            100ull,
+            700ull,
+            true);
+        ok &= expect_false(d.arcade_context, "intercept non-arcade recorded");
+        ok &= expect_true(d.p2p_rendezvous_candidate, "intercept p2p keeps existing non-arcade behavior");
+        ok &= expect_false(d.can_post_connection_state, "intercept post connection requires arcade context");
+    }
+
+    {
+        GBE_DotaReconnectContext missing_connect = ctx;
+        missing_connect.connect[0] = '\0';
+        auto d = gbe::dota_lobby_state::compute_reconnect_interception_decision(
+            missing_connect,
+            true,
+            100ull,
+            700ull,
+            true);
+        ok &= expect_false(d.has_connect, "intercept missing connect recorded");
+        ok &= expect_false(d.p2p_rendezvous_candidate, "intercept missing connect skips p2p rendezvous");
+        ok &= expect_false(d.can_post_connection_state, "intercept missing connect skips post connection state");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_reconnect_interception_decision(
+            ctx,
+            false,
+            100ull,
+            700ull,
+            true);
+        ok &= expect_false(d.has_context, "intercept missing context recorded");
+        ok &= expect_false(d.p2p_rendezvous_candidate, "intercept missing context skips p2p rendezvous");
+        ok &= expect_false(d.can_post_connection_state, "intercept missing context skips post connection state");
+    }
+
+    return ok;
+}
+
 // ---- Category 4: post-game teardown suppression ---------------------------
 
 bool test_post_game_teardown_suppression()
 {
     bool ok = true;
+
+    // 7035 request context captures wrapped/session/server and local lobby runtime state.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.state = 2u;
+        lobby.game_state = 1u;
+        lobby.server_id = 700ull;
+        lobby.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+        lobby.chat_channel_id = 7014ull;
+        lobby.owner_connected = true;
+        lobby.custom_game.game_id = 500ull;
+
+        gbe::dota_lobby_state::DotaAbandonRequestContext context{};
+        ok &= expect_true(gbe::dota_lobby_state::build_dota_abandon_request_context(lobby, true, true, true, context), "7035 context builds for active lobby");
+        ok &= expect_true(context.wrapped, "7035 context wrapped");
+        ok &= expect_true(context.has_wrapped_session, "7035 context session");
+        ok &= expect_true(context.is_server, "7035 context server");
+        ok &= expect_true(context.owner_connected, "7035 context owner connected");
+        ok &= expect_true(context.has_custom_game_details, "7035 context custom game");
+        ok &= expect_eq_u64(context.lobby_id, 100ull, "7035 context lobby id");
+        ok &= expect_eq_u32(context.lobby_state, 2u, "7035 context lobby state");
+        ok &= expect_eq_u32(context.game_state, 1u, "7035 context game state");
+        ok &= expect_eq_u64(context.server_id, 700ull, "7035 context server id");
+        ok &= expect_eq_u32(context.launch_phase, GBE_kDotaLaunchPhaseRunQueued, "7035 context launch phase");
+        ok &= expect_eq_u64(context.pre_postgame_chat_channel_id, 7014ull, "7035 context chat channel");
+
+        auto d = gbe::dota_lobby_state::compute_abandon_decision(context);
+        ok &= expect_true(d.ready_for_abandon_teardown, "7035 context decision ready with wrapped session");
+        ok &= expect_false(d.require_wrapped_session, "7035 context decision has wrapped session");
+
+        context.has_wrapped_session = false;
+        d = gbe::dota_lobby_state::compute_abandon_decision(context);
+        ok &= expect_true(d.require_wrapped_session, "7035 context decision requires missing wrapped session");
+    }
+
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.active = false;
+        gbe::dota_lobby_state::DotaAbandonRequestContext context{};
+        ok &= expect_false(gbe::dota_lobby_state::build_dota_abandon_request_context(lobby, false, false, true, context), "7035 context skips inactive lobby");
+    }
 
     // Threshold: wrapped/client uses 1, direct server uses 2.
     {
@@ -541,6 +998,11 @@ bool test_post_game_teardown_suppression()
         auto d = gbe::dota_lobby_state::compute_abandon_decision(lobby, false, true);
         ok &= expect_true(d.arcade_launch_failed_before_connect, "arcade launch failed before connect");
         ok &= expect_false(d.treat_as_current_game_disconnect, "arcade failed not treated as current-game disconnect");
+        ok &= expect_true(d.queue_cache_unsubscribed, "arcade failed queues cache unsubscribed");
+        ok &= expect_true(d.set_pending_reset_after_cache_unsubscribed, "arcade failed marks pending reset");
+        ok &= expect_true(d.discard_queued_launch_messages, "arcade failed discards launch queue");
+        ok &= expect_true(d.suppress_abandoned_lobby, "arcade failed suppresses abandoned lobby");
+        ok &= expect_false(d.queue_postgame_teardown, "arcade failed skips postgame teardown");
     }
 
     // arcade_launch_failed_before_connect: false once launch reaches Loaded (launch completed).
@@ -618,15 +1080,76 @@ bool test_post_game_teardown_suppression()
     return ok;
 }
 
+bool test_teardown_retrieval_decision()
+{
+    bool ok = true;
+
+    {
+        auto d = gbe::dota_lobby_state::compute_teardown_retrieval_decision(
+            true,
+            true,
+            false,
+            false,
+            GBE_kDotaOtherLeftChannel,
+            true);
+        ok &= expect_true(d.finalize_abandon_after_7014, "7014 matching channel finalizes abandon");
+        ok &= expect_false(d.finalize_normal_signout_after_25, "7014 does not finalize normal signout");
+        ok &= expect_false(d.reset_after_cache_unsubscribed, "7014 does not reset after 25");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_teardown_retrieval_decision(
+            true,
+            true,
+            false,
+            false,
+            GBE_kDotaOtherLeftChannel,
+            false);
+        ok &= expect_false(d.finalize_abandon_after_7014, "7014 with stale channel does not finalize abandon");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_teardown_retrieval_decision(
+            true,
+            false,
+            true,
+            true,
+            GBE_kDotaCacheUnsubscribed,
+            false);
+        ok &= expect_false(d.finalize_abandon_after_7014, "25 does not finalize abandon");
+        ok &= expect_true(d.finalize_normal_signout_after_25, "25 finalizes normal signout");
+        ok &= expect_true(d.reset_after_cache_unsubscribed, "25 applies pending reset");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_teardown_retrieval_decision(
+            false,
+            true,
+            true,
+            true,
+            GBE_kDotaCacheUnsubscribed,
+            true);
+        ok &= expect_false(d.finalize_abandon_after_7014, "non-Dota profile skips abandon finalize");
+        ok &= expect_false(d.finalize_normal_signout_after_25, "non-Dota profile skips normal finalize");
+        ok &= expect_false(d.reset_after_cache_unsubscribed, "non-Dota profile skips pending reset");
+    }
+
+    return ok;
+}
+
 } // namespace
 
 int main()
 {
     bool ok = true;
     ok &= test_valid_launch_progression();
+    ok &= test_launch_lifecycle_transition_decision();
     ok &= test_stale_generic_lobby_state_regression();
     ok &= test_owner_disconnect_and_reconnect();
+    ok &= test_reconnect_eligibility_decision();
+    ok &= test_reconnect_interception_decision();
     ok &= test_post_game_teardown_suppression();
+    ok &= test_teardown_retrieval_decision();
 
     if (!ok)
         return 1;

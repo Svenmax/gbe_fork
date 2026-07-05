@@ -25,6 +25,7 @@
 namespace gbe::proto_wire {
 struct Dota7034DisconnectedPlayer;
 struct Dota7034RequestShape;
+struct Dota7034RuntimeRequest;
 }
 
 namespace gbe::dota_gc_router {
@@ -134,6 +135,18 @@ public ISteamGameCoordinator
     void GBE_MarkDotaAbandonedLobbySuppressed(uint64 lobby_id, const char *reason);
     void GBE_ClearDotaAbandonedLobbySuppression(uint64 lobby_id, const char *reason);
     bool GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(uint32 masked_emsg) const;
+    bool GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel() const;
+    bool GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed() const;
+    bool GBE_HasPendingResetAfterCacheUnsubscribed() const;
+    void GBE_SetPendingDotaAbandonFinalizeAfterOtherLeftChannel(uint64 lobby_id);
+    uint64 GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel();
+    void GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel();
+    void GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(uint64 lobby_id);
+    uint64 GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
+    void GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
+    void GBE_SetPendingResetAfterCacheUnsubscribed(uint64 lobby_id);
+    void GBE_ClearPendingResetAfterCacheUnsubscribed(uint64 retained_lobby_id = 0);
+    uint64 GBE_ConsumePendingResetAfterCacheUnsubscribed();
     bool GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bool connected);
     bool GBE_SetDotaLobbyMemberRuntimeState(uint64 steam_id, bool connected, uint32 hero_id, bool has_hero_id);
     bool GBE_ShouldHoldDotaLanLaunchForRemoteMembers(uint32 next_game_state, uint32 *remote_count_out, uint32 *connected_remote_count_out) const;
@@ -151,6 +164,7 @@ public ISteamGameCoordinator
     uint64 item_id_network_to_local(uint64 item_id);
     std::string item_to_gcstruct(const Econ_Item &item, CSteamID steam_id);
     std::string item_to_gcprotobuf(const Econ_Item &item, CSteamID steam_id);
+    void GBE_SaveDotaItemsFromExecutor(const char *reason);
 
     void handle_set_item_pos(const void *input, uint32 input_size);
     void handle_delete_item(const void *input, uint32 input_size);
@@ -185,11 +199,11 @@ public ISteamGameCoordinator
     bool GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state, double delay = 0.0);
     void GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(uint64 owner_steam_id, uint64 source_job);
     void GBE_HandleDotaDirect7034DisconnectedPlayers(const std::vector<gbe::proto_wire::Dota7034DisconnectedPlayer> &disconnected_players, uint64 source_job);
-    void GBE_HandleDotaDirect7034RuntimeUpdates(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RequestShape &request_shape, bool custom_game_launch, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034RuntimeUpdates(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RuntimeRequest &request, bool custom_game_launch, uint64 source_job, bool &queued_runtime_lobby_update);
     bool GBE_HandleDotaDirect7034Response(uint32 request_emsg, const gbe::proto_wire::Dota7034RequestShape &request_shape, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     void GBE_HandleDotaDirect7034WaitForPlayers(uint32 request_emsg, const uint8 *body, size_t body_size, bool custom_game_launch, bool request_advances_to_hero_selection, uint64 source_job, bool &queued_runtime_lobby_update);
-    void GBE_HandleDotaDirect7034StrategyTime(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RequestShape &request_shape, bool custom_game_launch, uint64 source_job, bool &queued_runtime_lobby_update);
-    void GBE_HandleDotaDirect7034StrategyTimeFallback(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RequestShape &request_shape, bool custom_game_launch, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034StrategyTime(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RuntimeRequest &request, bool custom_game_launch, uint64 source_job, bool &queued_runtime_lobby_update);
+    void GBE_HandleDotaDirect7034StrategyTimeFallback(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RuntimeRequest &request, bool custom_game_launch, uint64 source_job, bool &queued_runtime_lobby_update);
     void GBE_HandleDotaDirect7034StrategyTimePreserve(uint32 request_emsg, uint64 source_job, bool &queued_runtime_lobby_update);
     void GBE_HandleDotaDirect7034LaunchPoll(uint32 request_emsg, uint64 source_job, bool &queued_runtime_lobby_update);
     bool GBE_HandleDotaDirect7034Request(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);

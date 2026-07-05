@@ -452,9 +452,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         const bool custom_game_create = GBE_local_lobby.custom_game.game_id != 0ull;
         GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby);
         if (custom_game_create) {
-            GBE_recent_dota_reconnect_context_valid = false;
-            GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
-            GBE_dota_reconnect_eligible.store(true);
+            GBE_ClearRecentDotaReconnectContext();
+            GBE_SetDotaReconnectEligible(true);
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Isolated arcade lobby from prior practice runtime lobby_id=%llu custom_game_id=%llu",
@@ -1169,7 +1168,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     }
 
-    const gbe::dota_lobby_state::AbandonDecision d = gbe::dota_lobby_state::compute_abandon_decision(GBE_local_lobby, wrapped, is_server);
+    gbe::dota_lobby_state::DotaAbandonRequestContext request{};
+    if (!gbe::dota_lobby_state::build_dota_abandon_request_context(
+            GBE_local_lobby,
+            wrapped,
+            outer_session_field_raw != nullptr,
+            is_server,
+            request)) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7035 because request context could not be built");
+        return true;
+    }
+
+    const gbe::dota_lobby_state::AbandonDecision d = gbe::dota_lobby_state::compute_abandon_decision(request);
 
     if (d.arcade_launch_failed_before_connect && GBE_local_lobby.game_start_time != 0u) {
         const uint32 now = static_cast<uint32>(std::time(nullptr));
@@ -1194,10 +1204,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
             return true;
         }
 
-        GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_arcade_launch_failed_before_connect");
-        GBE_pending_reset_after_cache_unsubscribed = true;
-        GBE_pending_reset_after_cache_unsubscribed_lobby_id = d.lobby_id;
-        GBE_MarkDotaAbandonedLobbySuppressed(d.lobby_id, "7035_arcade_launch_failed_before_connect");
+        if (d.discard_queued_launch_messages)
+            GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_arcade_launch_failed_before_connect");
+        if (d.set_pending_reset_after_cache_unsubscribed)
+            GBE_SetPendingResetAfterCacheUnsubscribed(d.lobby_id);
+        if (d.suppress_abandoned_lobby)
+            GBE_MarkDotaAbandonedLobbySuppressed(d.lobby_id, "7035_arcade_launch_failed_before_connect");
         push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
 
         GBE_GC_DebugLog(
@@ -1211,16 +1223,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     }
     if (!d.ready_for_abandon_teardown) {
-        if (d.treat_as_current_game_disconnect) {
+        if (d.queue_cache_unsubscribed) {
             std::string response_25;
             if (!gbe::gc_message::build_dota_lobby_cache_unsubscribed_payload(d.lobby_id, response_25)) {
                 GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 payload for current-game 7035 LobbyID=%llu", static_cast<unsigned long long>(d.lobby_id));
                 return true;
             }
 
-            GBE_pending_reset_after_cache_unsubscribed = true;
-            GBE_pending_reset_after_cache_unsubscribed_lobby_id = d.lobby_id;
-            GBE_MarkDotaAbandonedLobbySuppressed(d.lobby_id, "7035_current_game_disconnect");
+            if (d.set_pending_reset_after_cache_unsubscribed)
+                GBE_SetPendingResetAfterCacheUnsubscribed(d.lobby_id);
+            if (d.suppress_abandoned_lobby)
+                GBE_MarkDotaAbandonedLobbySuppressed(d.lobby_id, "7035_current_game_disconnect");
             push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
 
             GBE_GC_DebugLog(
@@ -1246,15 +1259,23 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     }
 
-    if (wrapped && !outer_session_field_raw) {
+    if (d.require_wrapped_session) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Missing wrapped session context for 7035 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
     }
 
-    GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_ready_for_abandon_teardown");
-    GBE_MarkDotaAbandonedLobbySuppressed(d.lobby_id, "7035_ready_for_abandon_teardown");
+    if (d.discard_queued_launch_messages)
+        GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_ready_for_abandon_teardown");
+    if (d.suppress_abandoned_lobby)
+        GBE_MarkDotaAbandonedLobbySuppressed(d.lobby_id, "7035_ready_for_abandon_teardown");
 
-    if (!GBE_QueueDotaPostGameTeardown("7035_abandon_current_game", wrapped, outer_session_field_raw, true, true, true))
+    if (d.queue_postgame_teardown && !GBE_QueueDotaPostGameTeardown(
+            "7035_abandon_current_game",
+            wrapped,
+            outer_session_field_raw,
+            d.suppress_previous_chat_channel,
+            d.push_postgame_cache_unsubscribed,
+            d.push_postgame_join))
         return true;
 
     GBE_GC_DebugLog(
@@ -1300,8 +1321,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaGameMatchSignOutRequest(bool wrapped,
         std::string response_25;
         if (gbe::gc_message::build_dota_lobby_cache_unsubscribed_payload(lobby_id, response_25)) {
             GBE_PushDotaResponse(GBE_kDotaCacheUnsubscribed, response_25, wrapped, outer_session_field_raw, "25_after_7004");
-            GBE_pending_dota_normal_signout_finalize_after_25 = true;
-            GBE_pending_dota_normal_signout_finalize_lobby_id = lobby_id;
+            GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(lobby_id);
         } else {
             GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 after 7004 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
         }

@@ -89,6 +89,8 @@ struct GBE_DotaWrappedDirectContext
     std::string inner_body_raw;
     std::uint64_t request_job_id{};
     bool has_request_job{};
+    std::uint64_t target_job_id{};
+    bool has_target_job{};
 };
 
 // Extracts the inner direct message from a wrapped ClientToGC envelope.

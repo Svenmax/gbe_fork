@@ -25,6 +25,7 @@
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_payload_item_helpers.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -851,4 +852,3 @@ void Steam_Game_Coordinator::remove_user_items(CSteamID steam_id)
 
     callback_items_removed(steam_id);
 }
-

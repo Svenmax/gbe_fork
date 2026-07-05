@@ -368,17 +368,16 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
 
     GBE_DotaReconnectContext reconnect_context{};
     if (gbe::dota_lobby_state::build_reconnect_context(GBE_local_lobby, reconnect_context)) {
-        GBE_recent_dota_reconnect_context_valid = true;
-        GBE_recent_dota_reconnect_context = reconnect_context;
+        GBE_SetRecentDotaReconnectContext(reconnect_context);
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
             "cached recent dota reconnect context reason=%s server_id=%llu lobby_state=%u game_state=%u custom_game_id=%llu endpoint=%s",
             reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_recent_dota_reconnect_context.server_id),
-            GBE_recent_dota_reconnect_context.lobby_state,
-            GBE_recent_dota_reconnect_context.game_state,
-            static_cast<unsigned long long>(GBE_recent_dota_reconnect_context.custom_game_id),
-            GBE_recent_dota_reconnect_context.connect
+            static_cast<unsigned long long>(reconnect_context.server_id),
+            reconnect_context.lobby_state,
+            reconnect_context.game_state,
+            static_cast<unsigned long long>(reconnect_context.custom_game_id),
+            reconnect_context.connect
         );
     }
 

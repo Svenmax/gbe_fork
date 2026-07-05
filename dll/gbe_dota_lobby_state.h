@@ -187,6 +187,44 @@ struct QueuedLobbyStateApplyPlan {
     bool preserved_game_state{};
 };
 
+struct LaunchLifecycleTransitionDecision {
+    bool apply_lobby_state{};
+    std::uint32_t next_state{};
+    std::uint32_t next_game_state{};
+    bool mark_launch_phase{};
+    std::uint32_t launch_phase{};
+    bool publish_shared_state{};
+    bool send_details_update{};
+    bool queue_runtime_lobby_update{};
+    double runtime_update_delay{};
+    std::string reason;
+};
+
+struct ReconnectEligibilityDecision {
+    bool source_valid{};
+    bool active{};
+    bool started{};
+    bool has_server_id{};
+    bool has_connect{};
+    bool custom_game{};
+    bool owner_connected{};
+    bool launch_run_or_later{};
+    bool launch_loaded{};
+    bool context_eligible{};
+};
+
+struct ReconnectInterceptionDecision {
+    bool has_context{};
+    bool remote_matches_server{};
+    bool state_ready{};
+    bool has_connect{};
+    bool arcade_context{};
+    bool local_is_owner{};
+    bool reconnect_eligible{};
+    bool p2p_rendezvous_candidate{};
+    bool can_post_connection_state{};
+};
+
 enum LaunchDetailsLobbySource : std::uint32_t {
     LaunchDetailsLobbySourceCurrent = 0u,
     LaunchDetailsLobbySourceReadyUp = 1u,
@@ -236,25 +274,88 @@ void adopt_shared_lobby_to_local(
     bool normalize_custom_readyup_run_state,
     GBE_LocalLobby &local);
 bool build_reconnect_context(const GBE_LocalLobby &local, GBE_DotaReconnectContext &context);
+ReconnectEligibilityDecision compute_reconnect_eligibility_decision(
+    bool source_valid,
+    bool active,
+    std::uint32_t lobby_state,
+    std::uint32_t game_state,
+    std::uint64_t server_id,
+    bool has_connect,
+    std::uint64_t custom_game_id,
+    bool owner_connected,
+    std::uint32_t launch_phase);
+ReconnectInterceptionDecision compute_reconnect_interception_decision(
+    const GBE_DotaReconnectContext &context,
+    bool has_context,
+    std::uint64_t local_steam_id,
+    std::uint64_t remote_steam_id,
+    bool reconnect_eligible);
 
-// Pure abandon-current-game decision (emsg 7035). Reads the local lobby state,
-// the wrapped flag, and is_server; returns all derived decision flags needed by
-// the abandon handler. Kept pure so the handler only executes the decision's
-// side effects in the documented order without interleaving boolean derivation.
+// Pure abandon-current-game decision (emsg 7035). Reads a captured request
+// context; returns all derived decision flags needed by the abandon handler.
+// Kept pure so the handler only executes the decision's side effects in the
+// documented order without interleaving boolean derivation.
+struct DotaAbandonRequestContext {
+    bool wrapped{};
+    bool has_wrapped_session{};
+    bool is_server{};
+    bool owner_connected{};
+    bool has_custom_game_details{};
+    std::uint64_t lobby_id{};
+    std::uint32_t lobby_state{};
+    std::uint32_t game_state{};
+    std::uint64_t server_id{};
+    std::uint32_t launch_phase{};
+    std::uint64_t pre_postgame_chat_channel_id{};
+};
+
 struct AbandonDecision {
     std::uint64_t lobby_id{};
     std::uint32_t lobby_state{};
     std::uint32_t lobby_game_state{};
+    std::uint64_t pre_postgame_chat_channel_id{};
     std::uint32_t abandon_game_state_threshold{};  // 1 for wrapped/client, 2 for direct server
     bool treat_as_current_game_disconnect{};
     bool ready_for_abandon_teardown{};
     bool arcade_launch_failed_before_connect{};
+    bool queue_cache_unsubscribed{};
+    bool set_pending_reset_after_cache_unsubscribed{};
+    bool discard_queued_launch_messages{};
+    bool suppress_abandoned_lobby{};
+    bool queue_postgame_teardown{};
+    bool require_wrapped_session{};
+    bool suppress_previous_chat_channel{};
+    bool push_postgame_cache_unsubscribed{};
+    bool push_postgame_join{};
 };
+
+bool build_dota_abandon_request_context(
+    const GBE_LocalLobby &lobby,
+    bool wrapped,
+    bool has_wrapped_session,
+    bool is_server,
+    DotaAbandonRequestContext &context);
+
+AbandonDecision compute_abandon_decision(const DotaAbandonRequestContext &context);
 
 AbandonDecision compute_abandon_decision(
     const GBE_LocalLobby &lobby,
     bool wrapped,
     bool is_server);
+
+struct TeardownRetrievalDecision {
+    bool finalize_abandon_after_7014{};
+    bool finalize_normal_signout_after_25{};
+    bool reset_after_cache_unsubscribed{};
+};
+
+TeardownRetrievalDecision compute_teardown_retrieval_decision(
+    bool is_dota_profile,
+    bool pending_abandon_after_7014,
+    bool pending_normal_signout_after_25,
+    bool pending_reset_after_cache_unsubscribed,
+    std::uint32_t retrieved_emsg,
+    bool retrieved_other_left_matches_abandon_channel);
 
 CreateLobbyPlan compose_create_lobby_plan(
     const proto_wire::DotaPracticeLobbyCreateRequest &request,
@@ -301,6 +402,34 @@ QueuedLobbyStateApplyPlan compose_queued_lobby_state_apply_plan(
     bool preserve_monotonic_game_state,
     std::uint32_t setup_synced_launch_phase,
     std::uint32_t run_queued_launch_phase);
+LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
+    const GBE_LocalLobby &current_lobby,
+    std::uint32_t ready_state,
+    std::uint32_t run_queued_launch_phase,
+    const std::string &reason);
+LaunchLifecycleTransitionDecision compute_custom_game_started_loading_transition(
+    const GBE_LocalLobby &current_lobby,
+    bool matching_lobby,
+    std::uint32_t setup_synced_launch_phase,
+    std::uint32_t run_queued_launch_phase,
+    const std::string &reason);
+LaunchLifecycleTransitionDecision compute_custom_game_finished_loading_transition(
+    const GBE_LocalLobby &current_lobby,
+    bool matching_lobby,
+    bool load_failed,
+    std::uint32_t run_queued_launch_phase,
+    std::uint32_t loaded_launch_phase,
+    const std::string &reason);
+LaunchLifecycleTransitionDecision compute_runtime_game_state_transition(
+    const GBE_LocalLobby &current_lobby,
+    bool custom_game_launch,
+    bool has_request_game_state,
+    std::uint32_t request_game_state,
+    std::uint32_t run_queued_launch_phase,
+    const std::string &reason);
+LaunchLifecycleTransitionDecision compute_launch_poll_transition(
+    const GBE_LocalLobby &current_lobby,
+    const std::string &reason);
 LaunchPresenceEvent compose_launch_serversetup_presence_event(const std::string &persona_reason);
 PracticeLobbyLaunchEventPlan compose_practice_lobby_launch_event_plan(std::uint32_t details_update_emsg);
 CustomGameLaunchSetupEventPlan compose_custom_game_launch_setup_event_plan(std::uint32_t details_update_emsg);

@@ -25,6 +25,7 @@
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -63,6 +64,43 @@ GBE_DotaLootListData GBE_vpk_loot_data;
 
 // --- Dota reconnect shared state ---
 std::atomic<bool> GBE_dota_reconnect_eligible{true};
+
+bool GBE_GetRecentDotaReconnectContext(GBE_DotaReconnectContext *out)
+{
+    if (!out || !GBE_recent_dota_reconnect_context_valid)
+        return false;
+
+    *out = GBE_recent_dota_reconnect_context;
+    return true;
+}
+
+void GBE_SetRecentDotaReconnectContext(const GBE_DotaReconnectContext &ctx)
+{
+    GBE_recent_dota_reconnect_context = ctx;
+    GBE_recent_dota_reconnect_context_valid = true;
+}
+
+void GBE_ClearRecentDotaReconnectContext()
+{
+    GBE_recent_dota_reconnect_context_valid = false;
+    GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
+}
+
+bool GBE_IsDotaReconnectEligible()
+{
+    return GBE_dota_reconnect_eligible.load();
+}
+
+void GBE_SetDotaReconnectEligible(bool eligible)
+{
+    GBE_dota_reconnect_eligible.store(eligible);
+}
+
+bool GBE_ConsumeDotaReconnectEligibility()
+{
+    bool expected = true;
+    return GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false);
+}
 
 #pragma pack( push, 1 )
 //-----------------------------------------------------------------------------
@@ -195,6 +233,21 @@ bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc
     auto adapt_practice_lobby_close_broadcast = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
         return self->GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest(c.body, c.wrapped, sess);
     };
+    auto adapt_direct_7427_notifications = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
+        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
+            return false;
+        return self->GBE_HandleDota7427NotificationsRequest(c.has_request_job, c.request_job_id);
+    };
+    auto adapt_direct_upload_rate = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
+        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
+            return false;
+        return self->GBE_HandleDotaUploadRateRequest(c.has_request_job, c.request_job_id);
+    };
+    auto adapt_direct_rank = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
+        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
+            return false;
+        return self->GBE_HandleDotaRankRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id);
+    };
 
     // Order follows the original switch arm order (chat -> lobby lifecycle ->
     // broadcast) to preserve the historical scan sequence. Linear lookup is
@@ -217,6 +270,9 @@ bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc
         { GBE_kDotaPracticeLobbyJoinBroadcastChannel,   adapt_practice_lobby_join_broadcast },
         { GBE_kDotaLobbyUpdateBroadcastChannelInfo,     adapt_lobby_update_broadcast_info },
         { GBE_kDotaPracticeLobbyCloseBroadcastChannel,  adapt_practice_lobby_close_broadcast },
+        { 7427u,                                        adapt_direct_7427_notifications  },
+        { 4523u,                                        adapt_direct_upload_rate          },
+        { 8879u,                                        adapt_direct_rank                 },
     };
 
     const Entry *entry = nullptr;
@@ -528,6 +584,78 @@ void Steam_Game_Coordinator::GBE_ClearDotaAbandonedLobbySuppression(uint64 lobby
     GBE_suppressed_dota_abandon_lobby_id = 0;
 }
 
+bool Steam_Game_Coordinator::GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel() const
+{
+    return GBE_pending_dota_abandon_finalize_after_7014;
+}
+
+bool Steam_Game_Coordinator::GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed() const
+{
+    return GBE_pending_dota_normal_signout_finalize_after_25;
+}
+
+bool Steam_Game_Coordinator::GBE_HasPendingResetAfterCacheUnsubscribed() const
+{
+    return GBE_pending_reset_after_cache_unsubscribed;
+}
+
+void Steam_Game_Coordinator::GBE_SetPendingDotaAbandonFinalizeAfterOtherLeftChannel(uint64 lobby_id)
+{
+    GBE_pending_dota_abandon_finalize_after_7014 = true;
+    GBE_pending_dota_abandon_finalize_lobby_id = lobby_id;
+}
+
+uint64 Steam_Game_Coordinator::GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel()
+{
+    const uint64 lobby_id = GBE_pending_dota_abandon_finalize_lobby_id;
+    GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel();
+    return lobby_id;
+}
+
+void Steam_Game_Coordinator::GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel()
+{
+    GBE_pending_dota_abandon_finalize_after_7014 = false;
+    GBE_pending_dota_abandon_finalize_lobby_id = 0;
+}
+
+void Steam_Game_Coordinator::GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(uint64 lobby_id)
+{
+    GBE_pending_dota_normal_signout_finalize_after_25 = true;
+    GBE_pending_dota_normal_signout_finalize_lobby_id = lobby_id;
+}
+
+uint64 Steam_Game_Coordinator::GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed()
+{
+    const uint64 lobby_id = GBE_pending_dota_normal_signout_finalize_lobby_id;
+    GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
+    return lobby_id;
+}
+
+void Steam_Game_Coordinator::GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed()
+{
+    GBE_pending_dota_normal_signout_finalize_after_25 = false;
+    GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+}
+
+void Steam_Game_Coordinator::GBE_SetPendingResetAfterCacheUnsubscribed(uint64 lobby_id)
+{
+    GBE_pending_reset_after_cache_unsubscribed = true;
+    GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
+}
+
+void Steam_Game_Coordinator::GBE_ClearPendingResetAfterCacheUnsubscribed(uint64 retained_lobby_id)
+{
+    GBE_pending_reset_after_cache_unsubscribed = false;
+    GBE_pending_reset_after_cache_unsubscribed_lobby_id = retained_lobby_id;
+}
+
+uint64 Steam_Game_Coordinator::GBE_ConsumePendingResetAfterCacheUnsubscribed()
+{
+    const uint64 lobby_id = GBE_pending_reset_after_cache_unsubscribed_lobby_id;
+    GBE_ClearPendingResetAfterCacheUnsubscribed();
+    return lobby_id;
+}
+
 void Steam_Game_Coordinator::push_incoming_now(uint32 msg_type, const std::string &message, bool apply_lobby_state, uint32 lobby_state, uint32 lobby_game_state)
 {
     GC_Message new_item;
@@ -773,14 +901,11 @@ void Steam_Game_Coordinator::clear_dota_runtime_state(bool preserve_reconnect_co
 {
     GBE_local_lobby = GBE_LocalLobby{};
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-    if (!preserve_reconnect_context) {
-        GBE_recent_dota_reconnect_context_valid = false;
-        GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
-    }
+    if (!preserve_reconnect_context)
+        GBE_ClearRecentDotaReconnectContext();
     GBE_dota_private_lobby_snapshot_replayed = false;
     GBE_last_dota_launch_state_pushed_game_state = 0;
-    GBE_pending_dota_normal_signout_finalize_after_25 = false;
-    GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+    GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
 }
 
 void Steam_Game_Coordinator::shutdown_gc()
@@ -929,12 +1054,10 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
     bool preserve_reconnect = reason && std::strcmp(reason, "7035_disconnect_current_game_after_25") == 0;
     clear_dota_runtime_state(preserve_reconnect);
 
-    GBE_pending_reset_after_cache_unsubscribed = false;
-    GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
+    GBE_ClearPendingResetAfterCacheUnsubscribed();
     if (previous_lobby_id != 0 && GBE_suppressed_dota_abandon_lobby_id != previous_lobby_id)
         GBE_ClearDotaAbandonedLobbySuppression(previous_lobby_id, reason ? reason : "reset_gc_memory");
-    GBE_pending_dota_abandon_finalize_after_7014 = false;
-    GBE_pending_dota_abandon_finalize_lobby_id = 0;
+    GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel();
     GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "reset_gc_memory");
     GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
 
@@ -1310,15 +1433,18 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
     *pcubMsgSize = outsize;
     message.msg_body.copy(reinterpret_cast<char *>(pubDest), cubDest);
 
-    const bool should_finalize_dota_abandon_after_7014 =
-        gc_profile == GC_PROFILE_DOTA2 &&
-        GBE_pending_dota_abandon_finalize_after_7014 &&
-        GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaOtherLeftChannel &&
+    const uint32 retrieved_emsg = GBE_GC_MaskedEMsg(*punMsgType);
+    const bool retrieved_other_left_matches_abandon_channel =
+        retrieved_emsg == GBE_kDotaOtherLeftChannel &&
         GBE_IsDotaOtherLeftChannelPayloadForChannel(message.msg_body, GBE_local_lobby.abandon_pre_postgame_chat_channel_id);
-    const bool should_finalize_dota_normal_signout_after_25 =
-        gc_profile == GC_PROFILE_DOTA2 &&
-        GBE_pending_dota_normal_signout_finalize_after_25 &&
-        GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaCacheUnsubscribed;
+    const gbe::dota_lobby_state::TeardownRetrievalDecision teardown_decision =
+        gbe::dota_lobby_state::compute_teardown_retrieval_decision(
+            gc_profile == GC_PROFILE_DOTA2,
+            GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel(),
+            GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(),
+            GBE_HasPendingResetAfterCacheUnsubscribed(),
+            retrieved_emsg,
+            retrieved_other_left_matches_abandon_channel);
 
     incoming_messages.pop();
 
@@ -1350,10 +1476,8 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
         );
     }
 
-    if (should_finalize_dota_abandon_after_7014) {
-        const uint64 finalize_lobby_id = GBE_pending_dota_abandon_finalize_lobby_id;
-        GBE_pending_dota_abandon_finalize_after_7014 = false;
-        GBE_pending_dota_abandon_finalize_lobby_id = 0;
+    if (teardown_decision.finalize_abandon_after_7014) {
+        const uint64 finalize_lobby_id = GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel();
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Consumed pending 7014; finalizing abandon teardown LobbyID=%llu channel=%llu",
@@ -1363,10 +1487,8 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
         GBE_FinalizeDotaAbandonAfterOtherLeftChannel(finalize_lobby_id, "7014_pre_postgame_retrieved");
     }
 
-    if (should_finalize_dota_normal_signout_after_25) {
-        const uint64 finalize_lobby_id = GBE_pending_dota_normal_signout_finalize_lobby_id;
-        GBE_pending_dota_normal_signout_finalize_after_25 = false;
-        GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+    if (teardown_decision.finalize_normal_signout_after_25) {
+        const uint64 finalize_lobby_id = GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Consumed normal signout 25; finalizing postgame teardown LobbyID=%llu",
@@ -1375,12 +1497,8 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
         GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed(finalize_lobby_id, "7004_signout_after_25_retrieved");
     }
 
-    if (gc_profile == GC_PROFILE_DOTA2 &&
-        GBE_pending_reset_after_cache_unsubscribed &&
-        GBE_GC_MaskedEMsg(*punMsgType) == GBE_kDotaCacheUnsubscribed) {
-        const uint64 pending_lobby_id = GBE_pending_reset_after_cache_unsubscribed_lobby_id;
-        GBE_pending_reset_after_cache_unsubscribed = false;
-        GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
+    if (teardown_decision.reset_after_cache_unsubscribed) {
+        const uint64 pending_lobby_id = GBE_ConsumePendingResetAfterCacheUnsubscribed();
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Consumed pending 25; applying deferred current-game reset for LobbyID=%llu",

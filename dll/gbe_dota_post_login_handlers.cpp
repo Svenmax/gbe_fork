@@ -33,6 +33,7 @@
 #include "gbe_dota_request_router.h"
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_gc_router.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -227,6 +228,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
     const bool has_source_job = proto_context.protohdr.has_job_id_source();
     const uint64 source_job = has_source_job ? proto_context.protohdr.job_id_source() : 0ull;
+    const bool has_target_job = proto_context.protohdr.has_job_id_target();
+    const uint64 target_job = has_target_job ? proto_context.protohdr.job_id_target() : 0ull;
     const uint8 *body = proto_context.body;
     const size_t body_size = proto_context.body_size;
 
@@ -236,7 +239,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     request_context.body.assign(reinterpret_cast<const char *>(body), body_size);
     request_context.request_job_id = source_job;
     request_context.has_request_job = has_source_job;
+    request_context.target_job_id = target_job;
+    request_context.has_target_job = has_target_job;
     request_context.wrapped = false;
+    request_context.path = gbe::dota_gc_router::DotaGcRequestPath::Direct;
     if (GBE_DispatchDotaPostLoginRequest(request_context))
         return true;
 
@@ -324,16 +330,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return GBE_HandleDotaMinimalVarintSuccessRequest(request_emsg, 8887u, "8886->8887 minimal success", "8886_8887", has_source_job, source_job);
     }
 
-    if (request_emsg == 7427) {
-        return GBE_HandleDota7427NotificationsRequest(has_source_job, source_job);
-    }
-
     if (request_emsg == 8793) {
         return GBE_HandleDotaMinimalVarintSuccessRequest(request_emsg, 8794u, "8793->8794 minimal success", "8793_8794", has_source_job, source_job);
-    }
-
-    if (request_emsg == 4523) {
-        return GBE_HandleDotaUploadRateRequest(has_source_job, source_job);
     }
 
     if (request_emsg == 7534) {
@@ -354,10 +352,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
     if (request_emsg == 8800) {
         return GBE_HandleDotaCoachingSummaryRequest(body, body_size, has_source_job, source_job);
-    }
-
-    if (request_emsg == 8879) {
-        return GBE_HandleDotaRankRequest(body, body_size, has_source_job, source_job);
     }
 
     if (request_emsg == 7450) {
@@ -646,6 +640,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
     context.inner_body_raw = route_context.body;
     context.request_job_id = route_context.request_job_id;
     context.has_request_job = route_context.has_request_job;
+    context.target_job_id = route_context.target_job_id;
+    context.has_target_job = route_context.has_target_job;
 
     if (context.inner_emsg == GBE_kDotaAbandonCurrentGame) {
         GBE_GC_DebugLog(
@@ -691,10 +687,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
                 GBE_PushDotaResponse(7170u, response_7170, true, &context.outer_session_field_raw, "7070_ready_up_status");
             }
 
-            if (ready_state == 1u && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state < 1u && GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
-                GBE_local_lobby.game_state = 1u;
-                GBE_PublishSharedDotaLobbyState("7070_wrapped_custom_game_ready_up_run_ack");
-                GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, "7070_wrapped_custom_game_ready_up_run_ack");
+            const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision ready_up =
+                gbe::dota_lobby_state::compute_custom_game_ready_up_transition(
+                    GBE_local_lobby,
+                    ready_state,
+                    GBE_kDotaLaunchPhaseRunQueued,
+                    "7070_wrapped_custom_game_ready_up_run_ack");
+            if (ready_up.apply_lobby_state) {
+                GBE_local_lobby.state = ready_up.next_state;
+                GBE_local_lobby.game_state = ready_up.next_game_state;
+                if (ready_up.publish_shared_state)
+                    GBE_PublishSharedDotaLobbyState(ready_up.reason.c_str());
+                if (ready_up.send_details_update)
+                    GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, ready_up.reason.c_str());
             }
         }
         return true;
@@ -725,9 +730,28 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
                     GBE_local_lobby.custom_game.game_id = custom_game_id;
                 if (start_time != 0)
                     GBE_local_lobby.game_start_time = static_cast<uint32>(start_time);
-                if (!GBE_TryAdvanceDotaLaunchToRun("custom game wrapped 8052 started loading", context.inner_emsg, context.request_job_id, "8052_wrapped_started_loading", 0u)) {
-                    GBE_PublishSharedDotaLobbyState("8052_wrapped_started_loading");
-                    GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, "8052_wrapped_started_loading");
+                const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision started_loading =
+                    gbe::dota_lobby_state::compute_custom_game_started_loading_transition(
+                        GBE_local_lobby,
+                        true,
+                        GBE_kDotaLaunchPhaseSetupSynced,
+                        GBE_kDotaLaunchPhaseRunQueued,
+                        "8052_wrapped_started_loading");
+                bool advanced_to_run = false;
+                if (started_loading.queue_runtime_lobby_update) {
+                    if (started_loading.mark_launch_phase)
+                        GBE_MarkDotaLaunchPhase(started_loading.launch_phase, started_loading.reason.c_str());
+                    advanced_to_run = GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(
+                        "custom game wrapped 8052 started loading",
+                        context.inner_emsg,
+                        context.request_job_id,
+                        started_loading.next_state,
+                        started_loading.next_game_state,
+                        started_loading.runtime_update_delay);
+                }
+                if (!advanced_to_run && (started_loading.publish_shared_state || started_loading.queue_runtime_lobby_update)) {
+                    GBE_PublishSharedDotaLobbyState(started_loading.reason.c_str());
+                    GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, started_loading.reason.c_str());
                 }
             }
         }
@@ -750,20 +774,26 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
             const GBE_Dota8053Result load_result = gbe::proto_wire::parse_dota8053_result(body, body_size);
 
             if (load_result.lobby_id == 0 || load_result.lobby_id == GBE_local_lobby.lobby_id) {
-                if (GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
-                    GBE_local_lobby.state = 2u;
-                    if (GBE_local_lobby.game_state < 1u)
-                        GBE_local_lobby.game_state = 1u;
-                } else if (GBE_local_lobby.state < 2u) {
-                    GBE_local_lobby.state = 2u;
-                }
-
                 const bool load_failed = gbe::proto_wire::dota8053_indicates_load_failure(load_result.result_code, load_result.result_text);
                 const char *reason = load_failed ? "8053_wrapped_load_failed" : "8053_wrapped_finished_loading";
+                const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision finished_loading =
+                    gbe::dota_lobby_state::compute_custom_game_finished_loading_transition(
+                        GBE_local_lobby,
+                        true,
+                        load_failed,
+                        GBE_kDotaLaunchPhaseRunQueued,
+                        GBE_kDotaLaunchPhaseLoaded,
+                        reason);
+                if (finished_loading.apply_lobby_state) {
+                    GBE_local_lobby.state = finished_loading.next_state;
+                    GBE_local_lobby.game_state = finished_loading.next_game_state;
+                }
                 if (!load_failed)
-                    GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseLoaded, reason);
-                GBE_PublishSharedDotaLobbyState(reason);
-                GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, reason);
+                    GBE_MarkDotaLaunchPhase(finished_loading.launch_phase, finished_loading.reason.c_str());
+                if (finished_loading.publish_shared_state)
+                    GBE_PublishSharedDotaLobbyState(finished_loading.reason.c_str());
+                if (finished_loading.send_details_update)
+                    GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, finished_loading.reason.c_str());
                 GBE_GC_DebugLog(
                     "GC_DOTA_LOBBY",
                     "[LOBBY] Applied wrapped 8053 lobby_id=%llu loading_duration=%llu result_code=%llu signon_states=%llu load_failed=%u result_text=%s",

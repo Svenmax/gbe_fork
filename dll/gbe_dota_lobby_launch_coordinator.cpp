@@ -524,8 +524,7 @@ bool Steam_Game_Coordinator::GBE_QueueDotaPostGameTeardown(const char *reason, b
     if (push_postgame_join && !push_reply(response_7010_postgame, GBE_kDotaJoinChatChannelResponse, "7010_postgame"))
         return false;
 
-    GBE_pending_reset_after_cache_unsubscribed = false;
-    GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
+    GBE_ClearPendingResetAfterCacheUnsubscribed(lobby_id);
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Queued postgame teardown cache_unsub=%u postgame_join=%u; deferring reset until 7272/7014 LobbyID=%llu pre_channel=%llu post_channel=%llu reason=%s",
@@ -718,5 +717,4 @@ bool Steam_Game_Coordinator::GBE_SendDotaCustomGameLaunchSetupFlow(bool wrapped,
     );
     return true;
 }
-
 

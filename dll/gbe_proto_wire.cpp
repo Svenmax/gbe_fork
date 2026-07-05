@@ -250,15 +250,52 @@ DotaRankRequestShape parse_dota_rank_request_shape(const std::uint8_t *data, std
     return shape;
 }
 
+Dota7070ReadyUpRequest parse_dota7070_ready_up_request(const std::uint8_t *data, std::size_t size)
+{
+    Dota7070ReadyUpRequest request{};
+    if (read_uint32_field(data, size, 1u, request.ready_state))
+        request.has_ready_state = true;
+    return request;
+}
+
+Dota8052StartedLoadingRequest parse_dota8052_started_loading_request(const std::uint8_t *data, std::size_t size)
+{
+    Dota8052StartedLoadingRequest request{};
+    if (read_uint64_field(data, size, 1u, request.lobby_id))
+        request.has_lobby_id = true;
+    if (read_uint64_field(data, size, 2u, request.custom_game_id))
+        request.has_custom_game_id = true;
+    if (read_uint64_field(data, size, 4u, request.start_time))
+        request.has_start_time = true;
+    return request;
+}
+
+Dota8053FinishedLoadingRequest parse_dota8053_finished_loading_request(const std::uint8_t *data, std::size_t size)
+{
+    Dota8053FinishedLoadingRequest request{};
+    if (read_uint64_field(data, size, 1u, request.lobby_id))
+        request.has_lobby_id = true;
+    if (read_uint64_field(data, size, 2u, request.loading_duration))
+        request.has_loading_duration = true;
+    if (read_uint64_field(data, size, 3u, request.result_code))
+        request.has_result_code = true;
+    if (read_bytes_field(data, size, 4u, request.result_text))
+        request.has_result_text = true;
+    if (read_uint64_field(data, size, 5u, request.signon_states))
+        request.has_signon_states = true;
+    request.result_text = sanitize_proto_log_string(request.result_text);
+    return request;
+}
+
 Dota8053Result parse_dota8053_result(const std::uint8_t *data, std::size_t size)
 {
+    const Dota8053FinishedLoadingRequest request = parse_dota8053_finished_loading_request(data, size);
     Dota8053Result result{};
-    read_uint64_field(data, size, 1u, result.lobby_id);
-    read_uint64_field(data, size, 2u, result.loading_duration);
-    read_uint64_field(data, size, 3u, result.result_code);
-    read_bytes_field(data, size, 4u, result.result_text);
-    read_uint64_field(data, size, 5u, result.signon_states);
-    result.result_text = sanitize_proto_log_string(result.result_text);
+    result.lobby_id = request.lobby_id;
+    result.loading_duration = request.loading_duration;
+    result.result_code = request.result_code;
+    result.signon_states = request.signon_states;
+    result.result_text = request.result_text;
     return result;
 }
 
@@ -335,6 +372,38 @@ Dota7034RequestShape parse_dota7034_request_shape(const std::uint8_t *data, std:
     }
 
     return shape;
+}
+
+Dota7034RuntimeRequest parse_dota7034_runtime_request(const std::uint8_t *data, std::size_t size)
+{
+    const Dota7034RequestShape shape = parse_dota7034_request_shape(data, size);
+    Dota7034RuntimeRequest request{};
+    request.game_state = shape.game_state;
+    request.send_reason = shape.send_reason;
+    request.first_blood_happened = shape.first_blood_happened;
+    request.radiant_kills = shape.radiant_kills;
+    request.dire_kills = shape.dire_kills;
+    request.radiant_lead = shape.radiant_lead;
+    request.building_state = shape.building_state;
+    request.draft_steam_id = shape.draft_steam_id;
+    request.draft_team = shape.draft_team;
+    request.draft_team_slot = shape.draft_team_slot;
+    request.connected_players = shape.connected_players;
+    request.disconnected_players = shape.disconnected_players;
+    request.has_game_state = shape.has_game_state;
+    request.has_send_reason = shape.has_send_reason;
+    request.has_first_blood_happened = shape.has_first_blood_happened;
+    request.has_radiant_kills = shape.has_radiant_kills;
+    request.has_dire_kills = shape.has_dire_kills;
+    request.has_radiant_lead = shape.has_radiant_lead;
+    request.has_building_state = shape.has_building_state;
+    request.has_connected_player = shape.has_connected_player;
+    request.has_draft = shape.has_draft;
+    request.has_draft_steam_id = shape.has_draft_steam_id;
+    request.has_draft_team = shape.has_draft_team;
+    request.has_draft_team_slot = shape.has_draft_team_slot;
+    request.has_disconnected_player = shape.has_disconnected_player;
+    return request;
 }
 
 bool parse_dota_practice_lobby_set_team_slot_body(const std::uint8_t *data, std::size_t size, DotaPracticeLobbySetTeamSlotRequest &request)

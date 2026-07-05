@@ -320,6 +320,125 @@ QueuedLobbyStateApplyPlan compose_queued_lobby_state_apply_plan(
     return plan;
 }
 
+LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
+    const GBE_LocalLobby &current_lobby,
+    std::uint32_t ready_state,
+    std::uint32_t run_queued_launch_phase,
+    const std::string &reason)
+{
+    LaunchLifecycleTransitionDecision d{};
+    if (!dota_custom_game::has_custom_game_details(current_lobby.custom_game))
+        return d;
+    if (ready_state != 1u || current_lobby.state != 2u || current_lobby.game_state >= 1u)
+        return d;
+    if (current_lobby.launch_phase < run_queued_launch_phase)
+        return d;
+
+    d.apply_lobby_state = true;
+    d.next_state = current_lobby.state;
+    d.next_game_state = 1u;
+    d.publish_shared_state = true;
+    d.send_details_update = true;
+    d.reason = reason;
+    return d;
+}
+
+LaunchLifecycleTransitionDecision compute_custom_game_started_loading_transition(
+    const GBE_LocalLobby &current_lobby,
+    bool matching_lobby,
+    std::uint32_t setup_synced_launch_phase,
+    std::uint32_t run_queued_launch_phase,
+    const std::string &reason)
+{
+    LaunchLifecycleTransitionDecision d{};
+    if (!matching_lobby || !dota_custom_game::has_custom_game_details(current_lobby.custom_game))
+        return d;
+
+    const LaunchRunPlan run_plan = compose_launch_run_plan(
+        current_lobby,
+        setup_synced_launch_phase,
+        run_queued_launch_phase,
+        0u);
+    d.apply_lobby_state = run_plan.can_advance;
+    d.next_state = run_plan.next_state;
+    d.next_game_state = run_plan.next_game_state;
+    d.mark_launch_phase = run_plan.can_advance;
+    d.launch_phase = run_plan.launch_phase;
+    d.queue_runtime_lobby_update = run_plan.can_advance;
+    d.publish_shared_state = !run_plan.can_advance;
+    d.send_details_update = !run_plan.can_advance;
+    d.reason = reason;
+    return d;
+}
+
+LaunchLifecycleTransitionDecision compute_custom_game_finished_loading_transition(
+    const GBE_LocalLobby &current_lobby,
+    bool matching_lobby,
+    bool load_failed,
+    std::uint32_t run_queued_launch_phase,
+    std::uint32_t loaded_launch_phase,
+    const std::string &reason)
+{
+    LaunchLifecycleTransitionDecision d{};
+    if (!matching_lobby || !dota_custom_game::has_custom_game_details(current_lobby.custom_game))
+        return d;
+
+    d.apply_lobby_state = true;
+    d.next_state = current_lobby.state;
+    d.next_game_state = current_lobby.game_state;
+    if (current_lobby.launch_phase >= run_queued_launch_phase) {
+        d.next_state = 2u;
+        if (d.next_game_state < 1u)
+            d.next_game_state = 1u;
+    } else if (d.next_state < 2u) {
+        d.next_state = 2u;
+    }
+
+    d.mark_launch_phase = !load_failed;
+    d.launch_phase = loaded_launch_phase;
+    d.publish_shared_state = true;
+    d.send_details_update = true;
+    d.reason = reason;
+    return d;
+}
+
+LaunchLifecycleTransitionDecision compute_runtime_game_state_transition(
+    const GBE_LocalLobby &current_lobby,
+    bool custom_game_launch,
+    bool has_request_game_state,
+    std::uint32_t request_game_state,
+    std::uint32_t run_queued_launch_phase,
+    const std::string &reason)
+{
+    LaunchLifecycleTransitionDecision d{};
+    if (!custom_game_launch || current_lobby.state != 2u)
+        return d;
+    if (current_lobby.launch_phase < run_queued_launch_phase)
+        return d;
+    if (!has_request_game_state || request_game_state <= current_lobby.game_state)
+        return d;
+
+    d.apply_lobby_state = true;
+    d.next_state = 2u;
+    d.next_game_state = request_game_state;
+    d.queue_runtime_lobby_update = true;
+    d.reason = reason;
+    return d;
+}
+
+LaunchLifecycleTransitionDecision compute_launch_poll_transition(
+    const GBE_LocalLobby &current_lobby,
+    const std::string &reason)
+{
+    LaunchLifecycleTransitionDecision d{};
+    if (current_lobby.state == 2u && current_lobby.game_state == 10u)
+        return d;
+
+    d.send_details_update = true;
+    d.reason = reason;
+    return d;
+}
+
 LaunchPresenceEvent compose_launch_serversetup_presence_event(const std::string &persona_reason)
 {
     LaunchPresenceEvent event{};
@@ -504,45 +623,125 @@ void adopt_shared_lobby_to_local(
     local.cache_sync_version = shared.cache_sync_version;
 }
 
-AbandonDecision compute_abandon_decision(
+bool build_dota_abandon_request_context(
     const GBE_LocalLobby &lobby,
     bool wrapped,
-    bool is_server)
+    bool has_wrapped_session,
+    bool is_server,
+    DotaAbandonRequestContext &context)
+{
+    context = {};
+    if (!lobby.active || lobby.lobby_id == 0)
+        return false;
+
+    context.wrapped = wrapped;
+    context.has_wrapped_session = has_wrapped_session;
+    context.is_server = is_server;
+    context.owner_connected = lobby.owner_connected;
+    context.has_custom_game_details = dota_custom_game::has_custom_game_details(lobby.custom_game);
+    context.lobby_id = lobby.lobby_id;
+    context.lobby_state = lobby.state;
+    context.game_state = lobby.game_state;
+    context.server_id = lobby.server_id;
+    context.launch_phase = lobby.launch_phase;
+    context.pre_postgame_chat_channel_id = lobby.chat_channel_id;
+    return true;
+}
+
+AbandonDecision compute_abandon_decision(const DotaAbandonRequestContext &context)
 {
     AbandonDecision d;
-    d.lobby_id = lobby.lobby_id;
-    d.lobby_state = lobby.state;
-    d.lobby_game_state = lobby.game_state;
+    d.lobby_id = context.lobby_id;
+    d.lobby_state = context.lobby_state;
+    d.lobby_game_state = context.game_state;
+    d.pre_postgame_chat_channel_id = context.pre_postgame_chat_channel_id;
     // Wrapped 7035 (user clicked Leave Game) can abandon at game_state >= 1
     // so players can leave during WAIT_FOR_PLAYERS_TO_LOAD if loading stalls.
     // Direct 7035 on a listen server (engine automatic state sync) requires
     // game_state >= 2 to avoid premature abandon during HERO_SELECTION.
     // Direct 7035 on a client (non-host) also uses game_state >= 1 because
     // the client has no engine-initiated 7035 -- it is always user-triggered.
-    d.abandon_game_state_threshold = (wrapped || !is_server) ? 1u : 2u;
+    d.abandon_game_state_threshold = (context.wrapped || !context.is_server) ? 1u : 2u;
     d.treat_as_current_game_disconnect =
-        is_server &&
-        lobby.owner_connected &&
+        context.is_server &&
+        context.owner_connected &&
         d.lobby_state == 2u &&
-        (lobby.server_id != 0 || d.lobby_game_state >= 1u);
+        (context.server_id != 0 || d.lobby_game_state >= 1u);
     d.ready_for_abandon_teardown =
         d.lobby_state == 2u &&
         d.lobby_game_state >= d.abandon_game_state_threshold;
     d.arcade_launch_failed_before_connect =
-        dota_custom_game::has_custom_game_details(lobby.custom_game) &&
-        !wrapped &&
-        !lobby.owner_connected &&
+        context.has_custom_game_details &&
+        !context.wrapped &&
+        !context.owner_connected &&
         d.lobby_state == 2u &&
         d.lobby_game_state >= 2u &&
-        lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued &&
-        lobby.launch_phase < GBE_kDotaLaunchPhaseLoaded;
+        context.launch_phase >= GBE_kDotaLaunchPhaseRunQueued &&
+        context.launch_phase < GBE_kDotaLaunchPhaseLoaded;
+    d.queue_cache_unsubscribed = d.arcade_launch_failed_before_connect ||
+        (!d.ready_for_abandon_teardown && d.treat_as_current_game_disconnect);
+    d.set_pending_reset_after_cache_unsubscribed = d.queue_cache_unsubscribed;
+    d.discard_queued_launch_messages = d.arcade_launch_failed_before_connect || d.ready_for_abandon_teardown;
+    d.suppress_abandoned_lobby = d.arcade_launch_failed_before_connect ||
+        d.treat_as_current_game_disconnect ||
+        d.ready_for_abandon_teardown;
+    d.queue_postgame_teardown = d.ready_for_abandon_teardown && !d.arcade_launch_failed_before_connect;
+    d.require_wrapped_session = context.wrapped && d.ready_for_abandon_teardown && !context.has_wrapped_session;
+    d.suppress_previous_chat_channel = d.queue_postgame_teardown;
+    d.push_postgame_cache_unsubscribed = d.queue_postgame_teardown;
+    d.push_postgame_join = d.queue_postgame_teardown;
+    return d;
+}
+
+AbandonDecision compute_abandon_decision(
+    const GBE_LocalLobby &lobby,
+    bool wrapped,
+    bool is_server)
+{
+    DotaAbandonRequestContext context{};
+    build_dota_abandon_request_context(lobby, wrapped, false, is_server, context);
+    return compute_abandon_decision(context);
+}
+
+TeardownRetrievalDecision compute_teardown_retrieval_decision(
+    bool is_dota_profile,
+    bool pending_abandon_after_7014,
+    bool pending_normal_signout_after_25,
+    bool pending_reset_after_cache_unsubscribed,
+    std::uint32_t retrieved_emsg,
+    bool retrieved_other_left_matches_abandon_channel)
+{
+    TeardownRetrievalDecision d;
+    if (!is_dota_profile)
+        return d;
+
+    d.finalize_abandon_after_7014 =
+        pending_abandon_after_7014 &&
+        retrieved_emsg == GBE_kDotaOtherLeftChannel &&
+        retrieved_other_left_matches_abandon_channel;
+    d.finalize_normal_signout_after_25 =
+        pending_normal_signout_after_25 &&
+        retrieved_emsg == GBE_kDotaCacheUnsubscribed;
+    d.reset_after_cache_unsubscribed =
+        pending_reset_after_cache_unsubscribed &&
+        retrieved_emsg == GBE_kDotaCacheUnsubscribed;
     return d;
 }
 
 bool build_reconnect_context(const GBE_LocalLobby &local, GBE_DotaReconnectContext &context)
 {
     context = GBE_DotaReconnectContext{};
-    if (!local.active || (local.state < 2u && local.game_state < 2u) || local.server_id == 0ull || local.connect.empty())
+    const auto eligibility = compute_reconnect_eligibility_decision(
+        true,
+        local.active,
+        local.state,
+        local.game_state,
+        local.server_id,
+        !local.connect.empty(),
+        local.custom_game.game_id,
+        local.owner_connected,
+        local.launch_phase);
+    if (!eligibility.context_eligible)
         return false;
 
     context.server_id = local.server_id;
@@ -554,6 +753,61 @@ bool build_reconnect_context(const GBE_LocalLobby &local, GBE_DotaReconnectConte
     context.connect[sizeof(context.connect) - 1] = '\0';
     context.owner_steam_id = local.owner_steam_id;
     return true;
+}
+
+ReconnectEligibilityDecision compute_reconnect_eligibility_decision(
+    bool source_valid,
+    bool active,
+    std::uint32_t lobby_state,
+    std::uint32_t game_state,
+    std::uint64_t server_id,
+    bool has_connect,
+    std::uint64_t custom_game_id,
+    bool owner_connected,
+    std::uint32_t launch_phase)
+{
+    ReconnectEligibilityDecision d;
+    d.source_valid = source_valid;
+    d.active = active;
+    d.started = lobby_state >= 2u || game_state >= 2u;
+    d.has_server_id = server_id != 0ull;
+    d.has_connect = has_connect;
+    d.custom_game = custom_game_id != 0ull;
+    d.owner_connected = owner_connected;
+    d.launch_run_or_later = launch_phase >= GBE_kDotaLaunchPhaseRunQueued;
+    d.launch_loaded = launch_phase >= GBE_kDotaLaunchPhaseLoaded;
+    d.context_eligible = d.source_valid && d.active && d.started && d.has_server_id && d.has_connect;
+    return d;
+}
+
+ReconnectInterceptionDecision compute_reconnect_interception_decision(
+    const GBE_DotaReconnectContext &context,
+    bool has_context,
+    std::uint64_t local_steam_id,
+    std::uint64_t remote_steam_id,
+    bool reconnect_eligible)
+{
+    ReconnectInterceptionDecision d;
+    d.has_context = has_context;
+    d.remote_matches_server = has_context && remote_steam_id == context.server_id;
+    d.state_ready = has_context && GBE_DotaReconnectContextIsStarted(context);
+    d.has_connect = has_context && context.connect[0] != '\0';
+    d.arcade_context = has_context && context.custom_game_id != 0ull;
+    d.local_is_owner = local_steam_id != 0ull && local_steam_id == context.owner_steam_id;
+    d.reconnect_eligible = reconnect_eligible;
+    d.p2p_rendezvous_candidate =
+        d.remote_matches_server &&
+        d.state_ready &&
+        d.has_connect &&
+        !d.local_is_owner;
+    d.can_post_connection_state =
+        d.has_context &&
+        d.arcade_context &&
+        d.state_ready &&
+        d.has_connect &&
+        !d.local_is_owner &&
+        d.reconnect_eligible;
+    return d;
 }
 
 } // namespace gbe::dota_lobby_state

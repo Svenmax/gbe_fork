@@ -28,10 +28,13 @@ inline bool GBE_DotaReconnectContextIsStarted(const GBE_DotaReconnectContext &ct
 bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out);
 bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64_t local_steam_id, GBE_DotaReconnectContext *out);
 bool GBE_IsDotaArcadeLobbyActive();
+bool GBE_GetRecentDotaReconnectContext(GBE_DotaReconnectContext *out);
+void GBE_SetRecentDotaReconnectContext(const GBE_DotaReconnectContext &ctx);
+void GBE_ClearRecentDotaReconnectContext();
 
-// Flag indicating player has disconnected (CancelAuthTicket called)
-// and is eligible for reconnect interception.
-extern std::atomic<bool> GBE_dota_reconnect_eligible;
+bool GBE_IsDotaReconnectEligible();
+void GBE_SetDotaReconnectEligible(bool eligible);
+bool GBE_ConsumeDotaReconnectEligibility();
 
 // Lightweight debug log for reconnect subsystem (writes to gbe_gc_debug.log)
 inline void GBE_ReconnectLog(const char *scope, const char *fmt, ...)

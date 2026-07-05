@@ -42,6 +42,7 @@
 #include "gbe_dota_request_router.h"
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_gc_router.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -66,9 +67,12 @@
 using namespace gamecoordinator::tf2;
 
 using GBE_Dota7034RequestShape = gbe::proto_wire::Dota7034RequestShape;
+using GBE_Dota7034RuntimeRequest = gbe::proto_wire::Dota7034RuntimeRequest;
 using GBE_Dota7034ConnectedPlayer = gbe::proto_wire::Dota7034ConnectedPlayer;
 using GBE_Dota7034DisconnectedPlayer = gbe::proto_wire::Dota7034DisconnectedPlayer;
-using GBE_Dota8053Result = gbe::proto_wire::Dota8053Result;
+using GBE_Dota7070ReadyUpRequest = gbe::proto_wire::Dota7070ReadyUpRequest;
+using GBE_Dota8052StartedLoadingRequest = gbe::proto_wire::Dota8052StartedLoadingRequest;
+using GBE_Dota8053FinishedLoadingRequest = gbe::proto_wire::Dota8053FinishedLoadingRequest;
 
 
 // ============================================================================
@@ -368,18 +372,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Request(
     uint64 source_job)
 {
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.match_id != 0 && (GBE_local_lobby.server_id != 0 || !GBE_local_lobby.connect.empty())) {
-        const GBE_Dota7034RequestShape request_shape = gbe::proto_wire::parse_dota7034_request_shape(body, body_size);
+        const GBE_Dota7034RuntimeRequest request = gbe::proto_wire::parse_dota7034_runtime_request(body, body_size);
         bool queued_runtime_lobby_update = false;
         const bool custom_game_launch = GBE_local_lobby.custom_game.game_id != 0ull;
 
         bool updated_owner_team_or_slot_from_7034 = false;
-        if (!custom_game_launch && request_shape.has_draft_steam_id && request_shape.draft_steam_id == GBE_GetDotaLobbyOwnerSteamId()) {
-            if (request_shape.has_draft_team && GBE_local_lobby.owner_team != request_shape.draft_team) {
-                GBE_local_lobby.owner_team = request_shape.draft_team;
+        if (!custom_game_launch && request.has_draft_steam_id && request.draft_steam_id == GBE_GetDotaLobbyOwnerSteamId()) {
+            if (request.has_draft_team && GBE_local_lobby.owner_team != request.draft_team) {
+                GBE_local_lobby.owner_team = request.draft_team;
                 updated_owner_team_or_slot_from_7034 = true;
             }
 
-            const uint32 draft_owner_slot = request_shape.has_draft_team_slot ? (request_shape.draft_team_slot + 1u) : 0u;
+            const uint32 draft_owner_slot = request.has_draft_team_slot ? (request.draft_team_slot + 1u) : 0u;
             if (draft_owner_slot != 0u && GBE_local_lobby.owner_slot != draft_owner_slot) {
                 GBE_local_lobby.owner_slot = draft_owner_slot;
                 updated_owner_team_or_slot_from_7034 = true;
@@ -401,7 +405,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Request(
 
         bool owner_hero_updated_from_7034 = false;
         const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
-        for (const GBE_Dota7034ConnectedPlayer &connected_player : request_shape.connected_players) {
+        for (const GBE_Dota7034ConnectedPlayer &connected_player : request.connected_players) {
             if (!connected_player.has_steam_id || connected_player.steam_id == 0ull)
                 continue;
             const uint32 previous_owner_hero_id = GBE_local_lobby.owner_hero_id;
@@ -442,7 +446,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Request(
             GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(owner_steam_id, source_job);
         }
 
-        GBE_HandleDotaDirect7034DisconnectedPlayers(request_shape.disconnected_players, source_job);
+        GBE_HandleDotaDirect7034DisconnectedPlayers(request.disconnected_players, source_job);
 
         if (GBE_local_lobby.state == 1u &&
             GBE_local_lobby.game_state == 0u &&
@@ -484,7 +488,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Request(
             gbe::proto_wire::format_dota7034_summary(body, body_size).c_str()
         );
 
-        GBE_HandleDotaDirect7034RuntimeUpdates(request_emsg, body, body_size, request_shape, custom_game_launch, source_job, queued_runtime_lobby_update);
+        GBE_HandleDotaDirect7034RuntimeUpdates(request_emsg, body, body_size, request, custom_game_launch, source_job, queued_runtime_lobby_update);
 
         if (custom_game_launch)
             return true;
@@ -556,19 +560,29 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034RuntimeUpdates(
     uint32 request_emsg,
     const uint8 *body,
     size_t body_size,
-    const GBE_Dota7034RequestShape &request_shape,
+    const GBE_Dota7034RuntimeRequest &request,
     bool custom_game_launch,
     uint64 source_job,
     bool &queued_runtime_lobby_update)
 {
-    const bool request_advances_to_hero_selection = request_shape.has_game_state && request_shape.game_state >= 2u;
+    const bool request_advances_to_hero_selection = request.has_game_state && request.game_state >= 2u;
 
-    if (custom_game_launch &&
-            GBE_local_lobby.state == 2u &&
-            GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued &&
-            request_shape.has_game_state &&
-            request_shape.game_state > GBE_local_lobby.game_state) {
-        if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("custom game 7034 game_state", request_emsg, source_job, 2u, request_shape.game_state))
+    const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision runtime_game_state =
+        gbe::dota_lobby_state::compute_runtime_game_state_transition(
+            GBE_local_lobby,
+            custom_game_launch,
+            request.has_game_state,
+            request.game_state,
+            GBE_kDotaLaunchPhaseRunQueued,
+            "custom game 7034 game_state");
+    if (runtime_game_state.queue_runtime_lobby_update) {
+        if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(
+                runtime_game_state.reason.c_str(),
+                request_emsg,
+                source_job,
+                runtime_game_state.next_state,
+                runtime_game_state.next_game_state,
+                runtime_game_state.runtime_update_delay))
             queued_runtime_lobby_update = true;
     }
 
@@ -580,7 +594,7 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034RuntimeUpdates(
             queued_runtime_lobby_update = true;
     }
 
-    GBE_HandleDotaDirect7034StrategyTime(request_emsg, body, body_size, request_shape, custom_game_launch, source_job, queued_runtime_lobby_update);
+    GBE_HandleDotaDirect7034StrategyTime(request_emsg, body, body_size, request, custom_game_launch, source_job, queued_runtime_lobby_update);
 
     GBE_HandleDotaDirect7034LaunchPoll(request_emsg, source_job, queued_runtime_lobby_update);
 
@@ -613,12 +627,12 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034StrategyTime(
     uint32 request_emsg,
     const uint8 *body,
     size_t body_size,
-    const GBE_Dota7034RequestShape &request_shape,
+    const GBE_Dota7034RuntimeRequest &request,
     bool custom_game_launch,
     uint64 source_job,
     bool &queued_runtime_lobby_update)
 {
-    GBE_HandleDotaDirect7034StrategyTimeFallback(request_emsg, body, body_size, request_shape, custom_game_launch, source_job, queued_runtime_lobby_update);
+    GBE_HandleDotaDirect7034StrategyTimeFallback(request_emsg, body, body_size, request, custom_game_launch, source_job, queued_runtime_lobby_update);
     GBE_HandleDotaDirect7034StrategyTimePreserve(request_emsg, source_job, queued_runtime_lobby_update);
 }
 
@@ -627,7 +641,7 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034StrategyTimeFallback(
     uint32 request_emsg,
     const uint8 *body,
     size_t body_size,
-    const GBE_Dota7034RequestShape &request_shape,
+    const GBE_Dota7034RuntimeRequest &request,
     bool custom_game_launch,
     uint64 source_job,
     bool &queued_runtime_lobby_update)
@@ -635,8 +649,8 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034StrategyTimeFallback(
     if (!custom_game_launch &&
         GBE_local_lobby.state == 2u &&
         GBE_local_lobby.game_state == 2u &&
-        request_shape.has_game_state && request_shape.game_state == 2u &&
-        request_shape.has_send_reason && request_shape.send_reason == 2u &&
+        request.has_game_state && request.game_state == 2u &&
+        request.has_send_reason && request.send_reason == 2u &&
         GBE_local_lobby.game_mode == 1u) {
         uint32 remote_count = 0u;
         uint32 connected_remote_count = 0u;
@@ -769,10 +783,14 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034LaunchPoll(
     uint64 source_job,
     bool &queued_runtime_lobby_update)
 {
-    if (GBE_local_lobby.state == 2u && GBE_local_lobby.game_state == 10u)
+    const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision launch_poll =
+        gbe::dota_lobby_state::compute_launch_poll_transition(
+            GBE_local_lobby,
+            "7034_launch_poll");
+    if (!launch_poll.send_details_update)
         return;
 
-    if (GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "7034_launch_poll")) {
+    if (GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, launch_poll.reason.c_str())) {
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "replying req=%u resp=%u source_job=%llu note=7034 direct poll uses runtime 26 fallback state=%u game_state=%u",
@@ -837,16 +855,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameReadyUpRequest(const uint8 
     );
 
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && gbe::dota_custom_game::has_custom_game_details(GBE_local_lobby.custom_game)) {
-        uint32 ready_state = 0u;
-        gbe::proto_wire::read_uint32_field(body, body_size, 1u, ready_state);
+        const GBE_Dota7070ReadyUpRequest request = gbe::proto_wire::parse_dota7070_ready_up_request(body, body_size);
         std::string response_7170;
-        if (gbe::gc_message::build_dota_ready_up_status_payload(has_source_job, source_job, GBE_local_lobby.lobby_id, 0u, ready_state != 0u ? ready_state : 1u, response_7170))
+        if (gbe::gc_message::build_dota_ready_up_status_payload(has_source_job, source_job, GBE_local_lobby.lobby_id, 0u, request.ready_state != 0u ? request.ready_state : 1u, response_7170))
             push_incoming_now(7170u | GBE_kProtoMask, response_7170);
 
-        if (ready_state == 1u && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state < 1u && GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
-            GBE_local_lobby.game_state = 1u;
-            GBE_PublishSharedDotaLobbyState("7070_custom_game_ready_up_run_ack");
-            GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "7070_custom_game_ready_up_run_ack");
+        const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision ready_up =
+            gbe::dota_lobby_state::compute_custom_game_ready_up_transition(
+                GBE_local_lobby,
+                request.ready_state,
+                GBE_kDotaLaunchPhaseRunQueued,
+                "7070_custom_game_ready_up_run_ack");
+        if (ready_up.apply_lobby_state) {
+            GBE_local_lobby.state = ready_up.next_state;
+            GBE_local_lobby.game_state = ready_up.next_game_state;
+            if (ready_up.publish_shared_state)
+                GBE_PublishSharedDotaLobbyState(ready_up.reason.c_str());
+            if (ready_up.send_details_update)
+                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, ready_up.reason.c_str());
         }
     }
     return true;
@@ -864,31 +890,45 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameStartedLoadingRequest(const
     );
 
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && gbe::dota_custom_game::has_custom_game_details(GBE_local_lobby.custom_game)) {
-        uint64 lobby_id = 0;
-        uint64 custom_game_id = 0;
-        uint64 start_time = 0;
-        gbe::proto_wire::read_uint64_field(body, body_size, 1u, lobby_id);
-        gbe::proto_wire::read_uint64_field(body, body_size, 2u, custom_game_id);
-        gbe::proto_wire::read_uint64_field(body, body_size, 4u, start_time);
+        const GBE_Dota8052StartedLoadingRequest request = gbe::proto_wire::parse_dota8052_started_loading_request(body, body_size);
 
-        if (lobby_id == 0 || lobby_id == GBE_local_lobby.lobby_id) {
-            if (custom_game_id != 0)
-                GBE_local_lobby.custom_game.game_id = custom_game_id;
-            if (start_time != 0)
-                GBE_local_lobby.game_start_time = static_cast<uint32>(start_time);
-            if (GBE_TryAdvanceDotaLaunchToRun("custom game 8052 started loading", 8052u, source_job, "8052_started_loading", 0u)) {
+        if (request.lobby_id == 0 || request.lobby_id == GBE_local_lobby.lobby_id) {
+            if (request.custom_game_id != 0)
+                GBE_local_lobby.custom_game.game_id = request.custom_game_id;
+            if (request.start_time != 0)
+                GBE_local_lobby.game_start_time = static_cast<uint32>(request.start_time);
+            const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision started_loading =
+                gbe::dota_lobby_state::compute_custom_game_started_loading_transition(
+                    GBE_local_lobby,
+                    true,
+                    GBE_kDotaLaunchPhaseSetupSynced,
+                    GBE_kDotaLaunchPhaseRunQueued,
+                    "8052_started_loading");
+            bool advanced_to_run = false;
+            if (started_loading.queue_runtime_lobby_update) {
+                if (started_loading.mark_launch_phase)
+                    GBE_MarkDotaLaunchPhase(started_loading.launch_phase, started_loading.reason.c_str());
+                advanced_to_run = GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(
+                    "custom game 8052 started loading",
+                    8052u,
+                    source_job,
+                    started_loading.next_state,
+                    started_loading.next_game_state,
+                    started_loading.runtime_update_delay);
+            }
+            if (advanced_to_run) {
                 GBE_GC_DebugLog(
                     "GC_DOTA_LOBBY",
                     "[LOBBY] Advanced custom game RUN after 8052 lobby_id=%llu custom_game_id=%llu start_time=%llu state=%u game_state=%u",
                     static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    static_cast<unsigned long long>(custom_game_id),
-                    static_cast<unsigned long long>(start_time),
+                    static_cast<unsigned long long>(request.custom_game_id),
+                    static_cast<unsigned long long>(request.start_time),
                     GBE_local_lobby.state,
                     GBE_local_lobby.game_state
                 );
-            } else {
-                GBE_PublishSharedDotaLobbyState("8052_started_loading");
-                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, "8052_started_loading");
+            } else if (started_loading.publish_shared_state || started_loading.queue_runtime_lobby_update) {
+                GBE_PublishSharedDotaLobbyState(started_loading.reason.c_str());
+                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, started_loading.reason.c_str());
             }
         }
     }
@@ -907,37 +947,44 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameFinishedLoadingRequest(cons
     );
 
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && gbe::dota_custom_game::has_custom_game_details(GBE_local_lobby.custom_game)) {
-        const GBE_Dota8053Result load_result = gbe::proto_wire::parse_dota8053_result(body, body_size);
+        const GBE_Dota8053FinishedLoadingRequest request = gbe::proto_wire::parse_dota8053_finished_loading_request(body, body_size);
 
-        if (load_result.lobby_id == 0 || load_result.lobby_id == GBE_local_lobby.lobby_id) {
-            if (GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued) {
-                GBE_local_lobby.state = 2u;
-                if (GBE_local_lobby.game_state < 1u)
-                    GBE_local_lobby.game_state = 1u;
-            } else if (GBE_local_lobby.state < 2u) {
-                GBE_local_lobby.state = 2u;
-            }
-
-            const bool load_failed = gbe::proto_wire::dota8053_indicates_load_failure(load_result.result_code, load_result.result_text);
+        if (request.lobby_id == 0 || request.lobby_id == GBE_local_lobby.lobby_id) {
+            const bool load_failed = gbe::proto_wire::dota8053_indicates_load_failure(request.result_code, request.result_text);
             const char *reason = load_failed ? "8053_load_failed" : "8053_finished_loading";
+            const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision finished_loading =
+                gbe::dota_lobby_state::compute_custom_game_finished_loading_transition(
+                    GBE_local_lobby,
+                    true,
+                    load_failed,
+                    GBE_kDotaLaunchPhaseRunQueued,
+                    GBE_kDotaLaunchPhaseLoaded,
+                    reason);
+            if (finished_loading.apply_lobby_state) {
+                GBE_local_lobby.state = finished_loading.next_state;
+                GBE_local_lobby.game_state = finished_loading.next_game_state;
+            }
             if (!load_failed) {
                 const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
                 if (local_steam_id != 0ull)
                     GBE_SetDotaLobbyMemberRuntimeState(local_steam_id, true, 0u, false);
-                GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseLoaded, reason);
+                if (finished_loading.mark_launch_phase)
+                    GBE_MarkDotaLaunchPhase(finished_loading.launch_phase, finished_loading.reason.c_str());
                 GBE_PublishDotaPracticeLobbyLocalMemberData(reason);
             }
-            GBE_PublishSharedDotaLobbyState(reason);
-            GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, reason);
+            if (finished_loading.publish_shared_state)
+                GBE_PublishSharedDotaLobbyState(finished_loading.reason.c_str());
+            if (finished_loading.send_details_update)
+                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, finished_loading.reason.c_str());
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Applied direct 8053 lobby_id=%llu loading_duration=%llu result_code=%llu signon_states=%llu load_failed=%u result_text=%s",
                 static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                static_cast<unsigned long long>(load_result.loading_duration),
-                static_cast<unsigned long long>(load_result.result_code),
-                static_cast<unsigned long long>(load_result.signon_states),
+                static_cast<unsigned long long>(request.loading_duration),
+                static_cast<unsigned long long>(request.result_code),
+                static_cast<unsigned long long>(request.signon_states),
                 load_failed ? 1u : 0u,
-                load_result.result_text.c_str()
+                request.result_text.c_str()
             );
         }
     }
