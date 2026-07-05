@@ -387,3 +387,56 @@ Phase 2.13 审查修复后,主文件为 1490 行(累计缩减 90.1%),已达成�
 - Phase 2.11 耦合分析报告:[tools/_phase31_coupling_report.txt](file:///workspace/tools/_phase31_coupling_report.txt)
 - Phase 2.12 耦合分析报告:[tools/_phase32_coupling_report.txt](file:///workspace/tools/_phase32_coupling_report.txt)
 - 各阶段脚本:[tools/_phase23a_externalize.py](file:///workspace/tools/_phase23a_externalize.py)、[_phase23b_extract_handlers.py](file:///workspace/tools/_phase23b_extract_handlers.py)、[_phase24a_delete_dead.py](file:///workspace/tools/_phase24a_delete_dead.py)、[_phase24b_extract.py](file:///workspace/tools/_phase24b_extract.py)、[_phase25_externalize.py](file:///workspace/tools/_phase25_externalize.py)、[_phase25_extract.py](file:///workspace/tools/_phase25_extract.py)、[_phase25_fix_default_args.py](file:///workspace/tools/_phase25_fix_default_args.py)、[_phase26_analyze.py](file:///workspace/tools/_phase26_analyze.py)、[_phase26_extract.py](file:///workspace/tools/_phase26_extract.py)、[_phase27_analyze.py](file:///workspace/tools/_phase27_analyze.py)、[_phase27_externalize.py](file:///workspace/tools/_phase27_externalize.py)、[_phase27_extract.py](file:///workspace/tools/_phase27_extract.py)、[_phase27_fix_struct_visibility.py](file:///workspace/tools/_phase27_fix_struct_visibility.py)、[_phase28_analyze.py](file:///workspace/tools/_phase28_analyze.py)、[_phase28_extract.py](file:///workspace/tools/_phase28_extract.py)、[_phase29_analyze.py](file:///workspace/tools/_phase29_analyze.py)、[_phase29_extract.py](file:///workspace/tools/_phase29_extract.py)、[_phase30_analyze.py](file:///workspace/tools/_phase30_analyze.py)、[_phase30_extract.py](file:///workspace/tools/_phase30_extract.py)、[_phase31_extract.py](file:///workspace/tools/_phase31_extract.py)、[_phase32_extract.py](file:///workspace/tools/_phase32_extract.py)
+
+---
+
+## 7. 第三方审查后续任务(2026-07-05)
+
+> 来源:独立审查 `origin/dev...origin/trae/agent-inRF11` 后形成的维护性收尾清单。目标不是继续扩大拆分,而是把当前中间态收敛成可长期维护、可 CI 保护的状态。
+
+### P0 — 合并前必须完成
+
+- [x] **接入 GC verification 到 PR CI**
+  - 在 `.github/workflows/emu-pull-request.yml` 为 pull_request 增加 Linux GC verification job。
+  - 执行 `bash tools/run_gc_verification.sh --fast` 作为 PR smoke；full verification 仍保留本地/手动入口。
+  - 目标:让 handler/payload/wire/lobby-state 的离线测试随 PR 自动运行。
+
+- [x] **修复当前 `git diff --check` 噪音**
+  - 清理 `tools/_phase29_extern_decls.txt` 与 `tools/_phase30_coupling_report.txt` 的 EOF 空行问题。
+  - 目标:保持 `tools/run_gc_verification.sh` 在干净 diff 上稳定可用。
+
+- [x] **统一 Dota runtime reset 入口**
+  - 将 `GBE_local_lobby = GBE_LocalLobby{}`、`GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{}`、`GBE_ClearLastDotaLaunchStatePushedGameState()` 等组合式清理收敛到显式 helper。
+  - 候选 API:在 `Steam_Game_Coordinator` 内保留 `clear_dota_runtime_state(...)`,并新增细粒度 helper/flags 覆盖 postgame/chat leave 等特殊路径。
+  - 已新增 `GBE_ClearDotaLobbyRuntimeState()` 覆盖 local/shared/last-launch 同构清理；`gbe_dota_chat_handlers.cpp` 中仅清 local lobby 的 stale-channel 特殊路径保持原行为不变。
+  - 目标:避免后续新增 runtime 状态时遗漏某条 teardown path。
+
+### P1 — 应该完成
+
+- [ ] **缩小 `gbe_dota_gc_internal.h` 的共享面**
+  - 优先处理 mutable state: `GBE_shared_dota_lobby_state`、`GBE_vpk_loot_data`、`GBE_last_dota_server_hello_context`。
+  - 已将 `GBE_vpk_loot_data` 收敛为 `GBE_GetDotaVpkLootData()` / `GBE_SetDotaVpkLootData(...)`,外部 TU 不再直接写全局变量。
+  - 已移除 `GBE_last_dota_server_hello_context` 的 extern 暴露,变量重新变为 `steam_game_coordinator.cpp` TU-local,外部只用 accessor。
+  - `GBE_shared_dota_lobby_state` 仍跨多个 coordinator/handler/payload TU 使用,不在本轮一刀切；需要单独设计 shared-state facade 或 state context。
+  - 目标:避免 internal header 变成跨文件全局垃圾桶。
+
+- [x] **清理 agent/过程文档入库噪音**
+  - 复核 `.monkeycode/`、`.opencode/`、中间阶段报告和生成脚本。
+  - 已移除 `.monkeycode/` 与 `.opencode/` 这类 agent 私有过程目录。
+  - 已将 audit 仍依赖的 reason/trace contract 迁移到 `docs/gc/reason-trace-governance.md`。
+  - 已从 `.monkeycode` 萃取长期维护信息到 `docs/gc/README.md`、`docs/gc/verification-and-build.md`、`docs/gc/internal-header-shrink-plan.md`、`docs/gc/dependency-seams.md`。
+  - 阶段脚本/报告暂保留,因为 `REFACTOR_TODO.md` 仍将其作为可复现审查证据引用。
+  - 目标:降低 reviewer 负担,减少主仓库维护噪音。
+
+### P2 — 可选增强
+
+- [x] **补充依赖边界文档**
+  - 用短文档说明 `steam_game_coordinator.cpp`、`gbe_dota_*_handlers.cpp`、payload helpers、wire helpers、state coordinator 的职责边界。
+  - 已新增 `docs/gc/coordinator-boundaries.md`。
+  - 目标:让后续功能改动知道应该落在哪个 TU。
+
+- [x] **增加 reset/path-specific regression tests**
+  - 对 normal signout、postgame cleanup、chat leave stale-channel 等路径增加最小 offline regression。
+  - 已在 `tools/gbe_dota_handler_test/smoke_test.cpp` 增加 `test_lobby_runtime_reset_clears_local_shared_and_last_launch_state`,覆盖 `GBE_ClearDotaLobbyRuntimeState()` 的 local/shared/last-launch 清理契约。
+  - 现有 `test_chat_leave_postgame_channel_order` 与 `test_lobby_normal_signout_pending_clear_resets_state` 继续覆盖 postgame/chat 与 normal signout 关键路径。
+  - 目标:验证统一 reset helper 没有改变消息顺序和状态发布语义。

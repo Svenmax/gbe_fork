@@ -25,7 +25,7 @@ MAIN_CPP = os.path.join(ROOT_DIR, "dll", "steam_game_coordinator.cpp")
 TODO_MD = os.path.join(ROOT_DIR, "REFACTOR_TODO.md")
 RUN_GC_OFFLINE_TESTS_SH = os.path.join(ROOT_DIR, "tools", "run_gc_offline_tests.sh")
 PREMAKE5_LUA = os.path.join(ROOT_DIR, "premake5.lua")
-REASON_TRACE_GOVERNANCE_MD = os.path.join(ROOT_DIR, ".monkeycode", "specs", "gc-refactor-next-steps", "reason-trace-governance.md")
+REASON_TRACE_GOVERNANCE_MD = os.path.join(ROOT_DIR, "docs", "gc", "reason-trace-governance.md")
 GC_TUS = sorted(glob.glob(os.path.join(ROOT_DIR, "dll", "gbe_dota_*.cpp"))) + [MAIN_CPP]
 TEMPLATE_BLOB_OWNER_FILES = {
     "gbe_dota_template_replay_handlers.cpp",
@@ -350,8 +350,7 @@ def audit_reason_inventory():
     for pattern in (
         os.path.join(ROOT_DIR, "tools", "*.cpp"),
         os.path.join(ROOT_DIR, "tools", "*", "*.cpp"),
-        os.path.join(ROOT_DIR, ".monkeycode", "specs", "gc-refactor-next-steps", "*.md"),
-        os.path.join(ROOT_DIR, ".monkeycode", "specs", "gc-refactor-follow-up", "*.md"),
+        os.path.join(ROOT_DIR, "docs", "gc", "*.md"),
     ):
         for path in glob.glob(pattern):
             coverage_text += "\n" + read(path)
