@@ -165,6 +165,7 @@ static const uint8 GBE_kDota9024Template[] = {
 
 
 bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job) {
+    const GBE_DotaLootListData &loot_data = GBE_GetDotaVpkLootData();
     const uint8 *template_bytes = nullptr;
     size_t template_size = 0;
     const char *template_hex = nullptr;
@@ -836,13 +837,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             // Build response with item_defs from loot list
             std::vector<uint32> crate_item_defs;
             // Look up loot list for this treasure
-            auto tll_it = GBE_vpk_loot_data.treasure_to_loot_list.find(crate_def);
-            if (tll_it != GBE_vpk_loot_data.treasure_to_loot_list.end()) {
-                auto ll_it = GBE_vpk_loot_data.loot_lists.find(tll_it->second);
-                if (ll_it != GBE_vpk_loot_data.loot_lists.end()) {
+            auto tll_it = loot_data.treasure_to_loot_list.find(crate_def);
+            if (tll_it != loot_data.treasure_to_loot_list.end()) {
+                auto ll_it = loot_data.loot_lists.find(tll_it->second);
+                if (ll_it != loot_data.loot_lists.end()) {
                     for (const auto &entry_name : ll_it->second) {
-                        auto def_it = GBE_vpk_loot_data.name_to_def.find(entry_name);
-                        if (def_it != GBE_vpk_loot_data.name_to_def.end())
+                        auto def_it = loot_data.name_to_def.find(entry_name);
+                        if (def_it != loot_data.name_to_def.end())
                             crate_item_defs.push_back(def_it->second);
                     }
                 }
@@ -886,24 +887,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             // Try to open as treasure: look up loot list
             uint32 granted_def = 0;
             std::string resolved_loot_list;
-            auto tll_it = GBE_vpk_loot_data.treasure_to_loot_list.find(item_def);
-            if (tll_it != GBE_vpk_loot_data.treasure_to_loot_list.end()) {
+            auto tll_it = loot_data.treasure_to_loot_list.find(item_def);
+            if (tll_it != loot_data.treasure_to_loot_list.end()) {
                 resolved_loot_list = tll_it->second;
             } else {
                 // Try tool.usage.loot_list path (gem packs, gifts, etc.)
-                auto tool_it = GBE_vpk_loot_data.tool_to_loot_list.find(item_def);
-                if (tool_it != GBE_vpk_loot_data.tool_to_loot_list.end()) {
+                auto tool_it = loot_data.tool_to_loot_list.find(item_def);
+                if (tool_it != loot_data.tool_to_loot_list.end()) {
                     resolved_loot_list = tool_it->second;
                 }
             }
             if (!resolved_loot_list.empty()) {
-                auto ll_it = GBE_vpk_loot_data.loot_lists.find(resolved_loot_list);
-                if (ll_it != GBE_vpk_loot_data.loot_lists.end() && !ll_it->second.empty()) {
+                auto ll_it = loot_data.loot_lists.find(resolved_loot_list);
+                if (ll_it != loot_data.loot_lists.end() && !ll_it->second.empty()) {
                     // Pick random item from loot list
                     size_t idx = static_cast<size_t>(rand()) % ll_it->second.size();
                     const std::string &chosen_name = ll_it->second[idx];
-                    auto def_it = GBE_vpk_loot_data.name_to_def.find(chosen_name);
-                    if (def_it != GBE_vpk_loot_data.name_to_def.end()) {
+                    auto def_it = loot_data.name_to_def.find(chosen_name);
+                    if (def_it != loot_data.name_to_def.end()) {
                         granted_def = def_it->second;
                     }
                 }
@@ -978,14 +979,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             }
             // Pick random item from loot list
             std::vector<uint32> granted_defs;
-            auto tll_it = GBE_vpk_loot_data.treasure_to_loot_list.find(crate_def);
-            if (tll_it != GBE_vpk_loot_data.treasure_to_loot_list.end()) {
-                auto ll_it = GBE_vpk_loot_data.loot_lists.find(tll_it->second);
-                if (ll_it != GBE_vpk_loot_data.loot_lists.end() && !ll_it->second.empty()) {
+            auto tll_it = loot_data.treasure_to_loot_list.find(crate_def);
+            if (tll_it != loot_data.treasure_to_loot_list.end()) {
+                auto ll_it = loot_data.loot_lists.find(tll_it->second);
+                if (ll_it != loot_data.loot_lists.end() && !ll_it->second.empty()) {
                     size_t idx = static_cast<size_t>(rand()) % ll_it->second.size();
                     const std::string &chosen_name = ll_it->second[idx];
-                    auto def_it = GBE_vpk_loot_data.name_to_def.find(chosen_name);
-                    if (def_it != GBE_vpk_loot_data.name_to_def.end()) {
+                    auto def_it = loot_data.name_to_def.find(chosen_name);
+                    if (def_it != loot_data.name_to_def.end()) {
                         granted_defs.push_back(def_it->second);
                     }
                 }
@@ -1054,11 +1055,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             }
             // Look up bundle contents and grant all items
             std::vector<uint32> granted_defs;
-            auto bc_it = GBE_vpk_loot_data.bundle_contents.find(bundle_def);
-            if (bc_it != GBE_vpk_loot_data.bundle_contents.end()) {
+            auto bc_it = loot_data.bundle_contents.find(bundle_def);
+            if (bc_it != loot_data.bundle_contents.end()) {
                 for (const auto &item_name : bc_it->second) {
-                    auto def_it = GBE_vpk_loot_data.name_to_def.find(item_name);
-                    if (def_it != GBE_vpk_loot_data.name_to_def.end()) {
+                    auto def_it = loot_data.name_to_def.find(item_name);
+                    if (def_it != loot_data.name_to_def.end()) {
                         granted_defs.push_back(def_it->second);
                     }
                 }

@@ -568,9 +568,7 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
 
         // Reset local lobby and invalidate shared state
         GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-        GBE_local_lobby = GBE_LocalLobby{};
-        GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-        GBE_ClearLastDotaLaunchStatePushedGameState();
+        GBE_ClearDotaLobbyRuntimeState();
 
         // Push CacheUnsubscribed (msg 25) so Dota knows the lobby SO is gone
         std::string response_25;

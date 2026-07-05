@@ -131,6 +131,7 @@ public ISteamGameCoordinator
     void parse_gc_config();
     bool is_welcome_message(const GC_Message &message);
     void clear_dota_runtime_state(bool preserve_reconnect_context);
+    void GBE_ClearDotaLobbyRuntimeState();
     void GBE_ApplyQueuedLobbyState(const GC_Message &message);
     bool GBE_ShouldSuppressDotaAbandonedLobby(uint64 lobby_id) const;
     void GBE_MarkDotaAbandonedLobbySuppressed(uint64 lobby_id, const char *reason);

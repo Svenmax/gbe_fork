@@ -585,11 +585,14 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 auto vpk_data = GBE_LoadAllDotaItemsFromVpk();
                 vpk_item_defs = std::move(vpk_data.item_defs);
                 vpk_style_unlock = vpk_data.style_unlock;
-                GBE_vpk_loot_data = std::move(vpk_data.loot_data);
+                const size_t loot_list_count = vpk_data.loot_data.loot_lists.size();
+                const size_t treasure_count = vpk_data.loot_data.treasure_to_loot_list.size();
+                const size_t tool_count = vpk_data.loot_data.tool_to_loot_list.size();
+                const size_t bundle_count = vpk_data.loot_data.bundle_contents.size();
+                GBE_SetDotaVpkLootData(std::move(vpk_data.loot_data));
                 GBE_GC_DebugLog("GC_DOTA_ITEMS", "loaded %zu cosmetic item defs from VPK items_game.txt (style_unlock_attrs=%s loot_lists=%zu treasures=%zu tools=%zu bundles=%zu)",
                     vpk_item_defs.size(), vpk_style_unlock.found ? "found" : "not_found",
-                    GBE_vpk_loot_data.loot_lists.size(), GBE_vpk_loot_data.treasure_to_loot_list.size(),
-                    GBE_vpk_loot_data.tool_to_loot_list.size(), GBE_vpk_loot_data.bundle_contents.size());
+                    loot_list_count, treasure_count, tool_count, bundle_count);
 
                 // Log style diagnostics
                 const auto &sd = vpk_data.style_diag;

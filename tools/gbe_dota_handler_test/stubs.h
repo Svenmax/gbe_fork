@@ -775,6 +775,12 @@ public:
     uint32 GBE_GetLastDotaLaunchStatePushedGameState() const { return GBE_last_dota_launch_state_pushed_game_state; }
     void GBE_SetLastDotaLaunchStatePushedGameState(uint32 game_state) { GBE_last_dota_launch_state_pushed_game_state = game_state; }
     void GBE_ClearLastDotaLaunchStatePushedGameState() { GBE_last_dota_launch_state_pushed_game_state = 0; }
+    void GBE_ClearDotaLobbyRuntimeState()
+    {
+        GBE_local_lobby = GBE_LocalLobby{};
+        GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+        GBE_ClearLastDotaLaunchStatePushedGameState();
+    }
     const std::string &GBE_GetLastDotaLaunchPersonaSignature() const { return GBE_last_dota_launch_persona_signature; }
     void GBE_SetLastDotaLaunchPersonaSignature(const std::string &signature) { GBE_last_dota_launch_persona_signature = signature; }
     void GBE_ClearLastDotaLaunchPersonaSignature() { GBE_last_dota_launch_persona_signature.clear(); }

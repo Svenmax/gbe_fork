@@ -62,7 +62,17 @@ constexpr int GC_MIN_VERSION = 20091217;
 GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 bool GBE_recent_dota_reconnect_context_valid = false;
 GBE_DotaReconnectContext GBE_recent_dota_reconnect_context{};
-GBE_DotaLootListData GBE_vpk_loot_data;
+static GBE_DotaLootListData GBE_vpk_loot_data;
+
+const GBE_DotaLootListData &GBE_GetDotaVpkLootData()
+{
+    return GBE_vpk_loot_data;
+}
+
+void GBE_SetDotaVpkLootData(GBE_DotaLootListData &&loot_data)
+{
+    GBE_vpk_loot_data = std::move(loot_data);
+}
 
 // --- Dota reconnect shared state ---
 std::atomic<bool> GBE_dota_reconnect_eligible{true};
@@ -116,7 +126,7 @@ struct GCMsgHdr_t
 
 #pragma pack(pop)
 
-GBE_DotaServerHelloContext GBE_last_dota_server_hello_context;
+static GBE_DotaServerHelloContext GBE_last_dota_server_hello_context;
 
 bool GBE_HasLastDotaServerHelloContext()
 {
@@ -1039,14 +1049,19 @@ void Steam_Game_Coordinator::initialize_gc()
     }
 }
 
-void Steam_Game_Coordinator::clear_dota_runtime_state(bool preserve_reconnect_context)
+void Steam_Game_Coordinator::GBE_ClearDotaLobbyRuntimeState()
 {
     GBE_local_lobby = GBE_LocalLobby{};
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+    GBE_ClearLastDotaLaunchStatePushedGameState();
+}
+
+void Steam_Game_Coordinator::clear_dota_runtime_state(bool preserve_reconnect_context)
+{
+    GBE_ClearDotaLobbyRuntimeState();
     if (!preserve_reconnect_context)
         GBE_ClearRecentDotaReconnectContext();
     GBE_ClearDotaPrivateLobbySnapshotReplayed();
-    GBE_ClearLastDotaLaunchStatePushedGameState();
     GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
 }
 

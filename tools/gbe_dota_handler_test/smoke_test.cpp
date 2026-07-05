@@ -1063,6 +1063,31 @@ static void test_lobby_normal_signout_pending_clear_resets_state()
     ++g_tests_passed;
 }
 
+static void test_lobby_runtime_reset_clears_local_shared_and_last_launch_state()
+{
+    TestFixture tf;
+    tf.reset();
+
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x5100u;
+    tf.gc.GBE_SetLastDotaLaunchStatePushedGameState(7u);
+    GBE_shared_dota_lobby_state.valid = true;
+    GBE_shared_dota_lobby_state.active = true;
+    GBE_shared_dota_lobby_state.lobby_id = 0x5100u;
+    GBE_shared_dota_lobby_state.state = 4u;
+    GBE_shared_dota_lobby_state.game_state = 7u;
+
+    tf.gc.GBE_ClearDotaLobbyRuntimeState();
+
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "runtime reset should clear local lobby active flag");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0u, "runtime reset should clear local lobby id");
+    TEST_ASSERT(!GBE_shared_dota_lobby_state.valid, "runtime reset should clear shared lobby validity");
+    TEST_ASSERT_EQ(GBE_shared_dota_lobby_state.lobby_id, 0u, "runtime reset should clear shared lobby id");
+    TEST_ASSERT_EQ(tf.gc.GBE_GetLastDotaLaunchStatePushedGameState(), 0u, "runtime reset should clear last pushed launch game state");
+
+    ++g_tests_passed;
+}
+
 // =====================================================================
 // Misc domain smoke tests
 // =====================================================================
@@ -1512,6 +1537,9 @@ int main()
 
     std::printf("[run] test_lobby_normal_signout_pending_clear_resets_state\n");
     RUN_TEST(test_lobby_normal_signout_pending_clear_resets_state);
+
+    std::printf("[run] test_lobby_runtime_reset_clears_local_shared_and_last_launch_state\n");
+    RUN_TEST(test_lobby_runtime_reset_clears_local_shared_and_last_launch_state);
 
     std::printf("[run] test_misc_minimal_varint_success\n");
     RUN_TEST(test_misc_minimal_varint_success);

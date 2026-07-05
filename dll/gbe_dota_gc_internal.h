@@ -63,8 +63,9 @@ inline T deser_var(const char *&p)
     return output;
 }
 
-// Shared mutable state
-extern GBE_DotaLootListData GBE_vpk_loot_data;
+// Shared VPK loot data cache. Keep mutation centralized in steam_game_coordinator.cpp.
+const GBE_DotaLootListData &GBE_GetDotaVpkLootData();
+void GBE_SetDotaVpkLootData(GBE_DotaLootListData &&loot_data);
 
 // Shared const data tables
 extern const std::array<uint8, 4> GBE_kOldDotaAccountIdVarint;
@@ -112,9 +113,7 @@ void GBE_LogDotaResponsePacket(
     uint32 lobby_state,
     uint32 lobby_game_state);
 
-// Shared mutable server-hello cache (defined in steam_game_coordinator.cpp;
-// used by core code + lobby-flow TU).
-extern GBE_DotaServerHelloContext GBE_last_dota_server_hello_context;
+// Shared server-hello cache accessors (defined in steam_game_coordinator.cpp).
 bool GBE_HasLastDotaServerHelloContext();
 const GBE_DotaServerHelloContext &GBE_GetLastDotaServerHelloContext();
 void GBE_SetLastDotaServerHelloContext(const GBE_DotaServerHelloContext &context);

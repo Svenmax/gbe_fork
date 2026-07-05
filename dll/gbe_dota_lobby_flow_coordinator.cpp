@@ -653,9 +653,7 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
         client_target->GBE_ClearLastDotaLaunchStatePushedGameState();
     }
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-    GBE_local_lobby = GBE_LocalLobby{};
-    GBE_ClearLastDotaLaunchStatePushedGameState();
-    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+    GBE_ClearDotaLobbyRuntimeState();
 
     if (client_target && client_target->gc_profile == GC_PROFILE_DOTA2) {
         client_target->GBE_ClearDotaPracticeLobbyLaunchRichPresence();
