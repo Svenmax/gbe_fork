@@ -41,4 +41,3 @@ Classification:
 Line-count preview (approx, excludes leading blanks/comments):
   Total extracted lines: 359
   Main file after extract: ~2911
-

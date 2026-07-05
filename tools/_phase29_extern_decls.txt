@@ -164,4 +164,3 @@ extern bool GBE_BuildDirectDotaClientWelcome(uint64 steam_id, uint32 app_id, uin
 
 // function, was at main line 2650
 extern bool GBE_ComposeDotaClientWelcome(uint64 steam_id, uint32 app_id, uint32 account_id, const GBE_DotaHelloContext &context, std::string &message);
-
