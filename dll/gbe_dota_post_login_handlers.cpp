@@ -334,26 +334,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return GBE_HandleDotaMinimalVarintSuccessRequest(request_emsg, 8794u, "8793->8794 minimal success", "8793_8794", has_source_job, source_job);
     }
 
-    if (request_emsg == 7534) {
-        return GBE_HandleDotaProfileCardRequest(body, body_size, has_source_job, source_job);
-    }
-
-    if (request_emsg == 2581) {
-        return GBE_HandleDotaLookupAccountNameRequest(body, body_size, has_source_job, source_job);
-    }
-
-    if (request_emsg == 7503) {
-        return GBE_HandleDotaEmoticonDataRequest(body, body_size, has_source_job, source_job);
-    }
-
-    if (request_emsg == 8095) {
-        return GBE_HandleDotaConductScorecardRequest(body, body_size, has_source_job, source_job);
-    }
-
-    if (request_emsg == 8800) {
-        return GBE_HandleDotaCoachingSummaryRequest(body, body_size, has_source_job, source_job);
-    }
-
     if (request_emsg == 7450) {
         return GBE_HandleDotaBatchPlayerResourcesRequest(body, body_size, has_source_job, source_job);
     }

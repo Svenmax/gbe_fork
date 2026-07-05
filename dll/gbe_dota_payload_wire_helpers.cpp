@@ -45,11 +45,13 @@
 // (GBE_PatchDotaLobbyTemplateIdentifiersIfPresent,
 // GBE_ForceDotaLobbyCacheOwnerSOID, GBE_PrepareDotaWelcomeBody) are now
 // external-linkage so the pure lobby TU can still call them; their
-// declarations live in gbe_dota_gc_internal.h. GBE_PatchDotaWelcomeAccountObjects
+// declarations live in gbe_dota_payload_wire_helpers.h. GBE_PatchDotaWelcomeAccountObjects
 // remains file-scope `static` because it is only called from
 // GBE_PrepareDotaWelcomeBody within this TU.
 
 #include "gbe_dota_gc_internal.h"
+#include "gbe_dota_payload_lobby_helpers.h"
+#include "gbe_dota_payload_wire_helpers.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_proto_wire.h"

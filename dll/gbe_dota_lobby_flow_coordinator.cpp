@@ -76,7 +76,7 @@ static constexpr const char *GBE_kDotaLaunchPersonaStatePrivateLobbyRunHex =
 
 void Steam_Game_Coordinator::GBE_ResetDotaPracticeLobbyLaunchPeripheralState()
 {
-    GBE_last_dota_direct_connect_callback_signature.clear();
+    GBE_ClearLastDotaDirectConnectCallbackSignature();
 }
 
 
@@ -256,8 +256,8 @@ void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const
 
 void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
 {
-    GBE_last_dota_launch_persona_signature.clear();
-    GBE_last_dota_direct_connect_callback_signature.clear();
+    GBE_ClearLastDotaLaunchPersonaSignature();
+    GBE_ClearLastDotaDirectConnectCallbackSignature();
 
     Steam_Client *steam_client = get_steam_client();
     if (!steam_client || !steam_client->steam_friends)
@@ -322,7 +322,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     signature.append(std::to_string(GBE_local_lobby.match_id));
     signature.push_back('|');
     signature.append(endpoint);
-    if (signature == GBE_last_dota_direct_connect_callback_signature) {
+    if (signature == GBE_GetLastDotaDirectConnectCallbackSignature()) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipping duplicate direct connect callback reason=%s lobby_id=%llu endpoint=%s",
@@ -393,7 +393,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     const bool reconnect_eligible_after_trigger = arcade_custom_launch;
     if (!reconnect_eligible_after_trigger)
         GBE_SetDotaReconnectEligible(false);
-    GBE_last_dota_direct_connect_callback_signature = signature;
+    GBE_SetLastDotaDirectConnectCallbackSignature(signature);
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
         "queued direct connect trigger reason=%s lobby_id=%llu match_id=%llu endpoint=%s endpoint_raw=%s command=%s local_is_owner=%u arcade=%u reconnect_eligible=%u",
@@ -414,7 +414,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(c
 {
     if (is_server || gc_profile != GC_PROFILE_DOTA2 || !status || !lobby_state || !include_lobby || GBE_local_lobby.lobby_id == 0) {
         if (!include_lobby)
-            GBE_last_dota_launch_persona_signature.clear();
+            GBE_ClearLastDotaLaunchPersonaSignature();
         return;
     }
 
@@ -430,7 +430,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(c
     }
 
     if (!template_hex) {
-        GBE_last_dota_launch_persona_signature.clear();
+        GBE_ClearLastDotaLaunchPersonaSignature();
         return;
     }
 
@@ -444,7 +444,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(c
     signature.push_back('|');
     signature.append(std::to_string(GBE_local_lobby.lobby_id));
 
-    if (signature == GBE_last_dota_launch_persona_signature) {
+    if (signature == GBE_GetLastDotaLaunchPersonaSignature()) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipping duplicate launch persona reason=%s lobby_id=%llu signature=%s",
@@ -472,7 +472,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(c
     // Rich Presence is already updated via ISteamFriends::SetRichPresence
     // (called by GBE_UpdateDotaPracticeLobbyLaunchRichPresence before this point).
     // Do not push 766 (CMsgClientPersonaState) into GC queue -- Dota does not handle it.
-    GBE_last_dota_launch_persona_signature = signature;
+    GBE_SetLastDotaLaunchPersonaSignature(signature);
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
         "built launch persona reason=%s lobby_id=%llu status=%s lobby_state=%s size=%zu (not queued, using SetRichPresence)",
@@ -650,11 +650,11 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
         client_target->GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
         if (postgame_lobby.active && postgame_lobby.lobby_id != 0)
             client_target->GBE_local_lobby = postgame_lobby;
-        client_target->GBE_last_dota_launch_state_pushed_game_state = 0;
+        client_target->GBE_ClearLastDotaLaunchStatePushedGameState();
     }
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
     GBE_local_lobby = GBE_LocalLobby{};
-    GBE_last_dota_launch_state_pushed_game_state = 0;
+    GBE_ClearLastDotaLaunchStatePushedGameState();
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
 
     if (client_target && client_target->gc_profile == GC_PROFILE_DOTA2) {
@@ -698,4 +698,3 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
         );
     }
 }
-

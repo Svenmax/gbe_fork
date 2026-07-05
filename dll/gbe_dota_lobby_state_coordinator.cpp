@@ -31,6 +31,7 @@
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
 #include "gbe_dota_gc_internal.h"
+#include "gbe_dota_payload_lobby_helpers.h"
 #include <atomic>
 #include <algorithm>
 #include <array>
@@ -486,8 +487,8 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
     // automatic reconnect loop.  Manual reconnect uses restore_client_runtime
     // which has its own signature-clearing logic (line ~11336-11350).
     if (!is_server && !gbe::dota_lobby_flow::lobby_members_equal(previous_members, GBE_local_lobby.members) && GBE_local_lobby.game_state == 0u) {
-        GBE_last_dota_direct_connect_callback_signature.clear();
-        GBE_dota_private_lobby_snapshot_replayed = false;
+        GBE_ClearLastDotaDirectConnectCallbackSignature();
+        GBE_ClearDotaPrivateLobbySnapshotReplayed();
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "cleared direct connect signature and snapshot replay flag on member change reason=%s lobby_id=%llu state=%u game_state=%u",
@@ -569,7 +570,7 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
         GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
         GBE_local_lobby = GBE_LocalLobby{};
         GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-        GBE_last_dota_launch_state_pushed_game_state = 0;
+        GBE_ClearLastDotaLaunchStatePushedGameState();
 
         // Push CacheUnsubscribed (msg 25) so Dota knows the lobby SO is gone
         std::string response_25;

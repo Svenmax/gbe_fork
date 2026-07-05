@@ -32,6 +32,8 @@
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
 #include "gbe_dota_gc_internal.h"
+#include "gbe_dota_payload_lobby_helpers.h"
+#include "gbe_dota_payload_wire_helpers.h"
 #include <atomic>
 #include <algorithm>
 #include <array>
@@ -115,6 +117,26 @@ struct GCMsgHdr_t
 #pragma pack(pop)
 
 GBE_DotaServerHelloContext GBE_last_dota_server_hello_context;
+
+bool GBE_HasLastDotaServerHelloContext()
+{
+    return GBE_last_dota_server_hello_context.valid;
+}
+
+const GBE_DotaServerHelloContext &GBE_GetLastDotaServerHelloContext()
+{
+    return GBE_last_dota_server_hello_context;
+}
+
+void GBE_SetLastDotaServerHelloContext(const GBE_DotaServerHelloContext &context)
+{
+    GBE_last_dota_server_hello_context = context;
+}
+
+void GBE_ClearLastDotaServerHelloContext()
+{
+    GBE_last_dota_server_hello_context = GBE_DotaServerHelloContext{};
+}
 
 using GBE_DotaPracticeLobbyDetailsRequest = gbe::proto_wire::DotaPracticeLobbyDetailsRequest;
 using GBE_DotaPracticeLobbyCreateRequest = gbe::proto_wire::DotaPracticeLobbyCreateRequest;
@@ -248,6 +270,31 @@ bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc
             return false;
         return self->GBE_HandleDotaRankRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id);
     };
+    auto adapt_direct_profile_card = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
+        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
+            return false;
+        return self->GBE_HandleDotaProfileCardRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id);
+    };
+    auto adapt_direct_lookup_account_name = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
+        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
+            return false;
+        return self->GBE_HandleDotaLookupAccountNameRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id);
+    };
+    auto adapt_direct_emoticon_data = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
+        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
+            return false;
+        return self->GBE_HandleDotaEmoticonDataRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id);
+    };
+    auto adapt_direct_conduct_scorecard = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
+        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
+            return false;
+        return self->GBE_HandleDotaConductScorecardRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id);
+    };
+    auto adapt_direct_coaching_summary = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
+        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
+            return false;
+        return self->GBE_HandleDotaCoachingSummaryRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id);
+    };
 
     // Order follows the original switch arm order (chat -> lobby lifecycle ->
     // broadcast) to preserve the historical scan sequence. Linear lookup is
@@ -273,6 +320,11 @@ bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc
         { 7427u,                                        adapt_direct_7427_notifications  },
         { 4523u,                                        adapt_direct_upload_rate          },
         { 8879u,                                        adapt_direct_rank                 },
+        { 7534u,                                        adapt_direct_profile_card         },
+        { 2581u,                                        adapt_direct_lookup_account_name  },
+        { 7503u,                                        adapt_direct_emoticon_data        },
+        { 8095u,                                        adapt_direct_conduct_scorecard    },
+        { 8800u,                                        adapt_direct_coaching_summary     },
     };
 
     const Entry *entry = nullptr;
@@ -589,6 +641,96 @@ bool Steam_Game_Coordinator::GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChan
     return GBE_pending_dota_abandon_finalize_after_7014;
 }
 
+bool Steam_Game_Coordinator::GBE_HasSentDotaLoginSync() const
+{
+    return GBE_dota_login_sync_sent;
+}
+
+void Steam_Game_Coordinator::GBE_MarkDotaLoginSyncSent()
+{
+    GBE_dota_login_sync_sent = true;
+}
+
+void Steam_Game_Coordinator::GBE_ClearDotaLoginSyncSent()
+{
+    GBE_dota_login_sync_sent = false;
+}
+
+bool Steam_Game_Coordinator::GBE_HasPushedDotaHostShowcaseEquip() const
+{
+    return GBE_dota_host_showcase_equip_pushed;
+}
+
+void Steam_Game_Coordinator::GBE_MarkDotaHostShowcaseEquipPushed()
+{
+    GBE_dota_host_showcase_equip_pushed = true;
+}
+
+void Steam_Game_Coordinator::GBE_ClearDotaHostShowcaseEquipPushed()
+{
+    GBE_dota_host_showcase_equip_pushed = false;
+}
+
+bool Steam_Game_Coordinator::GBE_HasReplayedDotaPrivateLobbySnapshot() const
+{
+    return GBE_dota_private_lobby_snapshot_replayed;
+}
+
+void Steam_Game_Coordinator::GBE_MarkDotaPrivateLobbySnapshotReplayed()
+{
+    GBE_dota_private_lobby_snapshot_replayed = true;
+}
+
+void Steam_Game_Coordinator::GBE_ClearDotaPrivateLobbySnapshotReplayed()
+{
+    GBE_dota_private_lobby_snapshot_replayed = false;
+}
+
+uint32 Steam_Game_Coordinator::GBE_GetLastDotaLaunchStatePushedGameState() const
+{
+    return GBE_last_dota_launch_state_pushed_game_state;
+}
+
+void Steam_Game_Coordinator::GBE_SetLastDotaLaunchStatePushedGameState(uint32 game_state)
+{
+    GBE_last_dota_launch_state_pushed_game_state = game_state;
+}
+
+void Steam_Game_Coordinator::GBE_ClearLastDotaLaunchStatePushedGameState()
+{
+    GBE_last_dota_launch_state_pushed_game_state = 0;
+}
+
+const std::string &Steam_Game_Coordinator::GBE_GetLastDotaLaunchPersonaSignature() const
+{
+    return GBE_last_dota_launch_persona_signature;
+}
+
+void Steam_Game_Coordinator::GBE_SetLastDotaLaunchPersonaSignature(const std::string &signature)
+{
+    GBE_last_dota_launch_persona_signature = signature;
+}
+
+void Steam_Game_Coordinator::GBE_ClearLastDotaLaunchPersonaSignature()
+{
+    GBE_last_dota_launch_persona_signature.clear();
+}
+
+const std::string &Steam_Game_Coordinator::GBE_GetLastDotaDirectConnectCallbackSignature() const
+{
+    return GBE_last_dota_direct_connect_callback_signature;
+}
+
+void Steam_Game_Coordinator::GBE_SetLastDotaDirectConnectCallbackSignature(const std::string &signature)
+{
+    GBE_last_dota_direct_connect_callback_signature = signature;
+}
+
+void Steam_Game_Coordinator::GBE_ClearLastDotaDirectConnectCallbackSignature()
+{
+    GBE_last_dota_direct_connect_callback_signature.clear();
+}
+
 bool Steam_Game_Coordinator::GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed() const
 {
     return GBE_pending_dota_normal_signout_finalize_after_25;
@@ -903,8 +1045,8 @@ void Steam_Game_Coordinator::clear_dota_runtime_state(bool preserve_reconnect_co
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
     if (!preserve_reconnect_context)
         GBE_ClearRecentDotaReconnectContext();
-    GBE_dota_private_lobby_snapshot_replayed = false;
-    GBE_last_dota_launch_state_pushed_game_state = 0;
+    GBE_ClearDotaPrivateLobbySnapshotReplayed();
+    GBE_ClearLastDotaLaunchStatePushedGameState();
     GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
 }
 
@@ -937,10 +1079,10 @@ void Steam_Game_Coordinator::shutdown_gc()
 
     welcome_received = false;
     delay_init = false;
-    GBE_dota_login_sync_sent = false;
-    GBE_dota_host_showcase_equip_pushed = false;
-    GBE_dota_private_lobby_snapshot_replayed = false;
-    GBE_last_dota_launch_state_pushed_game_state = 0;
+    GBE_ClearDotaLoginSyncSent();
+    GBE_ClearDotaHostShowcaseEquipPushed();
+    GBE_ClearDotaPrivateLobbySnapshotReplayed();
+    GBE_ClearLastDotaLaunchStatePushedGameState();
     GBE_last_lobby_poll_time = {};
     if (gc_profile == GC_PROFILE_DOTA2) {
         const uint64 previous_lobby_id = GBE_local_lobby.lobby_id;
@@ -1102,7 +1244,7 @@ bool Steam_Game_Coordinator::handle_dota_client_message(uint32 unMsgType, const 
             return false;
         }
 
-        GBE_last_dota_server_hello_context = server_hello_context;
+        GBE_SetLastDotaServerHelloContext(server_hello_context);
 
         if (is_server && welcome_received) {
             GBE_GC_DebugLog(

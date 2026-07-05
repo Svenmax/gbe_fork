@@ -16,15 +16,89 @@ import sys
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 INTERNAL_H = os.path.join(ROOT_DIR, "dll", "gbe_dota_gc_internal.h")
 PUBLIC_HEADERS = [
+    os.path.join(ROOT_DIR, "dll", "gbe_dota_payload_item_helpers.h"),
+    os.path.join(ROOT_DIR, "dll", "gbe_dota_payload_lobby_helpers.h"),
+    os.path.join(ROOT_DIR, "dll", "gbe_dota_payload_wire_helpers.h"),
     os.path.join(ROOT_DIR, "dll", "dll", "gbe_dota_reconnect_shared.h"),
 ]
 MAIN_CPP = os.path.join(ROOT_DIR, "dll", "steam_game_coordinator.cpp")
 TODO_MD = os.path.join(ROOT_DIR, "REFACTOR_TODO.md")
+RUN_GC_OFFLINE_TESTS_SH = os.path.join(ROOT_DIR, "tools", "run_gc_offline_tests.sh")
+PREMAKE5_LUA = os.path.join(ROOT_DIR, "premake5.lua")
+REASON_TRACE_GOVERNANCE_MD = os.path.join(ROOT_DIR, ".monkeycode", "specs", "gc-refactor-next-steps", "reason-trace-governance.md")
 GC_TUS = sorted(glob.glob(os.path.join(ROOT_DIR, "dll", "gbe_dota_*.cpp"))) + [MAIN_CPP]
 TEMPLATE_BLOB_OWNER_FILES = {
     "gbe_dota_template_replay_handlers.cpp",
     "gbe_dota_gc_payload_helpers.cpp",
 }
+SOURCE_LIST_AUDIT_EXEMPTIONS = {
+    "gbe_dota_chat_handlers.cpp": "compiled through handler test wrapper",
+    "gbe_dota_connection_lifecycle.cpp": "production lifecycle TU, not directly offline-buildable",
+    "gbe_dota_gc_payload_helpers.cpp": "compiled through payload helper test wrapper",
+    "gbe_dota_inventory_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
+    "gbe_dota_inventory_handlers.cpp": "compiled through handler test wrapper",
+    "gbe_dota_lobby_handlers.cpp": "compiled through handler test wrapper",
+    "gbe_dota_lobby_flow_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
+    "gbe_dota_lobby_launch_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
+    "gbe_dota_lobby_snapshot_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
+    "gbe_dota_lobby_state_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
+    "gbe_dota_match_handlers.cpp": "compiled through handler test wrapper",
+    "gbe_dota_misc_handlers.cpp": "compiled through handler test wrapper",
+    "gbe_dota_network_callbacks.cpp": "production callback TU, not directly offline-buildable",
+    "gbe_dota_payload_item_helpers.cpp": "compiled through test wrappers",
+    "gbe_dota_payload_lobby_helpers.cpp": "compiled through payload helper test wrapper",
+    "gbe_dota_payload_wire_helpers.cpp": "compiled through payload helper test wrapper",
+    "gbe_dota_post_login_handlers.cpp": "production dispatcher TU, covered by registry audit",
+    "gbe_dota_template_replay_handlers.cpp": "production template replay TU with canned payload ownership",
+    "gbe_dota_welcome_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
+}
+HIGH_RISK_SIDE_EFFECT_APIS = [
+    "save_items_to_file",
+    "GBE_SaveDotaItemsFromExecutor",
+    "GBE_PushDotaPlayerEquippedItemsCacheToGC",
+    "push_incoming_message",
+    "sendToAllGameservers",
+    "GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot",
+    "GBE_PublishSharedDotaLobbyState",
+    "GBE_PublishDotaPracticeLobbyMetadata",
+    "GBE_PublishDotaPracticeLobbyLocalMemberData",
+]
+HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE = {
+    ("gbe_dota_chat_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 5,
+    ("gbe_dota_inventory_handlers.cpp", "GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot"): 1,
+    ("gbe_dota_inventory_handlers.cpp", "GBE_PushDotaPlayerEquippedItemsCacheToGC"): 2,
+    ("gbe_dota_inventory_handlers.cpp", "GBE_SaveDotaItemsFromExecutor"): 1,
+    ("gbe_dota_inventory_handlers.cpp", "push_incoming_message"): 2,
+    ("gbe_dota_inventory_handlers.cpp", "save_items_to_file"): 2,
+    ("gbe_dota_inventory_handlers.cpp", "sendToAllGameservers"): 1,
+    ("gbe_dota_lobby_handlers.cpp", "GBE_PublishDotaPracticeLobbyLocalMemberData"): 4,
+    ("gbe_dota_lobby_handlers.cpp", "GBE_PublishDotaPracticeLobbyMetadata"): 2,
+    ("gbe_dota_lobby_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 7,
+    ("gbe_dota_match_handlers.cpp", "GBE_PublishDotaPracticeLobbyLocalMemberData"): 1,
+    ("gbe_dota_match_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 7,
+    ("gbe_dota_match_handlers.cpp", "GBE_PushDotaPlayerEquippedItemsCacheToGC"): 2,
+    ("gbe_dota_misc_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 2,
+    ("gbe_dota_post_login_handlers.cpp", "GBE_PublishDotaPracticeLobbyMetadata"): 1,
+    ("gbe_dota_post_login_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 3,
+    ("gbe_dota_post_login_handlers.cpp", "save_items_to_file"): 1,
+    ("gbe_dota_template_replay_handlers.cpp", "save_items_to_file"): 4,
+}
+HIGH_RISK_REASON_STRINGS = [
+    "equip_forward_host_resubscribe_server",
+    "equip_items_refresh",
+    "7272_7014",
+    "7272_leave_chat",
+    "7035_current_game_disconnect",
+    "postgame_teardown_7014",
+    "7034_connected_player",
+    "7034_disconnected_player",
+    "runtime AP hero_selection fallback strategy_time",
+    "7034_launch_poll",
+    "7070_custom_game_ready_up_run_ack",
+    "8052_started_loading",
+    "8053_finished_loading",
+    "8053_load_failed",
+]
 
 POST_LOGIN_DISPATCH_ENTRIES = [
     ("GBE_kDotaJoinChatChannel", "adapt_join_chat_channel", "GBE_HandleDotaJoinChatChannelRequest"),
@@ -49,6 +123,11 @@ POST_LOGIN_DIRECT_DISPATCH_ENTRIES = [
     ("7427u", "adapt_direct_7427_notifications", "GBE_HandleDota7427NotificationsRequest"),
     ("4523u", "adapt_direct_upload_rate", "GBE_HandleDotaUploadRateRequest"),
     ("8879u", "adapt_direct_rank", "GBE_HandleDotaRankRequest"),
+    ("7534u", "adapt_direct_profile_card", "GBE_HandleDotaProfileCardRequest"),
+    ("2581u", "adapt_direct_lookup_account_name", "GBE_HandleDotaLookupAccountNameRequest"),
+    ("7503u", "adapt_direct_emoticon_data", "GBE_HandleDotaEmoticonDataRequest"),
+    ("8095u", "adapt_direct_conduct_scorecard", "GBE_HandleDotaConductScorecardRequest"),
+    ("8800u", "adapt_direct_coaching_summary", "GBE_HandleDotaCoachingSummaryRequest"),
 ]
 
 
@@ -196,6 +275,96 @@ def audit_template_blob_ownership(tu_paths):
     return issues
 
 
+def audit_source_list_inclusion(tu_paths):
+    """Ensure testable split GC TUs stay in shell or Premake test source lists."""
+    shell_text = read(RUN_GC_OFFLINE_TESTS_SH) if os.path.exists(RUN_GC_OFFLINE_TESTS_SH) else ""
+    premake_text = read(PREMAKE5_LUA) if os.path.exists(PREMAKE5_LUA) else ""
+    issues = []
+    checked = 0
+    exempted = []
+
+    for path in sorted(tu_paths):
+        base = os.path.basename(path)
+        if not base.startswith("gbe_dota_") or not base.endswith(".cpp"):
+            continue
+
+        rel = "dll/" + base
+        in_shell = rel in shell_text
+        in_premake = rel in premake_text
+        if in_shell or in_premake:
+            checked += 1
+            continue
+
+        reason = SOURCE_LIST_AUDIT_EXEMPTIONS.get(base)
+        if reason:
+            exempted.append((base, reason))
+            continue
+
+        issues.append(f"{base}: missing from run_gc_offline_tests.sh and premake5.lua GC test source lists, with no audit exemption")
+
+    return issues, checked, exempted
+
+
+def strip_comments(text):
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    return re.sub(r"//.*", "", text)
+
+
+def audit_handler_side_effect_seams(tu_paths):
+    """Detect drift in high-risk side effects in ordinary handler files."""
+    pattern = re.compile(r"\b(" + "|".join(re.escape(api) for api in HIGH_RISK_SIDE_EFFECT_APIS) + r")\s*\(")
+    actual = {}
+    for path in tu_paths:
+        base = os.path.basename(path)
+        if not base.startswith("gbe_dota_") or not base.endswith("_handlers.cpp"):
+            continue
+        text = strip_comments(read(path))
+        for match in pattern.finditer(text):
+            line_start = text.rfind("\n", 0, match.start()) + 1
+            line = text[line_start:match.start()].strip()
+            if "::" in line:
+                continue
+            key = (base, match.group(1))
+            actual[key] = actual.get(key, 0) + 1
+
+    issues = []
+    for key, actual_count in sorted(actual.items()):
+        expected_count = HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE.get(key)
+        if expected_count is None:
+            issues.append(f"{key[0]}: new high-risk side-effect call to {key[1]} requires an approved seam or explicit baseline entry")
+        elif actual_count != expected_count:
+            issues.append(f"{key[0]}: {key[1]} count changed from {expected_count} to {actual_count}; route through an approved seam or update the baseline with reason")
+
+    for key, expected_count in sorted(HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE.items()):
+        actual_count = actual.get(key, 0)
+        if actual_count == 0 and expected_count:
+            issues.append(f"{key[0]}: {key[1]} baseline expected {expected_count}, found 0; remove stale baseline entry or confirm the seam migration")
+
+    return issues, sum(actual.values()), len(HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE)
+
+
+def audit_reason_inventory():
+    """Ensure high-risk reasons stay documented and covered by tests/specs."""
+    governance_text = read(REASON_TRACE_GOVERNANCE_MD) if os.path.exists(REASON_TRACE_GOVERNANCE_MD) else ""
+    coverage_text = ""
+    for pattern in (
+        os.path.join(ROOT_DIR, "tools", "*.cpp"),
+        os.path.join(ROOT_DIR, "tools", "*", "*.cpp"),
+        os.path.join(ROOT_DIR, ".monkeycode", "specs", "gc-refactor-next-steps", "*.md"),
+        os.path.join(ROOT_DIR, ".monkeycode", "specs", "gc-refactor-follow-up", "*.md"),
+    ):
+        for path in glob.glob(pattern):
+            coverage_text += "\n" + read(path)
+
+    issues = []
+    for reason in HIGH_RISK_REASON_STRINGS:
+        if f"`{reason}`" not in governance_text:
+            issues.append(f"{reason}: missing from reason-trace-governance.md high-risk inventory")
+        if reason not in coverage_text:
+            issues.append(f"{reason}: missing from focused tests or specs coverage text")
+    return issues
+
+
 def main():
     header_text = read(INTERNAL_H)
     real_decls = extract_header_symbols(header_text)
@@ -297,6 +466,44 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 6: GC source-list inclusion")
+    print("=" * 70)
+    print("  Action: add testable split GC TUs to shell/Premake test source lists or record an explicit exemption.")
+    source_list_issues, source_list_checked, source_list_exempted = audit_source_list_inclusion(GC_TUS)
+    if not source_list_issues:
+        print(f"  All {source_list_checked} testable split GC TUs appear in shell or Premake test source lists")
+        if source_list_exempted:
+            print(f"  {len(source_list_exempted)} production-only or wrapper-compiled TUs have explicit audit exemptions")
+    else:
+        for issue in source_list_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
+    print("AUDIT 7: Handler side-effect seam drift")
+    print("=" * 70)
+    print("  Action: keep high-risk handler side effects behind approved seams or explicit baselines.")
+    side_effect_issues, side_effect_calls, side_effect_baselines = audit_handler_side_effect_seams(GC_TUS)
+    if not side_effect_issues:
+        print(f"  All {side_effect_calls} high-risk handler side-effect calls match {side_effect_baselines} explicit baseline entries")
+    else:
+        for issue in side_effect_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
+    print("AUDIT 8: High-risk reason inventory")
+    print("=" * 70)
+    print("  Action: document high-risk reason strings and keep matching test/spec coverage text.")
+    reason_issues = audit_reason_inventory()
+    if not reason_issues:
+        print(f"  All {len(HIGH_RISK_REASON_STRINGS)} high-risk reason strings are documented and covered")
+    else:
+        for issue in reason_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -307,8 +514,11 @@ def main():
     print(f"  Doc line-number mismatches:          {len(mismatches)}")
     print(f"  Dispatch table mismatches:           {len(dispatch_issues)}")
     print(f"  Template blob ownership issues:      {len(template_blob_issues)}")
+    print(f"  Source-list inclusion issues:        {len(source_list_issues)}")
+    print(f"  Handler side-effect seam issues:     {len(side_effect_issues)}")
+    print(f"  High-risk reason inventory issues:   {len(reason_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues:
         sys.exit(1)
 
 

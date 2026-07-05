@@ -31,6 +31,7 @@
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
 #include "gbe_dota_gc_internal.h"
+#include "gbe_dota_payload_lobby_helpers.h"
 #include <atomic>
 #include <algorithm>
 #include <array>
@@ -420,18 +421,18 @@ std::vector<GBE_LocalLobby> Steam_Game_Coordinator::GBE_GetDotaGenericLobbySnaps
 void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(const char *reason)
 {
     if (is_server) {
-        GBE_dota_private_lobby_snapshot_replayed = false;
+        GBE_ClearDotaPrivateLobbySnapshotReplayed();
         return;
     }
 
     GBE_LocalLobby lobby{};
     if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "replay_current_private_lobby_snapshot", lobby, false)) {
-        GBE_dota_private_lobby_snapshot_replayed = false;
+        GBE_ClearDotaPrivateLobbySnapshotReplayed();
         return;
     }
 
     if (GBE_ShouldSuppressDotaAbandonedLobby(lobby.lobby_id)) {
-        GBE_dota_private_lobby_snapshot_replayed = false;
+        GBE_ClearDotaPrivateLobbySnapshotReplayed();
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipped replaying current private lobby snapshot for suppressed abandoned lobby reason=%s lobby_id=%llu state=%u game_state=%u",
@@ -463,11 +464,11 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
         lobby.game_state >= 2u;
 
     if (!ready_for_private_lobby_snapshot) {
-        GBE_dota_private_lobby_snapshot_replayed = false;
+        GBE_ClearDotaPrivateLobbySnapshotReplayed();
         return;
     }
 
-    if (GBE_dota_private_lobby_snapshot_replayed)
+    if (GBE_HasReplayedDotaPrivateLobbySnapshot())
         return;
 
     const bool lan_launch_active =
@@ -511,7 +512,7 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
         lobby.state,
         lobby.game_state
     );
-    GBE_dota_private_lobby_snapshot_replayed = true;
+    GBE_MarkDotaPrivateLobbySnapshotReplayed();
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
@@ -679,5 +680,3 @@ bool Steam_Game_Coordinator::GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdat
 
     return GBE_BuildCurrentDotaPracticeLobbyDetailsUpdate(effective_lobby, effective_player_name, message);
 }
-
-

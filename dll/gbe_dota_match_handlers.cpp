@@ -707,7 +707,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
     // engine sees [in cache] and does not create wearables. By re-pushing at
     // TEAM_SHOWCASE (when the server engine is about to spawn heroes), we give it
     // a fresh CacheSubscribed with only equipped items so wearables are created.
-    if (is_server && !GBE_dota_host_showcase_equip_pushed &&
+    if (is_server && !GBE_HasPushedDotaHostShowcaseEquip() &&
         request_shape.has_game_state && request_shape.game_state >= 4u &&
         GBE_local_lobby.active && GBE_local_lobby.state == 2u) {
         Steam_Client *steam_client_ptr = get_steam_client();
@@ -717,7 +717,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
             const CSteamID owner_steam_id(owner_steam64);
             const auto &client_items = client_gc_ptr->get_items();
             if (GBE_PushDotaPlayerEquippedItemsCacheToGC(this, owner_steam_id, client_items, true, "7034_showcase_host_equip_repush")) {
-                GBE_dota_host_showcase_equip_pushed = true;
+                GBE_MarkDotaHostShowcaseEquipPushed();
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
                     "re-pushed host equipped items at TEAM_SHOWCASE: steam64=%llu request_game_state=%u lobby_game_state=%u",

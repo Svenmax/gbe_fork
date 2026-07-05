@@ -26,6 +26,10 @@
 - `.monkeycode/specs/gc-refactor-follow-up/requirements.md`：GC 下一轮重构需求，覆盖构建验证、header 收缩、dependency seam、executor、runtime state 和 audit 强化。
 - `.monkeycode/specs/gc-refactor-follow-up/design.md`：GC 下一轮重构技术方案。
 - `.monkeycode/specs/gc-refactor-follow-up/tasklist.md`：GC 下一轮重构实施任务清单。
+- `.monkeycode/specs/gc-refactor-follow-up/runtime-validation-checklist.md`：GC 下一轮真实客户端和集成路径验证清单。
+- `.monkeycode/specs/gc-refactor-follow-up/runtime-state-storage-evaluation.md`：GC runtime 小状态 storage struct 评估结论。
+- `.monkeycode/specs/gc-refactor-follow-up/post-login-registry-candidates.md`：GC post-login registry 下一批 direct-only 迁移候选和排除路径。
+- `.monkeycode/specs/gc-refactor-follow-up/internal-header-declaration-inventory.md`：GC internal header 剩余声明分组、迁移和下沉清单。
 
 ## 默认验证入口
 

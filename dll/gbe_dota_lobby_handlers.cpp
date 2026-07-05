@@ -65,6 +65,14 @@ using GBE_DotaLobbyInviteResponseRequest = gbe::proto_wire::DotaLobbyInviteRespo
 using GBE_DotaPracticeLobbySetTeamSlotRequest = gbe::proto_wire::DotaPracticeLobbySetTeamSlotRequest;
 using GBE_DotaPracticeLobbyKickRequest = gbe::proto_wire::DotaPracticeLobbyKickRequest;
 
+bool Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbySetDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw)
+{
+    GBE_PublishDotaPracticeLobbyLocalMemberData("7046_set_details");
+    GBE_PublishSharedDotaLobbyState("7046_set_details");
+    GBE_PublishDotaPracticeLobbyMetadata("7046_set_details");
+    return GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7046");
+}
+
 
 // ============================================================================
 // Side-effect order documentation (see dll/gbe_dota_action_model.h for the
@@ -1572,11 +1580,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
     GBE_ApplyDotaCustomGameDetailsRequest(request, GBE_local_lobby.custom_game);
     GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, GBE_local_lobby.custom_game);
     GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby);
-    GBE_PublishDotaPracticeLobbyLocalMemberData("7046_set_details");
-    GBE_PublishSharedDotaLobbyState("7046_set_details");
-    GBE_PublishDotaPracticeLobbyMetadata("7046_set_details");
 
-    if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7046"))
+    if (!GBE_PublishDotaPracticeLobbySetDetailsUpdate(wrapped, outer_session_field_raw))
         return true;
 
     GBE_GC_DebugLog(

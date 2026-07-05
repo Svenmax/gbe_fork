@@ -21,6 +21,7 @@
 #include "base.h"
 #include "econ_item.h"
 #include "gbe_dota_lobby_state.h"
+#include <unordered_set>
 
 namespace gbe::proto_wire {
 struct Dota7034DisconnectedPlayer;
@@ -134,6 +135,24 @@ public ISteamGameCoordinator
     bool GBE_ShouldSuppressDotaAbandonedLobby(uint64 lobby_id) const;
     void GBE_MarkDotaAbandonedLobbySuppressed(uint64 lobby_id, const char *reason);
     void GBE_ClearDotaAbandonedLobbySuppression(uint64 lobby_id, const char *reason);
+    bool GBE_HasSentDotaLoginSync() const;
+    void GBE_MarkDotaLoginSyncSent();
+    void GBE_ClearDotaLoginSyncSent();
+    bool GBE_HasPushedDotaHostShowcaseEquip() const;
+    void GBE_MarkDotaHostShowcaseEquipPushed();
+    void GBE_ClearDotaHostShowcaseEquipPushed();
+    bool GBE_HasReplayedDotaPrivateLobbySnapshot() const;
+    void GBE_MarkDotaPrivateLobbySnapshotReplayed();
+    void GBE_ClearDotaPrivateLobbySnapshotReplayed();
+    uint32 GBE_GetLastDotaLaunchStatePushedGameState() const;
+    void GBE_SetLastDotaLaunchStatePushedGameState(uint32 game_state);
+    void GBE_ClearLastDotaLaunchStatePushedGameState();
+    const std::string &GBE_GetLastDotaLaunchPersonaSignature() const;
+    void GBE_SetLastDotaLaunchPersonaSignature(const std::string &signature);
+    void GBE_ClearLastDotaLaunchPersonaSignature();
+    const std::string &GBE_GetLastDotaDirectConnectCallbackSignature() const;
+    void GBE_SetLastDotaDirectConnectCallbackSignature(const std::string &signature);
+    void GBE_ClearLastDotaDirectConnectCallbackSignature();
     bool GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(uint32 masked_emsg) const;
     bool GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel() const;
     bool GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed() const;
@@ -165,6 +184,15 @@ public ISteamGameCoordinator
     std::string item_to_gcstruct(const Econ_Item &item, CSteamID steam_id);
     std::string item_to_gcprotobuf(const Econ_Item &item, CSteamID steam_id);
     void GBE_SaveDotaItemsFromExecutor(const char *reason);
+    void GBE_ForwardDotaEquipItemsToServerGC(
+        Steam_Game_Coordinator *server_gc,
+        const std::unordered_set<uint64> &modified_item_ids,
+        const std::string &update_message,
+        uint64 cache_version,
+        bool unsubscribe_first,
+        const char *cache_reason);
+    void GBE_BroadcastDotaEquippedItemsToGameServers();
+    void GBE_RefreshDotaEquipLobbySnapshot(const char *reason);
 
     void handle_set_item_pos(const void *input, uint32 input_size);
     void handle_delete_item(const void *input, uint32 input_size);
@@ -219,6 +247,7 @@ public ISteamGameCoordinator
     bool GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_LocalLobby &lobby);
     void GBE_PublishDotaPracticeLobbyLocalMemberData(const char *reason);
     void GBE_PublishDotaPracticeLobbyMetadata(const char *reason);
+    bool GBE_PublishDotaPracticeLobbySetDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_FindDotaGenericLobbyByDotaLobbyId(uint64 dota_lobby_id, CSteamID &generic_lobby_id, GBE_LocalLobby *lobby_snapshot, const char *reason);
     std::vector<GBE_LocalLobby> GBE_GetDotaGenericLobbySnapshots(const char *reason);
     void GBE_RestoreSharedDotaLobbyState(const char *reason);

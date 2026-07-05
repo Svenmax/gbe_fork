@@ -31,6 +31,7 @@
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
 #include "gbe_dota_gc_internal.h"
+#include "gbe_dota_payload_wire_helpers.h"
 #include <atomic>
 #include <algorithm>
 #include <array>
@@ -838,8 +839,10 @@ void Steam_Game_Coordinator::callback_server_welcome()
 }
 void Steam_Game_Coordinator::GBE_MaybePrimeDotaServerWelcomeFromCache(const char *reason)
 {
-    if (!is_server || gc_profile != GC_PROFILE_DOTA2 || !GBE_last_dota_server_hello_context.valid)
+    if (!is_server || gc_profile != GC_PROFILE_DOTA2 || !GBE_HasLastDotaServerHelloContext())
         return;
+
+    const GBE_DotaServerHelloContext &server_hello_context = GBE_GetLastDotaServerHelloContext();
 
     if (!gc_initialized)
         initialize_gc();
@@ -870,7 +873,7 @@ void Steam_Game_Coordinator::GBE_MaybePrimeDotaServerWelcomeFromCache(const char
     if (!GBE_BuildDirectDotaServerWelcome(
             settings->get_local_steam_id().ConvertToUint64(),
             settings->get_local_game_id().AppID(),
-            GBE_last_dota_server_hello_context,
+            server_hello_context,
             welcome_message)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SERVER_HELLO",
@@ -887,7 +890,7 @@ void Steam_Game_Coordinator::GBE_MaybePrimeDotaServerWelcomeFromCache(const char
         reason ? reason : "unknown",
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
         welcome_message.size(),
-        GBE_last_dota_server_hello_context.active_version
+        server_hello_context.active_version
     );
     push_incoming_now(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, welcome_message);
 
@@ -944,7 +947,7 @@ void Steam_Game_Coordinator::GBE_MaybePrimeDotaServerWelcomeFromCache(const char
 }
 void Steam_Game_Coordinator::GBE_PushDotaLoginSyncMessages()
 {
-    if (GBE_dota_login_sync_sent)
+    if (GBE_HasSentDotaLoginSync())
         return;
 
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
@@ -973,7 +976,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLoginSyncMessages()
         GBE_GC_DebugLog("GC_DOTA_SYNC", "failed patching login CacheSubscribed inventory steamid=%llu accountid=%u", static_cast<unsigned long long>(steam_id), account_id);
     }
 
-    GBE_dota_login_sync_sent = true;
+    GBE_MarkDotaLoginSyncSent();
     GBE_GC_DebugLog("GC_DOTA_SYNC", "queueing CacheSubscribed replay size=%zu steamid=%llu accountid=%u", cache_subscribed_message.size(), static_cast<unsigned long long>(steam_id), account_id);
     push_incoming_now(24u | GBE_kProtoMask, cache_subscribed_message);
 }

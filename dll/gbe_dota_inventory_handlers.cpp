@@ -199,6 +199,86 @@ struct EquipItemsPlan {
     GBE_DotaActionList actions;
 };
 
+struct EquipItemsExecutionContext {
+    bool has_source_job{};
+    uint64 source_job{};
+    uint64 local_steam_id{};
+    Steam_Game_Coordinator *server_gc{};
+};
+
+inline std::string build_equip_response_message(
+    const EquipItemsPlan &plan,
+    const EquipItemsExecutionContext &context)
+{
+    std::string response_message;
+    uint32_t flagged_emsg = 2570u | GBE_kProtoMask;
+    CMsgProtoBufHeader response_protohdr;
+    if (context.has_source_job) {
+        response_protohdr.set_job_id_target(context.source_job);
+    }
+    response_protohdr.set_job_id_source(18446744073709551615ULL);
+    std::string serialized_protohdr = response_protohdr.SerializeAsString();
+    uint32_t hdr_len = static_cast<uint32_t>(serialized_protohdr.size());
+
+    response_message.resize(sizeof(flagged_emsg) + sizeof(hdr_len));
+    memcpy(&response_message[0], &flagged_emsg, sizeof(flagged_emsg));
+    memcpy(&response_message[sizeof(flagged_emsg)], &hdr_len, sizeof(hdr_len));
+    response_message += serialized_protohdr;
+    response_message += plan.response_body;
+    return response_message;
+}
+
+template <typename PushSoUpdate,
+          typename PushResponse,
+          typename SaveItems,
+          typename ForwardServerGC,
+          typename BroadcastNetwork,
+          typename RefreshSnapshot>
+inline void execute_equip_items_plan(
+    const EquipItemsPlan &plan,
+    const EquipItemsExecutionContext &context,
+    const std::string &update_message,
+    const std::string &response_message,
+    PushSoUpdate push_so_update,
+    PushResponse push_response,
+    SaveItems save_items,
+    ForwardServerGC forward_server_gc,
+    BroadcastNetwork broadcast_network,
+    RefreshSnapshot refresh_snapshot)
+{
+    if (!update_message.empty()) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "replying req=2569 resp=26 source_job=%llu size=%zu note=SO cache update modified_items=%zu",
+            static_cast<unsigned long long>(context.source_job),
+            update_message.size(),
+            plan.modified_item_ids.size()
+        );
+        push_so_update(update_message);
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "replying req=2569 resp=2570 source_job=%llu size=%zu note=equip response count=%zu version=%llu",
+        static_cast<unsigned long long>(context.source_job),
+        response_message.size(),
+        plan.equip_ops.size(),
+        static_cast<unsigned long long>(plan.cache_version)
+    );
+    push_response(response_message);
+
+    save_items();
+
+    if (plan.server_forward.enabled) {
+        forward_server_gc(context.server_gc);
+        broadcast_network();
+    }
+
+    if (plan.snapshot_refresh_reason) {
+        refresh_snapshot(plan.snapshot_refresh_reason);
+    }
+}
+
 inline EquipItemsPlan plan_equip_items_request(
     const uint8 *body,
     size_t body_size,
@@ -283,6 +363,121 @@ void Steam_Game_Coordinator::GBE_SaveDotaItemsFromExecutor(const char *reason)
 {
     GBE_GC_DebugLog("GC_DOTA_DIRECT", "persisting Dota items from executor reason=%s", reason ? reason : "");
     save_items_to_file();
+}
+
+void Steam_Game_Coordinator::GBE_ForwardDotaEquipItemsToServerGC(
+    Steam_Game_Coordinator *server_gc,
+    const std::unordered_set<uint64> &modified_item_ids,
+    const std::string &update_message,
+    uint64 cache_version,
+    bool unsubscribe_first,
+    const char *cache_reason)
+{
+    if (!server_gc)
+        return;
+
+    const uint64 player_steam64 = settings->get_local_steam_id().ConvertToUint64();
+    const CSteamID player_steam_id = settings->get_local_steam_id();
+
+    // The full CacheSubscribed must precede SO Create/Update messages.
+    GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, player_steam_id, items, unsubscribe_first, cache_reason);
+
+    uint64_t create_version = cache_version - modified_item_ids.size();
+    for (uint64_t mid : modified_item_ids) {
+        for (const Econ_Item &item : items) {
+            if (item.id != mid) continue;
+
+            create_version++;
+            CMsgSOSingleObject create_msg;
+            auto *create_owner = create_msg.mutable_owner_soid();
+            create_owner->set_type(1u);
+            create_owner->set_id(player_steam64);
+            create_msg.set_type_id(1);
+            create_msg.set_object_data(item_to_gcprotobuf(item, player_steam_id));
+            create_msg.set_version(create_version);
+
+            std::string create_message;
+            gbe::gc_message::build_dota_zero_header_payload(21u, create_msg.SerializeAsString(), create_message);
+            server_gc->push_incoming_message(21u | GBE_kProtoMask, create_message);
+            break;
+        }
+    }
+
+    server_gc->push_incoming_message(26u | GBE_kProtoMask, update_message);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "forwarded equip to server GC: emsg21_count=%zu emsg26_size=%zu lobby_id=%llu",
+        modified_item_ids.size(),
+        update_message.size(),
+        static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+    );
+}
+
+void Steam_Game_Coordinator::GBE_BroadcastDotaEquippedItemsToGameServers()
+{
+    std::vector<const Econ_Item *> equipped_items;
+    for (const auto &item : items) {
+        if (!item.equip_states.empty())
+            equipped_items.push_back(&item);
+    }
+
+    if (equipped_items.empty())
+        return;
+
+    auto response_msg = new GameServer_Items_Messages::InventoryResponse();
+    response_msg->set_steam_api_call(0);  // 0 = unsolicited push
+
+    for (const Econ_Item *ep : equipped_items) {
+        auto new_item = response_msg->add_items();
+        new_item->set_id(ep->id);
+        new_item->set_def(ep->def);
+        new_item->set_level(ep->level);
+        new_item->set_quality(static_cast<int32>(ep->quality));
+        new_item->set_inv_pos(ep->inv_pos);
+        new_item->set_quantity(ep->quantity);
+        new_item->set_flags(ep->flags);
+        new_item->set_origin(ep->origin);
+        new_item->set_original_id(ep->original_id);
+        new_item->set_in_use(ep->in_use);
+        new_item->set_style(ep->style);
+
+        for (const auto &[class_id, slot_id] : ep->equip_states) {
+            auto new_state = new_item->add_equip_states();
+            new_state->set_class_id(class_id);
+            new_state->set_slot_id(slot_id);
+        }
+
+        for (const Econ_Item_Attribute &attr : ep->attributes) {
+            auto new_attr = new_item->add_attributes();
+            new_attr->set_def(attr.def);
+            new_attr->set_value(attr.value);
+            new_attr->set_value_bytes(attr.value_bytes);
+        }
+    }
+
+    auto gameserver_items_msg = new GameServer_Items_Messages();
+    gameserver_items_msg->set_type(GameServer_Items_Messages::Response_Inventory);
+    gameserver_items_msg->set_is_gc(true);
+    gameserver_items_msg->set_allocated_inventory_response(response_msg);
+
+    Common_Message msg{};
+    msg.set_allocated_gameserver_items_messages(gameserver_items_msg);
+    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+    network->sendToAllGameservers(&msg, true);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_DIRECT",
+        "broadcast equipped items to gameservers via network: steam64=%llu equipped_items=%zu",
+        static_cast<unsigned long long>(settings->get_local_steam_id().ConvertToUint64()),
+        equipped_items.size()
+    );
+}
+
+void Steam_Game_Coordinator::GBE_RefreshDotaEquipLobbySnapshot(const char *reason)
+{
+    GBE_ClearDotaPrivateLobbySnapshotReplayed();
+    GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(reason);
 }
 
 // ============================================================================
@@ -468,7 +663,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
     planning_context.lobby_snapshot_refresh_available = is_dota_client &&
         GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
         GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 2u &&
-        GBE_dota_private_lobby_snapshot_replayed;
+        GBE_HasReplayedDotaPrivateLobbySnapshot();
 
     EquipItemsPlan plan = plan_equip_items_request(
         body,
@@ -525,174 +720,43 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         plan.modified_item_ids.size(), plan.equip_ops.size()
     );
 
-    // Step 4: Push planned SO UpdateMultiple (emsg=26) if items were modified.
-    if (!update_message.empty()) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=2569 resp=26 source_job=%llu size=%zu note=SO cache update modified_items=%zu",
-            static_cast<unsigned long long>(source_job),
-            update_message.size(),
-            plan.modified_item_ids.size()
-        );
-        push_incoming_now(26u | GBE_kProtoMask, update_message);
-    }
+    EquipItemsExecutionContext execution_context{};
+    execution_context.has_source_job = has_source_job;
+    execution_context.source_job = source_job;
+    execution_context.local_steam_id = settings->get_local_steam_id().ConvertToUint64();
+    execution_context.server_gc = server_gc;
 
-    // Step 5: Build and push local response (emsg=2570) using planned body.
-    {
-        std::string response_message;
-        uint32_t flagged_emsg = 2570u | GBE_kProtoMask;
-        CMsgProtoBufHeader response_protohdr;
-        if (has_source_job) {
-            response_protohdr.set_job_id_target(source_job);
-        }
-        response_protohdr.set_job_id_source(18446744073709551615ULL);
-        std::string serialized_protohdr = response_protohdr.SerializeAsString();
-        uint32_t hdr_len = static_cast<uint32_t>(serialized_protohdr.size());
+    const std::string response_message = build_equip_response_message(plan, execution_context);
 
-        response_message.resize(sizeof(flagged_emsg) + sizeof(hdr_len));
-        memcpy(&response_message[0], &flagged_emsg, sizeof(flagged_emsg));
-        memcpy(&response_message[sizeof(flagged_emsg)], &hdr_len, sizeof(hdr_len));
-        response_message += serialized_protohdr;
-        response_message += plan.response_body;
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "replying req=2569 resp=2570 source_job=%llu size=%zu note=equip response count=%zu version=%llu",
-            static_cast<unsigned long long>(source_job),
-            response_message.size(),
-            plan.equip_ops.size(),
-            static_cast<unsigned long long>(plan.cache_version)
-        );
-        push_incoming_now(2570u | GBE_kProtoMask, response_message);
-    }
-
-    // Step 6: Persist inventory
-    GBE_SaveDotaItemsFromExecutor("equip_items");
-
-    // Step 7: Forward to server GC + broadcast via network (only when local GC
-    // is a DOTA2 client, not a server, and items were modified).
-    //
-    // [FIX] The server GC's settings->get_local_steam_id() returns the
-    // game-server steam ID, not the lobby owner's personal steam ID. At
-    // 7450 time the server fails to recognise the host as "local". Even
-    // when equip_states arrive later, the Source 2 engine only creates
-    // wearable entities from a CacheSubscribed (emsg=24) that establishes
-    // the player's SO cache. Bare emsg=21/26 arriving *before* any
-    // CacheSubscribed for that owner are silently dropped.
-    //
-    // Fix: before pushing emsg=21/26, always push a full player-item
-    // CacheSubscribed (emsg=24, owner_type=1) containing ALL currently
-    // equipped items. This guarantees the engine has a valid SO cache
-    // for the player before the individual Create/Update messages arrive.
-    if (plan.server_forward.enabled) {
-        if (server_gc) {
-            const uint64 player_steam64 = settings->get_local_steam_id().ConvertToUint64();
-            const CSteamID player_steam_id = settings->get_local_steam_id();
-
-            // Push full item cache first (CacheSubscribed) so engine has SO cache
-            GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, player_steam_id, items, plan.server_forward.unsubscribe_first, plan.server_forward.cache_reason);
-
-            // Then send emsg=21 (k_ESOMsg_Create) for each modified item
-            uint64_t create_version = plan.cache_version - plan.modified_item_ids.size();
-            for (uint64_t mid : plan.modified_item_ids) {
-                for (const Econ_Item &item : items) {
-                    if (item.id != mid) continue;
-
-                    create_version++;
-                    CMsgSOSingleObject create_msg;
-                    auto *create_owner = create_msg.mutable_owner_soid();
-                    create_owner->set_type(1u);
-                    create_owner->set_id(player_steam64);
-                    create_msg.set_type_id(1);
-                    create_msg.set_object_data(item_to_gcprotobuf(item, player_steam_id));
-                    create_msg.set_version(create_version);
-
-                    std::string create_message;
-                    gbe::gc_message::build_dota_zero_header_payload(21u, create_msg.SerializeAsString(), create_message);
-                    server_gc->push_incoming_message(21u | GBE_kProtoMask, create_message);
-                    break;
-                }
-            }
-
-            // Then send emsg=26 (CMsgSOMultipleObjects) with all modified items
-            server_gc->push_incoming_message(26u | GBE_kProtoMask, update_message);
-
-            GBE_GC_DebugLog(
-                "GC_DOTA_DIRECT",
-                "forwarded equip to server GC: emsg21_count=%zu emsg26_size=%zu lobby_id=%llu",
-                plan.modified_item_ids.size(),
-                update_message.size(),
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
-            );
-        }
-
-        // Also broadcast equipped items via network so the remote server GC
-        // (on the host machine in LAN mode) can build CacheSubscribed for us.
-        {
-            std::vector<const Econ_Item *> equipped_items;
-            for (const auto &item : items) {
-                if (!item.equip_states.empty())
-                    equipped_items.push_back(&item);
-            }
-
-            if (!equipped_items.empty()) {
-                auto response_msg = new GameServer_Items_Messages::InventoryResponse();
-                response_msg->set_steam_api_call(0);  // 0 = unsolicited push
-
-                for (const Econ_Item *ep : equipped_items) {
-                    auto new_item = response_msg->add_items();
-                    new_item->set_id(ep->id);
-                    new_item->set_def(ep->def);
-                    new_item->set_level(ep->level);
-                    new_item->set_quality(static_cast<int32>(ep->quality));
-                    new_item->set_inv_pos(ep->inv_pos);
-                    new_item->set_quantity(ep->quantity);
-                    new_item->set_flags(ep->flags);
-                    new_item->set_origin(ep->origin);
-                    new_item->set_original_id(ep->original_id);
-                    new_item->set_in_use(ep->in_use);
-                    new_item->set_style(ep->style);
-
-                    for (const auto &[class_id, slot_id] : ep->equip_states) {
-                        auto new_state = new_item->add_equip_states();
-                        new_state->set_class_id(class_id);
-                        new_state->set_slot_id(slot_id);
-                    }
-
-                    for (const Econ_Item_Attribute &attr : ep->attributes) {
-                        auto new_attr = new_item->add_attributes();
-                        new_attr->set_def(attr.def);
-                        new_attr->set_value(attr.value);
-                        new_attr->set_value_bytes(attr.value_bytes);
-                    }
-                }
-
-                auto gameserver_items_msg = new GameServer_Items_Messages();
-                gameserver_items_msg->set_type(GameServer_Items_Messages::Response_Inventory);
-                gameserver_items_msg->set_is_gc(true);
-                gameserver_items_msg->set_allocated_inventory_response(response_msg);
-
-                Common_Message msg{};
-                msg.set_allocated_gameserver_items_messages(gameserver_items_msg);
-                msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
-                network->sendToAllGameservers(&msg, true);
-
-                GBE_GC_DebugLog(
-                    "GC_DOTA_DIRECT",
-                    "broadcast equipped items to gameservers via network: steam64=%llu equipped_items=%zu",
-                    static_cast<unsigned long long>(settings->get_local_steam_id().ConvertToUint64()),
-                    equipped_items.size()
-                );
-            }
-        }
-    }
-
-    // Step 8: Refresh lobby snapshot if in an active game (the snapshot is now
-    // stale because equipped items changed).
-    if (plan.snapshot_refresh_reason) {
-        GBE_dota_private_lobby_snapshot_replayed = false;
-        GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(plan.snapshot_refresh_reason);
-    }
+    execute_equip_items_plan(
+        plan,
+        execution_context,
+        update_message,
+        response_message,
+        [this](const std::string &message) {
+            push_incoming_now(26u | GBE_kProtoMask, message);
+        },
+        [this](const std::string &message) {
+            push_incoming_now(2570u | GBE_kProtoMask, message);
+        },
+        [this]() {
+            GBE_SaveDotaItemsFromExecutor("equip_items");
+        },
+        [this, &plan, &update_message](Steam_Game_Coordinator *target_server_gc) {
+            GBE_ForwardDotaEquipItemsToServerGC(
+                target_server_gc,
+                plan.modified_item_ids,
+                update_message,
+                plan.cache_version,
+                plan.server_forward.unsubscribe_first,
+                plan.server_forward.cache_reason);
+        },
+        [this]() {
+            GBE_BroadcastDotaEquippedItemsToGameServers();
+        },
+        [this](const char *reason) {
+            GBE_RefreshDotaEquipLobbySnapshot(reason);
+        });
 
     return true;
 }

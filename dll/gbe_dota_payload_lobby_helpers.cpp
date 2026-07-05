@@ -54,9 +54,11 @@
 // (GBE_PatchDotaLobbyTemplateIdentifiers, GBE_ForceDotaLobbyCacheOwnerSOID,
 // GBE_PrepareDotaWelcomeBody, GBE_PrepareDotaDirectReplayMessage, etc.) which
 // now live in gbe_dota_payload_wire_helpers.cpp; those calls resolve via the
-// extern declarations in gbe_dota_gc_internal.h at link time.
+// extern declarations in gbe_dota_payload_wire_helpers.h at link time.
 
 #include "gbe_dota_gc_internal.h"
+#include "gbe_dota_payload_lobby_helpers.h"
+#include "gbe_dota_payload_wire_helpers.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_proto_buf_header.h"

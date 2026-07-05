@@ -289,7 +289,12 @@ struct TestFixture
         recorder.clear();
         gc.items.clear();
         gc.GBE_local_lobby = GBE_LocalLobby{};
-        gc.GBE_dota_private_lobby_snapshot_replayed = false;
+        gc.GBE_ClearDotaLoginSyncSent();
+        gc.GBE_ClearDotaPrivateLobbySnapshotReplayed();
+        gc.GBE_ClearDotaHostShowcaseEquipPushed();
+        gc.GBE_ClearLastDotaLaunchStatePushedGameState();
+        gc.GBE_ClearLastDotaLaunchPersonaSignature();
+        gc.GBE_ClearLastDotaDirectConnectCallbackSignature();
         gc.test_set_active_server_lobby(false);
         // Clear the global server-GC hook so each test starts from a clean slate.
         g_test_steam_client.steam_matchmaking = nullptr;
@@ -636,7 +641,7 @@ static void test_inventory_equip_full_forward()
     tf.gc.GBE_local_lobby.lobby_id = 1;
     tf.gc.GBE_local_lobby.state = 2u;
     tf.gc.GBE_local_lobby.game_state = 2u;
-    tf.gc.GBE_dota_private_lobby_snapshot_replayed = true;
+    tf.gc.GBE_MarkDotaPrivateLobbySnapshotReplayed();
 
     std::string body;
     encode_equip_op(body, 0xAAA1, 2u, 3u);
@@ -1346,6 +1351,52 @@ static void test_match_7034_game_state_runtime_update_before_response()
     ++g_tests_passed;
 }
 
+static void test_match_7034_host_showcase_repush_guard_marks_once()
+{
+    TestFixture tf;
+    tf.reset();
+
+    const uint64_t owner_steam_id = 0x110000100555555u;
+    const JobID_t source_job = 0x703455u;
+    tf.settings.m_local_steam_id = CSteamID(owner_steam_id);
+    tf.gc.is_server = true;
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x703450u;
+    tf.gc.GBE_local_lobby.match_id = 0x703451u;
+    tf.gc.GBE_local_lobby.server_id = 0x703452u;
+    tf.gc.GBE_local_lobby.owner_steam_id = owner_steam_id;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 3u;
+
+    Steam_Game_Coordinator client_gc;
+    client_gc.items.push_back(Econ_Item{});
+    g_test_steam_client.steam_game_coordinator = &client_gc;
+
+    const std::string body = make_dota7034_game_state_body(4u, 2u);
+    bool first_result = tf.gc.GBE_HandleDotaDirect7034Request(
+        7034u,
+        reinterpret_cast<const uint8 *>(body.data()), body.size(), true, source_job);
+
+    TEST_ASSERT(first_result, "7034 showcase handler should return true on first request");
+    TEST_ASSERT(tf.gc.GBE_HasPushedDotaHostShowcaseEquip(), "first showcase request should mark host equip repushed");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "first showcase request should repush cache then respond");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::ServerGcForward, "first showcase action should repush host equipped items");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7034_showcase_host_equip_repush", "showcase repush reason should be preserved");
+    expect_push_payload(tf.recorder.actions[1], 7034u, "second action should push 7034 response with payload");
+
+    tf.recorder.clear();
+    bool second_result = tf.gc.GBE_HandleDotaDirect7034Request(
+        7034u,
+        reinterpret_cast<const uint8 *>(body.data()), body.size(), true, source_job);
+
+    TEST_ASSERT(second_result, "7034 showcase handler should return true on second request");
+    TEST_ASSERT(tf.gc.GBE_HasPushedDotaHostShowcaseEquip(), "second showcase request should keep host equip repush marked");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "second showcase request should skip cache repush and still respond");
+    expect_push_payload(tf.recorder.actions[0], 7034u, "second request should still push 7034 response with payload");
+
+    ++g_tests_passed;
+}
+
 static void test_match_7034_launch_poll_records_details_update_before_response()
 {
     TestFixture tf;
@@ -1494,6 +1545,9 @@ int main()
 
     std::printf("[run] test_match_7034_game_state_runtime_update_before_response\n");
     RUN_TEST(test_match_7034_game_state_runtime_update_before_response);
+
+    std::printf("[run] test_match_7034_host_showcase_repush_guard_marks_once\n");
+    RUN_TEST(test_match_7034_host_showcase_repush_guard_marks_once);
 
     std::printf("[run] test_match_7034_launch_poll_records_details_update_before_response\n");
     RUN_TEST(test_match_7034_launch_poll_records_details_update_before_response);

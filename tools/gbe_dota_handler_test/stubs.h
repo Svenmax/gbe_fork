@@ -756,12 +756,31 @@ public:
     std::queue<GC_Message> incoming_messages;
     bool items_loaded{};
     bool gc_initialized{true};
+    bool GBE_dota_login_sync_sent{};
     bool GBE_pending_dota_abandon_finalize_after_7014{};
     uint64 GBE_pending_dota_abandon_finalize_lobby_id{};
 
     bool GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel() const { return GBE_pending_dota_abandon_finalize_after_7014; }
     bool GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed() const { return GBE_pending_dota_normal_signout_finalize_after_25; }
     bool GBE_HasPendingResetAfterCacheUnsubscribed() const { return GBE_pending_reset_after_cache_unsubscribed; }
+    bool GBE_HasSentDotaLoginSync() const { return GBE_dota_login_sync_sent; }
+    void GBE_MarkDotaLoginSyncSent() { GBE_dota_login_sync_sent = true; }
+    void GBE_ClearDotaLoginSyncSent() { GBE_dota_login_sync_sent = false; }
+    bool GBE_HasPushedDotaHostShowcaseEquip() const { return GBE_dota_host_showcase_equip_pushed; }
+    void GBE_MarkDotaHostShowcaseEquipPushed() { GBE_dota_host_showcase_equip_pushed = true; }
+    void GBE_ClearDotaHostShowcaseEquipPushed() { GBE_dota_host_showcase_equip_pushed = false; }
+    bool GBE_HasReplayedDotaPrivateLobbySnapshot() const { return GBE_dota_private_lobby_snapshot_replayed; }
+    void GBE_MarkDotaPrivateLobbySnapshotReplayed() { GBE_dota_private_lobby_snapshot_replayed = true; }
+    void GBE_ClearDotaPrivateLobbySnapshotReplayed() { GBE_dota_private_lobby_snapshot_replayed = false; }
+    uint32 GBE_GetLastDotaLaunchStatePushedGameState() const { return GBE_last_dota_launch_state_pushed_game_state; }
+    void GBE_SetLastDotaLaunchStatePushedGameState(uint32 game_state) { GBE_last_dota_launch_state_pushed_game_state = game_state; }
+    void GBE_ClearLastDotaLaunchStatePushedGameState() { GBE_last_dota_launch_state_pushed_game_state = 0; }
+    const std::string &GBE_GetLastDotaLaunchPersonaSignature() const { return GBE_last_dota_launch_persona_signature; }
+    void GBE_SetLastDotaLaunchPersonaSignature(const std::string &signature) { GBE_last_dota_launch_persona_signature = signature; }
+    void GBE_ClearLastDotaLaunchPersonaSignature() { GBE_last_dota_launch_persona_signature.clear(); }
+    const std::string &GBE_GetLastDotaDirectConnectCallbackSignature() const { return GBE_last_dota_direct_connect_callback_signature; }
+    void GBE_SetLastDotaDirectConnectCallbackSignature(const std::string &signature) { GBE_last_dota_direct_connect_callback_signature = signature; }
+    void GBE_ClearLastDotaDirectConnectCallbackSignature() { GBE_last_dota_direct_connect_callback_signature.clear(); }
     void GBE_SetPendingDotaAbandonFinalizeAfterOtherLeftChannel(uint64 lobby_id)
     {
         GBE_pending_dota_abandon_finalize_after_7014 = true;
@@ -813,6 +832,9 @@ public:
 
     GC_Profile gc_profile{};
     bool GBE_dota_private_lobby_snapshot_replayed{};
+    uint32 GBE_last_dota_launch_state_pushed_game_state{};
+    std::string GBE_last_dota_launch_persona_signature;
+    std::string GBE_last_dota_direct_connect_callback_signature;
 
     // --- Core recording side-effect methods ---
 
@@ -854,6 +876,15 @@ public:
     }
 
     void GBE_SaveDotaItemsFromExecutor(const char *reason);
+    void GBE_ForwardDotaEquipItemsToServerGC(
+        Steam_Game_Coordinator *server_gc,
+        const std::unordered_set<uint64> &modified_item_ids,
+        const std::string &update_message,
+        uint64 cache_version,
+        bool unsubscribe_first,
+        const char *cache_reason);
+    void GBE_BroadcastDotaEquippedItemsToGameServers();
+    void GBE_RefreshDotaEquipLobbySnapshot(const char *reason);
 
     std::string build_protomsg_header(uint32 msg_type,
                                       JobID_t target_job = k_GIDNil,
@@ -940,6 +971,7 @@ public:
     void GBE_PublishDotaPracticeLobbyLocalMemberData(const char *) {}
     void GBE_SyncSettingsLobbyFromGenericLobby(const char *) {}
     void GBE_PublishDotaPracticeLobbyMetadata(const char *) {}
+    bool GBE_PublishDotaPracticeLobbySetDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw);
     std::string GBE_GetDotaLobbyOwnerName() const { return GBE_local_lobby.owner_name.empty() ? std::string(settings ? settings->get_local_name() : "") : GBE_local_lobby.owner_name; }
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &, std::string &message) { message = "cache_subscribed"; return true; }
     bool GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(const GBE_LocalLobby &, const std::string &, std::string &message) { message = "cache_subscribed"; return true; }

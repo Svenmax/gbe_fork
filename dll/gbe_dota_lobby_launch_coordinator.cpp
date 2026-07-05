@@ -376,7 +376,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
         return;
     }
 
-    if (target->GBE_last_dota_launch_state_pushed_game_state >= lobby.game_state) {
+    if (target->GBE_GetLastDotaLaunchStatePushedGameState() >= lobby.game_state) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipping duplicate launch state push to client reason=%s target=%p lobby_id=%llu state=%u game_state=%u last_game_state=%u server_id=%llu",
@@ -385,7 +385,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
             static_cast<unsigned long long>(lobby.lobby_id),
             lobby.state,
             lobby.game_state,
-            target->GBE_last_dota_launch_state_pushed_game_state,
+            target->GBE_GetLastDotaLaunchStatePushedGameState(),
             static_cast<unsigned long long>(lobby.server_id)
         );
         return;
@@ -439,7 +439,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
         lobby.game_state
     );
     target->GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "push_launch_state_to_client");
-    target->GBE_last_dota_launch_state_pushed_game_state = lobby.game_state;
+    target->GBE_SetLastDotaLaunchStatePushedGameState(lobby.game_state);
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
@@ -717,4 +717,3 @@ bool Steam_Game_Coordinator::GBE_SendDotaCustomGameLaunchSetupFlow(bool wrapped,
     );
     return true;
 }
-
