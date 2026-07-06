@@ -41,6 +41,7 @@
 // RecordedAction below. It is dependency-free (only std headers).
 #include "dll/gbe_dota_action_model.h"
 
+#include "dll/gbe_dota_protocol_constants.h"
 #include "dll/gbe_dota_custom_game.h"
 #include "dll/gbe_dota_types.h"
 #include "dll/gbe_proto_wire.h"
@@ -911,6 +912,11 @@ public:
         if (out_wrapped_message)
             *out_wrapped_message = inner_message;
         return true;
+    }
+
+    bool GBE_PushDotaCacheUnsubscribedResponse(const std::string &message, bool wrapped, const std::string *outer_session_field_raw, const char *reason)
+    {
+        return GBE_PushDotaResponse(GBE_kDotaCacheUnsubscribed, message, wrapped, outer_session_field_raw, reason);
     }
 
     void save_items_to_file()

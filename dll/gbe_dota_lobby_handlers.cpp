@@ -631,7 +631,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyListRequest(bool has_request_job
     }
 
     if (finishing_leave) {
-        GBE_PushDotaResponse(GBE_kDotaCacheUnsubscribed, response_25, wrapped, outer_session_field_raw, "7040_leave_after_lobby_list_25");
+        GBE_PushDotaCacheUnsubscribedResponse(response_25, wrapped, outer_session_field_raw, "7040_leave_after_lobby_list_25");
         ResetGCMemory("7040_leave_after_lobby_list", true, false);
     }
 
@@ -1406,7 +1406,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
 
     GBE_MarkDotaAbandonedLobbySuppressed(lobby_id, "7040_leave");
 
-    if (!GBE_PushDotaResponse(GBE_kDotaCacheUnsubscribed, response_25, wrapped, outer_session_field_raw, "7040_leave_25"))
+    if (!GBE_PushDotaCacheUnsubscribedResponse(response_25, wrapped, outer_session_field_raw, "7040_leave_25"))
         return true;
     ResetGCMemory("7040_leave", true, false);
 
