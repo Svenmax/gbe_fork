@@ -1,0 +1,62 @@
+# GC Refactor Next Tasklist
+
+This tasklist continues the Dota GC maintenance refactor. The purpose is maintainability and update safety, not visual cleanup. Each task must reduce real maintenance risk through clearer semantics, stronger tests, or smaller dependency surfaces.
+
+- [ ] 1. Tighten shared lobby read semantics
+  - [x] 1.1 Document `GBE_GetSharedDotaLobbyScalarSnapshot()` as a raw immutable snapshot.
+    - Clarify that `lobby_id` and `generic_lobby_id` are not valid-gated and may intentionally preserve stale raw field contents.
+    - Clarify when callers should prefer `GBE_GetSharedDotaLobbyIdOrZero()` or `GBE_GetSharedDotaGenericLobbyIdOrZero()`.
+  - [x] 1.2 Strengthen payload helper tests for raw snapshot semantics.
+    - Cover invalid shared state with nonzero raw ids and assert scalar snapshot preserves raw ids.
+    - Assert valid-gated id helpers still return zero when `valid == false`.
+  - [ ] 1.3 Replace one additional low-risk read-only cluster.
+    - Candidate clusters: test-side assertions, pure log/suppression reads, or a local read where raw stale ids are intentionally preserved.
+    - Stop if the change needs broad snapshot plumbing or changes publish, clear, or lifecycle mutation behavior.
+
+- [ ] 2. Name one more lifecycle-specific shared clear intent
+  - [ ] 2.1 Confirm existing postgame cleanup coverage.
+    - Reuse host-client preserve, ordinary player cleanup, arcade preserve, and host-over-arcade precedence tests.
+  - [ ] 2.2 Add a behavior-equivalent wrapper for one clear intent.
+    - Preferred candidate: `GBE_ClearSharedDotaLobbyForPlayerPostgameCleanup()`.
+    - The wrapper must call `GBE_ClearSharedDotaLobbyState()` without flags, logging, preserve logic, or side effects.
+  - [ ] 2.3 Replace exactly one call site.
+    - Replace only the ordinary player postgame cleanup shared clear call site if tests already prove behavior.
+    - Stop if the path also requires settings, rich presence, server/client ownership, or generic lobby cleanup changes.
+
+- [ ] 3. Extend side-effect recorder coverage before more side-effect seams
+  - [ ] 3.1 Pick one observable side-effect family.
+    - Preferred order: server-GC forward, network broadcast, lobby snapshot refresh, rich presence update/clear.
+  - [ ] 3.2 Add recorder action fields only for the selected family.
+    - Preserve target coordinator, target steam id, reason string, wrapped/session/source-job metadata when applicable.
+  - [ ] 3.3 Strengthen one handler smoke test for ordering.
+    - Prove mutation-before-publish or response-before-cleanup ordering for the selected path.
+    - Stop if heavy SDK fake expansion is required.
+
+- [ ] 4. Continue response seam naming only where tests already prove metadata
+  - [ ] 4.1 Select one emsg family with recorder coverage.
+    - Candidate families: practice lobby details update, practice lobby response, cache subscribed.
+  - [ ] 4.2 Add one thin response helper.
+    - The helper must delegate to `GBE_PushDotaResponse(...)` and preserve immediate-vs-delayed, wrapped/direct, source-job, apply-lobby-state, and reason semantics.
+  - [ ] 4.3 Replace one or two call sites in the same handler family.
+    - Update docs with exact call sites and protected metadata.
+
+- [ ] 5. Add client/ownership seam only after coverage is clear
+  - [ ] 5.1 Identify one client coordinator lookup path.
+    - Candidate: launch-state push to client peer.
+  - [ ] 5.2 Add or strengthen a test for target selection.
+    - Cover server coordinator, client coordinator presence, and skip behavior when target is missing or server-owned.
+  - [ ] 5.3 Add a read-only lookup helper if the test makes ownership behavior reviewable.
+    - Stop if the helper needs broad constructor changes or must know unrelated lifecycle phases.
+
+- [ ] 6. Keep payload fixture coverage growing alongside refactors
+  - [ ] 6.1 Add focused malformed-input coverage for `GBE_ParseDotaEquipOps`.
+  - [ ] 6.2 Add focused style-index and attribute-merge coverage for `GBE_ApplyDotaUnlockStyleBitmask`.
+  - [ ] 6.3 Add template identifier patching output-equivalence fixtures only when binary output can be asserted exactly.
+
+- [ ] 7. Checkpoint before object extraction
+  - [ ] 7.1 Run full verification.
+    - Required command: `bash tools/run_gc_verification.sh --full`.
+  - [ ] 7.2 Run whitespace check.
+    - Required command: `git diff --check`.
+  - [ ] 7.3 Re-evaluate Dota sub-object extraction readiness.
+    - Start extraction only if shared-state read/clear/publish boundaries are named, at least three side-effect families have recorder coverage, settings/ownership seams are stable, and a small explicit context can replace broad `Steam_Game_Coordinator *` dependency.

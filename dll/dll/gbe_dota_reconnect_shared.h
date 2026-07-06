@@ -32,6 +32,9 @@ struct GBE_DotaReconnectSharedStateSnapshot {
     char connect[128]{};
 };
 
+// Raw immutable scalar snapshot. Field values are copied as-is even when
+// valid is false; use the valid-gated id helpers when invalid state should
+// map lobby ids to zero.
 struct GBE_DotaSharedLobbyScalarSnapshot {
     bool valid{};
     bool active{};
