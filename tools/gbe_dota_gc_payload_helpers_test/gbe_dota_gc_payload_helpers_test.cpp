@@ -1023,6 +1023,12 @@ TEST_CASE(test_build_so_single_object_from_item)
 
 TEST_CASE(test_parse_dota7034_runtime_request)
 {
+    const auto empty_request = gbe::proto_wire::parse_dota7034_runtime_request(nullptr, 0);
+    EXPECT_FALSE(empty_request.has_connected_player);
+    EXPECT_FALSE(empty_request.has_disconnected_player);
+    EXPECT_FALSE(empty_request.has_game_state);
+    EXPECT_FALSE(empty_request.has_draft);
+
     std::string connected_player;
     gbe::proto_wire::append_varint_field(connected_player, 1u, 76561198000000001ULL);
     gbe::proto_wire::append_varint_field(connected_player, 2u, 42u);
@@ -1088,6 +1094,20 @@ TEST_CASE(test_parse_dota7034_runtime_request)
     EXPECT_EQ(request.draft_team, 2u);
     EXPECT_TRUE(request.has_draft_team_slot);
     EXPECT_EQ(request.draft_team_slot, 4u);
+
+    const std::string truncated_nested_field{
+        static_cast<char>((1u << 3) | 2u),
+        static_cast<char>(4u),
+        static_cast<char>((1u << 3) | 0u),
+        static_cast<char>(0x80u)
+    };
+    const auto truncated_request = gbe::proto_wire::parse_dota7034_runtime_request(
+        reinterpret_cast<const std::uint8_t *>(truncated_nested_field.data()),
+        truncated_nested_field.size());
+    EXPECT_FALSE(truncated_request.has_connected_player);
+    EXPECT_FALSE(truncated_request.has_disconnected_player);
+    EXPECT_FALSE(truncated_request.has_game_state);
+    EXPECT_FALSE(truncated_request.has_draft);
 }
 
 // =====================================================================

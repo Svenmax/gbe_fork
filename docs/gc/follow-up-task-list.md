@@ -218,6 +218,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `GBE_PushDotaCacheUnsubscribedResponse()` as a thin helper over `GBE_PushDotaResponse(GBE_kDotaCacheUnsubscribed, ...)` and replaced the two 7040 leave-family cache-unsubscribed response call sites. Existing handler coverage verifies emsg `25`, wrapped/session metadata, reason string, and clear-after-response order for `7040_leave_25`.
   - Stop condition: no broad side-effect interface was introduced; immediate-vs-delayed response behavior remains owned by `GBE_PushDotaResponse()`.
 
+- [x] Runtime payload parser edge-case coverage.
+  - Goal: add focused fixture coverage for `parse_dota7034_runtime_request` without changing production behavior.
+  - Result: extended the pure parser test with empty input and a truncated nested connected-player field, verifying malformed runtime payloads leave connected/disconnected/game-state/draft flags unset.
+  - Stop condition: no payload adaptation or handler behavior changed.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
