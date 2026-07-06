@@ -201,6 +201,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Candidate areas: payload/lobby helper reads that can consume snapshots or scalar helpers.
   - Stop condition: avoid large snapshot plumbing if direct field reads are still clearer and low risk.
 
+- [x] Shared lobby state clear facade planning pass.
+  - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
+  - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
+  - Stop condition: planning only unless a behavior-equivalent helper is trivial and already covered.
+
 - [ ] Production-linked reset test re-check.
   - Goal: revisit only if `GBE_ClearDotaLobbyRuntimeState()` gains branching, extra side effects, or a semantic wrapper changes reset ownership.
   - Stop condition: do not add heavy linkage while the production helper remains behavior-equivalent and trivial.
