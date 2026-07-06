@@ -241,6 +241,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: identified `GBE_PushDotaLaunchStateToClientPeer(...)` as the candidate path. It selects `steam_game_coordinator` when called from the server coordinator, restores shared lobby state on the target, and pushes launch-state `24`/`26` through the client coordinator.
   - Stop condition: no helper added now because the existing handler smoke harness does not link `gbe_dota_lobby_launch_coordinator.cpp`; adding direct target-selection coverage would broaden the test wrapper surface before a focused launch coordinator harness exists.
 
+- [x] Payload malformed-input coverage phase 2.
+  - Goal: grow pure payload fixture coverage without changing handler behavior.
+  - Result: extended `GBE_ParseDotaEquipOps` tests with slot-overflow and style-overflow malformed inputs, protecting the uint16 slot narrowing and uint8 style-index narrowing checks.
+  - Stop condition: no parser behavior or handler adaptation changed.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
@@ -259,7 +264,7 @@ git diff --check
 
 Latest handoff verification:
 
-- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `225/225`, handler smoke tests `43/43`, and audit issues `0`.
+- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `227/227`, handler smoke tests `43/43`, and audit issues `0`.
 - `git diff --check` passed.
 
 For source-list, build-system, or new-file changes, also check the relevant `premake5.lua` source lists and `tools/run_gc_offline_tests.sh` entries.

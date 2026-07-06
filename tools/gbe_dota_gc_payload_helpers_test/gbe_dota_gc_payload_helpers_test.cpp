@@ -921,6 +921,23 @@ TEST_CASE(test_parse_dota_equip_ops)
     std::vector<uint8> class_overflow = { 0x0a, static_cast<uint8>(class_overflow_sub.size()) };
     class_overflow.insert(class_overflow.end(), class_overflow_sub.begin(), class_overflow_sub.end());
     EXPECT_FALSE(GBE_ParseDotaEquipOps(class_overflow.data(), class_overflow.size(), empty_ops));
+
+    std::string slot_overflow_sub;
+    gbe::proto_wire::append_varint_field(slot_overflow_sub, 1, 123ULL);
+    gbe::proto_wire::append_varint_field(slot_overflow_sub, 2, 1u);
+    gbe::proto_wire::append_varint_field(slot_overflow_sub, 3, 70000u);
+    std::vector<uint8> slot_overflow = { 0x0a, static_cast<uint8>(slot_overflow_sub.size()) };
+    slot_overflow.insert(slot_overflow.end(), slot_overflow_sub.begin(), slot_overflow_sub.end());
+    EXPECT_FALSE(GBE_ParseDotaEquipOps(slot_overflow.data(), slot_overflow.size(), empty_ops));
+
+    std::string style_overflow_sub;
+    gbe::proto_wire::append_varint_field(style_overflow_sub, 1, 123ULL);
+    gbe::proto_wire::append_varint_field(style_overflow_sub, 2, 1u);
+    gbe::proto_wire::append_varint_field(style_overflow_sub, 3, 1u);
+    gbe::proto_wire::append_varint_field(style_overflow_sub, 4, 300u);
+    std::vector<uint8> style_overflow = { 0x0a, static_cast<uint8>(style_overflow_sub.size()) };
+    style_overflow.insert(style_overflow.end(), style_overflow_sub.begin(), style_overflow_sub.end());
+    EXPECT_FALSE(GBE_ParseDotaEquipOps(style_overflow.data(), style_overflow.size(), empty_ops));
 }
 
 // =====================================================================
