@@ -68,10 +68,13 @@ This tasklist continues the Dota GC maintenance refactor. The purpose is maintai
   - [x] 6.3 Add template identifier patching output-equivalence fixtures only when binary output can be asserted exactly.
     - Result: added an exact-output fixture for `GBE_PatchDotaLobbyTemplateIdentifiers`, asserting the full patched byte string for lobby-id varint and steam-id fixed64 replacements.
 
-- [ ] 7. Checkpoint before object extraction
-  - [ ] 7.1 Run full verification.
+- [x] 7. Checkpoint before object extraction
+  - [x] 7.1 Run full verification.
     - Required command: `bash tools/run_gc_verification.sh --full`.
-  - [ ] 7.2 Run whitespace check.
+    - Result: passed with payload helper tests `238/238`, handler smoke tests `43/43`, and audit issues `0`.
+  - [x] 7.2 Run whitespace check.
     - Required command: `git diff --check`.
-  - [ ] 7.3 Re-evaluate Dota sub-object extraction readiness.
+    - Result: passed.
+  - [x] 7.3 Re-evaluate Dota sub-object extraction readiness.
     - Start extraction only if shared-state read/clear/publish boundaries are named, at least three side-effect families have recorder coverage, settings/ownership seams are stable, and a small explicit context can replace broad `Steam_Game_Coordinator *` dependency.
+    - Decision: defer Dota sub-object extraction. Shared-state and response seams are stronger, and multiple side-effect families have recorder coverage, while client/ownership target-selection coverage remains deferred and the candidate launch-state path still requires a broad coordinator surface.

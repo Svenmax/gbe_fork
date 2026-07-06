@@ -256,6 +256,12 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: extended `GBE_PatchDotaLobbyTemplateIdentifiers` tests with a minimal exact-output fixture that checks the complete patched byte string for lobby-id varint and steam-id fixed64 replacements.
   - Stop condition: no template patch behavior changed; broader canned template fixtures remain deferred unless exact expected output is practical.
 
+- [x] Object extraction readiness checkpoint.
+  - Goal: re-evaluate whether Dota sub-object extraction is ready after the current seam and payload coverage pass.
+  - Result: `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `43/43`, and audit issues `0`; `git diff --check` passed.
+  - Decision: defer Dota sub-object extraction. The shared-state read/clear seams and response seams are stronger, and recorder coverage now spans settings clear, server-GC forward, network broadcast, lobby snapshot refresh, and response metadata, while client/ownership target-selection coverage remains deferred and the launch-state client-peer path still depends on broad `Steam_Game_Coordinator` state.
+  - Stop condition: begin extraction only after client/ownership coverage can be added through a focused launch coordinator harness or another narrow path with a small explicit context.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
