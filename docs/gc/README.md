@@ -8,6 +8,7 @@ These documents preserve the long-term maintenance guidance extracted from the G
 - `dependency-seams.md`: side-effect seams, dependency touchpoints, and error-boundary rules.
 - `future-refactor-plan.md`: follow-up refactor sequence, risk gates, and stop conditions.
 - `follow-up-task-list.md`: executable checklist for follow-up tests, seams, facades, and verification.
+- `next-agent-task-list.md`: detailed next-agent handoff checklist with task scope, steps, done criteria, stop conditions, and verification gates.
 - `shared-lobby-state-contract.md`: current contract and safe facade direction for `GBE_shared_dota_lobby_state`.
 - `shared-lobby-state-clear-plan.md`: guardrails for future behavior-equivalent clear wrappers and lifecycle-specific clear helpers.
 - `lifecycle-state-map.md`: lobby lifecycle paths mapped to state, side effects, risks, and tests.
