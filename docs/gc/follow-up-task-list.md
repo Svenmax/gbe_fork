@@ -178,6 +178,33 @@ Do not start until shared-state facade, lifecycle tests, and dependency seams ar
 - [x] Stop if extraction creates several smaller objects that still share the same implicit global state.
   - Decision: stop before extraction. A sub-object today would mostly move member functions while retaining the same implicit global state and side-effect dependencies.
 
+## Next Phase Candidates
+
+The checklist above records the first follow-up pass and includes several "decided not to do now" items. It should not be read as the end of GC maintenance work. Use this section for the next small, reviewable steps.
+
+- [x] Shared lobby state read-only facade phase 2.
+  - Goal: replace one more clearly read-only cluster without touching publish or clear behavior.
+  - First cluster: shared-state existence and lobby-id fallback reads used by stale postgame leave and invite fallback logic.
+  - Required tests: helper equivalence assertions in the payload helper test, plus existing stale postgame leave handler coverage.
+  - Result: added `GBE_HasSharedDotaLobbyState()`, `GBE_GetSharedDotaLobbyIdOrZero()`, and `GBE_GetSharedDotaGenericLobbyIdOrZero()`; replaced the stale postgame leave validity check and invite fallback lobby-id reads. No publish, clear, or lifecycle-specific mutation paths were changed.
+  - Verified: `bash tools/run_gc_verification.sh --fast` passed with payload helper tests `196/196`, handler smoke tests `43/43`, and audit issues `0`.
+
+- [x] Side-effect recorder coverage phase 2.
+  - Goal: strengthen ordering assertions before introducing any broader side-effect interface.
+  - Candidate paths: normal signout, lobby destroy, set-details publish/update.
+  - Result: extended handler test recorder details-update and runtime-state observations with `action_sequence_index`, then asserted kick/set-details send practice-lobby details updates only after the shared-state publish action has already been recorded, and 7034 connected/disconnected runtime mutations happen before any response action is recorded. No production side-effect wrapper was introduced.
+  - Stop condition: do not wrap rich presence or network broadcast until recorder coverage can prove ordering.
+  - Verified: `bash tools/run_gc_verification.sh --fast` passed with payload helper tests `196/196`, handler smoke tests `43/43`, and audit issues `0`.
+
+- [ ] Shared lobby state read-only facade phase 3.
+  - Goal: evaluate another read-only cluster only after phase 2 lands cleanly.
+  - Candidate areas: payload/lobby helper reads that can consume snapshots or scalar helpers.
+  - Stop condition: avoid large snapshot plumbing if direct field reads are still clearer and low risk.
+
+- [ ] Production-linked reset test re-check.
+  - Goal: revisit only if `GBE_ClearDotaLobbyRuntimeState()` gains branching, extra side effects, or a semantic wrapper changes reset ownership.
+  - Stop condition: do not add heavy linkage while the production helper remains behavior-equivalent and trivial.
+
 ## Always Run Before Handoff
 
 ```bash

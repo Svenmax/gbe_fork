@@ -1018,6 +1018,7 @@ static void test_lobby_kick_removes_member_then_publishes_details()
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "kick should publish lobby state before details update");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7081_kick_member", "kick publish reason should be preserved");
     TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "kick should send one details update");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "kick details update should happen after shared state publish");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "kick details update should preserve wrapped flag in stub argument");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override == session_raw, "kick details update should preserve session raw in stub argument");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7081", "kick details update reason should be preserved");
@@ -1051,6 +1052,7 @@ static void test_lobby_set_details_mutates_before_publish_and_details_update()
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "set details should publish shared lobby state");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7046_set_details", "set details publish reason should be preserved");
     TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "set details should send one details update");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "set details update should happen after shared state publish");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "set details details update should preserve wrapped flag in stub argument");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override == session_raw, "set details details update should preserve session raw in stub argument");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7046", "set details details update reason should be preserved");
@@ -1476,6 +1478,7 @@ static void test_match_7034_connected_player_updates_runtime_before_response()
     TEST_ASSERT_EQ(tf.recorder.runtime_states.size(), 1u, "7034 should record one runtime state mutation");
     TEST_ASSERT_EQ(tf.recorder.runtime_states[0].steam_id, owner_steam_id, "runtime state should target request steam id");
     TEST_ASSERT(tf.recorder.runtime_states[0].connected, "runtime state should mark player connected");
+    TEST_ASSERT_EQ(tf.recorder.runtime_states[0].action_sequence_index, 0u, "runtime state should mutate before any response action is recorded");
     TEST_ASSERT_EQ(tf.recorder.runtime_states[0].hero_id, hero_id, "runtime state should preserve request hero id");
     TEST_ASSERT(tf.recorder.runtime_states[0].has_hero_id, "runtime state should preserve has_hero_id");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_hero_id, hero_id, "owner hero should update before response path completes");
@@ -1514,6 +1517,7 @@ static void test_match_7034_disconnected_player_updates_runtime_before_response(
     TEST_ASSERT_EQ(tf.recorder.runtime_states.size(), 1u, "7034 should record one disconnected runtime mutation");
     TEST_ASSERT_EQ(tf.recorder.runtime_states[0].steam_id, disconnected_steam_id, "runtime state should target disconnected steam id");
     TEST_ASSERT(!tf.recorder.runtime_states[0].connected, "runtime state should mark player disconnected");
+    TEST_ASSERT_EQ(tf.recorder.runtime_states[0].action_sequence_index, 0u, "disconnected runtime state should mutate before any response action is recorded");
     TEST_ASSERT_EQ(tf.recorder.runtime_states[0].hero_id, 0u, "disconnected runtime state should clear hero id");
     TEST_ASSERT(!tf.recorder.runtime_states[0].has_hero_id, "disconnected runtime state should not carry hero id");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "7034 disconnected should publish runtime state then respond");

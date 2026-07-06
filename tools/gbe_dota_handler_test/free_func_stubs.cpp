@@ -49,6 +49,21 @@ bool GBE_dota_host_showcase_equip_pushed = false;
 const std::array<uint8, 8> GBE_kOldDotaLobbyIdVarint = { 0x83, 0xcf, 0xa2, 0xb4, 0xa2, 0xff, 0xf9, 0x34 };
 const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyMatchIdVarint = { 0xae, 0xbb, 0xa3, 0xcf, 0x06 };
 
+bool GBE_HasSharedDotaLobbyState()
+{
+    return GBE_shared_dota_lobby_state.valid;
+}
+
+uint64 GBE_GetSharedDotaLobbyIdOrZero()
+{
+    return GBE_HasSharedDotaLobbyState() ? GBE_shared_dota_lobby_state.lobby_id : 0ull;
+}
+
+uint64 GBE_GetSharedDotaGenericLobbyIdOrZero()
+{
+    return GBE_HasSharedDotaLobbyState() ? GBE_shared_dota_lobby_state.generic_lobby_id : 0ull;
+}
+
 void GBE_ClearSharedDotaLobbyState()
 {
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};

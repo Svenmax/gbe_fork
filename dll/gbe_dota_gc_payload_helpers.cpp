@@ -263,6 +263,21 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
     return false;
 }
 
+bool GBE_HasSharedDotaLobbyState()
+{
+    return GBE_shared_dota_lobby_state.valid;
+}
+
+uint64 GBE_GetSharedDotaLobbyIdOrZero()
+{
+    return GBE_HasSharedDotaLobbyState() ? GBE_shared_dota_lobby_state.lobby_id : 0ull;
+}
+
+uint64 GBE_GetSharedDotaGenericLobbyIdOrZero()
+{
+    return GBE_HasSharedDotaLobbyState() ? GBE_shared_dota_lobby_state.generic_lobby_id : 0ull;
+}
+
 GBE_DotaReconnectSharedStateSnapshot GBE_GetSharedDotaReconnectStateSnapshot()
 {
     GBE_DotaReconnectSharedStateSnapshot snapshot{};

@@ -299,6 +299,7 @@ struct RecordedRuntimeState
     bool connected{};
     uint32 hero_id{};
     bool has_hero_id{};
+    size_t action_sequence_index{};
 };
 
 struct RecordedPracticeLobbyDetailsUpdate
@@ -306,6 +307,7 @@ struct RecordedPracticeLobbyDetailsUpdate
     bool preserve_server_id{};
     std::string message_override;
     std::string reason;
+    size_t action_sequence_index{};
 };
 
 struct RecordedLobbyKick
@@ -337,6 +339,7 @@ public:
         state.connected = connected;
         state.hero_id = hero_id;
         state.has_hero_id = has_hero_id;
+        state.action_sequence_index = actions.size();
         runtime_states.push_back(state);
     }
 
@@ -347,6 +350,7 @@ public:
         if (message_override)
             update.message_override = *message_override;
         update.reason = reason ? reason : "";
+        update.action_sequence_index = actions.size();
         practice_lobby_details_updates.push_back(std::move(update));
     }
 

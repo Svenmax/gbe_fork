@@ -31,6 +31,9 @@ void GBE_LogDotaSOCacheSubscribedSummary(const char *tag, const char *label, con
 // Shared lobby state cache (defined in steam_game_coordinator.cpp)
 struct GBE_SharedDotaLobbyState;
 extern GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
+bool GBE_HasSharedDotaLobbyState();
+uint64 GBE_GetSharedDotaLobbyIdOrZero();
+uint64 GBE_GetSharedDotaGenericLobbyIdOrZero();
 void GBE_ClearSharedDotaLobbyState();
 
 

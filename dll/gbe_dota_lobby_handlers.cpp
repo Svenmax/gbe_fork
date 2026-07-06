@@ -916,9 +916,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaInviteToLobbyRequest(const std::strin
 
     uint64 dota_lobby_id = GBE_local_lobby.lobby_id;
     CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
-    if ((!GBE_local_lobby.active || dota_lobby_id == 0 || !generic_lobby_id.IsLobby()) && GBE_shared_dota_lobby_state.valid) {
-        dota_lobby_id = GBE_shared_dota_lobby_state.lobby_id;
-        generic_lobby_id = CSteamID((uint64)GBE_shared_dota_lobby_state.generic_lobby_id);
+    if ((!GBE_local_lobby.active || dota_lobby_id == 0 || !generic_lobby_id.IsLobby()) && GBE_HasSharedDotaLobbyState()) {
+        dota_lobby_id = GBE_GetSharedDotaLobbyIdOrZero();
+        generic_lobby_id = CSteamID((uint64)GBE_GetSharedDotaGenericLobbyIdOrZero());
     }
 
     Steam_Client *steam_client = get_steam_client();
