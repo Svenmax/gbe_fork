@@ -142,6 +142,7 @@ Centralize dependencies only when doing so improves review or testability.
 - [x] Add named helper for settings lobby clear only if ordering remains obvious.
   - Candidate: `GBE_ClearSettingsLobbyForDotaSignout(...)`.
   - Result: added `GBE_ClearSettingsLobbyForDotaSignout()` and replaced three Dota GC settings-lobby clear sites while preserving the existing nonzero check and side-effect order.
+  - Follow-up: strengthened recorder coverage so normal signout proves cache unsubscribe happens before settings clear, the cleared settings lobby id matches the consumed pending id, and a second clear is a no-op when settings lobby is already empty.
 
 - [x] Wrap rich-presence operations only after recorder/test coverage can assert ordering.
   - Decision: no rich-presence wrapper added now. Existing recorder coverage still does not assert rich-presence ordering directly, so wrapping would add indirection without stronger tests.

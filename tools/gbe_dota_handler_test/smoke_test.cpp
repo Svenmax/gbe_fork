@@ -1119,6 +1119,9 @@ static void test_lobby_normal_signout_pending_clear_resets_state()
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::SettingsLobbyClear, "normal signout settings clear should happen after cache unsubscribe");
     TEST_ASSERT_EQ(tf.recorder.actions[1].item_id, consumed_lobby_id, "normal signout settings clear should preserve consumed lobby id");
 
+    tf.gc.GBE_ClearSettingsLobbyForDotaSignout();
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "settings lobby clear should be a no-op when settings lobby is already empty");
+
     ++g_tests_passed;
 }
 
