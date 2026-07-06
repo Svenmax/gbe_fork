@@ -113,7 +113,12 @@ Useful tests:
 - `test_lobby_abandon_current_game_disconnect_queues_25`
 - `test_lobby_abandon_ready_teardown_queues_postgame_response`
 - `test_chat_leave_postgame_channel_order`
-- Future host-client postgame observation test.
+- `test_chat_leave_postgame_skips_stale_republish_after_shared_clear`
+- `test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state`
+- `test_lobby_player_postgame_observation_clears_shared_state_after_details_update`
+- `test_lobby_arcade_active_postgame_observation_preserves_shared_state`
+- `test_lobby_host_client_postgame_observation_takes_precedence_over_arcade_skip`
+- Focused postgame observation decision tests in `gbe_dota_lobby_state_test`.
 
 ### Normal Signout And Cache Unsubscribe
 
@@ -162,7 +167,7 @@ Risk:
 Useful tests:
 
 - Payload helper reconnect tests in `gbe_dota_gc_payload_helpers_test`.
-- Future focused lifecycle tests should explicitly assert preserve vs clear behavior.
+- Focused runtime reset decision tests in `gbe_dota_lobby_state_test` assert preserve vs clear behavior.
 
 ## Change Rules
 

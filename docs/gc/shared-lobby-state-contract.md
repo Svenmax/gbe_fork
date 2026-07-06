@@ -74,7 +74,7 @@ This is a deliberate exception. Do not replace it with a broad runtime reset unl
 
 ### Host Client Postgame Observation
 
-Some client-side postgame paths observe server-owned state. A host client must not clear shared state that the server GC still needs. This is one of the reasons `GBE_shared_dota_lobby_state` should not be wrapped by a coarse setter/clear API without lifecycle-specific tests.
+Some client-side postgame paths observe server-owned state. A host client must not clear shared state that the server GC still needs, an ordinary player client must clear local/shared state after sending the final details update, and an active arcade lobby must preserve state while skipping cleanup messages. Host-client ownership takes precedence when it overlaps with arcade-active state, while the active arcade runtime details-update suppression still applies to the observable push sequence. This is covered by focused postgame decision tests, `test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state`, `test_lobby_player_postgame_observation_clears_shared_state_after_details_update`, `test_lobby_arcade_active_postgame_observation_preserves_shared_state`, and `test_lobby_host_client_postgame_observation_takes_precedence_over_arcade_skip`. This is one of the reasons `GBE_shared_dota_lobby_state` should not be wrapped by a coarse setter/clear API without lifecycle-specific tests.
 
 ### Reconnect Decisions
 
@@ -95,6 +95,8 @@ bool GBE_HasSharedDotaLobbyState();
 GBE_SharedDotaLobbyState GBE_GetSharedDotaLobbyStateSnapshot();
 uint64 GBE_GetSharedDotaLobbyIdOrZero();
 bool GBE_IsSharedDotaLobbyActive();
+bool GBE_IsSharedDotaArcadeLobbyActive();
+GBE_DotaReconnectSharedStateSnapshot GBE_GetSharedDotaReconnectStateSnapshot();
 ```
 
 Rules for the first read-only facade PR:

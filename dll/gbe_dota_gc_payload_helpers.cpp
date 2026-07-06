@@ -221,25 +221,25 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
     if (!out)
         return false;
 
+    const GBE_DotaReconnectSharedStateSnapshot shared = GBE_GetSharedDotaReconnectStateSnapshot();
     const auto shared_eligibility = gbe::dota_lobby_state::compute_reconnect_eligibility_decision(
-        GBE_shared_dota_lobby_state.valid,
-        GBE_shared_dota_lobby_state.active,
-        GBE_shared_dota_lobby_state.state,
-        GBE_shared_dota_lobby_state.game_state,
-        GBE_shared_dota_lobby_state.server_id,
-        !GBE_shared_dota_lobby_state.connect.empty(),
-        GBE_shared_dota_lobby_state.custom_game.game_id,
-        GBE_shared_dota_lobby_state.owner_connected,
-        GBE_shared_dota_lobby_state.launch_phase);
+        shared.valid,
+        shared.active,
+        shared.lobby_state,
+        shared.game_state,
+        shared.server_id,
+        shared.has_connect,
+        shared.custom_game_id,
+        shared.owner_connected,
+        shared.launch_phase);
     if (shared_eligibility.context_eligible) {
-        out->server_id = GBE_shared_dota_lobby_state.server_id;
-        out->lobby_state = GBE_shared_dota_lobby_state.state;
-        out->game_state = GBE_shared_dota_lobby_state.game_state;
-        out->custom_game_id = GBE_shared_dota_lobby_state.custom_game.game_id;
-        const std::string endpoint = gbe::proto_wire::get_dota_practice_lobby_first_connect_endpoint(GBE_shared_dota_lobby_state.connect);
-        std::strncpy(out->connect, endpoint.c_str(), sizeof(out->connect) - 1);
+        out->server_id = shared.server_id;
+        out->lobby_state = shared.lobby_state;
+        out->game_state = shared.game_state;
+        out->custom_game_id = shared.custom_game_id;
+        std::strncpy(out->connect, shared.connect, sizeof(out->connect) - 1);
         out->connect[sizeof(out->connect) - 1] = '\0';
-        out->owner_steam_id = GBE_shared_dota_lobby_state.owner_steam_id;
+        out->owner_steam_id = shared.owner_steam_id;
         return true;
     }
 
@@ -263,11 +263,35 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
     return false;
 }
 
-bool GBE_IsDotaArcadeLobbyActive()
+GBE_DotaReconnectSharedStateSnapshot GBE_GetSharedDotaReconnectStateSnapshot()
+{
+    GBE_DotaReconnectSharedStateSnapshot snapshot{};
+    snapshot.valid = GBE_shared_dota_lobby_state.valid;
+    snapshot.active = GBE_shared_dota_lobby_state.active;
+    snapshot.lobby_state = GBE_shared_dota_lobby_state.state;
+    snapshot.game_state = GBE_shared_dota_lobby_state.game_state;
+    snapshot.server_id = GBE_shared_dota_lobby_state.server_id;
+    snapshot.has_connect = !GBE_shared_dota_lobby_state.connect.empty();
+    snapshot.custom_game_id = GBE_shared_dota_lobby_state.custom_game.game_id;
+    snapshot.owner_connected = GBE_shared_dota_lobby_state.owner_connected;
+    snapshot.launch_phase = GBE_shared_dota_lobby_state.launch_phase;
+    snapshot.owner_steam_id = GBE_shared_dota_lobby_state.owner_steam_id;
+    const std::string endpoint = gbe::proto_wire::get_dota_practice_lobby_first_connect_endpoint(GBE_shared_dota_lobby_state.connect);
+    std::strncpy(snapshot.connect, endpoint.c_str(), sizeof(snapshot.connect) - 1);
+    snapshot.connect[sizeof(snapshot.connect) - 1] = '\0';
+    return snapshot;
+}
+
+bool GBE_IsSharedDotaArcadeLobbyActive()
 {
     return GBE_shared_dota_lobby_state.valid &&
         GBE_shared_dota_lobby_state.active &&
         GBE_shared_dota_lobby_state.custom_game.game_id != 0ull;
+}
+
+bool GBE_IsDotaArcadeLobbyActive()
+{
+    return GBE_IsSharedDotaArcadeLobbyActive();
 }
 
 bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64_t local_steam_id, GBE_DotaReconnectContext *out)

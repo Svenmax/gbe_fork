@@ -41,6 +41,7 @@
 // RecordedAction below. It is dependency-free (only std headers).
 #include "dll/gbe_dota_action_model.h"
 
+#include "dll/gbe_dota_custom_game.h"
 #include "dll/gbe_dota_types.h"
 #include "dll/gbe_proto_wire.h"
 // gbe_dota_lobby_state.h transitively includes gbe_dota_reconnect_shared.h
@@ -48,6 +49,7 @@
 #include "dll/gbe_dota_lobby_state.h"
 
 extern GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
+void GBE_ClearSharedDotaLobbyState();
 extern bool GBE_pending_reset_after_cache_unsubscribed;
 extern uint64_t GBE_pending_reset_after_cache_unsubscribed_lobby_id;
 extern bool GBE_pending_dota_normal_signout_finalize_after_25;
@@ -285,6 +287,7 @@ struct RecordedAction
             case GBE_DotaActionType::ServerGcForward:       return "ServerGcForward";
             case GBE_DotaActionType::NetworkBroadcast:      return "NetworkBroadcast";
             case GBE_DotaActionType::LobbySnapshotRefresh:  return "LobbySnapshotRefresh";
+            case GBE_DotaActionType::GenericLobbyLeave:     return "GenericLobbyLeave";
         }
         return "Unknown";
     }
@@ -452,6 +455,14 @@ public:
         RecordedAction a;
         a.type = GBE_DotaActionType::LobbySnapshotRefresh;
         a.reason = reason ? reason : "";
+        actions.push_back(std::move(a));
+    }
+
+    void record_generic_lobby_leave(uint64 lobby_id)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::GenericLobbyLeave;
+        a.item_id = lobby_id;
         actions.push_back(std::move(a));
     }
 
@@ -778,8 +789,13 @@ public:
     void GBE_ClearDotaLobbyRuntimeState()
     {
         GBE_local_lobby = GBE_LocalLobby{};
-        GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+        GBE_ClearSharedDotaLobbyState();
         GBE_ClearLastDotaLaunchStatePushedGameState();
+    }
+    void GBE_ClearSettingsLobbyForDotaSignout()
+    {
+        if (settings && settings->get_lobby().ConvertToUint64() != 0)
+            settings->set_lobby(k_steamIDNil);
     }
     const std::string &GBE_GetLastDotaLaunchPersonaSignature() const { return GBE_last_dota_launch_persona_signature; }
     void GBE_SetLastDotaLaunchPersonaSignature(const std::string &signature) { GBE_last_dota_launch_persona_signature = signature; }
@@ -937,6 +953,15 @@ public:
         (void)lobby_id;
         return m_test_has_active_server_lobby;
     }
+    bool GBE_HostHasActiveDotaServerLobby(uint64 lobby_id) const
+    {
+        if (lobby_id == 0)
+            return false;
+        Steam_Client *steam_client = get_steam_client();
+        return steam_client &&
+            steam_client->steam_gameserver_game_coordinator &&
+            steam_client->steam_gameserver_game_coordinator->GBE_HasActiveServerLobby(lobby_id);
+    }
 
     void callback_items_received(CSteamID, const std::vector<Econ_Item> &) {}
     void callback_items_removed(CSteamID) {}
@@ -971,6 +996,18 @@ public:
         return true;
     }
     bool GBE_CaptureCurrentDotaLobbyState(const char *, GBE_LocalLobby &snapshot, bool = true) { snapshot = GBE_local_lobby; return GBE_local_lobby.active; }
+    bool GBE_CaptureCurrentDotaLobbyStateWithPreviousSlots(const char *, const std::vector<GBE_DotaLobbyMemberState> &, uint64, GBE_LocalLobby &snapshot)
+    {
+        if (m_test_has_next_lobby_capture) {
+            GBE_local_lobby = m_test_next_lobby_capture;
+            snapshot = GBE_local_lobby;
+            m_test_next_lobby_capture = GBE_LocalLobby{};
+            m_test_has_next_lobby_capture = false;
+            return GBE_local_lobby.active;
+        }
+        snapshot = GBE_local_lobby;
+        return GBE_local_lobby.active;
+    }
     void GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *, const char *, bool, bool = true) {}
     void ResetGCMemory(const char *, bool = true, bool = true) { GBE_local_lobby = GBE_LocalLobby{}; }
     bool GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_LocalLobby &) { return false; }
@@ -985,6 +1022,57 @@ public:
     void GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &, const char *) {}
     std::vector<GBE_LocalLobby> GBE_GetDotaGenericLobbySnapshots(const char *) { return {}; }
     bool GBE_ShouldSuppressDotaAbandonedLobby(uint64) const { return false; }
+    bool GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(const char *reason)
+    {
+        if (is_server || gc_profile != GC_PROFILE_DOTA2)
+            return false;
+        if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.generic_lobby_id == 0)
+            return false;
+        if (GBE_local_lobby.state > 2u)
+            return false;
+
+        const uint32 previous_state = GBE_local_lobby.state;
+        GBE_LocalLobby lobby{};
+        if (!GBE_CaptureCurrentDotaLobbyStateWithPreviousSlots(reason ? reason : "generic_lobby_members_changed", GBE_local_lobby.members, GBE_local_lobby.owner_steam_id, lobby))
+            return false;
+
+        const auto postgame_observation = gbe::dota_lobby_state::compute_postgame_observation_decision(
+            is_server,
+            GBE_HostHasActiveDotaServerLobby(GBE_local_lobby.lobby_id),
+            gbe::dota_custom_game::has_custom_game_details(GBE_local_lobby.custom_game) &&
+                GBE_local_lobby.match_id != 0ull &&
+                GBE_local_lobby.game_state >= 2u &&
+                GBE_local_lobby.launch_phase >= 3u,
+            previous_state,
+            GBE_local_lobby.state,
+            GBE_local_lobby.lobby_id);
+        if (postgame_observation.run_player_cleanup) {
+            const uint64 cleaning_lobby_id = GBE_local_lobby.lobby_id;
+            std::string response_26;
+            if (GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, true))
+                push_incoming_now(26u | protobuf_mask, response_26);
+            GBE_ClearDotaLobbyRuntimeState();
+            push_incoming_now(25u | protobuf_mask, std::to_string(cleaning_lobby_id));
+            GBE_ClearSettingsLobbyForDotaSignout();
+            return true;
+        }
+
+        if (postgame_observation.skip_for_host_client || postgame_observation.skip_for_arcade_active_match) {
+            const bool arcade_runtime_member_change =
+                gbe::dota_custom_game::has_custom_game_details(GBE_local_lobby.custom_game) &&
+                GBE_local_lobby.match_id != 0ull &&
+                GBE_local_lobby.launch_phase >= 3u &&
+                GBE_local_lobby.state >= 2u;
+            std::string response_26;
+            if (postgame_observation.skip_for_host_client &&
+                !arcade_runtime_member_change &&
+                GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, true))
+                push_incoming_now(26u | protobuf_mask, response_26);
+            return true;
+        }
+
+        return previous_state != GBE_local_lobby.state;
+    }
     bool GBE_FindDotaGenericLobbyByDotaLobbyId(uint64 lobby_id, CSteamID &generic_lobby_id, GBE_LocalLobby *matched_lobby, const char *)
     { generic_lobby_id = CSteamID(0xBEEF); if (matched_lobby) { *matched_lobby = GBE_local_lobby; matched_lobby->lobby_id = lobby_id; } return GBE_local_lobby.active && GBE_local_lobby.lobby_id == lobby_id; }
     void GBE_DiscardQueuedDotaLaunchMessagesForAbandon(const char *) {}
@@ -1001,7 +1089,13 @@ public:
     void GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(const char *, const char *, bool, bool, const char *) {}
     bool GBE_SendDotaCustomGameLaunchSetupFlow(bool, const std::string *, bool, uint64) { return false; }
     void GBE_MaybeQueueDotaPracticeLobbySteamAuthAck(const char *, uint64) {}
-    void GBE_LeaveGenericLobby() { GBE_local_lobby = GBE_LocalLobby{}; }
+    void GBE_LeaveGenericLobby()
+    {
+        const uint64 lobby_id = GBE_local_lobby.lobby_id;
+        if (g_action_recorder)
+            g_action_recorder->record_generic_lobby_leave(lobby_id);
+        GBE_local_lobby = GBE_LocalLobby{};
+    }
     bool GBE_MaybeHandleDotaPracticeLobbyKicked(const char *) { return false; }
     bool GBE_SetDotaLobbyMemberRuntimeState(uint64 steam_id, bool connected, uint32 hero_id, bool has_hero_id)
     {
@@ -1042,6 +1136,16 @@ public:
 
     // --- Test-only controls ---
     void test_set_active_server_lobby(bool v) { m_test_has_active_server_lobby = v; }
+    void test_set_next_lobby_capture(const GBE_LocalLobby &lobby)
+    {
+        m_test_next_lobby_capture = lobby;
+        m_test_has_next_lobby_capture = true;
+    }
+    void test_clear_next_lobby_capture()
+    {
+        m_test_next_lobby_capture = GBE_LocalLobby{};
+        m_test_has_next_lobby_capture = false;
+    }
 
     // --- Handler declarations (defined in handler .cpp via test_wrapper) ---
     // Inventory domain
@@ -1118,6 +1222,8 @@ public:
 
 private:
     bool m_test_has_active_server_lobby = false;
+    bool m_test_has_next_lobby_capture = false;
+    GBE_LocalLobby m_test_next_lobby_capture{};
 };
 
 // =====================================================================

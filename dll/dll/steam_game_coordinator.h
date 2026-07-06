@@ -251,9 +251,11 @@ public ISteamGameCoordinator
     bool GBE_PublishDotaPracticeLobbySetDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_FindDotaGenericLobbyByDotaLobbyId(uint64 dota_lobby_id, CSteamID &generic_lobby_id, GBE_LocalLobby *lobby_snapshot, const char *reason);
     std::vector<GBE_LocalLobby> GBE_GetDotaGenericLobbySnapshots(const char *reason);
+    bool GBE_HostHasActiveDotaServerLobby(uint64 lobby_id) const;
     void GBE_RestoreSharedDotaLobbyState(const char *reason);
     void ResetGCMemory(const char *reason = nullptr, bool leave_generic_lobby = true, bool clear_queued_messages = true);
     void GBE_LeaveGenericLobby();
+    void GBE_ClearSettingsLobbyForDotaSignout();
     void GBE_SyncSettingsLobbyFromGenericLobby(const char *reason);
     bool GBE_SyncGenericLobbyGameServer(const char *reason);
     bool GBE_TrySyncDotaLobbyServerIdFromGameServer(const char *reason);

@@ -31,12 +31,12 @@ Current state:
 Next step for `GBE_shared_dota_lobby_state` should not be a mechanical getter/setter rename. Prefer a dedicated facade/context with named operations, for example:
 
 - `GBE_HasSharedDotaLobbyState()`
-- `GBE_GetSharedDotaLobbySnapshot(...)`
-- `GBE_ClearSharedDotaLobbyState(reason)`
+- `GBE_GetSharedDotaLobbyStateSnapshot()`
+- `GBE_ClearSharedDotaLobbyState()`
 - `GBE_PublishLocalLobbyToShared(reason)`
 - `GBE_GetSharedDotaLobbyIdOrZero()`
 
-The facade should preserve existing side-effect ordering and logging reasons.
+The facade should preserve existing side-effect ordering. Logging reasons belong in later lifecycle-specific helpers, not in the first behavior-equivalent raw clear helper.
 
 ## Const Tables And Serialization Templates
 

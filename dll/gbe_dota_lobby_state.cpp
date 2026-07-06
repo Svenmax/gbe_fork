@@ -728,6 +728,32 @@ TeardownRetrievalDecision compute_teardown_retrieval_decision(
     return d;
 }
 
+PostgameObservationDecision compute_postgame_observation_decision(
+    bool is_server,
+    bool host_has_active_server_gc,
+    bool arcade_active_match,
+    std::uint32_t previous_state,
+    std::uint32_t current_state,
+    std::uint64_t lobby_id)
+{
+    PostgameObservationDecision d;
+    const bool transitioned_to_postgame = !is_server && previous_state < 3u && current_state >= 3u;
+    d.skip_for_host_client = transitioned_to_postgame && host_has_active_server_gc;
+    d.skip_for_arcade_active_match = transitioned_to_postgame && !host_has_active_server_gc && arcade_active_match;
+    d.run_player_cleanup = transitioned_to_postgame &&
+        !host_has_active_server_gc &&
+        !arcade_active_match &&
+        lobby_id != 0ull;
+    return d;
+}
+
+RuntimeResetDecision compute_runtime_reset_decision(const char *reason)
+{
+    RuntimeResetDecision d{};
+    d.preserve_reconnect_context = reason && std::strcmp(reason, "7035_disconnect_current_game_after_25") == 0;
+    return d;
+}
+
 bool build_reconnect_context(const GBE_LocalLobby &local, GBE_DotaReconnectContext &context)
 {
     context = GBE_DotaReconnectContext{};

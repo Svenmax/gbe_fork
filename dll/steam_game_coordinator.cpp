@@ -64,6 +64,11 @@ bool GBE_recent_dota_reconnect_context_valid = false;
 GBE_DotaReconnectContext GBE_recent_dota_reconnect_context{};
 static GBE_DotaLootListData GBE_vpk_loot_data;
 
+void GBE_ClearSharedDotaLobbyState()
+{
+    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+}
+
 const GBE_DotaLootListData &GBE_GetDotaVpkLootData()
 {
     return GBE_vpk_loot_data;
@@ -599,6 +604,16 @@ bool Steam_Game_Coordinator::GBE_ShouldSuppressDotaAbandonedLobby(uint64 lobby_i
     return gc_profile == GC_PROFILE_DOTA2 && lobby_id != 0 && GBE_suppressed_dota_abandon_lobby_id == lobby_id;
 }
 
+bool Steam_Game_Coordinator::GBE_HostHasActiveDotaServerLobby(uint64 lobby_id) const
+{
+    if (lobby_id == 0)
+        return false;
+    Steam_Client *steam_client = get_steam_client();
+    return steam_client &&
+        steam_client->steam_gameserver_game_coordinator &&
+        steam_client->steam_gameserver_game_coordinator->GBE_HasActiveServerLobby(lobby_id);
+}
+
 void Steam_Game_Coordinator::GBE_MarkDotaAbandonedLobbySuppressed(uint64 lobby_id, const char *reason)
 {
     if (gc_profile != GC_PROFILE_DOTA2 || lobby_id == 0)
@@ -1052,8 +1067,14 @@ void Steam_Game_Coordinator::initialize_gc()
 void Steam_Game_Coordinator::GBE_ClearDotaLobbyRuntimeState()
 {
     GBE_local_lobby = GBE_LocalLobby{};
-    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+    GBE_ClearSharedDotaLobbyState();
     GBE_ClearLastDotaLaunchStatePushedGameState();
+}
+
+void Steam_Game_Coordinator::GBE_ClearSettingsLobbyForDotaSignout()
+{
+    if (settings && settings->get_lobby().ConvertToUint64() != 0)
+        settings->set_lobby(k_steamIDNil);
 }
 
 void Steam_Game_Coordinator::clear_dota_runtime_state(bool preserve_reconnect_context)
@@ -1103,8 +1124,7 @@ void Steam_Game_Coordinator::shutdown_gc()
         const uint64 previous_lobby_id = GBE_local_lobby.lobby_id;
         GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
         clear_dota_runtime_state(false);
-        if (settings && settings->get_lobby().ConvertToUint64() != 0)
-            settings->set_lobby(k_steamIDNil);
+        GBE_ClearSettingsLobbyForDotaSignout();
         GBE_GC_DebugLog(
             "GC_INIT",
             "cleared Dota2 GC runtime on shutdown this=%p previous_lobby_id=%llu",
@@ -1208,8 +1228,9 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
         pending_message_sequence = 0;
     }
 
-    bool preserve_reconnect = reason && std::strcmp(reason, "7035_disconnect_current_game_after_25") == 0;
-    clear_dota_runtime_state(preserve_reconnect);
+    const gbe::dota_lobby_state::RuntimeResetDecision reset_decision =
+        gbe::dota_lobby_state::compute_runtime_reset_decision(reason);
+    clear_dota_runtime_state(reset_decision.preserve_reconnect_context);
 
     GBE_ClearPendingResetAfterCacheUnsubscribed();
     if (previous_lobby_id != 0 && GBE_suppressed_dota_abandon_lobby_id != previous_lobby_id)

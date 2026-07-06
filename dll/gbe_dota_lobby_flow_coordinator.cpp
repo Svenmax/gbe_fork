@@ -643,8 +643,7 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
         reason ? reason : "unknown"
     );
 
-    if (settings->get_lobby().ConvertToUint64() != 0)
-        settings->set_lobby(k_steamIDNil);
+    GBE_ClearSettingsLobbyForDotaSignout();
 
     if (client_target && !client_target->is_server && client_target != this) {
         client_target->GBE_ResetDotaPracticeLobbyLaunchPeripheralState();

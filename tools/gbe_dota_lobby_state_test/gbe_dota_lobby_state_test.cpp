@@ -891,6 +891,33 @@ bool test_reconnect_interception_decision()
     return ok;
 }
 
+bool test_runtime_reset_reconnect_preserve_decision()
+{
+    bool ok = true;
+
+    {
+        auto d = gbe::dota_lobby_state::compute_runtime_reset_decision("7035_disconnect_current_game_after_25");
+        ok &= expect_true(d.preserve_reconnect_context, "7035 current-game disconnect reset preserves reconnect context");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_runtime_reset_decision("shutdown_gc");
+        ok &= expect_false(d.preserve_reconnect_context, "shutdown reset clears reconnect context");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_runtime_reset_decision("7040_leave_practice_lobby");
+        ok &= expect_false(d.preserve_reconnect_context, "ordinary leave reset clears reconnect context");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_runtime_reset_decision(nullptr);
+        ok &= expect_false(d.preserve_reconnect_context, "unknown reset clears reconnect context");
+    }
+
+    return ok;
+}
+
 // ---- Category 4: post-game teardown suppression ---------------------------
 
 bool test_post_game_teardown_suppression()
@@ -1137,6 +1164,88 @@ bool test_teardown_retrieval_decision()
     return ok;
 }
 
+bool test_postgame_observation_decision()
+{
+    bool ok = true;
+
+    {
+        auto d = gbe::dota_lobby_state::compute_postgame_observation_decision(
+            false,
+            true,
+            true,
+            2u,
+            3u,
+            100ull);
+        ok &= expect_true(d.skip_for_host_client, "host client postgame observation skips player cleanup");
+        ok &= expect_false(d.skip_for_arcade_active_match, "host client skip takes precedence over arcade skip");
+        ok &= expect_false(d.run_player_cleanup, "host client must preserve server-owned shared state");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_postgame_observation_decision(
+            false,
+            false,
+            false,
+            2u,
+            3u,
+            100ull);
+        ok &= expect_false(d.skip_for_host_client, "player cleanup path has no host server GC");
+        ok &= expect_false(d.skip_for_arcade_active_match, "player cleanup path is not active arcade");
+        ok &= expect_true(d.run_player_cleanup, "non-host client postgame transition runs player cleanup");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_postgame_observation_decision(
+            false,
+            false,
+            true,
+            2u,
+            3u,
+            100ull);
+        ok &= expect_false(d.skip_for_host_client, "arcade active skip has no host server GC");
+        ok &= expect_true(d.skip_for_arcade_active_match, "arcade active match skips player cleanup");
+        ok &= expect_false(d.run_player_cleanup, "arcade active match preserves runtime state");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_postgame_observation_decision(
+            true,
+            false,
+            false,
+            2u,
+            3u,
+            100ull);
+        ok &= expect_false(d.skip_for_host_client, "server GC does not use client postgame observation skip");
+        ok &= expect_false(d.skip_for_arcade_active_match, "server GC does not use arcade client skip");
+        ok &= expect_false(d.run_player_cleanup, "server GC does not run player observation cleanup");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_postgame_observation_decision(
+            false,
+            false,
+            false,
+            3u,
+            3u,
+            100ull);
+        ok &= expect_false(d.skip_for_host_client, "already-postgame state is not a transition");
+        ok &= expect_false(d.run_player_cleanup, "already-postgame state does not run cleanup again");
+    }
+
+    {
+        auto d = gbe::dota_lobby_state::compute_postgame_observation_decision(
+            false,
+            false,
+            false,
+            2u,
+            3u,
+            0ull);
+        ok &= expect_false(d.run_player_cleanup, "zero lobby id blocks player cleanup side effects");
+    }
+
+    return ok;
+}
+
 } // namespace
 
 int main()
@@ -1148,8 +1257,10 @@ int main()
     ok &= test_owner_disconnect_and_reconnect();
     ok &= test_reconnect_eligibility_decision();
     ok &= test_reconnect_interception_decision();
+    ok &= test_runtime_reset_reconnect_preserve_decision();
     ok &= test_post_game_teardown_suppression();
     ok &= test_teardown_retrieval_decision();
+    ok &= test_postgame_observation_decision();
 
     if (!ok)
         return 1;

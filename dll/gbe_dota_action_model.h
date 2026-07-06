@@ -79,6 +79,7 @@
 //   ServerGcForward       emsg, target_steam_id         (reason optional)
 //   NetworkBroadcast      (no fields)
 //   LobbySnapshotRefresh  reason
+//   GenericLobbyLeave     lobby_id
 
 #ifndef GBE_DOTA_ACTION_MODEL_H
 #define GBE_DOTA_ACTION_MODEL_H
@@ -95,6 +96,7 @@ enum class GBE_DotaActionType {
     ServerGcForward,       // forward to server GC (emsg, target_steam_id)
     NetworkBroadcast,      // broadcast to all gameservers
     LobbySnapshotRefresh,  // replay private lobby snapshot (reason)
+    GenericLobbyLeave,     // leave local generic lobby during lifecycle cleanup
 };
 
 struct GBE_DotaAction {

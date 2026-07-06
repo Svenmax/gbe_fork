@@ -296,6 +296,7 @@ struct TestFixture
         gc.GBE_ClearLastDotaLaunchPersonaSignature();
         gc.GBE_ClearLastDotaDirectConnectCallbackSignature();
         gc.test_set_active_server_lobby(false);
+        gc.test_clear_next_lobby_capture();
         // Clear the global server-GC hook so each test starts from a clean slate.
         g_test_steam_client.steam_matchmaking = nullptr;
         g_test_steam_client.steam_game_coordinator = nullptr;
@@ -860,6 +861,41 @@ static void test_chat_leave_postgame_channel_order()
     ++g_tests_passed;
 }
 
+static void test_chat_leave_postgame_skips_stale_republish_after_shared_clear()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0xCAFEu;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0xBEEFu;
+    tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.get_local_steam_id().ConvertToUint64();
+    tf.gc.GBE_local_lobby.owner_name = "tester";
+    tf.gc.GBE_local_lobby.has_chat_channel = true;
+    tf.gc.GBE_local_lobby.chat_channel_id = 0x7014u;
+    tf.gc.GBE_local_lobby.chat_channel_name = "postgame";
+    tf.gc.GBE_local_lobby.chat_channel_type = 18u;
+    tf.gc.GBE_local_lobby.abandon_postgame_active = true;
+    GBE_shared_dota_lobby_state.valid = false;
+
+    const std::string session_raw = "stale-leave-session-token";
+    const std::string body = make_leave_chat_body(tf.gc.GBE_local_lobby.chat_channel_id);
+    bool result = tf.gc.GBE_HandleDotaLeaveChatChannelRequest(body, true, &session_raw);
+
+    TEST_ASSERT(result, "stale postgame leave handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "stale postgame leave should push 7014 before cleanup without publishing state");
+    expect_push_payload(tf.recorder.actions[0], GBE_kDotaOtherLeftChannel, "stale postgame leave should still push 7014");
+    TEST_ASSERT(tf.recorder.actions[0].wrapped, "stale 7014 response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[0].session_raw == session_raw, "stale 7014 response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7272_7014", "stale 7014 response should keep normal leave response reason");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::GenericLobbyLeave, "stale postgame cleanup should happen after 7014");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].item_id, 0xCAFEu, "stale postgame cleanup should record the stale lobby id");
+    TEST_ASSERT(!GBE_shared_dota_lobby_state.valid, "stale postgame leave should not republish cleared shared state");
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "stale postgame leave should clear local lobby after skipping publish");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0ull, "stale postgame leave should clear local lobby id");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_abandon_current_game_disconnect_queues_25()
 {
     TestFixture tf;
@@ -1084,6 +1120,152 @@ static void test_lobby_runtime_reset_clears_local_shared_and_last_launch_state()
     TEST_ASSERT(!GBE_shared_dota_lobby_state.valid, "runtime reset should clear shared lobby validity");
     TEST_ASSERT_EQ(GBE_shared_dota_lobby_state.lobby_id, 0u, "runtime reset should clear shared lobby id");
     TEST_ASSERT_EQ(tf.gc.GBE_GetLastDotaLaunchStatePushedGameState(), 0u, "runtime reset should clear last pushed launch game state");
+
+    ++g_tests_passed;
+}
+
+static void setup_postgame_observation_lobby(
+    TestFixture &tf,
+    uint64_t lobby_id,
+    uint64_t owner_steam_id,
+    uint32_t owner_account_id,
+    const std::string &owner_name)
+{
+    tf.gc.is_server = false;
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = lobby_id;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0xBEEFu;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 2u;
+    tf.gc.GBE_local_lobby.owner_steam_id = owner_steam_id;
+    tf.gc.GBE_local_lobby.owner_account_id = owner_account_id;
+    tf.gc.GBE_local_lobby.owner_name = owner_name;
+
+    GBE_shared_dota_lobby_state.valid = true;
+    GBE_shared_dota_lobby_state.active = true;
+    GBE_shared_dota_lobby_state.lobby_id = lobby_id;
+    GBE_shared_dota_lobby_state.state = 2u;
+    GBE_shared_dota_lobby_state.game_state = 2u;
+}
+
+static void setup_local_owner_postgame_observation_lobby(TestFixture &tf, uint64_t lobby_id)
+{
+    setup_postgame_observation_lobby(
+        tf,
+        lobby_id,
+        tf.settings.get_local_steam_id().ConvertToUint64(),
+        tf.settings.get_local_steam_id().GetAccountID(),
+        tf.settings.get_local_name());
+}
+
+static void setup_remote_owner_postgame_observation_lobby(TestFixture &tf, uint64_t lobby_id)
+{
+    setup_postgame_observation_lobby(tf, lobby_id, 0x200000u, 0x200000u, "Remote Host");
+}
+
+static void setup_arcade_active_lobby(TestFixture &tf, uint64_t match_id, uint64_t custom_game_id)
+{
+    tf.gc.GBE_local_lobby.match_id = match_id;
+    tf.gc.GBE_local_lobby.launch_phase = 3u;
+    tf.gc.GBE_local_lobby.custom_game.game_id = custom_game_id;
+}
+
+static void queue_postgame_observation_capture(TestFixture &tf)
+{
+    GBE_LocalLobby postgame_capture = tf.gc.GBE_local_lobby;
+    postgame_capture.state = 3u;
+    postgame_capture.game_state = 4u;
+    tf.gc.test_set_next_lobby_capture(postgame_capture);
+}
+
+static void test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state()
+{
+    TestFixture tf;
+    tf.reset();
+
+    Steam_Game_Coordinator server_gc;
+    server_gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
+    server_gc.is_server = true;
+    server_gc.test_set_active_server_lobby(true);
+    g_test_steam_client.steam_gameserver_game_coordinator = &server_gc;
+
+    setup_local_owner_postgame_observation_lobby(tf, 0x5101u);
+    queue_postgame_observation_capture(tf);
+
+    const bool result = tf.gc.GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("host_client_postgame_observation_test");
+
+    TEST_ASSERT(result, "host client postgame observation should report handled runtime change");
+    TEST_ASSERT(GBE_shared_dota_lobby_state.valid, "host client postgame observation should preserve server-owned shared state");
+    TEST_ASSERT_EQ(GBE_shared_dota_lobby_state.lobby_id, 0x5101u, "shared lobby id should remain server-owned lobby id");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.state, 3u, "local lobby should still observe postgame state");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "host client skip should only send refreshed details update");
+    expect_push_action(tf.recorder.actions[0], GBE_kDotaPracticeLobbyDetailsUpdate, "host client skip should push details update");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_player_postgame_observation_clears_shared_state_after_details_update()
+{
+    TestFixture tf;
+    tf.reset();
+
+    setup_remote_owner_postgame_observation_lobby(tf, 0x5102u);
+    queue_postgame_observation_capture(tf);
+
+    const bool result = tf.gc.GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("player_postgame_observation_test");
+
+    TEST_ASSERT(result, "player postgame observation should run cleanup");
+    TEST_ASSERT(!GBE_shared_dota_lobby_state.valid, "player postgame cleanup should clear shared state");
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "player postgame cleanup should clear local lobby");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "player postgame cleanup should push details update then cache unsubscribe");
+    expect_push_action(tf.recorder.actions[0], GBE_kDotaPracticeLobbyDetailsUpdate, "player cleanup should push postgame details first");
+    expect_push_action(tf.recorder.actions[1], GBE_kDotaCacheUnsubscribed, "player cleanup should push cache unsubscribe after cleanup");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_arcade_active_postgame_observation_preserves_shared_state()
+{
+    TestFixture tf;
+    tf.reset();
+
+    setup_remote_owner_postgame_observation_lobby(tf, 0x5103u);
+    setup_arcade_active_lobby(tf, 0x9000u, 0x7777u);
+    queue_postgame_observation_capture(tf);
+
+    const bool result = tf.gc.GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("arcade_active_postgame_observation_test");
+
+    TEST_ASSERT(result, "arcade active postgame observation should report handled runtime change");
+    TEST_ASSERT(GBE_shared_dota_lobby_state.valid, "arcade active postgame observation should preserve shared state");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.active, "arcade active postgame observation should preserve local lobby");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.state, 3u, "arcade active local lobby should still observe postgame state");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 0u, "arcade active skip should not push cleanup or details update");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_host_client_postgame_observation_takes_precedence_over_arcade_skip()
+{
+    TestFixture tf;
+    tf.reset();
+
+    Steam_Game_Coordinator server_gc;
+    server_gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
+    server_gc.is_server = true;
+    server_gc.test_set_active_server_lobby(true);
+    g_test_steam_client.steam_gameserver_game_coordinator = &server_gc;
+
+    setup_local_owner_postgame_observation_lobby(tf, 0x5104u);
+    setup_arcade_active_lobby(tf, 0x9001u, 0x7778u);
+    queue_postgame_observation_capture(tf);
+
+    const bool result = tf.gc.GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("host_client_arcade_postgame_observation_test");
+
+    TEST_ASSERT(result, "host client arcade postgame observation should report handled runtime change");
+    TEST_ASSERT(GBE_shared_dota_lobby_state.valid, "host client arcade postgame observation should preserve server-owned shared state");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.active, "host client arcade postgame observation should preserve local lobby");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.state, 3u, "host client arcade local lobby should observe postgame state");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 0u, "host-client arcade skip should preserve state without cleanup or details update");
 
     ++g_tests_passed;
 }
@@ -1517,6 +1699,9 @@ int main()
     std::printf("[run] test_chat_leave_postgame_channel_order\n");
     RUN_TEST(test_chat_leave_postgame_channel_order);
 
+    std::printf("[run] test_chat_leave_postgame_skips_stale_republish_after_shared_clear\n");
+    RUN_TEST(test_chat_leave_postgame_skips_stale_republish_after_shared_clear);
+
     std::printf("[run] test_lobby_abandon_current_game_disconnect_queues_25\n");
     RUN_TEST(test_lobby_abandon_current_game_disconnect_queues_25);
 
@@ -1540,6 +1725,18 @@ int main()
 
     std::printf("[run] test_lobby_runtime_reset_clears_local_shared_and_last_launch_state\n");
     RUN_TEST(test_lobby_runtime_reset_clears_local_shared_and_last_launch_state);
+
+    std::printf("[run] test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state\n");
+    RUN_TEST(test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state);
+
+    std::printf("[run] test_lobby_player_postgame_observation_clears_shared_state_after_details_update\n");
+    RUN_TEST(test_lobby_player_postgame_observation_clears_shared_state_after_details_update);
+
+    std::printf("[run] test_lobby_arcade_active_postgame_observation_preserves_shared_state\n");
+    RUN_TEST(test_lobby_arcade_active_postgame_observation_preserves_shared_state);
+
+    std::printf("[run] test_lobby_host_client_postgame_observation_takes_precedence_over_arcade_skip\n");
+    RUN_TEST(test_lobby_host_client_postgame_observation_takes_precedence_over_arcade_skip);
 
     std::printf("[run] test_misc_minimal_varint_success\n");
     RUN_TEST(test_misc_minimal_varint_success);

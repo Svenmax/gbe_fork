@@ -349,6 +349,16 @@ struct TeardownRetrievalDecision {
     bool reset_after_cache_unsubscribed{};
 };
 
+struct PostgameObservationDecision {
+    bool skip_for_host_client{};
+    bool skip_for_arcade_active_match{};
+    bool run_player_cleanup{};
+};
+
+struct RuntimeResetDecision {
+    bool preserve_reconnect_context{};
+};
+
 TeardownRetrievalDecision compute_teardown_retrieval_decision(
     bool is_dota_profile,
     bool pending_abandon_after_7014,
@@ -356,6 +366,14 @@ TeardownRetrievalDecision compute_teardown_retrieval_decision(
     bool pending_reset_after_cache_unsubscribed,
     std::uint32_t retrieved_emsg,
     bool retrieved_other_left_matches_abandon_channel);
+PostgameObservationDecision compute_postgame_observation_decision(
+    bool is_server,
+    bool host_has_active_server_gc,
+    bool arcade_active_match,
+    std::uint32_t previous_state,
+    std::uint32_t current_state,
+    std::uint64_t lobby_id);
+RuntimeResetDecision compute_runtime_reset_decision(const char *reason);
 
 CreateLobbyPlan compose_create_lobby_plan(
     const proto_wire::DotaPracticeLobbyCreateRequest &request,

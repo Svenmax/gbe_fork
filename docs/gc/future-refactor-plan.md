@@ -26,6 +26,13 @@ The current branch has already landed the most important pre-merge cleanup:
 
 This is a good stopping point for the current PR. Further work should be split into small, separately reviewable follow-up PRs.
 
+Current follow-up progress:
+
+- Postgame observation has focused pure-decision coverage plus handler-level host-client preserve, ordinary player cleanup, arcade-active preserve, and host-over-arcade precedence coverage; reconnect preserve-vs-clear behavior has focused pure-decision coverage.
+- A narrow read-only shared-state helper and behavior-equivalent raw clear helper are in place.
+- Settings lobby clear has a behavior-equivalent seam.
+- Dota sub-object extraction was re-evaluated and remains deferred because the dependency surface is still broad.
+
 ## Do Not Do Next
 
 Do not immediately split `Steam_Game_Coordinator` into Dota sub-objects. The class is still a large integration host, but the required state and side-effect boundaries are not stable enough yet. Splitting it now would likely create several smaller objects that still call back into each other and still share the same implicit global state.
@@ -91,6 +98,8 @@ The first facade step should be read-only only. Examples:
 - `GBE_GetSharedDotaLobbyStateSnapshot()`
 - `GBE_GetSharedDotaLobbyIdOrZero()`
 - `GBE_IsSharedDotaLobbyActive()`
+- `GBE_IsSharedDotaArcadeLobbyActive()`
+- `GBE_GetSharedDotaReconnectStateSnapshot()`
 
 Replace only clearly read-only call sites. Do not return a mutable reference. Do not change publish or clear behavior in the same step.
 
