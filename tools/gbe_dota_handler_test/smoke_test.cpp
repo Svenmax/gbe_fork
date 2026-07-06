@@ -666,6 +666,7 @@ static void test_inventory_equip_full_forward()
     TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::ServerGcForward, "4: ServerGcForward (cache push)");
     TEST_ASSERT_EQ((tf.recorder.actions[3].msg_type & ~0x80000000u), 0u, "4: emsg=0 (CacheSubscribed)");
     TEST_ASSERT_EQ(tf.recorder.actions[3].item_id, 1u, "4: cache push should target a server GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].steam_id, 12345u, "4: cache push should use local steam id");
     TEST_ASSERT_EQ(tf.recorder.actions[3].server_gc_source_item_count, 1u, "4: cache push should include source items");
     TEST_ASSERT(tf.recorder.actions[3].server_gc_unsubscribe_first, "4: cache push should unsubscribe before subscribe");
     TEST_ASSERT(tf.recorder.actions[3].reason == "equip_forward_host_resubscribe_server", "4: cache push reason should identify equip forward");
@@ -677,8 +678,10 @@ static void test_inventory_equip_full_forward()
     TEST_ASSERT_EQ((tf.recorder.actions[5].msg_type & ~0x80000000u), 26u, "6: emsg=26");
 
     TEST_ASSERT_EQ(tf.recorder.actions[6].type, GBE_DotaActionType::NetworkBroadcast, "7: NetworkBroadcast");
+    TEST_ASSERT_EQ(tf.recorder.actions[6].source_id, 12345u, "7: network broadcast should use local steam id as source");
 
     TEST_ASSERT_EQ(tf.recorder.actions[7].type, GBE_DotaActionType::LobbySnapshotRefresh, "8: LobbySnapshotRefresh");
+    TEST_ASSERT(tf.recorder.actions[7].reason == "equip_items_refresh", "8: snapshot refresh reason should identify equip replay");
 
     ++g_tests_passed;
 }

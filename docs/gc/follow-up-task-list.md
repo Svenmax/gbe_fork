@@ -213,6 +213,7 @@ The checklist above records the first follow-up pass and includes several "decid
 - [x] Shared lobby state clear semantic wrapper prep.
   - Goal: name one lifecycle clear intent after behavior is already covered.
   - Result: added `GBE_ClearSharedDotaLobbyForRuntimeReset()` as a behavior-equivalent wrapper around `GBE_ClearSharedDotaLobbyState()` and replaced only the runtime reset call site. The existing `test_lobby_runtime_reset_clears_local_shared_and_last_launch_state` continues to protect local/shared/last-launch reset behavior.
+  - Follow-up: evaluated `GBE_ClearSharedDotaLobbyForPlayerPostgameCleanup()` and stopped before adding it because ordinary player postgame cleanup currently reaches shared clearing through the full runtime reset helper, with no direct shared-clear call site to name safely.
   - Stop condition: no preserve logic, logging, side effects, flags, or server/client ownership changes were added.
 
 - [x] Push / response seam phase 1.
@@ -224,6 +225,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Goal: add focused fixture coverage for `parse_dota7034_runtime_request` without changing production behavior.
   - Result: extended the pure parser test with empty input and a truncated nested connected-player field, verifying malformed runtime payloads leave connected/disconnected/game-state/draft flags unset.
   - Stop condition: no payload adaptation or handler behavior changed.
+
+- [x] Side-effect recorder coverage phase 4.
+  - Goal: strengthen server-GC forward, network broadcast, and lobby snapshot refresh assertions before adding more side-effect seams.
+  - Result: extended the equip-items full-forward handler smoke test so cache-forward records the local steam id, equipped-items network broadcast records the local steam id as source, and lobby snapshot refresh proves the `equip_items_refresh` reason after the prior local response/save/server-forward/broadcast actions. No production side-effect wrapper was introduced.
+  - Stop condition: do not add a broad side-effect interface until at least the selected family can be reviewed through metadata-rich recorder assertions.
 
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
@@ -243,7 +249,7 @@ git diff --check
 
 Latest handoff verification:
 
-- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `220/220`, handler smoke tests `43/43`, and audit issues `0`.
+- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `225/225`, handler smoke tests `43/43`, and audit issues `0`.
 - `git diff --check` passed.
 
 For source-list, build-system, or new-file changes, also check the relevant `premake5.lua` source lists and `tools/run_gc_offline_tests.sh` entries.

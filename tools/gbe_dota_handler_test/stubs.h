@@ -446,13 +446,6 @@ public:
         actions.push_back(std::move(a));
     }
 
-    void record_network_broadcast()
-    {
-        RecordedAction a;
-        a.type = GBE_DotaActionType::NetworkBroadcast;
-        actions.push_back(std::move(a));
-    }
-
     void record_network_broadcast(uint64 source_id)
     {
         RecordedAction a;
@@ -603,7 +596,7 @@ public:
         // freed by Common_Message::set_allocated_gameserver_items_messages.
         (void)msg; (void)reliable;
         if (g_action_recorder)
-            g_action_recorder->record_network_broadcast();
+            g_action_recorder->record_network_broadcast(msg ? msg->source_id() : 0u);
         return true;
     }
 

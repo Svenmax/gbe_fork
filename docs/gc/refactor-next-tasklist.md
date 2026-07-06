@@ -14,7 +14,7 @@ This tasklist continues the Dota GC maintenance refactor. The purpose is maintai
     - Stop if the change needs broad snapshot plumbing or changes publish, clear, or lifecycle mutation behavior.
 
 - [ ] 2. Name one more lifecycle-specific shared clear intent
-  - [ ] 2.1 Confirm existing postgame cleanup coverage.
+  - [x] 2.1 Confirm existing postgame cleanup coverage.
     - Reuse host-client preserve, ordinary player cleanup, arcade preserve, and host-over-arcade precedence tests.
   - [ ] 2.2 Add a behavior-equivalent wrapper for one clear intent.
     - Preferred candidate: `GBE_ClearSharedDotaLobbyForPlayerPostgameCleanup()`.
@@ -22,15 +22,21 @@ This tasklist continues the Dota GC maintenance refactor. The purpose is maintai
   - [ ] 2.3 Replace exactly one call site.
     - Replace only the ordinary player postgame cleanup shared clear call site if tests already prove behavior.
     - Stop if the path also requires settings, rich presence, server/client ownership, or generic lobby cleanup changes.
+  - [x] 2.4 Stop before adding a wrapper without a direct shared clear call site.
+    - Ordinary player postgame cleanup currently clears shared state through `GBE_ClearDotaLobbyRuntimeState()` together with local lobby and launch-state reset.
+    - Do not split this runtime reset path only to force a lifecycle-specific wrapper.
 
 - [ ] 3. Extend side-effect recorder coverage before more side-effect seams
-  - [ ] 3.1 Pick one observable side-effect family.
+  - [x] 3.1 Pick one observable side-effect family.
     - Preferred order: server-GC forward, network broadcast, lobby snapshot refresh, rich presence update/clear.
-  - [ ] 3.2 Add recorder action fields only for the selected family.
+    - Result: selected the existing equip-items full-forward path because it already observes server-GC forward, network broadcast, and lobby snapshot refresh in one tested ordering boundary.
+  - [x] 3.2 Add recorder action fields only for the selected family.
     - Preserve target coordinator, target steam id, reason string, wrapped/session/source-job metadata when applicable.
-  - [ ] 3.3 Strengthen one handler smoke test for ordering.
+    - Result: strengthened existing recorder metadata for cache-forward steam id, equipped-items network-broadcast source id, and snapshot-refresh reason; reused existing cache-forward target/reason/source-item fields.
+  - [x] 3.3 Strengthen one handler smoke test for ordering.
     - Prove mutation-before-publish or response-before-cleanup ordering for the selected path.
     - Stop if heavy SDK fake expansion is required.
+    - Result: `test_inventory_equip_full_forward` now asserts local response and save happen before server-GC forward, network broadcast, and lobby snapshot refresh, and verifies the observable steam/source/reason metadata for those side effects.
 
 - [ ] 4. Continue response seam naming only where tests already prove metadata
   - [ ] 4.1 Select one emsg family with recorder coverage.
