@@ -236,6 +236,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `GBE_PushDotaOtherLeftChannelResponse()` as a thin helper over `GBE_PushDotaResponse(GBE_kDotaOtherLeftChannel, ...)` and replaced the stale and normal `7272` chat leave `7014` response call sites. Existing chat leave coverage verifies emsg `7014`, wrapped/session metadata, reason strings `stale_7272_7014` and `7272_7014`, and response-before-cleanup/publish ordering.
   - Stop condition: no broad response interface was introduced; immediate-vs-delayed response behavior remains owned by `GBE_PushDotaResponse()`.
 
+- [x] Client/ownership seam evaluation.
+  - Goal: identify a narrow client coordinator lookup path before adding an ownership helper.
+  - Result: identified `GBE_PushDotaLaunchStateToClientPeer(...)` as the candidate path. It selects `steam_game_coordinator` when called from the server coordinator, restores shared lobby state on the target, and pushes launch-state `24`/`26` through the client coordinator.
+  - Stop condition: no helper added now because the existing handler smoke harness does not link `gbe_dota_lobby_launch_coordinator.cpp`; adding direct target-selection coverage would broaden the test wrapper surface before a focused launch coordinator harness exists.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

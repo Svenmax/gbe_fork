@@ -50,12 +50,15 @@ This tasklist continues the Dota GC maintenance refactor. The purpose is maintai
     - Result: replaced the stale and normal `7272` chat leave `7014` response call sites in `GBE_HandleDotaLeaveChatChannelRequest(...)`.
 
 - [ ] 5. Add client/ownership seam only after coverage is clear
-  - [ ] 5.1 Identify one client coordinator lookup path.
+  - [x] 5.1 Identify one client coordinator lookup path.
     - Candidate: launch-state push to client peer.
+    - Result: identified `GBE_PushDotaLaunchStateToClientPeer(...)`, which targets `steam_game_coordinator` when called from the server coordinator and then pushes cache-subscribed/details-update launch state through the client coordinator.
   - [ ] 5.2 Add or strengthen a test for target selection.
     - Cover server coordinator, client coordinator presence, and skip behavior when target is missing or server-owned.
+    - Stop: the current handler smoke harness does not link `gbe_dota_lobby_launch_coordinator.cpp`. A direct smoke test would broaden the wrapper linkage surface before the launch coordinator has a focused harness.
   - [ ] 5.3 Add a read-only lookup helper if the test makes ownership behavior reviewable.
     - Stop if the helper needs broad constructor changes or must know unrelated lifecycle phases.
+    - Stop: no lookup helper added until target-selection coverage can be added without broad handler-test linkage expansion.
 
 - [ ] 6. Keep payload fixture coverage growing alongside refactors
   - [ ] 6.1 Add focused malformed-input coverage for `GBE_ParseDotaEquipOps`.
