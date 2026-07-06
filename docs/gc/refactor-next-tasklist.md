@@ -9,7 +9,7 @@ This tasklist continues the Dota GC maintenance refactor. The purpose is maintai
   - [x] 1.2 Strengthen payload helper tests for raw snapshot semantics.
     - Cover invalid shared state with nonzero raw ids and assert scalar snapshot preserves raw ids.
     - Assert valid-gated id helpers still return zero when `valid == false`.
-  - [ ] 1.3 Replace one additional low-risk read-only cluster.
+  - [x] 1.3 Replace one additional low-risk read-only cluster.
     - Candidate clusters: test-side assertions, pure log/suppression reads, or a local read where raw stale ids are intentionally preserved.
     - Stop if the change needs broad snapshot plumbing or changes publish, clear, or lifecycle mutation behavior.
 

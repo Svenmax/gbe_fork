@@ -207,6 +207,7 @@ The checklist above records the first follow-up pass and includes several "decid
   - Candidate areas: payload/lobby helper reads that can consume snapshots or scalar helpers.
   - Result: added `GBE_GetSharedDotaLobbyScalarSnapshot()` for the read-only scalar cluster `valid/active/lobby_id/generic_lobby_id/state/game_state`, covered invalid and valid helper semantics in payload helper tests, and replaced one launch suppression read with the immutable snapshot. No publish, clear, or lifecycle-specific mutation semantics changed.
   - Follow-up: documented the helper as a raw immutable snapshot and added coverage proving invalid shared state preserves raw ids in the snapshot while valid-gated id helpers still return zero.
+  - Follow-up: replaced the queued lobby-state preapply valid/active/lobby-id read cluster with the raw scalar snapshot. The restore condition and no-context debug log remain behavior-equivalent.
   - Stop condition: avoid large snapshot plumbing if direct field reads are still clearer and low risk.
 
 - [x] Shared lobby state clear semantic wrapper prep.
