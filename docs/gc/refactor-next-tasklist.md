@@ -63,7 +63,8 @@ This tasklist continues the Dota GC maintenance refactor. The purpose is maintai
 - [ ] 6. Keep payload fixture coverage growing alongside refactors
   - [x] 6.1 Add focused malformed-input coverage for `GBE_ParseDotaEquipOps`.
     - Result: extended parser coverage for slot overflow and style overflow narrowing failures, complementing existing empty, malformed varint, truncated submessage, missing-slot, and class-overflow cases.
-  - [ ] 6.2 Add focused style-index and attribute-merge coverage for `GBE_ApplyDotaUnlockStyleBitmask`.
+  - [x] 6.2 Add focused style-index and attribute-merge coverage for `GBE_ApplyDotaUnlockStyleBitmask`.
+    - Result: added coverage for highest valid style index `31` and short attr-400 `value_bytes` merging, complementing existing create, OR, accumulate, and invalid-index tests.
   - [ ] 6.3 Add template identifier patching output-equivalence fixtures only when binary output can be asserted exactly.
 
 - [ ] 7. Checkpoint before object extraction

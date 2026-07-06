@@ -246,6 +246,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: extended `GBE_ParseDotaEquipOps` tests with slot-overflow and style-overflow malformed inputs, protecting the uint16 slot narrowing and uint8 style-index narrowing checks.
   - Stop condition: no parser behavior or handler adaptation changed.
 
+- [x] Unlock style bitmask coverage phase 2.
+  - Goal: strengthen pure style-index and attr-merge coverage before future inventory refactors.
+  - Result: extended `GBE_ApplyDotaUnlockStyleBitmask` tests with highest valid style index `31` and an existing attr-400 entry whose short `value_bytes` are treated as zero before OR-ing the requested style bit.
+  - Stop condition: no unlock behavior or inventory handler behavior changed.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
@@ -264,7 +269,7 @@ git diff --check
 
 Latest handoff verification:
 
-- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `227/227`, handler smoke tests `43/43`, and audit issues `0`.
+- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `235/235`, handler smoke tests `43/43`, and audit issues `0`.
 - `git diff --check` passed.
 
 For source-list, build-system, or new-file changes, also check the relevant `premake5.lua` source lists and `tools/run_gc_offline_tests.sh` entries.

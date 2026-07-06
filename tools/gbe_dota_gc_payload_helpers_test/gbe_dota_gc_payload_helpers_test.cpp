@@ -996,6 +996,33 @@ TEST_CASE(test_apply_dota_unlock_style_bitmask)
 
     EXPECT_FALSE(GBE_ApplyDotaUnlockStyleBitmask(item2, 255u));
     EXPECT_TRUE(item2.style == 5);
+
+    // Highest valid style index should set bit 31 and remain accepted.
+    Econ_Item item3{};
+    item3.id = 24680;
+    bool result3 = GBE_ApplyDotaUnlockStyleBitmask(item3, 31u);
+    EXPECT_TRUE(result3);
+    EXPECT_TRUE(item3.style == 31);
+    EXPECT_TRUE(item3.attributes.size() == 1);
+    uint32_t val5 = 0;
+    memcpy(&val5, item3.attributes[0].value_bytes.data(), 4);
+    EXPECT_TRUE(val5 == 0xFFFFFFFFu);
+
+    // Short attr 400 data should be treated as zero before OR-ing the bit.
+    Econ_Item item4{};
+    item4.id = 13579;
+    Econ_Item_Attribute short_attr;
+    short_attr.def = 400u;
+    short_attr.value_bytes.assign(2, '\0');
+    short_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+    item4.attributes.push_back(short_attr);
+    bool result4 = GBE_ApplyDotaUnlockStyleBitmask(item4, 4u);
+    EXPECT_TRUE(result4);
+    EXPECT_TRUE(item4.style == 4);
+    EXPECT_TRUE(item4.attributes.size() == 1);
+    uint32_t val6 = 0;
+    memcpy(&val6, item4.attributes[0].value_bytes.data(), 4);
+    EXPECT_TRUE(val6 == 0x00000010u);
 }
 
 // =====================================================================
