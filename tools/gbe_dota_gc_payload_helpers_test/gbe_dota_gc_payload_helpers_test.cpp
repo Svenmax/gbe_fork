@@ -451,6 +451,25 @@ TEST_CASE(test_patch_dota_lobby_template_identifiers)
     EXPECT_FALSE(result);
     EXPECT_TRUE(message.find(std::string(reinterpret_cast<const char *>(GBE_kOldDotaLobbyIdVarint.data()), GBE_kOldDotaLobbyIdVarint.size())) != std::string::npos);
     EXPECT_TRUE(message.find(make_fixed64_bytes(76561198000000000ULL)) != std::string::npos);
+
+    std::string exact_message = "prefix:";
+    exact_message.append(reinterpret_cast<const char *>(GBE_kOldDotaLobbyIdVarint.data()), GBE_kOldDotaLobbyIdVarint.size());
+    exact_message.append(":middle:");
+    exact_message.append(reinterpret_cast<const char *>(GBE_kOldDotaSteamIdFixed64.data()), GBE_kOldDotaSteamIdFixed64.size());
+    exact_message.append(":suffix");
+
+    std::string expected = "prefix:";
+    std::string encoded_lobby_id;
+    gbe::proto_wire::append_varuint(encoded_lobby_id, 0x11223344556677ULL);
+    EXPECT_TRUE(encoded_lobby_id.size() == GBE_kOldDotaLobbyIdVarint.size());
+    expected.append(encoded_lobby_id);
+    expected.append(":middle:");
+    expected.append(make_fixed64_bytes(0x1122334455667788ULL));
+    expected.append(":suffix");
+
+    EXPECT_TRUE(GBE_PatchDotaLobbyTemplateIdentifiers(
+        exact_message, 54321u, 0x1122334455667788ULL, 0x11223344556677ULL));
+    EXPECT_TRUE(exact_message == expected);
 }
 
 // =====================================================================
