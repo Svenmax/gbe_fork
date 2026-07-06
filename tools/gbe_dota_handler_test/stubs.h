@@ -49,6 +49,9 @@
 #include "dll/gbe_dota_lobby_state.h"
 
 extern GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
+bool GBE_HasSharedDotaLobbyState();
+uint64_t GBE_GetSharedDotaLobbyIdOrZero();
+uint64_t GBE_GetSharedDotaGenericLobbyIdOrZero();
 void GBE_ClearSharedDotaLobbyState();
 extern bool GBE_pending_reset_after_cache_unsubscribed;
 extern uint64_t GBE_pending_reset_after_cache_unsubscribed_lobby_id;
