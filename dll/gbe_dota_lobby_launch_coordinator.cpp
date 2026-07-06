@@ -676,6 +676,12 @@ bool Steam_Game_Coordinator::GBE_PushDotaCacheUnsubscribedResponse(const std::st
 }
 
 
+bool Steam_Game_Coordinator::GBE_PushDotaOtherLeftChannelResponse(const std::string &message, bool wrapped, const std::string *outer_session_field_raw, const char *reason)
+{
+    return GBE_PushDotaResponse(GBE_kDotaOtherLeftChannel, message, wrapped, outer_session_field_raw, reason);
+}
+
+
 bool Steam_Game_Coordinator::GBE_SendDotaCustomGameLaunchSetupFlow(bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id)
 {
     const gbe::dota_lobby_state::CustomGameLaunchSetupPlan launch_plan = gbe::dota_lobby_state::compose_custom_game_launch_setup_plan(

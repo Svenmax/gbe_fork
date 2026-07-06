@@ -499,7 +499,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             return true;
         }
 
-        if (!GBE_PushDotaResponse(GBE_kDotaOtherLeftChannel, stale_response_7014, wrapped, outer_session_field_raw, "stale_7272_7014"))
+        if (!GBE_PushDotaOtherLeftChannelResponse(stale_response_7014, wrapped, outer_session_field_raw, "stale_7272_7014"))
             return true;
 
         return true;
@@ -552,7 +552,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         return true;
     }
 
-    if (!GBE_PushDotaResponse(GBE_kDotaOtherLeftChannel, response_7014, wrapped, outer_session_field_raw, "7272_7014"))
+    if (!GBE_PushDotaOtherLeftChannelResponse(response_7014, wrapped, outer_session_field_raw, "7272_7014"))
         return true;
 
     if (d.leaving_postgame_channel) {

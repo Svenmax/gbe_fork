@@ -39,12 +39,15 @@ This tasklist continues the Dota GC maintenance refactor. The purpose is maintai
     - Result: `test_inventory_equip_full_forward` now asserts local response and save happen before server-GC forward, network broadcast, and lobby snapshot refresh, and verifies the observable steam/source/reason metadata for those side effects.
 
 - [ ] 4. Continue response seam naming only where tests already prove metadata
-  - [ ] 4.1 Select one emsg family with recorder coverage.
+  - [x] 4.1 Select one emsg family with recorder coverage.
     - Candidate families: practice lobby details update, practice lobby response, cache subscribed.
-  - [ ] 4.2 Add one thin response helper.
+    - Result: selected the `7014` OtherLeftChannel response family because chat leave tests already prove wrapped/session/reason metadata and response-before-cleanup ordering.
+  - [x] 4.2 Add one thin response helper.
     - The helper must delegate to `GBE_PushDotaResponse(...)` and preserve immediate-vs-delayed, wrapped/direct, source-job, apply-lobby-state, and reason semantics.
-  - [ ] 4.3 Replace one or two call sites in the same handler family.
+    - Result: added `GBE_PushDotaOtherLeftChannelResponse(...)` as a thin helper over `GBE_PushDotaResponse(GBE_kDotaOtherLeftChannel, ...)`.
+  - [x] 4.3 Replace one or two call sites in the same handler family.
     - Update docs with exact call sites and protected metadata.
+    - Result: replaced the stale and normal `7272` chat leave `7014` response call sites in `GBE_HandleDotaLeaveChatChannelRequest(...)`.
 
 - [ ] 5. Add client/ownership seam only after coverage is clear
   - [ ] 5.1 Identify one client coordinator lookup path.

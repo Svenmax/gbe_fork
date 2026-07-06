@@ -231,6 +231,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: extended the equip-items full-forward handler smoke test so cache-forward records the local steam id, equipped-items network broadcast records the local steam id as source, and lobby snapshot refresh proves the `equip_items_refresh` reason after the prior local response/save/server-forward/broadcast actions. No production side-effect wrapper was introduced.
   - Stop condition: do not add a broad side-effect interface until at least the selected family can be reviewed through metadata-rich recorder assertions.
 
+- [x] Push / response seam phase 2.
+  - Goal: name one more repeated response operation only where existing recorder coverage proves metadata.
+  - Result: added `GBE_PushDotaOtherLeftChannelResponse()` as a thin helper over `GBE_PushDotaResponse(GBE_kDotaOtherLeftChannel, ...)` and replaced the stale and normal `7272` chat leave `7014` response call sites. Existing chat leave coverage verifies emsg `7014`, wrapped/session metadata, reason strings `stale_7272_7014` and `7272_7014`, and response-before-cleanup/publish ordering.
+  - Stop condition: no broad response interface was introduced; immediate-vs-delayed response behavior remains owned by `GBE_PushDotaResponse()`.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
