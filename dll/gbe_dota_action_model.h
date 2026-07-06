@@ -97,6 +97,7 @@ enum class GBE_DotaActionType {
     NetworkBroadcast,      // broadcast to all gameservers
     LobbySnapshotRefresh,  // replay private lobby snapshot (reason)
     GenericLobbyLeave,     // leave local generic lobby during lifecycle cleanup
+    SettingsLobbyClear,    // clear settings lobby during signout cleanup
 };
 
 struct GBE_DotaAction {

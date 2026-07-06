@@ -340,13 +340,14 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
 
     target->GBE_RestoreSharedDotaLobbyState(reason ? reason : "push_launch_state_to_client");
 
-    if (target->GBE_ShouldSuppressDotaAbandonedLobby(GBE_shared_dota_lobby_state.lobby_id)) {
+    const GBE_DotaSharedLobbyScalarSnapshot shared_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
+    if (target->GBE_ShouldSuppressDotaAbandonedLobby(shared_snapshot.lobby_id)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipped pushing launch state to client for suppressed abandoned lobby reason=%s target=%p lobby_id=%llu",
             reason ? reason : "unknown",
             static_cast<void *>(target),
-            static_cast<unsigned long long>(GBE_shared_dota_lobby_state.lobby_id)
+            static_cast<unsigned long long>(shared_snapshot.lobby_id)
         );
         return;
     }

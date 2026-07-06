@@ -69,6 +69,11 @@ void GBE_ClearSharedDotaLobbyState()
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
 }
 
+void GBE_ClearSharedDotaLobbyForRuntimeReset()
+{
+    GBE_ClearSharedDotaLobbyState();
+}
+
 const GBE_DotaLootListData &GBE_GetDotaVpkLootData()
 {
     return GBE_vpk_loot_data;
@@ -1067,7 +1072,7 @@ void Steam_Game_Coordinator::initialize_gc()
 void Steam_Game_Coordinator::GBE_ClearDotaLobbyRuntimeState()
 {
     GBE_local_lobby = GBE_LocalLobby{};
-    GBE_ClearSharedDotaLobbyState();
+    GBE_ClearSharedDotaLobbyForRuntimeReset();
     GBE_ClearLastDotaLaunchStatePushedGameState();
 }
 

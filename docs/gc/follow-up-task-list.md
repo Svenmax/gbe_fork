@@ -196,10 +196,21 @@ The checklist above records the first follow-up pass and includes several "decid
   - Stop condition: do not wrap rich presence or network broadcast until recorder coverage can prove ordering.
   - Verified: `bash tools/run_gc_verification.sh --fast` passed with payload helper tests `196/196`, handler smoke tests `43/43`, and audit issues `0`.
 
-- [ ] Shared lobby state read-only facade phase 3.
+- [x] Side-effect recorder coverage phase 3.
+  - Goal: strengthen one more high-risk ordering assertion before broader side-effect wrappers.
+  - Result: extended the handler recorder with `SettingsLobbyClear` and strengthened `test_lobby_normal_signout_pending_clear_resets_state` so it records cache unsubscribe before runtime/settings cleanup, verifies local/shared/launch-state reset, and asserts the settings lobby clear happens after cache unsubscribe while preserving the consumed lobby id. No production side-effect wrapper was introduced.
+  - Stop condition: do not wrap settings, rich presence, or server/client lookup behavior until recorder coverage proves the affected ordering.
+
+- [x] Shared lobby state read-only facade phase 3.
   - Goal: evaluate another read-only cluster only after phase 2 lands cleanly.
   - Candidate areas: payload/lobby helper reads that can consume snapshots or scalar helpers.
+  - Result: added `GBE_GetSharedDotaLobbyScalarSnapshot()` for the read-only scalar cluster `valid/active/lobby_id/generic_lobby_id/state/game_state`, covered invalid and valid helper semantics in payload helper tests, and replaced one launch suppression read with the immutable snapshot. No publish, clear, or lifecycle-specific mutation semantics changed.
   - Stop condition: avoid large snapshot plumbing if direct field reads are still clearer and low risk.
+
+- [x] Shared lobby state clear semantic wrapper prep.
+  - Goal: name one lifecycle clear intent after behavior is already covered.
+  - Result: added `GBE_ClearSharedDotaLobbyForRuntimeReset()` as a behavior-equivalent wrapper around `GBE_ClearSharedDotaLobbyState()` and replaced only the runtime reset call site. The existing `test_lobby_runtime_reset_clears_local_shared_and_last_launch_state` continues to protect local/shared/last-launch reset behavior.
+  - Stop condition: no preserve logic, logging, side effects, flags, or server/client ownership changes were added.
 
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
@@ -219,7 +230,7 @@ git diff --check
 
 Latest handoff verification:
 
-- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `187/187`, handler smoke tests `43/43`, and audit issues `0`.
+- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `212/212`, handler smoke tests `43/43`, and audit issues `0`.
 - `git diff --check` passed.
 
 For source-list, build-system, or new-file changes, also check the relevant `premake5.lua` source lists and `tools/run_gc_offline_tests.sh` entries.

@@ -53,6 +53,7 @@ bool GBE_HasSharedDotaLobbyState();
 uint64_t GBE_GetSharedDotaLobbyIdOrZero();
 uint64_t GBE_GetSharedDotaGenericLobbyIdOrZero();
 void GBE_ClearSharedDotaLobbyState();
+void GBE_ClearSharedDotaLobbyForRuntimeReset();
 extern bool GBE_pending_reset_after_cache_unsubscribed;
 extern uint64_t GBE_pending_reset_after_cache_unsubscribed_lobby_id;
 extern bool GBE_pending_dota_normal_signout_finalize_after_25;
@@ -240,8 +241,8 @@ public:
     CSteamID get_local_steam_id() const { return m_local_steam_id; }
     void set_local_steam_id(CSteamID sid) { m_local_steam_id = sid; }
 
-    CSteamID get_lobby() const { return CSteamID(); }
-    void set_lobby(const CSteamID &lobby_id) { (void)lobby_id; }
+    CSteamID get_lobby() const { return m_lobby_id; }
+    void set_lobby(const CSteamID &lobby_id) { m_lobby_id = lobby_id; }
 
     const std::string &get_local_name() const { return m_name; }
     const std::string &get_language() const { return m_language; }
@@ -252,6 +253,7 @@ public:
     Mod_entry getMod(PublishedFileId_t mod_id) const { (void)mod_id; return Mod_entry{}; }
 
     CSteamID m_local_steam_id;
+    CSteamID m_lobby_id;
     std::string m_name;
     std::string m_language;
     std::vector<PublishedFileId_t> m_mods;
@@ -291,6 +293,7 @@ struct RecordedAction
             case GBE_DotaActionType::NetworkBroadcast:      return "NetworkBroadcast";
             case GBE_DotaActionType::LobbySnapshotRefresh:  return "LobbySnapshotRefresh";
             case GBE_DotaActionType::GenericLobbyLeave:     return "GenericLobbyLeave";
+            case GBE_DotaActionType::SettingsLobbyClear:    return "SettingsLobbyClear";
         }
         return "Unknown";
     }
@@ -469,6 +472,14 @@ public:
     {
         RecordedAction a;
         a.type = GBE_DotaActionType::GenericLobbyLeave;
+        a.item_id = lobby_id;
+        actions.push_back(std::move(a));
+    }
+
+    void record_settings_lobby_clear(uint64 lobby_id)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::SettingsLobbyClear;
         a.item_id = lobby_id;
         actions.push_back(std::move(a));
     }
@@ -796,13 +807,17 @@ public:
     void GBE_ClearDotaLobbyRuntimeState()
     {
         GBE_local_lobby = GBE_LocalLobby{};
-        GBE_ClearSharedDotaLobbyState();
+        GBE_ClearSharedDotaLobbyForRuntimeReset();
         GBE_ClearLastDotaLaunchStatePushedGameState();
     }
     void GBE_ClearSettingsLobbyForDotaSignout()
     {
-        if (settings && settings->get_lobby().ConvertToUint64() != 0)
+        const uint64 lobby_id = settings ? settings->get_lobby().ConvertToUint64() : 0ull;
+        if (lobby_id != 0) {
+            if (g_action_recorder)
+                g_action_recorder->record_settings_lobby_clear(lobby_id);
             settings->set_lobby(k_steamIDNil);
+        }
     }
     const std::string &GBE_GetLastDotaLaunchPersonaSignature() const { return GBE_last_dota_launch_persona_signature; }
     void GBE_SetLastDotaLaunchPersonaSignature(const std::string &signature) { GBE_last_dota_launch_persona_signature = signature; }

@@ -290,6 +290,13 @@ TEST_CASE(test_is_dota_arcade_lobby_active)
     EXPECT_FALSE(GBE_HasSharedDotaLobbyState());
     EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == 0ull);
     EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == 0ull);
+    GBE_DotaSharedLobbyScalarSnapshot scalar_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
+    EXPECT_FALSE(scalar_snapshot.valid);
+    EXPECT_FALSE(scalar_snapshot.active);
+    EXPECT_TRUE(scalar_snapshot.lobby_id == 0ull);
+    EXPECT_TRUE(scalar_snapshot.generic_lobby_id == 0ull);
+    EXPECT_TRUE(scalar_snapshot.lobby_state == 0u);
+    EXPECT_TRUE(scalar_snapshot.game_state == 0u);
     EXPECT_FALSE(GBE_IsDotaArcadeLobbyActive());
     EXPECT_FALSE(GBE_IsSharedDotaArcadeLobbyActive());
 
@@ -297,10 +304,19 @@ TEST_CASE(test_is_dota_arcade_lobby_active)
     GBE_shared_dota_lobby_state.active = true;
     GBE_shared_dota_lobby_state.lobby_id = 0x1234ull;
     GBE_shared_dota_lobby_state.generic_lobby_id = 0x5678ull;
+    GBE_shared_dota_lobby_state.state = 2u;
+    GBE_shared_dota_lobby_state.game_state = 3u;
     GBE_shared_dota_lobby_state.custom_game.game_id = 0;
     EXPECT_TRUE(GBE_HasSharedDotaLobbyState());
-    EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == GBE_shared_dota_lobby_state.lobby_id);
-    EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == GBE_shared_dota_lobby_state.generic_lobby_id);
+    scalar_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
+    EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == scalar_snapshot.lobby_id);
+    EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == scalar_snapshot.generic_lobby_id);
+    EXPECT_TRUE(scalar_snapshot.valid);
+    EXPECT_TRUE(scalar_snapshot.active);
+    EXPECT_TRUE(scalar_snapshot.lobby_id == 0x1234ull);
+    EXPECT_TRUE(scalar_snapshot.generic_lobby_id == 0x5678ull);
+    EXPECT_TRUE(scalar_snapshot.lobby_state == 2u);
+    EXPECT_TRUE(scalar_snapshot.game_state == 3u);
     EXPECT_FALSE(GBE_IsDotaArcadeLobbyActive());
     EXPECT_FALSE(GBE_IsSharedDotaArcadeLobbyActive());
 
@@ -316,6 +332,11 @@ TEST_CASE(test_is_dota_arcade_lobby_active)
     EXPECT_FALSE(GBE_HasSharedDotaLobbyState());
     EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == 0ull);
     EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == 0ull);
+    scalar_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
+    EXPECT_FALSE(scalar_snapshot.valid);
+    EXPECT_FALSE(scalar_snapshot.active);
+    EXPECT_TRUE(scalar_snapshot.lobby_id == 0ull);
+    EXPECT_TRUE(scalar_snapshot.generic_lobby_id == 0ull);
 }
 
 // =====================================================================

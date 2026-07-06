@@ -15,10 +15,11 @@ Do not add lifecycle preserve logic, server/client ownership logic, logging, or 
 
 ## Current Clear Surface
 
-As of this pass, production code has one direct raw clear helper definition and one runtime reset call site:
+As of this pass, production code has one direct raw clear helper definition and one behavior-equivalent runtime reset wrapper:
 
 - `steam_game_coordinator.cpp`: `GBE_ClearSharedDotaLobbyState()` defines the raw reset.
-- `Steam_Game_Coordinator::GBE_ClearDotaLobbyRuntimeState()` clears local lobby state, shared lobby state, and last pushed launch state together.
+- `GBE_ClearSharedDotaLobbyForRuntimeReset()` wraps the raw reset without adding preserve logic, logging, or side effects.
+- `Steam_Game_Coordinator::GBE_ClearDotaLobbyRuntimeState()` clears local lobby state, shared lobby state through the runtime-reset wrapper, and last pushed launch state together.
 
 The important current behavior is that runtime reset performs a full local/shared/launch-state reset. The handler smoke test `test_lobby_runtime_reset_clears_local_shared_and_last_launch_state` protects that behavior.
 

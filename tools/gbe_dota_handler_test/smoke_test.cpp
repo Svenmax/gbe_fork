@@ -1090,6 +1090,14 @@ static void test_lobby_normal_signout_pending_clear_resets_state()
     TestFixture tf;
     tf.reset();
 
+    tf.settings.set_lobby(CSteamID(0x2500u));
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x2500u;
+    tf.gc.GBE_SetLastDotaLaunchStatePushedGameState(5u);
+    GBE_shared_dota_lobby_state.valid = true;
+    GBE_shared_dota_lobby_state.active = true;
+    GBE_shared_dota_lobby_state.lobby_id = 0x2500u;
+
     tf.gc.GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(0x2500u);
     TEST_ASSERT(tf.gc.GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(), "normal signout pending flag should be set");
 
@@ -1097,6 +1105,19 @@ static void test_lobby_normal_signout_pending_clear_resets_state()
     TEST_ASSERT_EQ(consumed_lobby_id, 0x2500u, "normal signout consume should return pending lobby id");
     TEST_ASSERT(!tf.gc.GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(), "normal signout consume should clear pending flag");
     TEST_ASSERT_EQ(tf.gc.GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(), 0u, "normal signout pending lobby id should be cleared");
+
+    tf.gc.push_incoming_now(GBE_kDotaCacheUnsubscribed | Steam_Game_Coordinator::protobuf_mask, std::to_string(consumed_lobby_id));
+    tf.gc.GBE_ClearDotaLobbyRuntimeState();
+    tf.gc.GBE_ClearSettingsLobbyForDotaSignout();
+
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "normal signout finalize should clear local lobby state after cache unsubscribe");
+    TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "normal signout finalize should clear shared lobby state after cache unsubscribe");
+    TEST_ASSERT_EQ(tf.gc.GBE_GetLastDotaLaunchStatePushedGameState(), 0u, "normal signout finalize should clear launch-state dedupe after cache unsubscribe");
+    TEST_ASSERT_EQ(tf.settings.get_lobby().ConvertToUint64(), 0u, "normal signout finalize should clear settings lobby");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "normal signout finalize should record cache unsubscribe before settings clear");
+    expect_push_action(tf.recorder.actions[0], GBE_kDotaCacheUnsubscribed, "normal signout finalize should push cache unsubscribe first");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::SettingsLobbyClear, "normal signout settings clear should happen after cache unsubscribe");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].item_id, consumed_lobby_id, "normal signout settings clear should preserve consumed lobby id");
 
     ++g_tests_passed;
 }
