@@ -29,3 +29,8 @@ git diff --check
 - [x] 5. Re-check focused launch coordinator harness
   - Reconsider a harness only after side-effect order is explicit and the executor context is small.
   - Decision: defer focused harness until payload building and side-effect execution can be represented without broad coordinator construction.
+
+- [x] 6. Re-check focused launch coordinator harness after handler ordering coverage expansion
+  - Goal: determine whether `GBE_PushDotaLaunchStateToClientPeer(...)` can be compiled into the existing handler smoke wrapper without broadening the harness.
+  - Result: defer. The production file `gbe_dota_lobby_launch_coordinator.cpp` defines 15 launch/teardown/response members in one TU, including `GBE_TryQueueDotaPrelaunch021`, `GBE_SetDotaLobbyMemberRuntimeState`, `GBE_TryQueueDotaRuntimeLobbyDetailsUpdate`, `GBE_TryAdvanceDotaLaunchToRun`, `GBE_QueueDotaPostGameTeardown`, `GBE_SendDotaPracticeLobbyDetailsUpdate`, `GBE_PushDotaResponse`, and `GBE_SendDotaCustomGameLaunchSetupFlow`. The existing handler smoke stubs already provide several of these members, so including the whole TU would create definition conflicts and pull response/custom-game teardown linkage into a launch-state-only test.
+  - Next safe seam: split the launch-state push member into a small production TU or helper only after payload building and side-effect execution have a narrow interface. Do not link the full launch coordinator TU into handler smoke tests.
