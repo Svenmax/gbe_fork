@@ -33,6 +33,7 @@
   - [x] 增加 context mapping 和统一 action list 顺序单测。
   - [ ] 增加 smoke test，断言 launch push 的 action sequence 与 skip path 行为。
   - [ ] 为 handler smoke test 包装器纳入 launch coordinator，补齐必要 stub 后再接入 `GBE_PushDotaLaunchStateToClientPeer` 行为测试。
+    - 评估结果：直接纳入 `gbe_dota_lobby_launch_coordinator.cpp` 会与现有 handler smoke stub 中的 launch/postgame/response helper 定义大面积重叠，需要单独改造 wrapper 结构。
 
 - [ ] 4. 改造 `GBE_HandleDotaPracticeLobbyCreateRequest`
   - [x] 建立 create lobby context，集中 request、pre-reset lobby、custom game、generic lobby 可用性、settings 状态读取。
