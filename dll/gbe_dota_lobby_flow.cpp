@@ -125,6 +125,21 @@ void apply_target_to_launch_state_push_plan_input(
     plan_input.target_is_dota_profile = target.target_is_dota_profile;
 }
 
+LaunchStateCapturedLobbyInput captured_lobby_input_from_local_lobby(
+    const GBE_LocalLobby &lobby,
+    bool captured_active)
+{
+    return LaunchStateCapturedLobbyInput{
+        captured_active,
+        lobby.state,
+        lobby.game_state,
+        lobby.server_id,
+        !lobby.connect.empty(),
+        lobby.owner_steam_id,
+        lobby.lan,
+        lobby.match_id};
+}
+
 void apply_captured_lobby_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateCapturedLobbyInput &lobby,

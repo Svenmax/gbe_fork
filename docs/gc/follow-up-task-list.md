@@ -412,6 +412,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `LaunchStateTargetInput` and `apply_target_to_launch_state_push_plan_input(...)` so focused flow tests cover target/peer field copying and planner target gates; `GBE_PushDotaLaunchStateToClientPeer(...)` now uses the helper for the equivalent assignments.
   - Stop condition: no target selection, settings read, shared-state restore, lobby capture, payload build, response push, or last-game-state behavior changed.
 
+- [x] Launch-state captured local-lobby mapping seam.
+  - Goal: reduce hand-written captured lobby field construction inside the production launch-state push path without moving lobby capture or settings reads.
+  - Result: added `captured_lobby_input_from_local_lobby(...)` so focused flow tests cover copied launch fields and connect availability; production now uses the helper before applying captured lobby data to `LaunchStatePushPlanInput`.
+  - Stop condition: no lobby capture, last-pushed state read, target local steam id read, payload build, response push, or last-game-state behavior changed.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

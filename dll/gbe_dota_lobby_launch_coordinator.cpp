@@ -457,15 +457,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
     const uint64 target_local_steam_id = target->settings ? target->settings->get_local_steam_id().ConvertToUint64() : 0ull;
     gbe::dota_lobby_flow::apply_captured_lobby_to_launch_state_push_plan_input(
         plan_input,
-        gbe::dota_lobby_flow::LaunchStateCapturedLobbyInput{
-            true,
-            lobby.state,
-            lobby.game_state,
-            lobby.server_id,
-            !lobby.connect.empty(),
-            lobby.owner_steam_id,
-            lobby.lan,
-            lobby.match_id},
+        gbe::dota_lobby_flow::captured_lobby_input_from_local_lobby(lobby, true),
         target->GBE_GetLastDotaLaunchStatePushedGameState(),
         target_local_steam_id);
 

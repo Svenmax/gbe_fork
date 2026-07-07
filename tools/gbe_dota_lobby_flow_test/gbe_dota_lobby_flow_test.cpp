@@ -353,6 +353,38 @@ bool test_launch_state_plan_input_target_mapping()
     return ok;
 }
 
+bool test_launch_state_captured_lobby_input_from_local_lobby()
+{
+    bool ok = true;
+
+    GBE_LocalLobby lobby{};
+    lobby.active = true;
+    lobby.state = 2u;
+    lobby.game_state = 4u;
+    lobby.server_id = 55ull;
+    lobby.connect = "127.0.0.1:27015";
+    lobby.owner_steam_id = 10ull;
+    lobby.lan = true;
+    lobby.match_id = 123ull;
+
+    gbe::dota_lobby_flow::LaunchStateCapturedLobbyInput input = gbe::dota_lobby_flow::captured_lobby_input_from_local_lobby(lobby, true);
+    ok &= expect_true(input.active, "local lobby capture input active");
+    ok &= expect_eq_u64(input.state, 2u, "local lobby capture input state");
+    ok &= expect_eq_u64(input.game_state, 4u, "local lobby capture input game state");
+    ok &= expect_eq_u64(input.server_id, 55ull, "local lobby capture input server id");
+    ok &= expect_true(input.connect_available, "local lobby capture input connect available");
+    ok &= expect_eq_u64(input.owner_steam_id, 10ull, "local lobby capture input owner steam id");
+    ok &= expect_true(input.lan, "local lobby capture input lan");
+    ok &= expect_eq_u64(input.match_id, 123ull, "local lobby capture input match id");
+
+    lobby.connect.clear();
+    input = gbe::dota_lobby_flow::captured_lobby_input_from_local_lobby(lobby, false);
+    ok &= expect_true(!input.active, "local lobby capture input inactive");
+    ok &= expect_true(!input.connect_available, "local lobby capture input missing connect");
+
+    return ok;
+}
+
 bool test_launch_state_plan_input_captured_lobby_mapping()
 {
     bool ok = true;
@@ -1334,6 +1366,7 @@ int main()
     ok &= test_launch_state_peer_selection();
     ok &= test_launch_state_push_planner();
     ok &= test_launch_state_plan_input_target_mapping();
+    ok &= test_launch_state_captured_lobby_input_from_local_lobby();
     ok &= test_launch_state_plan_input_captured_lobby_mapping();
     ok &= test_upsert_and_slot_selection();
     ok &= test_apply_lobby_member_team_slot_update();

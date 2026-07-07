@@ -3,6 +3,7 @@
 
 #include "gbe_dota_lobby_publish.h"
 #include "gbe_dota_lobby_snapshot.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_dota_types.h"
 
 #include <cstddef>
@@ -114,6 +115,10 @@ struct LaunchStateTargetInput
 void apply_target_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateTargetInput &target);
+
+LaunchStateCapturedLobbyInput captured_lobby_input_from_local_lobby(
+    const GBE_LocalLobby &lobby,
+    bool captured_active);
 
 void apply_captured_lobby_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,

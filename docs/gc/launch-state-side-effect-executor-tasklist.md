@@ -69,3 +69,8 @@ git diff --check
   - Goal: make target/peer field mapping testable without moving target coordinator selection or settings reads.
   - Result: added `LaunchStateTargetInput` plus `apply_target_to_launch_state_push_plan_input(...)`, covered target field copying and planner gates in `gbe_dota_lobby_flow_test`, and replaced the equivalent field assignments inside `GBE_PushDotaLaunchStateToClientPeer(...)`.
   - Stop condition: this seam only copies planner inputs; it does not choose the target coordinator, restore shared state, capture lobby state, build payloads, push messages, or update last game state.
+
+- [x] 14. Extract local-lobby captured input mapping seam
+  - Goal: make the `GBE_LocalLobby` to `LaunchStateCapturedLobbyInput` conversion testable without moving lobby capture or settings reads.
+  - Result: added `captured_lobby_input_from_local_lobby(...)`, covered copied launch fields and connect availability in `gbe_dota_lobby_flow_test`, and replaced the equivalent field construction inside `GBE_PushDotaLaunchStateToClientPeer(...)`.
+  - Stop condition: the helper only converts fields; it does not capture lobby state, read last pushed game state, read target local steam id, build payloads, push messages, or update last game state.
