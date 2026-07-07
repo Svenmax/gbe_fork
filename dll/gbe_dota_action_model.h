@@ -88,6 +88,7 @@
 //   LobbyCacheSubscriptionRecord reason
 //   SettingsLobbySync  reason
 //   AbandonedLobbySuppressed lobby_id, reason
+//   LaunchMessagesDiscardedForAbandon reason
 
 #ifndef GBE_DOTA_ACTION_MODEL_H
 #define GBE_DOTA_ACTION_MODEL_H
@@ -114,6 +115,7 @@ enum class GBE_DotaActionType {
     LobbyCacheSubscriptionRecord, // record cache-subscription payload state
     SettingsLobbySync,   // sync settings lobby from generic lobby metadata
     AbandonedLobbySuppressed, // mark a Dota lobby as abandoned/suppressed
+    LaunchMessagesDiscardedForAbandon, // discard queued launch messages during abandon
 };
 
 struct GBE_DotaAction {

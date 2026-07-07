@@ -322,6 +322,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `AbandonedLobbySuppressed` to the handler action recorder and strengthened current-game disconnect, ordinary leave, and ready-for-abandon teardown smoke tests to prove suppression happens before cache-unsubscribed `25` or postgame `7014` responses with the correct lobby id and reason.
   - Stop condition: no production suppression behavior changed and queued-launch discard remains deferred until a focused launch-failure path can cover it.
 
+- [x] Queued launch discard recorder coverage pass.
+  - Goal: make queued launch message discard visible before wrapping abandon teardown side effects.
+  - Result: added `LaunchMessagesDiscardedForAbandon` to the handler action recorder and strengthened the ready-for-abandon teardown smoke test to prove queued launch messages are discarded before abandoned-lobby suppression and postgame `7014` response.
+  - Stop condition: no production discard behavior changed and arcade launch-failure coverage remains deferred until a focused launch-failure path is available.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

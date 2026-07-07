@@ -307,6 +307,7 @@ struct RecordedAction
             case GBE_DotaActionType::LobbyCacheSubscriptionRecord: return "LobbyCacheSubscriptionRecord";
             case GBE_DotaActionType::SettingsLobbySync:     return "SettingsLobbySync";
             case GBE_DotaActionType::AbandonedLobbySuppressed: return "AbandonedLobbySuppressed";
+            case GBE_DotaActionType::LaunchMessagesDiscardedForAbandon: return "LaunchMessagesDiscardedForAbandon";
         }
         return "Unknown";
     }
@@ -559,6 +560,14 @@ public:
         RecordedAction a;
         a.type = GBE_DotaActionType::AbandonedLobbySuppressed;
         a.item_id = lobby_id;
+        a.reason = reason ? reason : "";
+        actions.push_back(std::move(a));
+    }
+
+    void record_launch_messages_discarded_for_abandon(const char *reason)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::LaunchMessagesDiscardedForAbandon;
         a.reason = reason ? reason : "";
         actions.push_back(std::move(a));
     }
@@ -1210,7 +1219,11 @@ public:
     }
     bool GBE_FindDotaGenericLobbyByDotaLobbyId(uint64 lobby_id, CSteamID &generic_lobby_id, GBE_LocalLobby *matched_lobby, const char *)
     { generic_lobby_id = CSteamID(0xBEEF); if (matched_lobby) { *matched_lobby = GBE_local_lobby; matched_lobby->lobby_id = lobby_id; } return GBE_local_lobby.active && GBE_local_lobby.lobby_id == lobby_id; }
-    void GBE_DiscardQueuedDotaLaunchMessagesForAbandon(const char *) {}
+    void GBE_DiscardQueuedDotaLaunchMessagesForAbandon(const char *reason)
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_launch_messages_discarded_for_abandon(reason);
+    }
     void GBE_MarkDotaAbandonedLobbySuppressed(uint64 lobby_id, const char *reason)
     {
         if (g_action_recorder)

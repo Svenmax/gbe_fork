@@ -1195,15 +1195,17 @@ static void test_lobby_abandon_ready_teardown_queues_postgame_response()
     bool result = tf.gc.GBE_HandleDotaAbandonCurrentGameRequest(true, &session_raw);
 
     TEST_ASSERT(result, "ready abandon handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "ready teardown should suppress lobby before postgame response");
-    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::AbandonedLobbySuppressed, "ready teardown should mark abandoned lobby before response");
-    TEST_ASSERT_EQ(tf.recorder.actions[0].item_id, 0x7036u, "ready teardown suppression should target current lobby id");
-    TEST_ASSERT(tf.recorder.actions[0].reason == "7035_ready_for_abandon_teardown", "ready teardown suppression reason should be preserved");
-    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::PushIncomingNow, "teardown action should be push");
-    TEST_ASSERT_EQ(tf.recorder.actions[1].msg_type & ~Steam_Game_Coordinator::protobuf_mask, GBE_kDotaOtherLeftChannel, "teardown response should be 7014 in stub");
-    TEST_ASSERT(tf.recorder.actions[1].wrapped, "teardown response should preserve wrapped flag");
-    TEST_ASSERT(tf.recorder.actions[1].session_raw == session_raw, "teardown response should preserve session field");
-    TEST_ASSERT(tf.recorder.actions[1].reason == "postgame_teardown_7014", "teardown response should record reason");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "ready teardown should discard queued launch messages, suppress lobby, then postgame response");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LaunchMessagesDiscardedForAbandon, "ready teardown should discard queued launch messages before suppression");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7035_ready_for_abandon_teardown", "ready teardown discard reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::AbandonedLobbySuppressed, "ready teardown should mark abandoned lobby before response");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].item_id, 0x7036u, "ready teardown suppression should target current lobby id");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7035_ready_for_abandon_teardown", "ready teardown suppression reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::PushIncomingNow, "teardown action should be push");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].msg_type & ~Steam_Game_Coordinator::protobuf_mask, GBE_kDotaOtherLeftChannel, "teardown response should be 7014 in stub");
+    TEST_ASSERT(tf.recorder.actions[2].wrapped, "teardown response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[2].session_raw == session_raw, "teardown response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "postgame_teardown_7014", "teardown response should record reason");
 
     ++g_tests_passed;
 }
