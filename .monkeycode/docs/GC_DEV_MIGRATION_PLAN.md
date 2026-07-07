@@ -31,6 +31,35 @@ git apply --3way --check /tmp/opencode/gbe-migration-check-20260707/gc-refactor.
 
 Both checks failed. The current 107-commit patch cannot be applied directly to `origin/dev`.
 
+## Verified Dev-Based Migration Result
+
+A dev-based migration branch was created in a temporary worktree after the direct current-work patch failed against `origin/dev`.
+
+- Temporary worktree: `/tmp/opencode/gbe-migration-check-20260707/dev-worktree`
+- Local branch: `260707-refactor-gc-dev-baseline`
+- Base: `origin/dev`
+- Baseline migration commit: `d9e6e4fc refactor(gc): migrate extraction baseline onto dev`
+- Lifecycle closure migration commit: `06de534a refactor(gc): migrate lobby lifecycle closure onto dev`
+- Final range: `origin/dev..260707-refactor-gc-dev-baseline`
+- Final size: 2 commits, 179 files, 60199 insertions, 20011 deletions
+
+The migration was performed in two stages:
+
+1. Apply the pre-existing GC extraction baseline from `origin/dev` to `origin/trae/agent-inRF11`.
+2. Apply the current architecture closure work from `origin/trae/agent-inRF11` to `HEAD`.
+
+Both patch stages passed `git apply --check` before being applied.
+
+Validation completed successfully on the migrated dev-based branch:
+
+```bash
+tools/run_gc_verification.sh
+git diff --check
+git submodule foreach 'git status --porcelain'
+```
+
+The temporary migration branch is local only. It has not been pushed.
+
 ## Primary Failure Classes
 
 - `origin/dev` is missing the earlier GC extraction baseline files that the current work depends on.
@@ -103,6 +132,7 @@ git submodule foreach 'git status --porcelain'
 ## Recommended Delivery Strategy
 
 - Preserve the current branch by pushing `trae/agent-inRF11` when authorized.
-- Treat `dev` integration as a dedicated migration task.
+- Use the verified local branch `260707-refactor-gc-dev-baseline` as the dev-based integration candidate when authorized.
 - Avoid using `origin/dev...HEAD` for review because there is no merge-base.
 - Use `origin/trae/agent-inRF11..HEAD` to review the current completed architecture closure work.
+- Use `origin/dev..260707-refactor-gc-dev-baseline` to review the full dev-based migration candidate.
