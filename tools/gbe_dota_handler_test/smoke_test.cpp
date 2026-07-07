@@ -1666,6 +1666,9 @@ static void test_match_started_loading_updates_custom_game_before_publish()
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "8052 should publish one lobby state refresh when run advance stub declines");
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "8052 action should publish lobby state");
     TEST_ASSERT(tf.recorder.actions[0].reason == "8052_started_loading", "8052 publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "8052 should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "8052 details update should happen after shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "8052_started_loading", "8052 details update reason should be preserved");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.custom_game.game_id, 0x8052u, "8052 should update custom game id before publish");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_start_time, 12345u, "8052 should update start time before publish");
 
@@ -1693,6 +1696,9 @@ static void test_match_finished_loading_marks_loaded_before_publish()
     TEST_ASSERT(tf.recorder.actions[0].reason == "8053_finished_loading", "8053 local member data reason should be preserved");
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "8053 action should publish lobby state after local member data");
     TEST_ASSERT(tf.recorder.actions[1].reason == "8053_finished_loading", "8053 publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "8053 success should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 2u, "8053 success details update should happen after shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "8053_finished_loading", "8053 success details update reason should be preserved");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.launch_phase, GBE_kDotaLaunchPhaseLoaded, "8053 should mark launch loaded before publish");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, 1u, "8053 should ensure at least wait-for-players state");
 
@@ -1719,6 +1725,7 @@ static void test_match_finished_loading_failure_preserves_reason()
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "8053 load failure action should publish lobby state");
     TEST_ASSERT(tf.recorder.actions[0].reason == "8053_load_failed", "8053 failure publish reason should be preserved");
     TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "8053 load failure should publish one details update");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "8053 failure details update should happen after shared publish");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "8053_load_failed", "8053 failure details update reason should be preserved");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.launch_phase, GBE_kDotaLaunchPhaseRunQueued, "8053 failure should leave launch phase queued");
 

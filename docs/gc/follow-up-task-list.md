@@ -337,6 +337,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added a handler smoke test proving team/slot/bot-difficulty mutation occurs before local member-data publish, shared-lobby publish, details update, and optional `7055` ack.
   - Stop condition: no production team-slot behavior changed and no generic-lobby metadata surface was widened.
 
+- [x] Custom-game loading details-update ordering coverage pass.
+  - Goal: make 8052/8053 loading lifecycle details-update order explicit before wrapping launch lifecycle publish/update side effects.
+  - Result: strengthened existing started-loading, finished-loading success, and finished-loading failure smoke tests to prove details updates happen after the relevant shared-lobby publish actions and preserve their lifecycle reasons.
+  - Stop condition: no production loading lifecycle behavior changed and no launch coordinator linkage was expanded.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
