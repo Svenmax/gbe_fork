@@ -329,24 +329,31 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
     }
 
     Steam_Game_Coordinator *target = this;
+    bool client_peer_available = false;
     if (is_server) {
         Steam_Client *steam_client = get_steam_client();
-        if (gbe::dota_lobby_flow::should_use_client_peer_for_launch_state_push(
-                is_server,
-                steam_client && steam_client->steam_game_coordinator))
+        client_peer_available = steam_client && steam_client->steam_game_coordinator;
+        if (gbe::dota_lobby_flow::should_use_client_peer_for_launch_state_push(is_server, client_peer_available))
             target = steam_client->steam_game_coordinator;
     }
 
-    if (!gbe::dota_lobby_flow::is_valid_launch_state_push_target(
-            target != nullptr,
-            target ? target->is_server : false,
-            target ? target->gc_profile == GC_PROFILE_DOTA2 : false))
+    gbe::dota_lobby_flow::LaunchStatePushPlanInput plan_input{};
+    plan_input.source_is_server = is_server;
+    plan_input.client_peer_available = client_peer_available;
+    plan_input.target_available = target != nullptr;
+    plan_input.target_is_server = target ? target->is_server : false;
+    plan_input.target_is_dota_profile = target ? target->gc_profile == GC_PROFILE_DOTA2 : false;
+
+    gbe::dota_lobby_flow::LaunchStatePushPlan plan = gbe::dota_lobby_flow::plan_launch_state_push(plan_input);
+    if (plan.skip_reason == gbe::dota_lobby_flow::LaunchStatePushSkipReason::InvalidTarget)
         return;
 
     target->GBE_RestoreSharedDotaLobbyState(reason ? reason : "push_launch_state_to_client");
 
     const GBE_DotaSharedLobbyScalarSnapshot shared_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
-    if (target->GBE_ShouldSuppressDotaAbandonedLobby(shared_snapshot.lobby_id)) {
+    plan_input.shared_lobby_suppressed = target->GBE_ShouldSuppressDotaAbandonedLobby(shared_snapshot.lobby_id);
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(plan_input);
+    if (plan.skip_reason == gbe::dota_lobby_flow::LaunchStatePushSkipReason::SuppressedSharedLobby) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipped pushing launch state to client for suppressed abandoned lobby reason=%s target=%p lobby_id=%llu",
@@ -358,7 +365,9 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
     }
 
     GBE_LocalLobby lobby{};
-    if (!target->GBE_CaptureCurrentDotaLobbyState(reason ? reason : "push_launch_state_to_client", lobby, false)) {
+    plan_input.captured_lobby_active = target->GBE_CaptureCurrentDotaLobbyState(reason ? reason : "push_launch_state_to_client", lobby, false);
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(plan_input);
+    if (plan.skip_reason == gbe::dota_lobby_flow::LaunchStatePushSkipReason::NoCapturedLobby) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipped pushing launch state to client reason=%s target=%p active=0",
@@ -368,7 +377,19 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
         return;
     }
 
-    if (lobby.state != 2u || lobby.game_state < 1u || (lobby.server_id == 0 && lobby.connect.empty())) {
+    plan_input.lobby_state = lobby.state;
+    plan_input.lobby_game_state = lobby.game_state;
+    plan_input.lobby_server_id = lobby.server_id;
+    plan_input.lobby_connect_available = !lobby.connect.empty();
+    plan_input.last_pushed_game_state = target->GBE_GetLastDotaLaunchStatePushedGameState();
+    const uint64 target_local_steam_id = target->settings ? target->settings->get_local_steam_id().ConvertToUint64() : 0ull;
+    plan_input.target_local_steam_id = target_local_steam_id;
+    plan_input.lobby_owner_steam_id = lobby.owner_steam_id;
+    plan_input.lobby_lan = lobby.lan;
+    plan_input.lobby_match_id = lobby.match_id;
+
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(plan_input);
+    if (plan.skip_reason == gbe::dota_lobby_flow::LaunchStatePushSkipReason::IneligibleLaunchState) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipped pushing launch state to client reason=%s target=%p lobby_id=%llu state=%u game_state=%u server_id=%llu",
@@ -382,7 +403,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
         return;
     }
 
-    if (target->GBE_GetLastDotaLaunchStatePushedGameState() >= lobby.game_state) {
+    if (plan.skip_reason == gbe::dota_lobby_flow::LaunchStatePushSkipReason::DuplicateGameState) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipping duplicate launch state push to client reason=%s target=%p lobby_id=%llu state=%u game_state=%u last_game_state=%u server_id=%llu",
@@ -397,15 +418,8 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
         return;
     }
 
-    const uint64 target_local_steam_id = target->settings ? target->settings->get_local_steam_id().ConvertToUint64() : 0ull;
-    const bool target_owner_lan_launch = gbe::dota_lobby_flow::should_preserve_server_id_for_launch_state_push_target(
-        target_local_steam_id,
-        lobby.owner_steam_id,
-        lobby.lan,
-        lobby.match_id);
-
     std::string response_24;
-    if (!target->GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(lobby, target->GBE_GetDotaLobbyOwnerName(), response_24, target_owner_lan_launch)) {
+    if (!target->GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(lobby, target->GBE_GetDotaLobbyOwnerName(), response_24, plan.preserve_server_id)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "failed building launch state 24 for client reason=%s target=%p lobby_id=%llu state=%u game_state=%u server_id=%llu",
@@ -420,7 +434,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
     }
 
     std::string response_26;
-    if (!target->GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, target->GBE_GetDotaLobbyOwnerName(), response_26, target_owner_lan_launch)) {
+    if (!target->GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, target->GBE_GetDotaLobbyOwnerName(), response_26, plan.preserve_server_id)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "failed building launch state 26 for client reason=%s target=%p lobby_id=%llu state=%u game_state=%u server_id=%llu",

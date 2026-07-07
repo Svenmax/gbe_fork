@@ -21,10 +21,11 @@ git diff --check
 
   - Result: `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `43/43`, and audit issues `0`; `git diff --check` passed.
 
-- [ ] 4. Integrate planner into `GBE_PushDotaLaunchStateToClientPeer(...)`
+- [x] 4. Integrate planner into `GBE_PushDotaLaunchStateToClientPeer(...)`
   - Build planner input from existing coordinator state.
   - Use planner output to drive the existing restore/capture/build/push/rich-presence/last-state sequence.
   - Preserve existing reason strings, response order, wrapped `26` behavior, cache subscription recording, rich presence ordering, and last-game-state update.
+  - Result: production path now builds planner input incrementally and uses planner skip/preserve decisions while preserving the existing restore, capture, build, push, rich-presence, last-state, and debug-log order.
 
 - [ ] 5. Re-evaluate focused launch coordinator harness
   - Add a focused harness only if planner integration leaves a small explicit context for side-effect assertions.
