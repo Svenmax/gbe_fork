@@ -1307,6 +1307,26 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
     }
 
     const gbe::dota_lobby_state::AbandonDecision d = gbe::dota_lobby_state::compute_abandon_decision(request);
+    auto execute_abandon_cache_actions = [this](const GBE_DotaActionList &actions) {
+        for (const GBE_DotaAction &action : actions) {
+            switch (action.type) {
+                case GBE_DotaActionType::LaunchMessagesDiscardedForAbandon:
+                    GBE_DiscardQueuedDotaLaunchMessagesForAbandon(action.reason.c_str());
+                    break;
+                case GBE_DotaActionType::PendingResetAfterCacheUnsubscribed:
+                    GBE_SetPendingResetAfterCacheUnsubscribed(action.item_id);
+                    break;
+                case GBE_DotaActionType::AbandonedLobbySuppressed:
+                    GBE_MarkDotaAbandonedLobbySuppressed(action.item_id, action.reason.c_str());
+                    break;
+                case GBE_DotaActionType::PushIncomingNow:
+                    push_incoming_now(action.emsg, action.payload);
+                    break;
+                default:
+                    break;
+            }
+        }
+    };
 
     if (d.arcade_launch_failed_before_connect && GBE_local_lobby.game_start_time != 0u) {
         const uint32 now = static_cast<uint32>(std::time(nullptr));
@@ -1331,27 +1351,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
             return true;
         }
 
-        for (const GBE_DotaAction &action : gbe::dota_lobby_flow::abandon_cache_unsubscribed_action_list(
-                 d,
-                 response_25,
-                 "7035_arcade_launch_failed_before_connect")) {
-            switch (action.type) {
-                case GBE_DotaActionType::LaunchMessagesDiscardedForAbandon:
-                    GBE_DiscardQueuedDotaLaunchMessagesForAbandon(action.reason.c_str());
-                    break;
-                case GBE_DotaActionType::PendingResetAfterCacheUnsubscribed:
-                    GBE_SetPendingResetAfterCacheUnsubscribed(action.item_id);
-                    break;
-                case GBE_DotaActionType::AbandonedLobbySuppressed:
-                    GBE_MarkDotaAbandonedLobbySuppressed(action.item_id, action.reason.c_str());
-                    break;
-                case GBE_DotaActionType::PushIncomingNow:
-                    push_incoming_now(action.emsg, action.payload);
-                    break;
-                default:
-                    break;
-            }
-        }
+        execute_abandon_cache_actions(gbe::dota_lobby_flow::abandon_cache_unsubscribed_action_list(
+            d,
+            response_25,
+            "7035_arcade_launch_failed_before_connect"));
 
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
@@ -1371,27 +1374,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
                 return true;
             }
 
-            for (const GBE_DotaAction &action : gbe::dota_lobby_flow::abandon_cache_unsubscribed_action_list(
-                     d,
-                     response_25,
-                     "7035_current_game_disconnect")) {
-                switch (action.type) {
-                    case GBE_DotaActionType::LaunchMessagesDiscardedForAbandon:
-                        GBE_DiscardQueuedDotaLaunchMessagesForAbandon(action.reason.c_str());
-                        break;
-                    case GBE_DotaActionType::PendingResetAfterCacheUnsubscribed:
-                        GBE_SetPendingResetAfterCacheUnsubscribed(action.item_id);
-                        break;
-                    case GBE_DotaActionType::AbandonedLobbySuppressed:
-                        GBE_MarkDotaAbandonedLobbySuppressed(action.item_id, action.reason.c_str());
-                        break;
-                    case GBE_DotaActionType::PushIncomingNow:
-                        push_incoming_now(action.emsg, action.payload);
-                        break;
-                    default:
-                        break;
-                }
-            }
+            execute_abandon_cache_actions(gbe::dota_lobby_flow::abandon_cache_unsubscribed_action_list(
+                d,
+                response_25,
+                "7035_current_game_disconnect"));
 
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
