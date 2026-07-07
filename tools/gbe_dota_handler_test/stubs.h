@@ -1263,7 +1263,7 @@ public:
         if (g_action_recorder)
             g_action_recorder->record_launch_persona_state(status, lobby_state, include_party, include_lobby, reason);
     }
-    bool GBE_SendDotaCustomGameLaunchSetupFlow(bool, const std::string *, bool, uint64) { return false; }
+    bool GBE_SendDotaCustomGameLaunchSetupFlow(bool, const std::string *, bool, uint64) { return m_test_custom_game_launch_setup_flow_result; }
     void GBE_MaybeQueueDotaPracticeLobbySteamAuthAck(const char *, uint64) {}
     void GBE_LeaveGenericLobby()
     {
@@ -1332,6 +1332,7 @@ public:
         m_test_next_lobby_capture = GBE_LocalLobby{};
         m_test_has_next_lobby_capture = false;
     }
+    void test_set_custom_game_launch_setup_flow_result(bool v) { m_test_custom_game_launch_setup_flow_result = v; }
 
     // --- Handler declarations (defined in handler .cpp via test_wrapper) ---
     // Inventory domain
@@ -1411,6 +1412,7 @@ private:
     uint64 m_test_active_server_lobby_id = 0;
     bool m_test_has_next_lobby_capture = false;
     GBE_LocalLobby m_test_next_lobby_capture{};
+    bool m_test_custom_game_launch_setup_flow_result = false;
 };
 
 // =====================================================================

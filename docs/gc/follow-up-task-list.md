@@ -427,6 +427,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `gbe::dota_lobby_state::is_active_lobby_owned_by_local_user(...)`, covered active match, zero local steam id, remote owner, different lobby id, and inactive lobby cases in `gbe_dota_lobby_state_test`, made `GBE_HasActiveServerLobby(...)` consume the pure predicate, and strengthened handler coverage so a mismatched server-GC lobby id runs the player cleanup sequence instead of preserving shared state.
   - Stop condition: no server/client lookup, postgame cleanup decision, shared-state mutation, message push, or handler harness linkage changed.
 
+- [x] Custom-game 7041 launch rich-presence ordering coverage.
+  - Goal: cover the custom-game launch branch separately from the standard 7041 initial-details path without linking the full launch coordinator TU.
+  - Result: added a handler smoke test that uses a test-only stub control for `GBE_SendDotaCustomGameLaunchSetupFlow(...)` and verifies custom 7041 launch records peripheral reset, shared-state publish, rich-presence update, and launch persona state before the setup flow handles the request.
+  - Stop condition: no production code, full launch coordinator linkage, custom setup flow implementation, or standard 7041 launch behavior changed.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
@@ -445,8 +450,8 @@ git diff --check
 
 Latest handoff verification:
 
-- `bash tools/run_gc_offline_tests.sh --full` passed with payload helper tests `238/238` and handler smoke tests `55/55`.
-- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `55/55`, and audit issues `0`.
+- `bash tools/run_gc_offline_tests.sh --full` passed with payload helper tests `238/238` and handler smoke tests `56/56`.
+- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `56/56`, and audit issues `0`.
 - `git diff --check` passed.
 
 For source-list, build-system, or new-file changes, also check the relevant `premake5.lua` source lists and `tools/run_gc_offline_tests.sh` entries.

@@ -193,6 +193,7 @@ When changing a lifecycle path, first classify the path:
 - Shared-state clear helper remains behavior-equivalent for runtime reset: covered by `test_lobby_runtime_reset_clears_local_shared_and_last_launch_state`.
 - Read-only shared-state facade raw snapshot and valid-gated helper semantics: covered by payload helper tests.
 - Postgame stale chat leave cannot re-publish a cleared shared state: covered by `test_chat_leave_postgame_skips_stale_republish_after_shared_clear`.
+- Custom-game 7041 launch updates rich presence and launch persona state before setup-flow handling: covered by `test_lobby_custom_launch_updates_rich_presence_before_setup_flow`.
 - Launch-state push planner, target/captured input mapping, payload build request sequencing, grouped payload building, and action-sequence execution are covered by focused flow tests plus production helper integration.
 
 ## Missing Tests Worth Adding Next

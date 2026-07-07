@@ -54,6 +54,7 @@ These tests are especially relevant to future GC refactor work:
 | `test_lobby_abandon_ready_teardown_queues_postgame_response` | Abandon-ready teardown postgame response behavior. |
 | `test_lobby_normal_signout_pending_clear_resets_state` | Normal signout pending cleanup reset behavior. |
 | `test_lobby_runtime_reset_clears_local_shared_and_last_launch_state` | Runtime reset contract for local/shared/last-launch state. |
+| `test_lobby_custom_launch_updates_rich_presence_before_setup_flow` | Custom-game 7041 launch records shared publish, rich-presence update, and launch persona before setup-flow handling. |
 | `test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state` | Host-client postgame observation preserves server-owned shared state while still observing the transition. |
 | `test_lobby_host_client_postgame_observation_ignores_mismatched_server_lobby` | Mismatched server-GC lobby id runs player cleanup instead of host-client preserve. |
 | `test_lobby_player_postgame_observation_clears_shared_state_after_details_update` | Ordinary player postgame observation pushes details update before cache unsubscribe and clears local/shared state. |

@@ -339,7 +339,7 @@ Some of these already exist or have partial pure-helper coverage. Prefer extendi
 Pick exactly one boundary:
 
 1. Future launch-state restore/capture/settings/logging seam after the current planner, payload, and action seams.
-2. Rich presence clear/update around practice lobby launch.
+2. Another rich-presence clear/update path only if it has a distinct ordering risk from standard or custom 7041 launch.
 3. Another host/server ownership seam only if it names a different tested predicate.
 
 Add or strengthen a test first. Then add a helper only if it makes the ownership side effect more visible.

@@ -1512,6 +1512,42 @@ static void test_lobby_launch_updates_rich_presence_after_initial_details()
     ++g_tests_passed;
 }
 
+static void test_lobby_custom_launch_updates_rich_presence_before_setup_flow()
+{
+    TestFixture tf;
+    tf.reset();
+
+    tf.settings.m_local_steam_id = CSteamID(0x110000100704101u);
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x704101u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x704102u;
+    tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.m_local_steam_id.ConvertToUint64();
+    tf.gc.GBE_local_lobby.owner_name = "Custom Launch Owner";
+    tf.gc.GBE_local_lobby.state = 1u;
+    tf.gc.GBE_local_lobby.game_state = 0u;
+    tf.gc.GBE_local_lobby.custom_game.game_id = 0xCAFE7041u;
+    tf.gc.GBE_local_lobby.custom_game.map_name = "custom_launch_map";
+    tf.gc.test_set_custom_game_launch_setup_flow_result(true);
+
+    const std::string body;
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyLaunchRequest(body, false, nullptr, false, 0u);
+
+    TEST_ASSERT(result, "7041 custom launch handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 4u, "7041 custom launch should reset, publish, update rich presence, then build persona before setup flow handles it");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LaunchPeripheralReset, "7041 custom launch should reset launch peripheral first");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "7041 custom launch should publish shared lobby before rich presence");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7041_launch_init", "7041 custom publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::RichPresenceUpdate, "7041 custom launch should update rich presence before setup flow return");
+    TEST_ASSERT(tf.recorder.actions[2].status == "#DOTA_RP_INIT", "7041 custom rich presence status should reset to init");
+    TEST_ASSERT(tf.recorder.actions[2].lobby_state == "SERVERSETUP", "7041 custom rich presence lobby state should be serversetup");
+    TEST_ASSERT(!tf.recorder.actions[2].include_party, "7041 custom rich presence should clear party state");
+    TEST_ASSERT(tf.recorder.actions[2].include_lobby, "7041 custom rich presence should include lobby");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::LaunchPersonaState, "7041 custom launch should build persona after rich presence");
+    TEST_ASSERT(tf.recorder.actions[3].reason == "7041_custom_game_launch_init", "7041 custom persona reason should be preserved");
+
+    ++g_tests_passed;
+}
+
 static void setup_postgame_observation_lobby(
     TestFixture &tf,
     uint64_t lobby_id,
@@ -2257,6 +2293,9 @@ int main()
 
     std::printf("[run] test_lobby_launch_updates_rich_presence_after_initial_details\n");
     RUN_TEST(test_lobby_launch_updates_rich_presence_after_initial_details);
+
+    std::printf("[run] test_lobby_custom_launch_updates_rich_presence_before_setup_flow\n");
+    RUN_TEST(test_lobby_custom_launch_updates_rich_presence_before_setup_flow);
 
     std::printf("[run] test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state\n");
     RUN_TEST(test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state);
