@@ -39,3 +39,8 @@ git diff --check
   - Goal: make the captured lobby to `LaunchStatePushPlanInput` field mapping testable without touching payload building or side-effect execution.
   - Result: added `LaunchStateCapturedLobbyInput` plus `apply_captured_lobby_to_launch_state_push_plan_input(...)` in `gbe::dota_lobby_flow`, covered the mapping in `gbe_dota_lobby_flow_test`, and replaced the equivalent field assignments inside `GBE_PushDotaLaunchStateToClientPeer(...)`.
   - Stop condition: behavior remains equivalent; this seam only copies planner inputs and does not build payloads, push messages, reapply rich presence, or update last game state.
+
+- [x] 8. Name launch-state payload build sequence
+  - Goal: make payload build order explicit before introducing any production executor or focused coordinator harness.
+  - Result: added `LaunchStatePayloadBuild` plus `launch_state_payload_builds(...)` in `gbe::dota_lobby_flow`, covered the successful order `CacheSubscribed` then `DetailsUpdate`, and covered skipped plans producing no payload build sequence.
+  - Stop condition: production payload building remains in `GBE_PushDotaLaunchStateToClientPeer(...)`; this helper only describes build order and does not build or push messages.

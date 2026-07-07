@@ -62,6 +62,18 @@ bool expect_eq_action(
     return false;
 }
 
+bool expect_eq_payload_build(
+    gbe::dota_lobby_flow::LaunchStatePayloadBuild actual,
+    gbe::dota_lobby_flow::LaunchStatePayloadBuild expected,
+    const char *label)
+{
+    if (actual == expected)
+        return true;
+
+    std::cerr << "failed: " << label << " actual=" << static_cast<int>(actual) << " expected=" << static_cast<int>(expected) << std::endl;
+    return false;
+}
+
 gbe::dota_lobby_flow::LaunchStatePushPlanInput valid_launch_state_plan_input()
 {
     gbe::dota_lobby_flow::LaunchStatePushPlanInput input{};
@@ -263,11 +275,18 @@ bool test_launch_state_push_planner()
     ok &= expect_eq_action(actions[3], gbe::dota_lobby_flow::LaunchStatePushAction::ReapplyRichPresence, "planner fourth action reapplies rich presence");
     ok &= expect_eq_action(actions[4], gbe::dota_lobby_flow::LaunchStatePushAction::SetLastGameState, "planner fifth action updates last game state");
 
+    std::vector<gbe::dota_lobby_flow::LaunchStatePayloadBuild> builds = gbe::dota_lobby_flow::launch_state_payload_builds(plan);
+    ok &= expect_eq_u64(builds.size(), 2u, "planner payload build count");
+    ok &= expect_eq_payload_build(builds[0], gbe::dota_lobby_flow::LaunchStatePayloadBuild::CacheSubscribed, "planner first payload build creates cache subscribed");
+    ok &= expect_eq_payload_build(builds[1], gbe::dota_lobby_flow::LaunchStatePayloadBuild::DetailsUpdate, "planner second payload build creates details update");
+
     input = valid_launch_state_plan_input();
     input.target_available = false;
     plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
     actions = gbe::dota_lobby_flow::launch_state_push_actions(plan);
     ok &= expect_eq_u64(actions.size(), 0u, "planner skipped action count");
+    builds = gbe::dota_lobby_flow::launch_state_payload_builds(plan);
+    ok &= expect_eq_u64(builds.size(), 0u, "planner skipped payload build count");
 
     return ok;
 }

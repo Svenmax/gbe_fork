@@ -127,6 +127,12 @@ enum class LaunchStatePushAction
     SetLastGameState,
 };
 
+enum class LaunchStatePayloadBuild
+{
+    CacheSubscribed,
+    DetailsUpdate,
+};
+
 struct LaunchStatePushPlan
 {
     bool use_client_peer{};
@@ -146,6 +152,9 @@ LaunchStatePushPlan plan_launch_state_push(
     const LaunchStatePushPlanInput &input);
 
 std::vector<LaunchStatePushAction> launch_state_push_actions(
+    const LaunchStatePushPlan &plan);
+
+std::vector<LaunchStatePayloadBuild> launch_state_payload_builds(
     const LaunchStatePushPlan &plan);
 
 std::string resolve_chat_member_display_name(

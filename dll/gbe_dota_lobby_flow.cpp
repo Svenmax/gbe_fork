@@ -208,6 +208,21 @@ std::vector<LaunchStatePushAction> launch_state_push_actions(
     return actions;
 }
 
+std::vector<LaunchStatePayloadBuild> launch_state_payload_builds(
+    const LaunchStatePushPlan &plan)
+{
+    std::vector<LaunchStatePayloadBuild> builds;
+    if (plan.skip_reason != LaunchStatePushSkipReason::None)
+        return builds;
+
+    if (plan.build_cache_subscribed)
+        builds.push_back(LaunchStatePayloadBuild::CacheSubscribed);
+    if (plan.build_details_update)
+        builds.push_back(LaunchStatePayloadBuild::DetailsUpdate);
+
+    return builds;
+}
+
 bool find_lobby_member_index(
     const std::vector<GBE_DotaLobbyMemberState> &members,
     std::uint64_t steam_id,
