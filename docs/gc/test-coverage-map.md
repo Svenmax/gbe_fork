@@ -34,7 +34,7 @@ The PR workflow runs `bash tools/run_gc_verification.sh --fast`. Local handoff f
 | `gc_replay_test chat_channel` | Chat-channel replay behavior. | Chat join/leave/broadcast channel regressions. | Fixture output may not identify exact internal state cause. |
 | `gc_replay_test lobby_lifecycle` | Lobby lifecycle replay behavior. | Signout, cleanup, and lifecycle ordering regressions. | Should be paired with focused tests for new lifecycle branches. |
 | `gc_replay_test wire_edge_cases` | Wire edge-case replay behavior. | Parser edge cases and wrapper metadata. | No direct lifecycle intent coverage. |
-| `gbe_dota_lobby_flow_test` | Pure lobby flow helpers and publish composition. | Lifecycle planning helpers and flow transitions. | Does not execute full handler side effects. |
+| `gbe_dota_lobby_flow_test` | Pure lobby flow helpers, publish composition, and launch-state planner/payload/action seams. | Lifecycle planning helpers, flow transitions, and launch-state push seam changes. | Does not execute full handler side effects or link the full launch coordinator TU. |
 | `gbe_dota_lobby_state_test` | Lobby state decision helpers. | Reconnect eligibility/state transition changes. | Pure/helper oriented. |
 | `gbe_dota_custom_game_test` | Custom-game metadata, publish data, HTTP parsing helpers. | Arcade/custom-game flow and item data changes. | Does not cover full coordinator side effects. |
 
@@ -54,7 +54,9 @@ These tests are especially relevant to future GC refactor work:
 | `test_lobby_abandon_ready_teardown_queues_postgame_response` | Abandon-ready teardown postgame response behavior. |
 | `test_lobby_normal_signout_pending_clear_resets_state` | Normal signout pending cleanup reset behavior. |
 | `test_lobby_runtime_reset_clears_local_shared_and_last_launch_state` | Runtime reset contract for local/shared/last-launch state. |
+| `test_lobby_custom_launch_updates_rich_presence_before_setup_flow` | Custom-game 7041 launch records shared publish, rich-presence update, and launch persona before setup-flow handling. |
 | `test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state` | Host-client postgame observation preserves server-owned shared state while still observing the transition. |
+| `test_lobby_host_client_postgame_observation_ignores_mismatched_server_lobby` | Mismatched server-GC lobby id runs player cleanup instead of host-client preserve. |
 | `test_lobby_player_postgame_observation_clears_shared_state_after_details_update` | Ordinary player postgame observation pushes details update before cache unsubscribe and clears local/shared state. |
 | `test_lobby_arcade_active_postgame_observation_preserves_shared_state` | Arcade active postgame observation preserves local/shared state and skips cleanup messages. |
 | `test_lobby_host_client_postgame_observation_takes_precedence_over_arcade_skip` | Host-client ownership preserves server-owned state when both predicates are true, with active arcade runtime details-update suppression preserved. |
@@ -79,10 +81,11 @@ Inventory tests in the same binary protect item unlock/equip behavior and should
 ## Known Coverage Gaps
 
 - The handler reset test currently protects the handler-test stub contract for `GBE_ClearDotaLobbyRuntimeState()`. The production implementation is intentionally small and branch-free; add production-linked coverage only if it gains branching or new side effects.
-- Postgame observation is covered by `compute_postgame_observation_decision(...)` focused tests plus handler-level host-client preserve, ordinary player cleanup, arcade-active preserve, and host-over-arcade precedence tests; add more handler coverage before changing cleanup side-effect ordering.
+- Postgame observation is covered by `compute_postgame_observation_decision(...)` focused tests plus handler-level host-client preserve, ordinary player cleanup, arcade-active preserve, and host-over-arcade precedence tests. The server-GC active-lobby owner predicate is covered by `is_active_lobby_owned_by_local_user(...)` focused tests. Add more handler coverage before changing cleanup side-effect ordering.
 - Reconnect preserve-vs-clear behavior is covered by `compute_runtime_reset_decision(...)` focused tests; extend coverage if more reset reasons preserve context.
 - `GBE_IsSharedDotaArcadeLobbyActive()` and `GBE_GetSharedDotaReconnectStateSnapshot()` are covered against direct-field behavior; keep broad shared-state read replacement to one tested read-only cluster at a time.
 - Side-effect recorder coverage should be extended before wrapping more push/broadcast/detail-update operations.
+- Launch-state push planner, payload build request, grouped payload build, source/target/shared/capture/captured-context mapping, and action-sequence seams are covered by `gbe_dota_lobby_flow_test`; full launch coordinator harness coverage remains deferred around restore, capture source, settings read source, logging, and coordinator selection.
 
 ## Maintenance Rule
 

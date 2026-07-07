@@ -33,6 +33,12 @@ namespace gbe::dota_gc_router {
 struct DotaGcRequestContext;
 }
 
+namespace gbe::dota_lobby_flow {
+enum class LaunchStatePayloadBuild;
+struct LaunchStatePushPlan;
+struct LaunchStatePayloadBuildRequest;
+}
+
 class Steam_User_Items;
 class Steam_GameServer_Items;
 struct GCMsgHdr_t;
@@ -206,6 +212,7 @@ public ISteamGameCoordinator
     void GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
     bool GBE_ShouldTrackDotaPracticeLobbyLateSteamChain() const;
     void GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *status, const char *lobby_state, bool include_party, bool include_lobby = true);
+    void GBE_ResetDotaPracticeLobbyLaunchRichPresenceToServerSetup();
     void GBE_ClearDotaPracticeLobbyLaunchRichPresence();
     void GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(const char *status, const char *lobby_state, bool include_party, bool include_lobby, const char *reason);
     void GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback(const char *reason);
@@ -218,6 +225,9 @@ public ISteamGameCoordinator
     void GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(const char *reason);
     bool GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message, bool preserve_server_id = false);
     bool GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message, bool preserve_server_id = false);
+    bool GBE_BuildDotaLaunchStatePayload(const gbe::dota_lobby_flow::LaunchStatePayloadBuildRequest &request, const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message);
+    bool GBE_BuildDotaLaunchStatePayloads(const gbe::dota_lobby_flow::LaunchStatePushPlan &plan, const GBE_LocalLobby &lobby, std::string &response_24, std::string &response_26, gbe::dota_lobby_flow::LaunchStatePayloadBuild &failed_build);
+    void GBE_ExecuteDotaLaunchStatePushActions(const gbe::dota_lobby_flow::LaunchStatePushPlan &plan, const GBE_LocalLobby &lobby, const std::string &response_24, const std::string &response_26, const char *reason);
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message);
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &player_name, std::string &message);
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message);
@@ -266,6 +276,10 @@ public ISteamGameCoordinator
     bool GBE_HandleDotaAbandonCurrentGameRequest(bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaGameMatchSignOutRequest(bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id);
     bool GBE_PushDotaResponse(uint32 inner_emsg, const std::string &inner_message, bool wrapped, const std::string *outer_session_field_raw, const char *reason, bool apply_lobby_state = false, uint32 lobby_state = 0, uint32 lobby_game_state = 0, std::string *out_wrapped_message = nullptr);
+    bool GBE_PushDotaCacheUnsubscribedResponse(const std::string &message, bool wrapped, const std::string *outer_session_field_raw, const char *reason);
+    bool GBE_PushDotaOtherLeftChannelResponse(const std::string &message, bool wrapped, const std::string *outer_session_field_raw, const char *reason);
+    bool GBE_PushDotaPracticeLobbyResponse(const std::string &message, bool wrapped, const std::string *outer_session_field_raw, const char *reason, std::string *out_wrapped_message = nullptr);
+    bool GBE_PushDotaJoinChatChannelResponse(const std::string &message, bool wrapped, const std::string *outer_session_field_raw, const char *reason);
     bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw, const char *reason);
     bool GBE_SendDotaCustomGameLaunchSetupFlow(bool wrapped, const std::string *outer_session_field_raw, bool has_request_job, uint64 request_job_id);
     bool GBE_HandleDotaPracticeLobbyCreateRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw);
@@ -356,9 +370,8 @@ public:
         // Must be active, same lobby, AND this server GC must be the lobby owner.
         // On a PLAYER machine, the server GC may sync the same lobby_id from generic
         // lobby metadata, but it is NOT the owner -- only the HOST's server GC is.
-        if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id != lobby_id) return false;
         uint64 local_sid = settings ? settings->get_local_steam_id().ConvertToUint64() : 0;
-        return local_sid != 0 && GBE_local_lobby.owner_steam_id == local_sid;
+        return gbe::dota_lobby_state::is_active_lobby_owned_by_local_user(GBE_local_lobby, lobby_id, local_sid);
     }
 
     const std::vector<Econ_Item> &get_items() { return items; }

@@ -102,11 +102,29 @@ CreateLobbyPlan compose_create_lobby_plan(
     return plan;
 }
 
+CreateLobbyStateApplyPlan compose_create_lobby_state_apply_plan(
+    const CreateLobbyPlan &create_plan,
+    bool has_lobby_details)
+{
+    CreateLobbyStateApplyPlan plan{};
+    plan.lobby = create_plan.lobby;
+    plan.normalize_custom_game_details = has_lobby_details;
+    plan.normalize_arcade_member_slots = create_plan.custom_game_create;
+    plan.clear_reconnect_context = create_plan.custom_game_create;
+    plan.set_reconnect_eligible = create_plan.custom_game_create;
+    plan.log_arcade_isolation = create_plan.custom_game_create;
+    return plan;
+}
+
 CreateLobbyResetPlan compose_create_lobby_reset_plan(
     const GBE_LocalLobby &previous_lobby,
     const GBE_DotaCustomGameDetails &requested_custom_game)
 {
     CreateLobbyResetPlan plan{};
+    plan.reset_gc_memory = true;
+    plan.reset_reason = "7038_create";
+    plan.reset_leave_generic_lobby = true;
+    plan.reset_clear_queued_messages = true;
     plan.custom_game_create = requested_custom_game.game_id != 0ull;
     plan.previous_lobby_id = previous_lobby.lobby_id;
     plan.previous_match_id = previous_lobby.match_id;
@@ -128,6 +146,8 @@ JoinLobbyMergePlan compose_join_lobby_merge_plan(
     const GBE_LocalLobby &current_lobby,
     bool has_request_lobby_id,
     std::uint64_t request_lobby_id,
+    bool has_request_pass_key,
+    const std::string &request_pass_key,
     bool matched_generic_lobby,
     const GBE_LocalLobby &matched_lobby,
     std::uint64_t local_steam_id,
@@ -220,6 +240,8 @@ JoinLobbyMergePlan compose_join_lobby_merge_plan(
             break;
         }
     }
+    if (has_request_pass_key)
+        plan.lobby.pass_key = request_pass_key;
     plan.lobby.seen_local_in_generic_lobby = plan.seen_local_in_generic_lobby;
     dota_lobby_flow::upsert_lobby_member(plan.lobby.members, plan.local_member);
     return plan;
@@ -779,6 +801,17 @@ bool build_reconnect_context(const GBE_LocalLobby &local, GBE_DotaReconnectConte
     context.connect[sizeof(context.connect) - 1] = '\0';
     context.owner_steam_id = local.owner_steam_id;
     return true;
+}
+
+bool is_active_lobby_owned_by_local_user(
+    const GBE_LocalLobby &lobby,
+    std::uint64_t lobby_id,
+    std::uint64_t local_steam_id)
+{
+    return lobby.active &&
+        lobby.lobby_id == lobby_id &&
+        local_steam_id != 0ull &&
+        lobby.owner_steam_id == local_steam_id;
 }
 
 ReconnectEligibilityDecision compute_reconnect_eligibility_decision(

@@ -29,8 +29,12 @@ This is a good stopping point for the current PR. Further work should be split i
 Current follow-up progress:
 
 - Postgame observation has focused pure-decision coverage plus handler-level host-client preserve, ordinary player cleanup, arcade-active preserve, and host-over-arcade precedence coverage; reconnect preserve-vs-clear behavior has focused pure-decision coverage.
-- A narrow read-only shared-state helper and behavior-equivalent raw clear helper are in place.
+- Narrow read-only shared-state helpers, a raw scalar snapshot, and a behavior-equivalent runtime-reset shared clear wrapper are in place.
 - Settings lobby clear has a behavior-equivalent seam.
+- Thin response helpers now name cache-unsubscribed `25` and other-left-channel `7014` pushes without changing immediate, wrapped, session, source-job, or reason semantics.
+- Side-effect recorder coverage now includes settings clear, server-GC forward, network broadcast, lobby snapshot refresh, and response metadata ordering.
+- Payload fixtures now cover runtime parser malformed input, equip slot/style narrowing failures, unlock style bitmask boundaries, short attr-400 merges, and exact lobby template identifier patch output.
+- Launch-state client-peer target selection and push decision behavior have planner-backed pure coverage for server/client peer selection, target eligibility, shared suppression, capture availability, launch eligibility, duplicate suppression, and owner-LAN server-id preserve eligibility.
 - Dota sub-object extraction was re-evaluated and remains deferred because the dependency surface is still broad.
 
 ## Do Not Do Next
@@ -139,18 +143,17 @@ Settings and rich presence candidates:
 
 Server/client GC lookup candidates:
 
-- `get_steam_client()` access patterns
-- client GC target selection
-- gameserver GC ownership checks
-- host client postgame skip checks
+- future launch-state restore/capture/settings/logging seams after the current planner, payload, and action seams
+- additional gameserver GC ownership checks only when they name a different tested predicate
+- host client postgame skip checks around behavior not already covered by the active-lobby owner predicate
 
 The first helpers should be read-only or behavior-equivalent wrappers, for example:
 
-- `GBE_HostHasActiveDotaServerLobby(lobby_id)`
-- `GBE_GetDotaClientCoordinatorIfPresent()`
+- `is_active_lobby_owned_by_local_user(...)`-style pure predicates for new ownership checks
 - `GBE_ClearSettingsLobbyForDotaSignout(...)`
+- focused launch-state seams that consume existing plans, payload build requests, or action sequences
 
-The point is to make host/client and settings side effects visible without changing their order.
+The point is to make host/client and settings side effects visible without changing their order. Launch-state push decisions, payload build requests, grouped payload builds, action-sequence execution, and source/target/shared/capture/captured-context mapping already have focused coverage and narrow production seams. A follow-up re-check found that target coordinator choice is already covered by peer-selection and target-mapping tests, while settings and last-pushed reads already enter through captured-context mapping. Remaining launch-state work should wait for a new small explicit context around restore, capture source, or logging.
 
 ### P2/P3. Inventory And Template Replay Data Flow
 
@@ -161,12 +164,14 @@ Inventory/VPK direction:
 - Keep mutation centralized.
 - Separate load/cache/update behavior from read-only query behavior.
 - Add focused tests before changing data ownership.
+- Preserve the current equip-items full-forward ordering assertions for local response/save, server-GC forward, network broadcast, and lobby snapshot refresh.
 
 Template replay direction:
 
 - Do not move binary templates for appearance alone.
 - If template replay keeps changing, separate dispatch metadata from replay behavior while keeping fixture output stable.
 - Any blob movement must be fixture-protected.
+- Reuse exact-output fixtures where practical; broader canned template moves should remain deferred when expected bytes cannot be constructed clearly.
 
 ### P3. Natural Dota Sub-Object Extraction
 

@@ -64,9 +64,26 @@ uint64 GBE_GetSharedDotaGenericLobbyIdOrZero()
     return GBE_HasSharedDotaLobbyState() ? GBE_shared_dota_lobby_state.generic_lobby_id : 0ull;
 }
 
+GBE_DotaSharedLobbyScalarSnapshot GBE_GetSharedDotaLobbyScalarSnapshot()
+{
+    GBE_DotaSharedLobbyScalarSnapshot snapshot{};
+    snapshot.valid = GBE_shared_dota_lobby_state.valid;
+    snapshot.active = GBE_shared_dota_lobby_state.active;
+    snapshot.lobby_id = GBE_shared_dota_lobby_state.lobby_id;
+    snapshot.generic_lobby_id = GBE_shared_dota_lobby_state.generic_lobby_id;
+    snapshot.lobby_state = GBE_shared_dota_lobby_state.state;
+    snapshot.game_state = GBE_shared_dota_lobby_state.game_state;
+    return snapshot;
+}
+
 void GBE_ClearSharedDotaLobbyState()
 {
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+}
+
+void GBE_ClearSharedDotaLobbyForRuntimeReset()
+{
+    GBE_ClearSharedDotaLobbyState();
 }
 
 bool GBE_GetRecentDotaReconnectContext(GBE_DotaReconnectContext *out)

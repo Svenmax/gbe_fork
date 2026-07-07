@@ -78,8 +78,27 @@
 //   CallbackItemUpdated   target_steam_id, item_id
 //   ServerGcForward       emsg, target_steam_id         (reason optional)
 //   NetworkBroadcast      (no fields)
+//   GcMemoryReset         reason, leave_generic_lobby, clear_queued_messages
 //   LobbySnapshotRefresh  reason
+//   GenericLobbyCreate    reason
 //   GenericLobbyLeave     lobby_id
+//   GenericLobbyJoin      lobby_id
+//   RichPresenceUpdate    status, lobby_state, include_party, include_lobby
+//   RichPresenceClear     reason
+//   LaunchPersonaState    status, lobby_state, include_party, include_lobby, reason
+//   LobbyLocalMemberData  reason
+//   LobbyMetadataPublish  reason
+//   LaunchPeripheralReset reason
+//   LobbyCacheSubscriptionRecord reason
+//   LaunchStateGameStateRecord reason
+//   SettingsLobbySync  reason
+//   SettingsLobbyClear item_id, reason
+//   DotaLobbyRuntimeClear reason
+//   AbandonedLobbySuppressed lobby_id, reason
+//   LaunchMessagesDiscardedForAbandon reason
+//   PendingResetAfterCacheUnsubscribed lobby_id
+//   PendingResetAfterCacheUnsubscribedClear lobby_id
+//   PendingNormalSignoutFinalizeAfterCacheUnsubscribed lobby_id
 
 #ifndef GBE_DOTA_ACTION_MODEL_H
 #define GBE_DOTA_ACTION_MODEL_H
@@ -95,8 +114,27 @@ enum class GBE_DotaActionType {
     CallbackItemUpdated,   // notify Steam callback (target_steam_id, item_id)
     ServerGcForward,       // forward to server GC (emsg, target_steam_id)
     NetworkBroadcast,      // broadcast to all gameservers
+    GcMemoryReset,         // reset coordinator GC memory before lifecycle create
     LobbySnapshotRefresh,  // replay private lobby snapshot (reason)
+    GenericLobbyCreate,    // create generic Steam lobby for Dota lobby
     GenericLobbyLeave,     // leave local generic lobby during lifecycle cleanup
+    GenericLobbyJoin,      // join matched generic lobby during join flow
+    SettingsLobbyClear,    // clear settings lobby during signout cleanup
+    RichPresenceUpdate,    // update Dota launch rich presence
+    RichPresenceClear,     // clear Dota launch rich presence
+    LaunchPersonaState,    // build Dota launch persona state metadata
+    LobbyLocalMemberData,  // publish local member data to generic lobby
+    LobbyMetadataPublish,  // publish generic lobby metadata
+    LaunchPeripheralReset, // clear launch peripheral dedupe/callback state
+    LobbyCacheSubscriptionRecord, // record cache-subscription payload state
+    LaunchStateGameStateRecord, // record last pushed Dota launch game state
+    SettingsLobbySync,   // sync settings lobby from generic lobby metadata
+    DotaLobbyRuntimeClear, // clear local Dota lobby state and shared runtime snapshot
+    AbandonedLobbySuppressed, // mark a Dota lobby as abandoned/suppressed
+    LaunchMessagesDiscardedForAbandon, // discard queued launch messages during abandon
+    PendingResetAfterCacheUnsubscribed, // defer full reset until cache unsubscribe is observed
+    PendingResetAfterCacheUnsubscribedClear, // clear deferred reset after postgame teardown is queued
+    PendingNormalSignoutFinalizeAfterCacheUnsubscribed, // defer normal signout cleanup until 25 is retrieved
 };
 
 struct GBE_DotaAction {
@@ -107,6 +145,8 @@ struct GBE_DotaAction {
     uint64_t item_id{};           // CallbackItemUpdated
     uint64_t job_id{};            // when tied to a source/target job
     std::string reason;           // LobbySnapshotRefresh
+    bool leave_generic_lobby{};   // GcMemoryReset
+    bool clear_queued_messages{}; // GcMemoryReset
 };
 
 // Ordered list of intended side effects built by a pure helper and consumed

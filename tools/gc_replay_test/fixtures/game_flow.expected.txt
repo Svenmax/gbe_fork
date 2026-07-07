@@ -1,5 +1,5 @@
 gc_replay_test summary v1
-cases=6
+cases=10
 case 1
 label=lobby_launch_allpick
 emsg=2147490689
@@ -37,6 +37,42 @@ fnv1a64=0x8119dd70da957411
 body_size=10
 fields=none
 case 5
+label=lobby_leave_teardown
+emsg=2147490688
+masked_emsg=7040
+proto=1
+size=8
+fnv1a64=0x56787520fe680d2c
+body_size=8
+fields=432:0:1=0
+case 6
+label=postgame_leave_channel
+emsg=2147490920
+masked_emsg=7272
+proto=1
+size=11
+fnv1a64=0xf70ec176e2026b5a
+body_size=11
+fields=13:0:1=28
+case 7
+label=postgame_other_left
+emsg=2147490662
+masked_emsg=7014
+proto=1
+size=20
+fnv1a64=0xa5fbdcb03c8649b1
+body_size=20
+fields=none
+case 8
+label=postgame_join_response
+emsg=2147490658
+masked_emsg=7010
+proto=1
+size=20
+fnv1a64=0x4672c37eb2b1f423
+body_size=20
+fields=none
+case 9
 label=lobby_response_success
 emsg=2147490703
 masked_emsg=7055
@@ -45,7 +81,7 @@ size=19
 fnv1a64=0x0b59bb0e42674c79
 body_size=19
 fields=none
-case 6
+case 10
 label=lobby_response_fail
 emsg=2147490703
 masked_emsg=7055

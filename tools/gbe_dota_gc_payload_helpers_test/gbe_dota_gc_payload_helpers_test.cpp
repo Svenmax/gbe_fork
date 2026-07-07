@@ -290,6 +290,24 @@ TEST_CASE(test_is_dota_arcade_lobby_active)
     EXPECT_FALSE(GBE_HasSharedDotaLobbyState());
     EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == 0ull);
     EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == 0ull);
+
+    GBE_shared_dota_lobby_state.lobby_id = 0x9901ull;
+    GBE_shared_dota_lobby_state.generic_lobby_id = 0x9902ull;
+    GBE_DotaSharedLobbyScalarSnapshot raw_invalid_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
+    EXPECT_FALSE(raw_invalid_snapshot.valid);
+    EXPECT_TRUE(raw_invalid_snapshot.lobby_id == 0x9901ull);
+    EXPECT_TRUE(raw_invalid_snapshot.generic_lobby_id == 0x9902ull);
+    EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == 0ull);
+    EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == 0ull);
+
+    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+    GBE_DotaSharedLobbyScalarSnapshot scalar_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
+    EXPECT_FALSE(scalar_snapshot.valid);
+    EXPECT_FALSE(scalar_snapshot.active);
+    EXPECT_TRUE(scalar_snapshot.lobby_id == 0ull);
+    EXPECT_TRUE(scalar_snapshot.generic_lobby_id == 0ull);
+    EXPECT_TRUE(scalar_snapshot.lobby_state == 0u);
+    EXPECT_TRUE(scalar_snapshot.game_state == 0u);
     EXPECT_FALSE(GBE_IsDotaArcadeLobbyActive());
     EXPECT_FALSE(GBE_IsSharedDotaArcadeLobbyActive());
 
@@ -297,10 +315,19 @@ TEST_CASE(test_is_dota_arcade_lobby_active)
     GBE_shared_dota_lobby_state.active = true;
     GBE_shared_dota_lobby_state.lobby_id = 0x1234ull;
     GBE_shared_dota_lobby_state.generic_lobby_id = 0x5678ull;
+    GBE_shared_dota_lobby_state.state = 2u;
+    GBE_shared_dota_lobby_state.game_state = 3u;
     GBE_shared_dota_lobby_state.custom_game.game_id = 0;
     EXPECT_TRUE(GBE_HasSharedDotaLobbyState());
-    EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == GBE_shared_dota_lobby_state.lobby_id);
-    EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == GBE_shared_dota_lobby_state.generic_lobby_id);
+    scalar_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
+    EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == scalar_snapshot.lobby_id);
+    EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == scalar_snapshot.generic_lobby_id);
+    EXPECT_TRUE(scalar_snapshot.valid);
+    EXPECT_TRUE(scalar_snapshot.active);
+    EXPECT_TRUE(scalar_snapshot.lobby_id == 0x1234ull);
+    EXPECT_TRUE(scalar_snapshot.generic_lobby_id == 0x5678ull);
+    EXPECT_TRUE(scalar_snapshot.lobby_state == 2u);
+    EXPECT_TRUE(scalar_snapshot.game_state == 3u);
     EXPECT_FALSE(GBE_IsDotaArcadeLobbyActive());
     EXPECT_FALSE(GBE_IsSharedDotaArcadeLobbyActive());
 
@@ -316,6 +343,11 @@ TEST_CASE(test_is_dota_arcade_lobby_active)
     EXPECT_FALSE(GBE_HasSharedDotaLobbyState());
     EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == 0ull);
     EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == 0ull);
+    scalar_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
+    EXPECT_FALSE(scalar_snapshot.valid);
+    EXPECT_FALSE(scalar_snapshot.active);
+    EXPECT_TRUE(scalar_snapshot.lobby_id == 0ull);
+    EXPECT_TRUE(scalar_snapshot.generic_lobby_id == 0ull);
 }
 
 // =====================================================================
@@ -419,6 +451,25 @@ TEST_CASE(test_patch_dota_lobby_template_identifiers)
     EXPECT_FALSE(result);
     EXPECT_TRUE(message.find(std::string(reinterpret_cast<const char *>(GBE_kOldDotaLobbyIdVarint.data()), GBE_kOldDotaLobbyIdVarint.size())) != std::string::npos);
     EXPECT_TRUE(message.find(make_fixed64_bytes(76561198000000000ULL)) != std::string::npos);
+
+    std::string exact_message = "prefix:";
+    exact_message.append(reinterpret_cast<const char *>(GBE_kOldDotaLobbyIdVarint.data()), GBE_kOldDotaLobbyIdVarint.size());
+    exact_message.append(":middle:");
+    exact_message.append(reinterpret_cast<const char *>(GBE_kOldDotaSteamIdFixed64.data()), GBE_kOldDotaSteamIdFixed64.size());
+    exact_message.append(":suffix");
+
+    std::string expected = "prefix:";
+    std::string encoded_lobby_id;
+    gbe::proto_wire::append_varuint(encoded_lobby_id, 0x11223344556677ULL);
+    EXPECT_TRUE(encoded_lobby_id.size() == GBE_kOldDotaLobbyIdVarint.size());
+    expected.append(encoded_lobby_id);
+    expected.append(":middle:");
+    expected.append(make_fixed64_bytes(0x1122334455667788ULL));
+    expected.append(":suffix");
+
+    EXPECT_TRUE(GBE_PatchDotaLobbyTemplateIdentifiers(
+        exact_message, 54321u, 0x1122334455667788ULL, 0x11223344556677ULL));
+    EXPECT_TRUE(exact_message == expected);
 }
 
 // =====================================================================
@@ -889,6 +940,23 @@ TEST_CASE(test_parse_dota_equip_ops)
     std::vector<uint8> class_overflow = { 0x0a, static_cast<uint8>(class_overflow_sub.size()) };
     class_overflow.insert(class_overflow.end(), class_overflow_sub.begin(), class_overflow_sub.end());
     EXPECT_FALSE(GBE_ParseDotaEquipOps(class_overflow.data(), class_overflow.size(), empty_ops));
+
+    std::string slot_overflow_sub;
+    gbe::proto_wire::append_varint_field(slot_overflow_sub, 1, 123ULL);
+    gbe::proto_wire::append_varint_field(slot_overflow_sub, 2, 1u);
+    gbe::proto_wire::append_varint_field(slot_overflow_sub, 3, 70000u);
+    std::vector<uint8> slot_overflow = { 0x0a, static_cast<uint8>(slot_overflow_sub.size()) };
+    slot_overflow.insert(slot_overflow.end(), slot_overflow_sub.begin(), slot_overflow_sub.end());
+    EXPECT_FALSE(GBE_ParseDotaEquipOps(slot_overflow.data(), slot_overflow.size(), empty_ops));
+
+    std::string style_overflow_sub;
+    gbe::proto_wire::append_varint_field(style_overflow_sub, 1, 123ULL);
+    gbe::proto_wire::append_varint_field(style_overflow_sub, 2, 1u);
+    gbe::proto_wire::append_varint_field(style_overflow_sub, 3, 1u);
+    gbe::proto_wire::append_varint_field(style_overflow_sub, 4, 300u);
+    std::vector<uint8> style_overflow = { 0x0a, static_cast<uint8>(style_overflow_sub.size()) };
+    style_overflow.insert(style_overflow.end(), style_overflow_sub.begin(), style_overflow_sub.end());
+    EXPECT_FALSE(GBE_ParseDotaEquipOps(style_overflow.data(), style_overflow.size(), empty_ops));
 }
 
 // =====================================================================
@@ -947,6 +1015,33 @@ TEST_CASE(test_apply_dota_unlock_style_bitmask)
 
     EXPECT_FALSE(GBE_ApplyDotaUnlockStyleBitmask(item2, 255u));
     EXPECT_TRUE(item2.style == 5);
+
+    // Highest valid style index should set bit 31 and remain accepted.
+    Econ_Item item3{};
+    item3.id = 24680;
+    bool result3 = GBE_ApplyDotaUnlockStyleBitmask(item3, 31u);
+    EXPECT_TRUE(result3);
+    EXPECT_TRUE(item3.style == 31);
+    EXPECT_TRUE(item3.attributes.size() == 1);
+    uint32_t val5 = 0;
+    memcpy(&val5, item3.attributes[0].value_bytes.data(), 4);
+    EXPECT_TRUE(val5 == 0xFFFFFFFFu);
+
+    // Short attr 400 data should be treated as zero before OR-ing the bit.
+    Econ_Item item4{};
+    item4.id = 13579;
+    Econ_Item_Attribute short_attr;
+    short_attr.def = 400u;
+    short_attr.value_bytes.assign(2, '\0');
+    short_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+    item4.attributes.push_back(short_attr);
+    bool result4 = GBE_ApplyDotaUnlockStyleBitmask(item4, 4u);
+    EXPECT_TRUE(result4);
+    EXPECT_TRUE(item4.style == 4);
+    EXPECT_TRUE(item4.attributes.size() == 1);
+    uint32_t val6 = 0;
+    memcpy(&val6, item4.attributes[0].value_bytes.data(), 4);
+    EXPECT_TRUE(val6 == 0x00000010u);
 }
 
 // =====================================================================
@@ -1002,6 +1097,12 @@ TEST_CASE(test_build_so_single_object_from_item)
 
 TEST_CASE(test_parse_dota7034_runtime_request)
 {
+    const auto empty_request = gbe::proto_wire::parse_dota7034_runtime_request(nullptr, 0);
+    EXPECT_FALSE(empty_request.has_connected_player);
+    EXPECT_FALSE(empty_request.has_disconnected_player);
+    EXPECT_FALSE(empty_request.has_game_state);
+    EXPECT_FALSE(empty_request.has_draft);
+
     std::string connected_player;
     gbe::proto_wire::append_varint_field(connected_player, 1u, 76561198000000001ULL);
     gbe::proto_wire::append_varint_field(connected_player, 2u, 42u);
@@ -1067,6 +1168,20 @@ TEST_CASE(test_parse_dota7034_runtime_request)
     EXPECT_EQ(request.draft_team, 2u);
     EXPECT_TRUE(request.has_draft_team_slot);
     EXPECT_EQ(request.draft_team_slot, 4u);
+
+    const std::string truncated_nested_field{
+        static_cast<char>((1u << 3) | 2u),
+        static_cast<char>(4u),
+        static_cast<char>((1u << 3) | 0u),
+        static_cast<char>(0x80u)
+    };
+    const auto truncated_request = gbe::proto_wire::parse_dota7034_runtime_request(
+        reinterpret_cast<const std::uint8_t *>(truncated_nested_field.data()),
+        truncated_nested_field.size());
+    EXPECT_FALSE(truncated_request.has_connected_player);
+    EXPECT_FALSE(truncated_request.has_disconnected_player);
+    EXPECT_FALSE(truncated_request.has_game_state);
+    EXPECT_FALSE(truncated_request.has_draft);
 }
 
 // =====================================================================

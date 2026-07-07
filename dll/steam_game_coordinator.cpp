@@ -69,6 +69,11 @@ void GBE_ClearSharedDotaLobbyState()
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
 }
 
+void GBE_ClearSharedDotaLobbyForRuntimeReset()
+{
+    GBE_ClearSharedDotaLobbyState();
+}
+
 const GBE_DotaLootListData &GBE_GetDotaVpkLootData()
 {
     return GBE_vpk_loot_data;
@@ -436,16 +441,17 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         return;
 
     if (gc_profile == GC_PROFILE_DOTA2 && (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)) {
-        if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.active && GBE_shared_dota_lobby_state.lobby_id != 0) {
+        const GBE_DotaSharedLobbyScalarSnapshot shared_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
+        if (shared_snapshot.valid && shared_snapshot.active && shared_snapshot.lobby_id != 0) {
             GBE_RestoreSharedDotaLobbyState("queued_state_preapply");
         } else {
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
                 "queued lobby state has no full local/shared lobby context this=%p shared_valid=%u shared_active=%u shared_lobby_id=%llu msg=%u state=%u game_state=%u",
                 static_cast<void *>(this),
-                GBE_shared_dota_lobby_state.valid ? 1u : 0u,
-                GBE_shared_dota_lobby_state.active ? 1u : 0u,
-                static_cast<unsigned long long>(GBE_shared_dota_lobby_state.lobby_id),
+                shared_snapshot.valid ? 1u : 0u,
+                shared_snapshot.active ? 1u : 0u,
+                static_cast<unsigned long long>(shared_snapshot.lobby_id),
                 GBE_GC_MaskedEMsg(message.msg_type),
                 message.lobby_state,
                 message.lobby_game_state
@@ -1067,7 +1073,7 @@ void Steam_Game_Coordinator::initialize_gc()
 void Steam_Game_Coordinator::GBE_ClearDotaLobbyRuntimeState()
 {
     GBE_local_lobby = GBE_LocalLobby{};
-    GBE_ClearSharedDotaLobbyState();
+    GBE_ClearSharedDotaLobbyForRuntimeReset();
     GBE_ClearLastDotaLaunchStatePushedGameState();
 }
 
@@ -1237,7 +1243,7 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
         GBE_ClearDotaAbandonedLobbySuppression(previous_lobby_id, reason ? reason : "reset_gc_memory");
     GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel();
     GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "reset_gc_memory");
-    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
+    GBE_ResetDotaPracticeLobbyLaunchRichPresenceToServerSetup();
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",

@@ -666,6 +666,7 @@ static void test_inventory_equip_full_forward()
     TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::ServerGcForward, "4: ServerGcForward (cache push)");
     TEST_ASSERT_EQ((tf.recorder.actions[3].msg_type & ~0x80000000u), 0u, "4: emsg=0 (CacheSubscribed)");
     TEST_ASSERT_EQ(tf.recorder.actions[3].item_id, 1u, "4: cache push should target a server GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].steam_id, 12345u, "4: cache push should use local steam id");
     TEST_ASSERT_EQ(tf.recorder.actions[3].server_gc_source_item_count, 1u, "4: cache push should include source items");
     TEST_ASSERT(tf.recorder.actions[3].server_gc_unsubscribe_first, "4: cache push should unsubscribe before subscribe");
     TEST_ASSERT(tf.recorder.actions[3].reason == "equip_forward_host_resubscribe_server", "4: cache push reason should identify equip forward");
@@ -677,8 +678,10 @@ static void test_inventory_equip_full_forward()
     TEST_ASSERT_EQ((tf.recorder.actions[5].msg_type & ~0x80000000u), 26u, "6: emsg=26");
 
     TEST_ASSERT_EQ(tf.recorder.actions[6].type, GBE_DotaActionType::NetworkBroadcast, "7: NetworkBroadcast");
+    TEST_ASSERT_EQ(tf.recorder.actions[6].source_id, 12345u, "7: network broadcast should use local steam id as source");
 
     TEST_ASSERT_EQ(tf.recorder.actions[7].type, GBE_DotaActionType::LobbySnapshotRefresh, "8: LobbySnapshotRefresh");
+    TEST_ASSERT(tf.recorder.actions[7].reason == "equip_items_refresh", "8: snapshot refresh reason should identify equip replay");
 
     ++g_tests_passed;
 }
@@ -848,13 +851,18 @@ static void test_chat_leave_postgame_channel_order()
     bool result = tf.gc.GBE_HandleDotaLeaveChatChannelRequest(body, true, &session_raw);
 
     TEST_ASSERT(result, "leave chat handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "postgame leave should push 7014 then publish state");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "postgame leave should push 7014, update rich presence, then publish state");
     expect_push_payload(tf.recorder.actions[0], GBE_kDotaOtherLeftChannel, "first action should be 7014 response with payload");
     TEST_ASSERT(tf.recorder.actions[0].wrapped, "7014 response should preserve wrapped flag");
     TEST_ASSERT(tf.recorder.actions[0].session_raw == session_raw, "7014 response should preserve session field");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7272_7014", "7014 response should record reason");
-    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "second action should publish lobby state");
-    TEST_ASSERT(tf.recorder.actions[1].reason == "7272_leave_chat", "publish reason should identify leave chat");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::RichPresenceUpdate, "second action should update rich presence");
+    TEST_ASSERT(tf.recorder.actions[1].status == "#DOTA_RP_INIT", "postgame leave rich presence status should reset to init");
+    TEST_ASSERT(tf.recorder.actions[1].lobby_state == "SERVERSETUP", "postgame leave rich presence lobby state should reset to serversetup");
+    TEST_ASSERT(!tf.recorder.actions[1].include_party, "postgame leave rich presence should clear party state");
+    TEST_ASSERT(!tf.recorder.actions[1].include_lobby, "postgame leave rich presence should clear lobby state");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbySnapshotRefresh, "third action should publish lobby state");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7272_leave_chat", "publish reason should identify leave chat");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.has_chat_channel, "postgame leave should clear local chat channel after 7014");
     GBE_shared_dota_lobby_state.valid = false;
 
@@ -882,13 +890,16 @@ static void test_chat_leave_postgame_skips_stale_republish_after_shared_clear()
     bool result = tf.gc.GBE_HandleDotaLeaveChatChannelRequest(body, true, &session_raw);
 
     TEST_ASSERT(result, "stale postgame leave handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "stale postgame leave should push 7014 before cleanup without publishing state");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "stale postgame leave should push 7014 and update rich presence before cleanup without publishing state");
     expect_push_payload(tf.recorder.actions[0], GBE_kDotaOtherLeftChannel, "stale postgame leave should still push 7014");
     TEST_ASSERT(tf.recorder.actions[0].wrapped, "stale 7014 response should preserve wrapped flag");
     TEST_ASSERT(tf.recorder.actions[0].session_raw == session_raw, "stale 7014 response should preserve session field");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7272_7014", "stale 7014 response should keep normal leave response reason");
-    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::GenericLobbyLeave, "stale postgame cleanup should happen after 7014");
-    TEST_ASSERT_EQ(tf.recorder.actions[1].item_id, 0xCAFEu, "stale postgame cleanup should record the stale lobby id");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::RichPresenceUpdate, "stale postgame leave should update rich presence after 7014");
+    TEST_ASSERT(tf.recorder.actions[1].status == "#DOTA_RP_INIT", "stale leave rich presence status should reset to init");
+    TEST_ASSERT(tf.recorder.actions[1].lobby_state == "SERVERSETUP", "stale leave rich presence lobby state should reset to serversetup");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::GenericLobbyLeave, "stale postgame cleanup should happen after rich presence update");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].item_id, 0xCAFEu, "stale postgame cleanup should record the stale lobby id");
     TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "stale postgame leave should not republish cleared shared state");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "stale postgame leave should clear local lobby after skipping publish");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0ull, "stale postgame leave should clear local lobby id");
@@ -912,10 +923,43 @@ static void test_lobby_abandon_current_game_disconnect_queues_25()
     bool result = tf.gc.GBE_HandleDotaAbandonCurrentGameRequest(false, nullptr);
 
     TEST_ASSERT(result, "abandon handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "current-game disconnect should queue only 25");
-    expect_push_payload(tf.recorder.actions[0], GBE_kDotaCacheUnsubscribed, "25 response should be queued with payload");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "current-game disconnect should suppress lobby before queueing 25");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::AbandonedLobbySuppressed, "current-game disconnect should mark abandoned lobby before 25");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].item_id, 0x7035u, "current-game disconnect should suppress the current lobby id");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7035_current_game_disconnect", "current-game disconnect suppress reason should be preserved");
+    expect_push_payload(tf.recorder.actions[1], GBE_kDotaCacheUnsubscribed, "25 response should be queued after suppression with payload");
     TEST_ASSERT(tf.gc.GBE_HasPendingResetAfterCacheUnsubscribed(), "25 should mark reset pending");
     TEST_ASSERT_EQ(GBE_pending_reset_after_cache_unsubscribed_lobby_id, 0x7035u, "pending reset should record lobby id");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_abandon_arcade_launch_failure_discards_before_25()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.is_server = false;
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x703500u;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 2u;
+    tf.gc.GBE_local_lobby.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+    tf.gc.GBE_local_lobby.custom_game.game_id = 0x7035BEEFu;
+    tf.gc.GBE_local_lobby.owner_connected = false;
+    tf.gc.GBE_ClearPendingResetAfterCacheUnsubscribed();
+
+    bool result = tf.gc.GBE_HandleDotaAbandonCurrentGameRequest(false, nullptr);
+
+    TEST_ASSERT(result, "arcade launch failure abandon should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "arcade launch failure should discard, suppress, then queue 25");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LaunchMessagesDiscardedForAbandon, "arcade launch failure should discard queued launch messages before suppression");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7035_arcade_launch_failed_before_connect", "arcade launch failure discard reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::AbandonedLobbySuppressed, "arcade launch failure should suppress abandoned lobby before 25");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].item_id, 0x703500u, "arcade launch failure suppression should target current lobby id");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7035_arcade_launch_failed_before_connect", "arcade launch failure suppression reason should be preserved");
+    expect_push_payload(tf.recorder.actions[2], GBE_kDotaCacheUnsubscribed, "arcade launch failure should queue 25 after suppression");
+    TEST_ASSERT(tf.gc.GBE_HasPendingResetAfterCacheUnsubscribed(), "arcade launch failure should mark reset pending");
+    TEST_ASSERT_EQ(GBE_pending_reset_after_cache_unsubscribed_lobby_id, 0x703500u, "arcade launch failure pending reset should record lobby id");
 
     ++g_tests_passed;
 }
@@ -938,11 +982,14 @@ static void test_lobby_leave_queues_25_then_clears_local_lobby()
     bool result = tf.gc.GBE_HandleDotaPracticeLobbyLeaveRequest(true, &session_raw);
 
     TEST_ASSERT(result, "leave lobby handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "leave lobby should push one cache-unsubscribed response");
-    expect_push_payload(tf.recorder.actions[0], GBE_kDotaCacheUnsubscribed, "leave lobby response should be emsg 25 with payload");
-    TEST_ASSERT(tf.recorder.actions[0].wrapped, "leave lobby response should preserve wrapped flag");
-    TEST_ASSERT(tf.recorder.actions[0].session_raw == session_raw, "leave lobby response should preserve session field");
-    TEST_ASSERT(tf.recorder.actions[0].reason == "7040_leave_25", "leave lobby response should record reason");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "leave lobby should suppress abandoned lobby before 25 response");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::AbandonedLobbySuppressed, "leave lobby should mark abandoned lobby before 25");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].item_id, 0x7042u, "leave lobby suppression should target current lobby id");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7040_leave", "leave lobby suppression reason should be preserved");
+    expect_push_payload(tf.recorder.actions[1], GBE_kDotaCacheUnsubscribed, "leave lobby response should be emsg 25 with payload");
+    TEST_ASSERT(tf.recorder.actions[1].wrapped, "leave lobby response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[1].session_raw == session_raw, "leave lobby response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7040_leave_25", "leave lobby response should record reason");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "leave lobby should clear active flag after 25 response");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0u, "leave lobby should clear lobby id after 25 response");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.generic_lobby_id, 0u, "leave lobby should clear generic lobby id after 25 response");
@@ -1048,14 +1095,365 @@ static void test_lobby_set_details_mutates_before_publish_and_details_update()
     TEST_ASSERT(tf.gc.GBE_local_lobby.room_name == "after-room", "set details should update room name before returning");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.server_region, 12u, "set details should update server region before returning");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_mode, 7u, "set details should update game mode before returning");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "set details should publish shared state once through recorder actions");
-    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "set details should publish shared lobby state");
-    TEST_ASSERT(tf.recorder.actions[0].reason == "7046_set_details", "set details publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "set details should publish local member data, shared state, and metadata");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "set details should publish local member data before shared state");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7046_set_details", "set details local member data reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "set details should publish shared lobby state after local member data");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7046_set_details", "set details publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbyMetadataPublish, "set details should publish metadata after shared state");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7046_set_details", "set details metadata reason should be preserved");
     TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "set details should send one details update");
-    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "set details update should happen after shared state publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 3u, "set details update should happen after metadata publish");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "set details details update should preserve wrapped flag in stub argument");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override == session_raw, "set details details update should preserve session raw in stub argument");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7046", "set details details update reason should be preserved");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_set_team_slot_publishes_before_details_and_ack()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7047u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x704700u;
+    tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.get_local_steam_id().ConvertToUint64();
+    tf.gc.GBE_local_lobby.owner_account_id = tf.settings.get_local_steam_id().GetAccountID();
+    tf.gc.GBE_local_lobby.owner_name = "tester";
+    tf.gc.GBE_local_lobby.members.push_back(GBE_DotaLobbyMemberState{
+        tf.gc.GBE_local_lobby.owner_steam_id,
+        tf.gc.GBE_local_lobby.owner_account_id,
+        0u,
+        0u,
+        0u,
+        true,
+        0u
+    });
+
+    const std::string session_raw = "set-team-slot-session-token";
+    const JobID_t request_job = 0x7047ABCDu;
+    const std::string body = WireBodyBuilder()
+        .varint(1u, GBE_kDotaTeamGoodGuys)
+        .varint(2u, 3u)
+        .varint(3u, 2u)
+        .take();
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbySetTeamSlotRequest(body, request_job, true, true, &session_raw);
+
+    TEST_ASSERT(result, "set team slot handler should return true");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_team, GBE_kDotaTeamGoodGuys, "set team slot should update owner team before publishing");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_slot, 3u, "set team slot should update owner slot before publishing");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.bot_difficulty_radiant, 2u, "set team slot should update radiant bot difficulty before publishing");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "set team slot should publish local/shared state then ack");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "set team slot should publish local member data before shared state");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7047_set_team_slot", "set team slot local member data reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "set team slot should publish shared state after local member data");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7047_set_team_slot", "set team slot shared publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "set team slot should send one details update");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 2u, "set team slot details update should happen after shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "set team slot details update should preserve wrapped flag in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override == session_raw, "set team slot details update should preserve session raw in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7047", "set team slot details update reason should be preserved");
+    expect_push_payload(tf.recorder.actions[2], GBE_kDotaPracticeLobbyResponse, "set team slot should push 7055 ack after details update");
+    TEST_ASSERT(tf.recorder.actions[2].wrapped, "set team slot 7055 response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[2].session_raw == session_raw, "set team slot 7055 response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7047_7055", "set team slot 7055 reason should be preserved");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_join_broadcast_publishes_before_details_and_ack()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7149u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x714900u;
+
+    const std::string session_raw = "join-broadcast-session-token";
+    const JobID_t request_job = 0x7149ABCDu;
+    const std::string body = WireBodyBuilder()
+        .varint(1u, 77u)
+        .bytes(2u, "caster room")
+        .bytes(3u, "US")
+        .bytes(4u, "en")
+        .take();
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest(body, request_job, true, true, &session_raw);
+
+    TEST_ASSERT(result, "join broadcast handler should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.has_broadcast_channel, "join broadcast should mark channel active before publishing");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.broadcast_channel_id, 77u, "join broadcast should preserve channel id");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_description == "caster room", "join broadcast should preserve description");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_country_code == "US", "join broadcast should preserve country code");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_language_code == "en", "join broadcast should preserve language code");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "join broadcast should publish shared state then ack");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "join broadcast should publish shared state before ack");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7149_join_broadcast", "join broadcast publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "join broadcast should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "join broadcast details update should happen after shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "join broadcast details update should preserve wrapped flag in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override == session_raw, "join broadcast details update should preserve session raw in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7149", "join broadcast details update reason should be preserved");
+    expect_push_payload(tf.recorder.actions[1], GBE_kDotaPracticeLobbyResponse, "join broadcast should push 7055 ack after details update");
+    TEST_ASSERT(tf.recorder.actions[1].wrapped, "join broadcast 7055 response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[1].session_raw == session_raw, "join broadcast 7055 response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7149_7055", "join broadcast 7055 reason should be preserved");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_update_broadcast_publishes_before_details()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7367u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x736700u;
+    tf.gc.GBE_local_lobby.has_broadcast_channel = true;
+    tf.gc.GBE_local_lobby.broadcast_channel_id = 10u;
+    tf.gc.GBE_local_lobby.broadcast_description = "old room";
+    tf.gc.GBE_local_lobby.broadcast_country_code = "CA";
+    tf.gc.GBE_local_lobby.broadcast_language_code = "fr";
+
+    const std::string session_raw = "update-broadcast-session-token";
+    const std::string body = WireBodyBuilder()
+        .varint(1u, 88u)
+        .bytes(2u, "GB")
+        .bytes(3u, "updated room")
+        .bytes(4u, "en")
+        .take();
+    bool result = tf.gc.GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest(body, true, &session_raw);
+
+    TEST_ASSERT(result, "update broadcast handler should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.has_broadcast_channel, "update broadcast should keep channel active before publishing");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.broadcast_channel_id, 88u, "update broadcast should preserve channel id");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_description == "updated room", "update broadcast should preserve description");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_country_code == "GB", "update broadcast should preserve country code");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_language_code == "en", "update broadcast should preserve language code");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "update broadcast should only publish shared state directly");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "update broadcast should publish shared state before details update");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7367_update_broadcast", "update broadcast publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "update broadcast should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "update broadcast details update should happen after shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "update broadcast details update should preserve wrapped flag in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override == session_raw, "update broadcast details update should preserve session raw in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7367", "update broadcast details update reason should be preserved");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_close_broadcast_publishes_before_details()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x8054u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x805400u;
+    tf.gc.GBE_local_lobby.has_broadcast_channel = true;
+    tf.gc.GBE_local_lobby.broadcast_channel_id = 99u;
+    tf.gc.GBE_local_lobby.broadcast_description = "closing room";
+    tf.gc.GBE_local_lobby.broadcast_country_code = "JP";
+    tf.gc.GBE_local_lobby.broadcast_language_code = "ja";
+
+    const std::string session_raw = "close-broadcast-session-token";
+    const std::string body = WireBodyBuilder()
+        .varint(1u, 99u)
+        .take();
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest(body, true, &session_raw);
+
+    TEST_ASSERT(result, "close broadcast handler should return true");
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.has_broadcast_channel, "close broadcast should mark channel inactive before publishing");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.broadcast_channel_id, 99u, "close broadcast should preserve channel id");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_description.empty(), "close broadcast should clear description");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_country_code.empty(), "close broadcast should clear country code");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_language_code.empty(), "close broadcast should clear language code");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "close broadcast should only publish shared state directly");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "close broadcast should publish shared state before details update");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "8054_close_broadcast", "close broadcast publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "close broadcast should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "close broadcast details update should happen after shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "close broadcast details update should preserve wrapped flag in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override == session_raw, "close broadcast details update should preserve session raw in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "8054", "close broadcast details update reason should be preserved");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_create_records_cache_subscription_before_pushes()
+{
+    TestFixture tf;
+    tf.reset();
+    Steam_Matchmaking matchmaking;
+    g_test_steam_client.steam_matchmaking = &matchmaking;
+
+    const std::string session_raw = "create-lobby-session-token";
+    const JobID_t request_job = 0x7038ABCDu;
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyCreateRequest(std::string(), request_job, true, true, &session_raw);
+
+    TEST_ASSERT(result, "create lobby handler should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.active, "create lobby should activate local lobby");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 7u, "create lobby should publish setup, record cache subscription, then push 24 and 7055");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "create should publish local member data first");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7038_create", "create local member data reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::SettingsLobbySync, "create should sync settings lobby after local member data");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7038_create", "create settings sync reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbySnapshotRefresh, "create should publish shared lobby state after settings sync");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7038_create", "create shared publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::LobbyMetadataPublish, "create should publish metadata before cache subscription record");
+    TEST_ASSERT(tf.recorder.actions[3].reason == "7038_create", "create metadata reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].type, GBE_DotaActionType::LobbyCacheSubscriptionRecord, "create should record cache subscription before pushing 24");
+    TEST_ASSERT(tf.recorder.actions[4].reason == "7038_create_wrapped", "create cache subscription record reason should preserve wrapped path");
+    TEST_ASSERT(tf.recorder.actions[4].msg_body == "cache_subscribed", "create cache subscription record should preserve built cache body");
+    expect_push_payload(tf.recorder.actions[5], GBE_kDotaCacheSubscribed, "create should push cache subscribed after recording it");
+    TEST_ASSERT(tf.recorder.actions[5].wrapped, "create 24 response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[5].session_raw == session_raw, "create 24 response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[5].reason == "7038_24", "create 24 response reason should be preserved");
+    expect_push_payload(tf.recorder.actions[6], GBE_kDotaPracticeLobbyResponse, "create should push 7055 after cache subscribed");
+    TEST_ASSERT(tf.recorder.actions[6].wrapped, "create 7055 response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[6].session_raw == session_raw, "create 7055 response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[6].reason == "7038_7055", "create 7055 response reason should be preserved");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_create_arcade_unsubscribes_previous_before_new_lobby()
+{
+    TestFixture tf;
+    tf.reset();
+    Steam_Matchmaking matchmaking;
+    g_test_steam_client.steam_matchmaking = &matchmaking;
+
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x703800u;
+    tf.gc.GBE_local_lobby.match_id = 0x7038AAu;
+    tf.gc.GBE_local_lobby.custom_game.game_id = 0ull;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 1u;
+    tf.gc.GBE_local_lobby.owner_team = 0u;
+    tf.gc.GBE_local_lobby.owner_slot = 1u;
+
+    Mod_entry arcade_mod{};
+    arcade_mod.id = 0xC0FFEEu;
+    arcade_mod.title = "Arcade Title";
+    arcade_mod.metadata = "{\"addon_name\":\"arcade_addon\",\"map_name\":\"arcade_map\"}";
+    tf.settings.m_mod_entries[arcade_mod.id] = arcade_mod;
+
+    const std::string details = WireBodyBuilder()
+        .bytes(26u, "123")
+        .bytes(27u, "dota")
+        .varint(29u, 0xC0FFEEu)
+        .varint(30u, 1u)
+        .varint(31u, 10u)
+        .take();
+    const std::string body = WireBodyBuilder()
+        .bytes(7u, details)
+        .take();
+
+    const JobID_t request_job = 0x7038C0FFEEu;
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyCreateRequest(body, request_job, true, false, nullptr);
+
+    TEST_ASSERT(result, "arcade create handler should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.active, "arcade create should activate replacement lobby");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.custom_game.game_id, 0xC0FFEEu, "arcade create should preserve requested custom game id");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.custom_game.mode == "arcade_addon", "arcade create should normalize custom mode from installed mod metadata");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.custom_game.map_name == "arcade_map", "arcade create should normalize custom map from installed mod metadata");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_team, GBE_kDotaTeamGoodGuys, "arcade create should normalize owner team");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_slot, 1u, "arcade create should normalize owner slot");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.members.size(), 1u, "arcade create should keep one local owner member");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.members[0].team, GBE_kDotaTeamGoodGuys, "arcade create should normalize owner member team");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.members[0].slot, 1u, "arcade create should normalize owner member slot");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 8u, "arcade create should push previous 25 then setup, 24, and 7055");
+    expect_push_payload(tf.recorder.actions[0], GBE_kDotaCacheUnsubscribed, "arcade create should unsubscribe previous lobby first");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbyLocalMemberData, "arcade create should publish local member data after 25");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].type, GBE_DotaActionType::LobbyCacheSubscriptionRecord, "arcade create should record new cache subscription before 24");
+    expect_push_payload(tf.recorder.actions[6], GBE_kDotaCacheSubscribed, "arcade create should push new 24 after previous 25");
+    expect_push_payload(tf.recorder.actions[7], GBE_kDotaPracticeLobbyResponse, "arcade create should ack 7055 after new 24");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_join_records_cache_subscription_before_pushes()
+{
+    TestFixture tf;
+    tf.reset();
+
+    const std::string session_raw = "join-lobby-session-token";
+    const JobID_t request_job = 0x7044ABCDu;
+    const std::string body = WireBodyBuilder()
+        .varint(1u, 0x704400u)
+        .bytes(3u, "join-pass")
+        .take();
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyJoinRequest(body, request_job, true, false, &session_raw, true);
+
+    TEST_ASSERT(result, "join lobby handler should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.active, "join lobby should activate local lobby");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0x704400ull, "join lobby should preserve requested lobby id");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.pass_key == "join-pass", "join lobby should preserve field 3 pass key");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "join lobby should publish local/shared state, record cache subscription, then push 24 and 7113");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "join should publish local member data first");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7044_join", "join local member data reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "join should publish shared lobby state after local member data");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7044_join", "join shared publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbyCacheSubscriptionRecord, "join should record cache subscription before pushing 24");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7044_join_direct", "join cache subscription record reason should preserve direct path");
+    TEST_ASSERT(tf.recorder.actions[2].msg_body == "cache_subscribed", "join cache subscription record should preserve built cache body");
+    expect_push_payload(tf.recorder.actions[3], GBE_kDotaCacheSubscribed, "join should push cache subscribed after recording it");
+    expect_push_payload(tf.recorder.actions[4], GBE_kDotaPracticeLobbyJoinResponse, "join should push 7113 after cache subscribed");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_join_empty_local_lobby_generates_lobby_id_with_pass_key_only()
+{
+    TestFixture tf;
+    tf.reset();
+
+    const std::string body = WireBodyBuilder()
+        .bytes(3u, "pass-only")
+        .take();
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyJoinRequest(body, 0x7044DDu, true, false, nullptr, false);
+
+    TEST_ASSERT(result, "pass-only join handler should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.active, "pass-only join should activate local lobby");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.lobby_id != 0ull, "pass-only join should generate a lobby id for empty local lobby");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.pass_key == "pass-only", "pass-only join should preserve pass key");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 4u, "pass-only join without ack should publish, record, then push only 24");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "pass-only join should publish local member data first");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "pass-only join should publish shared state second");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbyCacheSubscriptionRecord, "pass-only join should record cache subscription before 24");
+    expect_push_payload(tf.recorder.actions[3], GBE_kDotaCacheSubscribed, "pass-only join should only push 24 when join response is disabled");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_join_matched_generic_syncs_settings_before_publish()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x704401u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x70440100u;
+    tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.get_local_steam_id().ConvertToUint64();
+    tf.gc.GBE_local_lobby.owner_name = "tester";
+
+    const JobID_t request_job = 0x7044BEEFu;
+    const std::string body = WireBodyBuilder()
+        .varint(1u, tf.gc.GBE_local_lobby.lobby_id)
+        .take();
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyJoinRequest(body, request_job, true, false, nullptr, true);
+
+    TEST_ASSERT(result, "matched generic join handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 6u, "matched generic join should sync settings before publishing and responses");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::SettingsLobbySync, "matched generic join should sync settings before local member data publish");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7044_join_generic", "matched generic settings sync reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbyLocalMemberData, "matched generic join should publish local member data after settings sync");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7044_join", "matched generic local member data reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbySnapshotRefresh, "matched generic join should publish shared state after local member data");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7044_join", "matched generic shared publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::LobbyCacheSubscriptionRecord, "matched generic join should record cache subscription before pushing 24");
+    TEST_ASSERT(tf.recorder.actions[3].reason == "7044_join_direct", "matched generic cache subscription record reason should preserve direct path");
+    expect_push_payload(tf.recorder.actions[4], GBE_kDotaCacheSubscribed, "matched generic join should push 24 after cache record");
+    expect_push_payload(tf.recorder.actions[5], GBE_kDotaPracticeLobbyJoinResponse, "matched generic join should push 7113 after 24");
 
     ++g_tests_passed;
 }
@@ -1075,12 +1473,45 @@ static void test_lobby_abandon_ready_teardown_queues_postgame_response()
     bool result = tf.gc.GBE_HandleDotaAbandonCurrentGameRequest(true, &session_raw);
 
     TEST_ASSERT(result, "ready abandon handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "ready teardown should queue postgame response via stub");
-    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::PushIncomingNow, "teardown action should be push");
-    TEST_ASSERT_EQ(tf.recorder.actions[0].msg_type & ~Steam_Game_Coordinator::protobuf_mask, GBE_kDotaOtherLeftChannel, "teardown response should be 7014 in stub");
-    TEST_ASSERT(tf.recorder.actions[0].wrapped, "teardown response should preserve wrapped flag");
-    TEST_ASSERT(tf.recorder.actions[0].session_raw == session_raw, "teardown response should preserve session field");
-    TEST_ASSERT(tf.recorder.actions[0].reason == "postgame_teardown_7014", "teardown response should record reason");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "ready teardown should discard queued launch messages, suppress lobby, then postgame response");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LaunchMessagesDiscardedForAbandon, "ready teardown should discard queued launch messages before suppression");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7035_ready_for_abandon_teardown", "ready teardown discard reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::AbandonedLobbySuppressed, "ready teardown should mark abandoned lobby before response");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].item_id, 0x7036u, "ready teardown suppression should target current lobby id");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7035_ready_for_abandon_teardown", "ready teardown suppression reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::PushIncomingNow, "teardown action should be push");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].msg_type & ~Steam_Game_Coordinator::protobuf_mask, GBE_kDotaOtherLeftChannel, "teardown response should be 7014 in stub");
+    TEST_ASSERT(tf.recorder.actions[2].wrapped, "teardown response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[2].session_raw == session_raw, "teardown response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "postgame_teardown_7014", "teardown response should record reason");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_abandon_finalize_after_other_left_resets_state()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.is_server = false;
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7014u;
+    tf.gc.GBE_local_lobby.abandon_postgame_active = true;
+
+    tf.gc.GBE_SetPendingDotaAbandonFinalizeAfterOtherLeftChannel(0x7014u);
+    TEST_ASSERT(tf.gc.GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel(), "abandon finalize pending flag should be set");
+
+    const uint64_t consumed_lobby_id = tf.gc.GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel();
+    TEST_ASSERT_EQ(consumed_lobby_id, 0x7014u, "abandon finalize consume should return pending lobby id");
+    TEST_ASSERT(!tf.gc.GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel(), "abandon finalize consume should clear pending flag");
+
+    tf.gc.GBE_FinalizeDotaAbandonAfterOtherLeftChannel(consumed_lobby_id, "abandon_finalize_after_7014_test");
+
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "abandon finalize should clear local lobby state");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "abandon finalize should execute one reset action");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::GcMemoryReset, "abandon finalize should reset GC memory");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "abandon_finalize_after_7014_test", "abandon finalize reset reason should be preserved");
+    TEST_ASSERT(tf.recorder.actions[0].include_lobby, "abandon finalize reset should leave generic lobby");
+    TEST_ASSERT(!tf.recorder.actions[0].include_party, "abandon finalize reset should preserve queued messages");
 
     ++g_tests_passed;
 }
@@ -1090,6 +1521,14 @@ static void test_lobby_normal_signout_pending_clear_resets_state()
     TestFixture tf;
     tf.reset();
 
+    tf.settings.set_lobby(CSteamID(0x2500u));
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x2500u;
+    tf.gc.GBE_SetLastDotaLaunchStatePushedGameState(5u);
+    GBE_shared_dota_lobby_state.valid = true;
+    GBE_shared_dota_lobby_state.active = true;
+    GBE_shared_dota_lobby_state.lobby_id = 0x2500u;
+
     tf.gc.GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(0x2500u);
     TEST_ASSERT(tf.gc.GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(), "normal signout pending flag should be set");
 
@@ -1097,6 +1536,25 @@ static void test_lobby_normal_signout_pending_clear_resets_state()
     TEST_ASSERT_EQ(consumed_lobby_id, 0x2500u, "normal signout consume should return pending lobby id");
     TEST_ASSERT(!tf.gc.GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(), "normal signout consume should clear pending flag");
     TEST_ASSERT_EQ(tf.gc.GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(), 0u, "normal signout pending lobby id should be cleared");
+
+    tf.gc.push_incoming_now(GBE_kDotaCacheUnsubscribed | Steam_Game_Coordinator::protobuf_mask, std::to_string(consumed_lobby_id));
+    tf.gc.GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed(consumed_lobby_id, "normal_signout_pending_clear_test");
+
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "normal signout finalize should clear local lobby state after cache unsubscribe");
+    TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "normal signout finalize should clear shared lobby state after cache unsubscribe");
+    TEST_ASSERT_EQ(tf.gc.GBE_GetLastDotaLaunchStatePushedGameState(), 0u, "normal signout finalize should clear launch-state dedupe after cache unsubscribe");
+    TEST_ASSERT_EQ(tf.settings.get_lobby().ConvertToUint64(), 0u, "normal signout finalize should clear settings lobby");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "normal signout finalize should record cache unsubscribe before local cleanup actions");
+    expect_push_action(tf.recorder.actions[0], GBE_kDotaCacheUnsubscribed, "normal signout finalize should push cache unsubscribe first");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::SettingsLobbyClear, "normal signout settings clear should happen after cache unsubscribe");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].item_id, consumed_lobby_id, "normal signout settings clear should preserve consumed lobby id");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LaunchPeripheralReset, "normal signout should reset launch peripheral after settings clear");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::DotaLobbyRuntimeClear, "normal signout should clear shared/local runtime after launch reset");
+    TEST_ASSERT(tf.recorder.actions[3].reason == "normal_signout_pending_clear_test", "normal signout runtime clear reason should be recorded");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].type, GBE_DotaActionType::RichPresenceClear, "normal signout should clear rich presence after runtime clear");
+
+    tf.gc.GBE_ClearSettingsLobbyForDotaSignout();
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "settings lobby clear should be a no-op when settings lobby is already empty");
 
     ++g_tests_passed;
 }
@@ -1126,6 +1584,150 @@ static void test_lobby_runtime_reset_clears_local_shared_and_last_launch_state()
     ++g_tests_passed;
 }
 
+static gbe::dota_lobby_flow::LaunchStatePushPlanInput valid_launch_state_smoke_input()
+{
+    gbe::dota_lobby_flow::LaunchStatePushPlanInput input{};
+    input.target_available = true;
+    input.target_is_dota_profile = true;
+    input.captured_lobby_active = true;
+    input.lobby_state = 2u;
+    input.lobby_game_state = 3u;
+    input.lobby_server_id = 0x5100u;
+    input.lobby_match_id = 0x5200u;
+    input.lobby_connect_available = true;
+    return input;
+}
+
+static void test_lobby_launch_state_push_smoke_action_sequence()
+{
+    TestFixture tf;
+    tf.reset();
+
+    GBE_LocalLobby lobby{};
+    lobby.active = true;
+    lobby.lobby_id = 0x5200u;
+    lobby.state = 2u;
+    lobby.game_state = 3u;
+    lobby.server_id = 0x5100u;
+    lobby.match_id = 0x5300u;
+    lobby.connect = "127.0.0.1:27015";
+
+    const auto plan = gbe::dota_lobby_flow::plan_launch_state_push(valid_launch_state_smoke_input());
+    const bool executed = tf.gc.GBE_TestExecuteDotaLaunchStatePush(plan, lobby, "cache_payload", "details_payload", "launch_push_smoke");
+
+    TEST_ASSERT(executed, "launch push smoke should execute valid plan");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "launch push smoke should record five actions");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyCacheSubscriptionRecord, "launch push should record cache subscription first");
+    TEST_ASSERT(tf.recorder.actions[0].msg_body == "cache_payload", "launch push cache subscription should use 24 payload");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "launch_push_smoke", "launch push cache subscription should preserve reason");
+    expect_push_action(tf.recorder.actions[1], GBE_kDotaCacheSubscribed, "launch push should push 24 second");
+    TEST_ASSERT(tf.recorder.actions[1].msg_body == "cache_payload", "launch push 24 should use cache payload");
+    expect_push_action(tf.recorder.actions[2], GBE_kDotaPracticeLobbyDetailsUpdate, "launch push should push 26 third");
+    TEST_ASSERT(tf.recorder.actions[2].msg_body == "details_payload", "launch push 26 should use details payload");
+    TEST_ASSERT(tf.recorder.actions[2].apply_lobby_state, "launch push 26 should apply lobby state");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].applied_lobby_state, 2u, "launch push 26 should apply captured state");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].applied_lobby_game_state, 3u, "launch push 26 should apply captured game state");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::RichPresenceUpdate, "launch push should reapply rich presence fourth");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].type, GBE_DotaActionType::LaunchStateGameStateRecord, "launch push should record game state last");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].item_id, 3u, "launch push should record pushed game state value");
+    TEST_ASSERT_EQ(tf.gc.GBE_GetLastDotaLaunchStatePushedGameState(), 3u, "launch push should update dedupe game state");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_launch_state_push_smoke_duplicate_skip()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_SetLastDotaLaunchStatePushedGameState(3u);
+
+    auto input = valid_launch_state_smoke_input();
+    input.last_pushed_game_state = tf.gc.GBE_GetLastDotaLaunchStatePushedGameState();
+    const auto plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    const bool executed = tf.gc.GBE_TestExecuteDotaLaunchStatePush(plan, GBE_LocalLobby{}, "cache_payload", "details_payload", "launch_push_duplicate");
+
+    TEST_ASSERT(!executed, "duplicate launch push smoke should skip execution");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 0u, "duplicate launch push should not record side effects");
+    TEST_ASSERT_EQ(tf.gc.GBE_GetLastDotaLaunchStatePushedGameState(), 3u, "duplicate launch push should preserve dedupe game state");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_launch_updates_rich_presence_after_initial_details()
+{
+    TestFixture tf;
+    tf.reset();
+
+    tf.settings.m_local_steam_id = CSteamID(0x110000100704100u);
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x704100u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x704101u;
+    tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.m_local_steam_id.ConvertToUint64();
+    tf.gc.GBE_local_lobby.owner_name = "Launch Owner";
+    tf.gc.GBE_local_lobby.state = 1u;
+    tf.gc.GBE_local_lobby.game_state = 0u;
+
+    const std::string body;
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyLaunchRequest(body, false, nullptr, false, 0u);
+
+    TEST_ASSERT(result, "7041 launch handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "7041 standard launch should reset peripherals, publish, push initial details, update rich presence, then build persona state");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LaunchPeripheralReset, "7041 should reset launch peripheral state first");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "7041 should publish shared lobby state after peripheral reset");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7041_launch_init", "7041 publish reason should be preserved");
+    expect_push_payload(tf.recorder.actions[2], GBE_kDotaPracticeLobbyDetailsUpdate, "7041 should push initial details before rich presence");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7041_initial_26", "7041 initial details reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::RichPresenceUpdate, "7041 should update rich presence after initial details");
+    TEST_ASSERT(tf.recorder.actions[3].status == "#DOTA_RP_INIT", "7041 rich presence status should be preserved");
+    TEST_ASSERT(tf.recorder.actions[3].lobby_state == "SERVERSETUP", "7041 rich presence lobby state should be preserved");
+    TEST_ASSERT(!tf.recorder.actions[3].include_party, "7041 rich presence should clear party state");
+    TEST_ASSERT(tf.recorder.actions[3].include_lobby, "7041 rich presence should include lobby");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].type, GBE_DotaActionType::LaunchPersonaState, "7041 should build persona state after rich presence");
+    TEST_ASSERT(tf.recorder.actions[4].status == "#DOTA_RP_INIT", "7041 persona status should be preserved");
+    TEST_ASSERT(tf.recorder.actions[4].lobby_state == "SERVERSETUP", "7041 persona lobby state should be preserved");
+    TEST_ASSERT(!tf.recorder.actions[4].include_party, "7041 persona state should clear party state");
+    TEST_ASSERT(tf.recorder.actions[4].include_lobby, "7041 persona state should include lobby");
+    TEST_ASSERT(tf.recorder.actions[4].reason == "7041_launch_init", "7041 persona reason should be preserved");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_custom_launch_updates_rich_presence_before_setup_flow()
+{
+    TestFixture tf;
+    tf.reset();
+
+    tf.settings.m_local_steam_id = CSteamID(0x110000100704101u);
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x704101u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x704102u;
+    tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.m_local_steam_id.ConvertToUint64();
+    tf.gc.GBE_local_lobby.owner_name = "Custom Launch Owner";
+    tf.gc.GBE_local_lobby.state = 1u;
+    tf.gc.GBE_local_lobby.game_state = 0u;
+    tf.gc.GBE_local_lobby.custom_game.game_id = 0xCAFE7041u;
+    tf.gc.GBE_local_lobby.custom_game.map_name = "custom_launch_map";
+    tf.gc.test_set_custom_game_launch_setup_flow_result(true);
+
+    const std::string body;
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyLaunchRequest(body, false, nullptr, false, 0u);
+
+    TEST_ASSERT(result, "7041 custom launch handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 4u, "7041 custom launch should reset, publish, update rich presence, then build persona before setup flow handles it");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LaunchPeripheralReset, "7041 custom launch should reset launch peripheral first");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "7041 custom launch should publish shared lobby before rich presence");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7041_launch_init", "7041 custom publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::RichPresenceUpdate, "7041 custom launch should update rich presence before setup flow return");
+    TEST_ASSERT(tf.recorder.actions[2].status == "#DOTA_RP_INIT", "7041 custom rich presence status should reset to init");
+    TEST_ASSERT(tf.recorder.actions[2].lobby_state == "SERVERSETUP", "7041 custom rich presence lobby state should be serversetup");
+    TEST_ASSERT(!tf.recorder.actions[2].include_party, "7041 custom rich presence should clear party state");
+    TEST_ASSERT(tf.recorder.actions[2].include_lobby, "7041 custom rich presence should include lobby");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::LaunchPersonaState, "7041 custom launch should build persona after rich presence");
+    TEST_ASSERT(tf.recorder.actions[3].reason == "7041_custom_game_launch_init", "7041 custom persona reason should be preserved");
+
+    ++g_tests_passed;
+}
+
 static void setup_postgame_observation_lobby(
     TestFixture &tf,
     uint64_t lobby_id,
@@ -1142,6 +1744,7 @@ static void setup_postgame_observation_lobby(
     tf.gc.GBE_local_lobby.owner_steam_id = owner_steam_id;
     tf.gc.GBE_local_lobby.owner_account_id = owner_account_id;
     tf.gc.GBE_local_lobby.owner_name = owner_name;
+    tf.settings.set_lobby(CSteamID(lobby_id));
 
     GBE_shared_dota_lobby_state.valid = true;
     GBE_shared_dota_lobby_state.active = true;
@@ -1188,7 +1791,7 @@ static void test_lobby_host_client_postgame_observation_preserves_server_owned_s
     Steam_Game_Coordinator server_gc;
     server_gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
     server_gc.is_server = true;
-    server_gc.test_set_active_server_lobby(true);
+    server_gc.test_set_active_server_lobby_id(0x5101u);
     g_test_steam_client.steam_gameserver_game_coordinator = &server_gc;
 
     setup_local_owner_postgame_observation_lobby(tf, 0x5101u);
@@ -1206,6 +1809,36 @@ static void test_lobby_host_client_postgame_observation_preserves_server_owned_s
     ++g_tests_passed;
 }
 
+static void test_lobby_host_client_postgame_observation_ignores_mismatched_server_lobby()
+{
+    TestFixture tf;
+    tf.reset();
+
+    Steam_Game_Coordinator server_gc;
+    server_gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
+    server_gc.is_server = true;
+    server_gc.test_set_active_server_lobby_id(0x9999u);
+    g_test_steam_client.steam_gameserver_game_coordinator = &server_gc;
+
+    setup_local_owner_postgame_observation_lobby(tf, 0x5105u);
+    queue_postgame_observation_capture(tf);
+
+    const bool result = tf.gc.GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("host_client_mismatched_server_lobby_test");
+
+    TEST_ASSERT(result, "mismatched server lobby should still report handled runtime change");
+    TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "mismatched server lobby should not preserve shared state");
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "mismatched server lobby should run player cleanup");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 6u, "mismatched server lobby should run player cleanup sequence");
+    expect_push_action(tf.recorder.actions[0], GBE_kDotaPracticeLobbyDetailsUpdate, "mismatched server cleanup should push postgame details first");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::RichPresenceClear, "mismatched server cleanup should clear rich presence after details update");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LaunchPeripheralReset, "mismatched server cleanup should reset launch peripheral after rich presence clear");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::DotaLobbyRuntimeClear, "mismatched server cleanup should clear shared/local runtime after launch reset");
+    expect_push_action(tf.recorder.actions[4], GBE_kDotaCacheUnsubscribed, "mismatched server cleanup should push cache unsubscribe after cleanup");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].type, GBE_DotaActionType::SettingsLobbyClear, "mismatched server cleanup should clear settings lobby after cache unsubscribe");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_player_postgame_observation_clears_shared_state_after_details_update()
 {
     TestFixture tf;
@@ -1219,9 +1852,16 @@ static void test_lobby_player_postgame_observation_clears_shared_state_after_det
     TEST_ASSERT(result, "player postgame observation should run cleanup");
     TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "player postgame cleanup should clear shared state");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "player postgame cleanup should clear local lobby");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "player postgame cleanup should push details update then cache unsubscribe");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 6u, "player postgame cleanup should push details, clear local state, then cache unsubscribe and settings lobby");
     expect_push_action(tf.recorder.actions[0], GBE_kDotaPracticeLobbyDetailsUpdate, "player cleanup should push postgame details first");
-    expect_push_action(tf.recorder.actions[1], GBE_kDotaCacheUnsubscribed, "player cleanup should push cache unsubscribe after cleanup");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::RichPresenceClear, "player cleanup should clear rich presence after details update");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "clear_launch_rich_presence", "player cleanup rich presence clear reason should be recorded");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LaunchPeripheralReset, "player cleanup should reset launch peripheral state after rich presence clear");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::DotaLobbyRuntimeClear, "player cleanup should clear shared/local runtime state after launch reset");
+    TEST_ASSERT(tf.recorder.actions[3].reason == "player_postgame_observation_test", "player cleanup runtime clear reason should be recorded");
+    expect_push_action(tf.recorder.actions[4], GBE_kDotaCacheUnsubscribed, "player cleanup should push cache unsubscribe after cleanup");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].type, GBE_DotaActionType::SettingsLobbyClear, "player cleanup should clear settings lobby after cache unsubscribe");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].item_id, 0x5102u, "player cleanup should clear the observed settings lobby id");
 
     ++g_tests_passed;
 }
@@ -1254,7 +1894,7 @@ static void test_lobby_host_client_postgame_observation_takes_precedence_over_ar
     Steam_Game_Coordinator server_gc;
     server_gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
     server_gc.is_server = true;
-    server_gc.test_set_active_server_lobby(true);
+    server_gc.test_set_active_server_lobby_id(0x5104u);
     g_test_steam_client.steam_gameserver_game_coordinator = &server_gc;
 
     setup_local_owner_postgame_observation_lobby(tf, 0x5104u);
@@ -1301,6 +1941,77 @@ static void test_misc_7427_notifications()
 
     TEST_ASSERT(result, "handler should return true");
     TEST_ASSERT(has_single_push(tf.recorder, 7428u), "7427 notification request should push 7428 response");
+
+    ++g_tests_passed;
+}
+
+static void test_misc_leaver_detected_publishes_before_details()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7072u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x707200u;
+    const uint64_t leaver_steam_id = 0x110000100707200u;
+    tf.gc.GBE_local_lobby.members.push_back(GBE_DotaLobbyMemberState{
+        leaver_steam_id,
+        0x7072u,
+        GBE_kDotaTeamGoodGuys,
+        1u,
+        0u,
+        true,
+        0u});
+
+    const std::string body = WireBodyBuilder()
+        .varint(1u, leaver_steam_id)
+        .varint(2u, 2u)
+        .varint(6u, 123u)
+        .take();
+    bool result = tf.gc.GBE_HandleDotaLeaverDetectedRequest(reinterpret_cast<const uint8 *>(body.data()), body.size(), 0x7072ABCDu);
+
+    TEST_ASSERT(result, "leaver detected handler should return true");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.members.size(), 1u, "leaver detected should preserve member slot count");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.members[0].steam_id, leaver_steam_id, "leaver detected should target request steam id");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.members[0].leaver_status, 2u, "leaver detected should update member leaver status before publishing");
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.members[0].connected, "leaver detected should mark member disconnected before publishing");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "leaver detected should only publish shared state directly");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "leaver detected should publish shared state before details update");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7072_leaver_detected", "leaver detected publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "leaver detected should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "leaver detected details update should happen after shared publish");
+    TEST_ASSERT(!tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "leaver detected details update should preserve unwrapped flag in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override.empty(), "leaver detected details update should use no session override");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7072_leaver_detected", "leaver detected details update reason should be preserved");
+
+    ++g_tests_passed;
+}
+
+static void test_misc_lan_server_available_publishes_once_for_matching_lobby()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x4511u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x451100u;
+    tf.gc.GBE_local_lobby.launch_4511_seen = false;
+
+    const std::string body = WireBodyBuilder()
+        .varint(1u, tf.gc.GBE_local_lobby.lobby_id)
+        .take();
+    bool first_result = tf.gc.GBE_HandleDotaLanServerAvailableRequest(4511u, reinterpret_cast<const uint8 *>(body.data()), body.size(), 0x4511ABCDu);
+
+    TEST_ASSERT(first_result, "LAN server available handler should return true for matching lobby");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.launch_4511_seen, "LAN server available should mark 4511 seen before publishing");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "first matching LAN server available should publish shared state");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "LAN server available should publish shared state directly");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "4511_lan_server_available_seen", "LAN server available publish reason should be preserved");
+
+    bool second_result = tf.gc.GBE_HandleDotaLanServerAvailableRequest(4511u, reinterpret_cast<const uint8 *>(body.data()), body.size(), 0x4511ABCEu);
+
+    TEST_ASSERT(second_result, "second LAN server available should return true for matching lobby");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.launch_4511_seen, "second LAN server available should keep 4511 seen");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "second matching LAN server available should not republish shared state");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 0u, "LAN server available should not send a details update directly");
 
     ++g_tests_passed;
 }
@@ -1371,6 +2082,9 @@ static void test_match_ready_up_queues_7170_then_runtime_update()
     TEST_ASSERT_EQ(tf.recorder.actions[0].msg_type & ~Steam_Game_Coordinator::protobuf_mask, 7170u, "first response should be 7170");
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "second action should publish lobby state");
     TEST_ASSERT(tf.recorder.actions[1].reason == "7070_custom_game_ready_up_run_ack", "publish reason should identify ready-up ack");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "ready-up should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 2u, "ready-up details update should happen after 7170 response and shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7070_custom_game_ready_up_run_ack", "ready-up details update reason should be preserved");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, 1u, "ready-up should advance to wait-for-players");
 
     ++g_tests_passed;
@@ -1394,6 +2108,9 @@ static void test_match_started_loading_updates_custom_game_before_publish()
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "8052 should publish one lobby state refresh when run advance stub declines");
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "8052 action should publish lobby state");
     TEST_ASSERT(tf.recorder.actions[0].reason == "8052_started_loading", "8052 publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "8052 should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "8052 details update should happen after shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "8052_started_loading", "8052 details update reason should be preserved");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.custom_game.game_id, 0x8052u, "8052 should update custom game id before publish");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_start_time, 12345u, "8052 should update start time before publish");
 
@@ -1416,9 +2133,14 @@ static void test_match_finished_loading_marks_loaded_before_publish()
         reinterpret_cast<const uint8 *>(body.data()), body.size(), true, 0x8053u);
 
     TEST_ASSERT(result, "finished-loading handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "8053 success should publish one lobby state refresh");
-    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "8053 action should publish lobby state");
-    TEST_ASSERT(tf.recorder.actions[0].reason == "8053_finished_loading", "8053 publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "8053 success should publish local member data before shared state");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "8053 should publish local member data first");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "8053_finished_loading", "8053 local member data reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "8053 action should publish lobby state after local member data");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "8053_finished_loading", "8053 publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "8053 success should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 2u, "8053 success details update should happen after shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "8053_finished_loading", "8053 success details update reason should be preserved");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.launch_phase, GBE_kDotaLaunchPhaseLoaded, "8053 should mark launch loaded before publish");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, 1u, "8053 should ensure at least wait-for-players state");
 
@@ -1445,6 +2167,7 @@ static void test_match_finished_loading_failure_preserves_reason()
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "8053 load failure action should publish lobby state");
     TEST_ASSERT(tf.recorder.actions[0].reason == "8053_load_failed", "8053 failure publish reason should be preserved");
     TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "8053 load failure should publish one details update");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "8053 failure details update should happen after shared publish");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "8053_load_failed", "8053 failure details update reason should be preserved");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.launch_phase, GBE_kDotaLaunchPhaseRunQueued, "8053 failure should leave launch phase queued");
 
@@ -1633,6 +2356,7 @@ static void test_match_7034_launch_poll_records_details_update_before_response()
     TEST_ASSERT(result, "7034 launch poll handler should return true");
     TEST_ASSERT_EQ(tf.recorder.runtime_states.size(), 0u, "launch poll should not mutate member runtime state");
     TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "launch poll should request one details update fallback");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 0u, "launch poll details update should happen before response action");
     TEST_ASSERT(!tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "launch poll should not preserve server id in fallback details update");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override.empty(), "launch poll should not pass a message override");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7034_launch_poll", "launch poll details update reason should be preserved");
@@ -1709,6 +2433,9 @@ int main()
     std::printf("[run] test_lobby_abandon_current_game_disconnect_queues_25\n");
     RUN_TEST(test_lobby_abandon_current_game_disconnect_queues_25);
 
+    std::printf("[run] test_lobby_abandon_arcade_launch_failure_discards_before_25\n");
+    RUN_TEST(test_lobby_abandon_arcade_launch_failure_discards_before_25);
+
     std::printf("[run] test_lobby_leave_queues_25_then_clears_local_lobby\n");
     RUN_TEST(test_lobby_leave_queues_25_then_clears_local_lobby);
 
@@ -1721,8 +2448,38 @@ int main()
     std::printf("[run] test_lobby_set_details_mutates_before_publish_and_details_update\n");
     RUN_TEST(test_lobby_set_details_mutates_before_publish_and_details_update);
 
+    std::printf("[run] test_lobby_set_team_slot_publishes_before_details_and_ack\n");
+    RUN_TEST(test_lobby_set_team_slot_publishes_before_details_and_ack);
+
+    std::printf("[run] test_lobby_join_broadcast_publishes_before_details_and_ack\n");
+    RUN_TEST(test_lobby_join_broadcast_publishes_before_details_and_ack);
+
+    std::printf("[run] test_lobby_update_broadcast_publishes_before_details\n");
+    RUN_TEST(test_lobby_update_broadcast_publishes_before_details);
+
+    std::printf("[run] test_lobby_close_broadcast_publishes_before_details\n");
+    RUN_TEST(test_lobby_close_broadcast_publishes_before_details);
+
+    std::printf("[run] test_lobby_create_records_cache_subscription_before_pushes\n");
+    RUN_TEST(test_lobby_create_records_cache_subscription_before_pushes);
+
+    std::printf("[run] test_lobby_create_arcade_unsubscribes_previous_before_new_lobby\n");
+    RUN_TEST(test_lobby_create_arcade_unsubscribes_previous_before_new_lobby);
+
+    std::printf("[run] test_lobby_join_records_cache_subscription_before_pushes\n");
+    RUN_TEST(test_lobby_join_records_cache_subscription_before_pushes);
+
+    std::printf("[run] test_lobby_join_empty_local_lobby_generates_lobby_id_with_pass_key_only\n");
+    RUN_TEST(test_lobby_join_empty_local_lobby_generates_lobby_id_with_pass_key_only);
+
+    std::printf("[run] test_lobby_join_matched_generic_syncs_settings_before_publish\n");
+    RUN_TEST(test_lobby_join_matched_generic_syncs_settings_before_publish);
+
     std::printf("[run] test_lobby_abandon_ready_teardown_queues_postgame_response\n");
     RUN_TEST(test_lobby_abandon_ready_teardown_queues_postgame_response);
+
+    std::printf("[run] test_lobby_abandon_finalize_after_other_left_resets_state\n");
+    RUN_TEST(test_lobby_abandon_finalize_after_other_left_resets_state);
 
     std::printf("[run] test_lobby_normal_signout_pending_clear_resets_state\n");
     RUN_TEST(test_lobby_normal_signout_pending_clear_resets_state);
@@ -1730,8 +2487,23 @@ int main()
     std::printf("[run] test_lobby_runtime_reset_clears_local_shared_and_last_launch_state\n");
     RUN_TEST(test_lobby_runtime_reset_clears_local_shared_and_last_launch_state);
 
+    std::printf("[run] test_lobby_launch_state_push_smoke_action_sequence\n");
+    RUN_TEST(test_lobby_launch_state_push_smoke_action_sequence);
+
+    std::printf("[run] test_lobby_launch_state_push_smoke_duplicate_skip\n");
+    RUN_TEST(test_lobby_launch_state_push_smoke_duplicate_skip);
+
+    std::printf("[run] test_lobby_launch_updates_rich_presence_after_initial_details\n");
+    RUN_TEST(test_lobby_launch_updates_rich_presence_after_initial_details);
+
+    std::printf("[run] test_lobby_custom_launch_updates_rich_presence_before_setup_flow\n");
+    RUN_TEST(test_lobby_custom_launch_updates_rich_presence_before_setup_flow);
+
     std::printf("[run] test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state\n");
     RUN_TEST(test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state);
+
+    std::printf("[run] test_lobby_host_client_postgame_observation_ignores_mismatched_server_lobby\n");
+    RUN_TEST(test_lobby_host_client_postgame_observation_ignores_mismatched_server_lobby);
 
     std::printf("[run] test_lobby_player_postgame_observation_clears_shared_state_after_details_update\n");
     RUN_TEST(test_lobby_player_postgame_observation_clears_shared_state_after_details_update);
@@ -1747,6 +2519,12 @@ int main()
 
     std::printf("[run] test_misc_7427_notifications\n");
     RUN_TEST(test_misc_7427_notifications);
+
+    std::printf("[run] test_misc_leaver_detected_publishes_before_details\n");
+    RUN_TEST(test_misc_leaver_detected_publishes_before_details);
+
+    std::printf("[run] test_misc_lan_server_available_publishes_once_for_matching_lobby\n");
+    RUN_TEST(test_misc_lan_server_available_publishes_once_for_matching_lobby);
 
     std::printf("[run] test_misc_upload_rate\n");
     RUN_TEST(test_misc_upload_rate);

@@ -145,7 +145,20 @@ struct CreateLobbyPlan {
     bool custom_game_create{};
 };
 
+struct CreateLobbyStateApplyPlan {
+    GBE_LocalLobby lobby;
+    bool normalize_custom_game_details{};
+    bool normalize_arcade_member_slots{};
+    bool clear_reconnect_context{};
+    bool set_reconnect_eligible{};
+    bool log_arcade_isolation{};
+};
+
 struct CreateLobbyResetPlan {
+    bool reset_gc_memory{};
+    std::string reset_reason;
+    bool reset_leave_generic_lobby{};
+    bool reset_clear_queued_messages{};
     bool custom_game_create{};
     bool unsubscribe_previous_practice_lobby{};
     std::uint64_t previous_lobby_id{};
@@ -274,6 +287,10 @@ void adopt_shared_lobby_to_local(
     bool normalize_custom_readyup_run_state,
     GBE_LocalLobby &local);
 bool build_reconnect_context(const GBE_LocalLobby &local, GBE_DotaReconnectContext &context);
+bool is_active_lobby_owned_by_local_user(
+    const GBE_LocalLobby &lobby,
+    std::uint64_t lobby_id,
+    std::uint64_t local_steam_id);
 ReconnectEligibilityDecision compute_reconnect_eligibility_decision(
     bool source_valid,
     bool active,
@@ -383,6 +400,9 @@ CreateLobbyPlan compose_create_lobby_plan(
     const std::string &owner_name,
     std::uint32_t owner_team,
     std::uint32_t owner_slot);
+CreateLobbyStateApplyPlan compose_create_lobby_state_apply_plan(
+    const CreateLobbyPlan &create_plan,
+    bool has_lobby_details);
 CreateLobbyResetPlan compose_create_lobby_reset_plan(
     const GBE_LocalLobby &previous_lobby,
     const GBE_DotaCustomGameDetails &requested_custom_game);
@@ -390,6 +410,8 @@ JoinLobbyMergePlan compose_join_lobby_merge_plan(
     const GBE_LocalLobby &current_lobby,
     bool has_request_lobby_id,
     std::uint64_t request_lobby_id,
+    bool has_request_pass_key,
+    const std::string &request_pass_key,
     bool matched_generic_lobby,
     const GBE_LocalLobby &matched_lobby,
     std::uint64_t local_steam_id,

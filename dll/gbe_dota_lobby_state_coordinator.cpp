@@ -564,26 +564,39 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
             push_incoming_now(GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask, postgame_response_26);
         }
 
-        // Clear Rich Presence
-        GBE_ClearDotaPracticeLobbyLaunchRichPresence();
-
-        // Reset local lobby and invalidate shared state
-        GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-        GBE_ClearDotaLobbyRuntimeState();
-
-        // Push CacheUnsubscribed (msg 25) so Dota knows the lobby SO is gone
         std::string response_25;
-        if (gbe::gc_message::build_dota_lobby_cache_unsubscribed_payload(cleaning_lobby_id, response_25)) {
-            push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
-            GBE_GC_DebugLog(
-                "GC_DOTA_SYNC",
-                "PLAYER PostGame: pushed CacheUnsubscribed lobby_id=%llu size=%zu",
-                static_cast<unsigned long long>(cleaning_lobby_id),
-                response_25.size()
-            );
+        const bool push_cache_unsubscribed = gbe::gc_message::build_dota_lobby_cache_unsubscribed_payload(cleaning_lobby_id, response_25);
+        for (const GBE_DotaAction &action : gbe::dota_lobby_flow::player_postgame_cleanup_action_list(
+                 cleaning_lobby_id,
+                 response_25,
+                 push_cache_unsubscribed,
+                 reason ? reason : "generic_lobby_members_changed")) {
+            switch (action.type) {
+                case GBE_DotaActionType::RichPresenceClear:
+                    GBE_ClearDotaPracticeLobbyLaunchRichPresence();
+                    break;
+                case GBE_DotaActionType::LaunchPeripheralReset:
+                    GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+                    break;
+                case GBE_DotaActionType::DotaLobbyRuntimeClear:
+                    GBE_ClearDotaLobbyRuntimeState();
+                    break;
+                case GBE_DotaActionType::PushIncomingNow:
+                    push_incoming_now(action.emsg, action.payload);
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_SYNC",
+                        "PLAYER PostGame: pushed CacheUnsubscribed lobby_id=%llu size=%zu",
+                        static_cast<unsigned long long>(cleaning_lobby_id),
+                        action.payload.size()
+                    );
+                    break;
+                case GBE_DotaActionType::SettingsLobbyClear:
+                    GBE_ClearSettingsLobbyForDotaSignout();
+                    break;
+                default:
+                    break;
+            }
         }
-
-        GBE_ClearSettingsLobbyForDotaSignout();
 
         return true;
     }

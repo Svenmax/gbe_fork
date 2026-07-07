@@ -288,7 +288,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
         return true;
     }
 
-    if (!GBE_PushDotaResponse(GBE_kDotaJoinChatChannelResponse, response_7010, wrapped, outer_session_field_raw, "7009_7010"))
+    if (!GBE_PushDotaJoinChatChannelResponse(response_7010, wrapped, outer_session_field_raw, "7009_7010"))
         return true;
 
     GBE_GC_DebugLog(
@@ -499,7 +499,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             return true;
         }
 
-        if (!GBE_PushDotaResponse(GBE_kDotaOtherLeftChannel, stale_response_7014, wrapped, outer_session_field_raw, "stale_7272_7014"))
+        if (!GBE_PushDotaOtherLeftChannelResponse(stale_response_7014, wrapped, outer_session_field_raw, "stale_7272_7014"))
             return true;
 
         return true;
@@ -552,7 +552,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         return true;
     }
 
-    if (!GBE_PushDotaResponse(GBE_kDotaOtherLeftChannel, response_7014, wrapped, outer_session_field_raw, "7272_7014"))
+    if (!GBE_PushDotaOtherLeftChannelResponse(response_7014, wrapped, outer_session_field_raw, "7272_7014"))
         return true;
 
     if (d.leaving_postgame_channel) {
@@ -567,7 +567,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             return true;
         }
 
-        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
+        GBE_ResetDotaPracticeLobbyLaunchRichPresenceToServerSetup();
 
         // During host disconnect from hero selection, the real client can still be unwinding
         // server/game-rules state after postgame chat leaves. Clearing the entire local/generic
@@ -698,7 +698,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequ
             return true;
         }
 
-        if (!GBE_PushDotaResponse(GBE_kDotaPracticeLobbyResponse, response_7055, wrapped, outer_session_field_raw, "7149_7055"))
+        if (!GBE_PushDotaPracticeLobbyResponse(response_7055, wrapped, outer_session_field_raw, "7149_7055"))
             return true;
     }
 

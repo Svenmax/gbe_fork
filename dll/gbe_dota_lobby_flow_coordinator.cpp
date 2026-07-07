@@ -254,6 +254,12 @@ void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const
 }
 
 
+void Steam_Game_Coordinator::GBE_ResetDotaPracticeLobbyLaunchRichPresenceToServerSetup()
+{
+    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
+}
+
+
 void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
 {
     GBE_ClearLastDotaLaunchPersonaSignature();
@@ -612,7 +618,15 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaAbandonAfterOtherLeftChannel(uint64
         static_cast<unsigned long long>(lobby_id),
         reason ? reason : "unknown"
     );
-    ResetGCMemory(reason ? reason : "7014_abandon_finalize", true, false);
+    for (const GBE_DotaAction &action : gbe::dota_lobby_flow::abandon_finalize_action_list(reason)) {
+        switch (action.type) {
+            case GBE_DotaActionType::GcMemoryReset:
+                ResetGCMemory(action.reason.c_str(), action.leave_generic_lobby, action.clear_queued_messages);
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 
@@ -643,37 +657,56 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
         reason ? reason : "unknown"
     );
 
-    GBE_ClearSettingsLobbyForDotaSignout();
-
-    if (client_target && !client_target->is_server && client_target != this) {
-        client_target->GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-        if (postgame_lobby.active && postgame_lobby.lobby_id != 0)
-            client_target->GBE_local_lobby = postgame_lobby;
-        client_target->GBE_ClearLastDotaLaunchStatePushedGameState();
+    const bool push_client_cache_unsubscribed = client_target && client_target->gc_profile == GC_PROFILE_DOTA2 && client_target != this && lobby_id != 0;
+    std::string client_response_25;
+    const bool built_client_response_25 = !push_client_cache_unsubscribed ||
+        gbe::gc_message::build_dota_lobby_cache_unsubscribed_payload(lobby_id, client_response_25);
+    if (push_client_cache_unsubscribed && !built_client_response_25) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "failed building normal signout client cache unsubscribe label=25 lobby_id=%llu",
+            static_cast<unsigned long long>(lobby_id)
+        );
     }
-    GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-    GBE_ClearDotaLobbyRuntimeState();
 
-    if (client_target && client_target->gc_profile == GC_PROFILE_DOTA2) {
-        client_target->GBE_ClearDotaPracticeLobbyLaunchRichPresence();
-
-        if (client_target != this && lobby_id != 0) {
-            std::string client_response_25;
-            if (gbe::gc_message::build_dota_lobby_cache_unsubscribed_payload(lobby_id, client_response_25)) {
-                client_target->push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, client_response_25);
-                GBE_GC_DebugLog(
-                    "GC_DOTA_SYNC",
-                    "queued normal signout client cache unsubscribe label=25 lobby_id=%llu size=%zu",
-                    static_cast<unsigned long long>(lobby_id),
-                    client_response_25.size()
-                );
-            } else {
-                GBE_GC_DebugLog(
-                    "GC_DOTA_SYNC",
-                    "failed building normal signout client cache unsubscribe label=25 lobby_id=%llu",
-                    static_cast<unsigned long long>(lobby_id)
-                );
-            }
+    for (const GBE_DotaAction &action : gbe::dota_lobby_flow::normal_signout_finalize_action_list(
+             lobby_id,
+             client_response_25,
+             push_client_cache_unsubscribed && built_client_response_25,
+             reason ? reason : "unknown")) {
+        switch (action.type) {
+            case GBE_DotaActionType::SettingsLobbyClear:
+                GBE_ClearSettingsLobbyForDotaSignout();
+                break;
+            case GBE_DotaActionType::LaunchPeripheralReset:
+                if (client_target && !client_target->is_server && client_target != this) {
+                    client_target->GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+                    if (postgame_lobby.active && postgame_lobby.lobby_id != 0)
+                        client_target->GBE_local_lobby = postgame_lobby;
+                    client_target->GBE_ClearLastDotaLaunchStatePushedGameState();
+                }
+                GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+                break;
+            case GBE_DotaActionType::DotaLobbyRuntimeClear:
+                GBE_ClearDotaLobbyRuntimeState();
+                break;
+            case GBE_DotaActionType::RichPresenceClear:
+                if (client_target && client_target->gc_profile == GC_PROFILE_DOTA2)
+                    client_target->GBE_ClearDotaPracticeLobbyLaunchRichPresence();
+                break;
+            case GBE_DotaActionType::PushIncomingNow:
+                if (client_target && client_target->gc_profile == GC_PROFILE_DOTA2) {
+                    client_target->push_incoming_now(action.emsg, action.payload);
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_SYNC",
+                        "queued normal signout client cache unsubscribe label=25 lobby_id=%llu size=%zu",
+                        static_cast<unsigned long long>(lobby_id),
+                        action.payload.size()
+                    );
+                }
+                break;
+            default:
+                break;
         }
     }
 

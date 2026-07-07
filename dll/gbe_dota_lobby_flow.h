@@ -1,95 +1,132 @@
 #ifndef GBE_DOTA_LOBBY_FLOW_H
 #define GBE_DOTA_LOBBY_FLOW_H
 
+#include "gbe_dota_chat_flow.h"
 #include "gbe_dota_lobby_publish.h"
+#include "gbe_dota_lobby_launch_flow.h"
+#include "gbe_dota_lobby_member_flow.h"
+#include "gbe_dota_lobby_payload_flow.h"
 #include "gbe_dota_lobby_snapshot.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_dota_types.h"
+#include "gbe_dota_action_model.h"
+#include "gbe_proto_wire.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace gbe::dota_lobby_flow {
 
-bool lobby_members_equal(
-    const std::vector<GBE_DotaLobbyMemberState> &left,
-    const std::vector<GBE_DotaLobbyMemberState> &right);
+struct CreateLobbyActionPlan
+{
+    bool reset_gc_memory{};
+    std::string reset_reason;
+    bool reset_leave_generic_lobby{};
+    bool reset_clear_queued_messages{};
+    bool unsubscribe_previous_practice_lobby{};
+};
 
-bool lobby_members_contain_steam_id(
-    const std::vector<GBE_DotaLobbyMemberState> &members,
-    std::uint64_t steam_id);
+struct CreateLobbyContext
+{
+    GBE_LocalLobby previous_lobby{};
+    GBE_DotaCustomGameDetails pre_reset_custom_game{};
+    gbe::proto_wire::DotaPracticeLobbyCreateRequest request{};
+    bool parsed_request{};
+    std::uint64_t new_lobby_id{};
+    std::uint64_t owner_steam_id{};
+    std::uint32_t owner_account_id{};
+    std::string owner_name;
+    std::uint32_t owner_team{};
+    std::uint32_t owner_slot{};
+};
 
-bool find_lobby_member_index(
-    const std::vector<GBE_DotaLobbyMemberState> &members,
-    std::uint64_t steam_id,
-    std::size_t &index);
+struct JoinLobbyActionPlan
+{
+    bool matched_generic_lobby{};
+    bool send_join_response{};
+    std::uint64_t generic_lobby_id{};
+};
 
-std::uint64_t find_lobby_member_steam_id_by_account_id(
-    const std::vector<GBE_DotaLobbyMemberState> &members,
-    std::uint32_t account_id);
+struct JoinLobbyContext
+{
+    GBE_LocalLobby current_lobby{};
+    bool request_has_lobby_id{};
+    std::uint64_t request_lobby_id{};
+    bool request_has_pass_key{};
+    std::string request_pass_key;
+    bool matched_generic_lobby{};
+    GBE_LocalLobby matched_lobby{};
+    std::uint64_t matched_generic_lobby_id{};
+    bool send_join_response{};
+    std::uint64_t local_steam_id{};
+    std::uint32_t local_account_id{};
+    std::string local_name;
+    std::uint32_t good_guys_team{};
+    std::uint32_t player_pool_team{};
+};
 
-bool clear_lobby_member_by_account_id(
-    std::vector<GBE_DotaLobbyMemberState> &members,
-    std::uint32_t account_id);
+GBE_DotaActionList create_lobby_action_list(
+    const CreateLobbyActionPlan &plan,
+    bool wrapped);
 
-void upsert_lobby_member(
-    std::vector<GBE_DotaLobbyMemberState> &members,
-    const GBE_DotaLobbyMemberState &member);
+gbe::dota_lobby_state::CreateLobbyResetPlan create_lobby_reset_plan_from_context(
+    const CreateLobbyContext &context);
 
-std::vector<GBE_DotaLobbyMemberState> find_joined_lobby_members(
-    const std::vector<GBE_DotaLobbyMemberState> &previous_members,
-    const std::vector<GBE_DotaLobbyMemberState> &current_members);
+gbe::dota_lobby_state::CreateLobbyPlan create_lobby_state_plan_from_context(
+    const CreateLobbyContext &context);
 
-std::vector<GBE_DotaLobbyMemberState> filter_nonzero_lobby_members(
-    const std::vector<GBE_DotaLobbyMemberState> &members);
+CreateLobbyActionPlan create_lobby_action_plan_from_reset_plan(
+    const gbe::dota_lobby_state::CreateLobbyResetPlan &reset_plan);
 
-void count_remote_lobby_members(
-    const std::vector<GBE_DotaLobbyMemberState> &members,
-    std::uint64_t owner_steam_id,
-    std::uint32_t &remote_count,
-    std::uint32_t &connected_remote_count);
+GBE_DotaActionList join_lobby_action_list(
+    const JoinLobbyActionPlan &plan,
+    bool wrapped);
 
-bool should_hold_lan_launch_for_remote_members(
-    const std::vector<GBE_DotaLobbyMemberState> &members,
-    std::uint64_t owner_steam_id,
-    std::uint32_t &remote_count,
-    std::uint32_t &connected_remote_count);
+gbe::dota_lobby_state::JoinLobbyMergePlan join_lobby_merge_plan_from_context(
+    const JoinLobbyContext &context);
 
-std::string resolve_chat_member_display_name(
-    std::uint64_t member_steam_id,
-    std::uint64_t local_steam_id,
-    const std::string &local_name,
-    std::uint64_t owner_steam_id,
-    const std::string &owner_name,
-    const std::string &generic_member_name,
-    const std::string &friend_name,
-    const std::string &fallback_name);
+JoinLobbyActionPlan join_lobby_action_plan_from_context(
+    const JoinLobbyContext &context);
 
-std::vector<GBE_DotaChatMemberState> compose_join_chat_channel_members(
-    std::uint64_t local_steam_id,
-    const std::string &local_name,
-    const std::vector<GBE_DotaLobbyMemberState> &channel_members,
-    std::uint64_t owner_steam_id,
-    const std::string &owner_name,
-    const std::vector<GBE_DotaChatMemberState> &resolved_remote_names);
+GBE_DotaActionList abandon_cache_unsubscribed_action_list(
+    const gbe::dota_lobby_state::AbandonDecision &decision,
+    const std::string &response_25,
+    const char *reason);
 
-bool should_use_current_practice_lobby_payload_for_details_update(
-    std::uint64_t match_id,
-    bool lan,
-    std::size_t member_count,
-    std::uint64_t custom_game_id);
+GBE_DotaActionList normal_signout_cache_unsubscribed_action_list(
+    std::uint64_t lobby_id,
+    const std::string &response_25,
+    const char *reason);
 
-bool should_use_current_practice_lobby_payload_for_cache_subscribed(
-    bool launch_started,
-    bool lan,
-    std::size_t member_count);
+GBE_DotaActionList leave_lobby_cache_unsubscribed_action_list(
+    std::uint64_t lobby_id,
+    const std::string &response_25,
+    const char *reason);
 
-GBE_DotaAuthoritativeLobbyPayloadData compose_authoritative_lobby_payload_data(
-    bool preserve_server_id,
-    bool launch_started,
-    std::uint64_t current_server_id,
-    std::uint64_t server_candidate_id,
-    const std::string &formatted_connect);
+GBE_DotaActionList postgame_teardown_action_list(
+    std::uint64_t lobby_id,
+    const std::string &response_25,
+    const std::string &response_7010_postgame,
+    bool push_cache_unsubscribed,
+    bool push_postgame_join,
+    const char *reason);
+
+GBE_DotaActionList player_postgame_cleanup_action_list(
+    std::uint64_t lobby_id,
+    const std::string &response_25,
+    bool push_cache_unsubscribed,
+    const char *reason);
+
+GBE_DotaActionList normal_signout_finalize_action_list(
+    std::uint64_t lobby_id,
+    const std::string &client_response_25,
+    bool push_client_cache_unsubscribed,
+    const char *reason);
+
+GBE_DotaActionList abandon_finalize_action_list(
+    const char *reason);
 
 void apply_lobby_member_team_slot_update(
     std::vector<GBE_DotaLobbyMemberState> &members,
