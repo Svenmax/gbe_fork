@@ -75,15 +75,16 @@
   - [x] 拆出 `gbe_dota_chat_flow.{h,cpp}`，承载 chat display name 和 join chat member list。
   - [x] 更新测试源列表和审计白名单，保持 `tools/run_gc_offline_tests.sh` 与审计脚本通过。
 
-- [ ] 10. 改造 abandon / signout / postgame 生命周期收尾
+- [x] 10. 改造 abandon / signout / postgame 生命周期收尾
   - [x] 复用 7035 abandon context/decision，收敛 arcade launch failure 和 current-game disconnect 的 `DiscardLaunchMessages`、`SetPendingReset`、`MarkAbandonedSuppressed`、`PushCacheUnsubscribed` 到 action list。
   - [x] 收敛 7004 normal signout 的 postgame 后 `PushCacheUnsubscribed`、`SetPendingNormalSignoutFinalize` 到 action list。
   - [x] 收敛 7040 leave 的 `MarkAbandonedSuppressed`、`PushCacheUnsubscribed`、`ResetGCMemory/LeaveGenericLobby` 到 action list。
   - [x] 收敛 postgame teardown 的 `PushCacheUnsubscribed`、`QueuePostGameJoin`、`ClearPendingReset` 到 action list。
   - [x] 收敛 player postgame observation cleanup 的 `ClearRichPresence`、`ResetLaunchPeripheral`、`ClearDotaLobbyRuntimeState`、`PushCacheUnsubscribed`、`ClearSettingsLobby` 到 action list。
   - [x] 收敛 normal signout finalize 的 `ClearSettingsLobby`、`ResetLaunchPeripheral`、`ClearDotaLobbyRuntimeState`、`ClearRichPresence`、client `PushCacheUnsubscribed` 到 action list。
-  - 建立 teardown plan，继续统一表达 shared state clear、local lobby clear 的状态转移。
-  - 保持 25、7010、shared state clear、generic lobby leave 的时序稳定。
+  - [x] 收敛 abandon finalize after 7014 的 `ResetGCMemory/LeaveGenericLobby` 到 action list。
+  - [x] 建立 teardown plan，统一表达 shared state clear、local lobby clear 的状态转移。
+  - [x] 保持 25、7010、shared state clear、generic lobby leave 的时序稳定。
 
 - [ ] 11. 为 teardown 路径补强测试护栏
   - 增加 replay fixture，覆盖 abandon、postgame channel leave、normal signout、host/client shared state。

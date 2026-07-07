@@ -223,6 +223,15 @@ GBE_DotaActionList normal_signout_finalize_action_list(
     return actions;
 }
 
+GBE_DotaActionList abandon_finalize_action_list(
+    const char *reason)
+{
+    GBE_DotaActionList actions;
+    const std::string action_reason = reason ? reason : "7014_abandon_finalize";
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::GcMemoryReset, 0u, std::string(), 0ull, 0ull, 0ull, action_reason, true, false });
+    return actions;
+}
+
 void preserve_lobby_owner_transfer_slots(
     std::vector<GBE_DotaLobbyMemberState> &members,
     const std::vector<GBE_DotaLobbyMemberState> &previous_members,

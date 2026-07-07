@@ -618,7 +618,15 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaAbandonAfterOtherLeftChannel(uint64
         static_cast<unsigned long long>(lobby_id),
         reason ? reason : "unknown"
     );
-    ResetGCMemory(reason ? reason : "7014_abandon_finalize", true, false);
+    for (const GBE_DotaAction &action : gbe::dota_lobby_flow::abandon_finalize_action_list(reason)) {
+        switch (action.type) {
+            case GBE_DotaActionType::GcMemoryReset:
+                ResetGCMemory(action.reason.c_str(), action.leave_generic_lobby, action.clear_queued_messages);
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 

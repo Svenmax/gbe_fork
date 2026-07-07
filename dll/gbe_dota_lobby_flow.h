@@ -125,6 +125,9 @@ GBE_DotaActionList normal_signout_finalize_action_list(
     bool push_client_cache_unsubscribed,
     const char *reason);
 
+GBE_DotaActionList abandon_finalize_action_list(
+    const char *reason);
+
 void apply_lobby_member_team_slot_update(
     std::vector<GBE_DotaLobbyMemberState> &members,
     std::uint64_t steam_id,

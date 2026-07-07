@@ -1488,6 +1488,34 @@ static void test_lobby_abandon_ready_teardown_queues_postgame_response()
     ++g_tests_passed;
 }
 
+static void test_lobby_abandon_finalize_after_other_left_resets_state()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.is_server = false;
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7014u;
+    tf.gc.GBE_local_lobby.abandon_postgame_active = true;
+
+    tf.gc.GBE_SetPendingDotaAbandonFinalizeAfterOtherLeftChannel(0x7014u);
+    TEST_ASSERT(tf.gc.GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel(), "abandon finalize pending flag should be set");
+
+    const uint64_t consumed_lobby_id = tf.gc.GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel();
+    TEST_ASSERT_EQ(consumed_lobby_id, 0x7014u, "abandon finalize consume should return pending lobby id");
+    TEST_ASSERT(!tf.gc.GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel(), "abandon finalize consume should clear pending flag");
+
+    tf.gc.GBE_FinalizeDotaAbandonAfterOtherLeftChannel(consumed_lobby_id, "abandon_finalize_after_7014_test");
+
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "abandon finalize should clear local lobby state");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "abandon finalize should execute one reset action");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::GcMemoryReset, "abandon finalize should reset GC memory");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "abandon_finalize_after_7014_test", "abandon finalize reset reason should be preserved");
+    TEST_ASSERT(tf.recorder.actions[0].include_lobby, "abandon finalize reset should leave generic lobby");
+    TEST_ASSERT(!tf.recorder.actions[0].include_party, "abandon finalize reset should preserve queued messages");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_normal_signout_pending_clear_resets_state()
 {
     TestFixture tf;
@@ -2380,6 +2408,9 @@ int main()
 
     std::printf("[run] test_lobby_abandon_ready_teardown_queues_postgame_response\n");
     RUN_TEST(test_lobby_abandon_ready_teardown_queues_postgame_response);
+
+    std::printf("[run] test_lobby_abandon_finalize_after_other_left_resets_state\n");
+    RUN_TEST(test_lobby_abandon_finalize_after_other_left_resets_state);
 
     std::printf("[run] test_lobby_normal_signout_pending_clear_resets_state\n");
     RUN_TEST(test_lobby_normal_signout_pending_clear_resets_state);
