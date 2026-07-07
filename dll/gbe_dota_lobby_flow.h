@@ -5,6 +5,7 @@
 #include "gbe_dota_lobby_publish.h"
 #include "gbe_dota_lobby_launch_flow.h"
 #include "gbe_dota_lobby_member_flow.h"
+#include "gbe_dota_lobby_payload_flow.h"
 #include "gbe_dota_lobby_snapshot.h"
 #include "gbe_dota_lobby_state.h"
 #include "gbe_dota_types.h"
@@ -88,24 +89,6 @@ gbe::dota_lobby_state::JoinLobbyMergePlan join_lobby_merge_plan_from_context(
 
 JoinLobbyActionPlan join_lobby_action_plan_from_context(
     const JoinLobbyContext &context);
-
-bool should_use_current_practice_lobby_payload_for_details_update(
-    std::uint64_t match_id,
-    bool lan,
-    std::size_t member_count,
-    std::uint64_t custom_game_id);
-
-bool should_use_current_practice_lobby_payload_for_cache_subscribed(
-    bool launch_started,
-    bool lan,
-    std::size_t member_count);
-
-GBE_DotaAuthoritativeLobbyPayloadData compose_authoritative_lobby_payload_data(
-    bool preserve_server_id,
-    bool launch_started,
-    std::uint64_t current_server_id,
-    std::uint64_t server_candidate_id,
-    const std::string &formatted_connect);
 
 void apply_lobby_member_team_slot_update(
     std::vector<GBE_DotaLobbyMemberState> &members,

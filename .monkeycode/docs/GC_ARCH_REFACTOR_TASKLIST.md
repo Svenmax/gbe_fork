@@ -71,7 +71,7 @@
 - [ ] 9. 收敛 `gbe_dota_lobby_flow` 的功能混杂
   - [x] 拆出 `gbe_dota_lobby_launch_flow.{h,cpp}`，承载 launch push context、planner、skip reason、payload build request。
   - [x] 拆出 `gbe_dota_lobby_member_flow.{h,cpp}`，承载 member 查找、upsert 和 LAN launch remote member 判断。
-  - 拆出 `gbe_dota_lobby_payload_flow.{h,cpp}`，承载 cache/details payload routing、authoritative payload data 选择规则。
+  - [x] 拆出 `gbe_dota_lobby_payload_flow.{h,cpp}`，承载 cache/details payload routing、authoritative payload data 选择规则。
   - [x] 拆出 `gbe_dota_chat_flow.{h,cpp}`，承载 chat display name 和 join chat member list。
   - 更新测试源列表和审计白名单，保持 `tools/run_gc_offline_tests.sh` 与审计脚本通过。
 
