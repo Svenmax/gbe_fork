@@ -851,13 +851,18 @@ static void test_chat_leave_postgame_channel_order()
     bool result = tf.gc.GBE_HandleDotaLeaveChatChannelRequest(body, true, &session_raw);
 
     TEST_ASSERT(result, "leave chat handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "postgame leave should push 7014 then publish state");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "postgame leave should push 7014, update rich presence, then publish state");
     expect_push_payload(tf.recorder.actions[0], GBE_kDotaOtherLeftChannel, "first action should be 7014 response with payload");
     TEST_ASSERT(tf.recorder.actions[0].wrapped, "7014 response should preserve wrapped flag");
     TEST_ASSERT(tf.recorder.actions[0].session_raw == session_raw, "7014 response should preserve session field");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7272_7014", "7014 response should record reason");
-    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "second action should publish lobby state");
-    TEST_ASSERT(tf.recorder.actions[1].reason == "7272_leave_chat", "publish reason should identify leave chat");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::RichPresenceUpdate, "second action should update rich presence");
+    TEST_ASSERT(tf.recorder.actions[1].status == "#DOTA_RP_INIT", "postgame leave rich presence status should reset to init");
+    TEST_ASSERT(tf.recorder.actions[1].lobby_state == "SERVERSETUP", "postgame leave rich presence lobby state should reset to serversetup");
+    TEST_ASSERT(!tf.recorder.actions[1].include_party, "postgame leave rich presence should clear party state");
+    TEST_ASSERT(!tf.recorder.actions[1].include_lobby, "postgame leave rich presence should clear lobby state");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbySnapshotRefresh, "third action should publish lobby state");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7272_leave_chat", "publish reason should identify leave chat");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.has_chat_channel, "postgame leave should clear local chat channel after 7014");
     GBE_shared_dota_lobby_state.valid = false;
 
@@ -885,13 +890,16 @@ static void test_chat_leave_postgame_skips_stale_republish_after_shared_clear()
     bool result = tf.gc.GBE_HandleDotaLeaveChatChannelRequest(body, true, &session_raw);
 
     TEST_ASSERT(result, "stale postgame leave handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "stale postgame leave should push 7014 before cleanup without publishing state");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "stale postgame leave should push 7014 and update rich presence before cleanup without publishing state");
     expect_push_payload(tf.recorder.actions[0], GBE_kDotaOtherLeftChannel, "stale postgame leave should still push 7014");
     TEST_ASSERT(tf.recorder.actions[0].wrapped, "stale 7014 response should preserve wrapped flag");
     TEST_ASSERT(tf.recorder.actions[0].session_raw == session_raw, "stale 7014 response should preserve session field");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7272_7014", "stale 7014 response should keep normal leave response reason");
-    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::GenericLobbyLeave, "stale postgame cleanup should happen after 7014");
-    TEST_ASSERT_EQ(tf.recorder.actions[1].item_id, 0xCAFEu, "stale postgame cleanup should record the stale lobby id");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::RichPresenceUpdate, "stale postgame leave should update rich presence after 7014");
+    TEST_ASSERT(tf.recorder.actions[1].status == "#DOTA_RP_INIT", "stale leave rich presence status should reset to init");
+    TEST_ASSERT(tf.recorder.actions[1].lobby_state == "SERVERSETUP", "stale leave rich presence lobby state should reset to serversetup");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::GenericLobbyLeave, "stale postgame cleanup should happen after rich presence update");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].item_id, 0xCAFEu, "stale postgame cleanup should record the stale lobby id");
     TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "stale postgame leave should not republish cleared shared state");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "stale postgame leave should clear local lobby after skipping publish");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0ull, "stale postgame leave should clear local lobby id");
@@ -1149,6 +1157,38 @@ static void test_lobby_runtime_reset_clears_local_shared_and_last_launch_state()
     TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "runtime reset should clear shared lobby validity");
     TEST_ASSERT_EQ(GBE_GetSharedDotaLobbyIdOrZero(), 0u, "runtime reset should clear shared lobby id");
     TEST_ASSERT_EQ(tf.gc.GBE_GetLastDotaLaunchStatePushedGameState(), 0u, "runtime reset should clear last pushed launch game state");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_launch_updates_rich_presence_after_initial_details()
+{
+    TestFixture tf;
+    tf.reset();
+
+    tf.settings.m_local_steam_id = CSteamID(0x110000100704100u);
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x704100u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x704101u;
+    tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.m_local_steam_id.ConvertToUint64();
+    tf.gc.GBE_local_lobby.owner_name = "Launch Owner";
+    tf.gc.GBE_local_lobby.state = 1u;
+    tf.gc.GBE_local_lobby.game_state = 0u;
+
+    const std::string body;
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyLaunchRequest(body, false, nullptr, false, 0u);
+
+    TEST_ASSERT(result, "7041 launch handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "7041 standard launch should publish, push initial details, then update rich presence");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "7041 should publish shared lobby state first");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7041_launch_init", "7041 publish reason should be preserved");
+    expect_push_payload(tf.recorder.actions[1], GBE_kDotaPracticeLobbyDetailsUpdate, "7041 should push initial details before rich presence");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7041_initial_26", "7041 initial details reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::RichPresenceUpdate, "7041 should update rich presence after initial details");
+    TEST_ASSERT(tf.recorder.actions[2].status == "#DOTA_RP_INIT", "7041 rich presence status should be preserved");
+    TEST_ASSERT(tf.recorder.actions[2].lobby_state == "SERVERSETUP", "7041 rich presence lobby state should be preserved");
+    TEST_ASSERT(!tf.recorder.actions[2].include_party, "7041 rich presence should clear party state");
+    TEST_ASSERT(tf.recorder.actions[2].include_lobby, "7041 rich presence should include lobby");
 
     ++g_tests_passed;
 }
@@ -1756,6 +1796,9 @@ int main()
 
     std::printf("[run] test_lobby_runtime_reset_clears_local_shared_and_last_launch_state\n");
     RUN_TEST(test_lobby_runtime_reset_clears_local_shared_and_last_launch_state);
+
+    std::printf("[run] test_lobby_launch_updates_rich_presence_after_initial_details\n");
+    RUN_TEST(test_lobby_launch_updates_rich_presence_after_initial_details);
 
     std::printf("[run] test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state\n");
     RUN_TEST(test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state);

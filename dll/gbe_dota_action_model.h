@@ -80,6 +80,7 @@
 //   NetworkBroadcast      (no fields)
 //   LobbySnapshotRefresh  reason
 //   GenericLobbyLeave     lobby_id
+//   RichPresenceUpdate    status, lobby_state, include_party, include_lobby
 
 #ifndef GBE_DOTA_ACTION_MODEL_H
 #define GBE_DOTA_ACTION_MODEL_H
@@ -98,6 +99,7 @@ enum class GBE_DotaActionType {
     LobbySnapshotRefresh,  // replay private lobby snapshot (reason)
     GenericLobbyLeave,     // leave local generic lobby during lifecycle cleanup
     SettingsLobbyClear,    // clear settings lobby during signout cleanup
+    RichPresenceUpdate,    // update Dota launch rich presence
 };
 
 struct GBE_DotaAction {

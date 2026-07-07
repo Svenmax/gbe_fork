@@ -278,9 +278,13 @@ struct RecordedAction
     uint64 source_id{};          // NetworkBroadcast
     bool wrapped{};              // Dota response wrapper flag
     std::string session_raw;     // Dota response outer session field
+    std::string status;          // RichPresenceUpdate
+    std::string lobby_state;     // RichPresenceUpdate
     JobID_t target_job{};        // build_protomsg_header target job
     JobID_t source_job{};        // build_protomsg_header source job
     bool server_gc_unsubscribe_first{};
+    bool include_party{};        // RichPresenceUpdate
+    bool include_lobby{};        // RichPresenceUpdate
     size_t server_gc_source_item_count{};
 
     const char *type_name() const
@@ -295,6 +299,7 @@ struct RecordedAction
             case GBE_DotaActionType::LobbySnapshotRefresh:  return "LobbySnapshotRefresh";
             case GBE_DotaActionType::GenericLobbyLeave:     return "GenericLobbyLeave";
             case GBE_DotaActionType::SettingsLobbyClear:    return "SettingsLobbyClear";
+            case GBE_DotaActionType::RichPresenceUpdate:    return "RichPresenceUpdate";
         }
         return "Unknown";
     }
@@ -475,6 +480,17 @@ public:
         RecordedAction a;
         a.type = GBE_DotaActionType::SettingsLobbyClear;
         a.item_id = lobby_id;
+        actions.push_back(std::move(a));
+    }
+
+    void record_rich_presence_update(const char *status, const char *lobby_state, bool include_party, bool include_lobby)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::RichPresenceUpdate;
+        a.status = status ? status : "";
+        a.lobby_state = lobby_state ? lobby_state : "";
+        a.include_party = include_party;
+        a.include_lobby = include_lobby;
         actions.push_back(std::move(a));
     }
 
@@ -1034,7 +1050,11 @@ public:
         snapshot = GBE_local_lobby;
         return GBE_local_lobby.active;
     }
-    void GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *, const char *, bool, bool = true) {}
+    void GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *status, const char *lobby_state, bool include_party, bool include_lobby = true)
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_rich_presence_update(status, lobby_state, include_party, include_lobby);
+    }
     void ResetGCMemory(const char *, bool = true, bool = true) { GBE_local_lobby = GBE_LocalLobby{}; }
     bool GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_LocalLobby &) { return false; }
     void GBE_PublishDotaPracticeLobbyLocalMemberData(const char *) {}

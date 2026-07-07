@@ -282,6 +282,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `LaunchStatePushAction` and `launch_state_push_actions` to `gbe::dota_lobby_flow`, covering record cache subscription, push cache subscribed, push details update, reapply rich presence, and set last game state in production order; skipped plans return an empty action sequence.
   - Stop condition: production executor remains deferred because it would still be a coordinator member wrapper over existing side effects without a narrower harness.
 
+- [x] Rich presence recorder coverage pass.
+  - Goal: make rich presence updates visible in handler smoke tests before adding any rich presence wrapper.
+  - Result: added `RichPresenceUpdate` to the handler action recorder, strengthened postgame chat leave tests to assert `7014` before rich presence reset and cleanup/publish behavior, and added a 7041 standard launch smoke test proving shared-lobby publish and initial details `26` precede the serversetup rich presence update.
+  - Stop condition: no production rich presence wrapper was introduced; this pass only records and asserts existing side-effect order and fields.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
@@ -300,7 +305,7 @@ git diff --check
 
 Latest handoff verification:
 
-- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `43/43`, and audit issues `0`.
+- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `44/44`, and audit issues `0`.
 - `git diff --check` passed.
 
 For source-list, build-system, or new-file changes, also check the relevant `premake5.lua` source lists and `tools/run_gc_offline_tests.sh` entries.
