@@ -101,6 +101,19 @@ bool is_valid_launch_state_push_target(
     return target_available && !target_is_server && target_is_dota_profile;
 }
 
+bool should_preserve_server_id_for_launch_state_push_target(
+    std::uint64_t target_local_steam_id,
+    std::uint64_t lobby_owner_steam_id,
+    bool lobby_lan,
+    std::uint64_t lobby_match_id)
+{
+    return target_local_steam_id != 0ull &&
+        lobby_owner_steam_id != 0ull &&
+        target_local_steam_id == lobby_owner_steam_id &&
+        lobby_lan &&
+        lobby_match_id != 0ull;
+}
+
 bool find_lobby_member_index(
     const std::vector<GBE_DotaLobbyMemberState> &members,
     std::uint64_t steam_id,

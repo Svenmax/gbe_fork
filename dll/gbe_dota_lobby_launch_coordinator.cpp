@@ -398,12 +398,11 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
     }
 
     const uint64 target_local_steam_id = target->settings ? target->settings->get_local_steam_id().ConvertToUint64() : 0ull;
-    const bool target_owner_lan_launch =
-        target_local_steam_id != 0ull &&
-        lobby.owner_steam_id != 0ull &&
-        target_local_steam_id == lobby.owner_steam_id &&
-        lobby.lan &&
-        lobby.match_id != 0ull;
+    const bool target_owner_lan_launch = gbe::dota_lobby_flow::should_preserve_server_id_for_launch_state_push_target(
+        target_local_steam_id,
+        lobby.owner_steam_id,
+        lobby.lan,
+        lobby.match_id);
 
     std::string response_24;
     if (!target->GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(lobby, target->GBE_GetDotaLobbyOwnerName(), response_24, target_owner_lan_launch)) {

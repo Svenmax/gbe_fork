@@ -264,8 +264,13 @@ The checklist above records the first follow-up pass and includes several "decid
 
 - [x] Launch-state peer target-selection seam.
   - Goal: add ownership target-selection coverage without linking the production-only launch coordinator into the handler smoke harness.
-  - Result: added `should_use_client_peer_for_launch_state_push` and `is_valid_launch_state_push_target` to `gbe::dota_lobby_flow`, covered server/client peer selection and valid Dota-client target eligibility in `gbe_dota_lobby_flow_test`, and replaced the matching checks in `GBE_PushDotaLaunchStateToClientPeer`.
+  - Result: added `should_use_client_peer_for_launch_state_push`, `is_valid_launch_state_push_target`, and `should_preserve_server_id_for_launch_state_push_target` to `gbe::dota_lobby_flow`, covered server/client peer selection, valid Dota-client target eligibility, and owner-LAN preserve eligibility in `gbe_dota_lobby_flow_test`, and replaced the matching checks in `GBE_PushDotaLaunchStateToClientPeer`.
   - Stop condition: no broad launch coordinator harness added; full push side effects remain behind the existing production coordinator path.
+
+- [x] Focused launch coordinator harness feasibility pass.
+  - Goal: determine whether the full launch-state client-peer push path can be covered without broadening the handler smoke harness.
+  - Result: the full path still depends on shared-state restore, current-lobby capture, cache-subscribed/details-update builders, cache subscription recording, queue pushes, rich presence, settings local steam id, duplicate suppression, and coordinator private state. The owner-LAN preserve branch was extracted to a pure helper instead.
+  - Stop condition: defer a full launch coordinator harness until those dependencies can be represented as a small explicit context or until the launch push is split into a planner with recorded side effects.
 
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.

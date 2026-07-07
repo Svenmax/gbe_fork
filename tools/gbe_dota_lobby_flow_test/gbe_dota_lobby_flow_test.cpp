@@ -138,6 +138,13 @@ bool test_launch_state_peer_selection()
     ok &= expect_true(!gbe::dota_lobby_flow::is_valid_launch_state_push_target(true, true, true), "server target invalid");
     ok &= expect_true(!gbe::dota_lobby_flow::is_valid_launch_state_push_target(true, false, false), "non dota target invalid");
 
+    ok &= expect_true(gbe::dota_lobby_flow::should_preserve_server_id_for_launch_state_push_target(10ull, 10ull, true, 99ull), "owner lan launch preserves server id");
+    ok &= expect_true(!gbe::dota_lobby_flow::should_preserve_server_id_for_launch_state_push_target(0ull, 10ull, true, 99ull), "zero target steam id skips preserve");
+    ok &= expect_true(!gbe::dota_lobby_flow::should_preserve_server_id_for_launch_state_push_target(10ull, 0ull, true, 99ull), "zero owner steam id skips preserve");
+    ok &= expect_true(!gbe::dota_lobby_flow::should_preserve_server_id_for_launch_state_push_target(10ull, 20ull, true, 99ull), "non owner target skips preserve");
+    ok &= expect_true(!gbe::dota_lobby_flow::should_preserve_server_id_for_launch_state_push_target(10ull, 10ull, false, 99ull), "non lan lobby skips preserve");
+    ok &= expect_true(!gbe::dota_lobby_flow::should_preserve_server_id_for_launch_state_push_target(10ull, 10ull, true, 0ull), "missing match skips preserve");
+
     return ok;
 }
 

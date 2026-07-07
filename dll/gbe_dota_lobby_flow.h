@@ -64,6 +64,12 @@ bool is_valid_launch_state_push_target(
     bool target_is_server,
     bool target_is_dota_profile);
 
+bool should_preserve_server_id_for_launch_state_push_target(
+    std::uint64_t target_local_steam_id,
+    std::uint64_t lobby_owner_steam_id,
+    bool lobby_lan,
+    std::uint64_t lobby_match_id);
+
 std::string resolve_chat_member_display_name(
     std::uint64_t member_steam_id,
     std::uint64_t local_steam_id,
