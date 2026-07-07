@@ -1584,6 +1584,75 @@ static void test_lobby_runtime_reset_clears_local_shared_and_last_launch_state()
     ++g_tests_passed;
 }
 
+static gbe::dota_lobby_flow::LaunchStatePushPlanInput valid_launch_state_smoke_input()
+{
+    gbe::dota_lobby_flow::LaunchStatePushPlanInput input{};
+    input.target_available = true;
+    input.target_is_dota_profile = true;
+    input.captured_lobby_active = true;
+    input.lobby_state = 2u;
+    input.lobby_game_state = 3u;
+    input.lobby_server_id = 0x5100u;
+    input.lobby_match_id = 0x5200u;
+    input.lobby_connect_available = true;
+    return input;
+}
+
+static void test_lobby_launch_state_push_smoke_action_sequence()
+{
+    TestFixture tf;
+    tf.reset();
+
+    GBE_LocalLobby lobby{};
+    lobby.active = true;
+    lobby.lobby_id = 0x5200u;
+    lobby.state = 2u;
+    lobby.game_state = 3u;
+    lobby.server_id = 0x5100u;
+    lobby.match_id = 0x5300u;
+    lobby.connect = "127.0.0.1:27015";
+
+    const auto plan = gbe::dota_lobby_flow::plan_launch_state_push(valid_launch_state_smoke_input());
+    const bool executed = tf.gc.GBE_TestExecuteDotaLaunchStatePush(plan, lobby, "cache_payload", "details_payload", "launch_push_smoke");
+
+    TEST_ASSERT(executed, "launch push smoke should execute valid plan");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "launch push smoke should record five actions");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyCacheSubscriptionRecord, "launch push should record cache subscription first");
+    TEST_ASSERT(tf.recorder.actions[0].msg_body == "cache_payload", "launch push cache subscription should use 24 payload");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "launch_push_smoke", "launch push cache subscription should preserve reason");
+    expect_push_action(tf.recorder.actions[1], GBE_kDotaCacheSubscribed, "launch push should push 24 second");
+    TEST_ASSERT(tf.recorder.actions[1].msg_body == "cache_payload", "launch push 24 should use cache payload");
+    expect_push_action(tf.recorder.actions[2], GBE_kDotaPracticeLobbyDetailsUpdate, "launch push should push 26 third");
+    TEST_ASSERT(tf.recorder.actions[2].msg_body == "details_payload", "launch push 26 should use details payload");
+    TEST_ASSERT(tf.recorder.actions[2].apply_lobby_state, "launch push 26 should apply lobby state");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].applied_lobby_state, 2u, "launch push 26 should apply captured state");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].applied_lobby_game_state, 3u, "launch push 26 should apply captured game state");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::RichPresenceUpdate, "launch push should reapply rich presence fourth");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].type, GBE_DotaActionType::LaunchStateGameStateRecord, "launch push should record game state last");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].item_id, 3u, "launch push should record pushed game state value");
+    TEST_ASSERT_EQ(tf.gc.GBE_GetLastDotaLaunchStatePushedGameState(), 3u, "launch push should update dedupe game state");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_launch_state_push_smoke_duplicate_skip()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_SetLastDotaLaunchStatePushedGameState(3u);
+
+    auto input = valid_launch_state_smoke_input();
+    input.last_pushed_game_state = tf.gc.GBE_GetLastDotaLaunchStatePushedGameState();
+    const auto plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    const bool executed = tf.gc.GBE_TestExecuteDotaLaunchStatePush(plan, GBE_LocalLobby{}, "cache_payload", "details_payload", "launch_push_duplicate");
+
+    TEST_ASSERT(!executed, "duplicate launch push smoke should skip execution");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 0u, "duplicate launch push should not record side effects");
+    TEST_ASSERT_EQ(tf.gc.GBE_GetLastDotaLaunchStatePushedGameState(), 3u, "duplicate launch push should preserve dedupe game state");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_launch_updates_rich_presence_after_initial_details()
 {
     TestFixture tf;
@@ -2417,6 +2486,12 @@ int main()
 
     std::printf("[run] test_lobby_runtime_reset_clears_local_shared_and_last_launch_state\n");
     RUN_TEST(test_lobby_runtime_reset_clears_local_shared_and_last_launch_state);
+
+    std::printf("[run] test_lobby_launch_state_push_smoke_action_sequence\n");
+    RUN_TEST(test_lobby_launch_state_push_smoke_action_sequence);
+
+    std::printf("[run] test_lobby_launch_state_push_smoke_duplicate_skip\n");
+    RUN_TEST(test_lobby_launch_state_push_smoke_duplicate_skip);
 
     std::printf("[run] test_lobby_launch_updates_rich_presence_after_initial_details\n");
     RUN_TEST(test_lobby_launch_updates_rich_presence_after_initial_details);

@@ -48,6 +48,7 @@
 // gbe_dota_lobby_state.h transitively includes gbe_dota_reconnect_shared.h
 // which provides GBE_DotaReconnectContext, GBE_SharedDotaLobbyState, etc.
 #include "dll/gbe_dota_lobby_state.h"
+#include "dll/gbe_dota_lobby_launch_flow.h"
 
 namespace gbe::dota_lobby_flow {
 GBE_DotaActionList player_postgame_cleanup_action_list(
@@ -305,6 +306,9 @@ struct RecordedAction
     bool server_gc_unsubscribe_first{};
     bool include_party{};        // RichPresenceUpdate
     bool include_lobby{};        // RichPresenceUpdate
+    bool apply_lobby_state{};    // PushIncomingNow
+    uint32 applied_lobby_state{};      // PushIncomingNow
+    uint32 applied_lobby_game_state{}; // PushIncomingNow
     size_t server_gc_source_item_count{};
 
     const char *type_name() const
@@ -411,12 +415,19 @@ public:
         lobby_kicks.push_back(kick);
     }
 
-    void record_push_incoming_now(uint32 msg_type, const std::string &msg_body)
+    void record_push_incoming_now(uint32 msg_type,
+                                  const std::string &msg_body,
+                                  bool apply_lobby_state = false,
+                                  uint32 lobby_state = 0,
+                                  uint32 lobby_game_state = 0)
     {
         RecordedAction a;
         a.type = GBE_DotaActionType::PushIncomingNow;
         a.msg_type = msg_type;
         a.msg_body = msg_body;
+        a.apply_lobby_state = apply_lobby_state;
+        a.applied_lobby_state = lobby_state;
+        a.applied_lobby_game_state = lobby_game_state;
         actions.push_back(std::move(a));
     }
 
@@ -1079,9 +1090,8 @@ public:
                            uint32 lobby_state = 0,
                            uint32 lobby_game_state = 0)
     {
-        (void)apply_lobby_state; (void)lobby_state; (void)lobby_game_state;
         if (g_action_recorder)
-            g_action_recorder->record_push_incoming_now(msg_type, message);
+            g_action_recorder->record_push_incoming_now(msg_type, message, apply_lobby_state, lobby_state, lobby_game_state);
     }
 
     void push_incoming(uint32 msg_type, const std::string &message,
@@ -1285,6 +1295,52 @@ public:
     }
     std::vector<GBE_LocalLobby> GBE_GetDotaGenericLobbySnapshots(const char *) { return {}; }
     bool GBE_ShouldSuppressDotaAbandonedLobby(uint64) const { return false; }
+    void GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(const char *reason)
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_rich_presence_update("#DOTA_RP_PLAYING_AS", "RUN", false, true);
+        (void)reason;
+    }
+    bool GBE_TestExecuteDotaLaunchStatePush(
+        const gbe::dota_lobby_flow::LaunchStatePushPlan &plan,
+        const GBE_LocalLobby &lobby,
+        const std::string &response_24,
+        const std::string &response_26,
+        const char *reason)
+    {
+        if (plan.skip_reason != gbe::dota_lobby_flow::LaunchStatePushSkipReason::None)
+            return false;
+        for (const GBE_DotaAction &action : gbe::dota_lobby_flow::launch_state_push_action_list(plan)) {
+            switch (action.type) {
+                case GBE_DotaActionType::LobbyCacheSubscriptionRecord:
+                    GBE_RecordDotaLobbyCacheSubscriptionState(response_24, reason ? reason : "push_launch_state_to_client");
+                    break;
+                case GBE_DotaActionType::PushIncomingNow:
+                    if (action.emsg == (GBE_kDotaCacheSubscribed | protobuf_mask)) {
+                        push_incoming_now(action.emsg, response_24);
+                    } else if (action.emsg == (GBE_kDotaPracticeLobbyDetailsUpdate | protobuf_mask)) {
+                        push_incoming_now(action.emsg, response_26, true, lobby.state, lobby.game_state);
+                    }
+                    break;
+                case GBE_DotaActionType::RichPresenceUpdate:
+                    GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "push_launch_state_to_client");
+                    break;
+                case GBE_DotaActionType::LaunchStateGameStateRecord:
+                    GBE_SetLastDotaLaunchStatePushedGameState(lobby.game_state);
+                    if (g_action_recorder) {
+                        RecordedAction a;
+                        a.type = GBE_DotaActionType::LaunchStateGameStateRecord;
+                        a.item_id = lobby.game_state;
+                        a.reason = reason ? reason : "";
+                        g_action_recorder->actions.push_back(std::move(a));
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+        return true;
+    }
     bool GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(const char *reason)
     {
         if (is_server || gc_profile != GC_PROFILE_DOTA2)

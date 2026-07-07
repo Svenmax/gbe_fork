@@ -28,11 +28,11 @@
   - [x] 保持顺序为 `RecordCacheSubscription -> PushCacheSubscribed -> PushDetailsUpdate -> ReapplyRichPresence -> SetLastGameState`。
   - [x] 继续评估阶段性 skip 判断，合并 capture 后重复 planner 调用，同时保持日志粒度。
 
-- [ ] 3. 为 launch push 补强测试护栏
+- [x] 3. 为 launch push 补强测试护栏
   - [x] 增加 planner 单测，覆盖 valid push、suppressed source lobby、invalid target、suppressed shared lobby、no captured lobby、duplicate game state。
   - [x] 增加 context mapping 和统一 action list 顺序单测。
-  - [ ] 增加 smoke test，断言 launch push 的 action sequence 与 skip path 行为。
-  - [ ] 为 handler smoke test 包装器纳入 launch coordinator，补齐必要 stub 后再接入 `GBE_PushDotaLaunchStateToClientPeer` 行为测试。
+  - [x] 增加 smoke test，断言 launch push 的 action sequence 与 skip path 行为。
+  - [x] 为 handler smoke test 增加 launch push 专用 seam，复用真实 planner/action-list 并覆盖 `GBE_PushDotaLaunchStateToClientPeer` 的 executor 顺序。
     - 评估结果：直接纳入 `gbe_dota_lobby_launch_coordinator.cpp` 会与现有 handler smoke stub 中的 launch/postgame/response helper 定义大面积重叠，需要单独改造 wrapper 结构。
 
 - [x] 4. 改造 `GBE_HandleDotaPracticeLobbyCreateRequest`
