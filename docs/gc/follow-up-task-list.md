@@ -367,6 +367,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added a handler smoke test proving member leaver status and connected state mutate before shared-lobby publish and details update, with unwrapped/no-session metadata and reason preserved.
   - Stop condition: no production leaver-detected behavior changed and no misc side-effect interface was introduced.
 
+- [x] LAN server available publish coverage pass.
+  - Goal: make the 4511 LAN server available publish visibility explicit before wrapping launch-marker side effects.
+  - Result: added a handler smoke test proving the first matching lobby request marks `launch_4511_seen` before shared-lobby publish and repeated matching requests do not republish.
+  - Stop condition: no production 4511 behavior changed and server-id sync remains a handler harness stub.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
@@ -385,7 +390,7 @@ git diff --check
 
 Latest handoff verification:
 
-- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `53/53`, and audit issues `0`.
+- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `54/54`, and audit issues `0`.
 - `git diff --check` passed.
 
 For source-list, build-system, or new-file changes, also check the relevant `premake5.lua` source lists and `tools/run_gc_offline_tests.sh` entries.

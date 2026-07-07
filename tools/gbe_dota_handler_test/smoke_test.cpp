@@ -1735,6 +1735,36 @@ static void test_misc_leaver_detected_publishes_before_details()
     ++g_tests_passed;
 }
 
+static void test_misc_lan_server_available_publishes_once_for_matching_lobby()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x4511u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x451100u;
+    tf.gc.GBE_local_lobby.launch_4511_seen = false;
+
+    const std::string body = WireBodyBuilder()
+        .varint(1u, tf.gc.GBE_local_lobby.lobby_id)
+        .take();
+    bool first_result = tf.gc.GBE_HandleDotaLanServerAvailableRequest(4511u, reinterpret_cast<const uint8 *>(body.data()), body.size(), 0x4511ABCDu);
+
+    TEST_ASSERT(first_result, "LAN server available handler should return true for matching lobby");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.launch_4511_seen, "LAN server available should mark 4511 seen before publishing");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "first matching LAN server available should publish shared state");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "LAN server available should publish shared state directly");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "4511_lan_server_available_seen", "LAN server available publish reason should be preserved");
+
+    bool second_result = tf.gc.GBE_HandleDotaLanServerAvailableRequest(4511u, reinterpret_cast<const uint8 *>(body.data()), body.size(), 0x4511ABCEu);
+
+    TEST_ASSERT(second_result, "second LAN server available should return true for matching lobby");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.launch_4511_seen, "second LAN server available should keep 4511 seen");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "second matching LAN server available should not republish shared state");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 0u, "LAN server available should not send a details update directly");
+
+    ++g_tests_passed;
+}
+
 static void test_misc_upload_rate()
 {
     TestFixture tf;
@@ -2220,6 +2250,9 @@ int main()
 
     std::printf("[run] test_misc_leaver_detected_publishes_before_details\n");
     RUN_TEST(test_misc_leaver_detected_publishes_before_details);
+
+    std::printf("[run] test_misc_lan_server_available_publishes_once_for_matching_lobby\n");
+    RUN_TEST(test_misc_lan_server_available_publishes_once_for_matching_lobby);
 
     std::printf("[run] test_misc_upload_rate\n");
     RUN_TEST(test_misc_upload_rate);
