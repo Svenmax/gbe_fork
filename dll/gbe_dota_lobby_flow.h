@@ -73,6 +73,7 @@ bool should_preserve_server_id_for_launch_state_push_target(
 
 struct LaunchStatePushPlanInput
 {
+    bool source_lobby_suppressed{};
     bool source_is_server{};
     bool client_peer_available{};
     bool target_available{};
@@ -128,6 +129,15 @@ struct LaunchStateCapturedContextInput
     std::uint64_t target_local_steam_id{};
 };
 
+struct LaunchStateSourceLobbyInput
+{
+    bool suppressed{};
+};
+
+void apply_source_lobby_to_launch_state_push_plan_input(
+    LaunchStatePushPlanInput &plan_input,
+    const LaunchStateSourceLobbyInput &source_lobby);
+
 void apply_target_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateTargetInput &target);
@@ -152,6 +162,7 @@ void apply_captured_lobby_to_launch_state_push_plan_input(
 enum class LaunchStatePushSkipReason
 {
     None,
+    SuppressedSourceLobby,
     InvalidTarget,
     SuppressedSharedLobby,
     NoCapturedLobby,

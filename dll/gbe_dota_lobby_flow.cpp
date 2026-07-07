@@ -114,6 +114,13 @@ bool should_preserve_server_id_for_launch_state_push_target(
         lobby_match_id != 0ull;
 }
 
+void apply_source_lobby_to_launch_state_push_plan_input(
+    LaunchStatePushPlanInput &plan_input,
+    const LaunchStateSourceLobbyInput &source_lobby)
+{
+    plan_input.source_lobby_suppressed = source_lobby.suppressed;
+}
+
 void apply_target_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateTargetInput &target)
@@ -175,6 +182,11 @@ LaunchStatePushPlan plan_launch_state_push(
     const LaunchStatePushPlanInput &input)
 {
     LaunchStatePushPlan plan{};
+    if (input.source_lobby_suppressed) {
+        plan.skip_reason = LaunchStatePushSkipReason::SuppressedSourceLobby;
+        return plan;
+    }
+
     plan.use_client_peer = should_use_client_peer_for_launch_state_push(
         input.source_is_server,
         input.client_peer_available);

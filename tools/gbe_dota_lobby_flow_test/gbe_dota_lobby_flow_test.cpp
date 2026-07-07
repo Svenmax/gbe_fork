@@ -225,6 +225,13 @@ bool test_launch_state_push_planner()
     ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::None, "planner push skip reason");
 
     input = valid_launch_state_plan_input();
+    input.source_lobby_suppressed = true;
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::SuppressedSourceLobby, "planner suppressed source lobby skip");
+    ok &= expect_true(!plan.use_client_peer, "suppressed source lobby skips target selection");
+    ok &= expect_true(!plan.restore_shared_state, "suppressed source lobby skips restore");
+
+    input = valid_launch_state_plan_input();
     input.target_available = false;
     plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
     ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::InvalidTarget, "planner invalid target skip");
@@ -303,6 +310,30 @@ bool test_launch_state_push_planner()
     ok &= expect_eq_u64(builds.size(), 0u, "planner skipped payload build count");
     build_requests = gbe::dota_lobby_flow::launch_state_payload_build_requests(plan);
     ok &= expect_eq_u64(build_requests.size(), 0u, "planner skipped payload build request count");
+
+    return ok;
+}
+
+bool test_launch_state_plan_input_source_lobby_mapping()
+{
+    bool ok = true;
+
+    gbe::dota_lobby_flow::LaunchStatePushPlanInput input = valid_launch_state_plan_input();
+    gbe::dota_lobby_flow::apply_source_lobby_to_launch_state_push_plan_input(
+        input,
+        gbe::dota_lobby_flow::LaunchStateSourceLobbyInput{true});
+
+    ok &= expect_true(input.source_lobby_suppressed, "source lobby mapping suppressed");
+    gbe::dota_lobby_flow::LaunchStatePushPlan plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::SuppressedSourceLobby, "source lobby mapping planner suppressed");
+
+    gbe::dota_lobby_flow::apply_source_lobby_to_launch_state_push_plan_input(
+        input,
+        gbe::dota_lobby_flow::LaunchStateSourceLobbyInput{false});
+
+    ok &= expect_true(!input.source_lobby_suppressed, "source lobby remapping unsuppressed");
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::None, "source lobby remapping planner push");
 
     return ok;
 }
@@ -1432,6 +1463,7 @@ int main()
     ok &= test_count_remote_lobby_members();
     ok &= test_launch_state_peer_selection();
     ok &= test_launch_state_push_planner();
+    ok &= test_launch_state_plan_input_source_lobby_mapping();
     ok &= test_launch_state_plan_input_target_mapping();
     ok &= test_launch_state_plan_input_shared_lobby_mapping();
     ok &= test_launch_state_plan_input_capture_mapping();

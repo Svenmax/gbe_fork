@@ -407,6 +407,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `GBE_BuildDotaLaunchStatePayloads(...)` to consume the tested build request sequence, build `response_24` then `response_26`, and return the failed build kind so the caller keeps the existing `24` and `26` failure log sites.
   - Stop condition: no response push, cache subscription, rich presence, last-game-state, failure log reason/text, or harness linkage changed.
 
+- [x] Launch-state source-lobby suppression mapping seam.
+  - Goal: move the earliest source-lobby suppression gate into the planner without changing its predicate, log fields, or early-return timing.
+  - Result: added `LaunchStateSourceLobbyInput`, `apply_source_lobby_to_launch_state_push_plan_input(...)`, and `SuppressedSourceLobby` so focused flow tests cover the gate and prove it skips target selection and shared-state restore; production now drives the existing early return through the planner.
+  - Stop condition: no suppression predicate, target selection, shared-state restore, capture, payload build, response push, or debug-log behavior changed.
+
 - [x] Launch-state target plan-input mapping seam.
   - Goal: reduce hand-written planner input setup inside the production launch-state push path without moving coordinator selection.
   - Result: added `LaunchStateTargetInput` and `apply_target_to_launch_state_push_plan_input(...)` so focused flow tests cover target/peer field copying and planner target gates; `GBE_PushDotaLaunchStateToClientPeer(...)` now uses the helper for the equivalent assignments.
@@ -434,7 +439,7 @@ The checklist above records the first follow-up pass and includes several "decid
 
 - [x] Launch-state push seam stop checkpoint.
   - Goal: re-evaluate remaining direct logic in `GBE_PushDotaLaunchStateToClientPeer(...)` after planner, target/captured mappings, payload build requests, grouped payload builds, and action-sequence execution were extracted.
-  - Result: stop before adding broad helpers. The remaining code is mostly source-lobby suppression, target coordinator selection, shared-state restore/snapshot source, capture source, settings read source, and failure/success logging. A next helper should name exactly one of those boundaries with an explicit context.
+  - Result: stop before adding broad helpers. The remaining code is mostly target coordinator selection, shared-state restore/snapshot source, capture source, settings read source, and failure/success logging. A next helper should name exactly one of those boundaries with an explicit context.
   - Stop condition: continue only when a future change can name one remaining boundary with a small explicit context and focused coverage, without linking the full launch coordinator TU into handler smoke tests.
 
 - [x] Host/server active-lobby ownership predicate seam.

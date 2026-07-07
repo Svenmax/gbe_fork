@@ -390,7 +390,14 @@ void Steam_Game_Coordinator::GBE_ExecuteDotaLaunchStatePushActions(
 
 void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *reason)
 {
-    if (GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
+    gbe::dota_lobby_flow::LaunchStatePushPlanInput plan_input{};
+    gbe::dota_lobby_flow::apply_source_lobby_to_launch_state_push_plan_input(
+        plan_input,
+        gbe::dota_lobby_flow::LaunchStateSourceLobbyInput{
+            GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)});
+
+    gbe::dota_lobby_flow::LaunchStatePushPlan plan = gbe::dota_lobby_flow::plan_launch_state_push(plan_input);
+    if (plan.skip_reason == gbe::dota_lobby_flow::LaunchStatePushSkipReason::SuppressedSourceLobby) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipped pushing launch state from suppressed abandoned lobby reason=%s source=%p is_server=%u lobby_id=%llu",
@@ -411,7 +418,6 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
             target = steam_client->steam_game_coordinator;
     }
 
-    gbe::dota_lobby_flow::LaunchStatePushPlanInput plan_input{};
     gbe::dota_lobby_flow::apply_target_to_launch_state_push_plan_input(
         plan_input,
         gbe::dota_lobby_flow::LaunchStateTargetInput{
@@ -421,7 +427,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
             target ? target->is_server : false,
             target ? target->gc_profile == GC_PROFILE_DOTA2 : false});
 
-    gbe::dota_lobby_flow::LaunchStatePushPlan plan = gbe::dota_lobby_flow::plan_launch_state_push(plan_input);
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(plan_input);
     if (plan.skip_reason == gbe::dota_lobby_flow::LaunchStatePushSkipReason::InvalidTarget)
         return;
 
