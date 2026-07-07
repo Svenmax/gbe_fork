@@ -422,6 +422,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: stop before adding more helpers. The remaining code is mostly source-lobby suppression, target coordinator selection, shared-state restore/checks, current-lobby capture, settings reads, and failure/success logging. A next helper would either be a mechanical setter wrapper or would hide the immediate ordering differences that the current seams keep visible.
   - Stop condition: continue only when a future change can name one remaining boundary with a small explicit context and focused coverage, without linking the full launch coordinator TU into handler smoke tests.
 
+- [x] Host/server active-lobby ownership predicate seam.
+  - Goal: make the server-GC active-lobby owner predicate testable without broadening handler smoke linkage or changing postgame cleanup order.
+  - Result: added `gbe::dota_lobby_state::is_active_lobby_owned_by_local_user(...)`, covered active match, zero local steam id, remote owner, different lobby id, and inactive lobby cases in `gbe_dota_lobby_state_test`, made `GBE_HasActiveServerLobby(...)` consume the pure predicate, and strengthened handler coverage so a mismatched server-GC lobby id runs the player cleanup sequence instead of preserving shared state.
+  - Stop condition: no server/client lookup, postgame cleanup decision, shared-state mutation, message push, or handler harness linkage changed.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
@@ -440,8 +445,8 @@ git diff --check
 
 Latest handoff verification:
 
-- `bash tools/run_gc_offline_tests.sh --full` passed with payload helper tests `238/238` and handler smoke tests `54/54`.
-- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `54/54`, and audit issues `0`.
+- `bash tools/run_gc_offline_tests.sh --full` passed with payload helper tests `238/238` and handler smoke tests `55/55`.
+- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `55/55`, and audit issues `0`.
 - `git diff --check` passed.
 
 For source-list, build-system, or new-file changes, also check the relevant `premake5.lua` source lists and `tools/run_gc_offline_tests.sh` entries.

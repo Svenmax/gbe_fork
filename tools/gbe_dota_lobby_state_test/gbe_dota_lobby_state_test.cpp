@@ -1246,6 +1246,34 @@ bool test_postgame_observation_decision()
     return ok;
 }
 
+bool test_active_lobby_owned_by_local_user()
+{
+    bool ok = true;
+
+    GBE_LocalLobby lobby = make_active_lobby();
+    lobby.owner_steam_id = 0x100000u;
+    ok &= expect_true(
+        gbe::dota_lobby_state::is_active_lobby_owned_by_local_user(lobby, 100ull, 0x100000u),
+        "active matching lobby owned by local user");
+
+    ok &= expect_false(
+        gbe::dota_lobby_state::is_active_lobby_owned_by_local_user(lobby, 100ull, 0ull),
+        "zero local steam id is not owner");
+    ok &= expect_false(
+        gbe::dota_lobby_state::is_active_lobby_owned_by_local_user(lobby, 100ull, 0x200000u),
+        "remote owner is not local owner");
+    ok &= expect_false(
+        gbe::dota_lobby_state::is_active_lobby_owned_by_local_user(lobby, 101ull, 0x100000u),
+        "different lobby id is not active owned lobby");
+
+    lobby.active = false;
+    ok &= expect_false(
+        gbe::dota_lobby_state::is_active_lobby_owned_by_local_user(lobby, 100ull, 0x100000u),
+        "inactive lobby is not active owned lobby");
+
+    return ok;
+}
+
 } // namespace
 
 int main()
@@ -1261,6 +1289,7 @@ int main()
     ok &= test_post_game_teardown_suppression();
     ok &= test_teardown_retrieval_decision();
     ok &= test_postgame_observation_decision();
+    ok &= test_active_lobby_owned_by_local_user();
 
     if (!ok)
         return 1;

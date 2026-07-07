@@ -184,7 +184,9 @@ When changing a lifecycle path, first classify the path:
 ## Focused Coverage Status
 
 - Host client observes postgame and preserves shared state needed by server GC: covered by `test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state`.
+- Mismatched server-GC lobby id runs player cleanup instead of host-client preserve: covered by `test_lobby_host_client_postgame_observation_ignores_mismatched_server_lobby`.
 - Host-client ownership takes precedence over arcade-active cleanup skip behavior: covered by `test_lobby_host_client_postgame_observation_takes_precedence_over_arcade_skip`.
+- Server-GC active-lobby ownership predicate is covered by `test_active_lobby_owned_by_local_user`.
 - Ordinary player postgame cleanup clears shared state after details update: covered by `test_lobby_player_postgame_observation_clears_shared_state_after_details_update`.
 - Arcade-active postgame observation preserves shared state: covered by `test_lobby_arcade_active_postgame_observation_preserves_shared_state`.
 - Reconnect context survives preserve paths and clears on ordinary reset paths: covered by focused lobby-state tests and handler reset coverage.

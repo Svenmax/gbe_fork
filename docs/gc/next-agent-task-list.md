@@ -339,8 +339,8 @@ Some of these already exist or have partial pure-helper coverage. Prefer extendi
 Pick exactly one boundary:
 
 1. Future launch-state restore/capture/settings/logging seam after the current planner, payload, and action seams.
-2. Host server-GC active lobby ownership check.
-3. Rich presence clear/update around practice lobby launch.
+2. Rich presence clear/update around practice lobby launch.
+3. Another host/server ownership seam only if it names a different tested predicate.
 
 Add or strengthen a test first. Then add a helper only if it makes the ownership side effect more visible.
 
@@ -465,7 +465,7 @@ git diff --check
 ```
 
 2. Check `docs/gc/follow-up-task-list.md` and `docs/gc/lifecycle-state-map.md` for the latest coverage status.
-3. Pick one remaining boundary only if it has a focused test path: host active server-GC ownership check, rich presence clear/update ordering, or a future launch-state restore/capture/settings/logging seam with a small explicit context.
+3. Pick one remaining boundary only if it has a focused test path: rich presence clear/update ordering, a future launch-state restore/capture/settings/logging seam with a small explicit context, or another host/server ownership seam with a different tested predicate.
 4. Stop if the change needs broad `Steam_Game_Coordinator` construction, a wider handler smoke harness, or a Dota sub-object extraction.
 5. Commit the small step with verification results, then hand off with status and remaining risk.
 

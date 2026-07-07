@@ -55,6 +55,7 @@ These tests are especially relevant to future GC refactor work:
 | `test_lobby_normal_signout_pending_clear_resets_state` | Normal signout pending cleanup reset behavior. |
 | `test_lobby_runtime_reset_clears_local_shared_and_last_launch_state` | Runtime reset contract for local/shared/last-launch state. |
 | `test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state` | Host-client postgame observation preserves server-owned shared state while still observing the transition. |
+| `test_lobby_host_client_postgame_observation_ignores_mismatched_server_lobby` | Mismatched server-GC lobby id runs player cleanup instead of host-client preserve. |
 | `test_lobby_player_postgame_observation_clears_shared_state_after_details_update` | Ordinary player postgame observation pushes details update before cache unsubscribe and clears local/shared state. |
 | `test_lobby_arcade_active_postgame_observation_preserves_shared_state` | Arcade active postgame observation preserves local/shared state and skips cleanup messages. |
 | `test_lobby_host_client_postgame_observation_takes_precedence_over_arcade_skip` | Host-client ownership preserves server-owned state when both predicates are true, with active arcade runtime details-update suppression preserved. |
@@ -79,7 +80,7 @@ Inventory tests in the same binary protect item unlock/equip behavior and should
 ## Known Coverage Gaps
 
 - The handler reset test currently protects the handler-test stub contract for `GBE_ClearDotaLobbyRuntimeState()`. The production implementation is intentionally small and branch-free; add production-linked coverage only if it gains branching or new side effects.
-- Postgame observation is covered by `compute_postgame_observation_decision(...)` focused tests plus handler-level host-client preserve, ordinary player cleanup, arcade-active preserve, and host-over-arcade precedence tests; add more handler coverage before changing cleanup side-effect ordering.
+- Postgame observation is covered by `compute_postgame_observation_decision(...)` focused tests plus handler-level host-client preserve, ordinary player cleanup, arcade-active preserve, and host-over-arcade precedence tests. The server-GC active-lobby owner predicate is covered by `is_active_lobby_owned_by_local_user(...)` focused tests. Add more handler coverage before changing cleanup side-effect ordering.
 - Reconnect preserve-vs-clear behavior is covered by `compute_runtime_reset_decision(...)` focused tests; extend coverage if more reset reasons preserve context.
 - `GBE_IsSharedDotaArcadeLobbyActive()` and `GBE_GetSharedDotaReconnectStateSnapshot()` are covered against direct-field behavior; keep broad shared-state read replacement to one tested read-only cluster at a time.
 - Side-effect recorder coverage should be extended before wrapping more push/broadcast/detail-update operations.

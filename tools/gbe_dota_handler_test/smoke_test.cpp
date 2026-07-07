@@ -1574,7 +1574,7 @@ static void test_lobby_host_client_postgame_observation_preserves_server_owned_s
     Steam_Game_Coordinator server_gc;
     server_gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
     server_gc.is_server = true;
-    server_gc.test_set_active_server_lobby(true);
+    server_gc.test_set_active_server_lobby_id(0x5101u);
     g_test_steam_client.steam_gameserver_game_coordinator = &server_gc;
 
     setup_local_owner_postgame_observation_lobby(tf, 0x5101u);
@@ -1588,6 +1588,34 @@ static void test_lobby_host_client_postgame_observation_preserves_server_owned_s
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.state, 3u, "local lobby should still observe postgame state");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "host client skip should only send refreshed details update");
     expect_push_action(tf.recorder.actions[0], GBE_kDotaPracticeLobbyDetailsUpdate, "host client skip should push details update");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_host_client_postgame_observation_ignores_mismatched_server_lobby()
+{
+    TestFixture tf;
+    tf.reset();
+
+    Steam_Game_Coordinator server_gc;
+    server_gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
+    server_gc.is_server = true;
+    server_gc.test_set_active_server_lobby_id(0x9999u);
+    g_test_steam_client.steam_gameserver_game_coordinator = &server_gc;
+
+    setup_local_owner_postgame_observation_lobby(tf, 0x5105u);
+    queue_postgame_observation_capture(tf);
+
+    const bool result = tf.gc.GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("host_client_mismatched_server_lobby_test");
+
+    TEST_ASSERT(result, "mismatched server lobby should still report handled runtime change");
+    TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "mismatched server lobby should not preserve shared state");
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "mismatched server lobby should run player cleanup");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 4u, "mismatched server lobby should run player cleanup sequence");
+    expect_push_action(tf.recorder.actions[0], GBE_kDotaPracticeLobbyDetailsUpdate, "mismatched server cleanup should push postgame details first");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::RichPresenceClear, "mismatched server cleanup should clear rich presence after details update");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LaunchPeripheralReset, "mismatched server cleanup should reset launch peripheral after rich presence clear");
+    expect_push_action(tf.recorder.actions[3], GBE_kDotaCacheUnsubscribed, "mismatched server cleanup should push cache unsubscribe after cleanup");
 
     ++g_tests_passed;
 }
@@ -1643,7 +1671,7 @@ static void test_lobby_host_client_postgame_observation_takes_precedence_over_ar
     Steam_Game_Coordinator server_gc;
     server_gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
     server_gc.is_server = true;
-    server_gc.test_set_active_server_lobby(true);
+    server_gc.test_set_active_server_lobby_id(0x5104u);
     g_test_steam_client.steam_gameserver_game_coordinator = &server_gc;
 
     setup_local_owner_postgame_observation_lobby(tf, 0x5104u);
@@ -2232,6 +2260,9 @@ int main()
 
     std::printf("[run] test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state\n");
     RUN_TEST(test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state);
+
+    std::printf("[run] test_lobby_host_client_postgame_observation_ignores_mismatched_server_lobby\n");
+    RUN_TEST(test_lobby_host_client_postgame_observation_ignores_mismatched_server_lobby);
 
     std::printf("[run] test_lobby_player_postgame_observation_clears_shared_state_after_details_update\n");
     RUN_TEST(test_lobby_player_postgame_observation_clears_shared_state_after_details_update);

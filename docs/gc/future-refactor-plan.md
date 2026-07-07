@@ -144,12 +144,12 @@ Settings and rich presence candidates:
 Server/client GC lookup candidates:
 
 - future launch-state restore/capture/settings/logging seams after the current planner, payload, and action seams
-- gameserver GC ownership checks
-- host client postgame skip checks
+- additional gameserver GC ownership checks only when they name a different tested predicate
+- host client postgame skip checks around behavior not already covered by the active-lobby owner predicate
 
 The first helpers should be read-only or behavior-equivalent wrappers, for example:
 
-- `GBE_HostHasActiveDotaServerLobby(lobby_id)`
+- `is_active_lobby_owned_by_local_user(...)`-style pure predicates for new ownership checks
 - `GBE_ClearSettingsLobbyForDotaSignout(...)`
 - focused launch-state seams that consume existing plans, payload build requests, or action sequences
 

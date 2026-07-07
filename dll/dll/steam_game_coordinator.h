@@ -368,9 +368,8 @@ public:
         // Must be active, same lobby, AND this server GC must be the lobby owner.
         // On a PLAYER machine, the server GC may sync the same lobby_id from generic
         // lobby metadata, but it is NOT the owner -- only the HOST's server GC is.
-        if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id != lobby_id) return false;
         uint64 local_sid = settings ? settings->get_local_steam_id().ConvertToUint64() : 0;
-        return local_sid != 0 && GBE_local_lobby.owner_steam_id == local_sid;
+        return gbe::dota_lobby_state::is_active_lobby_owned_by_local_user(GBE_local_lobby, lobby_id, local_sid);
     }
 
     const std::vector<Econ_Item> &get_items() { return items; }

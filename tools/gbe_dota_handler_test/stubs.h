@@ -1079,8 +1079,8 @@ public:
     // server-GC-forward code path unless the test explicitly enables it.
     bool GBE_HasActiveServerLobby(uint64 lobby_id) const
     {
-        (void)lobby_id;
-        return m_test_has_active_server_lobby;
+        return m_test_has_active_server_lobby &&
+            (m_test_active_server_lobby_id == 0ull || m_test_active_server_lobby_id == lobby_id);
     }
     bool GBE_HostHasActiveDotaServerLobby(uint64 lobby_id) const
     {
@@ -1311,7 +1311,17 @@ public:
     std::string serialize_item_to_gcprotobuf(const Econ_Item &item, CSteamID steam_id) { return item_to_gcprotobuf(item, steam_id); }
 
     // --- Test-only controls ---
-    void test_set_active_server_lobby(bool v) { m_test_has_active_server_lobby = v; }
+    void test_set_active_server_lobby(bool v)
+    {
+        m_test_has_active_server_lobby = v;
+        if (!v)
+            m_test_active_server_lobby_id = 0ull;
+    }
+    void test_set_active_server_lobby_id(uint64 lobby_id)
+    {
+        m_test_has_active_server_lobby = lobby_id != 0ull;
+        m_test_active_server_lobby_id = lobby_id;
+    }
     void test_set_next_lobby_capture(const GBE_LocalLobby &lobby)
     {
         m_test_next_lobby_capture = lobby;
@@ -1398,6 +1408,7 @@ public:
 
 private:
     bool m_test_has_active_server_lobby = false;
+    uint64 m_test_active_server_lobby_id = 0;
     bool m_test_has_next_lobby_capture = false;
     GBE_LocalLobby m_test_next_lobby_capture{};
 };

@@ -781,6 +781,17 @@ bool build_reconnect_context(const GBE_LocalLobby &local, GBE_DotaReconnectConte
     return true;
 }
 
+bool is_active_lobby_owned_by_local_user(
+    const GBE_LocalLobby &lobby,
+    std::uint64_t lobby_id,
+    std::uint64_t local_steam_id)
+{
+    return lobby.active &&
+        lobby.lobby_id == lobby_id &&
+        local_steam_id != 0ull &&
+        lobby.owner_steam_id == local_steam_id;
+}
+
 ReconnectEligibilityDecision compute_reconnect_eligibility_decision(
     bool source_valid,
     bool active,
