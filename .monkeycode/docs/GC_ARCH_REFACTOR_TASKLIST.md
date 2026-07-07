@@ -16,9 +16,9 @@
 
 ## 第一轮
 
-- [ ] 1. 将 `Steam_Game_Coordinator` 明确为 GC 基础设施入口
-  - 收敛职责说明，后续 handler 只负责消息入口和流程编排。
-  - 让 Dota lobby 生命周期逻辑进入 planner/domain 层。
+- [x] 1. 将 `Steam_Game_Coordinator` 明确为 GC 基础设施入口
+  - [x] 收敛职责说明，后续 handler 只负责消息入口和流程编排。
+  - [x] 让 Dota lobby 生命周期逻辑进入 planner/domain 层。
 
 - [x] 2. 改造 `GBE_PushDotaLaunchStateToClientPeer` 为样板路径
   - [x] 建立完整 launch push context，集中收集 source lobby、target、shared snapshot、captured lobby、last pushed game state。
