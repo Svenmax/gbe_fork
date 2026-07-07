@@ -86,9 +86,10 @@
   - [x] 建立 teardown plan，统一表达 shared state clear、local lobby clear 的状态转移。
   - [x] 保持 25、7010、shared state clear、generic lobby leave 的时序稳定。
 
-- [ ] 11. 为 teardown 路径补强测试护栏
+- [x] 11. 为 teardown 路径补强测试护栏
   - [x] 扩展 `game_flow` replay fixture，覆盖 abandon、normal signout、lobby leave、postgame channel leave、postgame 7014、postgame 7010 的 wire 摘要。
   - [x] 增加 action-list 单测，覆盖 cache unsubscribe、pending reset、postgame join、shared state clear、normal signout finalize、abandon finalize 的 action 顺序。
+  - [x] 确认 handler smoke 覆盖 host/client shared state：server-owned postgame 保留、mismatched server lobby 清理、host-client arcade 优先级。
 
 - [ ] 12. 第二轮检查点
   - 运行 `tools/run_gc_verification.sh`。
