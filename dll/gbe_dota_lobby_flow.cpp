@@ -1,5 +1,7 @@
 #include "gbe_dota_lobby_flow.h"
 
+#include "gbe_dota_protocol_constants.h"
+
 #include <algorithm>
 #include <climits>
 #include <cstdlib>
@@ -161,6 +163,30 @@ LaunchStateCapturedLobbyInput captured_lobby_input_from_local_lobby(
         lobby.match_id};
 }
 
+LaunchStatePushPlanInput launch_state_push_plan_input_from_context(
+    const LaunchStatePushContext &context)
+{
+    LaunchStatePushPlanInput input{};
+    input.source_lobby_suppressed = context.source_lobby_suppressed;
+    input.source_is_server = context.source_is_server;
+    input.client_peer_available = context.client_peer_available;
+    input.target_available = context.target_available;
+    input.target_is_server = context.target_is_server;
+    input.target_is_dota_profile = context.target_is_dota_profile;
+    input.shared_lobby_suppressed = context.shared_lobby_suppressed;
+    input.captured_lobby_active = context.captured_lobby_active;
+    input.lobby_state = context.captured_lobby.state;
+    input.lobby_game_state = context.captured_lobby.game_state;
+    input.lobby_server_id = context.captured_lobby.server_id;
+    input.lobby_connect_available = !context.captured_lobby.connect.empty();
+    input.last_pushed_game_state = context.last_pushed_game_state;
+    input.target_local_steam_id = context.target_local_steam_id;
+    input.lobby_owner_steam_id = context.captured_lobby.owner_steam_id;
+    input.lobby_lan = context.captured_lobby.lan;
+    input.lobby_match_id = context.captured_lobby.match_id;
+    return input;
+}
+
 void apply_captured_lobby_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateCapturedLobbyInput &lobby,
@@ -238,6 +264,12 @@ LaunchStatePushPlan plan_launch_state_push(
     return plan;
 }
 
+LaunchStatePushPlan plan_launch_state_push(
+    const LaunchStatePushContext &context)
+{
+    return plan_launch_state_push(launch_state_push_plan_input_from_context(context));
+}
+
 std::vector<LaunchStatePushAction> launch_state_push_actions(
     const LaunchStatePushPlan &plan)
 {
@@ -256,6 +288,50 @@ std::vector<LaunchStatePushAction> launch_state_push_actions(
     if (plan.set_last_game_state)
         actions.push_back(LaunchStatePushAction::SetLastGameState);
 
+    return actions;
+}
+
+GBE_DotaActionList launch_state_push_action_list(
+    const LaunchStatePushPlan &plan)
+{
+    GBE_DotaActionList actions;
+    for (LaunchStatePushAction action : launch_state_push_actions(plan)) {
+        switch (action) {
+            case LaunchStatePushAction::RecordCacheSubscription:
+                actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LobbyCacheSubscriptionRecord });
+                break;
+            case LaunchStatePushAction::PushCacheSubscribed:
+                actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaCacheSubscribed | GBE_kProtoMask });
+                break;
+            case LaunchStatePushAction::PushDetailsUpdate:
+                actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask });
+                break;
+            case LaunchStatePushAction::ReapplyRichPresence:
+                actions.push_back(GBE_DotaAction{ GBE_DotaActionType::RichPresenceUpdate });
+                break;
+            case LaunchStatePushAction::SetLastGameState:
+                actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LaunchStateGameStateRecord });
+                break;
+        }
+    }
+    return actions;
+}
+
+GBE_DotaActionList create_lobby_action_list(
+    const CreateLobbyActionPlan &plan,
+    bool wrapped)
+{
+    GBE_DotaActionList actions;
+    if (plan.unsubscribe_previous_practice_lobby)
+        actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaCacheUnsubscribed | GBE_kProtoMask });
+
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LobbyLocalMemberData, 0u, std::string(), 0ull, 0ull, 0ull, "7038_create" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::SettingsLobbySync, 0u, std::string(), 0ull, 0ull, 0ull, "7038_create" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LobbySnapshotRefresh, 0u, std::string(), 0ull, 0ull, 0ull, "7038_create" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LobbyMetadataPublish, 0u, std::string(), 0ull, 0ull, 0ull, "7038_create" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LobbyCacheSubscriptionRecord, 0u, std::string(), 0ull, 0ull, 0ull, wrapped ? "7038_create_wrapped" : "7038_create_direct" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaCacheSubscribed | GBE_kProtoMask, std::string(), 0ull, 0ull, 0ull, "7038_24" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaPracticeLobbyResponse | GBE_kProtoMask, std::string(), 0ull, 0ull, 0ull, "7038_7055" });
     return actions;
 }
 

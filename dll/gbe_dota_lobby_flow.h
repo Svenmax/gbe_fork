@@ -5,6 +5,7 @@
 #include "gbe_dota_lobby_snapshot.h"
 #include "gbe_dota_lobby_state.h"
 #include "gbe_dota_types.h"
+#include "gbe_dota_action_model.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -92,6 +93,26 @@ struct LaunchStatePushPlanInput
     std::uint64_t lobby_match_id{};
 };
 
+struct LaunchStatePushContext
+{
+    bool source_lobby_suppressed{};
+    bool source_is_server{};
+    bool client_peer_available{};
+    bool target_available{};
+    bool target_is_server{};
+    bool target_is_dota_profile{};
+    bool shared_lobby_suppressed{};
+    bool captured_lobby_active{};
+    GBE_LocalLobby captured_lobby{};
+    std::uint32_t last_pushed_game_state{};
+    std::uint64_t target_local_steam_id{};
+};
+
+struct CreateLobbyActionPlan
+{
+    bool unsubscribe_previous_practice_lobby{};
+};
+
 struct LaunchStateCapturedLobbyInput
 {
     bool active{};
@@ -154,6 +175,9 @@ LaunchStateCapturedLobbyInput captured_lobby_input_from_local_lobby(
     const GBE_LocalLobby &lobby,
     bool captured_active);
 
+LaunchStatePushPlanInput launch_state_push_plan_input_from_context(
+    const LaunchStatePushContext &context);
+
 void apply_captured_lobby_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateCapturedLobbyInput &lobby,
@@ -209,8 +233,18 @@ struct LaunchStatePushPlan
 LaunchStatePushPlan plan_launch_state_push(
     const LaunchStatePushPlanInput &input);
 
+LaunchStatePushPlan plan_launch_state_push(
+    const LaunchStatePushContext &context);
+
 std::vector<LaunchStatePushAction> launch_state_push_actions(
     const LaunchStatePushPlan &plan);
+
+GBE_DotaActionList launch_state_push_action_list(
+    const LaunchStatePushPlan &plan);
+
+GBE_DotaActionList create_lobby_action_list(
+    const CreateLobbyActionPlan &plan,
+    bool wrapped);
 
 std::vector<LaunchStatePayloadBuild> launch_state_payload_builds(
     const LaunchStatePushPlan &plan);

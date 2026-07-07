@@ -282,6 +282,16 @@ bool test_launch_state_push_planner()
     ok &= expect_eq_action(actions[3], gbe::dota_lobby_flow::LaunchStatePushAction::ReapplyRichPresence, "planner fourth action reapplies rich presence");
     ok &= expect_eq_action(actions[4], gbe::dota_lobby_flow::LaunchStatePushAction::SetLastGameState, "planner fifth action updates last game state");
 
+    GBE_DotaActionList action_list = gbe::dota_lobby_flow::launch_state_push_action_list(plan);
+    ok &= expect_eq_u64(action_list.size(), 5u, "planner unified action count");
+    ok &= expect_true(action_list[0].type == GBE_DotaActionType::LobbyCacheSubscriptionRecord, "planner unified first action records cache subscription");
+    ok &= expect_true(action_list[1].type == GBE_DotaActionType::PushIncomingNow, "planner unified second action pushes cache subscribed");
+    ok &= expect_eq_u64(action_list[1].emsg, 24u | 0x80000000u, "planner unified second action emsg");
+    ok &= expect_true(action_list[2].type == GBE_DotaActionType::PushIncomingNow, "planner unified third action pushes details update");
+    ok &= expect_eq_u64(action_list[2].emsg, 26u | 0x80000000u, "planner unified third action emsg");
+    ok &= expect_true(action_list[3].type == GBE_DotaActionType::RichPresenceUpdate, "planner unified fourth action reapplies rich presence");
+    ok &= expect_true(action_list[4].type == GBE_DotaActionType::LaunchStateGameStateRecord, "planner unified fifth action updates last game state");
+
     std::vector<gbe::dota_lobby_flow::LaunchStatePayloadBuild> builds = gbe::dota_lobby_flow::launch_state_payload_builds(plan);
     ok &= expect_eq_u64(builds.size(), 2u, "planner payload build count");
     ok &= expect_eq_payload_build(builds[0], gbe::dota_lobby_flow::LaunchStatePayloadBuild::CacheSubscribed, "planner first payload build creates cache subscribed");
@@ -310,6 +320,92 @@ bool test_launch_state_push_planner()
     ok &= expect_eq_u64(builds.size(), 0u, "planner skipped payload build count");
     build_requests = gbe::dota_lobby_flow::launch_state_payload_build_requests(plan);
     ok &= expect_eq_u64(build_requests.size(), 0u, "planner skipped payload build request count");
+    action_list = gbe::dota_lobby_flow::launch_state_push_action_list(plan);
+    ok &= expect_eq_u64(action_list.size(), 0u, "planner skipped unified action count");
+
+    return ok;
+}
+
+bool test_launch_state_push_context_mapping()
+{
+    bool ok = true;
+
+    gbe::dota_lobby_flow::LaunchStatePushContext context{};
+    context.source_is_server = true;
+    context.client_peer_available = true;
+    context.target_available = true;
+    context.target_is_server = false;
+    context.target_is_dota_profile = true;
+    context.captured_lobby_active = true;
+    context.captured_lobby.state = 2u;
+    context.captured_lobby.game_state = 3u;
+    context.captured_lobby.server_id = 99ull;
+    context.captured_lobby.owner_steam_id = 10ull;
+    context.captured_lobby.lan = true;
+    context.captured_lobby.match_id = 123ull;
+    context.last_pushed_game_state = 2u;
+    context.target_local_steam_id = 10ull;
+
+    gbe::dota_lobby_flow::LaunchStatePushPlanInput input = gbe::dota_lobby_flow::launch_state_push_plan_input_from_context(context);
+    ok &= expect_true(input.source_is_server, "context mapping source server");
+    ok &= expect_true(input.client_peer_available, "context mapping client peer available");
+    ok &= expect_true(input.target_available, "context mapping target available");
+    ok &= expect_true(!input.target_is_server, "context mapping target client");
+    ok &= expect_true(input.target_is_dota_profile, "context mapping target dota profile");
+    ok &= expect_true(input.captured_lobby_active, "context mapping captured lobby active");
+    ok &= expect_eq_u64(input.lobby_state, 2u, "context mapping lobby state");
+    ok &= expect_eq_u64(input.lobby_game_state, 3u, "context mapping lobby game state");
+    ok &= expect_eq_u64(input.lobby_server_id, 99ull, "context mapping server id");
+    ok &= expect_true(!input.lobby_connect_available, "context mapping missing connect");
+    ok &= expect_eq_u64(input.last_pushed_game_state, 2u, "context mapping last pushed game state");
+    ok &= expect_eq_u64(input.target_local_steam_id, 10ull, "context mapping target local steam id");
+    ok &= expect_eq_u64(input.lobby_owner_steam_id, 10ull, "context mapping owner steam id");
+    ok &= expect_true(input.lobby_lan, "context mapping lan flag");
+    ok &= expect_eq_u64(input.lobby_match_id, 123ull, "context mapping match id");
+
+    gbe::dota_lobby_flow::LaunchStatePushPlan plan = gbe::dota_lobby_flow::plan_launch_state_push(context);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::None, "context mapping planner push");
+    ok &= expect_true(plan.preserve_server_id, "context mapping planner preserves server id");
+
+    context.captured_lobby.server_id = 0ull;
+    context.captured_lobby.connect = "127.0.0.1:27015";
+    input = gbe::dota_lobby_flow::launch_state_push_plan_input_from_context(context);
+    ok &= expect_true(input.lobby_connect_available, "context mapping connect endpoint");
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(context);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::None, "context mapping connect planner push");
+
+    return ok;
+}
+
+bool test_create_lobby_action_list()
+{
+    bool ok = true;
+
+    GBE_DotaActionList actions = gbe::dota_lobby_flow::create_lobby_action_list(gbe::dota_lobby_flow::CreateLobbyActionPlan{}, true);
+    ok &= expect_eq_u64(actions.size(), 7u, "create action count");
+    ok &= expect_true(actions[0].type == GBE_DotaActionType::LobbyLocalMemberData, "create first action publishes local member data");
+    ok &= expect_true(actions[0].reason == "7038_create", "create local member reason");
+    ok &= expect_true(actions[1].type == GBE_DotaActionType::SettingsLobbySync, "create second action syncs settings");
+    ok &= expect_true(actions[1].reason == "7038_create", "create settings reason");
+    ok &= expect_true(actions[2].type == GBE_DotaActionType::LobbySnapshotRefresh, "create third action publishes shared lobby");
+    ok &= expect_true(actions[2].reason == "7038_create", "create shared reason");
+    ok &= expect_true(actions[3].type == GBE_DotaActionType::LobbyMetadataPublish, "create fourth action publishes metadata");
+    ok &= expect_true(actions[3].reason == "7038_create", "create metadata reason");
+    ok &= expect_true(actions[4].type == GBE_DotaActionType::LobbyCacheSubscriptionRecord, "create fifth action records cache subscription");
+    ok &= expect_true(actions[4].reason == "7038_create_wrapped", "create wrapped cache record reason");
+    ok &= expect_true(actions[5].type == GBE_DotaActionType::PushIncomingNow, "create sixth action pushes cache subscribed");
+    ok &= expect_eq_u64(actions[5].emsg, 24u | 0x80000000u, "create cache subscribed emsg");
+    ok &= expect_true(actions[5].reason == "7038_24", "create cache subscribed reason");
+    ok &= expect_true(actions[6].type == GBE_DotaActionType::PushIncomingNow, "create seventh action pushes create ack");
+    ok &= expect_eq_u64(actions[6].emsg, 7055u | 0x80000000u, "create ack emsg");
+    ok &= expect_true(actions[6].reason == "7038_7055", "create ack reason");
+
+    actions = gbe::dota_lobby_flow::create_lobby_action_list(gbe::dota_lobby_flow::CreateLobbyActionPlan{true}, false);
+    ok &= expect_eq_u64(actions.size(), 8u, "create action count with previous unsubscribe");
+    ok &= expect_true(actions[0].type == GBE_DotaActionType::PushIncomingNow, "create unsubscribe action first");
+    ok &= expect_eq_u64(actions[0].emsg, 25u | 0x80000000u, "create unsubscribe emsg");
+    ok &= expect_true(actions[5].type == GBE_DotaActionType::LobbyCacheSubscriptionRecord, "create direct cache record after publish block");
+    ok &= expect_true(actions[5].reason == "7038_create_direct", "create direct cache record reason");
 
     return ok;
 }
@@ -1463,6 +1559,8 @@ int main()
     ok &= test_count_remote_lobby_members();
     ok &= test_launch_state_peer_selection();
     ok &= test_launch_state_push_planner();
+    ok &= test_launch_state_push_context_mapping();
+    ok &= test_create_lobby_action_list();
     ok &= test_launch_state_plan_input_source_lobby_mapping();
     ok &= test_launch_state_plan_input_target_mapping();
     ok &= test_launch_state_plan_input_shared_lobby_mapping();

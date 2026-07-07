@@ -87,6 +87,7 @@
 //   LobbyMetadataPublish  reason
 //   LaunchPeripheralReset reason
 //   LobbyCacheSubscriptionRecord reason
+//   LaunchStateGameStateRecord reason
 //   SettingsLobbySync  reason
 //   AbandonedLobbySuppressed lobby_id, reason
 //   LaunchMessagesDiscardedForAbandon reason
@@ -115,6 +116,7 @@ enum class GBE_DotaActionType {
     LobbyMetadataPublish,  // publish generic lobby metadata
     LaunchPeripheralReset, // clear launch peripheral dedupe/callback state
     LobbyCacheSubscriptionRecord, // record cache-subscription payload state
+    LaunchStateGameStateRecord, // record last pushed Dota launch game state
     SettingsLobbySync,   // sync settings lobby from generic lobby metadata
     AbandonedLobbySuppressed, // mark a Dota lobby as abandoned/suppressed
     LaunchMessagesDiscardedForAbandon, // discard queued launch messages during abandon

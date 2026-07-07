@@ -306,6 +306,7 @@ struct RecordedAction
             case GBE_DotaActionType::LobbyMetadataPublish:  return "LobbyMetadataPublish";
             case GBE_DotaActionType::LaunchPeripheralReset: return "LaunchPeripheralReset";
             case GBE_DotaActionType::LobbyCacheSubscriptionRecord: return "LobbyCacheSubscriptionRecord";
+            case GBE_DotaActionType::LaunchStateGameStateRecord: return "LaunchStateGameStateRecord";
             case GBE_DotaActionType::SettingsLobbySync:     return "SettingsLobbySync";
             case GBE_DotaActionType::AbandonedLobbySuppressed: return "AbandonedLobbySuppressed";
             case GBE_DotaActionType::LaunchMessagesDiscardedForAbandon: return "LaunchMessagesDiscardedForAbandon";
