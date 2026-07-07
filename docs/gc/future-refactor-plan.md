@@ -153,7 +153,7 @@ The first helpers should be read-only or behavior-equivalent wrappers, for examp
 - `GBE_ClearSettingsLobbyForDotaSignout(...)`
 - focused launch-state seams that consume existing plans, payload build requests, or action sequences
 
-The point is to make host/client and settings side effects visible without changing their order. Launch-state push decisions, payload build requests, grouped payload builds, and action-sequence execution already have focused coverage and narrow production seams. Remaining launch-state work should wait for a small explicit context around restore, capture, settings reads, or logging.
+The point is to make host/client and settings side effects visible without changing their order. Launch-state push decisions, payload build requests, grouped payload builds, action-sequence execution, and source/target/shared/capture/captured-context mapping already have focused coverage and narrow production seams. A follow-up re-check found that target coordinator choice is already covered by peer-selection and target-mapping tests, while settings and last-pushed reads already enter through captured-context mapping. Remaining launch-state work should wait for a new small explicit context around restore, capture source, or logging.
 
 ### P2/P3. Inventory And Template Replay Data Flow
 

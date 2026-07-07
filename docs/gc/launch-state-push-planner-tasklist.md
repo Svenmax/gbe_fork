@@ -30,7 +30,7 @@ git diff --check
 - [x] 5. Re-evaluate focused launch coordinator harness
   - Add a focused harness only if planner integration leaves a small explicit context for side-effect assertions.
   - Stop if the harness requires broad coordinator construction, protobuf expansion, or handler smoke wrapper linkage expansion.
-  - Decision: defer the harness. The planner covers decision and skip behavior; later passes added source/target/shared/capture/captured-context input mapping, payload build requests, grouped payload builds, and action-sequence execution. Remaining harness work should start only when restore, capture source, settings read source, logging, or coordinator selection has a small explicit context.
+  - Decision: defer the harness. The planner covers decision and skip behavior; later passes added source/target/shared/capture/captured-context input mapping, payload build requests, grouped payload builds, and action-sequence execution. A follow-up re-check found target coordinator choice covered by peer-selection and target-mapping tests, and settings plus last-pushed reads covered as captured-context inputs. Remaining harness work should start only when restore, capture source, or logging has a small explicit context.
 
 - [x] 6. Re-check Dota sub-object extraction readiness
   - Keep extraction deferred unless the launch planner, ownership seams, side-effect ordering, and shared-state mutation boundaries form a small coherent dependency surface.
