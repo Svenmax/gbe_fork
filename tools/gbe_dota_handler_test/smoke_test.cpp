@@ -1510,20 +1510,23 @@ static void test_lobby_normal_signout_pending_clear_resets_state()
     TEST_ASSERT_EQ(tf.gc.GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(), 0u, "normal signout pending lobby id should be cleared");
 
     tf.gc.push_incoming_now(GBE_kDotaCacheUnsubscribed | Steam_Game_Coordinator::protobuf_mask, std::to_string(consumed_lobby_id));
-    tf.gc.GBE_ClearDotaLobbyRuntimeState();
-    tf.gc.GBE_ClearSettingsLobbyForDotaSignout();
+    tf.gc.GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed(consumed_lobby_id, "normal_signout_pending_clear_test");
 
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "normal signout finalize should clear local lobby state after cache unsubscribe");
     TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "normal signout finalize should clear shared lobby state after cache unsubscribe");
     TEST_ASSERT_EQ(tf.gc.GBE_GetLastDotaLaunchStatePushedGameState(), 0u, "normal signout finalize should clear launch-state dedupe after cache unsubscribe");
     TEST_ASSERT_EQ(tf.settings.get_lobby().ConvertToUint64(), 0u, "normal signout finalize should clear settings lobby");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "normal signout finalize should record cache unsubscribe before settings clear");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "normal signout finalize should record cache unsubscribe before local cleanup actions");
     expect_push_action(tf.recorder.actions[0], GBE_kDotaCacheUnsubscribed, "normal signout finalize should push cache unsubscribe first");
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::SettingsLobbyClear, "normal signout settings clear should happen after cache unsubscribe");
     TEST_ASSERT_EQ(tf.recorder.actions[1].item_id, consumed_lobby_id, "normal signout settings clear should preserve consumed lobby id");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LaunchPeripheralReset, "normal signout should reset launch peripheral after settings clear");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::DotaLobbyRuntimeClear, "normal signout should clear shared/local runtime after launch reset");
+    TEST_ASSERT(tf.recorder.actions[3].reason == "normal_signout_pending_clear_test", "normal signout runtime clear reason should be recorded");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].type, GBE_DotaActionType::RichPresenceClear, "normal signout should clear rich presence after runtime clear");
 
     tf.gc.GBE_ClearSettingsLobbyForDotaSignout();
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "settings lobby clear should be a no-op when settings lobby is already empty");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "settings lobby clear should be a no-op when settings lobby is already empty");
 
     ++g_tests_passed;
 }

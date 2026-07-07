@@ -81,6 +81,7 @@
   - [x] 收敛 7040 leave 的 `MarkAbandonedSuppressed`、`PushCacheUnsubscribed`、`ResetGCMemory/LeaveGenericLobby` 到 action list。
   - [x] 收敛 postgame teardown 的 `PushCacheUnsubscribed`、`QueuePostGameJoin`、`ClearPendingReset` 到 action list。
   - [x] 收敛 player postgame observation cleanup 的 `ClearRichPresence`、`ResetLaunchPeripheral`、`ClearDotaLobbyRuntimeState`、`PushCacheUnsubscribed`、`ClearSettingsLobby` 到 action list。
+  - [x] 收敛 normal signout finalize 的 `ClearSettingsLobby`、`ResetLaunchPeripheral`、`ClearDotaLobbyRuntimeState`、`ClearRichPresence`、client `PushCacheUnsubscribed` 到 action list。
   - 建立 teardown plan，继续统一表达 shared state clear、local lobby clear 的状态转移。
   - 保持 25、7010、shared state clear、generic lobby leave 的时序稳定。
 

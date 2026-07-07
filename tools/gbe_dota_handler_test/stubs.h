@@ -55,6 +55,11 @@ GBE_DotaActionList player_postgame_cleanup_action_list(
     const std::string &response_25,
     bool push_cache_unsubscribed,
     const char *reason);
+GBE_DotaActionList normal_signout_finalize_action_list(
+    std::uint64_t lobby_id,
+    const std::string &client_response_25,
+    bool push_client_cache_unsubscribed,
+    const char *reason);
 }
 
 extern GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
@@ -977,6 +982,37 @@ public:
         const uint64 lobby_id = GBE_pending_dota_normal_signout_finalize_lobby_id;
         GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
         return lobby_id;
+    }
+    void GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed(uint64 consumed_lobby_id, const char *reason)
+    {
+        if (gc_profile != GC_PROFILE_DOTA2)
+            return;
+        const uint64 shared_lobby_id = GBE_shared_dota_lobby_state.lobby_id;
+        const uint64 lobby_id = consumed_lobby_id != 0 ? consumed_lobby_id : shared_lobby_id;
+        for (const GBE_DotaAction &action : gbe::dota_lobby_flow::normal_signout_finalize_action_list(
+                 lobby_id,
+                 std::string(),
+                 false,
+                 reason ? reason : "unknown")) {
+            switch (action.type) {
+                case GBE_DotaActionType::SettingsLobbyClear:
+                    GBE_ClearSettingsLobbyForDotaSignout();
+                    break;
+                case GBE_DotaActionType::LaunchPeripheralReset:
+                    GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+                    break;
+                case GBE_DotaActionType::DotaLobbyRuntimeClear:
+                    if (g_action_recorder)
+                        g_action_recorder->record_dota_lobby_runtime_clear(action.reason.c_str());
+                    GBE_ClearDotaLobbyRuntimeState();
+                    break;
+                case GBE_DotaActionType::RichPresenceClear:
+                    GBE_ClearDotaPracticeLobbyLaunchRichPresence();
+                    break;
+                default:
+                    break;
+            }
+        }
     }
     void GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed()
     {
