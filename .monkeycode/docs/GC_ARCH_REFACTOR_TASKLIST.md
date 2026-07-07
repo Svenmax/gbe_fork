@@ -52,11 +52,13 @@
 - [ ] 6. 改造 `GBE_HandleDotaPracticeLobbyJoinRequest`
   - 建立 join lobby context，集中 request lobby id、pass key、matched generic lobby、当前 local lobby、settings sync 状态读取。
   - 抽出 join lobby merge plan，决定 JoinLobby、SyncSettingsLobby、pass key 更新、local lobby 合并。
-  - 将 JoinLobby、publish、record cache subscription、push 24、push 7113 收敛到 action list。
-  - 保持 join path 顺序为 `24 -> 7113`。
+  - [x] 将 JoinLobby、SyncSettingsLobby、publish、record cache subscription、push 24、push 7113 收敛到 join action list。
+  - [x] 保持 join path 顺序为 `24 -> 7113`。
 
 - [ ] 7. 为 join lobby 补强测试护栏
-  - 增加 smoke test，覆盖 matched generic lobby、empty local lobby、pass key、`24 -> 7113` 顺序。
+  - [x] 增加 action list 单测，覆盖 direct join、matched generic lobby、无 join response 的 `24` only 顺序。
+  - [x] 保持 smoke test 覆盖 matched generic lobby 和 `24 -> 7113` 顺序。
+  - 增加 smoke test，覆盖 empty local lobby、pass key。
 
 - [ ] 8. 第一轮检查点
   - 运行 `tools/run_gc_verification.sh`。

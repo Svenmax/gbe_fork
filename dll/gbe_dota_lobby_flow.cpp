@@ -335,6 +335,25 @@ GBE_DotaActionList create_lobby_action_list(
     return actions;
 }
 
+GBE_DotaActionList join_lobby_action_list(
+    const JoinLobbyActionPlan &plan,
+    bool wrapped)
+{
+    GBE_DotaActionList actions;
+    if (plan.matched_generic_lobby) {
+        actions.push_back(GBE_DotaAction{ GBE_DotaActionType::GenericLobbyJoin, 0u, std::string(), 0ull, plan.generic_lobby_id, 0ull, "7044_join_generic" });
+        actions.push_back(GBE_DotaAction{ GBE_DotaActionType::SettingsLobbySync, 0u, std::string(), 0ull, 0ull, 0ull, "7044_join_generic" });
+    }
+
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LobbyLocalMemberData, 0u, std::string(), 0ull, 0ull, 0ull, "7044_join" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LobbySnapshotRefresh, 0u, std::string(), 0ull, 0ull, 0ull, "7044_join" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LobbyCacheSubscriptionRecord, 0u, std::string(), 0ull, 0ull, 0ull, wrapped ? "7044_join_wrapped" : "7044_join_direct" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaCacheSubscribed | GBE_kProtoMask, std::string(), 0ull, 0ull, 0ull, "7044_join_24" });
+    if (plan.send_join_response)
+        actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaPracticeLobbyJoinResponse | GBE_kProtoMask, std::string(), 0ull, 0ull, 0ull, "7044_join_7113" });
+    return actions;
+}
+
 std::vector<LaunchStatePayloadBuild> launch_state_payload_builds(
     const LaunchStatePushPlan &plan)
 {

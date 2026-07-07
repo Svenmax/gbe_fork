@@ -410,6 +410,44 @@ bool test_create_lobby_action_list()
     return ok;
 }
 
+bool test_join_lobby_action_list()
+{
+    bool ok = true;
+
+    GBE_DotaActionList actions = gbe::dota_lobby_flow::join_lobby_action_list(gbe::dota_lobby_flow::JoinLobbyActionPlan{false, true, 0ull}, false);
+    ok &= expect_eq_u64(actions.size(), 5u, "join direct action count");
+    ok &= expect_true(actions[0].type == GBE_DotaActionType::LobbyLocalMemberData, "join direct first action publishes local member data");
+    ok &= expect_true(actions[0].reason == "7044_join", "join direct local member reason");
+    ok &= expect_true(actions[1].type == GBE_DotaActionType::LobbySnapshotRefresh, "join direct second action publishes shared lobby");
+    ok &= expect_true(actions[1].reason == "7044_join", "join direct shared reason");
+    ok &= expect_true(actions[2].type == GBE_DotaActionType::LobbyCacheSubscriptionRecord, "join direct third action records cache subscription");
+    ok &= expect_true(actions[2].reason == "7044_join_direct", "join direct cache record reason");
+    ok &= expect_true(actions[3].type == GBE_DotaActionType::PushIncomingNow, "join direct fourth action pushes cache subscribed");
+    ok &= expect_eq_u64(actions[3].emsg, 24u | 0x80000000u, "join direct cache subscribed emsg");
+    ok &= expect_true(actions[3].reason == "7044_join_24", "join direct cache subscribed reason");
+    ok &= expect_true(actions[4].type == GBE_DotaActionType::PushIncomingNow, "join direct fifth action pushes join ack");
+    ok &= expect_eq_u64(actions[4].emsg, 7113u | 0x80000000u, "join direct ack emsg");
+    ok &= expect_true(actions[4].reason == "7044_join_7113", "join direct ack reason");
+
+    actions = gbe::dota_lobby_flow::join_lobby_action_list(gbe::dota_lobby_flow::JoinLobbyActionPlan{true, true, 0x704400u}, true);
+    ok &= expect_eq_u64(actions.size(), 7u, "join matched generic action count");
+    ok &= expect_true(actions[0].type == GBE_DotaActionType::GenericLobbyJoin, "join matched first action joins generic lobby");
+    ok &= expect_eq_u64(actions[0].item_id, 0x704400u, "join matched generic lobby id");
+    ok &= expect_true(actions[0].reason == "7044_join_generic", "join matched generic join reason");
+    ok &= expect_true(actions[1].type == GBE_DotaActionType::SettingsLobbySync, "join matched second action syncs settings");
+    ok &= expect_true(actions[1].reason == "7044_join_generic", "join matched settings sync reason");
+    ok &= expect_true(actions[4].type == GBE_DotaActionType::LobbyCacheSubscriptionRecord, "join matched records cache after publish block");
+    ok &= expect_true(actions[4].reason == "7044_join_wrapped", "join matched wrapped cache record reason");
+    ok &= expect_eq_u64(actions[5].emsg, 24u | 0x80000000u, "join matched cache subscribed emsg");
+    ok &= expect_eq_u64(actions[6].emsg, 7113u | 0x80000000u, "join matched ack emsg");
+
+    actions = gbe::dota_lobby_flow::join_lobby_action_list(gbe::dota_lobby_flow::JoinLobbyActionPlan{false, false, 0ull}, false);
+    ok &= expect_eq_u64(actions.size(), 4u, "join without ack action count");
+    ok &= expect_eq_u64(actions[3].emsg, 24u | 0x80000000u, "join without ack only pushes cache subscribed");
+
+    return ok;
+}
+
 bool test_launch_state_plan_input_source_lobby_mapping()
 {
     bool ok = true;
@@ -1561,6 +1599,7 @@ int main()
     ok &= test_launch_state_push_planner();
     ok &= test_launch_state_push_context_mapping();
     ok &= test_create_lobby_action_list();
+    ok &= test_join_lobby_action_list();
     ok &= test_launch_state_plan_input_source_lobby_mapping();
     ok &= test_launch_state_plan_input_target_mapping();
     ok &= test_launch_state_plan_input_shared_lobby_mapping();

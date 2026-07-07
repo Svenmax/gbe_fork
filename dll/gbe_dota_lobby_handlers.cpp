@@ -846,10 +846,31 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
         GBE_kDotaTeamPlayerPool);
     GBE_local_lobby = join_plan.lobby;
 
+    const GBE_DotaActionList join_actions = gbe::dota_lobby_flow::join_lobby_action_list(
+        gbe::dota_lobby_flow::JoinLobbyActionPlan{
+            matched_generic_lobby,
+            send_join_response,
+            matched_generic_lobby_id.ConvertToUint64()},
+        wrapped);
+    std::size_t join_action_index = 0u;
+
     if (matched_generic_lobby) {
-        if (steam_client && steam_client->steam_matchmaking)
-            steam_client->steam_matchmaking->JoinLobby(matched_generic_lobby_id);
-        GBE_SyncSettingsLobbyFromGenericLobby("7044_join_generic");
+        for (; join_action_index < join_actions.size(); ++join_action_index) {
+            const GBE_DotaAction &action = join_actions[join_action_index];
+            if (action.type == GBE_DotaActionType::LobbyLocalMemberData)
+                break;
+            switch (action.type) {
+                case GBE_DotaActionType::GenericLobbyJoin:
+                    if (steam_client && steam_client->steam_matchmaking)
+                        steam_client->steam_matchmaking->JoinLobby(CSteamID(static_cast<uint64>(action.item_id)));
+                    break;
+                case GBE_DotaActionType::SettingsLobbySync:
+                    GBE_SyncSettingsLobbyFromGenericLobby(action.reason.c_str());
+                    break;
+                default:
+                    break;
+            }
+        }
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] 7044 matched generic custom metadata lobby_id=%llu generic_lobby_id=%llu custom_game_id=%llu custom_mode=%s custom_map=%s state=%u game_state=%u match_id=%llu server_id=%llu connect=%s",
@@ -869,8 +890,21 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
 
     if (request.has_pass_key)
         GBE_local_lobby.pass_key = request.pass_key;
-    GBE_PublishDotaPracticeLobbyLocalMemberData("7044_join");
-    GBE_PublishSharedDotaLobbyState("7044_join");
+    for (; join_action_index < join_actions.size(); ++join_action_index) {
+        const GBE_DotaAction &action = join_actions[join_action_index];
+        if (action.type == GBE_DotaActionType::LobbyCacheSubscriptionRecord)
+            break;
+        switch (action.type) {
+            case GBE_DotaActionType::LobbyLocalMemberData:
+                GBE_PublishDotaPracticeLobbyLocalMemberData(action.reason.c_str());
+                break;
+            case GBE_DotaActionType::LobbySnapshotRefresh:
+                GBE_PublishSharedDotaLobbyState(action.reason.c_str());
+                break;
+            default:
+                break;
+        }
+    }
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -926,13 +960,34 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
         return true;
     }
 
-    GBE_RecordDotaLobbyCacheSubscriptionState(response_24, wrapped ? "7044_join_wrapped" : "7044_join_direct");
-    push_incoming_now(outbound_24.emsg, outbound_24.payload);
-    GBE_LogDotaResponsePacket("7044_join_24", GBE_kDotaCacheSubscribed, wrapped, response_24, outbound_24.payload, GBE_local_lobby.lobby_id, GBE_local_lobby.state, GBE_local_lobby.game_state);
-    if (send_join_response) {
-        push_incoming_now(outbound_7113.emsg, outbound_7113.payload);
-        GBE_LogDotaResponsePacket("7044_join_7113", GBE_kDotaPracticeLobbyJoinResponse, wrapped, response_7113, outbound_7113.payload, GBE_local_lobby.lobby_id, GBE_local_lobby.state, GBE_local_lobby.game_state);
+    for (; join_action_index < join_actions.size(); ++join_action_index) {
+        const GBE_DotaAction &action = join_actions[join_action_index];
+        if (action.type == GBE_DotaActionType::PushIncomingNow &&
+                action.emsg == (GBE_kDotaPracticeLobbyJoinResponse | GBE_kProtoMask))
+            break;
+        switch (action.type) {
+            case GBE_DotaActionType::LobbyCacheSubscriptionRecord:
+                GBE_RecordDotaLobbyCacheSubscriptionState(response_24, action.reason.c_str());
+                break;
+            case GBE_DotaActionType::PushIncomingNow:
+                if (action.emsg == (GBE_kDotaCacheSubscribed | GBE_kProtoMask))
+                    push_incoming_now(outbound_24.emsg, outbound_24.payload);
+                break;
+            default:
+                break;
+        }
     }
+    GBE_LogDotaResponsePacket("7044_join_24", GBE_kDotaCacheSubscribed, wrapped, response_24, outbound_24.payload, GBE_local_lobby.lobby_id, GBE_local_lobby.state, GBE_local_lobby.game_state);
+    if (join_action_index < join_actions.size()) {
+        const GBE_DotaAction &action = join_actions[join_action_index];
+        if (action.type == GBE_DotaActionType::PushIncomingNow &&
+                action.emsg == (GBE_kDotaPracticeLobbyJoinResponse | GBE_kProtoMask)) {
+            push_incoming_now(outbound_7113.emsg, outbound_7113.payload);
+            ++join_action_index;
+        }
+    }
+    if (send_join_response)
+        GBE_LogDotaResponsePacket("7044_join_7113", GBE_kDotaPracticeLobbyJoinResponse, wrapped, response_7113, outbound_7113.payload, GBE_local_lobby.lobby_id, GBE_local_lobby.state, GBE_local_lobby.game_state);
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",

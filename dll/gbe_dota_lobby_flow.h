@@ -113,6 +113,13 @@ struct CreateLobbyActionPlan
     bool unsubscribe_previous_practice_lobby{};
 };
 
+struct JoinLobbyActionPlan
+{
+    bool matched_generic_lobby{};
+    bool send_join_response{};
+    std::uint64_t generic_lobby_id{};
+};
+
 struct LaunchStateCapturedLobbyInput
 {
     bool active{};
@@ -244,6 +251,10 @@ GBE_DotaActionList launch_state_push_action_list(
 
 GBE_DotaActionList create_lobby_action_list(
     const CreateLobbyActionPlan &plan,
+    bool wrapped);
+
+GBE_DotaActionList join_lobby_action_list(
+    const JoinLobbyActionPlan &plan,
     bool wrapped);
 
 std::vector<LaunchStatePayloadBuild> launch_state_payload_builds(

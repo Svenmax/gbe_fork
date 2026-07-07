@@ -80,6 +80,7 @@
 //   NetworkBroadcast      (no fields)
 //   LobbySnapshotRefresh  reason
 //   GenericLobbyLeave     lobby_id
+//   GenericLobbyJoin      lobby_id
 //   RichPresenceUpdate    status, lobby_state, include_party, include_lobby
 //   RichPresenceClear     reason
 //   LaunchPersonaState    status, lobby_state, include_party, include_lobby, reason
@@ -108,6 +109,7 @@ enum class GBE_DotaActionType {
     NetworkBroadcast,      // broadcast to all gameservers
     LobbySnapshotRefresh,  // replay private lobby snapshot (reason)
     GenericLobbyLeave,     // leave local generic lobby during lifecycle cleanup
+    GenericLobbyJoin,      // join matched generic lobby during join flow
     SettingsLobbyClear,    // clear settings lobby during signout cleanup
     RichPresenceUpdate,    // update Dota launch rich presence
     RichPresenceClear,     // clear Dota launch rich presence
