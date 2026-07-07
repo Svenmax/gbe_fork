@@ -303,6 +303,7 @@ struct RecordedAction
             case GBE_DotaActionType::LaunchPersonaState:    return "LaunchPersonaState";
             case GBE_DotaActionType::LobbyLocalMemberData:  return "LobbyLocalMemberData";
             case GBE_DotaActionType::LobbyMetadataPublish:  return "LobbyMetadataPublish";
+            case GBE_DotaActionType::LaunchPeripheralReset: return "LaunchPeripheralReset";
         }
         return "Unknown";
     }
@@ -521,6 +522,14 @@ public:
     {
         RecordedAction a;
         a.type = GBE_DotaActionType::LobbyMetadataPublish;
+        a.reason = reason ? reason : "";
+        actions.push_back(std::move(a));
+    }
+
+    void record_launch_peripheral_reset(const char *reason)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::LaunchPeripheralReset;
         a.reason = reason ? reason : "";
         actions.push_back(std::move(a));
     }
@@ -1174,7 +1183,11 @@ public:
             GBE_PushDotaResponse(7014u, std::string("postgame_teardown"), wrapped, outer_session_field_raw, "postgame_teardown_7014");
         return true;
     }
-    void GBE_ResetDotaPracticeLobbyLaunchPeripheralState() {}
+    void GBE_ResetDotaPracticeLobbyLaunchPeripheralState()
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_launch_peripheral_reset("launch_peripheral_reset");
+    }
     void GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(const char *status, const char *lobby_state, bool include_party, bool include_lobby, const char *reason)
     {
         if (g_action_recorder)

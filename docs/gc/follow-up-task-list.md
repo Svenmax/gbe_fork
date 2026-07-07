@@ -302,6 +302,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `LobbyLocalMemberData` and `LobbyMetadataPublish` to the handler action recorder, strengthened 7046 set-details coverage to assert local member data, shared-state publish, metadata publish, then details update order, and strengthened 8053 finished-loading coverage to assert local member data before shared-state publish.
   - Stop condition: no production publish helper was introduced; this pass only records existing side-effect order and reasons.
 
+- [x] Launch peripheral reset recorder coverage pass.
+  - Goal: make launch peripheral reset visible before any launch lifecycle helper grows around 7041.
+  - Result: added `LaunchPeripheralReset` to the handler action recorder and strengthened the 7041 standard launch smoke test to prove peripheral reset happens before shared-lobby publish, initial details `26`, rich presence update, and persona-state metadata build.
+  - Stop condition: no production reset behavior changed and no launch coordinator linkage was expanded.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

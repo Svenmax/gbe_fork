@@ -1183,22 +1183,23 @@ static void test_lobby_launch_updates_rich_presence_after_initial_details()
     bool result = tf.gc.GBE_HandleDotaPracticeLobbyLaunchRequest(body, false, nullptr, false, 0u);
 
     TEST_ASSERT(result, "7041 launch handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 4u, "7041 standard launch should publish, push initial details, update rich presence, then build persona state");
-    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "7041 should publish shared lobby state first");
-    TEST_ASSERT(tf.recorder.actions[0].reason == "7041_launch_init", "7041 publish reason should be preserved");
-    expect_push_payload(tf.recorder.actions[1], GBE_kDotaPracticeLobbyDetailsUpdate, "7041 should push initial details before rich presence");
-    TEST_ASSERT(tf.recorder.actions[1].reason == "7041_initial_26", "7041 initial details reason should be preserved");
-    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::RichPresenceUpdate, "7041 should update rich presence after initial details");
-    TEST_ASSERT(tf.recorder.actions[2].status == "#DOTA_RP_INIT", "7041 rich presence status should be preserved");
-    TEST_ASSERT(tf.recorder.actions[2].lobby_state == "SERVERSETUP", "7041 rich presence lobby state should be preserved");
-    TEST_ASSERT(!tf.recorder.actions[2].include_party, "7041 rich presence should clear party state");
-    TEST_ASSERT(tf.recorder.actions[2].include_lobby, "7041 rich presence should include lobby");
-    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::LaunchPersonaState, "7041 should build persona state after rich presence");
-    TEST_ASSERT(tf.recorder.actions[3].status == "#DOTA_RP_INIT", "7041 persona status should be preserved");
-    TEST_ASSERT(tf.recorder.actions[3].lobby_state == "SERVERSETUP", "7041 persona lobby state should be preserved");
-    TEST_ASSERT(!tf.recorder.actions[3].include_party, "7041 persona state should clear party state");
-    TEST_ASSERT(tf.recorder.actions[3].include_lobby, "7041 persona state should include lobby");
-    TEST_ASSERT(tf.recorder.actions[3].reason == "7041_launch_init", "7041 persona reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "7041 standard launch should reset peripherals, publish, push initial details, update rich presence, then build persona state");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LaunchPeripheralReset, "7041 should reset launch peripheral state first");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "7041 should publish shared lobby state after peripheral reset");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7041_launch_init", "7041 publish reason should be preserved");
+    expect_push_payload(tf.recorder.actions[2], GBE_kDotaPracticeLobbyDetailsUpdate, "7041 should push initial details before rich presence");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7041_initial_26", "7041 initial details reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::RichPresenceUpdate, "7041 should update rich presence after initial details");
+    TEST_ASSERT(tf.recorder.actions[3].status == "#DOTA_RP_INIT", "7041 rich presence status should be preserved");
+    TEST_ASSERT(tf.recorder.actions[3].lobby_state == "SERVERSETUP", "7041 rich presence lobby state should be preserved");
+    TEST_ASSERT(!tf.recorder.actions[3].include_party, "7041 rich presence should clear party state");
+    TEST_ASSERT(tf.recorder.actions[3].include_lobby, "7041 rich presence should include lobby");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].type, GBE_DotaActionType::LaunchPersonaState, "7041 should build persona state after rich presence");
+    TEST_ASSERT(tf.recorder.actions[4].status == "#DOTA_RP_INIT", "7041 persona status should be preserved");
+    TEST_ASSERT(tf.recorder.actions[4].lobby_state == "SERVERSETUP", "7041 persona lobby state should be preserved");
+    TEST_ASSERT(!tf.recorder.actions[4].include_party, "7041 persona state should clear party state");
+    TEST_ASSERT(tf.recorder.actions[4].include_lobby, "7041 persona state should include lobby");
+    TEST_ASSERT(tf.recorder.actions[4].reason == "7041_launch_init", "7041 persona reason should be preserved");
 
     ++g_tests_passed;
 }

@@ -84,6 +84,7 @@
 //   LaunchPersonaState    status, lobby_state, include_party, include_lobby, reason
 //   LobbyLocalMemberData  reason
 //   LobbyMetadataPublish  reason
+//   LaunchPeripheralReset reason
 
 #ifndef GBE_DOTA_ACTION_MODEL_H
 #define GBE_DOTA_ACTION_MODEL_H
@@ -106,6 +107,7 @@ enum class GBE_DotaActionType {
     LaunchPersonaState,    // build Dota launch persona state metadata
     LobbyLocalMemberData,  // publish local member data to generic lobby
     LobbyMetadataPublish,  // publish generic lobby metadata
+    LaunchPeripheralReset, // clear launch peripheral dedupe/callback state
 };
 
 struct GBE_DotaAction {
