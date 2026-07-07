@@ -33,6 +33,10 @@ namespace gbe::dota_gc_router {
 struct DotaGcRequestContext;
 }
 
+namespace gbe::dota_lobby_flow {
+struct LaunchStatePayloadBuildRequest;
+}
+
 class Steam_User_Items;
 class Steam_GameServer_Items;
 struct GCMsgHdr_t;
@@ -219,6 +223,7 @@ public ISteamGameCoordinator
     void GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(const char *reason);
     bool GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message, bool preserve_server_id = false);
     bool GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message, bool preserve_server_id = false);
+    bool GBE_BuildDotaLaunchStatePayload(const gbe::dota_lobby_flow::LaunchStatePayloadBuildRequest &request, const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message);
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message);
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &player_name, std::string &message);
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message);

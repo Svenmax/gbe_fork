@@ -314,6 +314,22 @@ bool Steam_Game_Coordinator::GBE_TryAdvanceDotaLaunchToRun(const char *note, uin
 }
 
 
+bool Steam_Game_Coordinator::GBE_BuildDotaLaunchStatePayload(
+    const gbe::dota_lobby_flow::LaunchStatePayloadBuildRequest &request,
+    const GBE_LocalLobby &lobby,
+    const std::string &player_name,
+    std::string &message)
+{
+    switch (request.build) {
+        case gbe::dota_lobby_flow::LaunchStatePayloadBuild::CacheSubscribed:
+            return GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(lobby, player_name, message, request.preserve_server_id);
+        case gbe::dota_lobby_flow::LaunchStatePayloadBuild::DetailsUpdate:
+            return GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, player_name, message, request.preserve_server_id);
+    }
+    return false;
+}
+
+
 void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *reason)
 {
     if (GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
@@ -422,8 +438,10 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
         return;
     }
 
+    const std::vector<gbe::dota_lobby_flow::LaunchStatePayloadBuildRequest> build_requests = gbe::dota_lobby_flow::launch_state_payload_build_requests(plan);
+
     std::string response_24;
-    if (!target->GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(lobby, target->GBE_GetDotaLobbyOwnerName(), response_24, plan.preserve_server_id)) {
+    if (!target->GBE_BuildDotaLaunchStatePayload(build_requests[0], lobby, target->GBE_GetDotaLobbyOwnerName(), response_24)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "failed building launch state 24 for client reason=%s target=%p lobby_id=%llu state=%u game_state=%u server_id=%llu",
@@ -438,7 +456,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
     }
 
     std::string response_26;
-    if (!target->GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, target->GBE_GetDotaLobbyOwnerName(), response_26, plan.preserve_server_id)) {
+    if (!target->GBE_BuildDotaLaunchStatePayload(build_requests[1], lobby, target->GBE_GetDotaLobbyOwnerName(), response_26)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "failed building launch state 26 for client reason=%s target=%p lobby_id=%llu state=%u game_state=%u server_id=%llu",
