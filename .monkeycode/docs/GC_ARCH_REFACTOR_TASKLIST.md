@@ -87,7 +87,7 @@
   - [x] 保持 25、7010、shared state clear、generic lobby leave 的时序稳定。
 
 - [ ] 11. 为 teardown 路径补强测试护栏
-  - 增加 replay fixture，覆盖 abandon、postgame channel leave、normal signout、host/client shared state。
+  - [x] 扩展 `game_flow` replay fixture，覆盖 abandon、normal signout、lobby leave、postgame channel leave、postgame 7014、postgame 7010 的 wire 摘要。
   - [x] 增加 action-list 单测，覆盖 cache unsubscribe、pending reset、postgame join、shared state clear、normal signout finalize、abandon finalize 的 action 顺序。
 
 - [ ] 12. 第二轮检查点
