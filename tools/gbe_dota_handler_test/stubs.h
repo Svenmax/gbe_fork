@@ -49,6 +49,14 @@
 // which provides GBE_DotaReconnectContext, GBE_SharedDotaLobbyState, etc.
 #include "dll/gbe_dota_lobby_state.h"
 
+namespace gbe::dota_lobby_flow {
+GBE_DotaActionList player_postgame_cleanup_action_list(
+    std::uint64_t lobby_id,
+    const std::string &response_25,
+    bool push_cache_unsubscribed,
+    const char *reason);
+}
+
 extern GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 bool GBE_HasSharedDotaLobbyState();
 uint64_t GBE_GetSharedDotaLobbyIdOrZero();
@@ -316,6 +324,7 @@ struct RecordedAction
             case GBE_DotaActionType::LobbyCacheSubscriptionRecord: return "LobbyCacheSubscriptionRecord";
             case GBE_DotaActionType::LaunchStateGameStateRecord: return "LaunchStateGameStateRecord";
             case GBE_DotaActionType::SettingsLobbySync:     return "SettingsLobbySync";
+            case GBE_DotaActionType::DotaLobbyRuntimeClear: return "DotaLobbyRuntimeClear";
             case GBE_DotaActionType::AbandonedLobbySuppressed: return "AbandonedLobbySuppressed";
             case GBE_DotaActionType::LaunchMessagesDiscardedForAbandon: return "LaunchMessagesDiscardedForAbandon";
             case GBE_DotaActionType::PendingResetAfterCacheUnsubscribed: return "PendingResetAfterCacheUnsubscribed";
@@ -484,6 +493,14 @@ public:
     {
         RecordedAction a;
         a.type = GBE_DotaActionType::LobbySnapshotRefresh;
+        a.reason = reason ? reason : "";
+        actions.push_back(std::move(a));
+    }
+
+    void record_dota_lobby_runtime_clear(const char *reason)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::DotaLobbyRuntimeClear;
         a.reason = reason ? reason : "";
         actions.push_back(std::move(a));
     }
@@ -1231,11 +1248,34 @@ public:
             std::string response_26;
             if (GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, true))
                 push_incoming_now(26u | protobuf_mask, response_26);
-            GBE_ClearDotaPracticeLobbyLaunchRichPresence();
-            GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-            GBE_ClearDotaLobbyRuntimeState();
-            push_incoming_now(25u | protobuf_mask, std::to_string(cleaning_lobby_id));
-            GBE_ClearSettingsLobbyForDotaSignout();
+            const std::string response_25 = std::to_string(cleaning_lobby_id);
+            for (const GBE_DotaAction &action : gbe::dota_lobby_flow::player_postgame_cleanup_action_list(
+                     cleaning_lobby_id,
+                     response_25,
+                     true,
+                     reason ? reason : "generic_lobby_members_changed")) {
+                switch (action.type) {
+                    case GBE_DotaActionType::RichPresenceClear:
+                        GBE_ClearDotaPracticeLobbyLaunchRichPresence();
+                        break;
+                    case GBE_DotaActionType::LaunchPeripheralReset:
+                        GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+                        break;
+                    case GBE_DotaActionType::DotaLobbyRuntimeClear:
+                        if (g_action_recorder)
+                            g_action_recorder->record_dota_lobby_runtime_clear(action.reason.c_str());
+                        GBE_ClearDotaLobbyRuntimeState();
+                        break;
+                    case GBE_DotaActionType::PushIncomingNow:
+                        push_incoming_now(action.emsg, action.payload);
+                        break;
+                    case GBE_DotaActionType::SettingsLobbyClear:
+                        GBE_ClearSettingsLobbyForDotaSignout();
+                        break;
+                    default:
+                        break;
+                }
+            }
             return true;
         }
 

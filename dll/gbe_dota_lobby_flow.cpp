@@ -189,6 +189,23 @@ GBE_DotaActionList postgame_teardown_action_list(
     return actions;
 }
 
+GBE_DotaActionList player_postgame_cleanup_action_list(
+    std::uint64_t lobby_id,
+    const std::string &response_25,
+    bool push_cache_unsubscribed,
+    const char *reason)
+{
+    GBE_DotaActionList actions;
+    const std::string action_reason = reason ? reason : std::string();
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::RichPresenceClear, 0u, std::string(), 0ull, 0ull, 0ull, "clear_launch_rich_presence" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LaunchPeripheralReset, 0u, std::string(), 0ull, 0ull, 0ull, "launch_peripheral_reset" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::DotaLobbyRuntimeClear, 0u, std::string(), 0ull, 0ull, 0ull, action_reason });
+    if (push_cache_unsubscribed)
+        actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25, 0ull, lobby_id, 0ull, action_reason });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::SettingsLobbyClear, 0u, std::string(), 0ull, lobby_id, 0ull, action_reason });
+    return actions;
+}
+
 void preserve_lobby_owner_transfer_slots(
     std::vector<GBE_DotaLobbyMemberState> &members,
     const std::vector<GBE_DotaLobbyMemberState> &previous_members,

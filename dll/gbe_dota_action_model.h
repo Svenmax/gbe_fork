@@ -92,6 +92,8 @@
 //   LobbyCacheSubscriptionRecord reason
 //   LaunchStateGameStateRecord reason
 //   SettingsLobbySync  reason
+//   SettingsLobbyClear item_id, reason
+//   DotaLobbyRuntimeClear reason
 //   AbandonedLobbySuppressed lobby_id, reason
 //   LaunchMessagesDiscardedForAbandon reason
 //   PendingResetAfterCacheUnsubscribed lobby_id
@@ -127,6 +129,7 @@ enum class GBE_DotaActionType {
     LobbyCacheSubscriptionRecord, // record cache-subscription payload state
     LaunchStateGameStateRecord, // record last pushed Dota launch game state
     SettingsLobbySync,   // sync settings lobby from generic lobby metadata
+    DotaLobbyRuntimeClear, // clear local Dota lobby state and shared runtime snapshot
     AbandonedLobbySuppressed, // mark a Dota lobby as abandoned/suppressed
     LaunchMessagesDiscardedForAbandon, // discard queued launch messages during abandon
     PendingResetAfterCacheUnsubscribed, // defer full reset until cache unsubscribe is observed

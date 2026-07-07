@@ -1644,6 +1644,7 @@ static void setup_postgame_observation_lobby(
     tf.gc.GBE_local_lobby.owner_steam_id = owner_steam_id;
     tf.gc.GBE_local_lobby.owner_account_id = owner_account_id;
     tf.gc.GBE_local_lobby.owner_name = owner_name;
+    tf.settings.set_lobby(CSteamID(lobby_id));
 
     GBE_shared_dota_lobby_state.valid = true;
     GBE_shared_dota_lobby_state.active = true;
@@ -1727,11 +1728,13 @@ static void test_lobby_host_client_postgame_observation_ignores_mismatched_serve
     TEST_ASSERT(result, "mismatched server lobby should still report handled runtime change");
     TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "mismatched server lobby should not preserve shared state");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "mismatched server lobby should run player cleanup");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 4u, "mismatched server lobby should run player cleanup sequence");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 6u, "mismatched server lobby should run player cleanup sequence");
     expect_push_action(tf.recorder.actions[0], GBE_kDotaPracticeLobbyDetailsUpdate, "mismatched server cleanup should push postgame details first");
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::RichPresenceClear, "mismatched server cleanup should clear rich presence after details update");
     TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LaunchPeripheralReset, "mismatched server cleanup should reset launch peripheral after rich presence clear");
-    expect_push_action(tf.recorder.actions[3], GBE_kDotaCacheUnsubscribed, "mismatched server cleanup should push cache unsubscribe after cleanup");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::DotaLobbyRuntimeClear, "mismatched server cleanup should clear shared/local runtime after launch reset");
+    expect_push_action(tf.recorder.actions[4], GBE_kDotaCacheUnsubscribed, "mismatched server cleanup should push cache unsubscribe after cleanup");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].type, GBE_DotaActionType::SettingsLobbyClear, "mismatched server cleanup should clear settings lobby after cache unsubscribe");
 
     ++g_tests_passed;
 }
@@ -1749,12 +1752,16 @@ static void test_lobby_player_postgame_observation_clears_shared_state_after_det
     TEST_ASSERT(result, "player postgame observation should run cleanup");
     TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "player postgame cleanup should clear shared state");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "player postgame cleanup should clear local lobby");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 4u, "player postgame cleanup should push details, clear launch state, then cache unsubscribe");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 6u, "player postgame cleanup should push details, clear local state, then cache unsubscribe and settings lobby");
     expect_push_action(tf.recorder.actions[0], GBE_kDotaPracticeLobbyDetailsUpdate, "player cleanup should push postgame details first");
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::RichPresenceClear, "player cleanup should clear rich presence after details update");
     TEST_ASSERT(tf.recorder.actions[1].reason == "clear_launch_rich_presence", "player cleanup rich presence clear reason should be recorded");
     TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LaunchPeripheralReset, "player cleanup should reset launch peripheral state after rich presence clear");
-    expect_push_action(tf.recorder.actions[3], GBE_kDotaCacheUnsubscribed, "player cleanup should push cache unsubscribe after cleanup");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::DotaLobbyRuntimeClear, "player cleanup should clear shared/local runtime state after launch reset");
+    TEST_ASSERT(tf.recorder.actions[3].reason == "player_postgame_observation_test", "player cleanup runtime clear reason should be recorded");
+    expect_push_action(tf.recorder.actions[4], GBE_kDotaCacheUnsubscribed, "player cleanup should push cache unsubscribe after cleanup");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].type, GBE_DotaActionType::SettingsLobbyClear, "player cleanup should clear settings lobby after cache unsubscribe");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].item_id, 0x5102u, "player cleanup should clear the observed settings lobby id");
 
     ++g_tests_passed;
 }

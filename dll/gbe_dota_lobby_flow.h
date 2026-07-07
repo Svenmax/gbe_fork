@@ -113,6 +113,12 @@ GBE_DotaActionList postgame_teardown_action_list(
     bool push_postgame_join,
     const char *reason);
 
+GBE_DotaActionList player_postgame_cleanup_action_list(
+    std::uint64_t lobby_id,
+    const std::string &response_25,
+    bool push_cache_unsubscribed,
+    const char *reason);
+
 void apply_lobby_member_team_slot_update(
     std::vector<GBE_DotaLobbyMemberState> &members,
     std::uint64_t steam_id,
