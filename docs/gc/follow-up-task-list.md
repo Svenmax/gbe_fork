@@ -324,8 +324,8 @@ The checklist above records the first follow-up pass and includes several "decid
 
 - [x] Queued launch discard recorder coverage pass.
   - Goal: make queued launch message discard visible before wrapping abandon teardown side effects.
-  - Result: added `LaunchMessagesDiscardedForAbandon` to the handler action recorder and strengthened the ready-for-abandon teardown smoke test to prove queued launch messages are discarded before abandoned-lobby suppression and postgame `7014` response.
-  - Stop condition: no production discard behavior changed and arcade launch-failure coverage remains deferred until a focused launch-failure path is available.
+  - Result: added `LaunchMessagesDiscardedForAbandon` to the handler action recorder, strengthened the ready-for-abandon teardown smoke test to prove queued launch messages are discarded before abandoned-lobby suppression and postgame `7014` response, and added an arcade launch-failure smoke test proving discard, suppression, then cache-unsubscribed `25` order with pending reset recorded.
+  - Stop condition: no production discard behavior changed and no launch coordinator linkage was expanded.
 
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.

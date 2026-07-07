@@ -934,6 +934,36 @@ static void test_lobby_abandon_current_game_disconnect_queues_25()
     ++g_tests_passed;
 }
 
+static void test_lobby_abandon_arcade_launch_failure_discards_before_25()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.is_server = false;
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x703500u;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 2u;
+    tf.gc.GBE_local_lobby.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+    tf.gc.GBE_local_lobby.custom_game.game_id = 0x7035BEEFu;
+    tf.gc.GBE_local_lobby.owner_connected = false;
+    tf.gc.GBE_ClearPendingResetAfterCacheUnsubscribed();
+
+    bool result = tf.gc.GBE_HandleDotaAbandonCurrentGameRequest(false, nullptr);
+
+    TEST_ASSERT(result, "arcade launch failure abandon should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "arcade launch failure should discard, suppress, then queue 25");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LaunchMessagesDiscardedForAbandon, "arcade launch failure should discard queued launch messages before suppression");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7035_arcade_launch_failed_before_connect", "arcade launch failure discard reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::AbandonedLobbySuppressed, "arcade launch failure should suppress abandoned lobby before 25");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].item_id, 0x703500u, "arcade launch failure suppression should target current lobby id");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7035_arcade_launch_failed_before_connect", "arcade launch failure suppression reason should be preserved");
+    expect_push_payload(tf.recorder.actions[2], GBE_kDotaCacheUnsubscribed, "arcade launch failure should queue 25 after suppression");
+    TEST_ASSERT(tf.gc.GBE_HasPendingResetAfterCacheUnsubscribed(), "arcade launch failure should mark reset pending");
+    TEST_ASSERT_EQ(GBE_pending_reset_after_cache_unsubscribed_lobby_id, 0x703500u, "arcade launch failure pending reset should record lobby id");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_leave_queues_25_then_clears_local_lobby()
 {
     TestFixture tf;
@@ -1898,6 +1928,9 @@ int main()
 
     std::printf("[run] test_lobby_abandon_current_game_disconnect_queues_25\n");
     RUN_TEST(test_lobby_abandon_current_game_disconnect_queues_25);
+
+    std::printf("[run] test_lobby_abandon_arcade_launch_failure_discards_before_25\n");
+    RUN_TEST(test_lobby_abandon_arcade_launch_failure_discards_before_25);
 
     std::printf("[run] test_lobby_leave_queues_25_then_clears_local_lobby\n");
     RUN_TEST(test_lobby_leave_queues_25_then_clears_local_lobby);
