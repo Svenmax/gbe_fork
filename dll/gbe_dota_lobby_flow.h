@@ -141,6 +141,8 @@ struct JoinLobbyContext
     GBE_LocalLobby current_lobby{};
     bool request_has_lobby_id{};
     std::uint64_t request_lobby_id{};
+    bool request_has_pass_key{};
+    std::string request_pass_key;
     bool matched_generic_lobby{};
     GBE_LocalLobby matched_lobby{};
     std::uint64_t matched_generic_lobby_id{};

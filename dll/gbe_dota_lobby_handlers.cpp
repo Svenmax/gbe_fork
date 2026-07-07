@@ -851,6 +851,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
     join_context.current_lobby = GBE_local_lobby;
     join_context.request_has_lobby_id = request.has_lobby_id;
     join_context.request_lobby_id = request.lobby_id;
+    join_context.request_has_pass_key = request.has_pass_key;
+    join_context.request_pass_key = request.pass_key;
     join_context.matched_generic_lobby = matched_generic_lobby;
     join_context.matched_lobby = matched_lobby;
     join_context.matched_generic_lobby_id = matched_generic_lobby_id.ConvertToUint64();
@@ -903,8 +905,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
 
     const GBE_DotaLobbyMemberState &local_member = join_plan.local_member;
 
-    if (request.has_pass_key)
-        GBE_local_lobby.pass_key = request.pass_key;
     for (; join_action_index < join_actions.size(); ++join_action_index) {
         const GBE_DotaAction &action = join_actions[join_action_index];
         if (action.type == GBE_DotaActionType::LobbyCacheSubscriptionRecord)

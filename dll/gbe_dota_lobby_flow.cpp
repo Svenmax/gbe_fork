@@ -308,6 +308,8 @@ gbe::dota_lobby_state::JoinLobbyMergePlan join_lobby_merge_plan_from_context(
         context.current_lobby,
         join_has_lobby_id,
         join_lobby_id,
+        context.request_has_pass_key,
+        context.request_pass_key,
         context.matched_generic_lobby,
         context.matched_lobby,
         context.local_steam_id,

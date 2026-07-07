@@ -465,11 +465,14 @@ bool test_join_lobby_context_mapping()
     gbe::dota_lobby_flow::JoinLobbyContext context{};
     context.request_has_lobby_id = true;
     context.request_lobby_id = 0x704400ull;
+    context.request_has_pass_key = true;
+    context.request_pass_key = "context-pass";
     context.matched_generic_lobby = true;
     context.matched_lobby.active = true;
     context.matched_lobby.lobby_id = 0x704400ull;
     context.matched_lobby.generic_lobby_id = 0x7044BEEFull;
     context.matched_lobby.room_name = "join-context-room";
+    context.matched_lobby.pass_key = "matched-pass";
     context.matched_lobby.owner_steam_id = 0x700ull;
     context.matched_lobby.owner_account_id = 70u;
     context.matched_lobby.owner_name = "join-owner";
@@ -487,6 +490,7 @@ bool test_join_lobby_context_mapping()
     ok &= expect_eq_u64(merge_plan.lobby.lobby_id, 0x704400ull, "join context merge lobby id");
     ok &= expect_eq_u64(merge_plan.lobby.generic_lobby_id, 0x7044BEEFull, "join context merge generic lobby id");
     ok &= expect_true(merge_plan.lobby.room_name == "join-context-room", "join context merge room name");
+    ok &= expect_true(merge_plan.lobby.pass_key == "context-pass", "join context request pass key wins");
     ok &= expect_eq_u64(merge_plan.local_member.steam_id, 0x800ull, "join context local member steam id");
     ok &= expect_eq_u64(merge_plan.local_member.account_id, 80u, "join context local member account id");
 

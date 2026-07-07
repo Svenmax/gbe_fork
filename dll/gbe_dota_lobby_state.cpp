@@ -142,6 +142,8 @@ JoinLobbyMergePlan compose_join_lobby_merge_plan(
     const GBE_LocalLobby &current_lobby,
     bool has_request_lobby_id,
     std::uint64_t request_lobby_id,
+    bool has_request_pass_key,
+    const std::string &request_pass_key,
     bool matched_generic_lobby,
     const GBE_LocalLobby &matched_lobby,
     std::uint64_t local_steam_id,
@@ -234,6 +236,8 @@ JoinLobbyMergePlan compose_join_lobby_merge_plan(
             break;
         }
     }
+    if (has_request_pass_key)
+        plan.lobby.pass_key = request_pass_key;
     plan.lobby.seen_local_in_generic_lobby = plan.seen_local_in_generic_lobby;
     dota_lobby_flow::upsert_lobby_member(plan.lobby.members, plan.local_member);
     return plan;

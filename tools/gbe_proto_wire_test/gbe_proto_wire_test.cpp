@@ -1753,6 +1753,8 @@ bool test_dota_lobby_state_helpers()
         GBE_LocalLobby{},
         true,
         matched_lobby.lobby_id,
+        false,
+        std::string(),
         true,
         matched_lobby,
         800ull,
@@ -1775,6 +1777,8 @@ bool test_dota_lobby_state_helpers()
         GBE_LocalLobby{},
         true,
         0x1234ull,
+        true,
+        std::string("fallback-pass"),
         false,
         GBE_LocalLobby{},
         900ull,
@@ -1786,6 +1790,7 @@ bool test_dota_lobby_state_helpers()
     ok &= expect_eq_u64(fallback_join_plan.lobby.lobby_id, 0x1234ull, "join merge fallback lobby id");
     ok &= expect_eq_u64(fallback_join_plan.lobby.owner_steam_id, 900ull, "join merge fallback owner steam id");
     ok &= expect_eq_string(fallback_join_plan.lobby.owner_name, "fallback-owner", "join merge fallback owner name");
+    ok &= expect_eq_string(fallback_join_plan.lobby.pass_key, "fallback-pass", "join merge fallback request pass key");
     ok &= expect_eq_u64(fallback_join_plan.lobby.game_mode, 2u, "join merge fallback game mode");
     ok &= expect_eq_u64(fallback_join_plan.lobby.server_region, 15u, "join merge fallback server region");
     ok &= expect_true(fallback_join_plan.lobby.allow_spectating, "join merge fallback spectating");
@@ -1796,6 +1801,8 @@ bool test_dota_lobby_state_helpers()
         seen_lobby,
         false,
         0ull,
+        false,
+        std::string(),
         false,
         GBE_LocalLobby{},
         900ull,
