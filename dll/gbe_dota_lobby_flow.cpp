@@ -270,6 +270,33 @@ LaunchStatePushPlan plan_launch_state_push(
     return plan_launch_state_push(launch_state_push_plan_input_from_context(context));
 }
 
+gbe::dota_lobby_state::CreateLobbyResetPlan create_lobby_reset_plan_from_context(
+    const CreateLobbyContext &context)
+{
+    return gbe::dota_lobby_state::compose_create_lobby_reset_plan(
+        context.previous_lobby,
+        context.pre_reset_custom_game);
+}
+
+gbe::dota_lobby_state::CreateLobbyPlan create_lobby_state_plan_from_context(
+    const CreateLobbyContext &context)
+{
+    return gbe::dota_lobby_state::compose_create_lobby_plan(
+        context.request,
+        context.new_lobby_id,
+        context.owner_steam_id,
+        context.owner_account_id,
+        context.owner_name,
+        context.owner_team,
+        context.owner_slot);
+}
+
+CreateLobbyActionPlan create_lobby_action_plan_from_reset_plan(
+    const gbe::dota_lobby_state::CreateLobbyResetPlan &reset_plan)
+{
+    return CreateLobbyActionPlan{reset_plan.unsubscribe_previous_practice_lobby};
+}
+
 std::vector<LaunchStatePushAction> launch_state_push_actions(
     const LaunchStatePushPlan &plan)
 {

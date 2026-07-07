@@ -6,9 +6,11 @@
 #include "gbe_dota_lobby_state.h"
 #include "gbe_dota_types.h"
 #include "gbe_dota_action_model.h"
+#include "gbe_proto_wire.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace gbe::dota_lobby_flow {
@@ -111,6 +113,20 @@ struct LaunchStatePushContext
 struct CreateLobbyActionPlan
 {
     bool unsubscribe_previous_practice_lobby{};
+};
+
+struct CreateLobbyContext
+{
+    GBE_LocalLobby previous_lobby{};
+    GBE_DotaCustomGameDetails pre_reset_custom_game{};
+    gbe::proto_wire::DotaPracticeLobbyCreateRequest request{};
+    bool parsed_request{};
+    std::uint64_t new_lobby_id{};
+    std::uint64_t owner_steam_id{};
+    std::uint32_t owner_account_id{};
+    std::string owner_name;
+    std::uint32_t owner_team{};
+    std::uint32_t owner_slot{};
 };
 
 struct JoinLobbyActionPlan
@@ -252,6 +268,15 @@ GBE_DotaActionList launch_state_push_action_list(
 GBE_DotaActionList create_lobby_action_list(
     const CreateLobbyActionPlan &plan,
     bool wrapped);
+
+gbe::dota_lobby_state::CreateLobbyResetPlan create_lobby_reset_plan_from_context(
+    const CreateLobbyContext &context);
+
+gbe::dota_lobby_state::CreateLobbyPlan create_lobby_state_plan_from_context(
+    const CreateLobbyContext &context);
+
+CreateLobbyActionPlan create_lobby_action_plan_from_reset_plan(
+    const gbe::dota_lobby_state::CreateLobbyResetPlan &reset_plan);
 
 GBE_DotaActionList join_lobby_action_list(
     const JoinLobbyActionPlan &plan,

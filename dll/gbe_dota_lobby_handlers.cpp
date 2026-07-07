@@ -414,9 +414,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, pre_reset_custom_game);
     }
 
-    const gbe::dota_lobby_state::CreateLobbyResetPlan reset_plan = gbe::dota_lobby_state::compose_create_lobby_reset_plan(GBE_local_lobby, pre_reset_custom_game);
+    GBE_DotaPracticeLobbyCreateRequest request{};
+    const bool parsed_create_request = gbe::proto_wire::parse_dota_practice_lobby_create_body(reinterpret_cast<const uint8 *>(request_body.data()), request_body.size(), request);
+
+    gbe::dota_lobby_flow::CreateLobbyContext create_context{};
+    create_context.previous_lobby = GBE_local_lobby;
+    create_context.pre_reset_custom_game = pre_reset_custom_game;
+    create_context.request = request;
+    create_context.parsed_request = parsed_create_request;
+    create_context.new_lobby_id = GBE_GenerateDotaLobbyId();
+    create_context.owner_steam_id = settings->get_local_steam_id().ConvertToUint64();
+    create_context.owner_account_id = settings->get_local_steam_id().GetAccountID();
+    create_context.owner_name = std::string(settings->get_local_name());
+    create_context.owner_team = GBE_kDotaTeamGoodGuys;
+    create_context.owner_slot = 1u;
+
+    const gbe::dota_lobby_state::CreateLobbyResetPlan reset_plan = gbe::dota_lobby_flow::create_lobby_reset_plan_from_context(create_context);
     const GBE_DotaActionList create_actions = gbe::dota_lobby_flow::create_lobby_action_list(
-        gbe::dota_lobby_flow::CreateLobbyActionPlan{reset_plan.unsubscribe_previous_practice_lobby},
+        gbe::dota_lobby_flow::create_lobby_action_plan_from_reset_plan(reset_plan),
         wrapped);
     std::size_t create_action_index = 0u;
 
@@ -455,19 +470,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         ++create_action_index;
     }
 
-    GBE_DotaPracticeLobbyCreateRequest request{};
-    const bool parsed_create_request = gbe::proto_wire::parse_dota_practice_lobby_create_body(reinterpret_cast<const uint8 *>(request_body.data()), request_body.size(), request);
-    const gbe::dota_lobby_state::CreateLobbyPlan create_plan = gbe::dota_lobby_state::compose_create_lobby_plan(
-        request,
-        GBE_GenerateDotaLobbyId(),
-        settings->get_local_steam_id().ConvertToUint64(),
-        settings->get_local_steam_id().GetAccountID(),
-        std::string(settings->get_local_name()),
-        GBE_kDotaTeamGoodGuys,
-        1u);
+    const gbe::dota_lobby_state::CreateLobbyPlan create_plan = gbe::dota_lobby_flow::create_lobby_state_plan_from_context(create_context);
     const gbe::dota_lobby_state::CreateLobbyStateApplyPlan state_apply_plan = gbe::dota_lobby_state::compose_create_lobby_state_apply_plan(
         create_plan,
-        parsed_create_request && request.has_lobby_details);
+        create_context.parsed_request && create_context.request.has_lobby_details);
     GBE_local_lobby = state_apply_plan.lobby;
     if (state_apply_plan.normalize_custom_game_details)
         GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, GBE_local_lobby.custom_game);

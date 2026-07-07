@@ -377,6 +377,48 @@ bool test_launch_state_push_context_mapping()
     return ok;
 }
 
+bool test_create_lobby_context_mapping()
+{
+    bool ok = true;
+
+    gbe::dota_lobby_flow::CreateLobbyContext context{};
+    context.previous_lobby.active = true;
+    context.previous_lobby.lobby_id = 0x7000ull;
+    context.previous_lobby.match_id = 0x8000ull;
+    context.pre_reset_custom_game.game_id = 0x9000ull;
+    context.request.has_lobby_details = true;
+    context.request.lobby_details.has_room_name = true;
+    context.request.lobby_details.room_name = "context-room";
+    context.request.lobby_details.has_custom_game_id = true;
+    context.request.lobby_details.custom_game_id = 0x9000ull;
+    context.parsed_request = true;
+    context.new_lobby_id = 0x7100ull;
+    context.owner_steam_id = 0x7200ull;
+    context.owner_account_id = 72u;
+    context.owner_name = "context-owner";
+    context.owner_team = 0u;
+    context.owner_slot = 1u;
+
+    const gbe::dota_lobby_state::CreateLobbyResetPlan reset_plan = gbe::dota_lobby_flow::create_lobby_reset_plan_from_context(context);
+    ok &= expect_true(reset_plan.unsubscribe_previous_practice_lobby, "create context reset unsubscribes previous lobby");
+    ok &= expect_eq_u64(reset_plan.previous_lobby_id, 0x7000ull, "create context reset previous lobby id");
+    ok &= expect_eq_u64(reset_plan.previous_match_id, 0x8000ull, "create context reset previous match id");
+
+    const gbe::dota_lobby_flow::CreateLobbyActionPlan action_plan = gbe::dota_lobby_flow::create_lobby_action_plan_from_reset_plan(reset_plan);
+    ok &= expect_true(action_plan.unsubscribe_previous_practice_lobby, "create context action plan unsubscribe");
+
+    const gbe::dota_lobby_state::CreateLobbyPlan state_plan = gbe::dota_lobby_flow::create_lobby_state_plan_from_context(context);
+    ok &= expect_eq_u64(state_plan.lobby.lobby_id, 0x7100ull, "create context state lobby id");
+    ok &= expect_eq_u64(state_plan.lobby.owner_steam_id, 0x7200ull, "create context state owner steam id");
+    ok &= expect_eq_u64(state_plan.lobby.owner_account_id, 72u, "create context state owner account id");
+    ok &= expect_true(state_plan.lobby.owner_name == "context-owner", "create context state owner name");
+    ok &= expect_true(state_plan.lobby.room_name == "context-room", "create context state room name");
+    ok &= expect_eq_u64(state_plan.lobby.custom_game.game_id, 0x9000ull, "create context state custom game id");
+    ok &= expect_true(state_plan.custom_game_create, "create context state custom flag");
+
+    return ok;
+}
+
 bool test_create_lobby_action_list()
 {
     bool ok = true;
@@ -1604,6 +1646,7 @@ int main()
     ok &= test_launch_state_peer_selection();
     ok &= test_launch_state_push_planner();
     ok &= test_launch_state_push_context_mapping();
+    ok &= test_create_lobby_context_mapping();
     ok &= test_create_lobby_action_list();
     ok &= test_join_lobby_action_list();
     ok &= test_launch_state_plan_input_source_lobby_mapping();
