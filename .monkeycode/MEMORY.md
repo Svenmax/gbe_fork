@@ -44,3 +44,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Context: 用户在 Dota GC 小步开发流程中补充协作偏好
 - Instructions:
   - 当一个小边界改动已完成、验证通过且到达提交闸口时，直接提交该小步，不再等待额外提交授权。
+
+[Dota GC 验证闸口]
+- Date: 2026-07-07
+- Context: Agent 在执行 Dota GC 架构收口和测试护栏补强时发现
+- Category: 测试方法
+- Instructions:
+  - Dota GC 相关改动完成后运行 `tools/run_gc_verification.sh` 作为完整验证闸口。
+  - 该命令覆盖 GC offline tests、replay fixtures、header declaration 审计、source-list inclusion 审计和 handler side-effect seam 审计。
