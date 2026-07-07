@@ -397,6 +397,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `GBE_BuildDotaLaunchStatePayload(...)` as a narrow member helper that delegates each `LaunchStatePayloadBuildRequest` to the existing authoritative cache-subscribed `24` or details-update `26` builder. `GBE_PushDotaLaunchStateToClientPeer(...)` now builds both payloads from the tested request sequence.
   - Stop condition: no response push, cache subscription, rich presence, last-game-state, failure log reason, or harness linkage changed.
 
+- [x] Launch-state production action sequence consumption seam.
+  - Goal: have the production launch-state push tail consume the pure action sequence after payloads are already built.
+  - Result: added `GBE_ExecuteDotaLaunchStatePushActions(...)` to execute cache subscription recording, cache-subscribed push, details-update push, rich-presence reapply, and last-game-state update from `launch_state_push_actions(plan)`.
+  - Stop condition: no target selection, shared-state restore, lobby capture, payload building, response metadata, failure log reason, or harness linkage changed.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

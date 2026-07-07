@@ -330,6 +330,42 @@ bool Steam_Game_Coordinator::GBE_BuildDotaLaunchStatePayload(
 }
 
 
+void Steam_Game_Coordinator::GBE_ExecuteDotaLaunchStatePushActions(
+    const gbe::dota_lobby_flow::LaunchStatePushPlan &plan,
+    const GBE_LocalLobby &lobby,
+    const std::string &response_24,
+    const std::string &response_26,
+    const char *reason)
+{
+    const std::vector<gbe::dota_lobby_flow::LaunchStatePushAction> actions = gbe::dota_lobby_flow::launch_state_push_actions(plan);
+    for (gbe::dota_lobby_flow::LaunchStatePushAction action : actions) {
+        switch (action) {
+            case gbe::dota_lobby_flow::LaunchStatePushAction::RecordCacheSubscription:
+                GBE_RecordDotaLobbyCacheSubscriptionState(response_24, reason ? reason : "push_launch_state_to_client");
+                break;
+            case gbe::dota_lobby_flow::LaunchStatePushAction::PushCacheSubscribed:
+                push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, response_24);
+                break;
+            case gbe::dota_lobby_flow::LaunchStatePushAction::PushDetailsUpdate:
+                push_incoming_now(
+                    GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
+                    response_26,
+                    true,
+                    lobby.state,
+                    lobby.game_state
+                );
+                break;
+            case gbe::dota_lobby_flow::LaunchStatePushAction::ReapplyRichPresence:
+                GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "push_launch_state_to_client");
+                break;
+            case gbe::dota_lobby_flow::LaunchStatePushAction::SetLastGameState:
+                GBE_SetLastDotaLaunchStatePushedGameState(lobby.game_state);
+                break;
+        }
+    }
+}
+
+
 void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *reason)
 {
     if (GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
@@ -470,17 +506,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
         return;
     }
 
-    target->GBE_RecordDotaLobbyCacheSubscriptionState(response_24, reason ? reason : "push_launch_state_to_client");
-    target->push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, response_24);
-    target->push_incoming_now(
-        GBE_kDotaPracticeLobbyDetailsUpdate | GBE_kProtoMask,
-        response_26,
-        true,
-        lobby.state,
-        lobby.game_state
-    );
-    target->GBE_ReapplyDotaPracticeLobbyLaunchRichPresence(reason ? reason : "push_launch_state_to_client");
-    target->GBE_SetLastDotaLaunchStatePushedGameState(lobby.game_state);
+    target->GBE_ExecuteDotaLaunchStatePushActions(plan, lobby, response_24, response_26, reason);
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
