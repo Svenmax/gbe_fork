@@ -420,7 +420,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         wrapped);
     std::size_t create_action_index = 0u;
 
-    ResetGCMemory("7038_create", true, true);
+    if (create_action_index < create_actions.size() &&
+            create_actions[create_action_index].type == GBE_DotaActionType::GcMemoryReset) {
+        ResetGCMemory(create_actions[create_action_index].reason.c_str(), true, true);
+        ++create_action_index;
+    }
 
     if (create_action_index < create_actions.size() &&
             create_actions[create_action_index].type == GBE_DotaActionType::PushIncomingNow &&
@@ -479,17 +483,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     }
 
     Steam_Client *steam_client = get_steam_client();
-    if (steam_client && steam_client->steam_matchmaking) {
-        CSteamID generic_lobby_id = steam_client->steam_matchmaking->CreateLobbyImmediate(k_ELobbyTypeInvisible, 10);
-        if (generic_lobby_id.IsLobby())
-            GBE_local_lobby.generic_lobby_id = generic_lobby_id.ConvertToUint64();
-    }
 
     for (; create_action_index < create_actions.size(); ++create_action_index) {
         const GBE_DotaAction &action = create_actions[create_action_index];
         if (action.type == GBE_DotaActionType::LobbyCacheSubscriptionRecord)
             break;
         switch (action.type) {
+            case GBE_DotaActionType::GenericLobbyCreate:
+                if (steam_client && steam_client->steam_matchmaking) {
+                    CSteamID generic_lobby_id = steam_client->steam_matchmaking->CreateLobbyImmediate(k_ELobbyTypeInvisible, 10);
+                    if (generic_lobby_id.IsLobby())
+                        GBE_local_lobby.generic_lobby_id = generic_lobby_id.ConvertToUint64();
+                }
+                break;
             case GBE_DotaActionType::LobbyLocalMemberData:
                 GBE_PublishDotaPracticeLobbyLocalMemberData(action.reason.c_str());
                 break;

@@ -78,7 +78,9 @@
 //   CallbackItemUpdated   target_steam_id, item_id
 //   ServerGcForward       emsg, target_steam_id         (reason optional)
 //   NetworkBroadcast      (no fields)
+//   GcMemoryReset         reason
 //   LobbySnapshotRefresh  reason
+//   GenericLobbyCreate    reason
 //   GenericLobbyLeave     lobby_id
 //   GenericLobbyJoin      lobby_id
 //   RichPresenceUpdate    status, lobby_state, include_party, include_lobby
@@ -107,7 +109,9 @@ enum class GBE_DotaActionType {
     CallbackItemUpdated,   // notify Steam callback (target_steam_id, item_id)
     ServerGcForward,       // forward to server GC (emsg, target_steam_id)
     NetworkBroadcast,      // broadcast to all gameservers
+    GcMemoryReset,         // reset coordinator GC memory before lifecycle create
     LobbySnapshotRefresh,  // replay private lobby snapshot (reason)
+    GenericLobbyCreate,    // create generic Steam lobby for Dota lobby
     GenericLobbyLeave,     // leave local generic lobby during lifecycle cleanup
     GenericLobbyJoin,      // join matched generic lobby during join flow
     SettingsLobbyClear,    // clear settings lobby during signout cleanup

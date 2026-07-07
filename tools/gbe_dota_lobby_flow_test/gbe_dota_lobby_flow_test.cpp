@@ -382,30 +382,36 @@ bool test_create_lobby_action_list()
     bool ok = true;
 
     GBE_DotaActionList actions = gbe::dota_lobby_flow::create_lobby_action_list(gbe::dota_lobby_flow::CreateLobbyActionPlan{}, true);
-    ok &= expect_eq_u64(actions.size(), 7u, "create action count");
-    ok &= expect_true(actions[0].type == GBE_DotaActionType::LobbyLocalMemberData, "create first action publishes local member data");
-    ok &= expect_true(actions[0].reason == "7038_create", "create local member reason");
-    ok &= expect_true(actions[1].type == GBE_DotaActionType::SettingsLobbySync, "create second action syncs settings");
-    ok &= expect_true(actions[1].reason == "7038_create", "create settings reason");
-    ok &= expect_true(actions[2].type == GBE_DotaActionType::LobbySnapshotRefresh, "create third action publishes shared lobby");
-    ok &= expect_true(actions[2].reason == "7038_create", "create shared reason");
-    ok &= expect_true(actions[3].type == GBE_DotaActionType::LobbyMetadataPublish, "create fourth action publishes metadata");
-    ok &= expect_true(actions[3].reason == "7038_create", "create metadata reason");
-    ok &= expect_true(actions[4].type == GBE_DotaActionType::LobbyCacheSubscriptionRecord, "create fifth action records cache subscription");
-    ok &= expect_true(actions[4].reason == "7038_create_wrapped", "create wrapped cache record reason");
-    ok &= expect_true(actions[5].type == GBE_DotaActionType::PushIncomingNow, "create sixth action pushes cache subscribed");
-    ok &= expect_eq_u64(actions[5].emsg, 24u | 0x80000000u, "create cache subscribed emsg");
-    ok &= expect_true(actions[5].reason == "7038_24", "create cache subscribed reason");
-    ok &= expect_true(actions[6].type == GBE_DotaActionType::PushIncomingNow, "create seventh action pushes create ack");
-    ok &= expect_eq_u64(actions[6].emsg, 7055u | 0x80000000u, "create ack emsg");
-    ok &= expect_true(actions[6].reason == "7038_7055", "create ack reason");
+    ok &= expect_eq_u64(actions.size(), 9u, "create action count");
+    ok &= expect_true(actions[0].type == GBE_DotaActionType::GcMemoryReset, "create first action resets GC memory");
+    ok &= expect_true(actions[0].reason == "7038_create", "create reset reason");
+    ok &= expect_true(actions[1].type == GBE_DotaActionType::GenericLobbyCreate, "create second action creates generic lobby");
+    ok &= expect_true(actions[1].reason == "7038_create", "create generic lobby reason");
+    ok &= expect_true(actions[2].type == GBE_DotaActionType::LobbyLocalMemberData, "create third action publishes local member data");
+    ok &= expect_true(actions[2].reason == "7038_create", "create local member reason");
+    ok &= expect_true(actions[3].type == GBE_DotaActionType::SettingsLobbySync, "create fourth action syncs settings");
+    ok &= expect_true(actions[3].reason == "7038_create", "create settings reason");
+    ok &= expect_true(actions[4].type == GBE_DotaActionType::LobbySnapshotRefresh, "create fifth action publishes shared lobby");
+    ok &= expect_true(actions[4].reason == "7038_create", "create shared reason");
+    ok &= expect_true(actions[5].type == GBE_DotaActionType::LobbyMetadataPublish, "create sixth action publishes metadata");
+    ok &= expect_true(actions[5].reason == "7038_create", "create metadata reason");
+    ok &= expect_true(actions[6].type == GBE_DotaActionType::LobbyCacheSubscriptionRecord, "create seventh action records cache subscription");
+    ok &= expect_true(actions[6].reason == "7038_create_wrapped", "create wrapped cache record reason");
+    ok &= expect_true(actions[7].type == GBE_DotaActionType::PushIncomingNow, "create eighth action pushes cache subscribed");
+    ok &= expect_eq_u64(actions[7].emsg, 24u | 0x80000000u, "create cache subscribed emsg");
+    ok &= expect_true(actions[7].reason == "7038_24", "create cache subscribed reason");
+    ok &= expect_true(actions[8].type == GBE_DotaActionType::PushIncomingNow, "create ninth action pushes create ack");
+    ok &= expect_eq_u64(actions[8].emsg, 7055u | 0x80000000u, "create ack emsg");
+    ok &= expect_true(actions[8].reason == "7038_7055", "create ack reason");
 
     actions = gbe::dota_lobby_flow::create_lobby_action_list(gbe::dota_lobby_flow::CreateLobbyActionPlan{true}, false);
-    ok &= expect_eq_u64(actions.size(), 8u, "create action count with previous unsubscribe");
-    ok &= expect_true(actions[0].type == GBE_DotaActionType::PushIncomingNow, "create unsubscribe action first");
-    ok &= expect_eq_u64(actions[0].emsg, 25u | 0x80000000u, "create unsubscribe emsg");
-    ok &= expect_true(actions[5].type == GBE_DotaActionType::LobbyCacheSubscriptionRecord, "create direct cache record after publish block");
-    ok &= expect_true(actions[5].reason == "7038_create_direct", "create direct cache record reason");
+    ok &= expect_eq_u64(actions.size(), 10u, "create action count with previous unsubscribe");
+    ok &= expect_true(actions[0].type == GBE_DotaActionType::GcMemoryReset, "create reset action before unsubscribe");
+    ok &= expect_true(actions[1].type == GBE_DotaActionType::PushIncomingNow, "create unsubscribe action after reset");
+    ok &= expect_eq_u64(actions[1].emsg, 25u | 0x80000000u, "create unsubscribe emsg");
+    ok &= expect_true(actions[2].type == GBE_DotaActionType::GenericLobbyCreate, "create generic lobby after unsubscribe");
+    ok &= expect_true(actions[7].type == GBE_DotaActionType::LobbyCacheSubscriptionRecord, "create direct cache record after publish block");
+    ok &= expect_true(actions[7].reason == "7038_create_direct", "create direct cache record reason");
 
     return ok;
 }

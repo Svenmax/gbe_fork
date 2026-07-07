@@ -322,9 +322,11 @@ GBE_DotaActionList create_lobby_action_list(
     bool wrapped)
 {
     GBE_DotaActionList actions;
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::GcMemoryReset, 0u, std::string(), 0ull, 0ull, 0ull, "7038_create" });
     if (plan.unsubscribe_previous_practice_lobby)
         actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaCacheUnsubscribed | GBE_kProtoMask });
 
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::GenericLobbyCreate, 0u, std::string(), 0ull, 0ull, 0ull, "7038_create" });
     actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LobbyLocalMemberData, 0u, std::string(), 0ull, 0ull, 0ull, "7038_create" });
     actions.push_back(GBE_DotaAction{ GBE_DotaActionType::SettingsLobbySync, 0u, std::string(), 0ull, 0ull, 0ull, "7038_create" });
     actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LobbySnapshotRefresh, 0u, std::string(), 0ull, 0ull, 0ull, "7038_create" });

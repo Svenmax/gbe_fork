@@ -296,7 +296,9 @@ struct RecordedAction
             case GBE_DotaActionType::CallbackItemUpdated:   return "CallbackItemUpdated";
             case GBE_DotaActionType::ServerGcForward:       return "ServerGcForward";
             case GBE_DotaActionType::NetworkBroadcast:      return "NetworkBroadcast";
+            case GBE_DotaActionType::GcMemoryReset:         return "GcMemoryReset";
             case GBE_DotaActionType::LobbySnapshotRefresh:  return "LobbySnapshotRefresh";
+            case GBE_DotaActionType::GenericLobbyCreate:    return "GenericLobbyCreate";
             case GBE_DotaActionType::GenericLobbyLeave:     return "GenericLobbyLeave";
             case GBE_DotaActionType::GenericLobbyJoin:      return "GenericLobbyJoin";
             case GBE_DotaActionType::SettingsLobbyClear:    return "SettingsLobbyClear";
