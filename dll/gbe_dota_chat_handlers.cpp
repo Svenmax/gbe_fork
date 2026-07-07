@@ -567,7 +567,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
             return true;
         }
 
-        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
+        GBE_ResetDotaPracticeLobbyLaunchRichPresenceToServerSetup();
 
         // During host disconnect from hero selection, the real client can still be unwinding
         // server/game-rules state after postgame chat leaves. Clearing the entire local/generic

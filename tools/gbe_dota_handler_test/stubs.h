@@ -1055,6 +1055,10 @@ public:
         if (g_action_recorder)
             g_action_recorder->record_rich_presence_update(status, lobby_state, include_party, include_lobby);
     }
+    void GBE_ResetDotaPracticeLobbyLaunchRichPresenceToServerSetup()
+    {
+        GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
+    }
     void ResetGCMemory(const char *, bool = true, bool = true) { GBE_local_lobby = GBE_LocalLobby{}; }
     bool GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_LocalLobby &) { return false; }
     void GBE_PublishDotaPracticeLobbyLocalMemberData(const char *) {}

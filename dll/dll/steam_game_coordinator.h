@@ -206,6 +206,7 @@ public ISteamGameCoordinator
     void GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
     bool GBE_ShouldTrackDotaPracticeLobbyLateSteamChain() const;
     void GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const char *status, const char *lobby_state, bool include_party, bool include_lobby = true);
+    void GBE_ResetDotaPracticeLobbyLaunchRichPresenceToServerSetup();
     void GBE_ClearDotaPracticeLobbyLaunchRichPresence();
     void GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(const char *status, const char *lobby_state, bool include_party, bool include_lobby, const char *reason);
     void GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback(const char *reason);

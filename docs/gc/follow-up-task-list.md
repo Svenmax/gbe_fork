@@ -287,6 +287,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `RichPresenceUpdate` to the handler action recorder, strengthened postgame chat leave tests to assert `7014` before rich presence reset and cleanup/publish behavior, and added a 7041 standard launch smoke test proving shared-lobby publish and initial details `26` precede the serversetup rich presence update.
   - Stop condition: no production rich presence wrapper was introduced; this pass only records and asserts existing side-effect order and fields.
 
+- [x] Rich presence server-setup reset seam.
+  - Goal: name the repeated Dota rich presence reset intent after recorder coverage proved the affected ordering.
+  - Result: added `GBE_ResetDotaPracticeLobbyLaunchRichPresenceToServerSetup()` as a behavior-equivalent wrapper for `#DOTA_RP_INIT` / `SERVERSETUP` with party and lobby fields cleared, then replaced the postgame chat leave and `ResetGCMemory(...)` reset call sites.
+  - Stop condition: no new rich presence policy, retry behavior, logging, or ordering changes were added.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

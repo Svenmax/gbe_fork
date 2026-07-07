@@ -254,6 +254,12 @@ void Steam_Game_Coordinator::GBE_UpdateDotaPracticeLobbyLaunchRichPresence(const
 }
 
 
+void Steam_Game_Coordinator::GBE_ResetDotaPracticeLobbyLaunchRichPresenceToServerSetup()
+{
+    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
+}
+
+
 void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
 {
     GBE_ClearLastDotaLaunchPersonaSignature();

@@ -1243,7 +1243,7 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
         GBE_ClearDotaAbandonedLobbySuppression(previous_lobby_id, reason ? reason : "reset_gc_memory");
     GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel();
     GBE_SyncSettingsLobbyFromGenericLobby(reason ? reason : "reset_gc_memory");
-    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
+    GBE_ResetDotaPracticeLobbyLaunchRichPresenceToServerSetup();
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
