@@ -297,6 +297,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `LaunchPersonaState` to the handler action recorder and strengthened the 7041 standard launch smoke test to prove shared-lobby publish, initial details `26`, rich presence update, and persona-state metadata build order, including status, lobby state, party/lobby flags, and reason.
   - Stop condition: no production persona-state behavior changed and no custom-game launch coordinator linkage was added.
 
+- [x] Generic lobby publish recorder coverage pass.
+  - Goal: make local member-data and generic lobby metadata publishes visible before wrapping more lobby publish side effects.
+  - Result: added `LobbyLocalMemberData` and `LobbyMetadataPublish` to the handler action recorder, strengthened 7046 set-details coverage to assert local member data, shared-state publish, metadata publish, then details update order, and strengthened 8053 finished-loading coverage to assert local member data before shared-state publish.
+  - Stop condition: no production publish helper was introduced; this pass only records existing side-effect order and reasons.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

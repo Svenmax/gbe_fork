@@ -1059,11 +1059,15 @@ static void test_lobby_set_details_mutates_before_publish_and_details_update()
     TEST_ASSERT(tf.gc.GBE_local_lobby.room_name == "after-room", "set details should update room name before returning");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.server_region, 12u, "set details should update server region before returning");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_mode, 7u, "set details should update game mode before returning");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "set details should publish shared state once through recorder actions");
-    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "set details should publish shared lobby state");
-    TEST_ASSERT(tf.recorder.actions[0].reason == "7046_set_details", "set details publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "set details should publish local member data, shared state, and metadata");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "set details should publish local member data before shared state");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7046_set_details", "set details local member data reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "set details should publish shared lobby state after local member data");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7046_set_details", "set details publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbyMetadataPublish, "set details should publish metadata after shared state");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7046_set_details", "set details metadata reason should be preserved");
     TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "set details should send one details update");
-    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "set details update should happen after shared state publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 3u, "set details update should happen after metadata publish");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "set details details update should preserve wrapped flag in stub argument");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override == session_raw, "set details details update should preserve session raw in stub argument");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7046", "set details details update reason should be preserved");
@@ -1489,9 +1493,11 @@ static void test_match_finished_loading_marks_loaded_before_publish()
         reinterpret_cast<const uint8 *>(body.data()), body.size(), true, 0x8053u);
 
     TEST_ASSERT(result, "finished-loading handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "8053 success should publish one lobby state refresh");
-    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "8053 action should publish lobby state");
-    TEST_ASSERT(tf.recorder.actions[0].reason == "8053_finished_loading", "8053 publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "8053 success should publish local member data before shared state");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "8053 should publish local member data first");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "8053_finished_loading", "8053 local member data reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "8053 action should publish lobby state after local member data");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "8053_finished_loading", "8053 publish reason should be preserved");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.launch_phase, GBE_kDotaLaunchPhaseLoaded, "8053 should mark launch loaded before publish");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, 1u, "8053 should ensure at least wait-for-players state");
 

@@ -301,6 +301,8 @@ struct RecordedAction
             case GBE_DotaActionType::SettingsLobbyClear:    return "SettingsLobbyClear";
             case GBE_DotaActionType::RichPresenceUpdate:    return "RichPresenceUpdate";
             case GBE_DotaActionType::LaunchPersonaState:    return "LaunchPersonaState";
+            case GBE_DotaActionType::LobbyLocalMemberData:  return "LobbyLocalMemberData";
+            case GBE_DotaActionType::LobbyMetadataPublish:  return "LobbyMetadataPublish";
         }
         return "Unknown";
     }
@@ -503,6 +505,22 @@ public:
         a.lobby_state = lobby_state ? lobby_state : "";
         a.include_party = include_party;
         a.include_lobby = include_lobby;
+        a.reason = reason ? reason : "";
+        actions.push_back(std::move(a));
+    }
+
+    void record_lobby_local_member_data(const char *reason)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::LobbyLocalMemberData;
+        a.reason = reason ? reason : "";
+        actions.push_back(std::move(a));
+    }
+
+    void record_lobby_metadata_publish(const char *reason)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::LobbyMetadataPublish;
         a.reason = reason ? reason : "";
         actions.push_back(std::move(a));
     }
@@ -1074,9 +1092,17 @@ public:
     }
     void ResetGCMemory(const char *, bool = true, bool = true) { GBE_local_lobby = GBE_LocalLobby{}; }
     bool GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_LocalLobby &) { return false; }
-    void GBE_PublishDotaPracticeLobbyLocalMemberData(const char *) {}
+    void GBE_PublishDotaPracticeLobbyLocalMemberData(const char *reason)
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_lobby_local_member_data(reason);
+    }
     void GBE_SyncSettingsLobbyFromGenericLobby(const char *) {}
-    void GBE_PublishDotaPracticeLobbyMetadata(const char *) {}
+    void GBE_PublishDotaPracticeLobbyMetadata(const char *reason)
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_lobby_metadata_publish(reason);
+    }
     bool GBE_PublishDotaPracticeLobbySetDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw);
     std::string GBE_GetDotaLobbyOwnerName() const { return GBE_local_lobby.owner_name.empty() ? std::string(settings ? settings->get_local_name() : "") : GBE_local_lobby.owner_name; }
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &, std::string &message) { message = "cache_subscribed"; return true; }
