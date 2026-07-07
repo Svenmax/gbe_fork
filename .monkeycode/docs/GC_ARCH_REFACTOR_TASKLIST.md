@@ -97,12 +97,12 @@
 
 ## 收尾验收
 
-- [ ] 13. 完成架构收口验收
-  - handler 主要承担 `parse -> context -> planner -> payload builder -> executor -> log`。
-  - launch/create/join/teardown handler 中直接写 `GBE_local_lobby` 的新增逻辑显著减少。
-  - launch/create/join/teardown handler 中直接 `push_incoming_now`、publish、generic lobby 操作显著减少。
-  - Dota lobby domain 负责业务决策，coordinator/executor 负责执行副作用。
-  - `gbe_dota_lobby_flow` 不再同时承载 launch、chat、member、payload 多类职责。
+- [x] 13. 完成架构收口验收
+  - [x] handler 主要承担 `parse -> context -> planner -> payload builder -> executor -> log`。
+  - [x] launch/create/join/teardown handler 中直接写 `GBE_local_lobby` 的新增逻辑显著减少。
+  - [x] launch/create/join/teardown handler 中直接 `push_incoming_now`、publish、generic lobby 操作显著减少。
+  - [x] Dota lobby domain 负责业务决策，coordinator/executor 负责执行副作用。
+  - [x] `gbe_dota_lobby_flow` 不再同时承载 launch、chat、member、payload 多类职责。
 
 ## 建议执行顺序
 
