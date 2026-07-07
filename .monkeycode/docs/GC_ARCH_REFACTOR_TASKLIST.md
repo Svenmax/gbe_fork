@@ -79,7 +79,8 @@
   - [x] 复用 7035 abandon context/decision，收敛 arcade launch failure 和 current-game disconnect 的 `DiscardLaunchMessages`、`SetPendingReset`、`MarkAbandonedSuppressed`、`PushCacheUnsubscribed` 到 action list。
   - [x] 收敛 7004 normal signout 的 postgame 后 `PushCacheUnsubscribed`、`SetPendingNormalSignoutFinalize` 到 action list。
   - [x] 收敛 7040 leave 的 `MarkAbandonedSuppressed`、`PushCacheUnsubscribed`、`ResetGCMemory/LeaveGenericLobby` 到 action list。
-  - 建立 teardown plan，继续统一表达 postgame 7010、shared state clear、local lobby clear 的状态转移。
+  - [x] 收敛 postgame teardown 的 `PushCacheUnsubscribed`、`QueuePostGameJoin`、`ClearPendingReset` 到 action list。
+  - 建立 teardown plan，继续统一表达 shared state clear、local lobby clear 的状态转移。
   - 保持 25、7010、shared state clear、generic lobby leave 的时序稳定。
 
 - [ ] 11. 为 teardown 路径补强测试护栏
