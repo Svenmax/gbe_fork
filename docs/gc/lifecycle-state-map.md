@@ -191,10 +191,11 @@ When changing a lifecycle path, first classify the path:
 - Shared-state clear helper remains behavior-equivalent for runtime reset: covered by `test_lobby_runtime_reset_clears_local_shared_and_last_launch_state`.
 - Read-only shared-state facade raw snapshot and valid-gated helper semantics: covered by payload helper tests.
 - Postgame stale chat leave cannot re-publish a cleared shared state: covered by `test_chat_leave_postgame_skips_stale_republish_after_shared_clear`.
+- Launch-state push planner, target/captured input mapping, payload build request sequencing, grouped payload building, and action-sequence execution are covered by focused flow tests plus production helper integration.
 
 ## Missing Tests Worth Adding Next
 
-- Full launch-state client-peer push side effects remain deferred until the path can be represented by a focused launch coordinator harness or a small explicit planner context.
+- Full launch-state client-peer push harness remains deferred until the remaining restore/capture/settings/logging boundary can be represented by a small explicit context.
 - Production-linked reset test re-check remains conditional on `GBE_ClearDotaLobbyRuntimeState()` gaining branching, extra side effects, or semantic reset ownership.
 
 ## Verification

@@ -143,7 +143,7 @@ Settings and rich presence candidates:
 
 Server/client GC lookup candidates:
 
-- full launch-state client-peer push side effects after planner decisions
+- future launch-state restore/capture/settings/logging seams after the current planner, payload, and action seams
 - gameserver GC ownership checks
 - host client postgame skip checks
 
@@ -151,9 +151,9 @@ The first helpers should be read-only or behavior-equivalent wrappers, for examp
 
 - `GBE_HostHasActiveDotaServerLobby(lobby_id)`
 - `GBE_ClearSettingsLobbyForDotaSignout(...)`
-- a launch-state side-effect executor that consumes an existing push plan
+- focused launch-state seams that consume existing plans, payload build requests, or action sequences
 
-The point is to make host/client and settings side effects visible without changing their order. Launch-state push decisions already have pure planner coverage; the remaining launch-state work should focus on side-effect execution behind `GBE_PushDotaLaunchStateToClientPeer(...)`.
+The point is to make host/client and settings side effects visible without changing their order. Launch-state push decisions, payload build requests, grouped payload builds, and action-sequence execution already have focused coverage and narrow production seams. Remaining launch-state work should wait for a small explicit context around restore, capture, settings reads, or logging.
 
 ### P2/P3. Inventory And Template Replay Data Flow
 

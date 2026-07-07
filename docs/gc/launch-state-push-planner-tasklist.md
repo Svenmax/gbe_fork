@@ -19,7 +19,7 @@ bash tools/run_gc_verification.sh --full
 git diff --check
 ```
 
-  - Result: `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `43/43`, and audit issues `0`; `git diff --check` passed.
+  - Result: `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests later expanded to `54/54`, and audit issues `0`; `git diff --check` passed.
 
 - [x] 4. Integrate planner into `GBE_PushDotaLaunchStateToClientPeer(...)`
   - Build planner input from existing coordinator state.
@@ -30,8 +30,8 @@ git diff --check
 - [x] 5. Re-evaluate focused launch coordinator harness
   - Add a focused harness only if planner integration leaves a small explicit context for side-effect assertions.
   - Stop if the harness requires broad coordinator construction, protobuf expansion, or handler smoke wrapper linkage expansion.
-  - Decision: defer the harness. The planner now covers decision and skip behavior, but full side-effect assertions still require shared-state restore, current-lobby capture, cache-subscribed/details-update builders, cache subscription recording, queue pushes, rich presence, settings local steam id, duplicate state, and coordinator private fields.
+  - Decision: defer the harness. The planner covers decision and skip behavior; later passes added payload build requests, grouped payload builds, and action-sequence execution. Remaining harness work should start only when restore, capture, settings reads, logging, or coordinator selection has a small explicit context.
 
 - [x] 6. Re-check Dota sub-object extraction readiness
   - Keep extraction deferred unless the launch planner, ownership seams, side-effect ordering, and shared-state mutation boundaries form a small coherent dependency surface.
-  - Decision: keep extraction deferred. Launch push decisions are now planner-backed, while side-effect execution still lives in the coordinator and the shared-state mutation/publish/restore boundaries are not yet a small object-ready dependency surface.
+  - Decision: keep extraction deferred. Launch push decisions, payload build requests, grouped payload builds, and action-sequence execution now have focused seams, while restore, capture, settings reads, coordinator selection, and shared-state mutation/publish/restore boundaries are not yet a small object-ready dependency surface.

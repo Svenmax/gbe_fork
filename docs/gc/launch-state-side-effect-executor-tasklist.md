@@ -19,21 +19,21 @@ bash tools/run_gc_verification.sh --full
 git diff --check
 ```
 
-  - Result: `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `43/43`, and audit issues `0`; `git diff --check` passed.
+  - Result: `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests later expanded to `54/54`, and audit issues `0`; `git diff --check` passed.
 
 - [x] 4. Evaluate a tiny production executor
   - Continue only if the executor can consume built payloads and a plan without owning shared-state restore, capture, or payload building.
   - Stop if the executor needs broad `Steam_Game_Coordinator` construction or changes response order, rich presence order, or reason strings.
-  - Decision: defer production executor. A tiny executor at this point would still be a coordinator member wrapper over `GBE_RecordDotaLobbyCacheSubscriptionState`, two `push_incoming_now` calls, `GBE_ReapplyDotaPracticeLobbyLaunchRichPresence`, and `GBE_SetLastDotaLaunchStatePushedGameState`, with no narrower test harness than the current planner/action-sequence coverage.
+  - Decision: this was deferred at the checkpoint, then later completed as the narrow `GBE_ExecuteDotaLaunchStatePushActions(...)` action-sequence consumer after payload build requests and grouped payload builds made the inputs explicit.
 
 - [x] 5. Re-check focused launch coordinator harness
   - Reconsider a harness only after side-effect order is explicit and the executor context is small.
-  - Decision: defer focused harness until payload building and side-effect execution can be represented without broad coordinator construction.
+  - Decision: keep focused harness deferred. Payload building and side-effect execution now have narrow seams; restore, capture, settings reads, logging, and coordinator selection remain the broad context.
 
 - [x] 6. Re-check focused launch coordinator harness after handler ordering coverage expansion
   - Goal: determine whether `GBE_PushDotaLaunchStateToClientPeer(...)` can be compiled into the existing handler smoke wrapper without broadening the harness.
   - Result: defer. The production file `gbe_dota_lobby_launch_coordinator.cpp` defines 15 launch/teardown/response members in one TU, including `GBE_TryQueueDotaPrelaunch021`, `GBE_SetDotaLobbyMemberRuntimeState`, `GBE_TryQueueDotaRuntimeLobbyDetailsUpdate`, `GBE_TryAdvanceDotaLaunchToRun`, `GBE_QueueDotaPostGameTeardown`, `GBE_SendDotaPracticeLobbyDetailsUpdate`, `GBE_PushDotaResponse`, and `GBE_SendDotaCustomGameLaunchSetupFlow`. The existing handler smoke stubs already provide several of these members, so including the whole TU would create definition conflicts and pull response/custom-game teardown linkage into a launch-state-only test.
-  - Next safe seam: split the launch-state push member into a small production TU or helper only after payload building and side-effect execution have a narrow interface. Do not link the full launch coordinator TU into handler smoke tests.
+  - Next safe seam: revisit only when restore, capture, settings reads, logging, or coordinator selection can be represented with a small explicit context. Do not link the full launch coordinator TU into handler smoke tests.
 
 - [x] 7. Extract captured-lobby plan-input mapping seam
   - Goal: make the captured lobby to `LaunchStatePushPlanInput` field mapping testable without touching payload building or side-effect execution.
@@ -74,3 +74,8 @@ git diff --check
   - Goal: make the `GBE_LocalLobby` to `LaunchStateCapturedLobbyInput` conversion testable without moving lobby capture or settings reads.
   - Result: added `captured_lobby_input_from_local_lobby(...)`, covered copied launch fields and connect availability in `gbe_dota_lobby_flow_test`, and replaced the equivalent field construction inside `GBE_PushDotaLaunchStateToClientPeer(...)`.
   - Stop condition: the helper only converts fields; it does not capture lobby state, read last pushed game state, read target local steam id, build payloads, push messages, or update last game state.
+
+- [x] 15. Stop before mechanical launch-state push helpers
+  - Goal: check whether the remaining `GBE_PushDotaLaunchStateToClientPeer(...)` logic has another small, testable seam.
+  - Decision: stop. Remaining direct logic is source-lobby suppression, target coordinator selection, shared-state restore and suppression checks, current-lobby capture, settings reads, and failure/success logging. A helper around those steps would either be a mechanical wrapper or would hide the ordering that the existing planner, payload-request, grouped-build, and action-sequence seams make explicit.
+  - Continue condition: only revisit when a future change can give restore, capture, settings reads, or logging a small explicit context with focused coverage and without linking the full launch coordinator TU into handler smoke tests.

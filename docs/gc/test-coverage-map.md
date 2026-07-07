@@ -34,7 +34,7 @@ The PR workflow runs `bash tools/run_gc_verification.sh --fast`. Local handoff f
 | `gc_replay_test chat_channel` | Chat-channel replay behavior. | Chat join/leave/broadcast channel regressions. | Fixture output may not identify exact internal state cause. |
 | `gc_replay_test lobby_lifecycle` | Lobby lifecycle replay behavior. | Signout, cleanup, and lifecycle ordering regressions. | Should be paired with focused tests for new lifecycle branches. |
 | `gc_replay_test wire_edge_cases` | Wire edge-case replay behavior. | Parser edge cases and wrapper metadata. | No direct lifecycle intent coverage. |
-| `gbe_dota_lobby_flow_test` | Pure lobby flow helpers and publish composition. | Lifecycle planning helpers and flow transitions. | Does not execute full handler side effects. |
+| `gbe_dota_lobby_flow_test` | Pure lobby flow helpers, publish composition, and launch-state planner/payload/action seams. | Lifecycle planning helpers, flow transitions, and launch-state push seam changes. | Does not execute full handler side effects or link the full launch coordinator TU. |
 | `gbe_dota_lobby_state_test` | Lobby state decision helpers. | Reconnect eligibility/state transition changes. | Pure/helper oriented. |
 | `gbe_dota_custom_game_test` | Custom-game metadata, publish data, HTTP parsing helpers. | Arcade/custom-game flow and item data changes. | Does not cover full coordinator side effects. |
 
@@ -83,6 +83,7 @@ Inventory tests in the same binary protect item unlock/equip behavior and should
 - Reconnect preserve-vs-clear behavior is covered by `compute_runtime_reset_decision(...)` focused tests; extend coverage if more reset reasons preserve context.
 - `GBE_IsSharedDotaArcadeLobbyActive()` and `GBE_GetSharedDotaReconnectStateSnapshot()` are covered against direct-field behavior; keep broad shared-state read replacement to one tested read-only cluster at a time.
 - Side-effect recorder coverage should be extended before wrapping more push/broadcast/detail-update operations.
+- Launch-state push planner, payload build request, grouped payload build, target/captured mapping, and action-sequence seams are covered by `gbe_dota_lobby_flow_test`; full launch coordinator harness coverage remains deferred around restore, capture, settings reads, logging, and coordinator selection.
 
 ## Maintenance Rule
 

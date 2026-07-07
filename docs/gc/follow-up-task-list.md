@@ -18,21 +18,21 @@ Do these before broad shared-state or side-effect refactors.
   - Suggested place: `tools/gbe_dota_handler_test/smoke_test.cpp` or a focused lifecycle test if production linkage becomes practical.
   - Verify: `bash tools/run_gc_verification.sh --full`.
   - Result: added `compute_postgame_observation_decision(...)` and focused lobby-state coverage for host-client skip, host-client-over-arcade precedence, ordinary player cleanup, arcade-active skip, server path, non-transition, and zero-lobby-id cases. Production postgame observation now consumes the same pure decision without changing side-effect order.
-  - Verified: `bash tools/run_gc_verification.sh --full` passed; handler smoke tests later expanded to `43/43` and still passed; audit issues `0`.
+  - Verified: `bash tools/run_gc_verification.sh --full` passed; handler smoke tests later expanded to `54/54` and still passed; audit issues `0`.
 
 - [x] Add a focused test for reconnect preserve-vs-clear behavior.
   - Goal: make it explicit which lifecycle paths preserve reconnect context and which paths clear it.
   - Suggested place: `tools/gbe_dota_gc_payload_helpers_test/gbe_dota_gc_payload_helpers_test.cpp` for payload decisions; handler/lifecycle test for cleanup triggers.
   - Verify: `bash tools/run_gc_verification.sh --full`.
   - Result: added `compute_runtime_reset_decision(...)` and focused lobby-state coverage showing `7035_disconnect_current_game_after_25` preserves reconnect context while shutdown, ordinary leave, and unknown reset reasons clear it. Production `ResetGCMemory(...)` now consumes the same pure decision before calling `clear_dota_runtime_state(...)`.
-  - Verified: `bash tools/run_gc_verification.sh --full` passed; handler smoke tests later expanded to `43/43` and still passed; audit issues `0`.
+  - Verified: `bash tools/run_gc_verification.sh --full` passed; handler smoke tests later expanded to `54/54` and still passed; audit issues `0`.
 
 - [x] Add or strengthen a stale postgame chat leave test.
   - Goal: prove a cleared shared state is not republished from stale local lobby state.
   - Suggested place: adjacent to `test_chat_leave_postgame_channel_order`.
   - Verify: `bash tools/run_gc_verification.sh --full`.
   - Result: added `test_chat_leave_postgame_skips_stale_republish_after_shared_clear`, covering the branch where postgame leave still returns 7014 while cleared shared state remains invalid and stale local lobby state is cleared instead of republished.
-  - Verified: `bash tools/run_gc_verification.sh --full` passed; handler smoke tests later expanded to `43/43` and still passed; audit issues `0`.
+  - Verified: `bash tools/run_gc_verification.sh --full` passed; handler smoke tests later expanded to `54/54` and still passed; audit issues `0`.
 
 - [x] Decide whether the reset contract needs a production-linked focused test.
   - Current state: `test_lobby_runtime_reset_clears_local_shared_and_last_launch_state` protects the handler-test stub contract, while the production helper is small and behavior-equivalent.
@@ -63,7 +63,7 @@ Start with read-only access. Do not change publish or clear behavior in this pha
 - [x] Run verification.
   - Required: `bash tools/run_gc_verification.sh --full`.
   - Required: `git diff --check`.
-  - Verified: `bash tools/run_gc_verification.sh --full` passed; payload helper tests later expanded to `187/187` and still passed; handler smoke tests later expanded to `43/43` and still passed; audit issues `0`.
+  - Verified: `bash tools/run_gc_verification.sh --full` passed; payload helper tests later expanded to `238/238` and still passed; handler smoke tests later expanded to `54/54` and still passed; audit issues `0`.
 
 - [x] Stop if review gets harder.
   - If call chains become longer without clearer lifecycle intent, revert or shrink the step.
@@ -188,14 +188,14 @@ The checklist above records the first follow-up pass and includes several "decid
   - First cluster: shared-state existence and lobby-id fallback reads used by stale postgame leave and invite fallback logic.
   - Required tests: helper equivalence assertions in the payload helper test, plus existing stale postgame leave handler coverage.
   - Result: added `GBE_HasSharedDotaLobbyState()`, `GBE_GetSharedDotaLobbyIdOrZero()`, and `GBE_GetSharedDotaGenericLobbyIdOrZero()`; replaced the stale postgame leave validity check and invite fallback lobby-id reads. No publish, clear, or lifecycle-specific mutation paths were changed.
-  - Verified: `bash tools/run_gc_verification.sh --fast` passed with payload helper tests `196/196`, handler smoke tests `43/43`, and audit issues `0`.
+  - Verified: `bash tools/run_gc_verification.sh --fast` passed; payload helper tests later expanded to `238/238`, handler smoke tests later expanded to `54/54`, and audit issues `0`.
 
 - [x] Side-effect recorder coverage phase 2.
   - Goal: strengthen ordering assertions before introducing any broader side-effect interface.
   - Candidate paths: normal signout, lobby destroy, set-details publish/update.
   - Result: extended handler test recorder details-update and runtime-state observations with `action_sequence_index`, then asserted kick/set-details send practice-lobby details updates only after the shared-state publish action has already been recorded, and 7034 connected/disconnected runtime mutations happen before any response action is recorded. No production side-effect wrapper was introduced.
   - Stop condition: do not wrap rich presence or network broadcast until recorder coverage can prove ordering.
-  - Verified: `bash tools/run_gc_verification.sh --fast` passed with payload helper tests `196/196`, handler smoke tests `43/43`, and audit issues `0`.
+  - Verified: `bash tools/run_gc_verification.sh --fast` passed; payload helper tests later expanded to `238/238`, handler smoke tests later expanded to `54/54`, and audit issues `0`.
 
 - [x] Side-effect recorder coverage phase 3.
   - Goal: strengthen one more high-risk ordering assertion before broader side-effect wrappers.
@@ -258,29 +258,29 @@ The checklist above records the first follow-up pass and includes several "decid
 
 - [x] Object extraction readiness checkpoint.
   - Goal: re-evaluate whether Dota sub-object extraction is ready after the current seam and payload coverage pass.
-  - Result: `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `43/43`, and audit issues `0`; `git diff --check` passed.
-  - Decision: defer Dota sub-object extraction. The shared-state read/clear seams and response seams are stronger, and recorder coverage now spans settings clear, server-GC forward, network broadcast, lobby snapshot refresh, and response metadata. Client/ownership target-selection now has a narrow pure helper seam for launch-state peer selection, but the full launch-state client-peer push path still depends on broad `Steam_Game_Coordinator` state.
-  - Stop condition: begin extraction only after the full launch-state client-peer path can be covered through a focused launch coordinator harness or another narrow path with a small explicit context.
+  - Result: `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests later expanded to `54/54`, and audit issues `0`; `git diff --check` passed.
+  - Decision: defer Dota sub-object extraction. The shared-state read/clear seams and response seams are stronger, recorder coverage now spans settings clear, server-GC forward, network broadcast, lobby snapshot refresh, and response metadata, and launch-state client-peer push now has narrow planner, payload build, mapping, and action-sequence seams.
+  - Stop condition: begin extraction only after the remaining restore/capture/settings/logging boundary has a small explicit context.
 
 - [x] Launch-state peer target-selection seam.
   - Goal: add ownership target-selection coverage without linking the production-only launch coordinator into the handler smoke harness.
   - Result: added `should_use_client_peer_for_launch_state_push`, `is_valid_launch_state_push_target`, and `should_preserve_server_id_for_launch_state_push_target` to `gbe::dota_lobby_flow`, covered server/client peer selection, valid Dota-client target eligibility, and owner-LAN preserve eligibility in `gbe_dota_lobby_flow_test`, and replaced the matching checks in `GBE_PushDotaLaunchStateToClientPeer`.
-  - Stop condition: no broad launch coordinator harness added; full push side effects remain behind the existing production coordinator path.
+  - Stop condition: no broad launch coordinator harness added; later seams covered planner, payload build, mapping, and action execution while keeping the full launch coordinator TU out of handler smoke tests.
 
 - [x] Focused launch coordinator harness feasibility pass.
   - Goal: determine whether the full launch-state client-peer push path can be covered without broadening the handler smoke harness.
-  - Result: the full path still depends on shared-state restore, current-lobby capture, cache-subscribed/details-update builders, cache subscription recording, queue pushes, rich presence, settings local steam id, duplicate suppression, and coordinator private state. The owner-LAN preserve branch was extracted to a pure helper instead.
-  - Stop condition: defer a full launch coordinator harness until those dependencies can be represented as a small explicit context or until the launch push is split into a planner with recorded side effects.
+  - Result: at that checkpoint, the full path depended on shared-state restore, current-lobby capture, cache-subscribed/details-update builders, cache subscription recording, queue pushes, rich presence, settings local steam id, duplicate suppression, and coordinator private state. Later passes extracted planner, payload build, mapping, and action-sequence seams while keeping full-TU harness linkage deferred.
+  - Stop condition: defer a full launch coordinator harness until restore, capture, settings reads, logging, or coordinator selection can be represented as a small explicit context.
 
 - [x] Launch-state push planner pass.
   - Goal: turn the launch-state client-peer push decision path into a pure planner before any harness or object extraction work.
   - Result: added `LaunchStatePushPlanInput`, `LaunchStatePushPlan`, and `plan_launch_state_push` to `gbe::dota_lobby_flow`; covered invalid target, suppressed shared lobby, inactive capture, ineligible launch state, duplicate game state, normal push, connect-endpoint push, and owner-LAN preserve in `gbe_dota_lobby_flow_test`; integrated the planner into `GBE_PushDotaLaunchStateToClientPeer` while preserving restore, capture, build, push, rich-presence, last-state, and debug-log order.
-  - Stop condition: full focused launch coordinator harness and Dota sub-object extraction remain deferred because side-effect execution still depends on broad coordinator state.
+  - Stop condition: full focused launch coordinator harness and Dota sub-object extraction remain deferred because restore, capture, settings reads, logging, and coordinator selection still need a small explicit context.
 
 - [x] Launch-state side-effect order planning pass.
   - Goal: make successful launch-state side-effect order explicit and testable before introducing a production executor.
   - Result: added `LaunchStatePushAction` and `launch_state_push_actions` to `gbe::dota_lobby_flow`, covering record cache subscription, push cache subscribed, push details update, reapply rich presence, and set last game state in production order; skipped plans return an empty action sequence.
-  - Stop condition: production executor remains deferred because it would still be a coordinator member wrapper over existing side effects without a narrower harness.
+  - Stop condition: production executor later became a narrow action-sequence consumer; broader launch-state harness work remains deferred around restore, capture, settings reads, logging, and coordinator selection.
 
 - [x] Rich presence recorder coverage pass.
   - Goal: make rich presence updates visible in handler smoke tests before adding any rich presence wrapper.
@@ -373,9 +373,9 @@ The checklist above records the first follow-up pass and includes several "decid
   - Stop condition: no production 4511 behavior changed and server-id sync remains a handler harness stub.
 
 - [x] Focused launch coordinator harness re-check.
-  - Goal: determine whether `GBE_PushDotaLaunchStateToClientPeer(...)` can move from pure planner/action-sequence coverage into a production-linked focused harness.
+  - Goal: determine whether `GBE_PushDotaLaunchStateToClientPeer(...)` can move from pure planner and action-sequence coverage into a production-linked focused harness.
   - Result: defer. `gbe_dota_lobby_launch_coordinator.cpp` still groups launch-state push with 14 other launch/teardown/response members, and the existing handler smoke stubs already define several of those members. Linking the whole TU would create definition conflicts and pull unrelated response/custom-game teardown behavior into a launch-state-only harness.
-  - Stop condition: do not link the full launch coordinator TU into handler smoke tests; first create a narrower production seam for launch-state push payload building and side-effect execution.
+  - Stop condition: do not link the full launch coordinator TU into handler smoke tests. Payload building and action execution now have narrow seams, so future launch harness work should start from restore, capture, settings reads, logging, or coordinator selection.
 
 - [x] Launch-state captured-lobby plan-input seam.
   - Goal: reduce the remaining hand-written field mapping inside `GBE_PushDotaLaunchStateToClientPeer(...)` without touching side effects.
@@ -417,6 +417,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `captured_lobby_input_from_local_lobby(...)` so focused flow tests cover copied launch fields and connect availability; production now uses the helper before applying captured lobby data to `LaunchStatePushPlanInput`.
   - Stop condition: no lobby capture, last-pushed state read, target local steam id read, payload build, response push, or last-game-state behavior changed.
 
+- [x] Launch-state push seam stop checkpoint.
+  - Goal: re-evaluate remaining direct logic in `GBE_PushDotaLaunchStateToClientPeer(...)` after planner, target/captured mappings, payload build requests, grouped payload builds, and action-sequence execution were extracted.
+  - Result: stop before adding more helpers. The remaining code is mostly source-lobby suppression, target coordinator selection, shared-state restore/checks, current-lobby capture, settings reads, and failure/success logging. A next helper would either be a mechanical setter wrapper or would hide the immediate ordering differences that the current seams keep visible.
+  - Stop condition: continue only when a future change can name one remaining boundary with a small explicit context and focused coverage, without linking the full launch coordinator TU into handler smoke tests.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
@@ -435,6 +440,7 @@ git diff --check
 
 Latest handoff verification:
 
+- `bash tools/run_gc_offline_tests.sh --full` passed with payload helper tests `238/238` and handler smoke tests `54/54`.
 - `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `54/54`, and audit issues `0`.
 - `git diff --check` passed.
 

@@ -62,7 +62,7 @@ This tasklist continues the Dota GC maintenance refactor. The purpose is maintai
   - [x] 5.3 Add a read-only lookup helper if the test makes ownership behavior reviewable.
     - Stop if the helper needs broad constructor changes or must know unrelated lifecycle phases.
     - Stop: no lookup helper added until target-selection coverage can be added without broad handler-test linkage expansion.
-    - Result: added narrow bool-only helper seams for peer selection, target eligibility, and owner-LAN server-id preserve eligibility. Full launch push side-effect coverage remains deferred until it can use a small explicit context or planner.
+    - Result: added narrow bool-only helper seams for peer selection, target eligibility, and owner-LAN server-id preserve eligibility. Later passes added planner, payload build request, grouped payload build, target/captured mapping, and action-sequence execution seams without linking the full launch coordinator TU into handler smoke tests.
 
 - [x] 6. Keep payload fixture coverage growing alongside refactors
   - [x] 6.1 Add focused malformed-input coverage for `GBE_ParseDotaEquipOps`.
@@ -75,10 +75,10 @@ This tasklist continues the Dota GC maintenance refactor. The purpose is maintai
 - [x] 7. Checkpoint before object extraction
   - [x] 7.1 Run full verification.
     - Required command: `bash tools/run_gc_verification.sh --full`.
-    - Result: passed with payload helper tests `238/238`, handler smoke tests `43/43`, and audit issues `0`.
+    - Result: passed with payload helper tests `238/238`, handler smoke tests later expanded to `54/54`, and audit issues `0`.
   - [x] 7.2 Run whitespace check.
     - Required command: `git diff --check`.
     - Result: passed.
   - [x] 7.3 Re-evaluate Dota sub-object extraction readiness.
     - Start extraction only if shared-state read/clear/publish boundaries are named, at least three side-effect families have recorder coverage, settings/ownership seams are stable, and a small explicit context can replace broad `Steam_Game_Coordinator *` dependency.
-    - Decision: defer Dota sub-object extraction. Shared-state and response seams are stronger, multiple side-effect families have recorder coverage, and client/ownership target-selection has narrow pure helper coverage. The full launch-state client-peer push path still requires a broad coordinator surface.
+    - Decision: defer Dota sub-object extraction. Shared-state and response seams are stronger, multiple side-effect families have recorder coverage, and launch-state client-peer push now has narrow planner, payload build, mapping, and action-sequence seams. Remaining restore/capture/settings/logging boundaries still require a small explicit context before extraction is justified.
