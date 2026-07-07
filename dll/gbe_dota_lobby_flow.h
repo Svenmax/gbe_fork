@@ -136,6 +136,22 @@ struct JoinLobbyActionPlan
     std::uint64_t generic_lobby_id{};
 };
 
+struct JoinLobbyContext
+{
+    GBE_LocalLobby current_lobby{};
+    bool request_has_lobby_id{};
+    std::uint64_t request_lobby_id{};
+    bool matched_generic_lobby{};
+    GBE_LocalLobby matched_lobby{};
+    std::uint64_t matched_generic_lobby_id{};
+    bool send_join_response{};
+    std::uint64_t local_steam_id{};
+    std::uint32_t local_account_id{};
+    std::string local_name;
+    std::uint32_t good_guys_team{};
+    std::uint32_t player_pool_team{};
+};
+
 struct LaunchStateCapturedLobbyInput
 {
     bool active{};
@@ -281,6 +297,12 @@ CreateLobbyActionPlan create_lobby_action_plan_from_reset_plan(
 GBE_DotaActionList join_lobby_action_list(
     const JoinLobbyActionPlan &plan,
     bool wrapped);
+
+gbe::dota_lobby_state::JoinLobbyMergePlan join_lobby_merge_plan_from_context(
+    const JoinLobbyContext &context);
+
+JoinLobbyActionPlan join_lobby_action_plan_from_context(
+    const JoinLobbyContext &context);
 
 std::vector<LaunchStatePayloadBuild> launch_state_payload_builds(
     const LaunchStatePushPlan &plan);

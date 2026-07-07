@@ -50,7 +50,7 @@
   - [x] 验证 custom game create 的状态归一化。
 
 - [ ] 6. 改造 `GBE_HandleDotaPracticeLobbyJoinRequest`
-  - 建立 join lobby context，集中 request lobby id、pass key、matched generic lobby、当前 local lobby、settings sync 状态读取。
+  - [x] 建立 join lobby context，集中 request lobby id、pass key、matched generic lobby、当前 local lobby、settings sync 状态读取。
   - 抽出 join lobby merge plan，决定 JoinLobby、SyncSettingsLobby、pass key 更新、local lobby 合并。
   - [x] 将 JoinLobby、SyncSettingsLobby、publish、record cache subscription、push 24、push 7113 收敛到 join action list。
   - [x] 保持 join path 顺序为 `24 -> 7113`。

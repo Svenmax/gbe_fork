@@ -297,6 +297,35 @@ CreateLobbyActionPlan create_lobby_action_plan_from_reset_plan(
     return CreateLobbyActionPlan{reset_plan.unsubscribe_previous_practice_lobby};
 }
 
+gbe::dota_lobby_state::JoinLobbyMergePlan join_lobby_merge_plan_from_context(
+    const JoinLobbyContext &context)
+{
+    const bool join_has_lobby_id = context.request_has_lobby_id || context.matched_lobby.lobby_id != 0ull;
+    const std::uint64_t join_lobby_id = context.request_has_lobby_id && context.request_lobby_id != 0ull ?
+        context.request_lobby_id :
+        context.matched_lobby.lobby_id;
+    return gbe::dota_lobby_state::compose_join_lobby_merge_plan(
+        context.current_lobby,
+        join_has_lobby_id,
+        join_lobby_id,
+        context.matched_generic_lobby,
+        context.matched_lobby,
+        context.local_steam_id,
+        context.local_account_id,
+        context.local_name,
+        context.good_guys_team,
+        context.player_pool_team);
+}
+
+JoinLobbyActionPlan join_lobby_action_plan_from_context(
+    const JoinLobbyContext &context)
+{
+    return JoinLobbyActionPlan{
+        context.matched_generic_lobby,
+        context.send_join_response,
+        context.matched_generic_lobby_id};
+}
+
 std::vector<LaunchStatePushAction> launch_state_push_actions(
     const LaunchStatePushPlan &plan)
 {

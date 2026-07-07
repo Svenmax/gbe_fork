@@ -458,6 +458,46 @@ bool test_create_lobby_action_list()
     return ok;
 }
 
+bool test_join_lobby_context_mapping()
+{
+    bool ok = true;
+
+    gbe::dota_lobby_flow::JoinLobbyContext context{};
+    context.request_has_lobby_id = true;
+    context.request_lobby_id = 0x704400ull;
+    context.matched_generic_lobby = true;
+    context.matched_lobby.active = true;
+    context.matched_lobby.lobby_id = 0x704400ull;
+    context.matched_lobby.generic_lobby_id = 0x7044BEEFull;
+    context.matched_lobby.room_name = "join-context-room";
+    context.matched_lobby.owner_steam_id = 0x700ull;
+    context.matched_lobby.owner_account_id = 70u;
+    context.matched_lobby.owner_name = "join-owner";
+    context.matched_lobby.owner_team = 0u;
+    context.matched_lobby.owner_slot = 1u;
+    context.matched_generic_lobby_id = 0x7044BEEFull;
+    context.send_join_response = false;
+    context.local_steam_id = 0x800ull;
+    context.local_account_id = 80u;
+    context.local_name = "join-local";
+    context.good_guys_team = 0u;
+    context.player_pool_team = 4u;
+
+    const gbe::dota_lobby_state::JoinLobbyMergePlan merge_plan = gbe::dota_lobby_flow::join_lobby_merge_plan_from_context(context);
+    ok &= expect_eq_u64(merge_plan.lobby.lobby_id, 0x704400ull, "join context merge lobby id");
+    ok &= expect_eq_u64(merge_plan.lobby.generic_lobby_id, 0x7044BEEFull, "join context merge generic lobby id");
+    ok &= expect_true(merge_plan.lobby.room_name == "join-context-room", "join context merge room name");
+    ok &= expect_eq_u64(merge_plan.local_member.steam_id, 0x800ull, "join context local member steam id");
+    ok &= expect_eq_u64(merge_plan.local_member.account_id, 80u, "join context local member account id");
+
+    const gbe::dota_lobby_flow::JoinLobbyActionPlan action_plan = gbe::dota_lobby_flow::join_lobby_action_plan_from_context(context);
+    ok &= expect_true(action_plan.matched_generic_lobby, "join context action matched generic");
+    ok &= expect_true(!action_plan.send_join_response, "join context action suppresses response");
+    ok &= expect_eq_u64(action_plan.generic_lobby_id, 0x7044BEEFull, "join context action generic lobby id");
+
+    return ok;
+}
+
 bool test_join_lobby_action_list()
 {
     bool ok = true;
@@ -1648,6 +1688,7 @@ int main()
     ok &= test_launch_state_push_context_mapping();
     ok &= test_create_lobby_context_mapping();
     ok &= test_create_lobby_action_list();
+    ok &= test_join_lobby_context_mapping();
     ok &= test_join_lobby_action_list();
     ok &= test_launch_state_plan_input_source_lobby_mapping();
     ok &= test_launch_state_plan_input_target_mapping();

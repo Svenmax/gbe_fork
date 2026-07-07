@@ -847,26 +847,25 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
     if (!matched_generic_lobby && (!request.has_lobby_id || request.lobby_id == 0) && (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0))
         matched_lobby.lobby_id = GBE_GenerateDotaLobbyId();
 
-    const bool join_has_lobby_id = request.has_lobby_id || matched_lobby.lobby_id != 0ull;
-    const uint64 join_lobby_id = request.has_lobby_id && request.lobby_id != 0 ? request.lobby_id : matched_lobby.lobby_id;
-    const gbe::dota_lobby_state::JoinLobbyMergePlan join_plan = gbe::dota_lobby_state::compose_join_lobby_merge_plan(
-        GBE_local_lobby,
-        join_has_lobby_id,
-        join_lobby_id,
-        matched_generic_lobby,
-        matched_lobby,
-        settings->get_local_steam_id().ConvertToUint64(),
-        settings->get_local_steam_id().GetAccountID(),
-        std::string(settings->get_local_name()),
-        GBE_kDotaTeamGoodGuys,
-        GBE_kDotaTeamPlayerPool);
+    gbe::dota_lobby_flow::JoinLobbyContext join_context{};
+    join_context.current_lobby = GBE_local_lobby;
+    join_context.request_has_lobby_id = request.has_lobby_id;
+    join_context.request_lobby_id = request.lobby_id;
+    join_context.matched_generic_lobby = matched_generic_lobby;
+    join_context.matched_lobby = matched_lobby;
+    join_context.matched_generic_lobby_id = matched_generic_lobby_id.ConvertToUint64();
+    join_context.send_join_response = send_join_response;
+    join_context.local_steam_id = settings->get_local_steam_id().ConvertToUint64();
+    join_context.local_account_id = settings->get_local_steam_id().GetAccountID();
+    join_context.local_name = std::string(settings->get_local_name());
+    join_context.good_guys_team = GBE_kDotaTeamGoodGuys;
+    join_context.player_pool_team = GBE_kDotaTeamPlayerPool;
+
+    const gbe::dota_lobby_state::JoinLobbyMergePlan join_plan = gbe::dota_lobby_flow::join_lobby_merge_plan_from_context(join_context);
     GBE_local_lobby = join_plan.lobby;
 
     const GBE_DotaActionList join_actions = gbe::dota_lobby_flow::join_lobby_action_list(
-        gbe::dota_lobby_flow::JoinLobbyActionPlan{
-            matched_generic_lobby,
-            send_join_response,
-            matched_generic_lobby_id.ConvertToUint64()},
+        gbe::dota_lobby_flow::join_lobby_action_plan_from_context(join_context),
         wrapped);
     std::size_t join_action_index = 0u;
 
