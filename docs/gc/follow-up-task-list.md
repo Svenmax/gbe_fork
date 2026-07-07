@@ -317,6 +317,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `SettingsLobbySync` to the handler action recorder, strengthened the 7038 create smoke test to prove local member data publish, settings sync, shared lobby publish, metadata publish, cache subscription record, cache subscribed `24`, then practice lobby response `7055` order, and added a 7044 matched-generic join smoke test proving settings sync happens before local member data publish, shared lobby publish, cache subscription record, cache subscribed `24`, then join response `7113`.
   - Stop condition: no production settings sync behavior changed and no generic-lobby metadata surface was widened.
 
+- [x] Abandoned lobby suppression recorder coverage pass.
+  - Goal: make abandoned-lobby suppression visible before adding lifecycle wrappers around leave/abandon teardown paths.
+  - Result: added `AbandonedLobbySuppressed` to the handler action recorder and strengthened current-game disconnect, ordinary leave, and ready-for-abandon teardown smoke tests to prove suppression happens before cache-unsubscribed `25` or postgame `7014` responses with the correct lobby id and reason.
+  - Stop condition: no production suppression behavior changed and queued-launch discard remains deferred until a focused launch-failure path can cover it.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

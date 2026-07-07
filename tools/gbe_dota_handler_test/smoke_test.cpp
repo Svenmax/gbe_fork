@@ -923,8 +923,11 @@ static void test_lobby_abandon_current_game_disconnect_queues_25()
     bool result = tf.gc.GBE_HandleDotaAbandonCurrentGameRequest(false, nullptr);
 
     TEST_ASSERT(result, "abandon handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "current-game disconnect should queue only 25");
-    expect_push_payload(tf.recorder.actions[0], GBE_kDotaCacheUnsubscribed, "25 response should be queued with payload");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "current-game disconnect should suppress lobby before queueing 25");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::AbandonedLobbySuppressed, "current-game disconnect should mark abandoned lobby before 25");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].item_id, 0x7035u, "current-game disconnect should suppress the current lobby id");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7035_current_game_disconnect", "current-game disconnect suppress reason should be preserved");
+    expect_push_payload(tf.recorder.actions[1], GBE_kDotaCacheUnsubscribed, "25 response should be queued after suppression with payload");
     TEST_ASSERT(tf.gc.GBE_HasPendingResetAfterCacheUnsubscribed(), "25 should mark reset pending");
     TEST_ASSERT_EQ(GBE_pending_reset_after_cache_unsubscribed_lobby_id, 0x7035u, "pending reset should record lobby id");
 
@@ -949,11 +952,14 @@ static void test_lobby_leave_queues_25_then_clears_local_lobby()
     bool result = tf.gc.GBE_HandleDotaPracticeLobbyLeaveRequest(true, &session_raw);
 
     TEST_ASSERT(result, "leave lobby handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "leave lobby should push one cache-unsubscribed response");
-    expect_push_payload(tf.recorder.actions[0], GBE_kDotaCacheUnsubscribed, "leave lobby response should be emsg 25 with payload");
-    TEST_ASSERT(tf.recorder.actions[0].wrapped, "leave lobby response should preserve wrapped flag");
-    TEST_ASSERT(tf.recorder.actions[0].session_raw == session_raw, "leave lobby response should preserve session field");
-    TEST_ASSERT(tf.recorder.actions[0].reason == "7040_leave_25", "leave lobby response should record reason");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "leave lobby should suppress abandoned lobby before 25 response");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::AbandonedLobbySuppressed, "leave lobby should mark abandoned lobby before 25");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].item_id, 0x7042u, "leave lobby suppression should target current lobby id");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7040_leave", "leave lobby suppression reason should be preserved");
+    expect_push_payload(tf.recorder.actions[1], GBE_kDotaCacheUnsubscribed, "leave lobby response should be emsg 25 with payload");
+    TEST_ASSERT(tf.recorder.actions[1].wrapped, "leave lobby response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[1].session_raw == session_raw, "leave lobby response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7040_leave_25", "leave lobby response should record reason");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "leave lobby should clear active flag after 25 response");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0u, "leave lobby should clear lobby id after 25 response");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.generic_lobby_id, 0u, "leave lobby should clear generic lobby id after 25 response");
@@ -1189,12 +1195,15 @@ static void test_lobby_abandon_ready_teardown_queues_postgame_response()
     bool result = tf.gc.GBE_HandleDotaAbandonCurrentGameRequest(true, &session_raw);
 
     TEST_ASSERT(result, "ready abandon handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "ready teardown should queue postgame response via stub");
-    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::PushIncomingNow, "teardown action should be push");
-    TEST_ASSERT_EQ(tf.recorder.actions[0].msg_type & ~Steam_Game_Coordinator::protobuf_mask, GBE_kDotaOtherLeftChannel, "teardown response should be 7014 in stub");
-    TEST_ASSERT(tf.recorder.actions[0].wrapped, "teardown response should preserve wrapped flag");
-    TEST_ASSERT(tf.recorder.actions[0].session_raw == session_raw, "teardown response should preserve session field");
-    TEST_ASSERT(tf.recorder.actions[0].reason == "postgame_teardown_7014", "teardown response should record reason");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "ready teardown should suppress lobby before postgame response");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::AbandonedLobbySuppressed, "ready teardown should mark abandoned lobby before response");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].item_id, 0x7036u, "ready teardown suppression should target current lobby id");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7035_ready_for_abandon_teardown", "ready teardown suppression reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::PushIncomingNow, "teardown action should be push");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].msg_type & ~Steam_Game_Coordinator::protobuf_mask, GBE_kDotaOtherLeftChannel, "teardown response should be 7014 in stub");
+    TEST_ASSERT(tf.recorder.actions[1].wrapped, "teardown response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[1].session_raw == session_raw, "teardown response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "postgame_teardown_7014", "teardown response should record reason");
 
     ++g_tests_passed;
 }

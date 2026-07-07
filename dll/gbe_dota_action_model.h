@@ -87,6 +87,7 @@
 //   LaunchPeripheralReset reason
 //   LobbyCacheSubscriptionRecord reason
 //   SettingsLobbySync  reason
+//   AbandonedLobbySuppressed lobby_id, reason
 
 #ifndef GBE_DOTA_ACTION_MODEL_H
 #define GBE_DOTA_ACTION_MODEL_H
@@ -112,6 +113,7 @@ enum class GBE_DotaActionType {
     LaunchPeripheralReset, // clear launch peripheral dedupe/callback state
     LobbyCacheSubscriptionRecord, // record cache-subscription payload state
     SettingsLobbySync,   // sync settings lobby from generic lobby metadata
+    AbandonedLobbySuppressed, // mark a Dota lobby as abandoned/suppressed
 };
 
 struct GBE_DotaAction {
