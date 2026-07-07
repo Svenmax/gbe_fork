@@ -280,6 +280,20 @@ bool test_launch_state_push_planner()
     ok &= expect_eq_payload_build(builds[0], gbe::dota_lobby_flow::LaunchStatePayloadBuild::CacheSubscribed, "planner first payload build creates cache subscribed");
     ok &= expect_eq_payload_build(builds[1], gbe::dota_lobby_flow::LaunchStatePayloadBuild::DetailsUpdate, "planner second payload build creates details update");
 
+    std::vector<gbe::dota_lobby_flow::LaunchStatePayloadBuildRequest> build_requests = gbe::dota_lobby_flow::launch_state_payload_build_requests(plan);
+    ok &= expect_eq_u64(build_requests.size(), 2u, "planner payload build request count");
+    ok &= expect_eq_payload_build(build_requests[0].build, gbe::dota_lobby_flow::LaunchStatePayloadBuild::CacheSubscribed, "planner first payload build request creates cache subscribed");
+    ok &= expect_true(!build_requests[0].preserve_server_id, "planner first payload build request skips server id preserve");
+    ok &= expect_eq_payload_build(build_requests[1].build, gbe::dota_lobby_flow::LaunchStatePayloadBuild::DetailsUpdate, "planner second payload build request creates details update");
+    ok &= expect_true(!build_requests[1].preserve_server_id, "planner second payload build request skips server id preserve");
+
+    input = valid_launch_state_plan_input();
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    build_requests = gbe::dota_lobby_flow::launch_state_payload_build_requests(plan);
+    ok &= expect_eq_u64(build_requests.size(), 2u, "planner preserve payload build request count");
+    ok &= expect_true(build_requests[0].preserve_server_id, "planner first payload build request preserves server id");
+    ok &= expect_true(build_requests[1].preserve_server_id, "planner second payload build request preserves server id");
+
     input = valid_launch_state_plan_input();
     input.target_available = false;
     plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
@@ -287,6 +301,8 @@ bool test_launch_state_push_planner()
     ok &= expect_eq_u64(actions.size(), 0u, "planner skipped action count");
     builds = gbe::dota_lobby_flow::launch_state_payload_builds(plan);
     ok &= expect_eq_u64(builds.size(), 0u, "planner skipped payload build count");
+    build_requests = gbe::dota_lobby_flow::launch_state_payload_build_requests(plan);
+    ok &= expect_eq_u64(build_requests.size(), 0u, "planner skipped payload build request count");
 
     return ok;
 }

@@ -133,6 +133,12 @@ enum class LaunchStatePayloadBuild
     DetailsUpdate,
 };
 
+struct LaunchStatePayloadBuildRequest
+{
+    LaunchStatePayloadBuild build{};
+    bool preserve_server_id{};
+};
+
 struct LaunchStatePushPlan
 {
     bool use_client_peer{};
@@ -155,6 +161,9 @@ std::vector<LaunchStatePushAction> launch_state_push_actions(
     const LaunchStatePushPlan &plan);
 
 std::vector<LaunchStatePayloadBuild> launch_state_payload_builds(
+    const LaunchStatePushPlan &plan);
+
+std::vector<LaunchStatePayloadBuildRequest> launch_state_payload_build_requests(
     const LaunchStatePushPlan &plan);
 
 std::string resolve_chat_member_display_name(

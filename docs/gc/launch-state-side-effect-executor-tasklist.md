@@ -44,3 +44,8 @@ git diff --check
   - Goal: make payload build order explicit before introducing any production executor or focused coordinator harness.
   - Result: added `LaunchStatePayloadBuild` plus `launch_state_payload_builds(...)` in `gbe::dota_lobby_flow`, covered the successful order `CacheSubscribed` then `DetailsUpdate`, and covered skipped plans producing no payload build sequence.
   - Stop condition: production payload building remains in `GBE_PushDotaLaunchStateToClientPeer(...)`; this helper only describes build order and does not build or push messages.
+
+- [x] 9. Name launch-state payload build requests
+  - Goal: carry payload build order plus the `preserve_server_id` build flag as pure data before moving any production payload builder call.
+  - Result: added `LaunchStatePayloadBuildRequest` plus `launch_state_payload_build_requests(...)` in `gbe::dota_lobby_flow`, covered successful request order, owner-LAN preserve propagation, non-preserve connect-endpoint behavior, and skipped plans producing no requests.
+  - Stop condition: production payload building remains in `GBE_PushDotaLaunchStateToClientPeer(...)`; this helper only describes request metadata and does not build payloads, push messages, record cache subscriptions, reapply rich presence, or update last game state.

@@ -387,6 +387,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added a pure `gbe::dota_lobby_flow` build sequence helper that returns `CacheSubscribed` then `DetailsUpdate` for successful plans and an empty sequence for skipped plans.
   - Stop condition: no production payload building, response push, rich presence, cache subscription, or last-game-state side effect changed.
 
+- [x] Launch-state payload build request seam.
+  - Goal: describe the payload build requests as pure data before moving any production payload builder calls.
+  - Result: added `LaunchStatePayloadBuildRequest` and `launch_state_payload_build_requests(...)` so focused flow tests now cover build order plus `preserve_server_id` propagation for owner-LAN, non-preserve connect-endpoint behavior, and skipped plans.
+  - Stop condition: no production payload building, response push, rich presence, cache subscription, or last-game-state side effect changed.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

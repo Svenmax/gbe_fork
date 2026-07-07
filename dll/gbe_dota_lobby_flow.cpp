@@ -223,6 +223,15 @@ std::vector<LaunchStatePayloadBuild> launch_state_payload_builds(
     return builds;
 }
 
+std::vector<LaunchStatePayloadBuildRequest> launch_state_payload_build_requests(
+    const LaunchStatePushPlan &plan)
+{
+    std::vector<LaunchStatePayloadBuildRequest> requests;
+    for (LaunchStatePayloadBuild build : launch_state_payload_builds(plan))
+        requests.push_back(LaunchStatePayloadBuildRequest{build, plan.preserve_server_id});
+    return requests;
+}
+
 bool find_lobby_member_index(
     const std::vector<GBE_DotaLobbyMemberState> &members,
     std::uint64_t steam_id,
