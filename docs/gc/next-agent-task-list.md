@@ -308,7 +308,7 @@ One wrapper, one call site. No preserve logic. No logging. No extra clearing. No
 
 ## Task 4. Settings / Rich Presence / Server-Client Lookup Boundaries
 
-Priority: medium, after recorder coverage improves.
+Priority: medium, after recorder coverage improves. Settings clear and launch-state target-selection now have narrow seams, so avoid repeating those first steps.
 
 ### Why This Matters
 
@@ -319,12 +319,11 @@ Settings and host/client target lookup are maintenance risks because they cross 
 Only add behavior-equivalent or read-only helpers first:
 
 ```cpp
-Steam_Game_Coordinator *GBE_GetDotaClientCoordinatorIfPresent();
 bool GBE_HostHasActiveDotaServerLobby(uint64 lobby_id) const;
-void GBE_ClearSettingsLobbyForDotaSignout();
+// Or a launch-state push planner that returns a small explicit action plan.
 ```
 
-Some of these may already exist. Prefer extending tests around existing seams before adding new ones.
+Some of these already exist or have partial pure-helper coverage. Prefer extending tests around existing seams before adding new ones.
 
 ### Files To Inspect
 
@@ -339,12 +338,17 @@ Some of these may already exist. Prefer extending tests around existing seams be
 
 Pick exactly one boundary:
 
-1. Settings lobby clear during signout.
-2. Client coordinator target lookup.
-3. Host server-GC active lobby ownership check.
-4. Rich presence clear/update around practice lobby launch.
+1. Full launch-state client-peer push side effects after target selection.
+2. Host server-GC active lobby ownership check.
+3. Rich presence clear/update around practice lobby launch.
 
 Add or strengthen a test first. Then add a helper only if it makes the ownership side effect more visible.
+
+Current launch-state status:
+
+- `should_use_client_peer_for_launch_state_push`, `is_valid_launch_state_push_target`, and `should_preserve_server_id_for_launch_state_push_target` already cover the pure target-selection and owner-LAN preserve predicates.
+- Full `GBE_PushDotaLaunchStateToClientPeer(...)` side effects remain deferred because the path still depends on shared-state restore, current-lobby capture, payload builders, cache subscription recording, queue pushes, rich presence, settings local steam id, duplicate suppression, and coordinator private state.
+- Continue only if the next step can represent those dependencies as a small explicit planner context.
 
 ### How Far To Go
 
@@ -443,6 +447,7 @@ Only reconsider after:
 - shared-state read/clear/publish boundaries are named.
 - side-effect order is covered by recorder tests.
 - settings/rich-presence/server-client lookup seams are stable.
+- target-selection helper coverage exists and the remaining launch-state work has a small explicit context.
 - repeated methods naturally group around a small state surface.
 
 A good extraction candidate must own a coherent state and dependency boundary. A bad extraction just moves `Steam_Game_Coordinator` methods into another class that still reaches back into the same globals and side effects.
@@ -458,12 +463,10 @@ bash tools/run_gc_verification.sh --full
 git diff --check
 ```
 
-2. Do Task 1: one small side-effect recorder coverage improvement.
-3. Commit it.
-4. Do Task 2: one read-only shared-state facade cluster, only if a safe cluster exists.
-5. Commit it.
-6. Do Task 3: one behavior-equivalent clear wrapper only if test coverage is already cheap and clear.
-7. Stop and hand off with status, verification results, and remaining risk.
+2. Check `docs/gc/follow-up-task-list.md` and `docs/gc/lifecycle-state-map.md` for the latest coverage status.
+3. Pick one remaining boundary only if it has a focused test path: full launch-state client-peer push planner, host active server-GC ownership check, or rich presence clear/update ordering.
+4. Stop if the change needs broad `Steam_Game_Coordinator` construction, a wider handler smoke harness, or a Dota sub-object extraction.
+5. Commit the small step with verification results, then hand off with status and remaining risk.
 
 ## Handoff Format
 
