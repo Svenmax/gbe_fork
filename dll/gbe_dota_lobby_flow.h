@@ -70,6 +70,54 @@ bool should_preserve_server_id_for_launch_state_push_target(
     bool lobby_lan,
     std::uint64_t lobby_match_id);
 
+struct LaunchStatePushPlanInput
+{
+    bool source_is_server{};
+    bool client_peer_available{};
+    bool target_available{};
+    bool target_is_server{};
+    bool target_is_dota_profile{};
+    bool shared_lobby_suppressed{};
+    bool captured_lobby_active{};
+    std::uint32_t lobby_state{};
+    std::uint32_t lobby_game_state{};
+    std::uint64_t lobby_server_id{};
+    bool lobby_connect_available{};
+    std::uint32_t last_pushed_game_state{};
+    std::uint64_t target_local_steam_id{};
+    std::uint64_t lobby_owner_steam_id{};
+    bool lobby_lan{};
+    std::uint64_t lobby_match_id{};
+};
+
+enum class LaunchStatePushSkipReason
+{
+    None,
+    InvalidTarget,
+    SuppressedSharedLobby,
+    NoCapturedLobby,
+    IneligibleLaunchState,
+    DuplicateGameState,
+};
+
+struct LaunchStatePushPlan
+{
+    bool use_client_peer{};
+    bool restore_shared_state{};
+    bool build_cache_subscribed{};
+    bool build_details_update{};
+    bool record_cache_subscription{};
+    bool push_cache_subscribed{};
+    bool push_details_update{};
+    bool reapply_rich_presence{};
+    bool set_last_game_state{};
+    bool preserve_server_id{};
+    LaunchStatePushSkipReason skip_reason{LaunchStatePushSkipReason::None};
+};
+
+LaunchStatePushPlan plan_launch_state_push(
+    const LaunchStatePushPlanInput &input);
+
 std::string resolve_chat_member_display_name(
     std::uint64_t member_steam_id,
     std::uint64_t local_steam_id,

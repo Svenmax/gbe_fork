@@ -38,6 +38,40 @@ bool expect_eq_u64(std::uint64_t actual, std::uint64_t expected, const char *lab
     return false;
 }
 
+bool expect_eq_skip_reason(
+    gbe::dota_lobby_flow::LaunchStatePushSkipReason actual,
+    gbe::dota_lobby_flow::LaunchStatePushSkipReason expected,
+    const char *label)
+{
+    if (actual == expected)
+        return true;
+
+    std::cerr << "failed: " << label << " actual=" << static_cast<int>(actual) << " expected=" << static_cast<int>(expected) << std::endl;
+    return false;
+}
+
+gbe::dota_lobby_flow::LaunchStatePushPlanInput valid_launch_state_plan_input()
+{
+    gbe::dota_lobby_flow::LaunchStatePushPlanInput input{};
+    input.source_is_server = true;
+    input.client_peer_available = true;
+    input.target_available = true;
+    input.target_is_server = false;
+    input.target_is_dota_profile = true;
+    input.shared_lobby_suppressed = false;
+    input.captured_lobby_active = true;
+    input.lobby_state = 2u;
+    input.lobby_game_state = 3u;
+    input.lobby_server_id = 99ull;
+    input.lobby_connect_available = false;
+    input.last_pushed_game_state = 2u;
+    input.target_local_steam_id = 10ull;
+    input.lobby_owner_steam_id = 10ull;
+    input.lobby_lan = true;
+    input.lobby_match_id = 123ull;
+    return input;
+}
+
 bool test_member_find_and_equality()
 {
     bool ok = true;
@@ -144,6 +178,70 @@ bool test_launch_state_peer_selection()
     ok &= expect_true(!gbe::dota_lobby_flow::should_preserve_server_id_for_launch_state_push_target(10ull, 20ull, true, 99ull), "non owner target skips preserve");
     ok &= expect_true(!gbe::dota_lobby_flow::should_preserve_server_id_for_launch_state_push_target(10ull, 10ull, false, 99ull), "non lan lobby skips preserve");
     ok &= expect_true(!gbe::dota_lobby_flow::should_preserve_server_id_for_launch_state_push_target(10ull, 10ull, true, 0ull), "missing match skips preserve");
+
+    return ok;
+}
+
+bool test_launch_state_push_planner()
+{
+    bool ok = true;
+
+    gbe::dota_lobby_flow::LaunchStatePushPlanInput input = valid_launch_state_plan_input();
+    gbe::dota_lobby_flow::LaunchStatePushPlan plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_true(plan.use_client_peer, "planner uses client peer");
+    ok &= expect_true(plan.restore_shared_state, "planner restores shared state before push");
+    ok &= expect_true(plan.build_cache_subscribed, "planner builds cache subscribed");
+    ok &= expect_true(plan.build_details_update, "planner builds details update");
+    ok &= expect_true(plan.record_cache_subscription, "planner records cache subscription");
+    ok &= expect_true(plan.push_cache_subscribed, "planner pushes cache subscribed");
+    ok &= expect_true(plan.push_details_update, "planner pushes details update");
+    ok &= expect_true(plan.reapply_rich_presence, "planner reapplies rich presence");
+    ok &= expect_true(plan.set_last_game_state, "planner updates last game state");
+    ok &= expect_true(plan.preserve_server_id, "planner preserves owner lan server id");
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::None, "planner push skip reason");
+
+    input = valid_launch_state_plan_input();
+    input.target_available = false;
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::InvalidTarget, "planner invalid target skip");
+    ok &= expect_true(!plan.restore_shared_state, "invalid target skips restore");
+
+    input = valid_launch_state_plan_input();
+    input.shared_lobby_suppressed = true;
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::SuppressedSharedLobby, "planner suppressed shared lobby skip");
+    ok &= expect_true(plan.restore_shared_state, "suppressed shared lobby occurs after restore");
+    ok &= expect_true(!plan.push_cache_subscribed, "suppressed shared lobby skips push");
+
+    input = valid_launch_state_plan_input();
+    input.captured_lobby_active = false;
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::NoCapturedLobby, "planner no captured lobby skip");
+
+    input = valid_launch_state_plan_input();
+    input.lobby_state = 1u;
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::IneligibleLaunchState, "planner state ineligible skip");
+
+    input = valid_launch_state_plan_input();
+    input.lobby_server_id = 0ull;
+    input.lobby_connect_available = false;
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::IneligibleLaunchState, "planner missing endpoint skip");
+
+    input = valid_launch_state_plan_input();
+    input.last_pushed_game_state = 3u;
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::DuplicateGameState, "planner duplicate game state skip");
+
+    input = valid_launch_state_plan_input();
+    input.lobby_server_id = 0ull;
+    input.lobby_connect_available = true;
+    input.target_local_steam_id = 20ull;
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::None, "planner connect endpoint push");
+    ok &= expect_true(plan.push_details_update, "planner pushes details update with connect endpoint");
+    ok &= expect_true(!plan.preserve_server_id, "planner skips preserve for non-owner target");
 
     return ok;
 }
@@ -1083,6 +1181,7 @@ int main()
     ok &= test_member_diff_and_filter();
     ok &= test_count_remote_lobby_members();
     ok &= test_launch_state_peer_selection();
+    ok &= test_launch_state_push_planner();
     ok &= test_upsert_and_slot_selection();
     ok &= test_apply_lobby_member_team_slot_update();
     ok &= test_member_state_update_block();

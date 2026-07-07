@@ -114,6 +114,61 @@ bool should_preserve_server_id_for_launch_state_push_target(
         lobby_match_id != 0ull;
 }
 
+LaunchStatePushPlan plan_launch_state_push(
+    const LaunchStatePushPlanInput &input)
+{
+    LaunchStatePushPlan plan{};
+    plan.use_client_peer = should_use_client_peer_for_launch_state_push(
+        input.source_is_server,
+        input.client_peer_available);
+
+    if (!is_valid_launch_state_push_target(
+            input.target_available,
+            input.target_is_server,
+            input.target_is_dota_profile)) {
+        plan.skip_reason = LaunchStatePushSkipReason::InvalidTarget;
+        return plan;
+    }
+
+    plan.restore_shared_state = true;
+
+    if (input.shared_lobby_suppressed) {
+        plan.skip_reason = LaunchStatePushSkipReason::SuppressedSharedLobby;
+        return plan;
+    }
+
+    if (!input.captured_lobby_active) {
+        plan.skip_reason = LaunchStatePushSkipReason::NoCapturedLobby;
+        return plan;
+    }
+
+    const bool has_launch_endpoint = input.lobby_server_id != 0ull || input.lobby_connect_available;
+    if (input.lobby_state != 2u || input.lobby_game_state < 1u || !has_launch_endpoint) {
+        plan.skip_reason = LaunchStatePushSkipReason::IneligibleLaunchState;
+        return plan;
+    }
+
+    if (input.last_pushed_game_state >= input.lobby_game_state) {
+        plan.skip_reason = LaunchStatePushSkipReason::DuplicateGameState;
+        return plan;
+    }
+
+    plan.build_cache_subscribed = true;
+    plan.build_details_update = true;
+    plan.record_cache_subscription = true;
+    plan.push_cache_subscribed = true;
+    plan.push_details_update = true;
+    plan.reapply_rich_presence = true;
+    plan.set_last_game_state = true;
+    plan.preserve_server_id = should_preserve_server_id_for_launch_state_push_target(
+        input.target_local_steam_id,
+        input.lobby_owner_steam_id,
+        input.lobby_lan,
+        input.lobby_match_id);
+
+    return plan;
+}
+
 bool find_lobby_member_index(
     const std::vector<GBE_DotaLobbyMemberState> &members,
     std::uint64_t steam_id,
