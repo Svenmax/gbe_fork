@@ -417,6 +417,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `captured_lobby_input_from_local_lobby(...)` so focused flow tests cover copied launch fields and connect availability; production now uses the helper before applying captured lobby data to `LaunchStatePushPlanInput`.
   - Stop condition: no lobby capture, last-pushed state read, target local steam id read, payload build, response push, or last-game-state behavior changed.
 
+- [x] Launch-state captured context mapping seam.
+  - Goal: name the last-pushed game-state and target-local-steam-id context used with captured lobby fields without moving those reads.
+  - Result: added `LaunchStateCapturedContextInput` so focused flow tests cover context remapping for duplicate suppression and owner-LAN preserve decisions; production now passes the existing last-pushed state and settings-derived local steam id through the explicit context.
+  - Stop condition: no settings read source, last-pushed state read source, captured lobby field mapping, payload build, response push, or debug-log behavior changed.
+
 - [x] Launch-state capture availability mapping seam.
   - Goal: name the current-lobby capture availability gate without moving the capture call, captured field mapping, settings reads, or logging.
   - Result: added `LaunchStateCaptureInput` and `apply_capture_to_launch_state_push_plan_input(...)` so focused flow tests cover active and inactive capture gate mapping; `GBE_PushDotaLaunchStateToClientPeer(...)` now uses the helper for the equivalent active flag assignment.
@@ -429,7 +434,7 @@ The checklist above records the first follow-up pass and includes several "decid
 
 - [x] Launch-state push seam stop checkpoint.
   - Goal: re-evaluate remaining direct logic in `GBE_PushDotaLaunchStateToClientPeer(...)` after planner, target/captured mappings, payload build requests, grouped payload builds, and action-sequence execution were extracted.
-  - Result: stop before adding broad helpers. The remaining code is mostly source-lobby suppression, target coordinator selection, shared-state restore/snapshot source, capture source, settings reads, and failure/success logging. A next helper should name exactly one of those boundaries with an explicit context.
+  - Result: stop before adding broad helpers. The remaining code is mostly source-lobby suppression, target coordinator selection, shared-state restore/snapshot source, capture source, settings read source, and failure/success logging. A next helper should name exactly one of those boundaries with an explicit context.
   - Stop condition: continue only when a future change can name one remaining boundary with a small explicit context and focused coverage, without linking the full launch coordinator TU into handler smoke tests.
 
 - [x] Host/server active-lobby ownership predicate seam.

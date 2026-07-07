@@ -157,16 +157,15 @@ LaunchStateCapturedLobbyInput captured_lobby_input_from_local_lobby(
 void apply_captured_lobby_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateCapturedLobbyInput &lobby,
-    std::uint32_t last_pushed_game_state,
-    std::uint64_t target_local_steam_id)
+    const LaunchStateCapturedContextInput &context)
 {
     plan_input.captured_lobby_active = lobby.active;
     plan_input.lobby_state = lobby.state;
     plan_input.lobby_game_state = lobby.game_state;
     plan_input.lobby_server_id = lobby.server_id;
     plan_input.lobby_connect_available = lobby.connect_available;
-    plan_input.last_pushed_game_state = last_pushed_game_state;
-    plan_input.target_local_steam_id = target_local_steam_id;
+    plan_input.last_pushed_game_state = context.last_pushed_game_state;
+    plan_input.target_local_steam_id = context.target_local_steam_id;
     plan_input.lobby_owner_steam_id = lobby.owner_steam_id;
     plan_input.lobby_lan = lobby.lan;
     plan_input.lobby_match_id = lobby.match_id;

@@ -122,6 +122,12 @@ struct LaunchStateCaptureInput
     bool active{};
 };
 
+struct LaunchStateCapturedContextInput
+{
+    std::uint32_t last_pushed_game_state{};
+    std::uint64_t target_local_steam_id{};
+};
+
 void apply_target_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateTargetInput &target);
@@ -141,8 +147,7 @@ LaunchStateCapturedLobbyInput captured_lobby_input_from_local_lobby(
 void apply_captured_lobby_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateCapturedLobbyInput &lobby,
-    std::uint32_t last_pushed_game_state,
-    std::uint64_t target_local_steam_id);
+    const LaunchStateCapturedContextInput &context);
 
 enum class LaunchStatePushSkipReason
 {

@@ -464,8 +464,9 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
     gbe::dota_lobby_flow::apply_captured_lobby_to_launch_state_push_plan_input(
         plan_input,
         gbe::dota_lobby_flow::captured_lobby_input_from_local_lobby(lobby, true),
-        target->GBE_GetLastDotaLaunchStatePushedGameState(),
-        target_local_steam_id);
+        gbe::dota_lobby_flow::LaunchStateCapturedContextInput{
+            target->GBE_GetLastDotaLaunchStatePushedGameState(),
+            target_local_steam_id});
 
     plan = gbe::dota_lobby_flow::plan_launch_state_push(plan_input);
     if (plan.skip_reason == gbe::dota_lobby_flow::LaunchStatePushSkipReason::IneligibleLaunchState) {

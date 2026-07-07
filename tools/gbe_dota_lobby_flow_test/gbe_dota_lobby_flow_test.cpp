@@ -457,8 +457,7 @@ bool test_launch_state_plan_input_captured_lobby_mapping()
             10ull,
             true,
             123ull},
-        3u,
-        10ull);
+        gbe::dota_lobby_flow::LaunchStateCapturedContextInput{3u, 10ull});
 
     ok &= expect_true(input.captured_lobby_active, "captured lobby mapping active");
     ok &= expect_eq_u64(input.lobby_state, 2u, "captured lobby mapping state");
@@ -474,6 +473,25 @@ bool test_launch_state_plan_input_captured_lobby_mapping()
     gbe::dota_lobby_flow::LaunchStatePushPlan plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
     ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::None, "captured lobby mapping planner push");
     ok &= expect_true(plan.preserve_server_id, "captured lobby mapping planner preserve owner lan server id");
+
+    gbe::dota_lobby_flow::apply_captured_lobby_to_launch_state_push_plan_input(
+        input,
+        gbe::dota_lobby_flow::LaunchStateCapturedLobbyInput{
+            true,
+            2u,
+            4u,
+            0ull,
+            true,
+            10ull,
+            true,
+            123ull},
+        gbe::dota_lobby_flow::LaunchStateCapturedContextInput{4u, 20ull});
+
+    ok &= expect_eq_u64(input.last_pushed_game_state, 4u, "captured context remapping last pushed game state");
+    ok &= expect_eq_u64(input.target_local_steam_id, 20ull, "captured context remapping target local steam id");
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::DuplicateGameState, "captured context remapping planner duplicate");
+    ok &= expect_true(!plan.preserve_server_id, "captured context remapping skips preserve for non-owner target");
 
     return ok;
 }
