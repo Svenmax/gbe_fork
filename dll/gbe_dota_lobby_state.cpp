@@ -102,6 +102,20 @@ CreateLobbyPlan compose_create_lobby_plan(
     return plan;
 }
 
+CreateLobbyStateApplyPlan compose_create_lobby_state_apply_plan(
+    const CreateLobbyPlan &create_plan,
+    bool has_lobby_details)
+{
+    CreateLobbyStateApplyPlan plan{};
+    plan.lobby = create_plan.lobby;
+    plan.normalize_custom_game_details = has_lobby_details;
+    plan.normalize_arcade_member_slots = create_plan.custom_game_create;
+    plan.clear_reconnect_context = create_plan.custom_game_create;
+    plan.set_reconnect_eligible = create_plan.custom_game_create;
+    plan.log_arcade_isolation = create_plan.custom_game_create;
+    return plan;
+}
+
 CreateLobbyResetPlan compose_create_lobby_reset_plan(
     const GBE_LocalLobby &previous_lobby,
     const GBE_DotaCustomGameDetails &requested_custom_game)

@@ -465,21 +465,25 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         std::string(settings->get_local_name()),
         GBE_kDotaTeamGoodGuys,
         1u);
-    GBE_local_lobby = create_plan.lobby;
-    if (parsed_create_request && request.has_lobby_details) {
+    const gbe::dota_lobby_state::CreateLobbyStateApplyPlan state_apply_plan = gbe::dota_lobby_state::compose_create_lobby_state_apply_plan(
+        create_plan,
+        parsed_create_request && request.has_lobby_details);
+    GBE_local_lobby = state_apply_plan.lobby;
+    if (state_apply_plan.normalize_custom_game_details)
         GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, GBE_local_lobby.custom_game);
-        const bool custom_game_create = GBE_local_lobby.custom_game.game_id != 0ull;
+    if (state_apply_plan.normalize_arcade_member_slots)
         GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby);
-        if (custom_game_create) {
-            GBE_ClearRecentDotaReconnectContext();
-            GBE_SetDotaReconnectEligible(true);
-            GBE_GC_DebugLog(
-                "GC_DOTA_LOBBY",
-                "[LOBBY] Isolated arcade lobby from prior practice runtime lobby_id=%llu custom_game_id=%llu",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id)
-            );
-        }
+    if (state_apply_plan.clear_reconnect_context)
+        GBE_ClearRecentDotaReconnectContext();
+    if (state_apply_plan.set_reconnect_eligible)
+        GBE_SetDotaReconnectEligible(true);
+    if (state_apply_plan.log_arcade_isolation) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Isolated arcade lobby from prior practice runtime lobby_id=%llu custom_game_id=%llu",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id)
+        );
     }
 
     Steam_Client *steam_client = get_steam_client();

@@ -145,6 +145,15 @@ struct CreateLobbyPlan {
     bool custom_game_create{};
 };
 
+struct CreateLobbyStateApplyPlan {
+    GBE_LocalLobby lobby;
+    bool normalize_custom_game_details{};
+    bool normalize_arcade_member_slots{};
+    bool clear_reconnect_context{};
+    bool set_reconnect_eligible{};
+    bool log_arcade_isolation{};
+};
+
 struct CreateLobbyResetPlan {
     bool custom_game_create{};
     bool unsubscribe_previous_practice_lobby{};
@@ -387,6 +396,9 @@ CreateLobbyPlan compose_create_lobby_plan(
     const std::string &owner_name,
     std::uint32_t owner_team,
     std::uint32_t owner_slot);
+CreateLobbyStateApplyPlan compose_create_lobby_state_apply_plan(
+    const CreateLobbyPlan &create_plan,
+    bool has_lobby_details);
 CreateLobbyResetPlan compose_create_lobby_reset_plan(
     const GBE_LocalLobby &previous_lobby,
     const GBE_DotaCustomGameDetails &requested_custom_game);

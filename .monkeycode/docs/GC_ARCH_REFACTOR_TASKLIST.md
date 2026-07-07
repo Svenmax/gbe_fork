@@ -38,7 +38,7 @@
   - 建立 create lobby context，集中 request、pre-reset lobby、custom game、generic lobby 可用性、settings 状态读取。
   - [x] 使用现有 reset plan 决定 previous cache unsubscribed，并把 25 纳入 create action list。
   - 抽出 reset plan，决定 `ResetGCMemory`、previous cache unsubscribed、reconnect context 处理。
-  - 抽出 create lobby state plan，集中生成新的 local lobby 状态。
+  - [x] 抽出 create lobby state plan，集中生成新的 local lobby 状态。
   - [x] 将 `PushCacheUnsubscribed`、publish、record cache subscription、push 24、push 7055 收敛到统一 create action list。
   - [x] 将 `ResetGCMemory`、`CreateGenericLobby` 收敛到 action list。
   - [x] 保持 create path 顺序为 `25 -> 24 -> 7055`。

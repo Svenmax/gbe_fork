@@ -1663,6 +1663,13 @@ bool test_dota_lobby_state_helpers()
     ok &= expect_eq_u64(create_plan.lobby.custom_game.game_id, 777ull, "create lobby plan custom game id");
     ok &= expect_eq_string(create_plan.lobby.custom_game.map_name, "custom-map", "create lobby plan custom map");
     ok &= expect_true(create_plan.custom_game_create, "create lobby plan custom flag");
+    const gbe::dota_lobby_state::CreateLobbyStateApplyPlan create_state_apply_plan = gbe::dota_lobby_state::compose_create_lobby_state_apply_plan(create_plan, true);
+    ok &= expect_eq_u64(create_state_apply_plan.lobby.lobby_id, create_plan.lobby.lobby_id, "create state apply lobby id");
+    ok &= expect_true(create_state_apply_plan.normalize_custom_game_details, "create state apply normalizes details");
+    ok &= expect_true(create_state_apply_plan.normalize_arcade_member_slots, "create state apply normalizes arcade slots");
+    ok &= expect_true(create_state_apply_plan.clear_reconnect_context, "create state apply clears reconnect context");
+    ok &= expect_true(create_state_apply_plan.set_reconnect_eligible, "create state apply sets reconnect eligible");
+    ok &= expect_true(create_state_apply_plan.log_arcade_isolation, "create state apply logs arcade isolation");
     ok &= expect_eq_size(create_plan.lobby.members.size(), 1u, "create lobby plan owner member count");
     if (!create_plan.lobby.members.empty()) {
         ok &= expect_eq_u64(create_plan.lobby.members[0].steam_id, 0x6666ull, "create lobby plan owner member steam id");
@@ -1682,6 +1689,22 @@ bool test_dota_lobby_state_helpers()
         0u,
         1u);
     ok &= expect_eq_string(fallback_pass_plan.lobby.pass_key, "top-level-pass", "create lobby plan top-level pass fallback");
+
+    gbe::proto_wire::DotaPracticeLobbyCreateRequest plain_create_request{};
+    const gbe::dota_lobby_state::CreateLobbyPlan plain_create_plan = gbe::dota_lobby_state::compose_create_lobby_plan(
+        plain_create_request,
+        0x5557ull,
+        0x6668ull,
+        79u,
+        "creator3",
+        0u,
+        1u);
+    const gbe::dota_lobby_state::CreateLobbyStateApplyPlan plain_state_apply_plan = gbe::dota_lobby_state::compose_create_lobby_state_apply_plan(plain_create_plan, false);
+    ok &= expect_true(!plain_state_apply_plan.normalize_custom_game_details, "plain create state apply skips details normalize");
+    ok &= expect_true(!plain_state_apply_plan.normalize_arcade_member_slots, "plain create state apply skips arcade slots");
+    ok &= expect_true(!plain_state_apply_plan.clear_reconnect_context, "plain create state apply keeps reconnect context");
+    ok &= expect_true(!plain_state_apply_plan.set_reconnect_eligible, "plain create state apply keeps reconnect eligibility");
+    ok &= expect_true(!plain_state_apply_plan.log_arcade_isolation, "plain create state apply skips isolation log");
 
     GBE_LocalLobby previous_lobby{};
     previous_lobby.active = true;
