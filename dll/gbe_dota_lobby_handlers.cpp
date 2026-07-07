@@ -1463,8 +1463,21 @@ bool Steam_Game_Coordinator::GBE_HandleDotaGameMatchSignOutRequest(bool wrapped,
 
         std::string response_25;
         if (gbe::gc_message::build_dota_lobby_cache_unsubscribed_payload(lobby_id, response_25)) {
-            GBE_PushDotaResponse(GBE_kDotaCacheUnsubscribed, response_25, wrapped, outer_session_field_raw, "25_after_7004");
-            GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(lobby_id);
+            for (const GBE_DotaAction &action : gbe::dota_lobby_flow::normal_signout_cache_unsubscribed_action_list(
+                     lobby_id,
+                     response_25,
+                     "25_after_7004")) {
+                switch (action.type) {
+                    case GBE_DotaActionType::PushIncomingNow:
+                        GBE_PushDotaResponse(GBE_kDotaCacheUnsubscribed, action.payload, wrapped, outer_session_field_raw, action.reason.c_str());
+                        break;
+                    case GBE_DotaActionType::PendingNormalSignoutFinalizeAfterCacheUnsubscribed:
+                        GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(action.item_id);
+                        break;
+                    default:
+                        break;
+                }
+            }
         } else {
             GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 after 7004 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));
         }

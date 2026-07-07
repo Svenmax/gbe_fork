@@ -95,6 +95,7 @@
 //   AbandonedLobbySuppressed lobby_id, reason
 //   LaunchMessagesDiscardedForAbandon reason
 //   PendingResetAfterCacheUnsubscribed lobby_id
+//   PendingNormalSignoutFinalizeAfterCacheUnsubscribed lobby_id
 
 #ifndef GBE_DOTA_ACTION_MODEL_H
 #define GBE_DOTA_ACTION_MODEL_H
@@ -128,6 +129,7 @@ enum class GBE_DotaActionType {
     AbandonedLobbySuppressed, // mark a Dota lobby as abandoned/suppressed
     LaunchMessagesDiscardedForAbandon, // discard queued launch messages during abandon
     PendingResetAfterCacheUnsubscribed, // defer full reset until cache unsubscribe is observed
+    PendingNormalSignoutFinalizeAfterCacheUnsubscribed, // defer normal signout cleanup until 25 is retrieved
 };
 
 struct GBE_DotaAction {

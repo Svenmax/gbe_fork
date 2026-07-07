@@ -319,6 +319,7 @@ struct RecordedAction
             case GBE_DotaActionType::AbandonedLobbySuppressed: return "AbandonedLobbySuppressed";
             case GBE_DotaActionType::LaunchMessagesDiscardedForAbandon: return "LaunchMessagesDiscardedForAbandon";
             case GBE_DotaActionType::PendingResetAfterCacheUnsubscribed: return "PendingResetAfterCacheUnsubscribed";
+            case GBE_DotaActionType::PendingNormalSignoutFinalizeAfterCacheUnsubscribed: return "PendingNormalSignoutFinalizeAfterCacheUnsubscribed";
         }
         return "Unknown";
     }
