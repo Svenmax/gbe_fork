@@ -105,6 +105,14 @@ GBE_DotaActionList leave_lobby_cache_unsubscribed_action_list(
     const std::string &response_25,
     const char *reason);
 
+GBE_DotaActionList postgame_teardown_action_list(
+    std::uint64_t lobby_id,
+    const std::string &response_25,
+    const std::string &response_7010_postgame,
+    bool push_cache_unsubscribed,
+    bool push_postgame_join,
+    const char *reason);
+
 void apply_lobby_member_team_slot_update(
     std::vector<GBE_DotaLobbyMemberState> &members,
     std::uint64_t steam_id,

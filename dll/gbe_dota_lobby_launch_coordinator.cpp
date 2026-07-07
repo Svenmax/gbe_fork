@@ -595,17 +595,26 @@ bool Steam_Game_Coordinator::GBE_QueueDotaPostGameTeardown(const char *reason, b
         return false;
     }
 
-    auto push_reply = [&](const std::string &payload, uint32 direct_emsg, const char *label) -> bool {
-        return GBE_PushDotaResponse(direct_emsg, payload, wrapped, outer_session_field_raw, label ? label : reason);
-    };
-
-    if (push_cache_unsubscribed && !push_reply(response_25, GBE_kDotaCacheUnsubscribed, "25"))
-        return false;
-
-    if (push_postgame_join && !push_reply(response_7010_postgame, GBE_kDotaJoinChatChannelResponse, "7010_postgame"))
-        return false;
-
-    GBE_ClearPendingResetAfterCacheUnsubscribed(lobby_id);
+    const GBE_DotaActionList postgame_actions = gbe::dota_lobby_flow::postgame_teardown_action_list(
+        lobby_id,
+        response_25,
+        response_7010_postgame,
+        push_cache_unsubscribed,
+        push_postgame_join,
+        reason ? reason : "postgame_teardown");
+    for (const GBE_DotaAction &action : postgame_actions) {
+        switch (action.type) {
+            case GBE_DotaActionType::PushIncomingNow:
+                if (!GBE_PushDotaResponse(action.emsg & ~GBE_kProtoMask, action.payload, wrapped, outer_session_field_raw, action.reason.c_str()))
+                    return false;
+                break;
+            case GBE_DotaActionType::PendingResetAfterCacheUnsubscribedClear:
+                GBE_ClearPendingResetAfterCacheUnsubscribed(action.item_id);
+                break;
+            default:
+                break;
+        }
+    }
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Queued postgame teardown cache_unsub=%u postgame_join=%u; deferring reset until 7272/7014 LobbyID=%llu pre_channel=%llu post_channel=%llu reason=%s",
