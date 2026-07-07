@@ -58,11 +58,11 @@ This tasklist continues the Dota GC maintenance refactor. The purpose is maintai
   - [x] 5.2 Add or strengthen a test for target selection.
     - Cover server coordinator, client coordinator presence, and skip behavior when target is missing or server-owned.
     - Stop: the current handler smoke harness does not link `gbe_dota_lobby_launch_coordinator.cpp`. A direct smoke test would broaden the wrapper linkage surface before the launch coordinator has a focused harness.
-    - Result: deferred by the linkage stop condition; no target-selection test added.
+    - Result: added pure `gbe::dota_lobby_flow` coverage for launch-state peer selection and valid target eligibility without linking the production launch coordinator into the handler smoke harness.
   - [x] 5.3 Add a read-only lookup helper if the test makes ownership behavior reviewable.
     - Stop if the helper needs broad constructor changes or must know unrelated lifecycle phases.
     - Stop: no lookup helper added until target-selection coverage can be added without broad handler-test linkage expansion.
-    - Result: deferred until focused target-selection coverage exists; no lookup helper added.
+    - Result: added narrow bool-only helper seams for peer selection, target eligibility, and owner-LAN server-id preserve eligibility. Full launch push side-effect coverage remains deferred until it can use a small explicit context or planner.
 
 - [x] 6. Keep payload fixture coverage growing alongside refactors
   - [x] 6.1 Add focused malformed-input coverage for `GBE_ParseDotaEquipOps`.
@@ -81,4 +81,4 @@ This tasklist continues the Dota GC maintenance refactor. The purpose is maintai
     - Result: passed.
   - [x] 7.3 Re-evaluate Dota sub-object extraction readiness.
     - Start extraction only if shared-state read/clear/publish boundaries are named, at least three side-effect families have recorder coverage, settings/ownership seams are stable, and a small explicit context can replace broad `Steam_Game_Coordinator *` dependency.
-    - Decision: defer Dota sub-object extraction. Shared-state and response seams are stronger, and multiple side-effect families have recorder coverage, while client/ownership target-selection coverage remains deferred and the candidate launch-state path still requires a broad coordinator surface.
+    - Decision: defer Dota sub-object extraction. Shared-state and response seams are stronger, multiple side-effect families have recorder coverage, and client/ownership target-selection has narrow pure helper coverage. The full launch-state client-peer push path still requires a broad coordinator surface.
