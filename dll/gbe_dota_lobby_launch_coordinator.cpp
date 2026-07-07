@@ -330,6 +330,28 @@ bool Steam_Game_Coordinator::GBE_BuildDotaLaunchStatePayload(
 }
 
 
+bool Steam_Game_Coordinator::GBE_BuildDotaLaunchStatePayloads(
+    const gbe::dota_lobby_flow::LaunchStatePushPlan &plan,
+    const GBE_LocalLobby &lobby,
+    std::string &response_24,
+    std::string &response_26,
+    gbe::dota_lobby_flow::LaunchStatePayloadBuild &failed_build)
+{
+    const std::vector<gbe::dota_lobby_flow::LaunchStatePayloadBuildRequest> build_requests = gbe::dota_lobby_flow::launch_state_payload_build_requests(plan);
+    if (build_requests.size() != 2u) {
+        failed_build = gbe::dota_lobby_flow::LaunchStatePayloadBuild::CacheSubscribed;
+        return false;
+    }
+    for (const gbe::dota_lobby_flow::LaunchStatePayloadBuildRequest &request : build_requests) {
+        failed_build = request.build;
+        std::string &response = request.build == gbe::dota_lobby_flow::LaunchStatePayloadBuild::CacheSubscribed ? response_24 : response_26;
+        if (!GBE_BuildDotaLaunchStatePayload(request, lobby, GBE_GetDotaLobbyOwnerName(), response))
+            return false;
+    }
+    return true;
+}
+
+
 void Steam_Game_Coordinator::GBE_ExecuteDotaLaunchStatePushActions(
     const gbe::dota_lobby_flow::LaunchStatePushPlan &plan,
     const GBE_LocalLobby &lobby,
@@ -474,35 +496,33 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
         return;
     }
 
-    const std::vector<gbe::dota_lobby_flow::LaunchStatePayloadBuildRequest> build_requests = gbe::dota_lobby_flow::launch_state_payload_build_requests(plan);
-
     std::string response_24;
-    if (!target->GBE_BuildDotaLaunchStatePayload(build_requests[0], lobby, target->GBE_GetDotaLobbyOwnerName(), response_24)) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "failed building launch state 24 for client reason=%s target=%p lobby_id=%llu state=%u game_state=%u server_id=%llu",
-            reason ? reason : "unknown",
-            static_cast<void *>(target),
-            static_cast<unsigned long long>(lobby.lobby_id),
-            lobby.state,
-            lobby.game_state,
-            static_cast<unsigned long long>(lobby.server_id)
-        );
-        return;
-    }
-
     std::string response_26;
-    if (!target->GBE_BuildDotaLaunchStatePayload(build_requests[1], lobby, target->GBE_GetDotaLobbyOwnerName(), response_26)) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "failed building launch state 26 for client reason=%s target=%p lobby_id=%llu state=%u game_state=%u server_id=%llu",
-            reason ? reason : "unknown",
-            static_cast<void *>(target),
-            static_cast<unsigned long long>(lobby.lobby_id),
-            lobby.state,
-            lobby.game_state,
-            static_cast<unsigned long long>(lobby.server_id)
-        );
+    gbe::dota_lobby_flow::LaunchStatePayloadBuild failed_build = gbe::dota_lobby_flow::LaunchStatePayloadBuild::CacheSubscribed;
+    if (!target->GBE_BuildDotaLaunchStatePayloads(plan, lobby, response_24, response_26, failed_build)) {
+        if (failed_build == gbe::dota_lobby_flow::LaunchStatePayloadBuild::CacheSubscribed) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "failed building launch state 24 for client reason=%s target=%p lobby_id=%llu state=%u game_state=%u server_id=%llu",
+                reason ? reason : "unknown",
+                static_cast<void *>(target),
+                static_cast<unsigned long long>(lobby.lobby_id),
+                lobby.state,
+                lobby.game_state,
+                static_cast<unsigned long long>(lobby.server_id)
+            );
+        } else {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "failed building launch state 26 for client reason=%s target=%p lobby_id=%llu state=%u game_state=%u server_id=%llu",
+                reason ? reason : "unknown",
+                static_cast<void *>(target),
+                static_cast<unsigned long long>(lobby.lobby_id),
+                lobby.state,
+                lobby.game_state,
+                static_cast<unsigned long long>(lobby.server_id)
+            );
+        }
         return;
     }
 

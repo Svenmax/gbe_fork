@@ -59,3 +59,8 @@ git diff --check
   - Goal: make the production tail follow the pure action sequence after payloads are already built.
   - Result: added `GBE_ExecuteDotaLaunchStatePushActions(...)`, which consumes `launch_state_push_actions(plan)` and executes cache subscription recording, cache-subscribed push, details-update push, rich-presence reapply, and last-game-state update in the tested order.
   - Stop condition: the helper receives built payloads and a captured lobby snapshot; it does not restore shared state, select the target coordinator, capture lobby state, build payloads, change response metadata, or introduce a focused launch coordinator harness.
+
+- [x] 12. Group launch-state payload builds behind a narrow helper
+  - Goal: keep `GBE_PushDotaLaunchStateToClientPeer(...)` from indexing build requests directly while preserving the existing `24` and `26` failure log sites.
+  - Result: added `GBE_BuildDotaLaunchStatePayloads(...)`, which consumes the tested request sequence, builds `response_24` then `response_26`, and reports the failed build kind to the caller.
+  - Stop condition: the helper still delegates to the existing authoritative payload builders; it does not push responses, record cache subscriptions, reapply rich presence, update last game state, change failure log reason/text, or broaden harness linkage.
