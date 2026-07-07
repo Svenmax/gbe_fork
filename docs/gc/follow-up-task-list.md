@@ -292,6 +292,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `GBE_ResetDotaPracticeLobbyLaunchRichPresenceToServerSetup()` as a behavior-equivalent wrapper for `#DOTA_RP_INIT` / `SERVERSETUP` with party and lobby fields cleared, then replaced the postgame chat leave and `ResetGCMemory(...)` reset call sites.
   - Stop condition: no new rich presence policy, retry behavior, logging, or ordering changes were added.
 
+- [x] Launch persona-state recorder coverage pass.
+  - Goal: make the non-queued persona-state side effect visible in handler smoke tests after rich presence ordering became visible.
+  - Result: added `LaunchPersonaState` to the handler action recorder and strengthened the 7041 standard launch smoke test to prove shared-lobby publish, initial details `26`, rich presence update, and persona-state metadata build order, including status, lobby state, party/lobby flags, and reason.
+  - Stop condition: no production persona-state behavior changed and no custom-game launch coordinator linkage was added.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

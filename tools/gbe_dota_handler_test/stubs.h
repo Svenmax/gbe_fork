@@ -300,6 +300,7 @@ struct RecordedAction
             case GBE_DotaActionType::GenericLobbyLeave:     return "GenericLobbyLeave";
             case GBE_DotaActionType::SettingsLobbyClear:    return "SettingsLobbyClear";
             case GBE_DotaActionType::RichPresenceUpdate:    return "RichPresenceUpdate";
+            case GBE_DotaActionType::LaunchPersonaState:    return "LaunchPersonaState";
         }
         return "Unknown";
     }
@@ -491,6 +492,18 @@ public:
         a.lobby_state = lobby_state ? lobby_state : "";
         a.include_party = include_party;
         a.include_lobby = include_lobby;
+        actions.push_back(std::move(a));
+    }
+
+    void record_launch_persona_state(const char *status, const char *lobby_state, bool include_party, bool include_lobby, const char *reason)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::LaunchPersonaState;
+        a.status = status ? status : "";
+        a.lobby_state = lobby_state ? lobby_state : "";
+        a.include_party = include_party;
+        a.include_lobby = include_lobby;
+        a.reason = reason ? reason : "";
         actions.push_back(std::move(a));
     }
 
@@ -1136,7 +1149,11 @@ public:
         return true;
     }
     void GBE_ResetDotaPracticeLobbyLaunchPeripheralState() {}
-    void GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(const char *, const char *, bool, bool, const char *) {}
+    void GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState(const char *status, const char *lobby_state, bool include_party, bool include_lobby, const char *reason)
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_launch_persona_state(status, lobby_state, include_party, include_lobby, reason);
+    }
     bool GBE_SendDotaCustomGameLaunchSetupFlow(bool, const std::string *, bool, uint64) { return false; }
     void GBE_MaybeQueueDotaPracticeLobbySteamAuthAck(const char *, uint64) {}
     void GBE_LeaveGenericLobby()
