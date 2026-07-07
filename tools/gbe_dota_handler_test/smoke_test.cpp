@@ -1111,6 +1111,57 @@ static void test_lobby_set_details_mutates_before_publish_and_details_update()
     ++g_tests_passed;
 }
 
+static void test_lobby_set_team_slot_publishes_before_details_and_ack()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7047u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x704700u;
+    tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.get_local_steam_id().ConvertToUint64();
+    tf.gc.GBE_local_lobby.owner_account_id = tf.settings.get_local_steam_id().GetAccountID();
+    tf.gc.GBE_local_lobby.owner_name = "tester";
+    tf.gc.GBE_local_lobby.members.push_back(GBE_DotaLobbyMemberState{
+        tf.gc.GBE_local_lobby.owner_steam_id,
+        tf.gc.GBE_local_lobby.owner_account_id,
+        0u,
+        0u,
+        0u,
+        true,
+        0u
+    });
+
+    const std::string session_raw = "set-team-slot-session-token";
+    const JobID_t request_job = 0x7047ABCDu;
+    const std::string body = WireBodyBuilder()
+        .varint(1u, GBE_kDotaTeamGoodGuys)
+        .varint(2u, 3u)
+        .varint(3u, 2u)
+        .take();
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbySetTeamSlotRequest(body, request_job, true, true, &session_raw);
+
+    TEST_ASSERT(result, "set team slot handler should return true");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_team, GBE_kDotaTeamGoodGuys, "set team slot should update owner team before publishing");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_slot, 3u, "set team slot should update owner slot before publishing");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.bot_difficulty_radiant, 2u, "set team slot should update radiant bot difficulty before publishing");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "set team slot should publish local/shared state then ack");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "set team slot should publish local member data before shared state");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7047_set_team_slot", "set team slot local member data reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "set team slot should publish shared state after local member data");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7047_set_team_slot", "set team slot shared publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "set team slot should send one details update");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 2u, "set team slot details update should happen after shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "set team slot details update should preserve wrapped flag in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override == session_raw, "set team slot details update should preserve session raw in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7047", "set team slot details update reason should be preserved");
+    expect_push_payload(tf.recorder.actions[2], GBE_kDotaPracticeLobbyResponse, "set team slot should push 7055 ack after details update");
+    TEST_ASSERT(tf.recorder.actions[2].wrapped, "set team slot 7055 response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[2].session_raw == session_raw, "set team slot 7055 response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7047_7055", "set team slot 7055 reason should be preserved");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_create_records_cache_subscription_before_pushes()
 {
     TestFixture tf;
@@ -1946,6 +1997,9 @@ int main()
 
     std::printf("[run] test_lobby_set_details_mutates_before_publish_and_details_update\n");
     RUN_TEST(test_lobby_set_details_mutates_before_publish_and_details_update);
+
+    std::printf("[run] test_lobby_set_team_slot_publishes_before_details_and_ack\n");
+    RUN_TEST(test_lobby_set_team_slot_publishes_before_details_and_ack);
 
     std::printf("[run] test_lobby_create_records_cache_subscription_before_pushes\n");
     RUN_TEST(test_lobby_create_records_cache_subscription_before_pushes);

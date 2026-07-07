@@ -332,6 +332,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `RichPresenceClear` to the handler action recorder and strengthened the player postgame observation smoke test to prove postgame details `26` precedes rich-presence clear, launch peripheral reset, and cache-unsubscribed `25` cleanup.
   - Stop condition: no production rich-presence behavior changed and no launch coordinator linkage was expanded.
 
+- [x] Team-slot publish ordering coverage pass.
+  - Goal: cover the 7047 set-team-slot publish/update/ack ordering before adding any helper around lobby mutation publish side effects.
+  - Result: added a handler smoke test proving team/slot/bot-difficulty mutation occurs before local member-data publish, shared-lobby publish, details update, and optional `7055` ack.
+  - Stop condition: no production team-slot behavior changed and no generic-lobby metadata surface was widened.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
