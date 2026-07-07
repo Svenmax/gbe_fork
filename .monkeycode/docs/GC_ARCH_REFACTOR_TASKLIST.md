@@ -20,7 +20,7 @@
   - 收敛职责说明，后续 handler 只负责消息入口和流程编排。
   - 让 Dota lobby 生命周期逻辑进入 planner/domain 层。
 
-- [ ] 2. 改造 `GBE_PushDotaLaunchStateToClientPeer` 为样板路径
+- [x] 2. 改造 `GBE_PushDotaLaunchStateToClientPeer` 为样板路径
   - [x] 建立完整 launch push context，集中收集 source lobby、target、shared snapshot、captured lobby、last pushed game state。
   - [x] 将多段 `LaunchStatePushPlanInput` 填充收敛为 context -> planner 入口。
   - [x] 让 planner 返回 skip reason、payload build request、action sequence。
@@ -35,7 +35,7 @@
   - [ ] 为 handler smoke test 包装器纳入 launch coordinator，补齐必要 stub 后再接入 `GBE_PushDotaLaunchStateToClientPeer` 行为测试。
     - 评估结果：直接纳入 `gbe_dota_lobby_launch_coordinator.cpp` 会与现有 handler smoke stub 中的 launch/postgame/response helper 定义大面积重叠，需要单独改造 wrapper 结构。
 
-- [ ] 4. 改造 `GBE_HandleDotaPracticeLobbyCreateRequest`
+- [x] 4. 改造 `GBE_HandleDotaPracticeLobbyCreateRequest`
   - [x] 建立 create lobby context，集中 request、pre-reset lobby、custom game、generic lobby 可用性、settings 状态读取。
   - [x] 使用现有 reset plan 决定 previous cache unsubscribed，并把 25 纳入 create action list。
   - [x] 抽出 reset plan，决定 `ResetGCMemory` 和 previous cache unsubscribed。
@@ -44,27 +44,27 @@
   - [x] 将 `ResetGCMemory`、`CreateGenericLobby` 收敛到 action list。
   - [x] 保持 create path 顺序为 `25 -> 24 -> 7055`。
 
-- [ ] 5. 为 create lobby 补强测试护栏
+- [x] 5. 为 create lobby 补强测试护栏
   - [x] 增加 create action list 单测，覆盖可选 25 以及 `24 -> 7055` 顺序。
   - [x] 增加 smoke test，覆盖真实 handler 的 `25 -> 24 -> 7055`。
   - [x] 验证 record cache subscription 在 push 前。
   - [x] 验证 custom game create 的状态归一化。
 
-- [ ] 6. 改造 `GBE_HandleDotaPracticeLobbyJoinRequest`
+- [x] 6. 改造 `GBE_HandleDotaPracticeLobbyJoinRequest`
   - [x] 建立 join lobby context，集中 request lobby id、pass key、matched generic lobby、当前 local lobby、settings sync 状态读取。
   - [x] 抽出 join lobby merge plan，决定 JoinLobby、SyncSettingsLobby、pass key 更新、local lobby 合并。
   - [x] 将 JoinLobby、SyncSettingsLobby、publish、record cache subscription、push 24、push 7113 收敛到 join action list。
   - [x] 保持 join path 顺序为 `24 -> 7113`。
 
-- [ ] 7. 为 join lobby 补强测试护栏
+- [x] 7. 为 join lobby 补强测试护栏
   - [x] 增加 action list 单测，覆盖 direct join、matched generic lobby、无 join response 的 `24` only 顺序。
   - [x] 保持 smoke test 覆盖 matched generic lobby 和 `24 -> 7113` 顺序。
   - [x] 增加 smoke test，覆盖 empty local lobby、pass key。
 
-- [ ] 8. 第一轮检查点
-  - 运行 `tools/run_gc_verification.sh`。
-  - 确认 launch/create/join 三条路径通过 full verification。
-  - 确认新增逻辑没有扩大 handler 直接写 `GBE_local_lobby` 和直接执行副作用的范围。
+- [x] 8. 第一轮检查点
+  - [x] 运行 `tools/run_gc_verification.sh`。
+  - [x] 确认 launch/create/join 三条路径通过 full verification。
+  - [x] 确认新增逻辑没有扩大 handler 直接写 `GBE_local_lobby` 和直接执行副作用的范围。
 
 ## 第二轮
 
