@@ -305,6 +305,7 @@ struct RecordedAction
             case GBE_DotaActionType::LobbyMetadataPublish:  return "LobbyMetadataPublish";
             case GBE_DotaActionType::LaunchPeripheralReset: return "LaunchPeripheralReset";
             case GBE_DotaActionType::LobbyCacheSubscriptionRecord: return "LobbyCacheSubscriptionRecord";
+            case GBE_DotaActionType::SettingsLobbySync:     return "SettingsLobbySync";
         }
         return "Unknown";
     }
@@ -540,6 +541,14 @@ public:
         RecordedAction a;
         a.type = GBE_DotaActionType::LobbyCacheSubscriptionRecord;
         a.msg_body = message;
+        a.reason = reason ? reason : "";
+        actions.push_back(std::move(a));
+    }
+
+    void record_settings_lobby_sync(const char *reason)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::SettingsLobbySync;
         a.reason = reason ? reason : "";
         actions.push_back(std::move(a));
     }
@@ -1116,7 +1125,11 @@ public:
         if (g_action_recorder)
             g_action_recorder->record_lobby_local_member_data(reason);
     }
-    void GBE_SyncSettingsLobbyFromGenericLobby(const char *) {}
+    void GBE_SyncSettingsLobbyFromGenericLobby(const char *reason)
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_settings_lobby_sync(reason);
+    }
     void GBE_PublishDotaPracticeLobbyMetadata(const char *reason)
     {
         if (g_action_recorder)

@@ -312,6 +312,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `LobbyCacheSubscriptionRecord` to the handler action recorder, added a 7038 create smoke test proving local member data publish, shared lobby publish, metadata publish, cache subscription record, cache subscribed `24`, then practice lobby response `7055` order, and added a 7044 join smoke test proving local member data publish, shared lobby publish, cache subscription record, cache subscribed `24`, then join response `7113` order.
   - Stop condition: no production cache subscription behavior changed and no join/custom-game linkage was expanded.
 
+- [x] Settings lobby sync recorder coverage pass.
+  - Goal: make settings-lobby sync visible in the 7038 create lifecycle before adding any wrapper around lobby setup publishing.
+  - Result: added `SettingsLobbySync` to the handler action recorder and strengthened the 7038 create smoke test to prove local member data publish, settings sync, shared lobby publish, metadata publish, cache subscription record, cache subscribed `24`, then practice lobby response `7055` order.
+  - Stop condition: no production settings sync behavior changed and no generic-lobby metadata surface was widened.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

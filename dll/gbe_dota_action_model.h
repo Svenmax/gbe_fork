@@ -86,6 +86,7 @@
 //   LobbyMetadataPublish  reason
 //   LaunchPeripheralReset reason
 //   LobbyCacheSubscriptionRecord reason
+//   SettingsLobbySync  reason
 
 #ifndef GBE_DOTA_ACTION_MODEL_H
 #define GBE_DOTA_ACTION_MODEL_H
@@ -110,6 +111,7 @@ enum class GBE_DotaActionType {
     LobbyMetadataPublish,  // publish generic lobby metadata
     LaunchPeripheralReset, // clear launch peripheral dedupe/callback state
     LobbyCacheSubscriptionRecord, // record cache-subscription payload state
+    SettingsLobbySync,   // sync settings lobby from generic lobby metadata
 };
 
 struct GBE_DotaAction {
