@@ -85,7 +85,7 @@ Inventory tests in the same binary protect item unlock/equip behavior and should
 - Reconnect preserve-vs-clear behavior is covered by `compute_runtime_reset_decision(...)` focused tests; extend coverage if more reset reasons preserve context.
 - `GBE_IsSharedDotaArcadeLobbyActive()` and `GBE_GetSharedDotaReconnectStateSnapshot()` are covered against direct-field behavior; keep broad shared-state read replacement to one tested read-only cluster at a time.
 - Side-effect recorder coverage should be extended before wrapping more push/broadcast/detail-update operations.
-- Launch-state push planner, payload build request, grouped payload build, target/captured mapping, and action-sequence seams are covered by `gbe_dota_lobby_flow_test`; full launch coordinator harness coverage remains deferred around restore, capture, settings reads, logging, and coordinator selection.
+- Launch-state push planner, payload build request, grouped payload build, target/shared/captured mapping, and action-sequence seams are covered by `gbe_dota_lobby_flow_test`; full launch coordinator harness coverage remains deferred around restore, capture, settings reads, logging, and coordinator selection.
 
 ## Maintenance Rule
 

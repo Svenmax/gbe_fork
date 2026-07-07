@@ -417,9 +417,14 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `captured_lobby_input_from_local_lobby(...)` so focused flow tests cover copied launch fields and connect availability; production now uses the helper before applying captured lobby data to `LaunchStatePushPlanInput`.
   - Stop condition: no lobby capture, last-pushed state read, target local steam id read, payload build, response push, or last-game-state behavior changed.
 
+- [x] Launch-state shared-lobby suppression mapping seam.
+  - Goal: name the post-restore shared-lobby suppression gate without moving restore, snapshot reads, suppression checks, capture, settings reads, or logging.
+  - Result: added `LaunchStateSharedLobbyInput` and `apply_shared_lobby_to_launch_state_push_plan_input(...)` so focused flow tests cover suppressed and unsuppressed shared-lobby gate mapping; `GBE_PushDotaLaunchStateToClientPeer(...)` now uses the helper for the equivalent planner-input assignment.
+  - Stop condition: no shared-state restore, snapshot source, suppression predicate, lobby capture, target selection, payload build, response push, or debug-log behavior changed.
+
 - [x] Launch-state push seam stop checkpoint.
   - Goal: re-evaluate remaining direct logic in `GBE_PushDotaLaunchStateToClientPeer(...)` after planner, target/captured mappings, payload build requests, grouped payload builds, and action-sequence execution were extracted.
-  - Result: stop before adding more helpers. The remaining code is mostly source-lobby suppression, target coordinator selection, shared-state restore/checks, current-lobby capture, settings reads, and failure/success logging. A next helper would either be a mechanical setter wrapper or would hide the immediate ordering differences that the current seams keep visible.
+  - Result: stop before adding broad helpers. The remaining code is mostly source-lobby suppression, target coordinator selection, shared-state restore/snapshot source, current-lobby capture, settings reads, and failure/success logging. A next helper should name exactly one of those boundaries with an explicit context.
   - Stop condition: continue only when a future change can name one remaining boundary with a small explicit context and focused coverage, without linking the full launch coordinator TU into handler smoke tests.
 
 - [x] Host/server active-lobby ownership predicate seam.

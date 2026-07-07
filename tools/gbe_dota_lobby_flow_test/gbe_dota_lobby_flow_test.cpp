@@ -353,6 +353,31 @@ bool test_launch_state_plan_input_target_mapping()
     return ok;
 }
 
+bool test_launch_state_plan_input_shared_lobby_mapping()
+{
+    bool ok = true;
+
+    gbe::dota_lobby_flow::LaunchStatePushPlanInput input = valid_launch_state_plan_input();
+    gbe::dota_lobby_flow::apply_shared_lobby_to_launch_state_push_plan_input(
+        input,
+        gbe::dota_lobby_flow::LaunchStateSharedLobbyInput{true});
+
+    ok &= expect_true(input.shared_lobby_suppressed, "shared lobby mapping suppressed");
+    gbe::dota_lobby_flow::LaunchStatePushPlan plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::SuppressedSharedLobby, "shared lobby mapping planner suppressed");
+    ok &= expect_true(plan.restore_shared_state, "shared lobby mapping occurs after restore gate");
+
+    gbe::dota_lobby_flow::apply_shared_lobby_to_launch_state_push_plan_input(
+        input,
+        gbe::dota_lobby_flow::LaunchStateSharedLobbyInput{false});
+
+    ok &= expect_true(!input.shared_lobby_suppressed, "shared lobby remapping unsuppressed");
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::None, "shared lobby remapping planner push");
+
+    return ok;
+}
+
 bool test_launch_state_captured_lobby_input_from_local_lobby()
 {
     bool ok = true;
@@ -1366,6 +1391,7 @@ int main()
     ok &= test_launch_state_peer_selection();
     ok &= test_launch_state_push_planner();
     ok &= test_launch_state_plan_input_target_mapping();
+    ok &= test_launch_state_plan_input_shared_lobby_mapping();
     ok &= test_launch_state_captured_lobby_input_from_local_lobby();
     ok &= test_launch_state_plan_input_captured_lobby_mapping();
     ok &= test_upsert_and_slot_selection();

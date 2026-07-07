@@ -112,9 +112,18 @@ struct LaunchStateTargetInput
     bool target_is_dota_profile{};
 };
 
+struct LaunchStateSharedLobbyInput
+{
+    bool suppressed{};
+};
+
 void apply_target_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateTargetInput &target);
+
+void apply_shared_lobby_to_launch_state_push_plan_input(
+    LaunchStatePushPlanInput &plan_input,
+    const LaunchStateSharedLobbyInput &shared_lobby);
 
 LaunchStateCapturedLobbyInput captured_lobby_input_from_local_lobby(
     const GBE_LocalLobby &lobby,

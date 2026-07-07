@@ -125,6 +125,13 @@ void apply_target_to_launch_state_push_plan_input(
     plan_input.target_is_dota_profile = target.target_is_dota_profile;
 }
 
+void apply_shared_lobby_to_launch_state_push_plan_input(
+    LaunchStatePushPlanInput &plan_input,
+    const LaunchStateSharedLobbyInput &shared_lobby)
+{
+    plan_input.shared_lobby_suppressed = shared_lobby.suppressed;
+}
+
 LaunchStateCapturedLobbyInput captured_lobby_input_from_local_lobby(
     const GBE_LocalLobby &lobby,
     bool captured_active)
