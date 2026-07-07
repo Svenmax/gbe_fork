@@ -352,6 +352,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: strengthened the existing ready-up smoke test to prove the `7170` response and shared-lobby publish precede the details update, with the `7070_custom_game_ready_up_run_ack` reason preserved.
   - Stop condition: no production ready-up behavior changed and no runtime transition side-effect interface was introduced.
 
+- [x] Broadcast join details-update ordering coverage pass.
+  - Goal: make the 7149 broadcast-channel join publish/update/ack order visible before wrapping chat broadcast side effects.
+  - Result: added a handler smoke test proving broadcast channel state mutates before shared-lobby publish, details update, and optional `7055` ack, with wrapped/session metadata and reasons preserved.
+  - Stop condition: no production broadcast behavior changed and no chat side-effect interface was introduced.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
@@ -370,7 +375,7 @@ git diff --check
 
 Latest handoff verification:
 
-- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `49/49`, and audit issues `0`.
+- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `50/50`, and audit issues `0`.
 - `git diff --check` passed.
 
 For source-list, build-system, or new-file changes, also check the relevant `premake5.lua` source lists and `tools/run_gc_offline_tests.sh` entries.

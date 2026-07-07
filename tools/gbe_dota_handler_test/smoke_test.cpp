@@ -1162,6 +1162,46 @@ static void test_lobby_set_team_slot_publishes_before_details_and_ack()
     ++g_tests_passed;
 }
 
+static void test_lobby_join_broadcast_publishes_before_details_and_ack()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7149u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x714900u;
+
+    const std::string session_raw = "join-broadcast-session-token";
+    const JobID_t request_job = 0x7149ABCDu;
+    const std::string body = WireBodyBuilder()
+        .varint(1u, 77u)
+        .bytes(2u, "caster room")
+        .bytes(3u, "US")
+        .bytes(4u, "en")
+        .take();
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest(body, request_job, true, true, &session_raw);
+
+    TEST_ASSERT(result, "join broadcast handler should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.has_broadcast_channel, "join broadcast should mark channel active before publishing");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.broadcast_channel_id, 77u, "join broadcast should preserve channel id");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_description == "caster room", "join broadcast should preserve description");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_country_code == "US", "join broadcast should preserve country code");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_language_code == "en", "join broadcast should preserve language code");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "join broadcast should publish shared state then ack");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "join broadcast should publish shared state before ack");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7149_join_broadcast", "join broadcast publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "join broadcast should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "join broadcast details update should happen after shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "join broadcast details update should preserve wrapped flag in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override == session_raw, "join broadcast details update should preserve session raw in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7149", "join broadcast details update reason should be preserved");
+    expect_push_payload(tf.recorder.actions[1], GBE_kDotaPracticeLobbyResponse, "join broadcast should push 7055 ack after details update");
+    TEST_ASSERT(tf.recorder.actions[1].wrapped, "join broadcast 7055 response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[1].session_raw == session_raw, "join broadcast 7055 response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7149_7055", "join broadcast 7055 reason should be preserved");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_create_records_cache_subscription_before_pushes()
 {
     TestFixture tf;
@@ -2011,6 +2051,9 @@ int main()
 
     std::printf("[run] test_lobby_set_team_slot_publishes_before_details_and_ack\n");
     RUN_TEST(test_lobby_set_team_slot_publishes_before_details_and_ack);
+
+    std::printf("[run] test_lobby_join_broadcast_publishes_before_details_and_ack\n");
+    RUN_TEST(test_lobby_join_broadcast_publishes_before_details_and_ack);
 
     std::printf("[run] test_lobby_create_records_cache_subscription_before_pushes\n");
     RUN_TEST(test_lobby_create_records_cache_subscription_before_pushes);
