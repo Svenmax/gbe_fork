@@ -1110,6 +1110,36 @@ static void test_lobby_create_records_cache_subscription_before_pushes()
     ++g_tests_passed;
 }
 
+static void test_lobby_join_records_cache_subscription_before_pushes()
+{
+    TestFixture tf;
+    tf.reset();
+
+    const std::string session_raw = "join-lobby-session-token";
+    const JobID_t request_job = 0x7044ABCDu;
+    const std::string body = WireBodyBuilder()
+        .varint(1u, 0x704400u)
+        .bytes(2u, "join-pass")
+        .take();
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyJoinRequest(body, request_job, true, false, &session_raw, true);
+
+    TEST_ASSERT(result, "join lobby handler should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.active, "join lobby should activate local lobby");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0x704400ull, "join lobby should preserve requested lobby id");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "join lobby should publish local/shared state, record cache subscription, then push 24 and 7113");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "join should publish local member data first");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7044_join", "join local member data reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "join should publish shared lobby state after local member data");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7044_join", "join shared publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbyCacheSubscriptionRecord, "join should record cache subscription before pushing 24");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7044_join_direct", "join cache subscription record reason should preserve direct path");
+    TEST_ASSERT(tf.recorder.actions[2].msg_body == "cache_subscribed", "join cache subscription record should preserve built cache body");
+    expect_push_payload(tf.recorder.actions[3], GBE_kDotaCacheSubscribed, "join should push cache subscribed after recording it");
+    expect_push_payload(tf.recorder.actions[4], GBE_kDotaPracticeLobbyJoinResponse, "join should push 7113 after cache subscribed");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_abandon_ready_teardown_queues_postgame_response()
 {
     TestFixture tf;
@@ -1838,6 +1868,9 @@ int main()
 
     std::printf("[run] test_lobby_create_records_cache_subscription_before_pushes\n");
     RUN_TEST(test_lobby_create_records_cache_subscription_before_pushes);
+
+    std::printf("[run] test_lobby_join_records_cache_subscription_before_pushes\n");
+    RUN_TEST(test_lobby_join_records_cache_subscription_before_pushes);
 
     std::printf("[run] test_lobby_abandon_ready_teardown_queues_postgame_response\n");
     RUN_TEST(test_lobby_abandon_ready_teardown_queues_postgame_response);

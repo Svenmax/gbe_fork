@@ -309,7 +309,7 @@ The checklist above records the first follow-up pass and includes several "decid
 
 - [x] Lobby cache subscription recorder coverage pass.
   - Goal: make cache subscription state recording visible before extracting or wrapping create/join cache-subscription side effects.
-  - Result: added `LobbyCacheSubscriptionRecord` to the handler action recorder and added a 7038 create smoke test proving local member data publish, shared lobby publish, metadata publish, cache subscription record, cache subscribed `24`, then practice lobby response `7055` order.
+  - Result: added `LobbyCacheSubscriptionRecord` to the handler action recorder, added a 7038 create smoke test proving local member data publish, shared lobby publish, metadata publish, cache subscription record, cache subscribed `24`, then practice lobby response `7055` order, and added a 7044 join smoke test proving local member data publish, shared lobby publish, cache subscription record, cache subscribed `24`, then join response `7113` order.
   - Stop condition: no production cache subscription behavior changed and no join/custom-game linkage was expanded.
 
 - [x] Shared lobby state clear facade planning pass.
