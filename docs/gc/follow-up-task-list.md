@@ -272,6 +272,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: the full path still depends on shared-state restore, current-lobby capture, cache-subscribed/details-update builders, cache subscription recording, queue pushes, rich presence, settings local steam id, duplicate suppression, and coordinator private state. The owner-LAN preserve branch was extracted to a pure helper instead.
   - Stop condition: defer a full launch coordinator harness until those dependencies can be represented as a small explicit context or until the launch push is split into a planner with recorded side effects.
 
+- [x] Launch-state push planner pass.
+  - Goal: turn the launch-state client-peer push decision path into a pure planner before any harness or object extraction work.
+  - Result: added `LaunchStatePushPlanInput`, `LaunchStatePushPlan`, and `plan_launch_state_push` to `gbe::dota_lobby_flow`; covered invalid target, suppressed shared lobby, inactive capture, ineligible launch state, duplicate game state, normal push, connect-endpoint push, and owner-LAN preserve in `gbe_dota_lobby_flow_test`; integrated the planner into `GBE_PushDotaLaunchStateToClientPeer` while preserving restore, capture, build, push, rich-presence, last-state, and debug-log order.
+  - Stop condition: full focused launch coordinator harness and Dota sub-object extraction remain deferred because side-effect execution still depends on broad coordinator state.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

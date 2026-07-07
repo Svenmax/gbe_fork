@@ -27,9 +27,11 @@ git diff --check
   - Preserve existing reason strings, response order, wrapped `26` behavior, cache subscription recording, rich presence ordering, and last-game-state update.
   - Result: production path now builds planner input incrementally and uses planner skip/preserve decisions while preserving the existing restore, capture, build, push, rich-presence, last-state, and debug-log order.
 
-- [ ] 5. Re-evaluate focused launch coordinator harness
+- [x] 5. Re-evaluate focused launch coordinator harness
   - Add a focused harness only if planner integration leaves a small explicit context for side-effect assertions.
   - Stop if the harness requires broad coordinator construction, protobuf expansion, or handler smoke wrapper linkage expansion.
+  - Decision: defer the harness. The planner now covers decision and skip behavior, but full side-effect assertions still require shared-state restore, current-lobby capture, cache-subscribed/details-update builders, cache subscription recording, queue pushes, rich presence, settings local steam id, duplicate state, and coordinator private fields.
 
-- [ ] 6. Re-check Dota sub-object extraction readiness
+- [x] 6. Re-check Dota sub-object extraction readiness
   - Keep extraction deferred unless the launch planner, ownership seams, side-effect ordering, and shared-state mutation boundaries form a small coherent dependency surface.
+  - Decision: keep extraction deferred. Launch push decisions are now planner-backed, while side-effect execution still lives in the coordinator and the shared-state mutation/publish/restore boundaries are not yet a small object-ready dependency surface.

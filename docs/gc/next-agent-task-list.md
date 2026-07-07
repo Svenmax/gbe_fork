@@ -320,7 +320,7 @@ Only add behavior-equivalent or read-only helpers first:
 
 ```cpp
 bool GBE_HostHasActiveDotaServerLobby(uint64 lobby_id) const;
-// Or a launch-state push planner that returns a small explicit action plan.
+// Or a launch-state side-effect executor that consumes an existing push plan.
 ```
 
 Some of these already exist or have partial pure-helper coverage. Prefer extending tests around existing seams before adding new ones.
@@ -338,7 +338,7 @@ Some of these already exist or have partial pure-helper coverage. Prefer extendi
 
 Pick exactly one boundary:
 
-1. Full launch-state client-peer push side effects after target selection.
+1. Full launch-state client-peer push side effects after planner decisions.
 2. Host server-GC active lobby ownership check.
 3. Rich presence clear/update around practice lobby launch.
 
@@ -346,9 +346,9 @@ Add or strengthen a test first. Then add a helper only if it makes the ownership
 
 Current launch-state status:
 
-- `should_use_client_peer_for_launch_state_push`, `is_valid_launch_state_push_target`, and `should_preserve_server_id_for_launch_state_push_target` already cover the pure target-selection and owner-LAN preserve predicates.
-- Full `GBE_PushDotaLaunchStateToClientPeer(...)` side effects remain deferred because the path still depends on shared-state restore, current-lobby capture, payload builders, cache subscription recording, queue pushes, rich presence, settings local steam id, duplicate suppression, and coordinator private state.
-- Continue only if the next step can represent those dependencies as a small explicit planner context.
+- `plan_launch_state_push(...)` already covers target-selection, shared suppression, capture availability, launch eligibility, duplicate suppression, push action booleans, and owner-LAN preserve predicates.
+- Full `GBE_PushDotaLaunchStateToClientPeer(...)` side effects remain deferred because the path still depends on shared-state restore, current-lobby capture, payload builders, cache subscription recording, queue pushes, rich presence, settings local steam id, and coordinator private state.
+- Continue only if the next step can represent those side-effect dependencies as a small explicit executor context.
 
 ### How Far To Go
 
@@ -447,7 +447,7 @@ Only reconsider after:
 - shared-state read/clear/publish boundaries are named.
 - side-effect order is covered by recorder tests.
 - settings/rich-presence/server-client lookup seams are stable.
-- target-selection helper coverage exists and the remaining launch-state work has a small explicit context.
+- launch-state planner coverage exists and the remaining side-effect execution work has a small explicit context.
 - repeated methods naturally group around a small state surface.
 
 A good extraction candidate must own a coherent state and dependency boundary. A bad extraction just moves `Steam_Game_Coordinator` methods into another class that still reaches back into the same globals and side effects.
@@ -464,7 +464,7 @@ git diff --check
 ```
 
 2. Check `docs/gc/follow-up-task-list.md` and `docs/gc/lifecycle-state-map.md` for the latest coverage status.
-3. Pick one remaining boundary only if it has a focused test path: full launch-state client-peer push planner, host active server-GC ownership check, or rich presence clear/update ordering.
+3. Pick one remaining boundary only if it has a focused test path: launch-state side-effect executor, host active server-GC ownership check, or rich presence clear/update ordering.
 4. Stop if the change needs broad `Steam_Game_Coordinator` construction, a wider handler smoke harness, or a Dota sub-object extraction.
 5. Commit the small step with verification results, then hand off with status and remaining risk.
 

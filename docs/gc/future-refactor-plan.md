@@ -34,7 +34,7 @@ Current follow-up progress:
 - Thin response helpers now name cache-unsubscribed `25` and other-left-channel `7014` pushes without changing immediate, wrapped, session, source-job, or reason semantics.
 - Side-effect recorder coverage now includes settings clear, server-GC forward, network broadcast, lobby snapshot refresh, and response metadata ordering.
 - Payload fixtures now cover runtime parser malformed input, equip slot/style narrowing failures, unlock style bitmask boundaries, short attr-400 merges, and exact lobby template identifier patch output.
-- Launch-state client-peer target selection has narrow pure helper coverage for server/client peer selection, target eligibility, and owner-LAN server-id preserve eligibility.
+- Launch-state client-peer target selection and push decision behavior have planner-backed pure coverage for server/client peer selection, target eligibility, shared suppression, capture availability, launch eligibility, duplicate suppression, and owner-LAN server-id preserve eligibility.
 - Dota sub-object extraction was re-evaluated and remains deferred because the dependency surface is still broad.
 
 ## Do Not Do Next
@@ -143,7 +143,7 @@ Settings and rich presence candidates:
 
 Server/client GC lookup candidates:
 
-- full launch-state client-peer push side effects after target selection
+- full launch-state client-peer push side effects after planner decisions
 - gameserver GC ownership checks
 - host client postgame skip checks
 
@@ -151,9 +151,9 @@ The first helpers should be read-only or behavior-equivalent wrappers, for examp
 
 - `GBE_HostHasActiveDotaServerLobby(lobby_id)`
 - `GBE_ClearSettingsLobbyForDotaSignout(...)`
-- a launch-state push planner that returns a small explicit action plan
+- a launch-state side-effect executor that consumes an existing push plan
 
-The point is to make host/client and settings side effects visible without changing their order. Target-selection predicates already have pure coverage; the remaining launch-state work should focus on the push side effects behind `GBE_PushDotaLaunchStateToClientPeer(...)`.
+The point is to make host/client and settings side effects visible without changing their order. Launch-state push decisions already have pure planner coverage; the remaining launch-state work should focus on side-effect execution behind `GBE_PushDotaLaunchStateToClientPeer(...)`.
 
 ### P2/P3. Inventory And Template Replay Data Flow
 
