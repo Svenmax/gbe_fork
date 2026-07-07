@@ -181,13 +181,21 @@ When changing a lifecycle path, first classify the path:
 | Partial cleanup | stale chat leave, host-client observation | Keep the exception explicit and covered by tests. |
 | Side-effect sequence | cache unsubscribe, postgame response, details update | Assert order in handler smoke tests or replay fixtures. |
 
+## Focused Coverage Status
+
+- Host client observes postgame and preserves shared state needed by server GC: covered by `test_lobby_host_client_postgame_observation_preserves_server_owned_shared_state`.
+- Host-client ownership takes precedence over arcade-active cleanup skip behavior: covered by `test_lobby_host_client_postgame_observation_takes_precedence_over_arcade_skip`.
+- Ordinary player postgame cleanup clears shared state after details update: covered by `test_lobby_player_postgame_observation_clears_shared_state_after_details_update`.
+- Arcade-active postgame observation preserves shared state: covered by `test_lobby_arcade_active_postgame_observation_preserves_shared_state`.
+- Reconnect context survives preserve paths and clears on ordinary reset paths: covered by focused lobby-state tests and handler reset coverage.
+- Shared-state clear helper remains behavior-equivalent for runtime reset: covered by `test_lobby_runtime_reset_clears_local_shared_and_last_launch_state`.
+- Read-only shared-state facade raw snapshot and valid-gated helper semantics: covered by payload helper tests.
+- Postgame stale chat leave cannot re-publish a cleared shared state: covered by `test_chat_leave_postgame_skips_stale_republish_after_shared_clear`.
+
 ## Missing Tests Worth Adding Next
 
-- Host client observes postgame but does not clear shared state needed by server GC.
-- Reconnect context survives paths that should preserve it.
-- Shared-state clear helper is behavior-equivalent before replacing direct clears.
-- Read-only shared-state facade returns the same values as direct field reads.
-- Postgame stale chat leave cannot re-publish a cleared shared state.
+- Full launch-state client-peer push side effects remain deferred until the path can be represented by a focused launch coordinator harness or a small explicit planner context.
+- Production-linked reset test re-check remains conditional on `GBE_ClearDotaLobbyRuntimeState()` gaining branching, extra side effects, or semantic reset ownership.
 
 ## Verification
 
