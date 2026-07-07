@@ -129,6 +129,23 @@ GBE_DotaActionList join_lobby_action_list(
     return actions;
 }
 
+GBE_DotaActionList abandon_cache_unsubscribed_action_list(
+    const gbe::dota_lobby_state::AbandonDecision &decision,
+    const std::string &response_25,
+    const char *reason)
+{
+    GBE_DotaActionList actions;
+    const std::string action_reason = reason ? reason : std::string();
+    if (decision.discard_queued_launch_messages)
+        actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LaunchMessagesDiscardedForAbandon, 0u, std::string(), 0ull, 0ull, 0ull, action_reason });
+    if (decision.set_pending_reset_after_cache_unsubscribed)
+        actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PendingResetAfterCacheUnsubscribed, 0u, std::string(), 0ull, decision.lobby_id, 0ull, action_reason });
+    if (decision.suppress_abandoned_lobby)
+        actions.push_back(GBE_DotaAction{ GBE_DotaActionType::AbandonedLobbySuppressed, 0u, std::string(), 0ull, decision.lobby_id, 0ull, action_reason });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25, 0ull, 0ull, 0ull, action_reason });
+    return actions;
+}
+
 void preserve_lobby_owner_transfer_slots(
     std::vector<GBE_DotaLobbyMemberState> &members,
     const std::vector<GBE_DotaLobbyMemberState> &previous_members,

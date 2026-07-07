@@ -90,6 +90,11 @@ gbe::dota_lobby_state::JoinLobbyMergePlan join_lobby_merge_plan_from_context(
 JoinLobbyActionPlan join_lobby_action_plan_from_context(
     const JoinLobbyContext &context);
 
+GBE_DotaActionList abandon_cache_unsubscribed_action_list(
+    const gbe::dota_lobby_state::AbandonDecision &decision,
+    const std::string &response_25,
+    const char *reason);
+
 void apply_lobby_member_team_slot_update(
     std::vector<GBE_DotaLobbyMemberState> &members,
     std::uint64_t steam_id,
