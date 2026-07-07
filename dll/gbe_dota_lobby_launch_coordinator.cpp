@@ -331,11 +331,16 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
     Steam_Game_Coordinator *target = this;
     if (is_server) {
         Steam_Client *steam_client = get_steam_client();
-        if (steam_client && steam_client->steam_game_coordinator)
+        if (gbe::dota_lobby_flow::should_use_client_peer_for_launch_state_push(
+                is_server,
+                steam_client && steam_client->steam_game_coordinator))
             target = steam_client->steam_game_coordinator;
     }
 
-    if (!target || target->is_server || target->gc_profile != GC_PROFILE_DOTA2)
+    if (!gbe::dota_lobby_flow::is_valid_launch_state_push_target(
+            target != nullptr,
+            target ? target->is_server : false,
+            target ? target->gc_profile == GC_PROFILE_DOTA2 : false))
         return;
 
     target->GBE_RestoreSharedDotaLobbyState(reason ? reason : "push_launch_state_to_client");

@@ -259,8 +259,13 @@ The checklist above records the first follow-up pass and includes several "decid
 - [x] Object extraction readiness checkpoint.
   - Goal: re-evaluate whether Dota sub-object extraction is ready after the current seam and payload coverage pass.
   - Result: `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `43/43`, and audit issues `0`; `git diff --check` passed.
-  - Decision: defer Dota sub-object extraction. The shared-state read/clear seams and response seams are stronger, and recorder coverage now spans settings clear, server-GC forward, network broadcast, lobby snapshot refresh, and response metadata, while client/ownership target-selection coverage remains deferred and the launch-state client-peer path still depends on broad `Steam_Game_Coordinator` state.
-  - Stop condition: begin extraction only after client/ownership coverage can be added through a focused launch coordinator harness or another narrow path with a small explicit context.
+  - Decision: defer Dota sub-object extraction. The shared-state read/clear seams and response seams are stronger, and recorder coverage now spans settings clear, server-GC forward, network broadcast, lobby snapshot refresh, and response metadata. Client/ownership target-selection now has a narrow pure helper seam for launch-state peer selection, but the full launch-state client-peer push path still depends on broad `Steam_Game_Coordinator` state.
+  - Stop condition: begin extraction only after the full launch-state client-peer path can be covered through a focused launch coordinator harness or another narrow path with a small explicit context.
+
+- [x] Launch-state peer target-selection seam.
+  - Goal: add ownership target-selection coverage without linking the production-only launch coordinator into the handler smoke harness.
+  - Result: added `should_use_client_peer_for_launch_state_push` and `is_valid_launch_state_push_target` to `gbe::dota_lobby_flow`, covered server/client peer selection and valid Dota-client target eligibility in `gbe_dota_lobby_flow_test`, and replaced the matching checks in `GBE_PushDotaLaunchStateToClientPeer`.
+  - Stop condition: no broad launch coordinator harness added; full push side effects remain behind the existing production coordinator path.
 
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.

@@ -86,6 +86,21 @@ bool should_hold_lan_launch_for_remote_members(
     return remote_count != 0u && connected_remote_count < remote_count;
 }
 
+bool should_use_client_peer_for_launch_state_push(
+    bool source_is_server,
+    bool client_peer_available)
+{
+    return source_is_server && client_peer_available;
+}
+
+bool is_valid_launch_state_push_target(
+    bool target_available,
+    bool target_is_server,
+    bool target_is_dota_profile)
+{
+    return target_available && !target_is_server && target_is_dota_profile;
+}
+
 bool find_lobby_member_index(
     const std::vector<GBE_DotaLobbyMemberState> &members,
     std::uint64_t steam_id,

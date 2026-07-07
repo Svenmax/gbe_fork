@@ -55,6 +55,15 @@ bool should_hold_lan_launch_for_remote_members(
     std::uint32_t &remote_count,
     std::uint32_t &connected_remote_count);
 
+bool should_use_client_peer_for_launch_state_push(
+    bool source_is_server,
+    bool client_peer_available);
+
+bool is_valid_launch_state_push_target(
+    bool target_available,
+    bool target_is_server,
+    bool target_is_dota_profile);
+
 std::string resolve_chat_member_display_name(
     std::uint64_t member_steam_id,
     std::uint64_t local_steam_id,

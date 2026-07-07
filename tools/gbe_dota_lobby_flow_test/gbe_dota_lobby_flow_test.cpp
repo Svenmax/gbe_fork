@@ -124,6 +124,23 @@ bool test_count_remote_lobby_members()
     return ok;
 }
 
+bool test_launch_state_peer_selection()
+{
+    bool ok = true;
+
+    ok &= expect_true(gbe::dota_lobby_flow::should_use_client_peer_for_launch_state_push(true, true), "server uses available client peer");
+    ok &= expect_true(!gbe::dota_lobby_flow::should_use_client_peer_for_launch_state_push(true, false), "server keeps self without client peer");
+    ok &= expect_true(!gbe::dota_lobby_flow::should_use_client_peer_for_launch_state_push(false, true), "client keeps self even with peer available");
+    ok &= expect_true(!gbe::dota_lobby_flow::should_use_client_peer_for_launch_state_push(false, false), "client keeps self without peer");
+
+    ok &= expect_true(gbe::dota_lobby_flow::is_valid_launch_state_push_target(true, false, true), "client dota target valid");
+    ok &= expect_true(!gbe::dota_lobby_flow::is_valid_launch_state_push_target(false, false, true), "missing target invalid");
+    ok &= expect_true(!gbe::dota_lobby_flow::is_valid_launch_state_push_target(true, true, true), "server target invalid");
+    ok &= expect_true(!gbe::dota_lobby_flow::is_valid_launch_state_push_target(true, false, false), "non dota target invalid");
+
+    return ok;
+}
+
 bool test_upsert_and_slot_selection()
 {
     bool ok = true;
@@ -1058,6 +1075,7 @@ int main()
     ok &= test_member_find_and_equality();
     ok &= test_member_diff_and_filter();
     ok &= test_count_remote_lobby_members();
+    ok &= test_launch_state_peer_selection();
     ok &= test_upsert_and_slot_selection();
     ok &= test_apply_lobby_member_team_slot_update();
     ok &= test_member_state_update_block();
