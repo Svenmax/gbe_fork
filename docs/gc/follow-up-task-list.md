@@ -342,6 +342,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: strengthened existing started-loading, finished-loading success, and finished-loading failure smoke tests to prove details updates happen after the relevant shared-lobby publish actions and preserve their lifecycle reasons.
   - Stop condition: no production loading lifecycle behavior changed and no launch coordinator linkage was expanded.
 
+- [x] Launch-poll details-update ordering coverage pass.
+  - Goal: make the 7034 launch-poll fallback details update order visible before wrapping direct runtime response side effects.
+  - Result: strengthened the existing launch-poll smoke test to prove the fallback details update is recorded before the direct `7034` response action and preserves the `7034_launch_poll` reason.
+  - Stop condition: no production launch-poll behavior changed and no direct 7034 response seam was introduced.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

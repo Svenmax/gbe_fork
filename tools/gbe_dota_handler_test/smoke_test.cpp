@@ -1914,6 +1914,7 @@ static void test_match_7034_launch_poll_records_details_update_before_response()
     TEST_ASSERT(result, "7034 launch poll handler should return true");
     TEST_ASSERT_EQ(tf.recorder.runtime_states.size(), 0u, "launch poll should not mutate member runtime state");
     TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "launch poll should request one details update fallback");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 0u, "launch poll details update should happen before response action");
     TEST_ASSERT(!tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "launch poll should not preserve server id in fallback details update");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override.empty(), "launch poll should not pass a message override");
     TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7034_launch_poll", "launch poll details update reason should be preserved");
