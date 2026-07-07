@@ -377,6 +377,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: defer. `gbe_dota_lobby_launch_coordinator.cpp` still groups launch-state push with 14 other launch/teardown/response members, and the existing handler smoke stubs already define several of those members. Linking the whole TU would create definition conflicts and pull unrelated response/custom-game teardown behavior into a launch-state-only harness.
   - Stop condition: do not link the full launch coordinator TU into handler smoke tests; first create a narrower production seam for launch-state push payload building and side-effect execution.
 
+- [x] Launch-state captured-lobby plan-input seam.
+  - Goal: reduce the remaining hand-written field mapping inside `GBE_PushDotaLaunchStateToClientPeer(...)` without touching side effects.
+  - Result: added a pure `gbe::dota_lobby_flow` helper that applies captured lobby fields, last pushed game state, and target local steam id to `LaunchStatePushPlanInput`, with focused flow-test coverage.
+  - Stop condition: no payload building, response push, rich presence, cache subscription, or last-game-state side effect changed.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

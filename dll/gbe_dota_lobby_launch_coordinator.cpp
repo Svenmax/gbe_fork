@@ -377,16 +377,20 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
         return;
     }
 
-    plan_input.lobby_state = lobby.state;
-    plan_input.lobby_game_state = lobby.game_state;
-    plan_input.lobby_server_id = lobby.server_id;
-    plan_input.lobby_connect_available = !lobby.connect.empty();
-    plan_input.last_pushed_game_state = target->GBE_GetLastDotaLaunchStatePushedGameState();
     const uint64 target_local_steam_id = target->settings ? target->settings->get_local_steam_id().ConvertToUint64() : 0ull;
-    plan_input.target_local_steam_id = target_local_steam_id;
-    plan_input.lobby_owner_steam_id = lobby.owner_steam_id;
-    plan_input.lobby_lan = lobby.lan;
-    plan_input.lobby_match_id = lobby.match_id;
+    gbe::dota_lobby_flow::apply_captured_lobby_to_launch_state_push_plan_input(
+        plan_input,
+        gbe::dota_lobby_flow::LaunchStateCapturedLobbyInput{
+            true,
+            lobby.state,
+            lobby.game_state,
+            lobby.server_id,
+            !lobby.connect.empty(),
+            lobby.owner_steam_id,
+            lobby.lan,
+            lobby.match_id},
+        target->GBE_GetLastDotaLaunchStatePushedGameState(),
+        target_local_steam_id);
 
     plan = gbe::dota_lobby_flow::plan_launch_state_push(plan_input);
     if (plan.skip_reason == gbe::dota_lobby_flow::LaunchStatePushSkipReason::IneligibleLaunchState) {

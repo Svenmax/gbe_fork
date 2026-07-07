@@ -272,6 +272,50 @@ bool test_launch_state_push_planner()
     return ok;
 }
 
+bool test_launch_state_plan_input_captured_lobby_mapping()
+{
+    bool ok = true;
+
+    gbe::dota_lobby_flow::LaunchStatePushPlanInput input{};
+    input.source_is_server = true;
+    input.client_peer_available = true;
+    input.target_available = true;
+    input.target_is_server = false;
+    input.target_is_dota_profile = true;
+    input.shared_lobby_suppressed = false;
+
+    gbe::dota_lobby_flow::apply_captured_lobby_to_launch_state_push_plan_input(
+        input,
+        gbe::dota_lobby_flow::LaunchStateCapturedLobbyInput{
+            true,
+            2u,
+            4u,
+            0ull,
+            true,
+            10ull,
+            true,
+            123ull},
+        3u,
+        10ull);
+
+    ok &= expect_true(input.captured_lobby_active, "captured lobby mapping active");
+    ok &= expect_eq_u64(input.lobby_state, 2u, "captured lobby mapping state");
+    ok &= expect_eq_u64(input.lobby_game_state, 4u, "captured lobby mapping game state");
+    ok &= expect_eq_u64(input.lobby_server_id, 0ull, "captured lobby mapping server id");
+    ok &= expect_true(input.lobby_connect_available, "captured lobby mapping connect availability");
+    ok &= expect_eq_u64(input.last_pushed_game_state, 3u, "captured lobby mapping last pushed game state");
+    ok &= expect_eq_u64(input.target_local_steam_id, 10ull, "captured lobby mapping target local steam id");
+    ok &= expect_eq_u64(input.lobby_owner_steam_id, 10ull, "captured lobby mapping owner steam id");
+    ok &= expect_true(input.lobby_lan, "captured lobby mapping lan flag");
+    ok &= expect_eq_u64(input.lobby_match_id, 123ull, "captured lobby mapping match id");
+
+    gbe::dota_lobby_flow::LaunchStatePushPlan plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::None, "captured lobby mapping planner push");
+    ok &= expect_true(plan.preserve_server_id, "captured lobby mapping planner preserve owner lan server id");
+
+    return ok;
+}
+
 bool test_upsert_and_slot_selection()
 {
     bool ok = true;
@@ -1208,6 +1252,7 @@ int main()
     ok &= test_count_remote_lobby_members();
     ok &= test_launch_state_peer_selection();
     ok &= test_launch_state_push_planner();
+    ok &= test_launch_state_plan_input_captured_lobby_mapping();
     ok &= test_upsert_and_slot_selection();
     ok &= test_apply_lobby_member_team_slot_update();
     ok &= test_member_state_update_block();

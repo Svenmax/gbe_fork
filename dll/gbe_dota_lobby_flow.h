@@ -90,6 +90,24 @@ struct LaunchStatePushPlanInput
     std::uint64_t lobby_match_id{};
 };
 
+struct LaunchStateCapturedLobbyInput
+{
+    bool active{};
+    std::uint32_t state{};
+    std::uint32_t game_state{};
+    std::uint64_t server_id{};
+    bool connect_available{};
+    std::uint64_t owner_steam_id{};
+    bool lan{};
+    std::uint64_t match_id{};
+};
+
+void apply_captured_lobby_to_launch_state_push_plan_input(
+    LaunchStatePushPlanInput &plan_input,
+    const LaunchStateCapturedLobbyInput &lobby,
+    std::uint32_t last_pushed_game_state,
+    std::uint64_t target_local_steam_id);
+
 enum class LaunchStatePushSkipReason
 {
     None,
