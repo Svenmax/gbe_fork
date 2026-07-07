@@ -1694,6 +1694,47 @@ static void test_misc_7427_notifications()
     ++g_tests_passed;
 }
 
+static void test_misc_leaver_detected_publishes_before_details()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7072u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x707200u;
+    const uint64_t leaver_steam_id = 0x110000100707200u;
+    tf.gc.GBE_local_lobby.members.push_back(GBE_DotaLobbyMemberState{
+        leaver_steam_id,
+        0x7072u,
+        GBE_kDotaTeamGoodGuys,
+        1u,
+        0u,
+        true,
+        0u});
+
+    const std::string body = WireBodyBuilder()
+        .varint(1u, leaver_steam_id)
+        .varint(2u, 2u)
+        .varint(6u, 123u)
+        .take();
+    bool result = tf.gc.GBE_HandleDotaLeaverDetectedRequest(reinterpret_cast<const uint8 *>(body.data()), body.size(), 0x7072ABCDu);
+
+    TEST_ASSERT(result, "leaver detected handler should return true");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.members.size(), 1u, "leaver detected should preserve member slot count");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.members[0].steam_id, leaver_steam_id, "leaver detected should target request steam id");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.members[0].leaver_status, 2u, "leaver detected should update member leaver status before publishing");
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.members[0].connected, "leaver detected should mark member disconnected before publishing");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "leaver detected should only publish shared state directly");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "leaver detected should publish shared state before details update");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7072_leaver_detected", "leaver detected publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "leaver detected should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "leaver detected details update should happen after shared publish");
+    TEST_ASSERT(!tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "leaver detected details update should preserve unwrapped flag in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override.empty(), "leaver detected details update should use no session override");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7072_leaver_detected", "leaver detected details update reason should be preserved");
+
+    ++g_tests_passed;
+}
+
 static void test_misc_upload_rate()
 {
     TestFixture tf;
@@ -2176,6 +2217,9 @@ int main()
 
     std::printf("[run] test_misc_7427_notifications\n");
     RUN_TEST(test_misc_7427_notifications);
+
+    std::printf("[run] test_misc_leaver_detected_publishes_before_details\n");
+    RUN_TEST(test_misc_leaver_detected_publishes_before_details);
 
     std::printf("[run] test_misc_upload_rate\n");
     RUN_TEST(test_misc_upload_rate);
