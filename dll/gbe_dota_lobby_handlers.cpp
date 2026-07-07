@@ -1552,11 +1552,25 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
         return true;
     }
 
-    GBE_MarkDotaAbandonedLobbySuppressed(lobby_id, "7040_leave");
-
-    if (!GBE_PushDotaCacheUnsubscribedResponse(response_25, wrapped, outer_session_field_raw, "7040_leave_25"))
-        return true;
-    ResetGCMemory("7040_leave", true, false);
+    for (const GBE_DotaAction &action : gbe::dota_lobby_flow::leave_lobby_cache_unsubscribed_action_list(
+             lobby_id,
+             response_25,
+             "7040_leave")) {
+        switch (action.type) {
+            case GBE_DotaActionType::AbandonedLobbySuppressed:
+                GBE_MarkDotaAbandonedLobbySuppressed(action.item_id, action.reason.c_str());
+                break;
+            case GBE_DotaActionType::PushIncomingNow:
+                if (!GBE_PushDotaCacheUnsubscribedResponse(action.payload, wrapped, outer_session_field_raw, "7040_leave_25"))
+                    return true;
+                break;
+            case GBE_DotaActionType::GcMemoryReset:
+                ResetGCMemory(action.reason.c_str(), action.leave_generic_lobby, action.clear_queued_messages);
+                break;
+            default:
+                break;
+        }
+    }
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
