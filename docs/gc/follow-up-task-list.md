@@ -370,7 +370,7 @@ git diff --check
 
 Latest handoff verification:
 
-- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `44/44`, and audit issues `0`.
+- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `49/49`, and audit issues `0`.
 - `git diff --check` passed.
 
 For source-list, build-system, or new-file changes, also check the relevant `premake5.lua` source lists and `tools/run_gc_offline_tests.sh` entries.
