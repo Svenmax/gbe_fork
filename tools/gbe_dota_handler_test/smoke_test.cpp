@@ -1202,6 +1202,83 @@ static void test_lobby_join_broadcast_publishes_before_details_and_ack()
     ++g_tests_passed;
 }
 
+static void test_lobby_update_broadcast_publishes_before_details()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7367u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x736700u;
+    tf.gc.GBE_local_lobby.has_broadcast_channel = true;
+    tf.gc.GBE_local_lobby.broadcast_channel_id = 10u;
+    tf.gc.GBE_local_lobby.broadcast_description = "old room";
+    tf.gc.GBE_local_lobby.broadcast_country_code = "CA";
+    tf.gc.GBE_local_lobby.broadcast_language_code = "fr";
+
+    const std::string session_raw = "update-broadcast-session-token";
+    const std::string body = WireBodyBuilder()
+        .varint(1u, 88u)
+        .bytes(2u, "GB")
+        .bytes(3u, "updated room")
+        .bytes(4u, "en")
+        .take();
+    bool result = tf.gc.GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest(body, true, &session_raw);
+
+    TEST_ASSERT(result, "update broadcast handler should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.has_broadcast_channel, "update broadcast should keep channel active before publishing");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.broadcast_channel_id, 88u, "update broadcast should preserve channel id");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_description == "updated room", "update broadcast should preserve description");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_country_code == "GB", "update broadcast should preserve country code");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_language_code == "en", "update broadcast should preserve language code");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "update broadcast should only publish shared state directly");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "update broadcast should publish shared state before details update");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7367_update_broadcast", "update broadcast publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "update broadcast should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "update broadcast details update should happen after shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "update broadcast details update should preserve wrapped flag in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override == session_raw, "update broadcast details update should preserve session raw in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7367", "update broadcast details update reason should be preserved");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_close_broadcast_publishes_before_details()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x8054u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x805400u;
+    tf.gc.GBE_local_lobby.has_broadcast_channel = true;
+    tf.gc.GBE_local_lobby.broadcast_channel_id = 99u;
+    tf.gc.GBE_local_lobby.broadcast_description = "closing room";
+    tf.gc.GBE_local_lobby.broadcast_country_code = "JP";
+    tf.gc.GBE_local_lobby.broadcast_language_code = "ja";
+
+    const std::string session_raw = "close-broadcast-session-token";
+    const std::string body = WireBodyBuilder()
+        .varint(1u, 99u)
+        .take();
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest(body, true, &session_raw);
+
+    TEST_ASSERT(result, "close broadcast handler should return true");
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.has_broadcast_channel, "close broadcast should mark channel inactive before publishing");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.broadcast_channel_id, 99u, "close broadcast should preserve channel id");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_description.empty(), "close broadcast should clear description");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_country_code.empty(), "close broadcast should clear country code");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.broadcast_language_code.empty(), "close broadcast should clear language code");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "close broadcast should only publish shared state directly");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "close broadcast should publish shared state before details update");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "8054_close_broadcast", "close broadcast publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "close broadcast should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 1u, "close broadcast details update should happen after shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "close broadcast details update should preserve wrapped flag in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override == session_raw, "close broadcast details update should preserve session raw in stub argument");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "8054", "close broadcast details update reason should be preserved");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_create_records_cache_subscription_before_pushes()
 {
     TestFixture tf;
@@ -2054,6 +2131,12 @@ int main()
 
     std::printf("[run] test_lobby_join_broadcast_publishes_before_details_and_ack\n");
     RUN_TEST(test_lobby_join_broadcast_publishes_before_details_and_ack);
+
+    std::printf("[run] test_lobby_update_broadcast_publishes_before_details\n");
+    RUN_TEST(test_lobby_update_broadcast_publishes_before_details);
+
+    std::printf("[run] test_lobby_close_broadcast_publishes_before_details\n");
+    RUN_TEST(test_lobby_close_broadcast_publishes_before_details);
 
     std::printf("[run] test_lobby_create_records_cache_subscription_before_pushes\n");
     RUN_TEST(test_lobby_create_records_cache_subscription_before_pushes);
