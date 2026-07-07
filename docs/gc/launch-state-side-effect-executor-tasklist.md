@@ -21,9 +21,11 @@ git diff --check
 
   - Result: `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `43/43`, and audit issues `0`; `git diff --check` passed.
 
-- [ ] 4. Evaluate a tiny production executor
+- [x] 4. Evaluate a tiny production executor
   - Continue only if the executor can consume built payloads and a plan without owning shared-state restore, capture, or payload building.
   - Stop if the executor needs broad `Steam_Game_Coordinator` construction or changes response order, rich presence order, or reason strings.
+  - Decision: defer production executor. A tiny executor at this point would still be a coordinator member wrapper over `GBE_RecordDotaLobbyCacheSubscriptionState`, two `push_incoming_now` calls, `GBE_ReapplyDotaPracticeLobbyLaunchRichPresence`, and `GBE_SetLastDotaLaunchStatePushedGameState`, with no narrower test harness than the current planner/action-sequence coverage.
 
-- [ ] 5. Re-check focused launch coordinator harness
+- [x] 5. Re-check focused launch coordinator harness
   - Reconsider a harness only after side-effect order is explicit and the executor context is small.
+  - Decision: defer focused harness until payload building and side-effect execution can be represented without broad coordinator construction.
