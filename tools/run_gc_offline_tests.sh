@@ -61,6 +61,7 @@ build_and_run \
     dll/gbe_proto_wire.cpp \
     dll/gbe_dota_gc_wire.cpp \
     dll/gbe_dota_gc_router.cpp \
+    dll/gbe_dota_chat_flow.cpp \
     dll/gbe_dota_lobby_state.cpp \
     dll/gbe_dota_lobby_launch_flow.cpp \
     dll/gbe_dota_lobby_member_flow.cpp \
@@ -116,6 +117,7 @@ if [[ "$FULL" -eq 1 ]]; then
     build_and_run \
         gbe_dota_lobby_flow_test \
         tools/gbe_dota_lobby_flow_test/gbe_dota_lobby_flow_test.cpp \
+        dll/gbe_dota_chat_flow.cpp \
         dll/gbe_dota_lobby_launch_flow.cpp \
         dll/gbe_dota_lobby_member_flow.cpp \
         dll/gbe_dota_lobby_flow.cpp \
@@ -130,6 +132,7 @@ if [[ "$FULL" -eq 1 ]]; then
         gbe_dota_lobby_state_test \
         tools/gbe_dota_lobby_state_test/gbe_dota_lobby_state_test.cpp \
         dll/gbe_dota_lobby_state.cpp \
+        dll/gbe_dota_chat_flow.cpp \
         dll/gbe_dota_lobby_launch_flow.cpp \
         dll/gbe_dota_lobby_member_flow.cpp \
         dll/gbe_dota_lobby_flow.cpp \
@@ -153,6 +156,7 @@ printf '[build] %s\n' gbe_dota_gc_payload_helpers_test
     tools/gbe_dota_gc_payload_helpers_test/gbe_dota_gc_payload_helpers_test.cpp \
     dll/gbe_proto_wire.cpp \
     dll/gbe_gc_message_utils.cpp \
+    dll/gbe_dota_chat_flow.cpp \
     dll/gbe_dota_lobby_launch_flow.cpp \
     dll/gbe_dota_lobby_member_flow.cpp \
     dll/gbe_dota_lobby_flow.cpp \
@@ -177,6 +181,7 @@ printf '[build] %s\n' gbe_dota_handler_test
     tools/gbe_dota_handler_test/smoke_test.cpp \
     dll/gbe_proto_wire.cpp \
     dll/gbe_gc_message_utils.cpp \
+    dll/gbe_dota_chat_flow.cpp \
     dll/gbe_dota_lobby_launch_flow.cpp \
     dll/gbe_dota_lobby_member_flow.cpp \
     dll/gbe_dota_lobby_flow.cpp \
