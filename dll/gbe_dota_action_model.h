@@ -85,6 +85,7 @@
 //   LobbyLocalMemberData  reason
 //   LobbyMetadataPublish  reason
 //   LaunchPeripheralReset reason
+//   LobbyCacheSubscriptionRecord reason
 
 #ifndef GBE_DOTA_ACTION_MODEL_H
 #define GBE_DOTA_ACTION_MODEL_H
@@ -108,6 +109,7 @@ enum class GBE_DotaActionType {
     LobbyLocalMemberData,  // publish local member data to generic lobby
     LobbyMetadataPublish,  // publish generic lobby metadata
     LaunchPeripheralReset, // clear launch peripheral dedupe/callback state
+    LobbyCacheSubscriptionRecord, // record cache-subscription payload state
 };
 
 struct GBE_DotaAction {

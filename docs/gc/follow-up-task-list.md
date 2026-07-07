@@ -307,6 +307,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `LaunchPeripheralReset` to the handler action recorder and strengthened the 7041 standard launch smoke test to prove peripheral reset happens before shared-lobby publish, initial details `26`, rich presence update, and persona-state metadata build.
   - Stop condition: no production reset behavior changed and no launch coordinator linkage was expanded.
 
+- [x] Lobby cache subscription recorder coverage pass.
+  - Goal: make cache subscription state recording visible before extracting or wrapping create/join cache-subscription side effects.
+  - Result: added `LobbyCacheSubscriptionRecord` to the handler action recorder and added a 7038 create smoke test proving local member data publish, shared lobby publish, metadata publish, cache subscription record, cache subscribed `24`, then practice lobby response `7055` order.
+  - Stop condition: no production cache subscription behavior changed and no join/custom-game linkage was expanded.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

@@ -1075,6 +1075,41 @@ static void test_lobby_set_details_mutates_before_publish_and_details_update()
     ++g_tests_passed;
 }
 
+static void test_lobby_create_records_cache_subscription_before_pushes()
+{
+    TestFixture tf;
+    tf.reset();
+    Steam_Matchmaking matchmaking;
+    g_test_steam_client.steam_matchmaking = &matchmaking;
+
+    const std::string session_raw = "create-lobby-session-token";
+    const JobID_t request_job = 0x7038ABCDu;
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyCreateRequest(std::string(), request_job, true, true, &session_raw);
+
+    TEST_ASSERT(result, "create lobby handler should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.active, "create lobby should activate local lobby");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 6u, "create lobby should publish setup, record cache subscription, then push 24 and 7055");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "create should publish local member data first");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7038_create", "create local member data reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "create should publish shared lobby state after local member data");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7038_create", "create shared publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbyMetadataPublish, "create should publish metadata before cache subscription record");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7038_create", "create metadata reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::LobbyCacheSubscriptionRecord, "create should record cache subscription before pushing 24");
+    TEST_ASSERT(tf.recorder.actions[3].reason == "7038_create_wrapped", "create cache subscription record reason should preserve wrapped path");
+    TEST_ASSERT(tf.recorder.actions[3].msg_body == "cache_subscribed", "create cache subscription record should preserve built cache body");
+    expect_push_payload(tf.recorder.actions[4], GBE_kDotaCacheSubscribed, "create should push cache subscribed after recording it");
+    TEST_ASSERT(tf.recorder.actions[4].wrapped, "create 24 response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[4].session_raw == session_raw, "create 24 response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[4].reason == "7038_24", "create 24 response reason should be preserved");
+    expect_push_payload(tf.recorder.actions[5], GBE_kDotaPracticeLobbyResponse, "create should push 7055 after cache subscribed");
+    TEST_ASSERT(tf.recorder.actions[5].wrapped, "create 7055 response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[5].session_raw == session_raw, "create 7055 response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[5].reason == "7038_7055", "create 7055 response reason should be preserved");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_abandon_ready_teardown_queues_postgame_response()
 {
     TestFixture tf;
@@ -1800,6 +1835,9 @@ int main()
 
     std::printf("[run] test_lobby_set_details_mutates_before_publish_and_details_update\n");
     RUN_TEST(test_lobby_set_details_mutates_before_publish_and_details_update);
+
+    std::printf("[run] test_lobby_create_records_cache_subscription_before_pushes\n");
+    RUN_TEST(test_lobby_create_records_cache_subscription_before_pushes);
 
     std::printf("[run] test_lobby_abandon_ready_teardown_queues_postgame_response\n");
     RUN_TEST(test_lobby_abandon_ready_teardown_queues_postgame_response);

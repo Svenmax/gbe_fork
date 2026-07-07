@@ -304,6 +304,7 @@ struct RecordedAction
             case GBE_DotaActionType::LobbyLocalMemberData:  return "LobbyLocalMemberData";
             case GBE_DotaActionType::LobbyMetadataPublish:  return "LobbyMetadataPublish";
             case GBE_DotaActionType::LaunchPeripheralReset: return "LaunchPeripheralReset";
+            case GBE_DotaActionType::LobbyCacheSubscriptionRecord: return "LobbyCacheSubscriptionRecord";
         }
         return "Unknown";
     }
@@ -530,6 +531,15 @@ public:
     {
         RecordedAction a;
         a.type = GBE_DotaActionType::LaunchPeripheralReset;
+        a.reason = reason ? reason : "";
+        actions.push_back(std::move(a));
+    }
+
+    void record_lobby_cache_subscription_record(const std::string &message, const char *reason)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::LobbyCacheSubscriptionRecord;
+        a.msg_body = message;
         a.reason = reason ? reason : "";
         actions.push_back(std::move(a));
     }
@@ -1117,7 +1127,11 @@ public:
     bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &, std::string &message) { message = "cache_subscribed"; return true; }
     bool GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(const GBE_LocalLobby &, const std::string &, std::string &message) { message = "cache_subscribed"; return true; }
     bool GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(const GBE_LocalLobby &, const std::string &, std::string &message, bool = false) { message = "details_update"; return true; }
-    void GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &, const char *) {}
+    void GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason)
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_lobby_cache_subscription_record(message, reason);
+    }
     std::vector<GBE_LocalLobby> GBE_GetDotaGenericLobbySnapshots(const char *) { return {}; }
     bool GBE_ShouldSuppressDotaAbandonedLobby(uint64) const { return false; }
     bool GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(const char *reason)
