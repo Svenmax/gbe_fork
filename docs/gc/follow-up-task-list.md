@@ -246,6 +246,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: replaced the 7149 join-broadcast `7055` ack call site with `GBE_PushDotaPracticeLobbyResponse()`. Existing handler coverage verifies emsg `7055`, wrapped/session metadata, reason string `7149_7055`, and response order after the broadcast details update.
   - Stop condition: no response builder, request-job branching, details-update order, or wrapped/direct response semantics changed.
 
+- [x] Push / response seam phase 5.
+  - Goal: name the covered chat-join response operation without changing postgame legacy chat behavior.
+  - Result: added `GBE_PushDotaJoinChatChannelResponse()` as a thin helper over `GBE_PushDotaResponse(GBE_kDotaJoinChatChannelResponse, ...)` and replaced the covered 7009 join-chat `7010` response call site. Existing chat join coverage verifies emsg `7010`, wrapped/session metadata, reason string `7009_7010`, and publish-before-response ordering.
+  - Stop condition: the `postgame_7010_after_signout` path remains direct until recorder coverage proves its legacy signout ordering and metadata.
+
 - [x] Client/ownership seam evaluation.
   - Goal: identify a narrow client coordinator lookup path before adding an ownership helper.
   - Result: identified `GBE_PushDotaLaunchStateToClientPeer(...)` as the candidate path. It selects `steam_game_coordinator` when called from the server coordinator, restores shared lobby state on the target, and pushes launch-state `24`/`26` through the client coordinator.

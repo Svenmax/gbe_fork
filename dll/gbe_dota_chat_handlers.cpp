@@ -288,7 +288,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
         return true;
     }
 
-    if (!GBE_PushDotaResponse(GBE_kDotaJoinChatChannelResponse, response_7010, wrapped, outer_session_field_raw, "7009_7010"))
+    if (!GBE_PushDotaJoinChatChannelResponse(response_7010, wrapped, outer_session_field_raw, "7009_7010"))
         return true;
 
     GBE_GC_DebugLog(

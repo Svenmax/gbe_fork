@@ -1025,6 +1025,11 @@ public:
         return GBE_PushDotaResponse(GBE_kDotaPracticeLobbyResponse, message, wrapped, outer_session_field_raw, reason, false, 0u, 0u, out_wrapped_message);
     }
 
+    bool GBE_PushDotaJoinChatChannelResponse(const std::string &message, bool wrapped, const std::string *outer_session_field_raw, const char *reason)
+    {
+        return GBE_PushDotaResponse(GBE_kDotaJoinChatChannelResponse, message, wrapped, outer_session_field_raw, reason);
+    }
+
     void save_items_to_file()
     {
         if (g_action_recorder)
