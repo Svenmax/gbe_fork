@@ -91,9 +91,9 @@
   - [x] 增加 action-list 单测，覆盖 cache unsubscribe、pending reset、postgame join、shared state clear、normal signout finalize、abandon finalize 的 action 顺序。
   - [x] 确认 handler smoke 覆盖 host/client shared state：server-owned postgame 保留、mismatched server lobby 清理、host-client arcade 优先级。
 
-- [ ] 12. 第二轮检查点
-  - 运行 `tools/run_gc_verification.sh`。
-  - 确认拆分后无 header zombie declaration、无 source-list inclusion 问题、无 replay 行为回归。
+- [x] 12. 第二轮检查点
+  - [x] 运行 `tools/run_gc_verification.sh`。
+  - [x] 确认拆分后无 header zombie declaration、无 source-list inclusion 问题、无 replay 行为回归。
 
 ## 收尾验收
 
