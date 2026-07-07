@@ -88,7 +88,7 @@
 
 - [ ] 11. 为 teardown 路径补强测试护栏
   - 增加 replay fixture，覆盖 abandon、postgame channel leave、normal signout、host/client shared state。
-  - 增加 smoke test，覆盖 cache unsubscribe、pending reset、postgame join、shared state clear 的 action 顺序。
+  - [x] 增加 action-list 单测，覆盖 cache unsubscribe、pending reset、postgame join、shared state clear、normal signout finalize、abandon finalize 的 action 顺序。
 
 - [ ] 12. 第二轮检查点
   - 运行 `tools/run_gc_verification.sh`。

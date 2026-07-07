@@ -74,6 +74,18 @@ bool expect_eq_payload_build(
     return false;
 }
 
+bool expect_eq_action_type(
+    GBE_DotaActionType actual,
+    GBE_DotaActionType expected,
+    const char *label)
+{
+    if (actual == expected)
+        return true;
+
+    std::cerr << "failed: " << label << " actual=" << static_cast<int>(actual) << " expected=" << static_cast<int>(expected) << std::endl;
+    return false;
+}
+
 gbe::dota_lobby_flow::LaunchStatePushPlanInput valid_launch_state_plan_input()
 {
     gbe::dota_lobby_flow::LaunchStatePushPlanInput input{};
@@ -1695,6 +1707,65 @@ bool test_normalize_arcade_lobby_member_slots()
     return ok;
 }
 
+bool test_teardown_action_lists()
+{
+    bool ok = true;
+
+    gbe::dota_lobby_state::AbandonDecision abandon{};
+    abandon.lobby_id = 0x7035u;
+    abandon.discard_queued_launch_messages = true;
+    abandon.set_pending_reset_after_cache_unsubscribed = true;
+    abandon.suppress_abandoned_lobby = true;
+    GBE_DotaActionList actions = gbe::dota_lobby_flow::abandon_cache_unsubscribed_action_list(abandon, "payload25", "abandon_reason");
+    ok &= expect_eq_u64(actions.size(), 4u, "abandon action count");
+    ok &= expect_eq_action_type(actions[0].type, GBE_DotaActionType::LaunchMessagesDiscardedForAbandon, "abandon first action discards launch messages");
+    ok &= expect_eq_action_type(actions[1].type, GBE_DotaActionType::PendingResetAfterCacheUnsubscribed, "abandon second action sets pending reset");
+    ok &= expect_eq_u64(actions[1].item_id, 0x7035u, "abandon pending reset lobby id");
+    ok &= expect_eq_action_type(actions[2].type, GBE_DotaActionType::AbandonedLobbySuppressed, "abandon third action suppresses lobby");
+    ok &= expect_eq_action_type(actions[3].type, GBE_DotaActionType::PushIncomingNow, "abandon fourth action pushes 25");
+    ok &= expect_eq_u64(actions[3].emsg, 25u | 0x80000000u, "abandon push emsg");
+
+    actions = gbe::dota_lobby_flow::postgame_teardown_action_list(0x9001u, "payload25", "payload7010", true, true, "postgame_reason");
+    ok &= expect_eq_u64(actions.size(), 3u, "postgame teardown action count");
+    ok &= expect_eq_action_type(actions[0].type, GBE_DotaActionType::PushIncomingNow, "postgame first action pushes 25");
+    ok &= expect_eq_u64(actions[0].emsg, 25u | 0x80000000u, "postgame first emsg");
+    ok &= expect_true(actions[0].reason == "25", "postgame 25 reason");
+    ok &= expect_eq_action_type(actions[1].type, GBE_DotaActionType::PushIncomingNow, "postgame second action pushes 7010");
+    ok &= expect_eq_u64(actions[1].emsg, 7010u | 0x80000000u, "postgame second emsg");
+    ok &= expect_true(actions[1].reason == "7010_postgame", "postgame 7010 reason");
+    ok &= expect_eq_action_type(actions[2].type, GBE_DotaActionType::PendingResetAfterCacheUnsubscribedClear, "postgame third action clears pending reset");
+    ok &= expect_eq_u64(actions[2].item_id, 0x9001u, "postgame clear pending lobby id");
+
+    actions = gbe::dota_lobby_flow::player_postgame_cleanup_action_list(0x5102u, "payload25", true, "player_cleanup");
+    ok &= expect_eq_u64(actions.size(), 5u, "player cleanup action count");
+    ok &= expect_eq_action_type(actions[0].type, GBE_DotaActionType::RichPresenceClear, "player cleanup first clears rich presence");
+    ok &= expect_eq_action_type(actions[1].type, GBE_DotaActionType::LaunchPeripheralReset, "player cleanup second resets launch peripheral");
+    ok &= expect_eq_action_type(actions[2].type, GBE_DotaActionType::DotaLobbyRuntimeClear, "player cleanup third clears runtime");
+    ok &= expect_eq_action_type(actions[3].type, GBE_DotaActionType::PushIncomingNow, "player cleanup fourth pushes 25");
+    ok &= expect_eq_u64(actions[3].emsg, 25u | 0x80000000u, "player cleanup 25 emsg");
+    ok &= expect_eq_action_type(actions[4].type, GBE_DotaActionType::SettingsLobbyClear, "player cleanup fifth clears settings lobby");
+    ok &= expect_eq_u64(actions[4].item_id, 0x5102u, "player cleanup settings lobby id");
+
+    actions = gbe::dota_lobby_flow::normal_signout_finalize_action_list(0x2500u, "client25", true, "signout_finalize");
+    ok &= expect_eq_u64(actions.size(), 5u, "normal signout finalize action count");
+    ok &= expect_eq_action_type(actions[0].type, GBE_DotaActionType::SettingsLobbyClear, "signout first clears settings lobby");
+    ok &= expect_eq_action_type(actions[1].type, GBE_DotaActionType::LaunchPeripheralReset, "signout second resets launch peripheral");
+    ok &= expect_eq_action_type(actions[2].type, GBE_DotaActionType::DotaLobbyRuntimeClear, "signout third clears runtime");
+    ok &= expect_eq_action_type(actions[3].type, GBE_DotaActionType::RichPresenceClear, "signout fourth clears rich presence");
+    ok &= expect_eq_action_type(actions[4].type, GBE_DotaActionType::PushIncomingNow, "signout fifth pushes client 25");
+    ok &= expect_eq_u64(actions[4].emsg, 25u | 0x80000000u, "signout client 25 emsg");
+    ok &= expect_true(actions[4].reason == "25", "signout client 25 reason");
+
+    actions = gbe::dota_lobby_flow::abandon_finalize_action_list("abandon_finalize");
+    ok &= expect_eq_u64(actions.size(), 1u, "abandon finalize action count");
+    ok &= expect_eq_action_type(actions[0].type, GBE_DotaActionType::GcMemoryReset, "abandon finalize resets gc memory");
+    ok &= expect_true(actions[0].reason == "abandon_finalize", "abandon finalize reason");
+    ok &= expect_true(actions[0].leave_generic_lobby, "abandon finalize leaves generic lobby");
+    ok &= expect_true(!actions[0].clear_queued_messages, "abandon finalize preserves queued messages");
+
+    return ok;
+}
+
 } // namespace
 
 int main()
@@ -1732,6 +1803,7 @@ int main()
     ok &= test_compose_lobby_members();
     ok &= test_normalize_and_owner_transfer();
     ok &= test_normalize_arcade_lobby_member_slots();
+    ok &= test_teardown_action_lists();
 
     if (!ok)
         return 1;
