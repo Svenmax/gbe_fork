@@ -16,3 +16,5 @@ These documents preserve the long-term maintenance guidance extracted from the G
 - `lifecycle-state-map.md`: lobby lifecycle paths mapped to state, side effects, risks, and tests.
 - `test-coverage-map.md`: offline GC tests mapped to the behavior they protect.
 - `reason-trace-governance.md`: high-risk reason string inventory used by `tools/_audit_gc_refactor.py`.
+- `response-seam-status.md`: response helper matrix covering replaced call sites, recorder contracts, and direct-call stop conditions.
+- `dependency-ownership-map.md`: dependency ownership map for future facade extraction and Dota sub-object readiness checks.
