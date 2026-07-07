@@ -102,6 +102,19 @@ struct LaunchStateCapturedLobbyInput
     std::uint64_t match_id{};
 };
 
+struct LaunchStateTargetInput
+{
+    bool source_is_server{};
+    bool client_peer_available{};
+    bool target_available{};
+    bool target_is_server{};
+    bool target_is_dota_profile{};
+};
+
+void apply_target_to_launch_state_push_plan_input(
+    LaunchStatePushPlanInput &plan_input,
+    const LaunchStateTargetInput &target);
+
 void apply_captured_lobby_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateCapturedLobbyInput &lobby,

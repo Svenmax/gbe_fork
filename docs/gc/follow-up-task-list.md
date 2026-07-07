@@ -407,6 +407,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `GBE_BuildDotaLaunchStatePayloads(...)` to consume the tested build request sequence, build `response_24` then `response_26`, and return the failed build kind so the caller keeps the existing `24` and `26` failure log sites.
   - Stop condition: no response push, cache subscription, rich presence, last-game-state, failure log reason/text, or harness linkage changed.
 
+- [x] Launch-state target plan-input mapping seam.
+  - Goal: reduce hand-written planner input setup inside the production launch-state push path without moving coordinator selection.
+  - Result: added `LaunchStateTargetInput` and `apply_target_to_launch_state_push_plan_input(...)` so focused flow tests cover target/peer field copying and planner target gates; `GBE_PushDotaLaunchStateToClientPeer(...)` now uses the helper for the equivalent assignments.
+  - Stop condition: no target selection, settings read, shared-state restore, lobby capture, payload build, response push, or last-game-state behavior changed.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

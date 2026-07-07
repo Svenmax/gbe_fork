@@ -114,6 +114,17 @@ bool should_preserve_server_id_for_launch_state_push_target(
         lobby_match_id != 0ull;
 }
 
+void apply_target_to_launch_state_push_plan_input(
+    LaunchStatePushPlanInput &plan_input,
+    const LaunchStateTargetInput &target)
+{
+    plan_input.source_is_server = target.source_is_server;
+    plan_input.client_peer_available = target.client_peer_available;
+    plan_input.target_available = target.target_available;
+    plan_input.target_is_server = target.target_is_server;
+    plan_input.target_is_dota_profile = target.target_is_dota_profile;
+}
+
 void apply_captured_lobby_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateCapturedLobbyInput &lobby,

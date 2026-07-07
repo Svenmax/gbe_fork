@@ -412,11 +412,14 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
     }
 
     gbe::dota_lobby_flow::LaunchStatePushPlanInput plan_input{};
-    plan_input.source_is_server = is_server;
-    plan_input.client_peer_available = client_peer_available;
-    plan_input.target_available = target != nullptr;
-    plan_input.target_is_server = target ? target->is_server : false;
-    plan_input.target_is_dota_profile = target ? target->gc_profile == GC_PROFILE_DOTA2 : false;
+    gbe::dota_lobby_flow::apply_target_to_launch_state_push_plan_input(
+        plan_input,
+        gbe::dota_lobby_flow::LaunchStateTargetInput{
+            is_server,
+            client_peer_available,
+            target != nullptr,
+            target ? target->is_server : false,
+            target ? target->gc_profile == GC_PROFILE_DOTA2 : false});
 
     gbe::dota_lobby_flow::LaunchStatePushPlan plan = gbe::dota_lobby_flow::plan_launch_state_push(plan_input);
     if (plan.skip_reason == gbe::dota_lobby_flow::LaunchStatePushSkipReason::InvalidTarget)

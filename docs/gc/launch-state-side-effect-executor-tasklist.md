@@ -64,3 +64,8 @@ git diff --check
   - Goal: keep `GBE_PushDotaLaunchStateToClientPeer(...)` from indexing build requests directly while preserving the existing `24` and `26` failure log sites.
   - Result: added `GBE_BuildDotaLaunchStatePayloads(...)`, which consumes the tested request sequence, builds `response_24` then `response_26`, and reports the failed build kind to the caller.
   - Stop condition: the helper still delegates to the existing authoritative payload builders; it does not push responses, record cache subscriptions, reapply rich presence, update last game state, change failure log reason/text, or broaden harness linkage.
+
+- [x] 13. Extract launch-state target plan-input mapping seam
+  - Goal: make target/peer field mapping testable without moving target coordinator selection or settings reads.
+  - Result: added `LaunchStateTargetInput` plus `apply_target_to_launch_state_push_plan_input(...)`, covered target field copying and planner gates in `gbe_dota_lobby_flow_test`, and replaced the equivalent field assignments inside `GBE_PushDotaLaunchStateToClientPeer(...)`.
+  - Stop condition: this seam only copies planner inputs; it does not choose the target coordinator, restore shared state, capture lobby state, build payloads, push messages, or update last game state.

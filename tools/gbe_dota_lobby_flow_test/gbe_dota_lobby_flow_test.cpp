@@ -307,6 +307,52 @@ bool test_launch_state_push_planner()
     return ok;
 }
 
+bool test_launch_state_plan_input_target_mapping()
+{
+    bool ok = true;
+
+    gbe::dota_lobby_flow::LaunchStatePushPlanInput input{};
+    gbe::dota_lobby_flow::apply_target_to_launch_state_push_plan_input(
+        input,
+        gbe::dota_lobby_flow::LaunchStateTargetInput{
+            true,
+            true,
+            true,
+            false,
+            true});
+
+    ok &= expect_true(input.source_is_server, "target mapping source server");
+    ok &= expect_true(input.client_peer_available, "target mapping client peer available");
+    ok &= expect_true(input.target_available, "target mapping target available");
+    ok &= expect_true(!input.target_is_server, "target mapping target is client");
+    ok &= expect_true(input.target_is_dota_profile, "target mapping target dota profile");
+
+    gbe::dota_lobby_flow::LaunchStatePushPlan plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_true(plan.use_client_peer, "target mapping planner uses client peer");
+    ok &= expect_true(plan.restore_shared_state, "target mapping planner restores shared state");
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::NoCapturedLobby, "target mapping planner reaches capture gate");
+
+    gbe::dota_lobby_flow::apply_target_to_launch_state_push_plan_input(
+        input,
+        gbe::dota_lobby_flow::LaunchStateTargetInput{
+            true,
+            false,
+            false,
+            false,
+            true});
+
+    ok &= expect_true(input.source_is_server, "target remapping source server");
+    ok &= expect_true(!input.client_peer_available, "target remapping client peer unavailable");
+    ok &= expect_true(!input.target_available, "target remapping target unavailable");
+    ok &= expect_true(!input.target_is_server, "target remapping target server flag");
+    ok &= expect_true(input.target_is_dota_profile, "target remapping target dota profile");
+
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::InvalidTarget, "target remapping planner invalid target");
+
+    return ok;
+}
+
 bool test_launch_state_plan_input_captured_lobby_mapping()
 {
     bool ok = true;
@@ -1287,6 +1333,7 @@ int main()
     ok &= test_count_remote_lobby_members();
     ok &= test_launch_state_peer_selection();
     ok &= test_launch_state_push_planner();
+    ok &= test_launch_state_plan_input_target_mapping();
     ok &= test_launch_state_plan_input_captured_lobby_mapping();
     ok &= test_upsert_and_slot_selection();
     ok &= test_apply_lobby_member_team_slot_update();
