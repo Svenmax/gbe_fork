@@ -1,0 +1,24 @@
+==============================================================================
+Phase 2.12: Move 6 payload free functions to payload_helpers TU
+==============================================================================
+
+Main file: /workspace/dll/steam_game_coordinator.cpp (2799 lines)
+Payload TU: /workspace/dll/gbe_dota_gc_payload_helpers.cpp (1492 lines)
+
+Target blocks (1-indexed inclusive):
+  Block 1: L891-L1225 (335 lines, 4 fns)
+  Block 2: L1903-L2073 (171 lines, 2 fns)
+
+Block 1 first line: bool GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedTemplate(
+Block 2 first line: bool GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl(
+Block boundary check: OK
+
+Function signatures found in extracted blocks: 6/6
+
+
+Original main file:     2799 lines
+New main file:          2284 lines (delta -515)
+Original payload TU:    1492 lines
+New payload TU:         2002 lines (delta 510)
+Definitions moved to payload TU: 6/6
+Definitions remaining in main: 0 (expected 0)

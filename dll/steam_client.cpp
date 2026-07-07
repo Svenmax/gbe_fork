@@ -142,7 +142,7 @@ Steam_Client::Steam_Client()
     steam_video = new Steam_Video();
     steam_parental = new Steam_Parental();
     steam_networking_sockets = new Steam_Networking_Sockets(settings_client, network, callback_results_client, callbacks_client, run_every_runcb, NULL);
-    steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
+    steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_client, network, callback_results_client, callbacks_client, run_every_runcb, steam_networking_sockets);
     steam_networking_messages = new Steam_Networking_Messages(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_game_coordinator = new Steam_Game_Coordinator(settings_client, network, local_storage, callbacks_client, run_every_runcb, false);
     steam_networking_utils = new Steam_Networking_Utils(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
@@ -170,7 +170,7 @@ Steam_Client::Steam_Client()
     steam_gameserver_ugc = new Steam_UGC(settings_server, ugc_bridge, local_storage, callback_results_server, callbacks_server);
     steam_gameserver_apps = new Steam_Apps(settings_server, callback_results_server, callbacks_server);
     steam_gameserver_networking_sockets = new Steam_Networking_Sockets(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, steam_networking_sockets->get_shared_between_client_server());
-    steam_gameserver_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
+    steam_gameserver_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, steam_gameserver_networking_sockets);
     steam_gameserver_networking_messages = new Steam_Networking_Messages(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
     steam_gameserver_game_coordinator = new Steam_Game_Coordinator(settings_server, network, local_storage, callbacks_server, run_every_runcb, true);
     steam_masterserver_updater = new Steam_Masterserver_Updater(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, steam_gameserver);
@@ -212,8 +212,8 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_gameserver_inventory);
     DEL_INST(steam_gameserver_ugc);
     DEL_INST(steam_gameserver_apps);
-    DEL_INST(steam_gameserver_networking_sockets);
     DEL_INST(steam_gameserver_networking_sockets_serialized);
+    DEL_INST(steam_gameserver_networking_sockets);
     DEL_INST(steam_gameserver_networking_messages);
     DEL_INST(steam_gameserver_game_coordinator);
     DEL_INST(steam_masterserver_updater);
@@ -238,8 +238,8 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_inventory);
     DEL_INST(steam_video);
     DEL_INST(steam_parental);
-    DEL_INST(steam_networking_sockets);
     DEL_INST(steam_networking_sockets_serialized);
+    DEL_INST(steam_networking_sockets);
     DEL_INST(steam_networking_messages);
     DEL_INST(steam_game_coordinator);
     DEL_INST(steam_networking_utils);
@@ -304,6 +304,8 @@ void Steam_Client::serverShutdown()
 
 void Steam_Client::clientShutdown()
 {
+    if (steam_game_coordinator)
+        steam_game_coordinator->shutdown_gc();
     callback_results_client->clear();
     user_logged_in = false;
 }
@@ -311,11 +313,13 @@ void Steam_Client::clientShutdown()
 void Steam_Client::setAppID(uint32 appid)
 {
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    bool appid_changed = false;
     if (appid && !settings_client->get_local_game_id().AppID()) {
         settings_client->set_game_id(CGameID(appid));
         settings_server->set_game_id(CGameID(appid));
         local_storage->setAppId(appid);
         network->setAppID(appid);
+        appid_changed = true;
 
         std::string appid_str(std::to_string(appid));
         set_env_variable("SteamAppId", appid_str);
@@ -326,7 +330,12 @@ void Steam_Client::setAppID(uint32 appid)
         }
     }
 
-    
+    if (appid_changed) {
+        if (steam_game_coordinator)
+            steam_game_coordinator->on_appid_changed(appid);
+        if (steam_gameserver_game_coordinator)
+            steam_gameserver_game_coordinator->on_appid_changed(appid);
+    }
 }
 
 // Creates a communication pipe to the Steam client.

@@ -953,10 +953,12 @@ SteamAPICall_t Steam_Remote_Storage::EnumerateUserSubscribedFiles( uint32 unStar
     RemoteStorageEnumerateUserSubscribedFilesResult_t data{};
     uint32_t modCount = (uint32_t)ugc_bridge->subbed_mods_count();
     if (unStartIndex >= modCount) {
-        data.m_eResult = EResult::k_EResultInvalidParam; // is this correct?
+        data.m_eResult = k_EResultOK;
+        data.m_nTotalResultCount = modCount;
+        data.m_nResultsReturned = 0;
     } else {
         data.m_eResult = k_EResultOK;
-        data.m_nTotalResultCount = modCount - unStartIndex; // total amount starting from given index
+        data.m_nTotalResultCount = modCount;
         std::set<PublishedFileId_t>::iterator i = ugc_bridge->subbed_mods_itr_begin();
         std::advance(i, unStartIndex);
         uint32_t iterated = 0;

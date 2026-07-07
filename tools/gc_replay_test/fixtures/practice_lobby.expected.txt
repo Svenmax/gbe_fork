@@ -1,0 +1,20 @@
+gc_replay_test summary v1
+cases=2
+case 1
+label=practice_lobby_cache_subscribed_full
+emsg=2147483672
+masked_emsg=24
+proto=1
+size=439
+fnv1a64=0xf52b779806d1c912
+body_size=431
+fields=4:2:4=0x08031009,2:2:268=0x08d40f1286020809...,2:2:20=0x08df0f120f0a000a...,2:2:5=0x08dd0f1200,2:2:23=0x08de0f12120a0a0a...,2:2:98=0x08e00f125d0a2a09...
+case 2
+label=practice_lobby_details_update_full
+emsg=2147483674
+masked_emsg=26
+proto=1
+size=439
+fnv1a64=0x4c19e48bf68dbcaa
+body_size=431
+fields=6:2:4=0x08031009,2:2:23=0x08de0f12120a0a0a...,2:2:5=0x08dd0f1200,2:2:20=0x08df0f120f0a000a...,2:2:268=0x08d40f1286020809...,2:2:98=0x08e00f125d0a2a09...
