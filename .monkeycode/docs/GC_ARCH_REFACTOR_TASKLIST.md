@@ -26,7 +26,7 @@
   - [x] 让 planner 返回 skip reason、payload build request、action sequence。
   - [x] 将 launch push 动作接入统一 `GBE_DotaActionList` 或等价统一 action 模型。
   - [x] 保持顺序为 `RecordCacheSubscription -> PushCacheSubscribed -> PushDetailsUpdate -> ReapplyRichPresence -> SetLastGameState`。
-  - [ ] 继续评估是否可以把 restore/capture 前的阶段性 skip 判断进一步合并，同时保持日志粒度。
+  - [x] 继续评估阶段性 skip 判断，合并 capture 后重复 planner 调用，同时保持日志粒度。
 
 - [ ] 3. 为 launch push 补强测试护栏
   - [x] 增加 planner 单测，覆盖 valid push、suppressed source lobby、invalid target、suppressed shared lobby、no captured lobby、duplicate game state。
