@@ -81,6 +81,7 @@
 //   LobbySnapshotRefresh  reason
 //   GenericLobbyLeave     lobby_id
 //   RichPresenceUpdate    status, lobby_state, include_party, include_lobby
+//   RichPresenceClear     reason
 //   LaunchPersonaState    status, lobby_state, include_party, include_lobby, reason
 //   LobbyLocalMemberData  reason
 //   LobbyMetadataPublish  reason
@@ -108,6 +109,7 @@ enum class GBE_DotaActionType {
     GenericLobbyLeave,     // leave local generic lobby during lifecycle cleanup
     SettingsLobbyClear,    // clear settings lobby during signout cleanup
     RichPresenceUpdate,    // update Dota launch rich presence
+    RichPresenceClear,     // clear Dota launch rich presence
     LaunchPersonaState,    // build Dota launch persona state metadata
     LobbyLocalMemberData,  // publish local member data to generic lobby
     LobbyMetadataPublish,  // publish generic lobby metadata

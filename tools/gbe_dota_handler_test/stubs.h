@@ -300,6 +300,7 @@ struct RecordedAction
             case GBE_DotaActionType::GenericLobbyLeave:     return "GenericLobbyLeave";
             case GBE_DotaActionType::SettingsLobbyClear:    return "SettingsLobbyClear";
             case GBE_DotaActionType::RichPresenceUpdate:    return "RichPresenceUpdate";
+            case GBE_DotaActionType::RichPresenceClear:     return "RichPresenceClear";
             case GBE_DotaActionType::LaunchPersonaState:    return "LaunchPersonaState";
             case GBE_DotaActionType::LobbyLocalMemberData:  return "LobbyLocalMemberData";
             case GBE_DotaActionType::LobbyMetadataPublish:  return "LobbyMetadataPublish";
@@ -499,6 +500,14 @@ public:
         a.lobby_state = lobby_state ? lobby_state : "";
         a.include_party = include_party;
         a.include_lobby = include_lobby;
+        actions.push_back(std::move(a));
+    }
+
+    void record_rich_presence_clear(const char *reason)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::RichPresenceClear;
+        a.reason = reason ? reason : "";
         actions.push_back(std::move(a));
     }
 
@@ -1137,6 +1146,11 @@ public:
     {
         GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_INIT", "SERVERSETUP", false, false);
     }
+    void GBE_ClearDotaPracticeLobbyLaunchRichPresence()
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_rich_presence_clear("clear_launch_rich_presence");
+    }
     void ResetGCMemory(const char *, bool = true, bool = true) { GBE_local_lobby = GBE_LocalLobby{}; }
     bool GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_LocalLobby &) { return false; }
     void GBE_PublishDotaPracticeLobbyLocalMemberData(const char *reason)
@@ -1195,6 +1209,8 @@ public:
             std::string response_26;
             if (GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(lobby, GBE_GetDotaLobbyOwnerName(), response_26, true))
                 push_incoming_now(26u | protobuf_mask, response_26);
+            GBE_ClearDotaPracticeLobbyLaunchRichPresence();
+            GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
             GBE_ClearDotaLobbyRuntimeState();
             push_incoming_now(25u | protobuf_mask, std::to_string(cleaning_lobby_id));
             GBE_ClearSettingsLobbyForDotaSignout();

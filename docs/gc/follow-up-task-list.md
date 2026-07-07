@@ -327,6 +327,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `LaunchMessagesDiscardedForAbandon` to the handler action recorder, strengthened the ready-for-abandon teardown smoke test to prove queued launch messages are discarded before abandoned-lobby suppression and postgame `7014` response, and added an arcade launch-failure smoke test proving discard, suppression, then cache-unsubscribed `25` order with pending reset recorded.
   - Stop condition: no production discard behavior changed and no launch coordinator linkage was expanded.
 
+- [x] Rich presence clear recorder coverage pass.
+  - Goal: make player postgame cleanup rich-presence clearing visible before adding any lifecycle wrapper around that cleanup path.
+  - Result: added `RichPresenceClear` to the handler action recorder and strengthened the player postgame observation smoke test to prove postgame details `26` precedes rich-presence clear, launch peripheral reset, and cache-unsubscribed `25` cleanup.
+  - Stop condition: no production rich-presence behavior changed and no launch coordinator linkage was expanded.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

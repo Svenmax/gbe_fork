@@ -1437,9 +1437,12 @@ static void test_lobby_player_postgame_observation_clears_shared_state_after_det
     TEST_ASSERT(result, "player postgame observation should run cleanup");
     TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "player postgame cleanup should clear shared state");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "player postgame cleanup should clear local lobby");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "player postgame cleanup should push details update then cache unsubscribe");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 4u, "player postgame cleanup should push details, clear launch state, then cache unsubscribe");
     expect_push_action(tf.recorder.actions[0], GBE_kDotaPracticeLobbyDetailsUpdate, "player cleanup should push postgame details first");
-    expect_push_action(tf.recorder.actions[1], GBE_kDotaCacheUnsubscribed, "player cleanup should push cache unsubscribe after cleanup");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::RichPresenceClear, "player cleanup should clear rich presence after details update");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "clear_launch_rich_presence", "player cleanup rich presence clear reason should be recorded");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LaunchPeripheralReset, "player cleanup should reset launch peripheral state after rich presence clear");
+    expect_push_action(tf.recorder.actions[3], GBE_kDotaCacheUnsubscribed, "player cleanup should push cache unsubscribe after cleanup");
 
     ++g_tests_passed;
 }
