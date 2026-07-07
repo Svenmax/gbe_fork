@@ -1020,6 +1020,11 @@ public:
         return GBE_PushDotaResponse(GBE_kDotaOtherLeftChannel, message, wrapped, outer_session_field_raw, reason);
     }
 
+    bool GBE_PushDotaPracticeLobbyResponse(const std::string &message, bool wrapped, const std::string *outer_session_field_raw, const char *reason, std::string *out_wrapped_message = nullptr)
+    {
+        return GBE_PushDotaResponse(GBE_kDotaPracticeLobbyResponse, message, wrapped, outer_session_field_raw, reason, false, 0u, 0u, out_wrapped_message);
+    }
+
     void save_items_to_file()
     {
         if (g_action_recorder)

@@ -543,7 +543,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     }
 
     std::string wrapped_7055;
-    if (!GBE_PushDotaResponse(GBE_kDotaPracticeLobbyResponse, response_7055, wrapped, outer_session_field_raw, "7038_7055", false, 0u, 0u, &wrapped_7055))
+    if (!GBE_PushDotaPracticeLobbyResponse(response_7055, wrapped, outer_session_field_raw, "7038_7055", &wrapped_7055))
         return true;
 
     if (wrapped) {
@@ -1664,7 +1664,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
         }
 
         std::string wrapped_7055;
-        if (!GBE_PushDotaResponse(GBE_kDotaPracticeLobbyResponse, response_7055, wrapped, outer_session_field_raw, "7047_7055", false, 0u, 0u, &wrapped_7055))
+        if (!GBE_PushDotaPracticeLobbyResponse(response_7055, wrapped, outer_session_field_raw, "7047_7055", &wrapped_7055))
             return true;
 
         if (wrapped) {

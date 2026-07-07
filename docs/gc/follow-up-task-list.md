@@ -236,6 +236,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `GBE_PushDotaOtherLeftChannelResponse()` as a thin helper over `GBE_PushDotaResponse(GBE_kDotaOtherLeftChannel, ...)` and replaced the stale and normal `7272` chat leave `7014` response call sites. Existing chat leave coverage verifies emsg `7014`, wrapped/session metadata, reason strings `stale_7272_7014` and `7272_7014`, and response-before-cleanup/publish ordering.
   - Stop condition: no broad response interface was introduced; immediate-vs-delayed response behavior remains owned by `GBE_PushDotaResponse()`.
 
+- [x] Push / response seam phase 3.
+  - Goal: name one more repeated practice-lobby response operation only where recorder coverage proves order and metadata.
+  - Result: added `GBE_PushDotaPracticeLobbyResponse()` as a thin helper over `GBE_PushDotaResponse(GBE_kDotaPracticeLobbyResponse, ...)` and replaced the 7038 create and 7047 set-team-slot `7055` ack call sites that already preserve wrapped packet output for logging. Existing handler coverage verifies emsg `7055`, wrapped/session metadata, reason strings `7038_7055` and `7047_7055`, and response order after cache subscription or details update.
+  - Stop condition: no broad response interface was introduced; immediate-vs-delayed response behavior and wrapped packet capture remain owned by `GBE_PushDotaResponse()`.
+
 - [x] Client/ownership seam evaluation.
   - Goal: identify a narrow client coordinator lookup path before adding an ownership helper.
   - Result: identified `GBE_PushDotaLaunchStateToClientPeer(...)` as the candidate path. It selects `steam_game_coordinator` when called from the server coordinator, restores shared lobby state on the target, and pushes launch-state `24`/`26` through the client coordinator.
