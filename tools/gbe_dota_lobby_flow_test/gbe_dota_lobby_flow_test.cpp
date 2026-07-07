@@ -400,11 +400,19 @@ bool test_create_lobby_context_mapping()
     context.owner_slot = 1u;
 
     const gbe::dota_lobby_state::CreateLobbyResetPlan reset_plan = gbe::dota_lobby_flow::create_lobby_reset_plan_from_context(context);
+    ok &= expect_true(reset_plan.reset_gc_memory, "create context reset resets GC memory");
+    ok &= expect_true(reset_plan.reset_reason == "7038_create", "create context reset reason");
+    ok &= expect_true(reset_plan.reset_leave_generic_lobby, "create context reset leaves generic lobby");
+    ok &= expect_true(reset_plan.reset_clear_queued_messages, "create context reset clears queued messages");
     ok &= expect_true(reset_plan.unsubscribe_previous_practice_lobby, "create context reset unsubscribes previous lobby");
     ok &= expect_eq_u64(reset_plan.previous_lobby_id, 0x7000ull, "create context reset previous lobby id");
     ok &= expect_eq_u64(reset_plan.previous_match_id, 0x8000ull, "create context reset previous match id");
 
     const gbe::dota_lobby_flow::CreateLobbyActionPlan action_plan = gbe::dota_lobby_flow::create_lobby_action_plan_from_reset_plan(reset_plan);
+    ok &= expect_true(action_plan.reset_gc_memory, "create context action plan resets GC memory");
+    ok &= expect_true(action_plan.reset_reason == "7038_create", "create context action plan reset reason");
+    ok &= expect_true(action_plan.reset_leave_generic_lobby, "create context action plan leaves generic lobby");
+    ok &= expect_true(action_plan.reset_clear_queued_messages, "create context action plan clears queued messages");
     ok &= expect_true(action_plan.unsubscribe_previous_practice_lobby, "create context action plan unsubscribe");
 
     const gbe::dota_lobby_state::CreateLobbyPlan state_plan = gbe::dota_lobby_flow::create_lobby_state_plan_from_context(context);
@@ -423,10 +431,17 @@ bool test_create_lobby_action_list()
 {
     bool ok = true;
 
-    GBE_DotaActionList actions = gbe::dota_lobby_flow::create_lobby_action_list(gbe::dota_lobby_flow::CreateLobbyActionPlan{}, true);
+    gbe::dota_lobby_flow::CreateLobbyActionPlan plan{};
+    plan.reset_gc_memory = true;
+    plan.reset_reason = "7038_create";
+    plan.reset_leave_generic_lobby = true;
+    plan.reset_clear_queued_messages = true;
+    GBE_DotaActionList actions = gbe::dota_lobby_flow::create_lobby_action_list(plan, true);
     ok &= expect_eq_u64(actions.size(), 9u, "create action count");
     ok &= expect_true(actions[0].type == GBE_DotaActionType::GcMemoryReset, "create first action resets GC memory");
     ok &= expect_true(actions[0].reason == "7038_create", "create reset reason");
+    ok &= expect_true(actions[0].leave_generic_lobby, "create reset leaves generic lobby");
+    ok &= expect_true(actions[0].clear_queued_messages, "create reset clears queued messages");
     ok &= expect_true(actions[1].type == GBE_DotaActionType::GenericLobbyCreate, "create second action creates generic lobby");
     ok &= expect_true(actions[1].reason == "7038_create", "create generic lobby reason");
     ok &= expect_true(actions[2].type == GBE_DotaActionType::LobbyLocalMemberData, "create third action publishes local member data");
@@ -446,7 +461,8 @@ bool test_create_lobby_action_list()
     ok &= expect_eq_u64(actions[8].emsg, 7055u | 0x80000000u, "create ack emsg");
     ok &= expect_true(actions[8].reason == "7038_7055", "create ack reason");
 
-    actions = gbe::dota_lobby_flow::create_lobby_action_list(gbe::dota_lobby_flow::CreateLobbyActionPlan{true}, false);
+    plan.unsubscribe_previous_practice_lobby = true;
+    actions = gbe::dota_lobby_flow::create_lobby_action_list(plan, false);
     ok &= expect_eq_u64(actions.size(), 10u, "create action count with previous unsubscribe");
     ok &= expect_true(actions[0].type == GBE_DotaActionType::GcMemoryReset, "create reset action before unsubscribe");
     ok &= expect_true(actions[1].type == GBE_DotaActionType::PushIncomingNow, "create unsubscribe action after reset");

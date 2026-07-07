@@ -112,6 +112,10 @@ struct LaunchStatePushContext
 
 struct CreateLobbyActionPlan
 {
+    bool reset_gc_memory{};
+    std::string reset_reason;
+    bool reset_leave_generic_lobby{};
+    bool reset_clear_queued_messages{};
     bool unsubscribe_previous_practice_lobby{};
 };
 

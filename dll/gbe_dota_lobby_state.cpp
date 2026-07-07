@@ -121,6 +121,10 @@ CreateLobbyResetPlan compose_create_lobby_reset_plan(
     const GBE_DotaCustomGameDetails &requested_custom_game)
 {
     CreateLobbyResetPlan plan{};
+    plan.reset_gc_memory = true;
+    plan.reset_reason = "7038_create";
+    plan.reset_leave_generic_lobby = true;
+    plan.reset_clear_queued_messages = true;
     plan.custom_game_create = requested_custom_game.game_id != 0ull;
     plan.previous_lobby_id = previous_lobby.lobby_id;
     plan.previous_match_id = previous_lobby.match_id;

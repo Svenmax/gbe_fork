@@ -78,7 +78,7 @@
 //   CallbackItemUpdated   target_steam_id, item_id
 //   ServerGcForward       emsg, target_steam_id         (reason optional)
 //   NetworkBroadcast      (no fields)
-//   GcMemoryReset         reason
+//   GcMemoryReset         reason, leave_generic_lobby, clear_queued_messages
 //   LobbySnapshotRefresh  reason
 //   GenericLobbyCreate    reason
 //   GenericLobbyLeave     lobby_id
@@ -136,6 +136,8 @@ struct GBE_DotaAction {
     uint64_t item_id{};           // CallbackItemUpdated
     uint64_t job_id{};            // when tied to a source/target job
     std::string reason;           // LobbySnapshotRefresh
+    bool leave_generic_lobby{};   // GcMemoryReset
+    bool clear_queued_messages{}; // GcMemoryReset
 };
 
 // Ordered list of intended side effects built by a pure helper and consumed

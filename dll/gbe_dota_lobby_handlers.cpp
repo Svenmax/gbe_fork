@@ -437,7 +437,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
 
     if (create_action_index < create_actions.size() &&
             create_actions[create_action_index].type == GBE_DotaActionType::GcMemoryReset) {
-        ResetGCMemory(create_actions[create_action_index].reason.c_str(), true, true);
+        ResetGCMemory(
+            create_actions[create_action_index].reason.c_str(),
+            create_actions[create_action_index].leave_generic_lobby,
+            create_actions[create_action_index].clear_queued_messages);
         ++create_action_index;
     }
 

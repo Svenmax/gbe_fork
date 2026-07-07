@@ -294,7 +294,13 @@ gbe::dota_lobby_state::CreateLobbyPlan create_lobby_state_plan_from_context(
 CreateLobbyActionPlan create_lobby_action_plan_from_reset_plan(
     const gbe::dota_lobby_state::CreateLobbyResetPlan &reset_plan)
 {
-    return CreateLobbyActionPlan{reset_plan.unsubscribe_previous_practice_lobby};
+    CreateLobbyActionPlan plan{};
+    plan.reset_gc_memory = reset_plan.reset_gc_memory;
+    plan.reset_reason = reset_plan.reset_reason;
+    plan.reset_leave_generic_lobby = reset_plan.reset_leave_generic_lobby;
+    plan.reset_clear_queued_messages = reset_plan.reset_clear_queued_messages;
+    plan.unsubscribe_previous_practice_lobby = reset_plan.unsubscribe_previous_practice_lobby;
+    return plan;
 }
 
 gbe::dota_lobby_state::JoinLobbyMergePlan join_lobby_merge_plan_from_context(
@@ -380,7 +386,8 @@ GBE_DotaActionList create_lobby_action_list(
     bool wrapped)
 {
     GBE_DotaActionList actions;
-    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::GcMemoryReset, 0u, std::string(), 0ull, 0ull, 0ull, "7038_create" });
+    if (plan.reset_gc_memory)
+        actions.push_back(GBE_DotaAction{ GBE_DotaActionType::GcMemoryReset, 0u, std::string(), 0ull, 0ull, 0ull, plan.reset_reason, plan.reset_leave_generic_lobby, plan.reset_clear_queued_messages });
     if (plan.unsubscribe_previous_practice_lobby)
         actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaCacheUnsubscribed | GBE_kProtoMask });
 

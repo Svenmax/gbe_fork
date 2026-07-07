@@ -1718,6 +1718,10 @@ bool test_dota_lobby_state_helpers()
     GBE_DotaCustomGameDetails requested_custom_game{};
     requested_custom_game.game_id = 0x9000ull;
     const gbe::dota_lobby_state::CreateLobbyResetPlan reset_plan = gbe::dota_lobby_state::compose_create_lobby_reset_plan(previous_lobby, requested_custom_game);
+    ok &= expect_true(reset_plan.reset_gc_memory, "create reset plan resets GC memory");
+    ok &= expect_true(reset_plan.reset_reason == "7038_create", "create reset plan reset reason");
+    ok &= expect_true(reset_plan.reset_leave_generic_lobby, "create reset plan leaves generic lobby");
+    ok &= expect_true(reset_plan.reset_clear_queued_messages, "create reset plan clears queued messages");
     ok &= expect_true(reset_plan.custom_game_create, "create reset plan custom game create");
     ok &= expect_true(reset_plan.unsubscribe_previous_practice_lobby, "create reset plan unsubscribes previous practice lobby");
     ok &= expect_eq_u64(reset_plan.previous_lobby_id, previous_lobby.lobby_id, "create reset plan previous lobby id");

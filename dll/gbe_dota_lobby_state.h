@@ -155,6 +155,10 @@ struct CreateLobbyStateApplyPlan {
 };
 
 struct CreateLobbyResetPlan {
+    bool reset_gc_memory{};
+    std::string reset_reason;
+    bool reset_leave_generic_lobby{};
+    bool reset_clear_queued_messages{};
     bool custom_game_create{};
     bool unsubscribe_previous_practice_lobby{};
     std::uint64_t previous_lobby_id{};
