@@ -45,7 +45,7 @@
 
 - [ ] 5. 为 create lobby 补强测试护栏
   - [x] 增加 create action list 单测，覆盖可选 25 以及 `24 -> 7055` 顺序。
-  - 增加 smoke test，覆盖真实 handler 的 `25 -> 24 -> 7055`。
+  - [x] 增加 smoke test，覆盖真实 handler 的 `25 -> 24 -> 7055`。
   - [x] 验证 record cache subscription 在 push 前。
   - 验证 custom game create 的状态归一化。
 
@@ -58,7 +58,7 @@
 - [ ] 7. 为 join lobby 补强测试护栏
   - [x] 增加 action list 单测，覆盖 direct join、matched generic lobby、无 join response 的 `24` only 顺序。
   - [x] 保持 smoke test 覆盖 matched generic lobby 和 `24 -> 7113` 顺序。
-  - 增加 smoke test，覆盖 empty local lobby、pass key。
+  - [x] 增加 smoke test，覆盖 empty local lobby、pass key。
 
 - [ ] 8. 第一轮检查点
   - 运行 `tools/run_gc_verification.sh`。

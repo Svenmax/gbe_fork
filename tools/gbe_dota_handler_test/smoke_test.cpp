@@ -1316,6 +1316,49 @@ static void test_lobby_create_records_cache_subscription_before_pushes()
     ++g_tests_passed;
 }
 
+static void test_lobby_create_arcade_unsubscribes_previous_before_new_lobby()
+{
+    TestFixture tf;
+    tf.reset();
+    Steam_Matchmaking matchmaking;
+    g_test_steam_client.steam_matchmaking = &matchmaking;
+
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x703800u;
+    tf.gc.GBE_local_lobby.match_id = 0x7038AAu;
+    tf.gc.GBE_local_lobby.custom_game.game_id = 0ull;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 1u;
+    tf.gc.GBE_local_lobby.owner_team = 0u;
+    tf.gc.GBE_local_lobby.owner_slot = 1u;
+
+    const std::string details = WireBodyBuilder()
+        .bytes(26u, "arcade-mode")
+        .bytes(27u, "arcade-map")
+        .varint(29u, 0xC0FFEEu)
+        .varint(30u, 1u)
+        .varint(31u, 10u)
+        .take();
+    const std::string body = WireBodyBuilder()
+        .bytes(7u, details)
+        .take();
+
+    const JobID_t request_job = 0x7038C0FFEEu;
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyCreateRequest(body, request_job, true, false, nullptr);
+
+    TEST_ASSERT(result, "arcade create handler should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.active, "arcade create should activate replacement lobby");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.custom_game.game_id, 0xC0FFEEu, "arcade create should preserve requested custom game id");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 8u, "arcade create should push previous 25 then setup, 24, and 7055");
+    expect_push_payload(tf.recorder.actions[0], GBE_kDotaCacheUnsubscribed, "arcade create should unsubscribe previous lobby first");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbyLocalMemberData, "arcade create should publish local member data after 25");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].type, GBE_DotaActionType::LobbyCacheSubscriptionRecord, "arcade create should record new cache subscription before 24");
+    expect_push_payload(tf.recorder.actions[6], GBE_kDotaCacheSubscribed, "arcade create should push new 24 after previous 25");
+    expect_push_payload(tf.recorder.actions[7], GBE_kDotaPracticeLobbyResponse, "arcade create should ack 7055 after new 24");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_join_records_cache_subscription_before_pushes()
 {
     TestFixture tf;
@@ -1325,13 +1368,14 @@ static void test_lobby_join_records_cache_subscription_before_pushes()
     const JobID_t request_job = 0x7044ABCDu;
     const std::string body = WireBodyBuilder()
         .varint(1u, 0x704400u)
-        .bytes(2u, "join-pass")
+        .bytes(3u, "join-pass")
         .take();
     bool result = tf.gc.GBE_HandleDotaPracticeLobbyJoinRequest(body, request_job, true, false, &session_raw, true);
 
     TEST_ASSERT(result, "join lobby handler should return true");
     TEST_ASSERT(tf.gc.GBE_local_lobby.active, "join lobby should activate local lobby");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0x704400ull, "join lobby should preserve requested lobby id");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.pass_key == "join-pass", "join lobby should preserve field 3 pass key");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "join lobby should publish local/shared state, record cache subscription, then push 24 and 7113");
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "join should publish local member data first");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7044_join", "join local member data reason should be preserved");
@@ -1342,6 +1386,29 @@ static void test_lobby_join_records_cache_subscription_before_pushes()
     TEST_ASSERT(tf.recorder.actions[2].msg_body == "cache_subscribed", "join cache subscription record should preserve built cache body");
     expect_push_payload(tf.recorder.actions[3], GBE_kDotaCacheSubscribed, "join should push cache subscribed after recording it");
     expect_push_payload(tf.recorder.actions[4], GBE_kDotaPracticeLobbyJoinResponse, "join should push 7113 after cache subscribed");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_join_empty_local_lobby_generates_lobby_id_with_pass_key_only()
+{
+    TestFixture tf;
+    tf.reset();
+
+    const std::string body = WireBodyBuilder()
+        .bytes(3u, "pass-only")
+        .take();
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyJoinRequest(body, 0x7044DDu, true, false, nullptr, false);
+
+    TEST_ASSERT(result, "pass-only join handler should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.active, "pass-only join should activate local lobby");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.lobby_id != 0ull, "pass-only join should generate a lobby id for empty local lobby");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.pass_key == "pass-only", "pass-only join should preserve pass key");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 4u, "pass-only join without ack should publish, record, then push only 24");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "pass-only join should publish local member data first");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "pass-only join should publish shared state second");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbyCacheSubscriptionRecord, "pass-only join should record cache subscription before 24");
+    expect_push_payload(tf.recorder.actions[3], GBE_kDotaCacheSubscribed, "pass-only join should only push 24 when join response is disabled");
 
     ++g_tests_passed;
 }
@@ -2276,8 +2343,14 @@ int main()
     std::printf("[run] test_lobby_create_records_cache_subscription_before_pushes\n");
     RUN_TEST(test_lobby_create_records_cache_subscription_before_pushes);
 
+    std::printf("[run] test_lobby_create_arcade_unsubscribes_previous_before_new_lobby\n");
+    RUN_TEST(test_lobby_create_arcade_unsubscribes_previous_before_new_lobby);
+
     std::printf("[run] test_lobby_join_records_cache_subscription_before_pushes\n");
     RUN_TEST(test_lobby_join_records_cache_subscription_before_pushes);
+
+    std::printf("[run] test_lobby_join_empty_local_lobby_generates_lobby_id_with_pass_key_only\n");
+    RUN_TEST(test_lobby_join_empty_local_lobby_generates_lobby_id_with_pass_key_only);
 
     std::printf("[run] test_lobby_join_matched_generic_syncs_settings_before_publish\n");
     RUN_TEST(test_lobby_join_matched_generic_syncs_settings_before_publish);
