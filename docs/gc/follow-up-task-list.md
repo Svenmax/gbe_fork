@@ -347,6 +347,11 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: strengthened the existing launch-poll smoke test to prove the fallback details update is recorded before the direct `7034` response action and preserves the `7034_launch_poll` reason.
   - Stop condition: no production launch-poll behavior changed and no direct 7034 response seam was introduced.
 
+- [x] Ready-up details-update ordering coverage pass.
+  - Goal: make the 7070 ready-up details-update order visible before wrapping custom-game runtime transition side effects.
+  - Result: strengthened the existing ready-up smoke test to prove the `7170` response and shared-lobby publish precede the details update, with the `7070_custom_game_ready_up_run_ack` reason preserved.
+  - Stop condition: no production ready-up behavior changed and no runtime transition side-effect interface was introduced.
+
 - [x] Shared lobby state clear facade planning pass.
   - Goal: identify whether any remaining direct clear semantics can be named without changing behavior.
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.

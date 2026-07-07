@@ -1643,6 +1643,9 @@ static void test_match_ready_up_queues_7170_then_runtime_update()
     TEST_ASSERT_EQ(tf.recorder.actions[0].msg_type & ~Steam_Game_Coordinator::protobuf_mask, 7170u, "first response should be 7170");
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "second action should publish lobby state");
     TEST_ASSERT(tf.recorder.actions[1].reason == "7070_custom_game_ready_up_run_ack", "publish reason should identify ready-up ack");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "ready-up should send one details update after publish");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates[0].action_sequence_index, 2u, "ready-up details update should happen after 7170 response and shared publish");
+    TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].reason == "7070_custom_game_ready_up_run_ack", "ready-up details update reason should be preserved");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, 1u, "ready-up should advance to wait-for-players");
 
     ++g_tests_passed;
