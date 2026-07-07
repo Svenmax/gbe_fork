@@ -445,7 +445,10 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
     }
 
     GBE_LocalLobby lobby{};
-    plan_input.captured_lobby_active = target->GBE_CaptureCurrentDotaLobbyState(reason ? reason : "push_launch_state_to_client", lobby, false);
+    gbe::dota_lobby_flow::apply_capture_to_launch_state_push_plan_input(
+        plan_input,
+        gbe::dota_lobby_flow::LaunchStateCaptureInput{
+            target->GBE_CaptureCurrentDotaLobbyState(reason ? reason : "push_launch_state_to_client", lobby, false)});
     plan = gbe::dota_lobby_flow::plan_launch_state_push(plan_input);
     if (plan.skip_reason == gbe::dota_lobby_flow::LaunchStatePushSkipReason::NoCapturedLobby) {
         GBE_GC_DebugLog(

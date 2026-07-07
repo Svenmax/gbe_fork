@@ -132,6 +132,13 @@ void apply_shared_lobby_to_launch_state_push_plan_input(
     plan_input.shared_lobby_suppressed = shared_lobby.suppressed;
 }
 
+void apply_capture_to_launch_state_push_plan_input(
+    LaunchStatePushPlanInput &plan_input,
+    const LaunchStateCaptureInput &capture)
+{
+    plan_input.captured_lobby_active = capture.active;
+}
+
 LaunchStateCapturedLobbyInput captured_lobby_input_from_local_lobby(
     const GBE_LocalLobby &lobby,
     bool captured_active)

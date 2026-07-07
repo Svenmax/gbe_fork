@@ -378,6 +378,30 @@ bool test_launch_state_plan_input_shared_lobby_mapping()
     return ok;
 }
 
+bool test_launch_state_plan_input_capture_mapping()
+{
+    bool ok = true;
+
+    gbe::dota_lobby_flow::LaunchStatePushPlanInput input = valid_launch_state_plan_input();
+    gbe::dota_lobby_flow::apply_capture_to_launch_state_push_plan_input(
+        input,
+        gbe::dota_lobby_flow::LaunchStateCaptureInput{false});
+
+    ok &= expect_true(!input.captured_lobby_active, "capture mapping inactive");
+    gbe::dota_lobby_flow::LaunchStatePushPlan plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::NoCapturedLobby, "capture mapping planner no captured lobby");
+
+    gbe::dota_lobby_flow::apply_capture_to_launch_state_push_plan_input(
+        input,
+        gbe::dota_lobby_flow::LaunchStateCaptureInput{true});
+
+    ok &= expect_true(input.captured_lobby_active, "capture remapping active");
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::None, "capture remapping planner push");
+
+    return ok;
+}
+
 bool test_launch_state_captured_lobby_input_from_local_lobby()
 {
     bool ok = true;
@@ -1392,6 +1416,7 @@ int main()
     ok &= test_launch_state_push_planner();
     ok &= test_launch_state_plan_input_target_mapping();
     ok &= test_launch_state_plan_input_shared_lobby_mapping();
+    ok &= test_launch_state_plan_input_capture_mapping();
     ok &= test_launch_state_captured_lobby_input_from_local_lobby();
     ok &= test_launch_state_plan_input_captured_lobby_mapping();
     ok &= test_upsert_and_slot_selection();

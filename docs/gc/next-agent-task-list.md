@@ -347,7 +347,7 @@ Add or strengthen a test first. Then add a helper only if it makes the ownership
 Current launch-state status:
 
 - `plan_launch_state_push(...)` already covers target-selection, shared suppression, capture availability, launch eligibility, duplicate suppression, push action booleans, and owner-LAN preserve predicates.
-- Launch-state push now has narrow seams for target/shared/captured plan-input mapping, payload build requests, grouped payload builds, and action-sequence execution.
+- Launch-state push now has narrow seams for target/shared/capture/captured plan-input mapping, payload build requests, grouped payload builds, and action-sequence execution.
 - Full focused production harness remains deferred because `gbe_dota_lobby_launch_coordinator.cpp` still groups launch-state push with unrelated launch/teardown/response members that conflict with existing handler smoke stubs.
 - Continue only if the next step keeps the explicit context small and does not link the full launch coordinator TU into handler smoke tests.
 

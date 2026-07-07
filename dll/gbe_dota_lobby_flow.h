@@ -117,6 +117,11 @@ struct LaunchStateSharedLobbyInput
     bool suppressed{};
 };
 
+struct LaunchStateCaptureInput
+{
+    bool active{};
+};
+
 void apply_target_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateTargetInput &target);
@@ -124,6 +129,10 @@ void apply_target_to_launch_state_push_plan_input(
 void apply_shared_lobby_to_launch_state_push_plan_input(
     LaunchStatePushPlanInput &plan_input,
     const LaunchStateSharedLobbyInput &shared_lobby);
+
+void apply_capture_to_launch_state_push_plan_input(
+    LaunchStatePushPlanInput &plan_input,
+    const LaunchStateCaptureInput &capture);
 
 LaunchStateCapturedLobbyInput captured_lobby_input_from_local_lobby(
     const GBE_LocalLobby &lobby,
