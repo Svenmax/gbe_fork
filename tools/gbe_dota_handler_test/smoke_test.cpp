@@ -1142,6 +1142,38 @@ static void test_lobby_join_records_cache_subscription_before_pushes()
     ++g_tests_passed;
 }
 
+static void test_lobby_join_matched_generic_syncs_settings_before_publish()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x704401u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = 0x70440100u;
+    tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.get_local_steam_id().ConvertToUint64();
+    tf.gc.GBE_local_lobby.owner_name = "tester";
+
+    const JobID_t request_job = 0x7044BEEFu;
+    const std::string body = WireBodyBuilder()
+        .varint(1u, tf.gc.GBE_local_lobby.lobby_id)
+        .take();
+    bool result = tf.gc.GBE_HandleDotaPracticeLobbyJoinRequest(body, request_job, true, false, nullptr, true);
+
+    TEST_ASSERT(result, "matched generic join handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 6u, "matched generic join should sync settings before publishing and responses");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::SettingsLobbySync, "matched generic join should sync settings before local member data publish");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7044_join_generic", "matched generic settings sync reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbyLocalMemberData, "matched generic join should publish local member data after settings sync");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7044_join", "matched generic local member data reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbySnapshotRefresh, "matched generic join should publish shared state after local member data");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7044_join", "matched generic shared publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::LobbyCacheSubscriptionRecord, "matched generic join should record cache subscription before pushing 24");
+    TEST_ASSERT(tf.recorder.actions[3].reason == "7044_join_direct", "matched generic cache subscription record reason should preserve direct path");
+    expect_push_payload(tf.recorder.actions[4], GBE_kDotaCacheSubscribed, "matched generic join should push 24 after cache record");
+    expect_push_payload(tf.recorder.actions[5], GBE_kDotaPracticeLobbyJoinResponse, "matched generic join should push 7113 after 24");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_abandon_ready_teardown_queues_postgame_response()
 {
     TestFixture tf;
@@ -1873,6 +1905,9 @@ int main()
 
     std::printf("[run] test_lobby_join_records_cache_subscription_before_pushes\n");
     RUN_TEST(test_lobby_join_records_cache_subscription_before_pushes);
+
+    std::printf("[run] test_lobby_join_matched_generic_syncs_settings_before_publish\n");
+    RUN_TEST(test_lobby_join_matched_generic_syncs_settings_before_publish);
 
     std::printf("[run] test_lobby_abandon_ready_teardown_queues_postgame_response\n");
     RUN_TEST(test_lobby_abandon_ready_teardown_queues_postgame_response);

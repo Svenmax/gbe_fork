@@ -314,7 +314,7 @@ The checklist above records the first follow-up pass and includes several "decid
 
 - [x] Settings lobby sync recorder coverage pass.
   - Goal: make settings-lobby sync visible in the 7038 create lifecycle before adding any wrapper around lobby setup publishing.
-  - Result: added `SettingsLobbySync` to the handler action recorder and strengthened the 7038 create smoke test to prove local member data publish, settings sync, shared lobby publish, metadata publish, cache subscription record, cache subscribed `24`, then practice lobby response `7055` order.
+  - Result: added `SettingsLobbySync` to the handler action recorder, strengthened the 7038 create smoke test to prove local member data publish, settings sync, shared lobby publish, metadata publish, cache subscription record, cache subscribed `24`, then practice lobby response `7055` order, and added a 7044 matched-generic join smoke test proving settings sync happens before local member data publish, shared lobby publish, cache subscription record, cache subscribed `24`, then join response `7113`.
   - Stop condition: no production settings sync behavior changed and no generic-lobby metadata surface was widened.
 
 - [x] Shared lobby state clear facade planning pass.
