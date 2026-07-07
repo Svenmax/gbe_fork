@@ -1332,9 +1332,15 @@ static void test_lobby_create_arcade_unsubscribes_previous_before_new_lobby()
     tf.gc.GBE_local_lobby.owner_team = 0u;
     tf.gc.GBE_local_lobby.owner_slot = 1u;
 
+    Mod_entry arcade_mod{};
+    arcade_mod.id = 0xC0FFEEu;
+    arcade_mod.title = "Arcade Title";
+    arcade_mod.metadata = "{\"addon_name\":\"arcade_addon\",\"map_name\":\"arcade_map\"}";
+    tf.settings.m_mod_entries[arcade_mod.id] = arcade_mod;
+
     const std::string details = WireBodyBuilder()
-        .bytes(26u, "arcade-mode")
-        .bytes(27u, "arcade-map")
+        .bytes(26u, "123")
+        .bytes(27u, "dota")
         .varint(29u, 0xC0FFEEu)
         .varint(30u, 1u)
         .varint(31u, 10u)
@@ -1349,6 +1355,13 @@ static void test_lobby_create_arcade_unsubscribes_previous_before_new_lobby()
     TEST_ASSERT(result, "arcade create handler should return true");
     TEST_ASSERT(tf.gc.GBE_local_lobby.active, "arcade create should activate replacement lobby");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.custom_game.game_id, 0xC0FFEEu, "arcade create should preserve requested custom game id");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.custom_game.mode == "arcade_addon", "arcade create should normalize custom mode from installed mod metadata");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.custom_game.map_name == "arcade_map", "arcade create should normalize custom map from installed mod metadata");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_team, GBE_kDotaTeamGoodGuys, "arcade create should normalize owner team");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_slot, 1u, "arcade create should normalize owner slot");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.members.size(), 1u, "arcade create should keep one local owner member");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.members[0].team, GBE_kDotaTeamGoodGuys, "arcade create should normalize owner member team");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.members[0].slot, 1u, "arcade create should normalize owner member slot");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 8u, "arcade create should push previous 25 then setup, 24, and 7055");
     expect_push_payload(tf.recorder.actions[0], GBE_kDotaCacheUnsubscribed, "arcade create should unsubscribe previous lobby first");
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbyLocalMemberData, "arcade create should publish local member data after 25");

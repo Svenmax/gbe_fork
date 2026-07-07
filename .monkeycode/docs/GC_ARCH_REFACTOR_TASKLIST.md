@@ -47,7 +47,7 @@
   - [x] 增加 create action list 单测，覆盖可选 25 以及 `24 -> 7055` 顺序。
   - [x] 增加 smoke test，覆盖真实 handler 的 `25 -> 24 -> 7055`。
   - [x] 验证 record cache subscription 在 push 前。
-  - 验证 custom game create 的状态归一化。
+  - [x] 验证 custom game create 的状态归一化。
 
 - [ ] 6. 改造 `GBE_HandleDotaPracticeLobbyJoinRequest`
   - 建立 join lobby context，集中 request lobby id、pass key、matched generic lobby、当前 local lobby、settings sync 状态读取。

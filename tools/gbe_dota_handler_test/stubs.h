@@ -249,15 +249,20 @@ public:
     const std::string &get_language() const { return m_language; }
 
     const std::vector<PublishedFileId_t> &modSet() const { return m_mods; }
-    bool has_mod(PublishedFileId_t mod_id) const { (void)mod_id; return false; }
-    bool isModInstalled(PublishedFileId_t mod_id) const { (void)mod_id; return false; }
-    Mod_entry getMod(PublishedFileId_t mod_id) const { (void)mod_id; return Mod_entry{}; }
+    bool has_mod(PublishedFileId_t mod_id) const { return m_mod_entries.find(mod_id) != m_mod_entries.end(); }
+    bool isModInstalled(PublishedFileId_t mod_id) const { return has_mod(mod_id); }
+    Mod_entry getMod(PublishedFileId_t mod_id) const
+    {
+        auto it = m_mod_entries.find(mod_id);
+        return it != m_mod_entries.end() ? it->second : Mod_entry{};
+    }
 
     CSteamID m_local_steam_id;
     CSteamID m_lobby_id;
     std::string m_name;
     std::string m_language;
     std::vector<PublishedFileId_t> m_mods;
+    std::map<PublishedFileId_t, Mod_entry> m_mod_entries;
 };
 
 // =====================================================================
