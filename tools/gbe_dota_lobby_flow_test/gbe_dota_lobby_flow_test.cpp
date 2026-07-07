@@ -50,6 +50,18 @@ bool expect_eq_skip_reason(
     return false;
 }
 
+bool expect_eq_action(
+    gbe::dota_lobby_flow::LaunchStatePushAction actual,
+    gbe::dota_lobby_flow::LaunchStatePushAction expected,
+    const char *label)
+{
+    if (actual == expected)
+        return true;
+
+    std::cerr << "failed: " << label << " actual=" << static_cast<int>(actual) << " expected=" << static_cast<int>(expected) << std::endl;
+    return false;
+}
+
 gbe::dota_lobby_flow::LaunchStatePushPlanInput valid_launch_state_plan_input()
 {
     gbe::dota_lobby_flow::LaunchStatePushPlanInput input{};
@@ -242,6 +254,20 @@ bool test_launch_state_push_planner()
     ok &= expect_eq_skip_reason(plan.skip_reason, gbe::dota_lobby_flow::LaunchStatePushSkipReason::None, "planner connect endpoint push");
     ok &= expect_true(plan.push_details_update, "planner pushes details update with connect endpoint");
     ok &= expect_true(!plan.preserve_server_id, "planner skips preserve for non-owner target");
+
+    std::vector<gbe::dota_lobby_flow::LaunchStatePushAction> actions = gbe::dota_lobby_flow::launch_state_push_actions(plan);
+    ok &= expect_eq_u64(actions.size(), 5u, "planner action count");
+    ok &= expect_eq_action(actions[0], gbe::dota_lobby_flow::LaunchStatePushAction::RecordCacheSubscription, "planner first action records cache subscription");
+    ok &= expect_eq_action(actions[1], gbe::dota_lobby_flow::LaunchStatePushAction::PushCacheSubscribed, "planner second action pushes cache subscribed");
+    ok &= expect_eq_action(actions[2], gbe::dota_lobby_flow::LaunchStatePushAction::PushDetailsUpdate, "planner third action pushes details update");
+    ok &= expect_eq_action(actions[3], gbe::dota_lobby_flow::LaunchStatePushAction::ReapplyRichPresence, "planner fourth action reapplies rich presence");
+    ok &= expect_eq_action(actions[4], gbe::dota_lobby_flow::LaunchStatePushAction::SetLastGameState, "planner fifth action updates last game state");
+
+    input = valid_launch_state_plan_input();
+    input.target_available = false;
+    plan = gbe::dota_lobby_flow::plan_launch_state_push(input);
+    actions = gbe::dota_lobby_flow::launch_state_push_actions(plan);
+    ok &= expect_eq_u64(actions.size(), 0u, "planner skipped action count");
 
     return ok;
 }

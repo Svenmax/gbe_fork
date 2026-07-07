@@ -169,6 +169,27 @@ LaunchStatePushPlan plan_launch_state_push(
     return plan;
 }
 
+std::vector<LaunchStatePushAction> launch_state_push_actions(
+    const LaunchStatePushPlan &plan)
+{
+    std::vector<LaunchStatePushAction> actions;
+    if (plan.skip_reason != LaunchStatePushSkipReason::None)
+        return actions;
+
+    if (plan.record_cache_subscription)
+        actions.push_back(LaunchStatePushAction::RecordCacheSubscription);
+    if (plan.push_cache_subscribed)
+        actions.push_back(LaunchStatePushAction::PushCacheSubscribed);
+    if (plan.push_details_update)
+        actions.push_back(LaunchStatePushAction::PushDetailsUpdate);
+    if (plan.reapply_rich_presence)
+        actions.push_back(LaunchStatePushAction::ReapplyRichPresence);
+    if (plan.set_last_game_state)
+        actions.push_back(LaunchStatePushAction::SetLastGameState);
+
+    return actions;
+}
+
 bool find_lobby_member_index(
     const std::vector<GBE_DotaLobbyMemberState> &members,
     std::uint64_t steam_id,

@@ -100,6 +100,15 @@ enum class LaunchStatePushSkipReason
     DuplicateGameState,
 };
 
+enum class LaunchStatePushAction
+{
+    RecordCacheSubscription,
+    PushCacheSubscribed,
+    PushDetailsUpdate,
+    ReapplyRichPresence,
+    SetLastGameState,
+};
+
 struct LaunchStatePushPlan
 {
     bool use_client_peer{};
@@ -117,6 +126,9 @@ struct LaunchStatePushPlan
 
 LaunchStatePushPlan plan_launch_state_push(
     const LaunchStatePushPlanInput &input);
+
+std::vector<LaunchStatePushAction> launch_state_push_actions(
+    const LaunchStatePushPlan &plan);
 
 std::string resolve_chat_member_display_name(
     std::uint64_t member_steam_id,
