@@ -350,6 +350,8 @@ void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std
 
 void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
 {
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
     if (GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
@@ -1236,6 +1238,8 @@ void Steam_Game_Coordinator::GBE_SyncSettingsLobbyFromGenericLobby(const char *r
 
 void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
 {
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
     if (!GBE_shared_dota_lobby_state.valid) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",

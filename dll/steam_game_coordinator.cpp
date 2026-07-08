@@ -66,6 +66,7 @@ static GBE_DotaLootListData GBE_vpk_loot_data;
 
 void GBE_ClearSharedDotaLobbyState()
 {
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
 }
 
@@ -1739,9 +1740,8 @@ void Steam_Game_Coordinator::RunCallbacks()
     // before the game starts (when no gameserver existed yet to receive them).
     if (!is_server && gc_profile == GC_PROFILE_DOTA2 &&
         GBE_local_lobby.active && GBE_local_lobby.server_id != 0 && GBE_local_lobby.state >= 1u) {
-        static uint64 s_last_broadcast_match_id = 0;
-        if (s_last_broadcast_match_id != GBE_local_lobby.match_id && GBE_local_lobby.match_id != 0) {
-            s_last_broadcast_match_id = GBE_local_lobby.match_id;
+        if (GBE_last_broadcast_dota_match_id != GBE_local_lobby.match_id && GBE_local_lobby.match_id != 0) {
+            GBE_last_broadcast_dota_match_id = GBE_local_lobby.match_id;
 
             std::vector<const Econ_Item *> equipped_items;
             for (const auto &item : items) {

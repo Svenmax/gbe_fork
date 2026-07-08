@@ -34,6 +34,10 @@
 // Provide stub types before including the TU
 #include "stubs.h"
 
+#include <mutex>
+
+std::recursive_mutex global_mutex;
+
 // Include the pure item payload helpers TU inline (Phase 3.2.3).
 // This compiles the real GBE_ParseDotaEquipOps / GBE_ApplyDotaUnlockStyleBitmask
 // / GBE_SerializeEconItemToGcprotobuf / GBE_BuildSOSingleObjectFromItem against
