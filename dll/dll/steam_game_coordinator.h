@@ -114,6 +114,7 @@ public ISteamGameCoordinator
     std::string GBE_last_dota_launch_persona_signature;
     std::string GBE_last_dota_direct_connect_callback_signature;
     std::chrono::high_resolution_clock::time_point GBE_last_lobby_poll_time{};
+    uint64 GBE_last_broadcast_dota_match_id{};
 
     GBE_LocalLobby GBE_local_lobby{};
 

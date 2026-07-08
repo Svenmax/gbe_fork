@@ -43,6 +43,7 @@
 #include <cstring>
 #include <sstream>
 #include <iomanip>
+#include <mutex>
 #include <random>
 #include <string>
 #include <vector>
@@ -55,6 +56,8 @@
 #include <tf2/tf_gcmessages.pb.h>
 
 using namespace gamecoordinator::tf2;
+
+extern std::recursive_mutex global_mutex;
 
 // --- Phase 3.2.2 migration: pure wire helpers + static byte arrays moved to
 // dll/gbe_dota_payload_wire_helpers.cpp.
@@ -265,21 +268,25 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
 
 bool GBE_HasSharedDotaLobbyState()
 {
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
     return GBE_shared_dota_lobby_state.valid;
 }
 
 uint64 GBE_GetSharedDotaLobbyIdOrZero()
 {
-    return GBE_HasSharedDotaLobbyState() ? GBE_shared_dota_lobby_state.lobby_id : 0ull;
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    return GBE_shared_dota_lobby_state.valid ? GBE_shared_dota_lobby_state.lobby_id : 0ull;
 }
 
 uint64 GBE_GetSharedDotaGenericLobbyIdOrZero()
 {
-    return GBE_HasSharedDotaLobbyState() ? GBE_shared_dota_lobby_state.generic_lobby_id : 0ull;
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    return GBE_shared_dota_lobby_state.valid ? GBE_shared_dota_lobby_state.generic_lobby_id : 0ull;
 }
 
 GBE_DotaSharedLobbyScalarSnapshot GBE_GetSharedDotaLobbyScalarSnapshot()
 {
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
     GBE_DotaSharedLobbyScalarSnapshot snapshot{};
     snapshot.valid = GBE_shared_dota_lobby_state.valid;
     snapshot.active = GBE_shared_dota_lobby_state.active;
@@ -292,6 +299,7 @@ GBE_DotaSharedLobbyScalarSnapshot GBE_GetSharedDotaLobbyScalarSnapshot()
 
 GBE_DotaReconnectSharedStateSnapshot GBE_GetSharedDotaReconnectStateSnapshot()
 {
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
     GBE_DotaReconnectSharedStateSnapshot snapshot{};
     snapshot.valid = GBE_shared_dota_lobby_state.valid;
     snapshot.active = GBE_shared_dota_lobby_state.active;
