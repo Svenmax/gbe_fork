@@ -26,6 +26,7 @@
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_dota_lobby_state.h"
+#include "gbe_dota_lobby_state_store.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -64,10 +65,15 @@ bool GBE_recent_dota_reconnect_context_valid = false;
 GBE_DotaReconnectContext GBE_recent_dota_reconnect_context{};
 static GBE_DotaLootListData GBE_vpk_loot_data;
 
+gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore()
+{
+    static gbe::dota_lobby_state::Store store(GBE_shared_dota_lobby_state, global_mutex);
+    return store;
+}
+
 void GBE_ClearSharedDotaLobbyState()
 {
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+    GBE_GetSharedDotaLobbyStateStore().clear();
 }
 
 void GBE_ClearSharedDotaLobbyForRuntimeReset()

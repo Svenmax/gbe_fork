@@ -95,6 +95,7 @@ build_and_run \
 
 build_and_run \
     gbe_dota_lobby_state_store_test \
+    -pthread \
     tools/gbe_dota_lobby_state_store_test/gbe_dota_lobby_state_store_test.cpp \
     dll/gbe_dota_lobby_state_store.cpp
 

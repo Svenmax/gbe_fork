@@ -172,9 +172,10 @@
     - 提供 immutable snapshot、publish/update、clear 和 generation-aware compare/update 操作。
     - 依赖：任务 7。
     - 实现：新增 dependency-free `gbe::dota_lobby_state::Store`，通过值快照隔离调用方，支持完整 publish、clear、复制后原子 update，以及 generation 不匹配时跳过 mutator 并返回 `StaleGeneration` 的 compare/update。
-  - [ ] 8.2 实现线程安全 store
+  - [x] 8.2 实现线程安全 store
     - 集中 `global_mutex` 使用和状态拷贝规则。
     - 禁止向调用方暴露可变共享状态引用。
+    - 实现：production accessor 将唯一 store 实例绑定到既有 `GBE_shared_dota_lobby_state + global_mutex` 同步域，底层 clear 已经由 store 执行；并发 reader/writer 测试验证每个值快照只包含一个完整版本的跨字段数据。
   - [ ] 8.3 迁移 shared lobby 读取路径
     - 迁移 reconnect、payload、rich presence、postgame、lobby ownership 和诊断读取。
     - 每个业务操作使用单个一致 snapshot。

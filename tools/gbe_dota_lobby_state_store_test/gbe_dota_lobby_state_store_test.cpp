@@ -1,9 +1,12 @@
 #include "dll/gbe_dota_lobby_state_store.h"
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <mutex>
 #include <string>
+#include <thread>
+#include <vector>
 
 namespace {
 
@@ -175,6 +178,67 @@ void test_clear_resets_complete_state()
     expect_true(snapshot.cache_service_list.empty(), "clear resets cache services");
 }
 
+void test_concurrent_readers_observe_complete_versions()
+{
+    Fixture fixture;
+    constexpr std::uint64_t iterations = 2000u;
+    constexpr int reader_count = 4;
+    std::atomic<bool> start{false};
+    std::atomic<bool> writer_done{false};
+    std::atomic<int> inconsistent_snapshots{0};
+
+    auto make_version = [](std::uint64_t version) {
+        GBE_SharedDotaLobbyState state;
+        state.valid = true;
+        state.generation = version;
+        state.lobby_id = version;
+        state.server_id = version;
+        state.connect = std::to_string(version);
+        state.cache_service_list.push_back(static_cast<std::uint32_t>(version));
+        return state;
+    };
+    fixture.store.publish(make_version(0u));
+
+    std::vector<std::thread> readers;
+    readers.reserve(reader_count);
+    for (int reader = 0; reader < reader_count; ++reader) {
+        readers.emplace_back([&] {
+            while (!start.load(std::memory_order_acquire)) {
+            }
+            do {
+                const auto snapshot = fixture.store.snapshot();
+                const auto version = snapshot.generation;
+                const bool complete =
+                    snapshot.valid &&
+                    snapshot.lobby_id == version &&
+                    snapshot.server_id == version &&
+                    snapshot.connect == std::to_string(version) &&
+                    snapshot.cache_service_list.size() == 1u &&
+                    snapshot.cache_service_list.front() == static_cast<std::uint32_t>(version);
+                if (!complete)
+                    inconsistent_snapshots.fetch_add(1, std::memory_order_relaxed);
+            } while (!writer_done.load(std::memory_order_acquire));
+        });
+    }
+
+    std::thread writer([&] {
+        start.store(true, std::memory_order_release);
+        for (std::uint64_t version = 1u; version <= iterations; ++version)
+            fixture.store.publish(make_version(version));
+        writer_done.store(true, std::memory_order_release);
+    });
+
+    writer.join();
+    for (auto &reader : readers)
+        reader.join();
+
+    expect_eq_u64(
+        static_cast<std::uint64_t>(inconsistent_snapshots.load()),
+        0u,
+        "concurrent readers observe one complete state version");
+    expect_eq_u64(fixture.store.snapshot().generation, iterations, "concurrent writer commits the final version");
+}
+
 } // namespace
 
 int main()
@@ -186,6 +250,7 @@ int main()
     test_compare_update_applies_matching_generation();
     test_compare_update_rejects_stale_generation_without_mutation();
     test_clear_resets_complete_state();
+    test_concurrent_readers_observe_complete_versions();
 
     if (failures != 0) {
         std::fprintf(stderr, "gbe_dota_lobby_state_store_test failed: %d assertion(s)\n", failures);
