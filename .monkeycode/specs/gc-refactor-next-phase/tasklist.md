@@ -464,8 +464,14 @@
     - 完整性：`constexpr transition_table_complete()` 编译期遍历全部 104 个 state/event 组合，并由 `static_assert` 阻止遗漏或不一致结果进入构建。
     - Focused test：固定当前 transition table 分布为 26 accepted、10 ignored、68 rejected，并断言总数为 104。
     - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
-  - [ ] 14.6 增加状态机示例测试
+  - [x] 14.6 增加状态机示例测试
     - 覆盖正常 launch、load failure、重复 loading/loaded、乱序 loaded、postgame、leave、abandon 和 reconnect。
+    - 正常 launch：场景化串联 `Create -> Setup -> Loading -> Loaded -> Run -> PostGame`，逐步断言 lifecycle state，并确认 create 后 generation 只推进一次。
+    - Load failure：通过 custom-game transition 验证 failed `8053` 保持 Loading 和当前 generation，仅产生 legacy lifecycle action effect，不产生 `StateChanged`。
+    - 重复与乱序：重复 loading/loaded 稳定返回 `AlreadyInState`，setup 阶段提前 loaded 稳定返回 `InvalidTransition`。
+    - Teardown：postgame 保持 generation，leave 进入 PostGame 并推进 generation，abandon 进入 PostGame 并复用 generation，符合当前 generation boundary contract。
+    - Reconnect：首次 generation/server/endpoint key 产生 `ReconnectQueued`，重复 key 返回 `ReconnectAlreadyQueued`，lifecycle 与 generation 保持稳定。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
   - [ ] 14.7 增加状态机属性测试
     - 属性 P15-A：任意事件序列都不能绕过合法 launch progression 进入 loaded/run。
     - 属性 P15-B：旧 generation 事件不能改变当前状态或产生当前代际 effects。

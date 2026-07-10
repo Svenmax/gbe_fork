@@ -47,6 +47,120 @@ void assert_rejected(
     assert(result.effects.empty());
 }
 
+void run_normal_launch_example()
+{
+    lifecycle::MachineState state{};
+    state.generation = 40u;
+    constexpr std::array<lifecycle::EventKind, 6> events{{
+        lifecycle::EventKind::Create,
+        lifecycle::EventKind::Setup,
+        lifecycle::EventKind::Loading,
+        lifecycle::EventKind::Loaded,
+        lifecycle::EventKind::Run,
+        lifecycle::EventKind::PostGame,
+    }};
+    constexpr std::array<lifecycle::State, 6> expected_states{{
+        lifecycle::State::Created,
+        lifecycle::State::Setup,
+        lifecycle::State::Loading,
+        lifecycle::State::Loaded,
+        lifecycle::State::Running,
+        lifecycle::State::PostGame,
+    }};
+
+    for (std::size_t index = 0u; index < events.size(); ++index) {
+        const auto result = lifecycle::transition(state, event(events[index]));
+        assert(result.accepted());
+        state = result.state;
+        assert(state.lifecycle == expected_states[index]);
+    }
+    assert(state.generation == 41u);
+}
+
+void run_load_failure_example()
+{
+    lifecycle::CustomGameRequestState state{};
+    state.machine.lifecycle = lifecycle::State::Loading;
+    state.machine.generation = 51u;
+    state.has_custom_game = true;
+    lifecycle::CustomGameRequest request{};
+    request.event = { lifecycle::EventKind::Loaded, lifecycle::EventSource::Wrapped, 8053u, 51u, 0u, 0u };
+    request.load_failed = true;
+
+    const auto result = lifecycle::transition_custom_game_request(state, request, 2u, 3u);
+    assert(result.accepted());
+    assert(result.state.lifecycle == lifecycle::State::Loading);
+    assert(result.state.generation == state.machine.generation);
+    assert(!result.effects.contains(lifecycle::EffectKind::StateChanged));
+    assert(result.effects.contains(lifecycle::EffectKind::LegacyLifecycleActionsRequested));
+}
+
+void run_duplicate_and_out_of_order_example()
+{
+    const auto duplicate_loading = lifecycle::transition(
+        lifecycle::State::Loading,
+        event(lifecycle::EventKind::Loading));
+    assert(!duplicate_loading.accepted());
+    assert(duplicate_loading.reason == lifecycle::DecisionReason::AlreadyInState);
+
+    const auto duplicate_loaded = lifecycle::transition(
+        lifecycle::State::Loaded,
+        event(lifecycle::EventKind::Loaded));
+    assert(!duplicate_loaded.accepted());
+    assert(duplicate_loaded.reason == lifecycle::DecisionReason::AlreadyInState);
+
+    const auto out_of_order_loaded = lifecycle::transition(
+        lifecycle::State::Setup,
+        event(lifecycle::EventKind::Loaded));
+    assert(!out_of_order_loaded.accepted());
+    assert(out_of_order_loaded.reason == lifecycle::DecisionReason::InvalidTransition);
+}
+
+void run_teardown_examples()
+{
+    lifecycle::MachineState running{};
+    running.lifecycle = lifecycle::State::Running;
+    running.generation = 61u;
+
+    const auto postgame = lifecycle::transition(running, event(lifecycle::EventKind::PostGame));
+    assert(postgame.accepted());
+    assert(postgame.state.lifecycle == lifecycle::State::PostGame);
+    assert(postgame.state.generation == running.generation);
+
+    const auto leave = lifecycle::transition(running, event(lifecycle::EventKind::Leave));
+    assert(leave.accepted());
+    assert(leave.state.lifecycle == lifecycle::State::PostGame);
+    assert(leave.state.generation == running.generation + 1u);
+    assert(leave.effects.contains(lifecycle::EffectKind::GenerationAdvanced));
+
+    const auto abandon = lifecycle::transition(running, event(lifecycle::EventKind::Abandon));
+    assert(abandon.accepted());
+    assert(abandon.state.lifecycle == lifecycle::State::PostGame);
+    assert(abandon.state.generation == running.generation);
+}
+
+void run_reconnect_example()
+{
+    lifecycle::MachineState running{};
+    running.lifecycle = lifecycle::State::Running;
+    running.generation = 71u;
+
+    const auto queued = lifecycle::transition(
+        running,
+        lifecycle::reconnect_event(71u, 9001u, 27015u));
+    assert(queued.accepted());
+    assert(queued.reason == lifecycle::DecisionReason::ReconnectQueued);
+    assert(queued.state.lifecycle == lifecycle::State::Running);
+    assert(queued.state.generation == running.generation);
+    assert(queued.effects.contains(lifecycle::EffectKind::ReconnectQueued));
+
+    const auto duplicate = lifecycle::transition(
+        queued.state,
+        lifecycle::reconnect_event(71u, 9001u, 27015u));
+    assert(!duplicate.accepted());
+    assert(duplicate.reason == lifecycle::DecisionReason::ReconnectAlreadyQueued);
+}
+
 int main()
 {
     constexpr std::array<ExpectedMapping, 9> mappings{{
@@ -111,6 +225,12 @@ int main()
     assert(rejected_pairs == 68u);
     assert(ignored_pairs == 10u);
     assert(accepted_pairs + rejected_pairs + ignored_pairs == 104u);
+
+    run_normal_launch_example();
+    run_load_failure_example();
+    run_duplicate_and_out_of_order_example();
+    run_teardown_examples();
+    run_reconnect_example();
 
     assert_accepted(lifecycle::State::Idle, lifecycle::EventKind::Create, lifecycle::State::Created);
     assert_accepted(lifecycle::State::Idle, lifecycle::EventKind::Join, lifecycle::State::Joined);
