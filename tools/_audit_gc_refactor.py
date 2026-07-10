@@ -152,6 +152,33 @@ RETIRED_SHARED_LOBBY_COMPATIBILITY_SYMBOLS = (
     "GBE_ClearSharedDotaLobbyForRuntimeReset",
     "GBE_shared_dota_lobby_state",
 )
+POST_LOGIN_REGISTRY_OWNER = "steam_game_coordinator.cpp"
+RECONNECT_MAPPING_OWNER = "gbe_dota_reconnect_context.cpp"
+RECONNECT_SOURCE_FIELDS = (
+    "kind",
+    "valid",
+    "active",
+    "generation",
+    "lobby_id",
+    "lobby_state",
+    "game_state",
+    "server_id",
+    "custom_game_id",
+    "owner_connected",
+    "launch_phase",
+    "owner_steam_id",
+    "connect",
+)
+RECONNECT_CONTEXT_FIELDS = (
+    "generation",
+    "lobby_id",
+    "lobby_state",
+    "game_state",
+    "server_id",
+    "custom_game_id",
+    "owner_steam_id",
+    "connect",
+)
 HIGH_RISK_REASON_STRINGS = [
     "equip_forward_host_resubscribe_server",
     "equip_items_refresh",
@@ -425,15 +452,23 @@ def strip_comments(text):
     return re.sub(r"//.*", "", text)
 
 
-def audit_handler_side_effect_seams(tu_paths):
+def audit_handler_side_effect_seams(tu_paths=None, source_texts=None, baseline=None):
     """Detect drift in high-risk side effects in ordinary handler files."""
+    if source_texts is None:
+        source_texts = {
+            os.path.basename(path): read(path)
+            for path in (tu_paths or GC_TUS)
+        }
+    if baseline is None:
+        baseline = HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE
+
     pattern = re.compile(r"\b(" + "|".join(re.escape(api) for api in HIGH_RISK_SIDE_EFFECT_APIS) + r")\s*\(")
     actual = {}
-    for path in tu_paths:
-        base = os.path.basename(path)
+    for source_name, source_text in source_texts.items():
+        base = os.path.basename(source_name)
         if not base.startswith("gbe_dota_") or not base.endswith("_handlers.cpp"):
             continue
-        text = strip_comments(read(path))
+        text = strip_comments(source_text)
         for match in pattern.finditer(text):
             line_start = text.rfind("\n", 0, match.start()) + 1
             line = text[line_start:match.start()].strip()
@@ -444,18 +479,18 @@ def audit_handler_side_effect_seams(tu_paths):
 
     issues = []
     for key, actual_count in sorted(actual.items()):
-        expected_count = HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE.get(key)
+        expected_count = baseline.get(key)
         if expected_count is None:
             issues.append(f"{key[0]}: new high-risk side-effect call to {key[1]} requires an approved seam or explicit baseline entry")
         elif actual_count != expected_count:
             issues.append(f"{key[0]}: {key[1]} count changed from {expected_count} to {actual_count}; route through an approved seam or update the baseline with reason")
 
-    for key, expected_count in sorted(HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE.items()):
+    for key, expected_count in sorted(baseline.items()):
         actual_count = actual.get(key, 0)
         if actual_count == 0 and expected_count:
             issues.append(f"{key[0]}: {key[1]} baseline expected {expected_count}, found 0; remove stale baseline entry or confirm the seam migration")
 
-    return issues, sum(actual.values()), len(HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE)
+    return issues, sum(actual.values()), len(baseline)
 
 
 def audit_lifecycle_side_effect_ownership():
@@ -563,6 +598,66 @@ def audit_retired_shared_lobby_compatibility_layers(source_texts=None):
         for symbol in RETIRED_SHARED_LOBBY_COMPATIBILITY_SYMBOLS:
             if re.search(r"\b" + re.escape(symbol) + r"\b", uncommented):
                 issues.append(f"{source_name}: retired shared lobby compatibility symbol {symbol} returned")
+    return issues
+
+
+def audit_architecture_boundaries(source_texts=None):
+    """Keep handler effects, post-login dispatch, reconnect mapping, and shared state on canonical owners."""
+    injected = source_texts is not None
+    if source_texts is None:
+        source_texts = {}
+        for path in glob.glob(os.path.join(ROOT_DIR, "dll", "**", "*.h"), recursive=True):
+            source_texts[os.path.relpath(path, ROOT_DIR)] = read(path)
+        for path in glob.glob(os.path.join(ROOT_DIR, "dll", "*.cpp")):
+            source_texts[os.path.relpath(path, ROOT_DIR)] = read(path)
+
+    issues = []
+    side_effect_issues, _, _ = audit_handler_side_effect_seams(
+        source_texts=source_texts,
+        baseline={} if injected else HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE,
+    )
+    issues.extend(side_effect_issues)
+
+    registry_declaration = re.compile(r"\bregistry::Entry\s+[A-Za-z_][A-Za-z0-9_]*\s*\[")
+    post_login_switch = re.compile(r"\bswitch\s*\(\s*(?:request_emsg|inner_emsg)\s*\)")
+    for source_name, source_text in source_texts.items():
+        base = os.path.basename(source_name)
+        uncommented = strip_comments(source_text)
+        registry_count = len(registry_declaration.findall(uncommented))
+        if base == POST_LOGIN_REGISTRY_OWNER:
+            if registry_count > 1:
+                issues.append(f"{base}: parallel typed post-login registry returned beside the canonical kTable")
+        elif registry_count:
+            issues.append(f"{base}: parallel typed post-login registry returned outside {POST_LOGIN_REGISTRY_OWNER}")
+
+        if base in {POST_LOGIN_REGISTRY_OWNER, "gbe_dota_post_login_handlers.cpp"} and post_login_switch.search(uncommented):
+            issues.append(f"{base}: post-login message switch bypasses the typed registry")
+
+    reconnect_types = (
+        (r"(?:GBE_DotaReconnectSource|(?:gbe::)?dota_reconnect::Source)", "source", RECONNECT_SOURCE_FIELDS),
+        (r"GBE_DotaReconnectContext", "context", RECONNECT_CONTEXT_FIELDS),
+    )
+    for source_name, source_text in source_texts.items():
+        base = os.path.basename(source_name)
+        if base == RECONNECT_MAPPING_OWNER or not base.endswith(".cpp"):
+            continue
+        uncommented = strip_comments(source_text)
+        for type_pattern, mapping_name, fields in reconnect_types:
+            declarations = re.finditer(
+                r"\b" + type_pattern + r"\s*(?:[&*]\s*)?([A-Za-z_][A-Za-z0-9_]*)",
+                uncommented,
+            )
+            for declaration in declarations:
+                variable = declaration.group(1)
+                assignment = re.compile(
+                    r"\b" + re.escape(variable) + r"\s*(?:\.|->)\s*(" + "|".join(fields) + r")\s*=(?!=)",
+                )
+                for match in assignment.finditer(uncommented, declaration.end()):
+                    issues.append(
+                        f"{base}: reconnect {mapping_name} field {match.group(1)} is mapped outside {RECONNECT_MAPPING_OWNER}"
+                    )
+
+    issues.extend(audit_retired_shared_lobby_compatibility_layers(source_texts))
     return issues
 
 
@@ -961,6 +1056,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 14: Canonical GC architecture boundaries")
+    print("=" * 70)
+    print("  Action: keep handler effects, post-login dispatch, reconnect mapping, and shared state on canonical owners.")
+    architecture_boundary_issues = audit_architecture_boundaries()
+    if not architecture_boundary_issues:
+        print("  Handler seams, the typed registry, reconnect adapters, and shared lobby Store boundaries remain canonical")
+    else:
+        for issue in architecture_boundary_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -979,8 +1086,9 @@ def main():
     print(f"  Concurrency ownership issues:        {len(concurrency_ownership_issues)}")
     print(f"  Reconnect transition-layer issues:   {len(reconnect_transition_issues)}")
     print(f"  Shared lobby compatibility issues:   {len(shared_lobby_compatibility_issues)}")
+    print(f"  Architecture boundary issues:        {len(architecture_boundary_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues:
         sys.exit(1)
 
 

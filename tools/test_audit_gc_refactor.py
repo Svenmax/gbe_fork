@@ -192,5 +192,108 @@ class RetiredSharedLobbyCompatibilityLayerAuditTest(unittest.TestCase):
         )
 
 
+class HandlerSideEffectSeamAuditTest(unittest.TestCase):
+    def test_accepts_handler_using_approved_executor_seam(self):
+        sources = {
+            "gbe_dota_lobby_handlers.cpp": "return lifecycle_executor.execute(context);",
+        }
+        issues, call_count, baseline_count = audit.audit_handler_side_effect_seams(
+            source_texts=sources,
+            baseline={},
+        )
+        self.assertEqual([], issues)
+        self.assertEqual(0, call_count)
+        self.assertEqual(0, baseline_count)
+
+    def test_rejects_new_direct_high_risk_side_effect(self):
+        sources = {
+            "gbe_dota_lobby_handlers.cpp": "GBE_PublishSharedDotaLobbyState(lobby);",
+        }
+        issues, _, _ = audit.audit_handler_side_effect_seams(
+            source_texts=sources,
+            baseline={},
+        )
+        self.assertIn(
+            "gbe_dota_lobby_handlers.cpp: new high-risk side-effect call to GBE_PublishSharedDotaLobbyState requires an approved seam or explicit baseline entry",
+            issues,
+        )
+
+
+class ArchitectureBoundaryAuditTest(unittest.TestCase):
+    def test_accepts_canonical_architecture_owners(self):
+        sources = {
+            "steam_game_coordinator.cpp": """
+                bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const Context &context) {
+                    static const registry::Entry kTable[] = {};
+                    return registry::find_entry(kTable, 0, context.inner_emsg, context.path);
+                }
+            """,
+            "gbe_dota_post_login_handlers.cpp": "return GBE_DispatchDotaPostLoginRequest(context);",
+            "gbe_dota_template_replay_handlers.cpp": "switch (request_emsg) { default: return false; }",
+            "gbe_dota_reconnect_context.cpp": """
+                Source source_from_context(const GBE_DotaReconnectContext &context) {
+                    Source source;
+                    source.generation = context.generation;
+                    source.lobby_id = context.lobby_id;
+                    return source;
+                }
+            """,
+            "gbe_dota_gc_payload_helpers.cpp": "return dota_reconnect::build_context(source, context);",
+            "gbe_dota_lobby_handlers.cpp": "const auto shared = GBE_GetSharedDotaLobbyStateStore().snapshot();",
+        }
+        self.assertEqual([], audit.audit_architecture_boundaries(sources))
+
+    def test_rejects_parallel_post_login_registry_and_switch(self):
+        sources = {
+            "steam_game_coordinator.cpp": """
+                bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const Context &context) {
+                    static const registry::Entry kTable[] = {};
+                    return registry::find_entry(kTable, 0, context.inner_emsg, context.path);
+                }
+            """,
+            "gbe_dota_post_login_handlers.cpp": """
+                static const registry::Entry kFallbackTable[] = {};
+                switch (request_emsg) { default: return false; }
+            """,
+        }
+        issues = audit.audit_architecture_boundaries(sources)
+        self.assertIn(
+            "gbe_dota_post_login_handlers.cpp: parallel typed post-login registry returned outside steam_game_coordinator.cpp",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_post_login_handlers.cpp: post-login message switch bypasses the typed registry",
+            issues,
+        )
+
+    def test_rejects_reconnect_field_mapping_outside_canonical_owner(self):
+        sources = {
+            "gbe_dota_reconnect_context.cpp": "Source source_from_context(const GBE_DotaReconnectContext &context);",
+            "gbe_dota_gc_payload_helpers.cpp": """
+                GBE_DotaReconnectSource source;
+                source.generation = snapshot.generation;
+                source.lobby_id = snapshot.lobby_id;
+            """,
+        }
+        issues = audit.audit_architecture_boundaries(sources)
+        self.assertIn(
+            "gbe_dota_gc_payload_helpers.cpp: reconnect source field generation is mapped outside gbe_dota_reconnect_context.cpp",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_gc_payload_helpers.cpp: reconnect source field lobby_id is mapped outside gbe_dota_reconnect_context.cpp",
+            issues,
+        )
+
+    def test_rejects_retired_shared_lobby_direct_access(self):
+        sources = {
+            "gbe_dota_lobby_handlers.cpp": "const auto shared = GBE_GetSharedDotaLobbyStateSnapshot();",
+        }
+        self.assertIn(
+            "gbe_dota_lobby_handlers.cpp: retired shared lobby compatibility symbol GBE_GetSharedDotaLobbyStateSnapshot returned",
+            audit.audit_architecture_boundaries(sources),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
