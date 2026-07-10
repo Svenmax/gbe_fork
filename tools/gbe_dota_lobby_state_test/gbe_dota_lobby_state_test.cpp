@@ -427,6 +427,7 @@ bool test_launch_lifecycle_action_sequence()
         effects.trigger_emsg = 8052u;
         effects.source_job = 123ull;
         effects.runtime_update_note = "runtime packet after 8052";
+        effects.fallback_publish_on_runtime_update_failure = true;
 
         const GBE_DotaActionList actions = gbe::dota_lifecycle::build_transition_actions(effects);
         ok &= expect_eq_u64(actions.size(), 3u, "8052 action count");
@@ -436,6 +437,20 @@ bool test_launch_lifecycle_action_sequence()
         ok &= expect_true(actions[2].only_when_runtime_update_not_queued, "8052 fallback publish is conditional");
         ok &= expect_eq_u32(actions[1].emsg, 8052u, "8052 runtime emsg");
         ok &= expect_eq_u64(actions[1].job_id, 123ull, "8052 runtime source job");
+    }
+
+    {
+        const GBE_DotaActionList actions = gbe::dota_lifecycle::build_member_runtime_actions(
+            700ull,
+            false,
+            0u,
+            false,
+            "7034_disconnected_player");
+        ok &= expect_eq_u64(actions.size(), 2u, "7034 member action count");
+        ok &= expect_true(actions[0].type == GBE_DotaActionType::LobbyMemberRuntimeUpdate, "7034 member mutation first");
+        ok &= expect_false(actions[0].connected, "7034 disconnected state preserved");
+        ok &= expect_true(actions[1].type == GBE_DotaActionType::SharedLobbyPublish, "7034 member publish second");
+        ok &= expect_true(actions[1].only_when_previous_action_succeeded, "7034 publish requires mutation");
     }
 
     {

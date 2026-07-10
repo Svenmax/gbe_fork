@@ -165,6 +165,7 @@ struct GBE_DotaAction {
     uint32_t hero_id{};           // LobbyMemberRuntimeUpdate
     bool connected{};             // LobbyMemberRuntimeUpdate
     bool has_hero_id{};           // LobbyMemberRuntimeUpdate
+    bool only_when_previous_action_succeeded{}; // conditional follow-up action
     bool only_when_runtime_update_not_queued{}; // runtime update fallback action
     double delay{};               // RuntimeLobbyDetailsUpdate
 };

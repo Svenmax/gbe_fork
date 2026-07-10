@@ -54,11 +54,11 @@ GBE_DotaActionList build_transition_actions(const TransitionEffects &effects)
         actions.push_back(std::move(action));
     }
 
-    if (transition.publish_shared_state || transition.queue_runtime_lobby_update) {
+    if (transition.publish_shared_state || effects.fallback_publish_on_runtime_update_failure) {
         GBE_DotaAction action;
         action.type = GBE_DotaActionType::SharedLobbyPublish;
         action.reason = transition.reason;
-        action.only_when_runtime_update_not_queued = transition.queue_runtime_lobby_update;
+        action.only_when_runtime_update_not_queued = effects.fallback_publish_on_runtime_update_failure;
         actions.push_back(std::move(action));
     }
 
@@ -69,6 +69,33 @@ GBE_DotaActionList build_transition_actions(const TransitionEffects &effects)
         action.only_when_runtime_update_not_queued = transition.queue_runtime_lobby_update;
         actions.push_back(std::move(action));
     }
+
+    return actions;
+}
+
+GBE_DotaActionList build_member_runtime_actions(
+    std::uint64_t steam_id,
+    bool connected,
+    std::uint32_t hero_id,
+    bool has_hero_id,
+    const char *reason)
+{
+    GBE_DotaActionList actions;
+
+    GBE_DotaAction update;
+    update.type = GBE_DotaActionType::LobbyMemberRuntimeUpdate;
+    update.target_steam_id = steam_id;
+    update.connected = connected;
+    update.hero_id = hero_id;
+    update.has_hero_id = has_hero_id;
+    update.reason = reason ? reason : "";
+    actions.push_back(std::move(update));
+
+    GBE_DotaAction publish;
+    publish.type = GBE_DotaActionType::SharedLobbyPublish;
+    publish.reason = reason ? reason : "";
+    publish.only_when_previous_action_succeeded = true;
+    actions.push_back(std::move(publish));
 
     return actions;
 }

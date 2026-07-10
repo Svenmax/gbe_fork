@@ -408,8 +408,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Request(
             if (!connected_player.has_steam_id || connected_player.steam_id == 0ull)
                 continue;
             const uint32 previous_owner_hero_id = GBE_local_lobby.owner_hero_id;
-            if (GBE_SetDotaLobbyMemberRuntimeState(connected_player.steam_id, true, connected_player.hero_id, connected_player.has_hero_id)) {
-                GBE_PublishSharedDotaLobbyState("7034_connected_player");
+            const auto execution = GBE_ExecuteDotaLifecycleActions(
+                gbe::dota_lifecycle::build_member_runtime_actions(
+                    connected_player.steam_id,
+                    true,
+                    connected_player.hero_id,
+                    connected_player.has_hero_id,
+                    "7034_connected_player"));
+            if (execution.state_changed) {
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
                     "marked connected player from 7034 steam_id=%llu hero_id=%u has_hero=%u source_job=%llu state=%u game_state=%u",
@@ -540,8 +546,14 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034DisconnectedPlayers(
     for (const GBE_Dota7034DisconnectedPlayer &disconnected_player : disconnected_players) {
         if (!disconnected_player.has_steam_id || disconnected_player.steam_id == 0ull)
             continue;
-        if (GBE_SetDotaLobbyMemberRuntimeState(disconnected_player.steam_id, false, 0u, false)) {
-            GBE_PublishSharedDotaLobbyState("7034_disconnected_player");
+        const auto execution = GBE_ExecuteDotaLifecycleActions(
+            gbe::dota_lifecycle::build_member_runtime_actions(
+                disconnected_player.steam_id,
+                false,
+                0u,
+                false,
+                "7034_disconnected_player"));
+        if (execution.state_changed) {
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
                 "marked disconnected player from 7034 steam_id=%llu source_job=%llu state=%u game_state=%u",
@@ -575,13 +587,12 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034RuntimeUpdates(
             GBE_kDotaLaunchPhaseRunQueued,
             "custom game 7034 game_state");
     if (runtime_game_state.queue_runtime_lobby_update) {
-        if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(
-                runtime_game_state.reason.c_str(),
-                request_emsg,
-                source_job,
-                runtime_game_state.next_state,
-                runtime_game_state.next_game_state,
-                runtime_game_state.runtime_update_delay))
+        gbe::dota_lifecycle::TransitionEffects effects;
+        effects.transition = runtime_game_state;
+        effects.trigger_emsg = request_emsg;
+        effects.source_job = source_job;
+        effects.runtime_update_note = runtime_game_state.reason.c_str();
+        if (GBE_ExecuteDotaLifecycleActions(gbe::dota_lifecycle::build_transition_actions(effects)).runtime_update_queued)
             queued_runtime_lobby_update = true;
     }
 
@@ -789,7 +800,9 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034LaunchPoll(
     if (!launch_poll.send_details_update)
         return;
 
-    if (GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, launch_poll.reason.c_str())) {
+    gbe::dota_lifecycle::TransitionEffects effects;
+    effects.transition = launch_poll;
+    if (GBE_ExecuteDotaLifecycleActions(gbe::dota_lifecycle::build_transition_actions(effects)).details_update_sent) {
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "replying req=%u resp=%u source_job=%llu note=7034 direct poll uses runtime 26 fallback state=%u game_state=%u",
@@ -866,12 +879,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameReadyUpRequest(const uint8 
                 GBE_kDotaLaunchPhaseRunQueued,
                 "7070_custom_game_ready_up_run_ack");
         if (ready_up.apply_lobby_state) {
-            GBE_local_lobby.state = ready_up.next_state;
-            GBE_local_lobby.game_state = ready_up.next_game_state;
-            if (ready_up.publish_shared_state)
-                GBE_PublishSharedDotaLobbyState(ready_up.reason.c_str());
-            if (ready_up.send_details_update)
-                GBE_SendDotaPracticeLobbyDetailsUpdate(false, nullptr, ready_up.reason.c_str());
+            gbe::dota_lifecycle::TransitionEffects effects;
+            effects.transition = ready_up;
+            GBE_ExecuteDotaLifecycleActions(gbe::dota_lifecycle::build_transition_actions(effects));
         }
     }
     return true;
