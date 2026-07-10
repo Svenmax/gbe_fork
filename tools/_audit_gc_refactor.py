@@ -583,11 +583,17 @@ def audit_concurrency_ownership_contract():
         issues.append("steam_client.cpp: RunCallbacks must pass its owned lock to callback delivery")
 
     serialized_text = read(os.path.join(ROOT_DIR, "dll", "steam_networking_socketsserialized.cpp"))
+    serialized_header_text = read(os.path.join(ROOT_DIR, "dll", "dll", "steam_networking_socketsserialized.h"))
+    if "GBE_DotaSerializedConnectionSynchronizer dota_connection_synchronizer;" not in serialized_header_text:
+        issues.append("steam_networking_socketsserialized.h: serialized connection state lacks an instance synchronization owner")
+    post_pos = serialized_text.find("void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg(")
+    process_lock_pos = serialized_text.find("std::unique_lock<std::recursive_mutex> lock(global_mutex);", post_pos)
     prepare_pos = serialized_text.find("GBE_PrepareDotaReconnectPostConnectionState(")
+    instance_lock_pos = serialized_text.rfind("dota_connection_synchronizer.acquire()", process_lock_pos, prepare_pos)
     unlock_pos = serialized_text.find("lock.unlock();", prepare_pos)
     effects_pos = serialized_text.find("GBE_ExecuteDotaReconnectPostEffects(", unlock_pos)
-    if prepare_pos < 0 or unlock_pos < 0 or effects_pos < 0 or not prepare_pos < unlock_pos < effects_pos:
-        issues.append("steam_networking_socketsserialized.cpp: reconnect prepare/unlock/effects order is missing")
+    if min(post_pos, instance_lock_pos, process_lock_pos, prepare_pos, unlock_pos, effects_pos) < 0 or not process_lock_pos < instance_lock_pos < prepare_pos < unlock_pos < effects_pos:
+        issues.append("steam_networking_socketsserialized.cpp: reconnect process-lock/instance-lock/prepare/process-unlock/effects order is missing")
     return issues
 
 

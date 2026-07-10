@@ -13,8 +13,8 @@ class GBE_DotaReconnectNetworkAdapter final :
     public GBE_DotaReconnectDirectConnector,
     public GBE_DotaReconnectCallbackQueue
 {
-    // Instance-owned reconnect probe cache. It shares the serialized sockets
-    // instance synchronization domain with get_context().
+    // Instance-owned reconnect probe cache. PostConnectionStateMsg protects it
+    // with the serialized sockets instance synchronizer while get_context runs.
     SteamCallBacks *callbacks{};
     Steam_Networking_Sockets *direct_sockets{};
     std::time_t last_recover_probe_time{};

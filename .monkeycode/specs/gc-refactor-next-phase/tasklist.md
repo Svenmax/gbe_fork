@@ -277,9 +277,13 @@
     - callback：`SteamCallResults::runCallResults()` 接收 owning `unique_lock`，通过统一 exception-safe RAII 边界在锁外执行普通 callback、call-result callback、completed callback 和 `cb_all`，返回后恢复锁并继续队列遍历；生产路径已移除裸 `global_mutex.unlock()/lock()`。
     - 测试与审计：reconnect focused fake 断言 prepare 阶段不执行外部 effect、锁内预留 dedup 且 effects 保持顺序；callsystem 使用另一线程 `try_lock()` 证明已注册、late-registration replay 和 `cb_all` 均在 process lock 外执行。Audit 11 禁止 callsystem 裸锁操作并要求 production reconnect 保持 prepare/unlock/effects 顺序。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 259/259，callsystem guard 8/8，registry assertions 339/339，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit helper 8/8，audit 11 项 0 问题。
-  - [ ] 11.3 将 serialized 实例状态限制在实例同步域
+  - [x] 11.3 将 serialized 实例状态限制在实例同步域
     - 明确 callback 与 `PostConnectionStateMsg()` 的串行化要求。
     - 必要时使用实例 mutex 或现有 run-callback 序列保证。
+    - 实现：新增 dependency-light `GBE_DotaSerializedConnectionSynchronizer`，每个 `Steam_Networking_Sockets_Serialized` 实例持有独立 mutex。`PostConnectionStateMsg()` 在既有 `global_mutex` 域内获取实例锁，完成 context/probe cache 读取和 connection state prepare 与 dedup 预留；随后依次释放实例锁和 process lock，再执行 direct connect 与 callback queue effects。
+    - 锁序：统一为 `global_mutex -> serialized instance mutex`，兼容可能已持有递归 process lock 的入口。同实例 connection state 与 recovery probe cache 在 prepare 期间串行，client 与 gameserver serialized sockets 使用独立实例域；锁外 effects 依靠锁内 dedup 预留保持单次提交语义。
+    - 测试与审计：focused concurrency test 通过受控条件变量证明同一 synchronizer 阻止重叠操作并在释放后推进下一操作，同时证明两个独立 synchronizer 可同时进入。Audit 11 要求实例 synchronizer 成员存在，并固定 production `process lock -> instance lock -> prepare -> process unlock -> effects` 顺序。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 262/262，callsystem guard 8/8，registry assertions 339/339，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit helper 8/8，audit 11 项 0 问题。
   - [ ] 11.4 增加并发压力单元测试
     - 有界并发执行 snapshot/read/update/clear/context build，断言无崩溃、无 torn snapshot、无 stale write 生效。
   - [ ] 11.5 增加 ThreadSanitizer CI target

@@ -92,6 +92,7 @@ build_and_run \
 
 build_and_run \
     gbe_dota_reconnect_network_test \
+    -pthread \
     tools/gbe_dota_reconnect_network_test/gbe_dota_reconnect_network_test.cpp \
     dll/gbe_dota_reconnect_network.cpp \
     dll/gbe_dota_serialized_connection_state.cpp \

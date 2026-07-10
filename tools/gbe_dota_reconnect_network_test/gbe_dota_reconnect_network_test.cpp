@@ -1,8 +1,10 @@
 #include "dll/gbe_dota_reconnect_network.h"
 
+#include <atomic>
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -180,6 +182,30 @@ void test_prepare_reserves_state_before_unlocked_effects()
     const auto result = GBE_ExecuteDotaReconnectPostEffects(std::move(plan), connector, queue);
     expect(result.direct_connect_succeeded && result.callback_queued, "effect phase executes reserved work");
     expect(events == std::vector<std::string>({"context:primary", "eligible", "connect", "queue"}), "effect phase preserves external call order");
+}
+
+void test_serialized_instance_synchronization_domains()
+{
+    GBE_DotaSerializedConnectionSynchronizer shared_domain;
+    auto shared_lock = shared_domain.acquire();
+    std::atomic<bool> shared_probe_acquired{};
+    std::thread shared_probe([&] {
+        shared_probe_acquired = shared_domain.try_acquire().owns_lock();
+    });
+    shared_probe.join();
+    expect(!shared_probe_acquired.load(), "same serialized instance domain rejects overlapping operation");
+    shared_lock.unlock();
+    expect(shared_domain.try_acquire().owns_lock(), "same serialized instance domain accepts work after release");
+
+    GBE_DotaSerializedConnectionSynchronizer first_domain;
+    GBE_DotaSerializedConnectionSynchronizer second_domain;
+    auto first_lock = first_domain.acquire();
+    std::atomic<bool> second_probe_acquired{};
+    std::thread second_probe([&] {
+        second_probe_acquired = second_domain.try_acquire().owns_lock();
+    });
+    second_probe.join();
+    expect(second_probe_acquired.load(), "separate serialized instance domains allow concurrent work");
 }
 
 void test_dedup_and_generation_changes()
@@ -485,6 +511,7 @@ int main()
 {
     test_first_connection_contract();
     test_prepare_reserves_state_before_unlocked_effects();
+    test_serialized_instance_synchronization_domains();
     test_dedup_and_generation_changes();
     test_recovery_and_skip_paths();
     test_parse_and_connect_failures();

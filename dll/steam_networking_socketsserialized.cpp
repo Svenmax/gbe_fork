@@ -725,11 +725,15 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     const uint64 local_id = settings->get_local_steam_id().ConvertToUint64();
     if (!reconnect_context_provider || !reconnect_direct_connector || !reconnect_callback_queue)
         return;
-    GBE_DotaReconnectPostPlan reconnect_plan = GBE_PrepareDotaReconnectPostConnectionState(
-        local_id,
-        cbMsg,
-        *reconnect_context_provider,
-        dota_connection_state);
+    GBE_DotaReconnectPostPlan reconnect_plan;
+    {
+        auto instance_lock = dota_connection_synchronizer.acquire();
+        reconnect_plan = GBE_PrepareDotaReconnectPostConnectionState(
+            local_id,
+            cbMsg,
+            *reconnect_context_provider,
+            dota_connection_state);
+    }
     lock.unlock();
     const GBE_DotaReconnectPostResult result = GBE_ExecuteDotaReconnectPostEffects(
         std::move(reconnect_plan),

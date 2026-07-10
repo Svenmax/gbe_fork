@@ -37,6 +37,7 @@ public ISteamNetworkingSocketsSerialized005
     GBE_DotaReconnectDirectConnector *reconnect_direct_connector{};
     GBE_DotaReconnectCallbackQueue *reconnect_callback_queue{};
     GBE_DotaReconnectNetworkAdapter production_reconnect_adapter;
+    GBE_DotaSerializedConnectionSynchronizer dota_connection_synchronizer;
     GBE_DotaSerializedConnectionState dota_connection_state{};
 
     static void steam_callback(void *object, Common_Message *msg);
