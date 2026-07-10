@@ -387,9 +387,14 @@
     - Registry 切片：`GBE_ProductionDotaHandlerRegistry()` 唯一拥有 canonical 27 项 typed table，`Steam_Client` 将同一只读 view 显式注入 client/server coordinator，dispatcher 仅通过实例 view 执行查找。Audit 4 从 factory 派生 mapping，Audit 14 拒绝 dispatcher 恢复 static table 或绕过注入 view。提交：`8444af45`。
     - Lifecycle 切片：新增 `dota_lifecycle::Executor` 窄 port 与 production `CoordinatorExecutor` adapter；`Steam_Client` 为 client/server 分别拥有 executor，并在 coordinator 构造时以引用显式注入。业务调用继续经稳定 `GBE_ExecuteDotaLifecycleActions()` 入口转发，原副作用循环保留为 coordinator 私有 effect implementation。Audit 15 锁定 `serialized service -> lifecycle executor -> coordinator` 构造和精确反向销毁顺序。提交：`7c4a8e23`。
     - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 28/28，16 项 production audit 零问题，TSAN 无 race。
-  - [ ] 13.4 收敛业务 singleton 和文件级可变 static
+  - [x] 13.4 收敛业务 singleton 和文件级可变 static
     - 将业务状态迁移到 composition root 所拥有的实例。
     - 保留协议常量、immutable lookup table 和受控进程基础设施。
+    - Shared Store 切片：`Steam_Client` 直接拥有 lobby backing state 和 Store；compatibility locator 仅保存非 owning 指针，隐藏 function-local singleton 已移除。提交：`b4d8932a`。
+    - Runtime state 切片：`Steam_Client` 直接拥有 `gbe::dota::RuntimeState`，承载 recent reconnect context、eligibility 和 last server-hello context；现有 free-function 入口只定位已绑定实例。提交：`f9b38ea0`。
+    - Cache 切片：VPK loot、item definitions、style unlock、load/disable flags 与 equip cache version 全部迁入同一 application runtime owner；welcome/inventory 每次操作捕获一次 owner 引用，协议与副作用顺序保持稳定。
+    - 架构门禁：Audit 15 扫描 main coordinator、welcome 和 inventory split TU，拒绝十个 retired 文件级业务状态回流；注入式负向 fixtures 覆盖 split TU 失败路径。
+    - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 31/31，16 项 production audit 零问题，TSAN 无 race。
   - [ ] 13.5 增加 composition root 构造测试
     - 覆盖 client、gameserver、offline fake 三种组装方式。
     - 断言实例间 store、reconnect state、callback scheduler 和 adapters 互相隔离。

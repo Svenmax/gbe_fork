@@ -33,10 +33,17 @@
 
 // Provide stub types before including the TU
 #include "stubs.h"
+#include "dll/gbe_dota_runtime_state.h"
 
 #include <mutex>
 
 std::recursive_mutex global_mutex;
+static gbe::dota::RuntimeState test_dota_runtime_state;
+
+gbe::dota::RuntimeState &GBE_DotaRuntimeState()
+{
+    return test_dota_runtime_state;
+}
 
 gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore()
 {

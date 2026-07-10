@@ -202,6 +202,25 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
             audit.audit_composition_root_lifecycle(self.STEAM_CLIENT, self.STEAM_CLIENT_HEADER, coordinator),
         )
 
+    def test_rejects_retired_split_tu_runtime_state(self):
+        welcome = "static bool vpk_items_loaded = false;"
+        inventory = "static uint64_t equip_cache_version = 0;"
+        issues = audit.audit_composition_root_lifecycle(
+            self.STEAM_CLIENT,
+            self.STEAM_CLIENT_HEADER,
+            self.COORDINATOR,
+            welcome,
+            inventory,
+        )
+        self.assertIn(
+            "gbe_dota_welcome_coordinator.cpp: retired file-level Dota runtime state vpk_items_loaded returned",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_inventory_handlers.cpp: retired file-level Dota runtime state equip_cache_version returned",
+            issues,
+        )
+
 
 class RetiredLifecycleTransitionLayerAuditTest(unittest.TestCase):
     def test_accepts_registry_only_lifecycle_dispatch(self):

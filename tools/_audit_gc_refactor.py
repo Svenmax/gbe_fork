@@ -868,7 +868,13 @@ def audit_shared_lobby_global_access():
     return issues
 
 
-def audit_composition_root_lifecycle(steam_client_text=None, steam_client_header_text=None, coordinator_text=None):
+def audit_composition_root_lifecycle(
+    steam_client_text=None,
+    steam_client_header_text=None,
+    coordinator_text=None,
+    welcome_text=None,
+    inventory_text=None,
+):
     """Keep production GC owners inside their declared dependency lifetime."""
     issues = []
     if steam_client_text is None:
@@ -877,6 +883,10 @@ def audit_composition_root_lifecycle(steam_client_text=None, steam_client_header
         steam_client_header_text = read(os.path.join(ROOT_DIR, "dll", "dll", "steam_client.h"))
     if coordinator_text is None:
         coordinator_text = read(os.path.join(ROOT_DIR, "dll", "steam_game_coordinator.cpp"))
+    if welcome_text is None:
+        welcome_text = read(os.path.join(ROOT_DIR, "dll", "gbe_dota_welcome_coordinator.cpp"))
+    if inventory_text is None:
+        inventory_text = read(os.path.join(ROOT_DIR, "dll", "gbe_dota_inventory_handlers.cpp"))
 
     constructor_start = steam_client_text.find("Steam_Client::Steam_Client()")
     destructor_start = steam_client_text.find("Steam_Client::~Steam_Client()")
@@ -940,14 +950,20 @@ def audit_composition_root_lifecycle(steam_client_text=None, steam_client_header
     if "GBE_BindDotaRuntimeState(dota_runtime_state);" not in constructor_text or "GBE_UnbindDotaRuntimeState(dota_runtime_state);" not in destructor_text:
         issues.append("steam_client.cpp: Steam_Client must bind and unbind its owned Dota runtime state")
     retired_runtime_state = (
-        "GBE_recent_dota_reconnect_context_valid",
-        "GBE_recent_dota_reconnect_context",
-        "GBE_dota_reconnect_eligible",
-        "GBE_last_dota_server_hello_context",
+        ("steam_game_coordinator.cpp", coordinator_text, "GBE_recent_dota_reconnect_context_valid"),
+        ("steam_game_coordinator.cpp", coordinator_text, "GBE_recent_dota_reconnect_context"),
+        ("steam_game_coordinator.cpp", coordinator_text, "GBE_dota_reconnect_eligible"),
+        ("steam_game_coordinator.cpp", coordinator_text, "GBE_last_dota_server_hello_context"),
+        ("steam_game_coordinator.cpp", coordinator_text, "GBE_vpk_loot_data"),
+        ("gbe_dota_welcome_coordinator.cpp", welcome_text, "vpk_items_loaded"),
+        ("gbe_dota_welcome_coordinator.cpp", welcome_text, "vpk_item_defs"),
+        ("gbe_dota_welcome_coordinator.cpp", welcome_text, "vpk_style_unlock"),
+        ("gbe_dota_welcome_coordinator.cpp", welcome_text, "vpk_items_disabled"),
+        ("gbe_dota_inventory_handlers.cpp", inventory_text, "equip_cache_version"),
     )
-    for symbol in retired_runtime_state:
-        if re.search(r"^(?:static\s+)?[^\n;=]*\b" + re.escape(symbol) + r"\b\s*(?:\{|=|;)", coordinator_text, re.MULTILINE):
-            issues.append(f"steam_game_coordinator.cpp: retired file-level Dota runtime state {symbol} returned")
+    for filename, source_text, symbol in retired_runtime_state:
+        if re.search(r"^(?:static\s+)?[^\n;=.]*\b" + re.escape(symbol) + r"\b\s*(?:\{|=|;)", source_text, re.MULTILINE):
+            issues.append(f"{filename}: retired file-level Dota runtime state {symbol} returned")
     return issues
 
 

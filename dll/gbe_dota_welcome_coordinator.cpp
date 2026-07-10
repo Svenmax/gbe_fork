@@ -31,6 +31,7 @@
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
 #include "gbe_dota_gc_internal.h"
+#include "gbe_dota_runtime_state.h"
 #include "gbe_dota_payload_wire_helpers.h"
 #include <atomic>
 #include <algorithm>
@@ -570,28 +571,25 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
     // Controlled by GBE_DOTA_UNLOCK_ITEMS env var: "0" to disable, "1" or unset to enable
     // GBE_DOTA_UNLOCK_ITEMS_MAX limits the count (default: no limit)
     if (gc_profile == GC_PROFILE_DOTA2) {
-        static bool vpk_items_loaded = false;
-        static std::vector<GBE_DotaItemDef> vpk_item_defs;
-        static GBE_DotaStyleUnlockInfo vpk_style_unlock{};
-        static bool vpk_items_disabled = false;
+        auto &runtime_state = GBE_DotaRuntimeState();
 
-        if (!vpk_items_loaded) {
-            vpk_items_loaded = true;
+        if (!runtime_state.vpk_items_loaded) {
+            runtime_state.vpk_items_loaded = true;
             const char *env_disable = std::getenv("GBE_DOTA_UNLOCK_ITEMS");
             if (env_disable && std::string(env_disable) == "0") {
-                vpk_items_disabled = true;
+                runtime_state.vpk_items_disabled = true;
                 GBE_GC_DebugLog("GC_DOTA_ITEMS", "VPK item unlock disabled via GBE_DOTA_UNLOCK_ITEMS=0");
             } else {
                 auto vpk_data = GBE_LoadAllDotaItemsFromVpk();
-                vpk_item_defs = std::move(vpk_data.item_defs);
-                vpk_style_unlock = vpk_data.style_unlock;
+                runtime_state.vpk_item_defs = std::move(vpk_data.item_defs);
+                runtime_state.vpk_style_unlock = vpk_data.style_unlock;
                 const size_t loot_list_count = vpk_data.loot_data.loot_lists.size();
                 const size_t treasure_count = vpk_data.loot_data.treasure_to_loot_list.size();
                 const size_t tool_count = vpk_data.loot_data.tool_to_loot_list.size();
                 const size_t bundle_count = vpk_data.loot_data.bundle_contents.size();
                 GBE_SetDotaVpkLootData(std::move(vpk_data.loot_data));
                 GBE_GC_DebugLog("GC_DOTA_ITEMS", "loaded %zu cosmetic item defs from VPK items_game.txt (style_unlock_attrs=%s loot_lists=%zu treasures=%zu tools=%zu bundles=%zu)",
-                    vpk_item_defs.size(), vpk_style_unlock.found ? "found" : "not_found",
+                    runtime_state.vpk_item_defs.size(), runtime_state.vpk_style_unlock.found ? "found" : "not_found",
                     loot_list_count, treasure_count, tool_count, bundle_count);
 
                 // Log style diagnostics
@@ -607,9 +605,9 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
             }
         }
 
-        if (!vpk_items_disabled && !vpk_item_defs.empty()) {
+        if (!runtime_state.vpk_items_disabled && !runtime_state.vpk_item_defs.empty()) {
             // Max items to inject (default: all, override via GBE_DOTA_UNLOCK_ITEMS_MAX)
-            size_t max_items = vpk_item_defs.size();
+            size_t max_items = runtime_state.vpk_item_defs.size();
             const char *env_max = std::getenv("GBE_DOTA_UNLOCK_ITEMS_MAX");
             if (env_max && env_max[0]) {
                 try { max_items = std::stoul(env_max); } catch (...) {}
@@ -642,7 +640,7 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
             uint32_t item_seq = 1; // sequential counter within our block
             size_t injected_count = 0;
 
-            for (const auto &def : vpk_item_defs) {
+            for (const auto &def : runtime_state.vpk_item_defs) {
                 if (existing_defs.count(def.def_index)) continue;
                 if (injected_count >= max_items) break;
 
@@ -759,7 +757,7 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
             }
 
             GBE_GC_DebugLog("GC_DOTA_ITEMS", "injected %zu CSOEconItem entries from %zu unique defs (skipped %zu existing)",
-                injected_count, vpk_item_defs.size(), existing_defs.size());
+                injected_count, runtime_state.vpk_item_defs.size(), existing_defs.size());
 
             // Ensure ALL existing items have attr=400 with all bits set.
             // Items loaded from items.json may or may not already have attr=400.

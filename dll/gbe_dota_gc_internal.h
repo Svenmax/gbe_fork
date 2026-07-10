@@ -41,6 +41,7 @@ void GBE_BindSharedDotaLobbyStateStore(gbe::dota_lobby_state::Store &store);
 void GBE_UnbindSharedDotaLobbyStateStore(gbe::dota_lobby_state::Store &store);
 void GBE_BindDotaRuntimeState(gbe::dota::RuntimeState &state);
 void GBE_UnbindDotaRuntimeState(gbe::dota::RuntimeState &state);
+gbe::dota::RuntimeState &GBE_DotaRuntimeState();
 
 
 #include <array>

@@ -64,7 +64,6 @@ namespace registry = gbe::dota_handler_registry;
 
 constexpr int GC_MIN_VERSION = 20091217;
 
-static GBE_DotaLootListData GBE_vpk_loot_data;
 static gbe::dota_lobby_state::Store *GBE_shared_dota_lobby_store{};
 static gbe::dota::RuntimeState *GBE_dota_runtime_state{};
 
@@ -90,12 +89,12 @@ void GBE_UnbindSharedDotaLobbyStateStore(gbe::dota_lobby_state::Store &store)
 
 const GBE_DotaLootListData &GBE_GetDotaVpkLootData()
 {
-    return GBE_vpk_loot_data;
+    return GBE_DotaRuntimeState().vpk_loot_data;
 }
 
 void GBE_SetDotaVpkLootData(GBE_DotaLootListData &&loot_data)
 {
-    GBE_vpk_loot_data = std::move(loot_data);
+    GBE_DotaRuntimeState().vpk_loot_data = std::move(loot_data);
 }
 
 void GBE_BindDotaRuntimeState(gbe::dota::RuntimeState &state)
@@ -111,7 +110,7 @@ void GBE_UnbindDotaRuntimeState(gbe::dota::RuntimeState &state)
         GBE_dota_runtime_state = nullptr;
 }
 
-static gbe::dota::RuntimeState &GBE_DotaRuntimeState()
+gbe::dota::RuntimeState &GBE_DotaRuntimeState()
 {
     if (!GBE_dota_runtime_state)
         throw std::logic_error("Dota runtime state is not bound");

@@ -29,6 +29,7 @@
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
 #include "gbe_dota_gc_internal.h"
+#include "gbe_dota_runtime_state.h"
 #include <algorithm>
 #include <cstdlib>
 #include <cstdio>
@@ -79,7 +80,7 @@ using namespace gamecoordinator::tf2;
 // GBE_HandleDotaEquipItemsRequest (emsg 2569 -> 2570 + 26):
 //   1. Parse: GBE_ParseDotaEquipOps(body) -> equip_ops          [pure]
 //   2. apply_equip_ops(equip_ops, items) -> modified_item_ids   [pure on items]
-//   3. Generate equip_cache_version (coordinator static)
+//   3. Generate equip_cache_version (application runtime state)
 //   4. If modified:
 //      PushIncomingNow(emsg=26, CMsgSOMultipleObjects)          [coordinator]
 //   5. PushIncomingNow(emsg=2570, response with cache version)  [coordinator]
@@ -638,8 +639,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaSetItemStyleRequest(const uint8 *body
 
 bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job) {
     // Generate a candidate cache version without committing it until parse succeeds.
-    static uint64_t equip_cache_version = 0;
-    uint64_t next_cache_version = equip_cache_version;
+    auto &runtime_state = GBE_DotaRuntimeState();
+    uint64_t next_cache_version = runtime_state.equip_cache_version;
     if (next_cache_version == 0) {
         next_cache_version = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::microseconds>(
@@ -682,7 +683,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         return true;
     }
 
-    equip_cache_version = next_cache_version;
+    runtime_state.equip_cache_version = next_cache_version;
     items = plan.items_after_mutation;
 
     std::string update_message;
