@@ -395,9 +395,12 @@
     - Cache 切片：VPK loot、item definitions、style unlock、load/disable flags 与 equip cache version 全部迁入同一 application runtime owner；welcome/inventory 每次操作捕获一次 owner 引用，协议与副作用顺序保持稳定。
     - 架构门禁：Audit 15 扫描 main coordinator、welcome 和 inventory split TU，拒绝十个 retired 文件级业务状态回流；注入式负向 fixtures 覆盖 split TU 失败路径。
     - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 31/31，16 项 production audit 零问题，TSAN 无 race。
-  - [ ] 13.5 增加 composition root 构造测试
+  - [x] 13.5 增加 composition root 构造测试
     - 覆盖 client、gameserver、offline fake 三种组装方式。
     - 断言实例间 store、reconnect state、callback scheduler 和 adapters 互相隔离。
+    - Client/gameserver：分别驱动对应 role 的 reconnect service，断言 context provider、direct connector 和 callback queue 只在所属 role 被调用，generation 准确转发。
+    - Offline fake：构造两个独立 root，断言 lobby Store、callback scheduler、context provider、direct connector 和 callback queue 的对象身份与调用状态完全隔离。
+    - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 31/31，16 项 production audit 零问题，TSAN 无 race。
   - [ ] 13.6 增加生命周期销毁测试
     - 验证 delayed task 和 callback 不会在依赖销毁后访问悬空对象。
     - 验证重复创建/销毁应用上下文不会继承上一实例业务状态。
