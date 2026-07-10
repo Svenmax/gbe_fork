@@ -1414,6 +1414,24 @@ project "tool_gbe_dota_lobby_state_test"
 -- End tool_gbe_dota_lobby_state_test
 
 
+-- Project tool_gbe_dota_lobby_state_store_test
+project "tool_gbe_dota_lobby_state_store_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_lobby_state_store_test"))
+    targetname "gbe_dota_lobby_state_store_test_%{cfg.platform}"
+
+    files {
+        "tools/gbe_dota_lobby_state_store_test/gbe_dota_lobby_state_store_test.cpp",
+        "tools/gbe_dota_header_compile_test/lobby_state_store_header_compile.cpp",
+        "dll/gbe_dota_lobby_state_store.cpp",
+        "dll/gbe_dota_lobby_state_store.h",
+        "dll/gbe_dota_lobby_state.h",
+        "dll/gbe_dota_types.h",
+    }
+-- End tool_gbe_dota_lobby_state_store_test
+
+
 -- Project tool_gbe_dota_reconnect_network_test
 project "tool_gbe_dota_reconnect_network_test"
     kind "ConsoleApp"

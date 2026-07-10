@@ -168,9 +168,10 @@
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 165/165，callsystem guard 4/4，payload helpers 257/257，handler smoke 75/75，replay fixtures 7 组，audit 9 项 0 问题。
 
 - [ ] 8. P7 收敛全局大厅共享状态访问
-  - [ ] 8.1 定义 lobby state store 接口
+  - [x] 8.1 定义 lobby state store 接口
     - 提供 immutable snapshot、publish/update、clear 和 generation-aware compare/update 操作。
     - 依赖：任务 7。
+    - 实现：新增 dependency-free `gbe::dota_lobby_state::Store`，通过值快照隔离调用方，支持完整 publish、clear、复制后原子 update，以及 generation 不匹配时跳过 mutator 并返回 `StaleGeneration` 的 compare/update。
   - [ ] 8.2 实现线程安全 store
     - 集中 `global_mutex` 使用和状态拷贝规则。
     - 禁止向调用方暴露可变共享状态引用。

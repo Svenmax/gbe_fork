@@ -64,6 +64,10 @@ compile_header_test \
     reconnect_network_header_compile \
     tools/gbe_dota_header_compile_test/reconnect_network_header_compile.cpp
 
+compile_header_test \
+    lobby_state_store_header_compile \
+    tools/gbe_dota_header_compile_test/lobby_state_store_header_compile.cpp
+
 build_and_run \
     gc_message_utils_test \
     tools/gc_message_utils_test/gc_message_utils_test.cpp \
@@ -88,6 +92,11 @@ build_and_run \
     -DGBE_CALLSYSTEM_STANDALONE_TEST \
     tools/callsystem_execution_guard_test/callsystem_execution_guard_test.cpp \
     dll/callsystem.cpp
+
+build_and_run \
+    gbe_dota_lobby_state_store_test \
+    tools/gbe_dota_lobby_state_store_test/gbe_dota_lobby_state_store_test.cpp \
+    dll/gbe_dota_lobby_state_store.cpp
 
 build_and_run \
     gbe_proto_wire_test \
