@@ -200,9 +200,10 @@
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 75/75，replay fixtures 7 组，audit 10 项 0 问题。
 
 - [ ] 9. P9 建立类型化 GC Handler Registry
-  - [ ] 9.1 定义 registry entry 类型
+  - [x] 9.1 定义 registry entry 类型
     - 字段包含 message ID、direct/wrapped 模式、session 策略、生命周期分类、adapter 和 handler。
     - 依赖：任务 2 和任务 6。
+    - 实现：新增 dependency-light `gbe_dota_handler_registry.h`，定义强类型 `RequestMode`、`SessionPolicy`、`LifecycleClass`、`HandlerId`、统一 adapter 函数指针和聚合 `Entry`；constexpr helper 统一 direct/wrapped path 匹配与 wrapped session 转发判断，独立 header compile test 验证自包含与类型契约。
   - [ ] 9.2 迁移 post-login dispatch 映射
     - 使用 registry 驱动 direct 与 wrapped 分发。
     - 保持未知消息 fallback 和日志行为。
