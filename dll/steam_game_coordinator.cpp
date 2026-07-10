@@ -60,14 +60,14 @@ using namespace gamecoordinator::tf2;
 
 constexpr int GC_MIN_VERSION = 20091217;
 
-GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 bool GBE_recent_dota_reconnect_context_valid = false;
 GBE_DotaReconnectContext GBE_recent_dota_reconnect_context{};
 static GBE_DotaLootListData GBE_vpk_loot_data;
 
 gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore()
 {
-    static gbe::dota_lobby_state::Store store(GBE_shared_dota_lobby_state, global_mutex);
+    static GBE_SharedDotaLobbyState state;
+    static gbe::dota_lobby_state::Store store(state, global_mutex);
     return store;
 }
 
@@ -1128,7 +1128,7 @@ Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class N
         "coordinator init this=%p is_server=%u shared_lobby=%p shared_valid=%u active=%u lobby_id=%llu match_id=%llu state=%u game_state=%u",
         static_cast<void *>(this),
         this->is_server ? 1u : 0u,
-        static_cast<void *>(&GBE_shared_dota_lobby_state),
+        static_cast<void *>(&GBE_GetSharedDotaLobbyStateStore()),
         shared_lobby.valid ? 1u : 0u,
         shared_lobby.active ? 1u : 0u,
         static_cast<unsigned long long>(shared_lobby.lobby_id),

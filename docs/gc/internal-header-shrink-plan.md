@@ -26,7 +26,7 @@ Current state:
 
 - `GBE_vpk_loot_data` no longer has an `extern` declaration. Mutation goes through `GBE_SetDotaVpkLootData(...)`; reads go through `GBE_GetDotaVpkLootData()`.
 - `GBE_last_dota_server_hello_context` no longer has an `extern` declaration. It is TU-local to `steam_game_coordinator.cpp`; external users use server-hello accessors.
-- `GBE_shared_dota_lobby_state` remains directly exposed because it is used by handlers, payload helpers, state coordinators, and launch/finalize flows.
+- Shared lobby backing state is private to `GBE_GetSharedDotaLobbyStateStore()`; the internal header exposes only the store accessor, value snapshot facade, scalar/id helpers, and clear operations.
 
 Next step for `GBE_shared_dota_lobby_state` should not be a mechanical getter/setter rename. Prefer a dedicated facade/context with named operations, for example:
 

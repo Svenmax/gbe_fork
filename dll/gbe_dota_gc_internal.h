@@ -33,7 +33,6 @@ struct GBE_SharedDotaLobbyState;
 namespace gbe::dota_lobby_state {
 class Store;
 }
-extern GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore();
 GBE_SharedDotaLobbyState GBE_GetSharedDotaLobbyStateSnapshot();
 bool GBE_HasSharedDotaLobbyState();

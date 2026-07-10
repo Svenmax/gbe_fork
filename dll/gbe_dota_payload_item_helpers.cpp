@@ -20,7 +20,7 @@
 // payload-helper split. This TU owns the four functions that operate solely on
 // Econ_Item / GBE_DotaEquipOp / CSteamID inputs and produce wire/protobuf
 // outputs, with no dependency on Steam_Game_Coordinator, Steam_Client,
-// Settings, or GBE_shared_dota_lobby_state.
+// Settings, or shared lobby state.
 //
 // Responsibility boundary: parse equip-op request bodies, mutate item style
 // bitmask attributes, serialize Econ_Item to the GC protobuf wire format, and

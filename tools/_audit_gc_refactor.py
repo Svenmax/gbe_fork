@@ -7,6 +7,7 @@ Checks:
   2. Every shared GBE_* free-function definition has a declaration in the
      header, while member/static helpers are classified as non-actionable.
   3. Doc line numbers in REFACTOR_TODO.md match actual code.
+  4. Production code cannot access the retired mutable shared lobby global.
 """
 import os
 import re
@@ -128,6 +129,7 @@ HIGH_RISK_REASON_STRINGS = [
     "8053_finished_loading",
     "8053_load_failed",
 ]
+RETIRED_SHARED_LOBBY_GLOBAL = "GBE_shared_dota_lobby_state"
 
 POST_LOGIN_DISPATCH_ENTRIES = [
     ("GBE_kDotaJoinChatChannel", "adapt_join_chat_channel", "GBE_HandleDotaJoinChatChannelRequest"),
@@ -417,6 +419,20 @@ def audit_reason_inventory():
     return issues
 
 
+def audit_shared_lobby_global_access():
+    """Keep production shared lobby state accessible only through the store."""
+    issues = []
+    paths = list(GC_TUS) + [INTERNAL_H]
+    for path in paths:
+        text = strip_comments(read(path))
+        for match in re.finditer(r"\b" + re.escape(RETIRED_SHARED_LOBBY_GLOBAL) + r"\b", text):
+            line_no = text.count("\n", 0, match.start()) + 1
+            issues.append(
+                f"{os.path.basename(path)}:{line_no}: direct access to {RETIRED_SHARED_LOBBY_GLOBAL}; use the shared lobby store facade"
+            )
+    return issues
+
+
 def main():
     header_text = read(INTERNAL_H)
     real_decls = extract_header_symbols(header_text)
@@ -568,6 +584,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 10: Shared lobby global access")
+    print("=" * 70)
+    print("  Action: keep production shared lobby state behind the store facade.")
+    shared_lobby_global_issues = audit_shared_lobby_global_access()
+    if not shared_lobby_global_issues:
+        print(f"  (none) - production code does not access {RETIRED_SHARED_LOBBY_GLOBAL}")
+    else:
+        for issue in shared_lobby_global_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -582,8 +610,9 @@ def main():
     print(f"  Handler side-effect seam issues:     {len(side_effect_issues)}")
     print(f"  High-risk reason inventory issues:   {len(reason_issues)}")
     print(f"  Lifecycle ownership issues:          {len(lifecycle_ownership_issues)}")
+    print(f"  Shared lobby global access issues:   {len(shared_lobby_global_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues:
         sys.exit(1)
 
 

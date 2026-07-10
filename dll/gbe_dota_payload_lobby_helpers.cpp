@@ -23,7 +23,7 @@
 // to coordinator/global state: they take context structs (GBE_DotaHelloContext,
 // GBE_DotaServerHelloContext, GBE_DotaLobbyMemberState, GBE_DotaCustomGameDetails)
 // and caller-provided output parameters, with no dependency on
-// Steam_Game_Coordinator, Steam_Client, Settings, or GBE_shared_dota_lobby_state.
+// Steam_Game_Coordinator, Steam_Client, Settings, or shared lobby state.
 //
 // Responsibility boundary:
 //   - compose SO objects for practice-lobby cache-subscribed payloads

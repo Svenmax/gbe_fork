@@ -184,9 +184,10 @@
     - 迁移 publish、clear、runtime member update 和 lifecycle state update。
     - generation 不匹配的写入返回 stale 结果。
     - 实现：完整 shared publish 在既有 `global_mutex` 同步域内构造候选快照，并通过 generation 单调 publish 拒绝旧代际覆盖；generic metadata、4508 runtime connect 和 gameserver-derived server ID 使用 `compare_update(local.generation)`，代际不匹配时跳过写入并记录 stale 诊断；clear 继续统一委托 store。
-  - [ ] 8.5 移除 production 中的直接全局访问
+  - [x] 8.5 移除 production 中的直接全局访问
     - 保留 store implementation 和必要测试 fixture 的受控访问。
     - 增加 audit，阻止新增 `GBE_shared_dota_lobby_state` 直读直写。
+    - 实现：移除 internal header 的 mutable extern，将 production backing state 收口为 store accessor 内的函数局部静态对象；诊断日志改为记录稳定 store 地址；Audit 10 扫描全部 GC production TUs 与 internal header，发现旧全局符号即失败，测试 fixture 继续保留受控独立状态。
   - [ ] 8.6 增加 store 单元与并发测试
     - 覆盖 snapshot 一致性、generation compare/update、clear、并发 reader/writer 和 stale write。
   - [ ] 8.7 增加 store 属性测试

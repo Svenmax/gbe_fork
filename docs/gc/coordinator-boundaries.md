@@ -25,7 +25,7 @@ Preferred pattern:
 
 Current known debt:
 
-- `GBE_shared_dota_lobby_state` is still directly shared across handlers, payload helpers, and state coordinators. Shrinking it needs a dedicated state facade or context object rather than a mechanical rename.
+- Shared lobby state is owned by `gbe::dota_lobby_state::Store`; handlers, payload helpers, and state coordinators use value snapshots or generation-aware store operations.
 
 ## Handler TUs
 

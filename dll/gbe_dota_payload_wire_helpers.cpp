@@ -19,8 +19,7 @@
 // Extracted from gbe_dota_gc_payload_helpers.cpp (Phase 3.2.2) as part of the
 // payload-helper split. This TU owns the byte/varint/field parsing & patching
 // helpers that operate on direct-protobuf-framed GC messages with no dependency
-// on Steam_Game_Coordinator, Steam_Client, Settings, or
-// GBE_shared_dota_lobby_state.
+// on Steam_Game_Coordinator, Steam_Client, Settings, or shared lobby state.
 //
 // Responsibility boundary:
 //   - parse direct proto contexts and rewrite account_id varints / fixed32
