@@ -156,8 +156,9 @@
     - 连接和 callback 去重改用 generation，server/endpoint 继续作为同代际键。
     - 保留 lobby ID 用于协议匹配和日志。
     - 实现：serialized reconnect 和 lobby-flow callback bundle 使用类型化 `generation + server_id + endpoint` 键；generation 变化清除 retry、payload、direct-connect 和 callback 状态，同 generation 下 lobby ID 仅同步；callback 在实际 dispatch 前继续校验 generation。
-  - [ ] 7.5 增加 generation 生命周期测试
+  - [x] 7.5 增加 generation 生命周期测试
     - 覆盖快速退房重进、相同 lobby ID 复用、异步回调晚到、旧延迟任务和状态重置。
+    - 实现：handler smoke 通过真实 `Join -> Leave -> same-ID Join` 验证 generation `1 -> 2 -> 3` 严格变化，并拒绝首次 Join 捕获的 delayed runtime update；callsystem guard 覆盖已注册与晚注册 callback；既有 postgame、delayed runtime 和 reset 测试覆盖旧任务拒绝与新 generation 保留。
   - [ ] 7.6 增加 generation 属性测试
     - 属性 P6-A：新大厅生命周期 generation 严格变化。
     - 属性 P6-B：旧 generation action 永远不能修改当前 lobby state。

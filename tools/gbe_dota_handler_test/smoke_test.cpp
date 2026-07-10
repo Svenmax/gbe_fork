@@ -1416,6 +1416,53 @@ static void test_lobby_join_records_cache_subscription_before_pushes()
     ++g_tests_passed;
 }
 
+static void test_lobby_fast_leave_rejoin_same_id_rejects_old_generation_work()
+{
+    TestFixture tf;
+    tf.reset();
+
+    const uint64 lobby_id = 0x7044F00Dull;
+    const std::string join_body = WireBodyBuilder()
+        .varint(1u, lobby_id)
+        .take();
+    TEST_ASSERT(
+        tf.gc.GBE_HandleDotaPracticeLobbyJoinRequest(join_body, 0x7044F001u, true, false, nullptr, true),
+        "initial join should succeed");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, lobby_id, "initial join should use requested lobby id");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.generation, 1ull, "initial join should allocate generation one");
+
+    tf.gc.push_incoming(
+        GBE_kDotaPracticeLobbyDetailsUpdate | Steam_Game_Coordinator::protobuf_mask,
+        "old_generation_runtime",
+        0.1,
+        true,
+        2u,
+        4u);
+
+    TEST_ASSERT(tf.gc.GBE_HandleDotaPracticeLobbyLeaveRequest(false, nullptr), "fast leave should succeed");
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "fast leave should clear active lobby state");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.generation, 2ull, "fast leave should allocate the next generation");
+
+    TEST_ASSERT(
+        tf.gc.GBE_HandleDotaPracticeLobbyJoinRequest(join_body, 0x7044F002u, true, false, nullptr, true),
+        "same-id rejoin should succeed");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.active, "same-id rejoin should reactivate lobby state");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, lobby_id, "same-id rejoin should preserve protocol lobby identity");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.generation, 3ull, "same-id rejoin should allocate a distinct generation");
+
+    const uint32 rejoined_state = tf.gc.GBE_local_lobby.state;
+    const uint32 rejoined_game_state = tf.gc.GBE_local_lobby.game_state;
+    const auto status = tf.gc.test_deliver_next_pending_message();
+    TEST_ASSERT(
+        status == Steam_Game_Coordinator::GBE_DotaDeferredTaskStatus::Stale,
+        "delayed work from the first join should be stale after same-id rejoin");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.state, rejoined_state, "stale delayed work should preserve rejoined lobby state");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, rejoined_game_state, "stale delayed work should preserve rejoined game state");
+    TEST_ASSERT(tf.gc.incoming_messages.empty(), "stale delayed work should not enter the incoming queue");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_join_empty_local_lobby_generates_lobby_id_with_pass_key_only()
 {
     TestFixture tf;
@@ -2891,6 +2938,9 @@ int main()
 
     std::printf("[run] test_lobby_join_records_cache_subscription_before_pushes\n");
     RUN_TEST(test_lobby_join_records_cache_subscription_before_pushes);
+
+    std::printf("[run] test_lobby_fast_leave_rejoin_same_id_rejects_old_generation_work\n");
+    RUN_TEST(test_lobby_fast_leave_rejoin_same_id_rejects_old_generation_work);
 
     std::printf("[run] test_lobby_join_empty_local_lobby_generates_lobby_id_with_pass_key_only\n");
     RUN_TEST(test_lobby_join_empty_local_lobby_generates_lobby_id_with_pass_key_only);
