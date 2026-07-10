@@ -56,6 +56,7 @@
 #include "steam_app_disable_update.h"
 #include "steam_billing.h"
 #include "steam_user_items.h"
+#include "gbe_dota_lobby_state_store.h"
 
 #include "steam_gameserver.h"
 #include "steam_masterserver_updater.h"
@@ -127,6 +128,8 @@ private:
     std::map<CCallbackBase *, CCallBackWrapper> old_callbacks_map;
 
 public:
+    GBE_SharedDotaLobbyState dota_lobby_state{};
+    gbe::dota_lobby_state::Store dota_lobby_store;
     Networking *network{};
     SteamCallResults *callback_results_server{}, *callback_results_client{};
     SteamCallBacks *callbacks_server{}, *callbacks_client{};

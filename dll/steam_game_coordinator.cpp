@@ -66,12 +66,26 @@ constexpr int GC_MIN_VERSION = 20091217;
 bool GBE_recent_dota_reconnect_context_valid = false;
 GBE_DotaReconnectContext GBE_recent_dota_reconnect_context{};
 static GBE_DotaLootListData GBE_vpk_loot_data;
+static gbe::dota_lobby_state::Store *GBE_shared_dota_lobby_store{};
 
 gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore()
 {
-    static GBE_SharedDotaLobbyState state;
-    static gbe::dota_lobby_state::Store store(state, global_mutex);
-    return store;
+    if (!GBE_shared_dota_lobby_store)
+        throw std::logic_error("Shared Dota lobby Store is not bound");
+    return *GBE_shared_dota_lobby_store;
+}
+
+void GBE_BindSharedDotaLobbyStateStore(gbe::dota_lobby_state::Store &store)
+{
+    if (GBE_shared_dota_lobby_store && GBE_shared_dota_lobby_store != &store)
+        throw std::logic_error("Shared Dota lobby Store is already bound");
+    GBE_shared_dota_lobby_store = &store;
+}
+
+void GBE_UnbindSharedDotaLobbyStateStore(gbe::dota_lobby_state::Store &store)
+{
+    if (GBE_shared_dota_lobby_store == &store)
+        GBE_shared_dota_lobby_store = nullptr;
 }
 
 const GBE_DotaLootListData &GBE_GetDotaVpkLootData()

@@ -868,11 +868,15 @@ def audit_shared_lobby_global_access():
     return issues
 
 
-def audit_composition_root_lifecycle(steam_client_text=None):
+def audit_composition_root_lifecycle(steam_client_text=None, steam_client_header_text=None, coordinator_text=None):
     """Keep production GC owners inside their declared dependency lifetime."""
     issues = []
     if steam_client_text is None:
         steam_client_text = read(os.path.join(ROOT_DIR, "dll", "steam_client.cpp"))
+    if steam_client_header_text is None:
+        steam_client_header_text = read(os.path.join(ROOT_DIR, "dll", "dll", "steam_client.h"))
+    if coordinator_text is None:
+        coordinator_text = read(os.path.join(ROOT_DIR, "dll", "steam_game_coordinator.cpp"))
 
     constructor_start = steam_client_text.find("Steam_Client::Steam_Client()")
     destructor_start = steam_client_text.find("Steam_Client::~Steam_Client()")
@@ -921,6 +925,16 @@ def audit_composition_root_lifecycle(steam_client_text=None):
     serialized_header = read(os.path.join(ROOT_DIR, "dll", "dll", "steam_networking_socketsserialized.h"))
     if "production_reconnect_adapter" in strip_comments(serialized_header):
         issues.append("steam_networking_socketsserialized.h: serialized service owns a hidden production reconnect adapter")
+
+    if "GBE_SharedDotaLobbyState dota_lobby_state" not in steam_client_header_text or "dota_lobby_state::Store dota_lobby_store" not in steam_client_header_text:
+        issues.append("steam_client.h: Steam_Client must own the shared Dota lobby backing state and Store")
+    store_accessor_start = coordinator_text.find("gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore()")
+    store_accessor_end = coordinator_text.find("const GBE_DotaLootListData &GBE_GetDotaVpkLootData", store_accessor_start)
+    store_accessor = coordinator_text[store_accessor_start:store_accessor_end if store_accessor_end >= 0 else len(coordinator_text)]
+    if "static GBE_SharedDotaLobbyState state" in store_accessor or "static gbe::dota_lobby_state::Store store" in store_accessor:
+        issues.append("steam_game_coordinator.cpp: shared lobby accessor owns hidden singleton backing state")
+    if "GBE_BindSharedDotaLobbyStateStore(dota_lobby_store);" not in constructor_text or "GBE_UnbindSharedDotaLobbyStateStore(dota_lobby_store);" not in destructor_text:
+        issues.append("steam_client.cpp: Steam_Client must bind and unbind its owned shared lobby Store")
     return issues
 
 

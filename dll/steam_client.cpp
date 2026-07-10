@@ -62,7 +62,9 @@ void Steam_Client::background_thread_proc()
 }
 
 Steam_Client::Steam_Client()
+    : dota_lobby_store(dota_lobby_state, global_mutex)
 {
+    GBE_BindSharedDotaLobbyStateStore(dota_lobby_store);
     PRINT_DEBUG("start ----------");
     uint32 appid = create_localstorage_settings(&settings_client, &settings_server, &local_storage);
     local_storage->update_save_filenames(Local_Storage::remote_storage_folder);
@@ -279,6 +281,8 @@ Steam_Client::~Steam_Client()
 
     DEL_INST(run_every_runcb);
     DEL_INST(network);
+
+    GBE_UnbindSharedDotaLobbyStateStore(dota_lobby_store);
 
     #undef DEL_INST
 }

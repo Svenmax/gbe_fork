@@ -100,9 +100,20 @@ class ConcurrencyOwnershipAuditTest(unittest.TestCase):
 
 
 class CompositionRootLifecycleAuditTest(unittest.TestCase):
+    STEAM_CLIENT_HEADER = """
+        GBE_SharedDotaLobbyState dota_lobby_state{};
+        gbe::dota_lobby_state::Store dota_lobby_store;
+    """
+    COORDINATOR = """
+        gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore() {
+            return *GBE_shared_dota_lobby_store;
+        }
+        const GBE_DotaLootListData &GBE_GetDotaVpkLootData() { return loot; }
+    """
     STEAM_CLIENT = """
     Steam_Client::Steam_Client()
     {
+        GBE_BindSharedDotaLobbyStateStore(dota_lobby_store);
         steam_networking_sockets = new Steam_Networking_Sockets();
         dota_reconnect_adapter_client = new GBE_DotaReconnectNetworkAdapter();
         steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized();
@@ -126,11 +137,12 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
         DEL_INST(steam_networking_sockets_serialized);
         DEL_INST(dota_reconnect_adapter_client);
         DEL_INST(steam_networking_sockets);
+        GBE_UnbindSharedDotaLobbyStateStore(dota_lobby_store);
     }
     """
 
     def test_accepts_dependency_order_for_both_roles(self):
-        self.assertEqual([], audit.audit_composition_root_lifecycle(self.STEAM_CLIENT))
+        self.assertEqual([], audit.audit_composition_root_lifecycle(self.STEAM_CLIENT, self.STEAM_CLIENT_HEADER, self.COORDINATOR))
 
     def test_rejects_coordinator_before_services(self):
         source = self.STEAM_CLIENT.replace(
@@ -147,7 +159,7 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
         )
         self.assertIn(
             "steam_client.cpp: client GC construction must order direct sockets, reconnect adapter, serialized services, lifecycle executor, then coordinator",
-            audit.audit_composition_root_lifecycle(source),
+            audit.audit_composition_root_lifecycle(source, self.STEAM_CLIENT_HEADER, self.COORDINATOR),
         )
 
     def test_rejects_service_destroyed_before_coordinator(self):
@@ -163,7 +175,21 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
         )
         self.assertIn(
             "steam_client.cpp: gameserver GC destruction must order coordinator, lifecycle executor, serialized services, reconnect adapter, then direct sockets",
-            audit.audit_composition_root_lifecycle(source),
+            audit.audit_composition_root_lifecycle(source, self.STEAM_CLIENT_HEADER, self.COORDINATOR),
+        )
+
+    def test_rejects_hidden_shared_lobby_store_singleton(self):
+        coordinator = """
+            gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore() {
+                static GBE_SharedDotaLobbyState state;
+                static gbe::dota_lobby_state::Store store(state, global_mutex);
+                return store;
+            }
+            const GBE_DotaLootListData &GBE_GetDotaVpkLootData() { return loot; }
+        """
+        self.assertIn(
+            "steam_game_coordinator.cpp: shared lobby accessor owns hidden singleton backing state",
+            audit.audit_composition_root_lifecycle(self.STEAM_CLIENT, self.STEAM_CLIENT_HEADER, coordinator),
         )
 
 
