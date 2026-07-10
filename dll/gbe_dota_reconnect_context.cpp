@@ -162,14 +162,4 @@ Selection select_context(const std::vector<Source> &sources)
     return selection;
 }
 
-const char *describe_source_kind(SourceKind kind)
-{
-    return gbe::dota_diagnostic::describe_source(kind).data();
-}
-
-const char *describe_reject_reason(RejectReason reason)
-{
-    return gbe::dota_diagnostic::describe_reason(reason).data();
-}
-
 } // namespace gbe::dota_reconnect

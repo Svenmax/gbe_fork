@@ -160,8 +160,3 @@ GBE_DotaReconnectPostResult GBE_ExecuteDotaReconnectPostConnectionState(
         direct_connector,
         callback_queue);
 }
-
-const char *GBE_DescribeDotaReconnectPostSkipReason(GBE_DotaReconnectPostSkipReason reason)
-{
-    return gbe::dota_diagnostic::describe_reason(reason).data();
-}

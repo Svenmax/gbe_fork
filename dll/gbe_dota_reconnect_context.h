@@ -49,8 +49,6 @@ Source source_from_local_lobby(const GBE_LocalLobby &lobby, SourceKind kind = So
 Source source_from_generic_lobby(const GBE_LocalLobby &lobby, std::uint64_t local_steam_id);
 RejectReason build_context(const Source &source, GBE_DotaReconnectContext &context);
 Selection select_context(const std::vector<Source> &sources);
-const char *describe_source_kind(SourceKind kind);
-const char *describe_reject_reason(RejectReason reason);
 
 } // namespace gbe::dota_reconnect
 

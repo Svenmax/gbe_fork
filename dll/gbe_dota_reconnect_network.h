@@ -81,6 +81,4 @@ GBE_DotaReconnectPostResult GBE_ExecuteDotaReconnectPostConnectionState(
     GBE_DotaReconnectCallbackQueue &callback_queue,
     GBE_DotaSerializedConnectionState &connection_state);
 
-const char *GBE_DescribeDotaReconnectPostSkipReason(GBE_DotaReconnectPostSkipReason reason);
-
 #endif // __INCLUDED_GBE_DOTA_RECONNECT_NETWORK_H__

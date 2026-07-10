@@ -381,9 +381,6 @@ void test_diagnostic_reason_and_source_serialization()
     }
     expect(diagnostic::source_from_string("unregistered_source") == diagnostic::Source::Unknown, "unknown diagnostic source falls back");
 
-    expect(std::string(GBE_DescribeDotaReconnectPostSkipReason(GBE_DotaReconnectPostSkipReason::NoContext)) == "no_context", "legacy skip reason describe stays stable");
-    expect(std::string(GBE_DescribeDotaReconnectPostSkipReason(GBE_DotaReconnectPostSkipReason::MissingEndpoint)) == "missing_endpoint", "legacy missing endpoint describe stays stable");
-
     diagnostic::Event event{
         "reconnect.callback",
         diagnostic::Reason::AlreadyQueued,
