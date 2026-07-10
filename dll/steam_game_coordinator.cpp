@@ -1109,7 +1109,7 @@ void Steam_Game_Coordinator::steam_run_every_runcb(void *object)
     steam_gamecoordinator->RunCallbacks();
 }
 
-Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, registry::View handler_registry, bool is_server)
+Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, registry::View handler_registry, gbe::dota_lifecycle::Executor &lifecycle_executor, bool is_server)
 {
     if (!handler_registry.entries || handler_registry.size == 0u)
         throw std::invalid_argument("Dota handler registry is required");
@@ -1121,6 +1121,7 @@ Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class N
     this->run_every_runcb = run_every_runcb;
     this->shared_lobby_store = &shared_lobby_store;
     this->handler_registry = handler_registry;
+    this->lifecycle_executor = &lifecycle_executor;
     this->is_server = is_server;
 
     this->network->setCallback(CALLBACK_ID_GAMESERVER_ITEMS, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);

@@ -66,6 +66,8 @@ class CMsgProtoBufHeader;
 class Steam_Game_Coordinator :
 public ISteamGameCoordinator
 {
+    friend class gbe::dota_lifecycle::CoordinatorExecutor;
+
     static constexpr const auto items_user_file = "items.json";
     static constexpr const auto gc_config_file = "gc.json";
     constexpr const static uint32 protobuf_mask = 0x80000000;
@@ -77,6 +79,7 @@ public ISteamGameCoordinator
     class RunEveryRunCB *run_every_runcb{};
     gbe::dota_lobby_state::Store *shared_lobby_store{};
     gbe::dota_handler_registry::View handler_registry{};
+    gbe::dota_lifecycle::Executor *lifecycle_executor{};
     bool is_server{};
 
     struct GC_Message
@@ -362,6 +365,9 @@ public ISteamGameCoordinator
     gbe::dota_lifecycle::ExecutionResult GBE_ExecuteDotaLifecycleActions(
         const GBE_DotaActionList &actions,
         const gbe::dota_lifecycle::ExecutionOptions &options = {});
+    gbe::dota_lifecycle::ExecutionResult GBE_ExecuteDotaLifecycleEffects(
+        const GBE_DotaActionList &actions,
+        const gbe::dota_lifecycle::ExecutionOptions &options);
     bool GBE_ExecuteDotaCustomGameLifecycleTransition(const gbe::dota_custom_game_lifecycle::ExecutionContext &context);
     bool GBE_HandleDotaMinimalVarintSuccessRequest(uint32 request_emsg, uint32 response_emsg, const char *log_note, const char *push_note, bool has_source_job, uint64 source_job);
     bool GBE_HandleDota7427NotificationsRequest(bool has_source_job, uint64 source_job);
@@ -411,7 +417,7 @@ public ISteamGameCoordinator
 
 public:
     static gbe::dota_handler_registry::View GBE_ProductionDotaHandlerRegistry();
-    Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, gbe::dota_handler_registry::View handler_registry, bool is_server);
+    Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, gbe::dota_handler_registry::View handler_registry, gbe::dota_lifecycle::Executor &lifecycle_executor, bool is_server);
     ~Steam_Game_Coordinator();
 
     void initialize_gc();

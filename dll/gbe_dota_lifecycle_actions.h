@@ -36,6 +36,23 @@ struct ExecutionResult {
     bool succeeded{ true };
 };
 
+class Executor {
+public:
+    virtual ~Executor() = default;
+    virtual ExecutionResult execute(
+        Steam_Game_Coordinator &coordinator,
+        const GBE_DotaActionList &actions,
+        const ExecutionOptions &options) = 0;
+};
+
+class CoordinatorExecutor final : public Executor {
+public:
+    ExecutionResult execute(
+        Steam_Game_Coordinator &coordinator,
+        const GBE_DotaActionList &actions,
+        const ExecutionOptions &options) override;
+};
+
 struct TransitionEffects {
     gbe::dota_lobby_state::LaunchLifecycleTransitionDecision transition;
     std::uint64_t local_steam_id{};

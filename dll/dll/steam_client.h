@@ -203,6 +203,8 @@ public:
 
     GBE_DotaReconnectNetworkAdapter *dota_reconnect_adapter_client{};
     GBE_DotaReconnectNetworkAdapter *dota_reconnect_adapter_server{};
+    gbe::dota_lifecycle::CoordinatorExecutor *dota_lifecycle_executor_client{};
+    gbe::dota_lifecycle::CoordinatorExecutor *dota_lifecycle_executor_server{};
 
     template <class T>
     class Reusable_Numbers {

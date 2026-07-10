@@ -45,6 +45,21 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
     const GBE_DotaActionList &actions,
     const gbe::dota_lifecycle::ExecutionOptions &options)
 {
+    return lifecycle_executor->execute(*this, actions, options);
+}
+
+gbe::dota_lifecycle::ExecutionResult gbe::dota_lifecycle::CoordinatorExecutor::execute(
+    Steam_Game_Coordinator &coordinator,
+    const GBE_DotaActionList &actions,
+    const ExecutionOptions &options)
+{
+    return coordinator.GBE_ExecuteDotaLifecycleEffects(actions, options);
+}
+
+gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLifecycleEffects(
+    const GBE_DotaActionList &actions,
+    const gbe::dota_lifecycle::ExecutionOptions &options)
+{
     gbe::dota_lifecycle::ExecutionResult result;
     bool previous_action_succeeded = true;
     bool abort_execution = false;

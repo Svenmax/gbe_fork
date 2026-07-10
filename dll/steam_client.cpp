@@ -147,7 +147,8 @@ Steam_Client::Steam_Client()
     steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_client, network, callback_results_client, callbacks_client, run_every_runcb, dota_reconnect_adapter_client, dota_reconnect_adapter_client, dota_reconnect_adapter_client);
     steam_networking_messages = new Steam_Networking_Messages(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     const auto dota_handler_registry = Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry();
-    steam_game_coordinator = new Steam_Game_Coordinator(settings_client, network, local_storage, callbacks_client, run_every_runcb, GBE_GetSharedDotaLobbyStateStore(), dota_handler_registry, false);
+    dota_lifecycle_executor_client = new gbe::dota_lifecycle::CoordinatorExecutor();
+    steam_game_coordinator = new Steam_Game_Coordinator(settings_client, network, local_storage, callbacks_client, run_every_runcb, GBE_GetSharedDotaLobbyStateStore(), dota_handler_registry, *dota_lifecycle_executor_client, false);
     steam_networking_utils = new Steam_Networking_Utils(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_unified_messages = new Steam_Unified_Messages(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_game_search = new Steam_Game_Search(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
@@ -176,7 +177,8 @@ Steam_Client::Steam_Client()
     dota_reconnect_adapter_server = new GBE_DotaReconnectNetworkAdapter(callbacks_server, steam_gameserver_networking_sockets);
     steam_gameserver_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, dota_reconnect_adapter_server, dota_reconnect_adapter_server, dota_reconnect_adapter_server);
     steam_gameserver_networking_messages = new Steam_Networking_Messages(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
-    steam_gameserver_game_coordinator = new Steam_Game_Coordinator(settings_server, network, local_storage, callbacks_server, run_every_runcb, GBE_GetSharedDotaLobbyStateStore(), dota_handler_registry, true);
+    dota_lifecycle_executor_server = new gbe::dota_lifecycle::CoordinatorExecutor();
+    steam_gameserver_game_coordinator = new Steam_Game_Coordinator(settings_server, network, local_storage, callbacks_server, run_every_runcb, GBE_GetSharedDotaLobbyStateStore(), dota_handler_registry, *dota_lifecycle_executor_server, true);
     steam_masterserver_updater = new Steam_Masterserver_Updater(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, steam_gameserver);
     steam_gameserver_gamestats = new Steam_GameStats(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
     steam_gameserver_items = new Steam_GameServer_Items(settings_server, callbacks_server, callback_results_server);
@@ -217,6 +219,7 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_gameserver_ugc);
     DEL_INST(steam_gameserver_apps);
     DEL_INST(steam_gameserver_game_coordinator);
+    DEL_INST(dota_lifecycle_executor_server);
     DEL_INST(steam_gameserver_networking_sockets_serialized);
     DEL_INST(dota_reconnect_adapter_server);
     DEL_INST(steam_gameserver_networking_sockets);
@@ -244,6 +247,7 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_video);
     DEL_INST(steam_parental);
     DEL_INST(steam_game_coordinator);
+    DEL_INST(dota_lifecycle_executor_client);
     DEL_INST(steam_networking_sockets_serialized);
     DEL_INST(dota_reconnect_adapter_client);
     DEL_INST(steam_networking_sockets);

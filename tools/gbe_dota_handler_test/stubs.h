@@ -929,6 +929,8 @@ enum ESOMsg {
 
 class Steam_Game_Coordinator
 {
+    friend class gbe::dota_lifecycle::CoordinatorExecutor;
+
 public:
     enum class GBE_DotaGenerationAdvanceResult : uint8 { Advanced, Exhausted };
     enum class GBE_DotaDeferredTaskStatus : uint8 { Current, Stale, Empty };
@@ -953,6 +955,8 @@ public:
     Networking *network{};
     void *local_storage{};       // opaque, not used by handler tests
     SteamCallBacks *callbacks{};
+    gbe::dota_lifecycle::CoordinatorExecutor production_lifecycle_executor{};
+    gbe::dota_lifecycle::Executor *lifecycle_executor{&production_lifecycle_executor};
     bool is_server{};
 
     GBE_LocalLobby GBE_local_lobby{};
@@ -1696,6 +1700,9 @@ public:
     gbe::dota_lifecycle::ExecutionResult GBE_ExecuteDotaLifecycleActions(
         const GBE_DotaActionList &actions,
         const gbe::dota_lifecycle::ExecutionOptions &options = {});
+    gbe::dota_lifecycle::ExecutionResult GBE_ExecuteDotaLifecycleEffects(
+        const GBE_DotaActionList &actions,
+        const gbe::dota_lifecycle::ExecutionOptions &options);
     bool GBE_ExecuteDotaCustomGameLifecycleTransition(const gbe::dota_custom_game_lifecycle::ExecutionContext &context);
 
     // Other handlers declared in the real header but not defined in the
