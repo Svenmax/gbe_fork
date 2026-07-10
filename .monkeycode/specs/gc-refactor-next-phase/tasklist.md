@@ -247,8 +247,11 @@
     - 实现：新增集中 `format_event()` 与 `GBE_ReconnectLogEvent()` sink adapter，按固定顺序输出 event、reason、source、lobby ID、generation、server ID、endpoint、decision、message ID 和 job ID；缺失文本与可选 ID 使用稳定 `-` 占位。context selection、direct connect、callback dedup/queue、retry、callback generation guard、queued lobby message 和 delayed task stale-generation 拒绝点已迁移到结构化事件；endpoint 仅记录规范化连接地址，message ID 使用 masked ID，日志不携带 serialized payload、raw state、session 或密码。
     - 测试：reason/source inventory 扩展为 23 个 reason 和 10 个 source；reconnect focused suite 增加 13 条断言，覆盖新增映射往返、固定字段顺序、合法零值 message/job ID、缺失字段占位和敏感字段排除，断言总数增至 236/236。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 236/236，registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
-  - [ ] 10.4 迁移生命周期诊断日志
+  - [x] 10.4 迁移生命周期诊断日志
     - 覆盖 transition decision、action execution、skip、failure 和 delayed task。
+    - 实现：将结构化 sink 扩展为通用 `GBE_DiagnosticLogEvent()`，reconnect 与 lifecycle 分别使用稳定 scope。custom-game transition 入口记录 planned/no-actions decision、direct/wrapped source、trigger message 和 source job；统一 lifecycle executor 为每个 action 记录 execution/failure，为 conditional follow-up 记录 previous-action-failed 或 runtime-update-queued skip，为 runtime details update 记录 delayed-task queued/failure。action decision 来自覆盖全部 33 个 action type 的 constexpr 稳定名称；lobby ID、generation 和 server ID 在 action 执行前捕获，避免 reset/clear 后身份漂移。lifecycle 结构化事件不记录 endpoint、payload、outer session 或自由 reason 文本。
+    - 测试：diagnostic reason inventory 增加 `previous_action_failed`、`runtime_update_queued` 和 `action_failed` 的稳定序列化与往返断言；handler focused suite 增加 state、delayed、push 三类 action 名称稳定性断言。reconnect focused suite 增至 242/242，handler smoke 仍为 77/77。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，replay fixtures 7 组，audit 10 项 0 问题。
   - [ ] 10.5 增加事件格式与字段测试
     - 断言关键事件字段齐全、reason 稳定、敏感 payload 不进入结构化日志。
   - [ ] 10.6 更新 reason inventory 审计

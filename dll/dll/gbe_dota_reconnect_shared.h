@@ -85,10 +85,20 @@ inline void GBE_ReconnectLog(const char *scope, const char *fmt, ...)
     std::fclose(f);
 }
 
-inline void GBE_ReconnectLogEvent(const gbe::dota_diagnostic::Event &event)
+inline void GBE_DiagnosticLogEvent(const char *scope, const gbe::dota_diagnostic::Event &event)
 {
     const std::string formatted = gbe::dota_diagnostic::format_event(event);
-    GBE_ReconnectLog("GBE_RECONNECT_EVENT", "%s", formatted.c_str());
+    GBE_ReconnectLog(scope, "%s", formatted.c_str());
+}
+
+inline void GBE_ReconnectLogEvent(const gbe::dota_diagnostic::Event &event)
+{
+    GBE_DiagnosticLogEvent("GBE_RECONNECT_EVENT", event);
+}
+
+inline void GBE_LifecycleLogEvent(const gbe::dota_diagnostic::Event &event)
+{
+    GBE_DiagnosticLogEvent("GBE_LIFECYCLE_EVENT", event);
 }
 
 #endif // __INCLUDED_GBE_DOTA_RECONNECT_SHARED_H__

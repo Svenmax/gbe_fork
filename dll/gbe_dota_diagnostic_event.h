@@ -31,6 +31,9 @@ enum class Reason : std::uint8_t {
     ParseFailed,
     AlreadyQueued,
     StaleGeneration,
+    PreviousActionFailed,
+    RuntimeUpdateQueued,
+    ActionFailed,
 };
 
 enum class Source : std::uint8_t {
@@ -86,6 +89,9 @@ constexpr std::string_view describe_reason(Reason reason)
     case Reason::ParseFailed: return "parse_failed";
     case Reason::AlreadyQueued: return "already_queued";
     case Reason::StaleGeneration: return "stale_generation";
+    case Reason::PreviousActionFailed: return "previous_action_failed";
+    case Reason::RuntimeUpdateQueued: return "runtime_update_queued";
+    case Reason::ActionFailed: return "action_failed";
     case Reason::Unknown: return "unknown";
     }
     return "unknown";
@@ -94,7 +100,7 @@ constexpr std::string_view describe_reason(Reason reason)
 constexpr Reason reason_from_string(std::string_view value)
 {
     for (std::uint8_t raw = static_cast<std::uint8_t>(Reason::None);
-         raw <= static_cast<std::uint8_t>(Reason::StaleGeneration);
+         raw <= static_cast<std::uint8_t>(Reason::ActionFailed);
          ++raw) {
         const Reason reason = static_cast<Reason>(raw);
         if (describe_reason(reason) == value)

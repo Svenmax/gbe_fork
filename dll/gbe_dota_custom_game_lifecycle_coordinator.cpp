@@ -5,6 +5,42 @@
 #include "gbe_dota_custom_game_lifecycle.h"
 #include "gbe_dota_protocol_constants.h"
 
+namespace {
+
+gbe::dota_diagnostic::Event lifecycle_action_event(
+    const GBE_DotaAction &action,
+    const gbe::dota_lifecycle::ExecutionOptions &options,
+    std::uint64_t lobby_id,
+    std::uint64_t generation,
+    std::uint64_t server_id,
+    const char *event,
+    gbe::dota_diagnostic::Reason fallback_reason)
+{
+    const gbe::dota_diagnostic::Reason parsed_reason =
+        gbe::dota_diagnostic::reason_from_string(action.reason);
+    gbe::dota_diagnostic::Event diagnostic{
+        event,
+        fallback_reason == gbe::dota_diagnostic::Reason::None ? parsed_reason : fallback_reason,
+        action.type == GBE_DotaActionType::RuntimeLobbyDetailsUpdate
+            ? gbe::dota_diagnostic::Source::DelayedTask
+            : (options.wrapped ? gbe::dota_diagnostic::Source::Wrapped : gbe::dota_diagnostic::Source::Direct),
+        lobby_id,
+        generation,
+        server_id,
+        {},
+        GBE_DescribeDotaActionType(action.type),
+    };
+    if (action.emsg != 0u)
+        diagnostic = gbe::dota_diagnostic::with_message_id(
+            diagnostic,
+            action.emsg & ~Steam_Game_Coordinator::protobuf_mask);
+    if (action.job_id != 0u)
+        diagnostic = gbe::dota_diagnostic::with_job_id(diagnostic, action.job_id);
+    return diagnostic;
+}
+
+} // namespace
+
 gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLifecycleActions(
     const GBE_DotaActionList &actions,
     const gbe::dota_lifecycle::ExecutionOptions &options)
@@ -13,10 +49,31 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
     bool previous_action_succeeded = true;
     bool abort_execution = false;
     for (const GBE_DotaAction &action : actions) {
-        if (action.only_when_previous_action_succeeded && !previous_action_succeeded)
+        const std::uint64_t action_lobby_id = GBE_local_lobby.lobby_id;
+        const std::uint64_t action_generation = GBE_local_lobby.generation;
+        const std::uint64_t action_server_id = GBE_local_lobby.server_id;
+        if (action.only_when_previous_action_succeeded && !previous_action_succeeded) {
+            GBE_LifecycleLogEvent(lifecycle_action_event(
+                action,
+                options,
+                action_lobby_id,
+                action_generation,
+                action_server_id,
+                "lifecycle.action_skip",
+                gbe::dota_diagnostic::Reason::PreviousActionFailed));
             continue;
-        if (action.only_when_runtime_update_not_queued && result.runtime_update_queued)
+        }
+        if (action.only_when_runtime_update_not_queued && result.runtime_update_queued) {
+            GBE_LifecycleLogEvent(lifecycle_action_event(
+                action,
+                options,
+                action_lobby_id,
+                action_generation,
+                action_server_id,
+                "lifecycle.action_skip",
+                gbe::dota_diagnostic::Reason::RuntimeUpdateQueued));
             continue;
+        }
 
         previous_action_succeeded = true;
         switch (action.type) {
@@ -153,6 +210,18 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
             default:
                 break;
         }
+        GBE_LifecycleLogEvent(lifecycle_action_event(
+            action,
+            options,
+            action_lobby_id,
+            action_generation,
+            action_server_id,
+            action.type == GBE_DotaActionType::RuntimeLobbyDetailsUpdate
+                ? (previous_action_succeeded ? "lifecycle.delayed_task_queued" : "lifecycle.delayed_task_failure")
+                : (previous_action_succeeded ? "lifecycle.action_execution" : "lifecycle.action_failure"),
+            previous_action_succeeded
+                ? gbe::dota_diagnostic::Reason::None
+                : gbe::dota_diagnostic::Reason::ActionFailed));
         if (abort_execution) {
             result.succeeded = false;
             break;
@@ -177,7 +246,25 @@ bool Steam_Game_Coordinator::GBE_ExecuteDotaCustomGameLifecycleTransition(
     gbe::dota_lifecycle::ExecutionOptions options;
     options.wrapped = context.wrapped;
     options.outer_session_field_raw = context.outer_session_field_raw;
+    const GBE_DotaActionList actions = gbe::dota_lifecycle::build_transition_actions(effects);
+    gbe::dota_diagnostic::Event transition_event{
+        "lifecycle.transition_decision",
+        gbe::dota_diagnostic::reason_from_string(context.transition.reason),
+        context.wrapped ? gbe::dota_diagnostic::Source::Wrapped : gbe::dota_diagnostic::Source::Direct,
+        GBE_local_lobby.lobby_id,
+        GBE_local_lobby.generation,
+        GBE_local_lobby.server_id,
+        {},
+        actions.empty() ? "no_actions" : "planned",
+    };
+    if (context.trigger_emsg != 0u)
+        transition_event = gbe::dota_diagnostic::with_message_id(
+            transition_event,
+            context.trigger_emsg & ~protobuf_mask);
+    if (context.source_job != 0u)
+        transition_event = gbe::dota_diagnostic::with_job_id(transition_event, context.source_job);
+    GBE_LifecycleLogEvent(transition_event);
     return GBE_ExecuteDotaLifecycleActions(
-        gbe::dota_lifecycle::build_transition_actions(effects),
+        actions,
         options).runtime_update_queued;
 }

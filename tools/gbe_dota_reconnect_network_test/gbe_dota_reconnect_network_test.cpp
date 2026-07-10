@@ -285,6 +285,9 @@ void test_diagnostic_reason_and_source_serialization()
         {diagnostic::Reason::ParseFailed, "parse_failed"},
         {diagnostic::Reason::AlreadyQueued, "already_queued"},
         {diagnostic::Reason::StaleGeneration, "stale_generation"},
+        {diagnostic::Reason::PreviousActionFailed, "previous_action_failed"},
+        {diagnostic::Reason::RuntimeUpdateQueued, "runtime_update_queued"},
+        {diagnostic::Reason::ActionFailed, "action_failed"},
     };
     for (const auto &entry : reasons) {
         expect(diagnostic::describe_reason(entry.first) == entry.second, "diagnostic reason serialization is stable");

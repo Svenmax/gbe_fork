@@ -2662,6 +2662,13 @@ static void test_lifecycle_executor_empty_and_conditional_actions()
     TestFixture tf;
     tf.reset();
 
+    TEST_ASSERT(std::string(GBE_DescribeDotaActionType(GBE_DotaActionType::LobbyStateApply)) == "lobby_state_apply",
+        "lifecycle state action diagnostic name should remain stable");
+    TEST_ASSERT(std::string(GBE_DescribeDotaActionType(GBE_DotaActionType::RuntimeLobbyDetailsUpdate)) == "runtime_lobby_details_update",
+        "lifecycle delayed action diagnostic name should remain stable");
+    TEST_ASSERT(std::string(GBE_DescribeDotaActionType(GBE_DotaActionType::PushIncomingNow)) == "push_incoming_now",
+        "lifecycle push action diagnostic name should remain stable");
+
     const gbe::dota_lifecycle::ExecutionResult empty_result =
         tf.gc.GBE_ExecuteDotaLifecycleActions({});
     TEST_ASSERT(empty_result.succeeded, "empty lifecycle action list should succeed");

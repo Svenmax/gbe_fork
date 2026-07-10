@@ -151,6 +151,46 @@ enum class GBE_DotaActionType {
     RuntimeLobbyDetailsUpdate, // queue a runtime practice lobby details update
 };
 
+constexpr const char *GBE_DescribeDotaActionType(GBE_DotaActionType type)
+{
+    switch (type) {
+        case GBE_DotaActionType::PushIncomingNow: return "push_incoming_now";
+        case GBE_DotaActionType::PushIncoming: return "push_incoming";
+        case GBE_DotaActionType::SaveItemsToFile: return "save_items_to_file";
+        case GBE_DotaActionType::CallbackItemUpdated: return "callback_item_updated";
+        case GBE_DotaActionType::ServerGcForward: return "server_gc_forward";
+        case GBE_DotaActionType::NetworkBroadcast: return "network_broadcast";
+        case GBE_DotaActionType::GcMemoryReset: return "gc_memory_reset";
+        case GBE_DotaActionType::LobbySnapshotRefresh: return "lobby_snapshot_refresh";
+        case GBE_DotaActionType::GenericLobbyCreate: return "generic_lobby_create";
+        case GBE_DotaActionType::GenericLobbyLeave: return "generic_lobby_leave";
+        case GBE_DotaActionType::GenericLobbyJoin: return "generic_lobby_join";
+        case GBE_DotaActionType::SettingsLobbyClear: return "settings_lobby_clear";
+        case GBE_DotaActionType::RichPresenceUpdate: return "rich_presence_update";
+        case GBE_DotaActionType::RichPresenceClear: return "rich_presence_clear";
+        case GBE_DotaActionType::LaunchPersonaState: return "launch_persona_state";
+        case GBE_DotaActionType::LobbyLocalMemberData: return "lobby_local_member_data";
+        case GBE_DotaActionType::LobbyMetadataPublish: return "lobby_metadata_publish";
+        case GBE_DotaActionType::LaunchPeripheralReset: return "launch_peripheral_reset";
+        case GBE_DotaActionType::LobbyCacheSubscriptionRecord: return "lobby_cache_subscription_record";
+        case GBE_DotaActionType::LaunchStateGameStateRecord: return "launch_state_game_state_record";
+        case GBE_DotaActionType::SettingsLobbySync: return "settings_lobby_sync";
+        case GBE_DotaActionType::DotaLobbyRuntimeClear: return "dota_lobby_runtime_clear";
+        case GBE_DotaActionType::AbandonedLobbySuppressed: return "abandoned_lobby_suppressed";
+        case GBE_DotaActionType::LaunchMessagesDiscardedForAbandon: return "launch_messages_discarded_for_abandon";
+        case GBE_DotaActionType::PendingResetAfterCacheUnsubscribed: return "pending_reset_after_cache_unsubscribed";
+        case GBE_DotaActionType::PendingResetAfterCacheUnsubscribedClear: return "pending_reset_after_cache_unsubscribed_clear";
+        case GBE_DotaActionType::PendingNormalSignoutFinalizeAfterCacheUnsubscribed: return "pending_normal_signout_finalize_after_cache_unsubscribed";
+        case GBE_DotaActionType::LobbyStateApply: return "lobby_state_apply";
+        case GBE_DotaActionType::LobbyMemberRuntimeUpdate: return "lobby_member_runtime_update";
+        case GBE_DotaActionType::LaunchPhaseMark: return "launch_phase_mark";
+        case GBE_DotaActionType::SharedLobbyPublish: return "shared_lobby_publish";
+        case GBE_DotaActionType::PracticeLobbyDetailsUpdate: return "practice_lobby_details_update";
+        case GBE_DotaActionType::RuntimeLobbyDetailsUpdate: return "runtime_lobby_details_update";
+    }
+    return "unknown";
+}
+
 struct GBE_DotaAction {
     GBE_DotaActionType type{};
     uint32_t emsg{};              // PushIncomingNow / PushIncoming / ServerGcForward
