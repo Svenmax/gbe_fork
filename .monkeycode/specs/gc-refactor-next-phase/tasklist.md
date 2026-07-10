@@ -430,9 +430,15 @@
     - 边界：本任务只固定 domain vocabulary 和 transport-to-domain mapping，不引入 transition 规则或 production handler 接线；后续 14.2 和 14.4 分别负责纯 transition 与核心路径迁移。
     - 测试与构建：新增 header self-containment 和 focused mapping test，覆盖九类 transport event 的 direct/wrapped 等价、source 保留、unknown mapping 与 internal reset，并接入 fast/full shell gate 和独立 Premake target。
     - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
-  - [ ] 14.2 实现纯 transition 函数
+  - [x] 14.2 实现纯 transition 函数
     - 输入 immutable state 和 event，输出 new state、effects、decision reason 和 accepted/rejected 状态。
     - transition 内禁止执行网络、callback、日志、文件或全局状态副作用。
+    - 实现：新增 `constexpr transition(State, const Event&)`，输入仅为值语义 state/event，返回 `TransitionResult`，其中包含 next state、固定容量 effect list、typed `DecisionReason` 和 `DecisionStatus`。
+    - 基础 progression：idle 可进入 created 或 joined，created/joined 可进入 setup，随后按 loading、loaded、running、postgame、idle 单向推进；leave/abandon 从任意 active state 进入 postgame，reset 仅从 postgame 返回 idle。
+    - 决策：accepted transition 产生一个纯 `StateChanged` effect；重复目标状态返回稳定 `AlreadyInState`，乱序或非法 progression 返回 `InvalidTransition`，拒绝结果保持原状态且 effects 为空。
+    - 纯度边界：实现为 header-only constexpr 值变换，不引用 Store、coordinator、network、callback、logger、filesystem 或 mutable global state。当前 effect 仅描述 domain state change，production action 生成与执行留给 14.4。
+    - 测试：覆盖 create/join 双入口、完整正常 progression、leave/abandon teardown、reset、重复事件、乱序 loading/loaded，以及编译期 transition 求值。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
   - [ ] 14.3 将 generation 与 reconnect 规则纳入状态机
     - 建模 generation 创建、复用、失效、旧 callback、重复消息和乱序事件。
     - reconnect dedup 状态变化由明确 event 驱动。
