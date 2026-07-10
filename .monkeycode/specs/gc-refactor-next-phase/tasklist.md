@@ -231,9 +231,11 @@
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 阶段级复跑通过；registry assertions 339/339，reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
 
 - [ ] 10. P10 标准化 GC 观测与诊断事件
-  - [ ] 10.1 定义结构化事件模型
+  - [x] 10.1 定义结构化事件模型
     - 统一 event、reason、source、lobby ID、generation、server ID、endpoint、decision、message ID 和 job ID 字段。
     - 依赖：任务 4、任务 7 和任务 9。
+    - 实现：新增 dependency-light `gbe_dota_diagnostic_event.h`，以纯聚合 `gbe::dota_diagnostic::Event` 统一承载 event、reason、source、lobby ID、generation、server ID、endpoint、decision、message ID 和 job ID；message/job ID 使用独立 presence 位，保留合法零值并区分字段缺失；constexpr `with_message_id()` 与 `with_job_id()` 支持无副作用构造。独立 header compile test 验证自包含、聚合初始化、全部字段和零值 job ID presence 语义，shell/Premake 已接线。production 日志尚未迁移，既有文本和控制流保持稳定。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；新增 `diagnostic_event_header_compile` 构建通过，registry assertions 339/339，reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
   - [ ] 10.2 定义 reason/source 强类型枚举
     - 替换 reconnect 和 lifecycle 核心路径中的自由字符串分支判断。
     - 保留稳定字符串序列化用于日志与现有测试。

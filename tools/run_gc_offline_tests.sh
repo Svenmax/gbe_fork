@@ -72,6 +72,10 @@ compile_header_test \
     handler_registry_header_compile \
     tools/gbe_dota_header_compile_test/handler_registry_header_compile.cpp
 
+compile_header_test \
+    diagnostic_event_header_compile \
+    tools/gbe_dota_header_compile_test/diagnostic_event_header_compile.cpp
+
 build_and_run \
     gc_message_utils_test \
     tools/gc_message_utils_test/gc_message_utils_test.cpp \

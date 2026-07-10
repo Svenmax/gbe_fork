@@ -1382,12 +1382,14 @@ project "tool_gbe_dota_lobby_state_test"
     ---------
     files {
         "tools/gbe_dota_lobby_state_test/gbe_dota_lobby_state_test.cpp",
+        "tools/gbe_dota_header_compile_test/diagnostic_event_header_compile.cpp",
         "tools/gbe_dota_header_compile_test/handler_registry_header_compile.cpp",
         "tools/gbe_dota_header_compile_test/reconnect_shared_header_compile.cpp",
         "tools/gbe_dota_header_compile_test/serialized_connection_state_header_compile.cpp",
         "dll/gbe_dota_serialized_connection_state.cpp",
         "dll/dll/gbe_dota_serialized_connection_state.h",
         "dll/gbe_dota_connection_dedup_key.h",
+        "dll/gbe_dota_diagnostic_event.h",
         "dll/gbe_dota_handler_registry.h",
         "dll/gbe_dota_gc_router.h",
         "dll/gbe_dota_reconnect_context.cpp",
