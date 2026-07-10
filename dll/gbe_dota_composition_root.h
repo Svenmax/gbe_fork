@@ -13,6 +13,34 @@
 
 namespace gbe::dota {
 
+enum class LifecycleStage : std::uint8_t {
+    Settings,
+    Network,
+    Callbacks,
+    Store,
+    Services,
+    Coordinator,
+};
+
+constexpr LifecycleStage kLifecycleOrder[] = {
+    LifecycleStage::Settings,
+    LifecycleStage::Network,
+    LifecycleStage::Callbacks,
+    LifecycleStage::Store,
+    LifecycleStage::Services,
+    LifecycleStage::Coordinator,
+};
+
+constexpr bool has_valid_construction_order()
+{
+    return kLifecycleOrder[0] == LifecycleStage::Settings &&
+        kLifecycleOrder[1] == LifecycleStage::Network &&
+        kLifecycleOrder[2] == LifecycleStage::Callbacks &&
+        kLifecycleOrder[3] == LifecycleStage::Store &&
+        kLifecycleOrder[4] == LifecycleStage::Services &&
+        kLifecycleOrder[5] == LifecycleStage::Coordinator;
+}
+
 class LifecycleExecutor {
 public:
     virtual ~LifecycleExecutor() = default;

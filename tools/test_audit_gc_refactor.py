@@ -99,6 +99,58 @@ class ConcurrencyOwnershipAuditTest(unittest.TestCase):
         self.assertFalse([issue for issue in issues if "P11.5" in issue or "TSAN" in issue])
 
 
+class CompositionRootLifecycleAuditTest(unittest.TestCase):
+    STEAM_CLIENT = """
+    Steam_Client::Steam_Client()
+    {
+        steam_networking_sockets = new Steam_Networking_Sockets();
+        steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized();
+        steam_game_coordinator = new Steam_Game_Coordinator();
+        steam_gameserver_networking_sockets = new Steam_Networking_Sockets();
+        steam_gameserver_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized();
+        steam_gameserver_game_coordinator = new Steam_Game_Coordinator();
+    }
+    Steam_Client::~Steam_Client()
+    {
+        DEL_INST(steam_gameserver_game_coordinator);
+        DEL_INST(steam_gameserver_networking_sockets_serialized);
+        DEL_INST(steam_gameserver_networking_sockets);
+        DEL_INST(steam_game_coordinator);
+        DEL_INST(steam_networking_sockets_serialized);
+        DEL_INST(steam_networking_sockets);
+    }
+    """
+
+    def test_accepts_dependency_order_for_both_roles(self):
+        self.assertEqual([], audit.audit_composition_root_lifecycle(self.STEAM_CLIENT))
+
+    def test_rejects_coordinator_before_services(self):
+        source = self.STEAM_CLIENT.replace(
+            "        steam_networking_sockets = new Steam_Networking_Sockets();\n"
+            "        steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized();\n"
+            "        steam_game_coordinator = new Steam_Game_Coordinator();",
+            "        steam_game_coordinator = new Steam_Game_Coordinator();\n"
+            "        steam_networking_sockets = new Steam_Networking_Sockets();\n"
+            "        steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized();",
+        )
+        self.assertIn(
+            "steam_client.cpp: client GC construction must order direct sockets, serialized services, then coordinator",
+            audit.audit_composition_root_lifecycle(source),
+        )
+
+    def test_rejects_service_destroyed_before_coordinator(self):
+        source = self.STEAM_CLIENT.replace(
+            "        DEL_INST(steam_gameserver_game_coordinator);\n"
+            "        DEL_INST(steam_gameserver_networking_sockets_serialized);",
+            "        DEL_INST(steam_gameserver_networking_sockets_serialized);\n"
+            "        DEL_INST(steam_gameserver_game_coordinator);",
+        )
+        self.assertIn(
+            "steam_client.cpp: gameserver GC destruction must order coordinator, serialized services, then direct sockets",
+            audit.audit_composition_root_lifecycle(source),
+        )
+
+
 class RetiredLifecycleTransitionLayerAuditTest(unittest.TestCase):
     def test_accepts_registry_only_lifecycle_dispatch(self):
         sources = {

@@ -26,18 +26,22 @@ struct FakeCallbackScheduler final : gbe::dota::CallbackScheduler {
 struct FakeContextProvider final : GBE_DotaReconnectContextProvider {
     bool get_context(std::uint64_t, bool, GBE_DotaReconnectContext &context) override
     {
+        ++get_context_calls;
         context = next_context;
         return has_context;
     }
 
     bool reconnect_eligible() const override
     {
+        ++eligible_calls;
         return eligible;
     }
 
     bool has_context{true};
     bool eligible{true};
     GBE_DotaReconnectContext next_context{};
+    int get_context_calls{};
+    mutable int eligible_calls{};
 };
 
 struct FakeDirectConnector final : GBE_DotaReconnectDirectConnector {
@@ -131,6 +135,20 @@ void test_root_binds_all_application_dependencies()
     expect_true(&fixture.root->server().reconnect_service().direct_connector() == fixture.server_direct_connector, "server role owns reconnect connector");
 }
 
+void test_construction_does_not_execute_services()
+{
+    Fixture fixture;
+
+    expect_true(fixture.client_context_provider->get_context_calls == 0, "root construction does not query client reconnect context");
+    expect_true(fixture.client_context_provider->eligible_calls == 0, "root construction does not query client reconnect eligibility");
+    expect_true(fixture.client_direct_connector->calls == 0, "root construction does not invoke client network effects");
+    expect_true(fixture.client_callback_queue->calls == 0, "root construction does not enqueue client callbacks");
+    expect_true(fixture.server_context_provider->get_context_calls == 0, "root construction does not query server reconnect context");
+    expect_true(fixture.server_context_provider->eligible_calls == 0, "root construction does not query server reconnect eligibility");
+    expect_true(fixture.server_direct_connector->calls == 0, "root construction does not invoke server network effects");
+    expect_true(fixture.server_callback_queue->calls == 0, "root construction does not enqueue server callbacks");
+}
+
 void test_root_owns_shared_lobby_state()
 {
     Fixture fixture;
@@ -192,6 +210,7 @@ void test_reconnect_service_uses_bound_adapters()
 int main()
 {
     test_root_binds_all_application_dependencies();
+    test_construction_does_not_execute_services();
     test_root_owns_shared_lobby_state();
     test_roots_isolate_owned_state();
     test_reconnect_service_uses_bound_adapters();

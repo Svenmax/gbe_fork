@@ -854,6 +854,50 @@ def audit_shared_lobby_global_access():
     return issues
 
 
+def audit_composition_root_lifecycle(steam_client_text=None):
+    """Keep production GC owners inside their declared dependency lifetime."""
+    issues = []
+    if steam_client_text is None:
+        steam_client_text = read(os.path.join(ROOT_DIR, "dll", "steam_client.cpp"))
+
+    constructor_start = steam_client_text.find("Steam_Client::Steam_Client()")
+    destructor_start = steam_client_text.find("Steam_Client::~Steam_Client()")
+    constructor_text = steam_client_text[constructor_start:destructor_start]
+    destructor_text = steam_client_text[destructor_start:]
+    roles = (
+        (
+            "client",
+            "steam_networking_sockets = new Steam_Networking_Sockets(",
+            "steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(",
+            "steam_game_coordinator = new Steam_Game_Coordinator(",
+            "DEL_INST(steam_game_coordinator);",
+            "DEL_INST(steam_networking_sockets_serialized);",
+            "DEL_INST(steam_networking_sockets);",
+        ),
+        (
+            "gameserver",
+            "steam_gameserver_networking_sockets = new Steam_Networking_Sockets(",
+            "steam_gameserver_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(",
+            "steam_gameserver_game_coordinator = new Steam_Game_Coordinator(",
+            "DEL_INST(steam_gameserver_game_coordinator);",
+            "DEL_INST(steam_gameserver_networking_sockets_serialized);",
+            "DEL_INST(steam_gameserver_networking_sockets);",
+        ),
+    )
+    for role, direct_new, serialized_new, coordinator_new, coordinator_del, serialized_del, direct_del in roles:
+        construction = tuple(constructor_text.find(token) for token in (direct_new, serialized_new, coordinator_new))
+        if min(construction) < 0 or not construction[0] < construction[1] < construction[2]:
+            issues.append(
+                f"steam_client.cpp: {role} GC construction must order direct sockets, serialized services, then coordinator"
+            )
+        destruction = tuple(destructor_text.find(token) for token in (coordinator_del, serialized_del, direct_del))
+        if min(destruction) < 0 or not destruction[0] < destruction[1] < destruction[2]:
+            issues.append(
+                f"steam_client.cpp: {role} GC destruction must order coordinator, serialized services, then direct sockets"
+            )
+    return issues
+
+
 def audit_concurrency_ownership_contract():
     """Keep the P11.1 state-owner and lock-boundary contract complete."""
     if not os.path.exists(CONCURRENCY_OWNERSHIP_MD):
@@ -1157,7 +1201,19 @@ def main():
     print()
 
     print("=" * 70)
-    print("AUDIT 15: Layered GC CI gates")
+    print("AUDIT 15: Composition root lifecycle")
+    print("=" * 70)
+    print("  Action: keep coordinators inside the lifetime of their GC services and infrastructure.")
+    composition_root_lifecycle_issues = audit_composition_root_lifecycle()
+    if not composition_root_lifecycle_issues:
+        print("  Client and gameserver GC construction and destruction follow the declared dependency order")
+    else:
+        for issue in composition_root_lifecycle_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
+    print("AUDIT 16: Layered GC CI gates")
     print("=" * 70)
     print("  Action: keep fast, production, and sanitizer PR checks separate and blocking.")
     layered_ci_issues = audit_layered_ci_gates()
@@ -1188,9 +1244,10 @@ def main():
     print(f"  Reconnect transition-layer issues:   {len(reconnect_transition_issues)}")
     print(f"  Shared lobby compatibility issues:   {len(shared_lobby_compatibility_issues)}")
     print(f"  Architecture boundary issues:        {len(architecture_boundary_issues)}")
+    print(f"  Composition root lifecycle issues:   {len(composition_root_lifecycle_issues)}")
     print(f"  Layered CI gate issues:               {len(layered_ci_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or layered_ci_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or layered_ci_issues:
         sys.exit(1)
 
 

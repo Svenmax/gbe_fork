@@ -212,10 +212,10 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_gameserver_inventory);
     DEL_INST(steam_gameserver_ugc);
     DEL_INST(steam_gameserver_apps);
+    DEL_INST(steam_gameserver_game_coordinator);
     DEL_INST(steam_gameserver_networking_sockets_serialized);
     DEL_INST(steam_gameserver_networking_sockets);
     DEL_INST(steam_gameserver_networking_messages);
-    DEL_INST(steam_gameserver_game_coordinator);
     DEL_INST(steam_masterserver_updater);
     DEL_INST(steam_gameserver);
     DEL_INST(steam_gameserver_gamestats);
@@ -238,10 +238,10 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_inventory);
     DEL_INST(steam_video);
     DEL_INST(steam_parental);
+    DEL_INST(steam_game_coordinator);
     DEL_INST(steam_networking_sockets_serialized);
     DEL_INST(steam_networking_sockets);
     DEL_INST(steam_networking_messages);
-    DEL_INST(steam_game_coordinator);
     DEL_INST(steam_networking_utils);
     DEL_INST(steam_unified_messages);
     DEL_INST(steam_game_search);

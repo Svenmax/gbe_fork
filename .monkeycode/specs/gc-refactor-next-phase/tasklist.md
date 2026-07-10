@@ -371,9 +371,14 @@
     - 测试：新增 header self-containment 与 focused composition-root tests，覆盖六类依赖绑定、ownership 转移后的引用稳定、client/server Store 共享、双 root 状态隔离，以及 reconnect service 对 owned adapters 的调用。
     - 构建：新模块接入 fast/full shell gate 和独立 Premake test target；Audit 6 识别的 testable split GC TU 从 17 增至 18，shell/Premake source-list 均完整。
     - 验证：GCC `run_gc_verification.sh --full`、Clang fast offline gate 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 23/23，15 项 audit 0 问题，TSAN 无 race。
-  - [ ] 13.2 明确对象生命周期和构造顺序
+  - [x] 13.2 明确对象生命周期和构造顺序
     - 定义 settings、network、callbacks、store、services、coordinator 的初始化和销毁顺序。
     - 禁止 service 在构造期间访问尚未完成初始化的依赖。
+    - 契约：`LifecycleStage` 以单一 canonical 序列定义 `Settings -> Network -> Callbacks -> Store -> Services -> Coordinator`；销毁严格反向执行，避免维护第二份平行清单。
+    - production：保留 client/server direct sockets、serialized sockets、game coordinator 的现有构造相对顺序；销毁顺序调整为 coordinator 先于 serialized/direct sockets，确保 coordinator 始终位于其 GC services 和 network infrastructure 生命周期内。
+    - 构造安全：focused composition-root test 通过带调用计数的 fakes 断言 root 构造只接管依赖，不查询 reconnect context、不执行 direct network effect、不入队 callback。
+    - 架构门禁：新增 Audit 15，直接检查 `Steam_Client` 的 client/gameserver production 构造和销毁顺序；注入式正反 fixtures 验证 coordinator 提前构造或延后销毁均会失败。layered CI gate 顺延为 Audit 16。
+    - 验证：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 26/26，16 项 production audit 零问题，TSAN 无 race。
   - [ ] 13.3 将业务依赖改为显式注入
     - 从 reconnect、lifecycle、registry 和 store 调用链开始迁移构造参数或窄 context 引用。
     - Steam 兼容入口只定位所属实例并转发调用。
