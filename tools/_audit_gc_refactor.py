@@ -130,6 +130,15 @@ RETIRED_LIFECYCLE_HANDLER_SYMBOLS = (
     "GBE_HandleDotaWrappedCustomGameLifecycleRequest",
 )
 RETIRED_LIFECYCLE_FALLBACK_EMSGS = ("7070u", "8052u", "8053u")
+RETIRED_RECONNECT_TRANSITION_SYMBOLS = (
+    "GBE_DotaReconnectSharedStateSnapshot",
+    "GBE_GetSharedDotaReconnectStateSnapshot",
+    "source_from_shared_snapshot",
+    "build_reconnect_context",
+    "describe_source_kind",
+    "describe_reject_reason",
+    "GBE_DescribeDotaReconnectPostSkipReason",
+)
 HIGH_RISK_REASON_STRINGS = [
     "equip_forward_host_resubscribe_server",
     "equip_items_refresh",
@@ -480,6 +489,49 @@ def audit_retired_lifecycle_transition_layers(source_texts=None):
     for emsg in RETIRED_LIFECYCLE_FALLBACK_EMSGS:
         if re.search(r"\b" + re.escape(emsg) + r"\b", post_login_text):
             issues.append(f"gbe_dota_post_login_handlers.cpp: lifecycle emsg {emsg} bypasses the typed registry")
+    return issues
+
+
+def audit_retired_reconnect_transition_layers(source_texts=None):
+    """Prevent retired reconnect mappings and lobby-id state APIs from returning."""
+    if source_texts is None:
+        source_texts = {}
+        for path in glob.glob(os.path.join(ROOT_DIR, "dll", "**", "*.h"), recursive=True):
+            source_texts[os.path.relpath(path, ROOT_DIR)] = read(path)
+        for path in glob.glob(os.path.join(ROOT_DIR, "dll", "*.cpp")):
+            source_texts[os.path.relpath(path, ROOT_DIR)] = read(path)
+
+    issues = []
+    for source_name, source_text in source_texts.items():
+        uncommented = strip_comments(source_text)
+        for symbol in RETIRED_RECONNECT_TRANSITION_SYMBOLS:
+            if re.search(r"\b" + re.escape(symbol) + r"\b", uncommented):
+                issues.append(f"{source_name}: retired reconnect transition symbol {symbol} returned")
+
+    serialized_header = strip_comments(source_texts.get(
+        "dll/dll/gbe_dota_serialized_connection_state.h",
+        source_texts.get("gbe_dota_serialized_connection_state.h", ""),
+    ))
+    state_match = re.search(
+        r"struct\s+GBE_DotaSerializedConnectionState\s*\{(?P<body>.*?)\n\s*\};",
+        serialized_header,
+        re.S,
+    )
+    if not state_match:
+        issues.append("gbe_dota_serialized_connection_state.h: serialized reconnect state declaration is missing")
+        return issues
+
+    state_body = state_match.group("body")
+    if re.search(r"\blobby_id\b", state_body):
+        issues.append("gbe_dota_serialized_connection_state.h: serialized reconnect state restored lobby_id compatibility state")
+    if re.search(r"\bbegin_lobby\s*\(", state_body):
+        issues.append("gbe_dota_serialized_connection_state.h: serialized reconnect state restored begin_lobby compatibility API")
+
+    begin_generation = re.search(r"\bbegin_generation\s*\((?P<parameters>[^)]*)\)", state_body)
+    if not begin_generation:
+        issues.append("gbe_dota_serialized_connection_state.h: generation-scoped begin_generation API is missing")
+    elif "=" in begin_generation.group("parameters"):
+        issues.append("gbe_dota_serialized_connection_state.h: begin_generation restored a default generation")
     return issues
 
 
@@ -854,6 +906,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 12: Retired reconnect transition layers")
+    print("=" * 70)
+    print("  Action: keep reconnect source mapping canonical and serialized state generation-scoped.")
+    reconnect_transition_issues = audit_retired_reconnect_transition_layers()
+    if not reconnect_transition_issues:
+        print(f"  All {len(RETIRED_RECONNECT_TRANSITION_SYMBOLS)} retired reconnect symbols remain absent; serialized state remains generation-scoped")
+    else:
+        for issue in reconnect_transition_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -870,8 +934,9 @@ def main():
     print(f"  Lifecycle ownership issues:          {len(lifecycle_ownership_issues)}")
     print(f"  Shared lobby global access issues:   {len(shared_lobby_global_issues)}")
     print(f"  Concurrency ownership issues:        {len(concurrency_ownership_issues)}")
+    print(f"  Reconnect transition-layer issues:   {len(reconnect_transition_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues:
         sys.exit(1)
 
 

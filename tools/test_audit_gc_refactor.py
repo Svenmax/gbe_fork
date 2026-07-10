@@ -125,5 +125,48 @@ class RetiredLifecycleTransitionLayerAuditTest(unittest.TestCase):
         )
 
 
+class RetiredReconnectTransitionLayerAuditTest(unittest.TestCase):
+    def test_accepts_canonical_mapping_and_generation_state(self):
+        sources = {
+            "gbe_dota_reconnect_context.cpp": "Source source_from_shared_lobby_snapshot(const Shared &snapshot);",
+            "gbe_dota_serialized_connection_state.h": """
+                struct GBE_DotaSerializedConnectionState {
+                    std::uint64_t generation{};
+                    void begin_generation(std::uint64_t current_generation);
+                };
+            """,
+        }
+        self.assertEqual([], audit.audit_retired_reconnect_transition_layers(sources))
+
+    def test_rejects_retired_mapping_and_lobby_id_state(self):
+        sources = {
+            "gbe_dota_reconnect_context.cpp": "Source source_from_shared_snapshot(const Snapshot &snapshot);",
+            "gbe_dota_serialized_connection_state.h": """
+                struct GBE_DotaSerializedConnectionState {
+                    std::uint64_t lobby_id{};
+                    void begin_lobby(std::uint64_t lobby_id, std::uint64_t generation = 0);
+                    void begin_generation(std::uint64_t current_generation = 0);
+                };
+            """,
+        }
+        issues = audit.audit_retired_reconnect_transition_layers(sources)
+        self.assertIn(
+            "gbe_dota_reconnect_context.cpp: retired reconnect transition symbol source_from_shared_snapshot returned",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_serialized_connection_state.h: serialized reconnect state restored lobby_id compatibility state",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_serialized_connection_state.h: serialized reconnect state restored begin_lobby compatibility API",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_serialized_connection_state.h: begin_generation restored a default generation",
+            issues,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
