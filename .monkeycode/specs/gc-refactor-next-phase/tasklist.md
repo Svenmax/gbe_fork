@@ -138,7 +138,7 @@
   - [x] 6.8 检查点：确保所有测试通过，如有疑问请询问用户
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 156/156，payload helpers 252/252，handler smoke 70/70，replay fixtures 7 组，audit 9 项 0 问题。
 
-- [ ] 7. P6 引入显式 Lobby Generation
+- [x] 7. P6 引入显式 Lobby Generation
   - [x] 7.1 定义 generation 类型和分配规则
     - 明确创建、加入、离开、重置和恢复大厅时 generation 的变化规则。
     - 使用单调递增值并定义进程生命周期内的溢出行为。
@@ -164,7 +164,8 @@
     - 属性 P6-B：旧 generation action 永远不能修改当前 lobby state。
     - 属性 P6-C：generation 变化清除所有代际内去重记录。
     - 实现：P6-A 对 64 条序列各执行 32 次混合 Create/Join/Leave/Reset/Recover boundary，断言每次严格加一；P6-B 对 64 个同 lobby ID 场景推进不同 boundary 后投递旧 runtime action，断言状态与 incoming queue 不变；P6-C 对 64 组 serialized connection state 断言 generation 变化清除 retry、payload、server、direct-connect 和 callback 去重状态。
-  - [ ] 7.7 检查点：确保所有测试通过，如有疑问请询问用户
+  - [x] 7.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 165/165，callsystem guard 4/4，payload helpers 257/257，handler smoke 75/75，replay fixtures 7 组，audit 9 项 0 问题。
 
 - [ ] 8. P7 收敛全局大厅共享状态访问
   - [ ] 8.1 定义 lobby state store 接口
