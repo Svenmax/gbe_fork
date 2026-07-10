@@ -38,3 +38,7 @@ This contract records the current thread ownership and synchronization boundarie
 
 - Recent reconnect context relies on caller-held `global_mutex`; a future dedicated synchronization owner may narrow this process-wide dependency.
 - Any future entrypoint that touches serialized connection state or the adapter probe cache must use the same instance synchronizer and lock order.
+
+## Bounded Stress Gate
+
+`gbe_dota_concurrency_stress_test` runs one writer and four readers across 1,000 generations. The writer combines monotonic publish, matching and stale compare/update, and clear operations. Each reader validates one immutable snapshot version and builds a reconnect context from that same value. The gate requires zero torn snapshots, zero context identity drift, zero stale mutator execution, and a complete final generation.

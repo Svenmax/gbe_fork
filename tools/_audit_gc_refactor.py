@@ -594,6 +594,25 @@ def audit_concurrency_ownership_contract():
     effects_pos = serialized_text.find("GBE_ExecuteDotaReconnectPostEffects(", unlock_pos)
     if min(post_pos, instance_lock_pos, process_lock_pos, prepare_pos, unlock_pos, effects_pos) < 0 or not process_lock_pos < instance_lock_pos < prepare_pos < unlock_pos < effects_pos:
         issues.append("steam_networking_socketsserialized.cpp: reconnect process-lock/instance-lock/prepare/process-unlock/effects order is missing")
+
+    stress_path = os.path.join(ROOT_DIR, "tools", "gbe_dota_concurrency_stress_test", "gbe_dota_concurrency_stress_test.cpp")
+    stress_text = read(stress_path) if os.path.exists(stress_path) else ""
+    for required in (
+        "store.snapshot()",
+        "store.publish_if_generation_current_or_newer(",
+        "store.compare_update(",
+        "store.clear()",
+        "gbe::dota_reconnect::build_context(",
+        "torn_snapshots.load() == 0u",
+        "stale_mutator_calls.load() == 0u",
+    ):
+        if required not in stress_text:
+            issues.append(f"gbe_dota_concurrency_stress_test.cpp: missing P11.4 boundary {required}")
+    shell_text = read(os.path.join(ROOT_DIR, "tools", "run_gc_offline_tests.sh"))
+    premake_text = read(os.path.join(ROOT_DIR, "premake5.lua"))
+    for owner, text in (("run_gc_offline_tests.sh", shell_text), ("premake5.lua", premake_text)):
+        if "gbe_dota_concurrency_stress_test" not in text:
+            issues.append(f"{owner}: missing P11.4 concurrency stress test wiring")
     return issues
 
 

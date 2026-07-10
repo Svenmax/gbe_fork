@@ -284,8 +284,11 @@
     - 锁序：统一为 `global_mutex -> serialized instance mutex`，兼容可能已持有递归 process lock 的入口。同实例 connection state 与 recovery probe cache 在 prepare 期间串行，client 与 gameserver serialized sockets 使用独立实例域；锁外 effects 依靠锁内 dedup 预留保持单次提交语义。
     - 测试与审计：focused concurrency test 通过受控条件变量证明同一 synchronizer 阻止重叠操作并在释放后推进下一操作，同时证明两个独立 synchronizer 可同时进入。Audit 11 要求实例 synchronizer 成员存在，并固定 production `process lock -> instance lock -> prepare -> process unlock -> effects` 顺序。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 262/262，callsystem guard 8/8，registry assertions 339/339，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit helper 8/8，audit 11 项 0 问题。
-  - [ ] 11.4 增加并发压力单元测试
+  - [x] 11.4 增加并发压力单元测试
     - 有界并发执行 snapshot/read/update/clear/context build，断言无崩溃、无 torn snapshot、无 stale write 生效。
+    - 实现：新增独立 `gbe_dota_concurrency_stress_test`，以 1 个 writer 和 4 个 reader 执行 1,000 个 generation 的有界历史。writer 交替执行完整 monotonic publish、matching compare/update、stale compare/update 和周期 clear；reader 每次只读取一个 immutable snapshot，校验 generation、lobby/server/custom game/owner/endpoint/string/vector 字段属于同一完整版本，并从该版本通过 production reconnect source/context builder 生成 context。
+    - 验收：断言 reader 全部执行、torn snapshot 为零、context identity 漂移为零、999 次 stale update 全部返回 `StaleGeneration`、stale mutator 调用为零，并验证最终 generation 1001 的完整状态。测试接入 fast/full shell 门禁与 Premake target；Audit 11 要求关键操作、零错误断言和双入口接线持续存在。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；concurrency stress 通过，reconnect network 262/262，callsystem guard 8/8，registry assertions 339/339，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit helper 8/8，audit 11 项 0 问题。
   - [ ] 11.5 增加 ThreadSanitizer CI target
     - 构建最小 GC state/reconnect 测试集并执行 TSAN。
     - 将确定性 data race 作为 PR 阻断条件。

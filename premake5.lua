@@ -1437,6 +1437,42 @@ project "tool_gbe_dota_lobby_state_store_test"
 -- End tool_gbe_dota_lobby_state_store_test
 
 
+-- Project tool_gbe_dota_concurrency_stress_test
+project "tool_gbe_dota_concurrency_stress_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_concurrency_stress_test"))
+    targetname "gbe_dota_concurrency_stress_test_%{cfg.platform}"
+
+    files {
+        "tools/gbe_dota_concurrency_stress_test/gbe_dota_concurrency_stress_test.cpp",
+        "dll/gbe_dota_lobby_state_store.cpp",
+        "dll/gbe_dota_lobby_state_store.h",
+        "dll/gbe_dota_reconnect_context.cpp",
+        "dll/gbe_dota_reconnect_context.h",
+        "dll/gbe_dota_chat_flow.cpp",
+        "dll/gbe_dota_chat_flow.h",
+        "dll/gbe_dota_lobby_launch_flow.cpp",
+        "dll/gbe_dota_lobby_launch_flow.h",
+        "dll/gbe_dota_lobby_member_flow.cpp",
+        "dll/gbe_dota_lobby_member_flow.h",
+        "dll/gbe_dota_lobby_payload_flow.cpp",
+        "dll/gbe_dota_lobby_payload_flow.h",
+        "dll/gbe_dota_lobby_flow.cpp",
+        "dll/gbe_dota_lobby_flow.h",
+        "dll/gbe_dota_lobby_state.cpp",
+        "dll/gbe_dota_lobby_state.h",
+        "dll/gbe_dota_custom_game.cpp",
+        "dll/gbe_dota_custom_game.h",
+        "dll/gbe_dota_gc_wire.cpp",
+        "dll/gbe_dota_gc_wire.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+        "dll/gbe_dota_types.h",
+    }
+-- End tool_gbe_dota_concurrency_stress_test
+
+
 -- Project tool_gbe_dota_handler_registry_test
 project "tool_gbe_dota_handler_registry_test"
     kind "ConsoleApp"
