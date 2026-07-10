@@ -208,8 +208,9 @@
     - 使用 registry 驱动 direct 与 wrapped 分发。
     - 保持未知消息 fallback 和日志行为。
     - 实现：现有 24 项表全部迁移为 typed `Entry`；16 项声明 `DirectAndWrapped + ForwardWrappedSession`，8 项声明 `Direct + Ignore`，查找同时匹配 message ID 与 request path，session pointer 按 policy 生成；adapter、线性扫描顺序、成功命中后的日志文本和未命中返回 false fallback 保持稳定。
-  - [ ] 9.3 从 registry 生成审计数据
+  - [x] 9.3 从 registry 生成审计数据
     - audit 直接读取或解析 registry，移除手工维护的平行 dispatch 清单。
+    - 实现：Audit 4 直接解析 production `kTable` 的六个 typed 字段，并按 adapter 名称提取 lambda 与实际 `GBE_HandleDota*Request` 调用；自动检查 entry 解析完整性、adapter 存在性与孤立项、单 handler 调用、direct path guard、session policy、handler identity 和 lifecycle class，entry 总数由 registry 自动计算，Python 中两份 24 项平行清单已移除。
   - [ ] 9.4 建立 fixture 关联机制
     - 每个高风险 registry entry 关联 smoke/replay fixture 标识。
     - CI 审计缺失 fixture 的新增高风险 handler。

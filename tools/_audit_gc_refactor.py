@@ -131,36 +131,6 @@ HIGH_RISK_REASON_STRINGS = [
 ]
 RETIRED_SHARED_LOBBY_GLOBAL = "GBE_shared_dota_lobby_state"
 
-POST_LOGIN_DISPATCH_ENTRIES = [
-    ("GBE_kDotaJoinChatChannel", "adapt_join_chat_channel", "GBE_HandleDotaJoinChatChannelRequest"),
-    ("GBE_kDotaPracticeLobbyCreate", "adapt_practice_lobby_create", "GBE_HandleDotaPracticeLobbyCreateRequest"),
-    ("GBE_kDotaLobbyList", "adapt_lobby_list", "GBE_HandleDotaLobbyListRequest"),
-    ("GBE_kDotaCustomLobbyListRequest", "adapt_custom_lobby_list", "GBE_HandleDotaCustomLobbyListRequest"),
-    ("GBE_kDotaFriendPracticeLobbyListRequest", "adapt_friend_practice_lobby_list", "GBE_HandleDotaFriendPracticeLobbyListRequest"),
-    ("GBE_kGCInviteToLobby", "adapt_invite_to_lobby", "GBE_HandleDotaInviteToLobbyRequest"),
-    ("GBE_kGCLobbyInviteResponse", "adapt_lobby_invite_response", "GBE_HandleDotaLobbyInviteResponseRequest"),
-    ("GBE_kDotaPracticeLobbyJoin", "adapt_practice_lobby_join", "GBE_HandleDotaPracticeLobbyJoinRequest"),
-    ("GBE_kDotaPracticeLobbyLeave", "adapt_practice_lobby_leave", "GBE_HandleDotaPracticeLobbyLeaveRequest"),
-    ("GBE_kDotaPracticeLobbyLaunch", "adapt_practice_lobby_launch", "GBE_HandleDotaPracticeLobbyLaunchRequest"),
-    ("GBE_kDotaPracticeLobbySetDetails", "adapt_practice_lobby_set_details", "GBE_HandleDotaPracticeLobbySetDetailsRequest"),
-    ("GBE_kDotaPracticeLobbySetTeamSlot", "adapt_practice_lobby_set_team_slot", "GBE_HandleDotaPracticeLobbySetTeamSlotRequest"),
-    ("GBE_kDotaPracticeLobbyKick", "adapt_practice_lobby_kick", "GBE_HandleDotaPracticeLobbyKickRequest"),
-    ("GBE_kDotaPracticeLobbyJoinBroadcastChannel", "adapt_practice_lobby_join_broadcast", "GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest"),
-    ("GBE_kDotaLobbyUpdateBroadcastChannelInfo", "adapt_lobby_update_broadcast_info", "GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest"),
-    ("GBE_kDotaPracticeLobbyCloseBroadcastChannel", "adapt_practice_lobby_close_broadcast", "GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest"),
-]
-
-POST_LOGIN_DIRECT_DISPATCH_ENTRIES = [
-    ("7427u", "adapt_direct_7427_notifications", "GBE_HandleDota7427NotificationsRequest"),
-    ("4523u", "adapt_direct_upload_rate", "GBE_HandleDotaUploadRateRequest"),
-    ("8879u", "adapt_direct_rank", "GBE_HandleDotaRankRequest"),
-    ("7534u", "adapt_direct_profile_card", "GBE_HandleDotaProfileCardRequest"),
-    ("2581u", "adapt_direct_lookup_account_name", "GBE_HandleDotaLookupAccountNameRequest"),
-    ("7503u", "adapt_direct_emoticon_data", "GBE_HandleDotaEmoticonDataRequest"),
-    ("8095u", "adapt_direct_conduct_scorecard", "GBE_HandleDotaConductScorecardRequest"),
-    ("8800u", "adapt_direct_coaching_summary", "GBE_HandleDotaCoachingSummaryRequest"),
-]
-
 
 def read(path):
     with open(path, "r", encoding="utf-8", errors="replace") as f:
@@ -250,53 +220,66 @@ def extract_defined_symbols(tu_paths):
 def audit_post_login_dispatch(main_text):
     start = main_text.find("bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest")
     if start < 0:
-        return ["GBE_DispatchDotaPostLoginRequest definition not found"]
+        return ["GBE_DispatchDotaPostLoginRequest definition not found"], 0
     end = main_text.find("bool Steam_Game_Coordinator::gc_enabled", start)
     dispatch_text = main_text[start:end if end >= 0 else len(main_text)]
 
-    issues = []
-    for emsg, adapter, handler in POST_LOGIN_DISPATCH_ENTRIES:
-        table_pattern = re.compile(
-            r"\{\s*" + re.escape(emsg) +
-            r"\s*,\s*registry::RequestMode::DirectAndWrapped\s*,.*?\b" + re.escape(adapter) + r"\s*,",
-        )
-        if not table_pattern.search(dispatch_text):
-            issues.append(f"{emsg}: missing table entry for {adapter}")
+    table_start = dispatch_text.find("static const registry::Entry kTable[]")
+    table_end = dispatch_text.find("};", table_start)
+    if table_start < 0 or table_end < 0:
+        return ["typed post-login registry table not found"], 0
+    table_text = dispatch_text[table_start:table_end]
 
-        adapter_pattern = re.compile(
-            r"auto\s+" + re.escape(adapter) + r"\s*=.*?return\s+self->" + re.escape(handler) + r"\s*\(",
-            re.DOTALL,
-        )
-        if not adapter_pattern.search(dispatch_text):
-            issues.append(f"{adapter}: missing adapter call to {handler}")
-
-    for emsg, adapter, handler in POST_LOGIN_DIRECT_DISPATCH_ENTRIES:
-        table_pattern = re.compile(
-            r"\{\s*" + re.escape(emsg) +
-            r"\s*,\s*registry::RequestMode::Direct\s*,.*?\b" + re.escape(adapter) + r"\s*,",
-        )
-        if not table_pattern.search(dispatch_text):
-            issues.append(f"{emsg}: missing direct-only table entry for {adapter}")
-
-        adapter_pattern = re.compile(
-            r"auto\s+" + re.escape(adapter) +
-            r"\s*=.*?DotaGcRequestPath::Direct.*?return\s+self->" + re.escape(handler) + r"\s*\(",
-            re.DOTALL,
-        )
-        if not adapter_pattern.search(dispatch_text):
-            issues.append(f"{adapter}: missing direct path guard or call to {handler}")
-
-    found_entries = re.findall(
-        r"\{\s*(GBE_k[A-Za-z0-9_]+|\d+u)\s*,\s*registry::RequestMode::[A-Za-z]+\s*,.*?\b(adapt_[A-Za-z0-9_]+)\s*,",
-        dispatch_text,
+    entry_pattern = re.compile(
+        r"\{\s*(GBE_k[A-Za-z0-9_]+|\d+u)\s*,\s*"
+        r"registry::RequestMode::([A-Za-z]+)\s*,\s*"
+        r"registry::SessionPolicy::([A-Za-z]+)\s*,\s*"
+        r"registry::LifecycleClass::([A-Za-z]+)\s*,\s*"
+        r"(adapt_[A-Za-z0-9_]+)\s*,\s*"
+        r"registry::HandlerId::([A-Za-z0-9_]+)\s*\}",
     )
-    expected_pairs = {(emsg, adapter) for emsg, adapter, _ in POST_LOGIN_DISPATCH_ENTRIES}
-    expected_pairs.update((emsg, adapter) for emsg, adapter, _ in POST_LOGIN_DIRECT_DISPATCH_ENTRIES)
-    found_pairs = set(found_entries)
-    for emsg, adapter in sorted(found_pairs - expected_pairs):
-        issues.append(f"{emsg}: unexpected dispatch table adapter {adapter}")
+    entries = entry_pattern.findall(table_text)
 
-    return issues
+    adapter_pattern = re.compile(
+        r"auto\s+(adapt_[A-Za-z0-9_]+)\s*=\s*\+\[\]\(.*?\)\s*->\s*bool\s*\{(.*?)\n\s*\};",
+        re.DOTALL,
+    )
+    adapters = dict(adapter_pattern.findall(dispatch_text[:table_start]))
+
+    issues = []
+    raw_entry_count = len(re.findall(r"^\s*\{", table_text, re.MULTILINE))
+    if len(entries) != raw_entry_count:
+        issues.append(f"registry parse covered {len(entries)} of {raw_entry_count} entries")
+
+    registered_adapters = set()
+    for emsg, mode, session_policy, lifecycle, adapter, handler_id in entries:
+        registered_adapters.add(adapter)
+        body = adapters.get(adapter)
+        if body is None:
+            issues.append(f"{emsg}: registry adapter {adapter} has no lambda definition")
+            continue
+
+        handler_calls = re.findall(r"self->(GBE_HandleDota[A-Za-z0-9_]+Request)\s*\(", body)
+        if len(handler_calls) != 1:
+            issues.append(f"{emsg}: {adapter} calls {len(handler_calls)} request handlers")
+
+        has_direct_guard = "DotaGcRequestPath::Direct" in body
+        if mode == "Direct" and not has_direct_guard:
+            issues.append(f"{emsg}: direct-only adapter {adapter} has no direct path guard")
+        if mode == "DirectAndWrapped" and has_direct_guard:
+            issues.append(f"{emsg}: dual-mode adapter {adapter} contains a direct-only path guard")
+
+        if mode == "Direct" and session_policy != "Ignore":
+            issues.append(f"{emsg}: direct-only entry forwards wrapped session metadata")
+        if handler_id == "Unknown":
+            issues.append(f"{emsg}: registry entry has unknown handler identity")
+        if lifecycle not in {"None", "LobbyRead", "LobbyMutation", "LobbyLifecycle"}:
+            issues.append(f"{emsg}: registry entry has unknown lifecycle class {lifecycle}")
+
+    for adapter in sorted(set(adapters) - registered_adapters):
+        issues.append(f"{adapter}: adapter lambda is not referenced by the typed registry")
+
+    return issues, len(entries)
 
 
 def audit_template_blob_ownership(tu_paths):
@@ -521,10 +504,9 @@ def main():
     print("AUDIT 4: Post-login dispatch table mapping")
     print("=" * 70)
     print("  Action: keep the dispatch table aligned with the original post-login switch mapping.")
-    dispatch_issues = audit_post_login_dispatch(main_text)
+    dispatch_issues, total_entries = audit_post_login_dispatch(main_text)
     if not dispatch_issues:
-        total_entries = len(POST_LOGIN_DISPATCH_ENTRIES) + len(POST_LOGIN_DIRECT_DISPATCH_ENTRIES)
-        print(f"  All {total_entries} dispatch entries map to the expected handlers")
+        print(f"  All {total_entries} typed registry entries resolve to one handler adapter")
     else:
         for issue in dispatch_issues:
             print(f"  {issue}")
