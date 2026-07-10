@@ -6,6 +6,7 @@
 #include "gbe_dota_custom_game_lifecycle.h"
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_lobby_state.h"
+#include "gbe_dota_lifecycle_state_machine.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -30,6 +31,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameLifecycleRequest(const gbe:
 
     const uint8 *body = reinterpret_cast<const uint8 *>(context.body.data());
     const size_t body_size = context.body.size();
+    const gbe::dota_lifecycle_state_machine::EventMapping event_mapping =
+        gbe::dota_lifecycle_state_machine::event_from_message(context.inner_emsg, context.wrapped);
+    if (!event_mapping.mapped)
+        return true;
+
+    gbe::dota_lifecycle_state_machine::CustomGameRequestState request_state{};
+    request_state.machine.generation = GBE_CurrentDotaLobbyGeneration();
+    request_state.lobby_state = GBE_local_lobby.state;
+    request_state.game_state = GBE_local_lobby.game_state;
+    request_state.launch_phase = GBE_local_lobby.launch_phase;
+    request_state.has_custom_game = true;
+    request_state.has_launch_server_setup = gbe::dota_lobby_state::has_launch_server_setup_sync(GBE_local_lobby);
 
     if (context.inner_emsg == 7070u) {
         const auto request = gbe::proto_wire::parse_dota7070_ready_up_request(body, body_size);
@@ -40,6 +53,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameLifecycleRequest(const gbe:
             else
                 push_incoming_now(7170u | GBE_kProtoMask, response_7170);
         }
+
+        gbe::dota_lifecycle_state_machine::CustomGameRequest machine_request{};
+        machine_request.event = event_mapping.event;
+        machine_request.ready_state = request.ready_state;
+        const auto transition = gbe::dota_lifecycle_state_machine::transition_custom_game_request(
+            request_state,
+            machine_request,
+            GBE_kDotaLaunchPhaseSetupSynced,
+            GBE_kDotaLaunchPhaseRunQueued);
+        if (!transition.accepted() || !transition.effects.contains(
+                gbe::dota_lifecycle_state_machine::EffectKind::LegacyLifecycleActionsRequested))
+            return true;
 
         const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision ready_up =
             gbe::dota_lobby_state::compute_custom_game_ready_up_transition(
@@ -70,6 +95,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameLifecycleRequest(const gbe:
         if (request.start_time != 0)
             GBE_local_lobby.game_start_time = static_cast<uint32>(request.start_time);
 
+        request_state.has_launch_server_setup = gbe::dota_lobby_state::has_launch_server_setup_sync(GBE_local_lobby);
+        gbe::dota_lifecycle_state_machine::CustomGameRequest machine_request{};
+        machine_request.event = event_mapping.event;
+        const auto transition = gbe::dota_lifecycle_state_machine::transition_custom_game_request(
+            request_state,
+            machine_request,
+            GBE_kDotaLaunchPhaseSetupSynced,
+            GBE_kDotaLaunchPhaseRunQueued);
+        if (!transition.accepted() || !transition.effects.contains(
+                gbe::dota_lifecycle_state_machine::EffectKind::LegacyLifecycleActionsRequested))
+            return true;
+
         const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision started_loading =
             gbe::dota_lobby_state::compute_custom_game_started_loading_transition(
                 GBE_local_lobby, true, GBE_kDotaLaunchPhaseSetupSynced,
@@ -92,6 +129,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameLifecycleRequest(const gbe:
     if (load_result.lobby_id != 0 && load_result.lobby_id != GBE_local_lobby.lobby_id)
         return true;
     const bool load_failed = gbe::proto_wire::dota8053_indicates_load_failure(load_result.result_code, load_result.result_text);
+    gbe::dota_lifecycle_state_machine::CustomGameRequest machine_request{};
+    machine_request.event = event_mapping.event;
+    machine_request.load_failed = load_failed;
+    const auto transition = gbe::dota_lifecycle_state_machine::transition_custom_game_request(
+        request_state,
+        machine_request,
+        GBE_kDotaLaunchPhaseSetupSynced,
+        GBE_kDotaLaunchPhaseRunQueued);
+    if (!transition.accepted() || !transition.effects.contains(
+            gbe::dota_lifecycle_state_machine::EffectKind::LegacyLifecycleActionsRequested))
+        return true;
+
     const char *reason = context.wrapped
         ? (load_failed ? "8053_wrapped_load_failed" : "8053_wrapped_finished_loading")
         : (load_failed ? "8053_load_failed" : "8053_finished_loading");

@@ -71,6 +71,7 @@ enum class DecisionReason : std::uint8_t {
     ReconnectQueued,
     ReconnectAlreadyQueued,
     TerminalState,
+    RequestIgnored,
 };
 
 enum class EffectKind : std::uint8_t {
@@ -78,6 +79,7 @@ enum class EffectKind : std::uint8_t {
     GenerationAdvanced,
     ReconnectQueued,
     PracticeLobbyDetailsRequested,
+    LegacyLifecycleActionsRequested,
 };
 
 struct Effect {
@@ -94,6 +96,15 @@ struct EffectList {
     constexpr bool empty() const
     {
         return count == 0u;
+    }
+
+    constexpr bool contains(EffectKind kind) const
+    {
+        for (std::size_t index = 0u; index < count; ++index) {
+            if (values[index].kind == kind)
+                return true;
+        }
+        return false;
     }
 };
 
@@ -370,6 +381,75 @@ constexpr MachineTransitionResult transition_runtime_poll(
         DecisionReason::TransitionApplied,
         DecisionStatus::Accepted,
     };
+}
+
+struct CustomGameRequestState {
+    MachineState machine{};
+    std::uint32_t lobby_state{};
+    std::uint32_t game_state{};
+    std::uint32_t launch_phase{};
+    bool has_custom_game{};
+    bool has_launch_server_setup{};
+};
+
+struct CustomGameRequest {
+    Event event{};
+    std::uint32_t ready_state{};
+    bool load_failed{};
+};
+
+constexpr MachineTransitionResult accepted_custom_game_request(
+    MachineState state,
+    State lifecycle)
+{
+    const State previous_lifecycle = state.lifecycle;
+    state.lifecycle = lifecycle;
+    EffectList effects{};
+    if (previous_lifecycle != lifecycle) {
+        effects.values[effects.count++] = {
+            EffectKind::StateChanged,
+            previous_lifecycle,
+            lifecycle,
+            state.generation,
+        };
+    }
+    effects.values[effects.count++] = {
+        EffectKind::LegacyLifecycleActionsRequested,
+        lifecycle,
+        lifecycle,
+        state.generation,
+    };
+    return { state, effects, DecisionReason::TransitionApplied, DecisionStatus::Accepted };
+}
+
+constexpr MachineTransitionResult transition_custom_game_request(
+    const CustomGameRequestState &state,
+    const CustomGameRequest &request,
+    std::uint32_t setup_synced_launch_phase,
+    std::uint32_t run_queued_launch_phase)
+{
+    if (request.event.generation != 0u && request.event.generation != state.machine.generation)
+        return rejected_machine_transition(state.machine, DecisionReason::StaleGeneration);
+    if (!state.has_custom_game)
+        return rejected_machine_transition(state.machine, DecisionReason::RequestIgnored);
+
+    switch (request.event.kind) {
+        case EventKind::Run:
+            if (request.ready_state != 1u || state.lobby_state != 2u || state.game_state >= 1u ||
+                state.launch_phase < run_queued_launch_phase)
+                return rejected_machine_transition(state.machine, DecisionReason::RequestIgnored);
+            return accepted_custom_game_request(state.machine, State::Running);
+        case EventKind::Loading:
+            if (state.has_launch_server_setup && state.launch_phase >= setup_synced_launch_phase)
+                return accepted_custom_game_request(state.machine, State::Loading);
+            return accepted_custom_game_request(state.machine, state.machine.lifecycle);
+        case EventKind::Loaded:
+            return accepted_custom_game_request(
+                state.machine,
+                request.load_failed ? state.machine.lifecycle : State::Loaded);
+        default:
+            return rejected_machine_transition(state.machine, DecisionReason::InvalidTransition);
+    }
 }
 
 } // namespace gbe::dota_lifecycle_state_machine

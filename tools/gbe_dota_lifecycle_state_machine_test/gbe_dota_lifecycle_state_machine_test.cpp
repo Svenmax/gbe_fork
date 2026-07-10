@@ -237,6 +237,61 @@ int main()
     assert(stale_poll.reason == lifecycle::DecisionReason::StaleGeneration);
     assert(stale_poll.effects.empty());
 
+    lifecycle::CustomGameRequestState custom_game{};
+    custom_game.machine.generation = 12u;
+    custom_game.lobby_state = 2u;
+    custom_game.game_state = 0u;
+    custom_game.launch_phase = 3u;
+    custom_game.has_custom_game = true;
+    lifecycle::CustomGameRequest ready_up{};
+    ready_up.event = { lifecycle::EventKind::Run, lifecycle::EventSource::Direct, 7070u, 0u, 0u, 0u };
+    ready_up.ready_state = 1u;
+    const auto ready_up_result = lifecycle::transition_custom_game_request(custom_game, ready_up, 2u, 3u);
+    assert(ready_up_result.accepted());
+    assert(ready_up_result.state.lifecycle == lifecycle::State::Running);
+    assert(ready_up_result.effects.count == 2u);
+    assert(ready_up_result.effects.values[1].kind == lifecycle::EffectKind::LegacyLifecycleActionsRequested);
+    assert(ready_up_result.effects.contains(lifecycle::EffectKind::LegacyLifecycleActionsRequested));
+    assert(!ready_up_result.effects.contains(lifecycle::EffectKind::ReconnectQueued));
+
+    custom_game.game_state = 1u;
+    const auto duplicate_ready_up = lifecycle::transition_custom_game_request(custom_game, ready_up, 2u, 3u);
+    assert(!duplicate_ready_up.accepted());
+    assert(duplicate_ready_up.reason == lifecycle::DecisionReason::RequestIgnored);
+
+    custom_game.game_state = 0u;
+    custom_game.launch_phase = 2u;
+    custom_game.has_launch_server_setup = true;
+    lifecycle::CustomGameRequest loading{};
+    loading.event = { lifecycle::EventKind::Loading, lifecycle::EventSource::Wrapped, 8052u, 0u, 0u, 0u };
+    const auto loading_result = lifecycle::transition_custom_game_request(custom_game, loading, 2u, 3u);
+    assert(loading_result.accepted());
+    assert(loading_result.state.lifecycle == lifecycle::State::Loading);
+
+    custom_game.has_launch_server_setup = false;
+    custom_game.launch_phase = 3u;
+    const auto loading_fallback = lifecycle::transition_custom_game_request(custom_game, loading, 2u, 3u);
+    assert(loading_fallback.accepted());
+    assert(loading_fallback.state.lifecycle == custom_game.machine.lifecycle);
+    assert(loading_fallback.effects.count == 1u);
+
+    lifecycle::CustomGameRequest loaded{};
+    loaded.event = { lifecycle::EventKind::Loaded, lifecycle::EventSource::Direct, 8053u, 0u, 0u, 0u };
+    const auto loaded_result = lifecycle::transition_custom_game_request(custom_game, loaded, 2u, 3u);
+    assert(loaded_result.accepted());
+    assert(loaded_result.state.lifecycle == lifecycle::State::Loaded);
+
+    loaded.load_failed = true;
+    const auto load_failed_result = lifecycle::transition_custom_game_request(custom_game, loaded, 2u, 3u);
+    assert(load_failed_result.accepted());
+    assert(load_failed_result.state.lifecycle == custom_game.machine.lifecycle);
+    assert(load_failed_result.effects.count == 1u);
+
+    loading.event.generation = 11u;
+    const auto stale_custom_loading = lifecycle::transition_custom_game_request(custom_game, loading, 2u, 3u);
+    assert(!stale_custom_loading.accepted());
+    assert(stale_custom_loading.reason == lifecycle::DecisionReason::StaleGeneration);
+
     std::cout << "gbe_dota_lifecycle_state_machine_test passed\n";
     return 0;
 }
