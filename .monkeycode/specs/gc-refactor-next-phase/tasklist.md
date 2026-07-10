@@ -139,10 +139,11 @@
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 156/156，payload helpers 252/252，handler smoke 70/70，replay fixtures 7 组，audit 9 项 0 问题。
 
 - [ ] 7. P6 引入显式 Lobby Generation
-  - [ ] 7.1 定义 generation 类型和分配规则
+  - [x] 7.1 定义 generation 类型和分配规则
     - 明确创建、加入、离开、重置和恢复大厅时 generation 的变化规则。
     - 使用单调递增值并定义进程生命周期内的溢出行为。
     - 依赖：任务 4 和任务 6。
+    - 实现：`Generation` 使用 `uint64`，零值表示未分配；`Create/Join/Leave/Reset/Recover` 均推进一次 generation；达到 `UINT64_MAX` 后拒绝分配并保持最大值，禁止回绕复用旧代际。
   - [ ] 7.2 将 generation 加入 lobby snapshot 与 reconnect context
     - `lobby_id` 保持协议身份，generation 专门用于本地异步状态代际。
     - 更新 shared、recent、local、generic recovery 和 serialized state。

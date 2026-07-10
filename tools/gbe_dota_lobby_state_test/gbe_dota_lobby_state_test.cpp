@@ -12,6 +12,7 @@
 
 #include "dll/gbe_dota_lobby_state.h"
 #include "dll/gbe_dota_lifecycle_actions.h"
+#include "dll/gbe_dota_lobby_generation.h"
 #include "dll/gbe_dota_reconnect_context.h"
 #include "dll/gbe_dota_types.h"
 #include "dll/dll/gbe_dota_reconnect_shared.h"
@@ -20,6 +21,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -548,6 +550,48 @@ bool test_lifecycle_action_properties()
     ok &= expect_true(
         gbe::dota_lifecycle::build_transition_actions(empty_effects).empty(),
         "P5-C empty effects produce no actions");
+    return ok;
+}
+
+bool test_lobby_generation_allocation_rules()
+{
+    using gbe::dota_lobby_generation::Boundary;
+    using gbe::dota_lobby_generation::Counter;
+    using gbe::dota_lobby_generation::Generation;
+
+    bool ok = true;
+    Counter counter;
+    ok &= expect_false(counter.current().assigned(), "unallocated generation starts at zero");
+
+    const Boundary boundaries[] = {
+        Boundary::Create,
+        Boundary::Join,
+        Boundary::Leave,
+        Boundary::Reset,
+        Boundary::Recover,
+    };
+    std::uint64_t expected = 0u;
+    for (Boundary boundary : boundaries) {
+        const auto result = counter.advance(boundary);
+        ++expected;
+        ok &= expect_true(result.advanced, "lifecycle boundary advances generation");
+        ok &= expect_eq_u64(result.previous.value, expected - 1u, "generation result preserves previous value");
+        ok &= expect_eq_u64(result.current.value, expected, "generation increments exactly once per boundary");
+        ok &= expect_true(result.boundary == boundary, "generation result preserves boundary reason");
+        ok &= expect_true(
+            gbe::dota_lobby_generation::is_newer(result.current, result.previous),
+            "advanced generation is strictly newer");
+    }
+
+    const Generation maximum{std::numeric_limits<std::uint64_t>::max()};
+    Counter exhausted(maximum);
+    const auto overflow = exhausted.advance(Boundary::Create);
+    ok &= expect_false(overflow.advanced, "maximum generation refuses allocation");
+    ok &= expect_eq_u64(overflow.previous.value, maximum.value, "overflow preserves previous generation");
+    ok &= expect_eq_u64(overflow.current.value, maximum.value, "overflow never wraps generation");
+    ok &= expect_false(
+        gbe::dota_lobby_generation::is_newer(Generation{}, maximum),
+        "wrapped zero is never newer than maximum generation");
     return ok;
 }
 
@@ -1599,6 +1643,7 @@ int main()
     ok &= test_launch_lifecycle_transition_decision();
     ok &= test_launch_lifecycle_action_sequence();
     ok &= test_lifecycle_action_properties();
+    ok &= test_lobby_generation_allocation_rules();
     ok &= test_stale_generic_lobby_state_regression();
     ok &= test_owner_disconnect_and_reconnect();
     ok &= test_reconnect_eligibility_decision();
