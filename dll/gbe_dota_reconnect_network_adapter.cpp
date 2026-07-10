@@ -15,8 +15,21 @@ bool is_current_dota_reconnect_generation(const void *guard_context, unsigned in
     std::uint64_t expected_generation{};
     std::memcpy(&expected_generation, guard_context, sizeof(expected_generation));
     GBE_DotaReconnectContext current_context{};
-    return GBE_GetDotaReconnectContext(&current_context)
-        && current_context.generation == expected_generation;
+    const bool has_context = GBE_GetDotaReconnectContext(&current_context);
+    const bool current = has_context && current_context.generation == expected_generation;
+    if (!current) {
+        GBE_ReconnectLogEvent({
+            "reconnect.callback_generation",
+            gbe::dota_diagnostic::Reason::StaleGeneration,
+            gbe::dota_diagnostic::Source::DelayedTask,
+            has_context ? current_context.lobby_id : 0u,
+            expected_generation,
+            has_context ? current_context.server_id : 0u,
+            has_context ? current_context.connect : "",
+            "rejected",
+        });
+    }
+    return current;
 }
 
 } // namespace

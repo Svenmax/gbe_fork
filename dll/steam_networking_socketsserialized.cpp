@@ -732,6 +732,19 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         *reconnect_direct_connector,
         *reconnect_callback_queue,
         dota_connection_state);
+    const GBE_DotaReconnectContext &ctx = result.context;
+    if (result.has_context) {
+        GBE_ReconnectLogEvent({
+            "reconnect.retry",
+            result.skip_reason,
+            gbe::dota_diagnostic::Source::SerializedState,
+            ctx.lobby_id,
+            ctx.generation,
+            ctx.server_id,
+            result.endpoint,
+            std::to_string(result.retry_count),
+        });
+    }
     if (!result.has_context ||
         result.skip_reason == GBE_DotaReconnectPostSkipReason::OrdinaryPracticeLobby ||
         result.skip_reason == GBE_DotaReconnectPostSkipReason::ReconnectIneligible)
@@ -740,7 +753,6 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     const std::string payload_prefix = GBE_FormatPayloadPrefix(pMsg, cbMsg);
     const std::string payload_fields = GBE_FormatSerializedPayloadFields(pMsg, cbMsg);
     const std::string payload_details = GBE_FormatSerializedStateDetails(pMsg, cbMsg);
-    const GBE_DotaReconnectContext &ctx = result.context;
     const auto decision = gbe::dota_lobby_state::compute_reconnect_interception_decision(
         ctx,
         result.has_context,
@@ -783,34 +795,33 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     }
 
     if (result.direct_connect_attempted) {
-        if (result.direct_connect_parse_failed) {
-            GBE_ReconnectLog(
-                "GBE_RECONNECT_DIAG",
-                "skipped direct ConnectByIPAddress reason=parse_failed server_id=%llu endpoint=%s",
-                (unsigned long long)ctx.server_id,
-                result.endpoint.c_str()
-            );
-        } else {
-            GBE_ReconnectLog(
-                "GBE_RECONNECT_DIAG",
-                "direct ConnectByIPAddress source=PostConnectionStateMsg server_id=%llu endpoint=%s connection=%u options=IP_AllowWithoutAuth:2,IPLocalHost_AllowWithoutAuth:2,Unencrypted:2",
-                (unsigned long long)ctx.server_id,
-                result.endpoint.c_str(),
-                result.connection
-            );
-        }
+        GBE_ReconnectLogEvent({
+            "reconnect.direct_connect",
+            result.direct_connect_parse_failed
+                ? gbe::dota_diagnostic::Reason::ParseFailed
+                : gbe::dota_diagnostic::Reason::None,
+            gbe::dota_diagnostic::Source::Direct,
+            ctx.lobby_id,
+            ctx.generation,
+            ctx.server_id,
+            result.endpoint,
+            result.direct_connect_parse_failed
+                ? "skipped"
+                : (result.direct_connect_succeeded ? "connected" : "failed"),
+        });
     }
 
     if (result.callback_already_queued) {
-        GBE_ReconnectLog(
-            "GBE_RECONNECT_DIAG",
-            "skipped engine callback source=PostConnectionStateMsg reason=already_queued retry=%u size_changed=%u server_id=%llu endpoint=%s endpoint_raw=%s",
-            result.retry_count,
-            result.size_changed ? 1u : 0u,
-            (unsigned long long)ctx.server_id,
-            result.endpoint.c_str(),
-            ctx.connect
-        );
+        GBE_ReconnectLogEvent({
+            "reconnect.callback",
+            gbe::dota_diagnostic::Reason::AlreadyQueued,
+            gbe::dota_diagnostic::Source::CallbackQueue,
+            ctx.lobby_id,
+            ctx.generation,
+            ctx.server_id,
+            result.endpoint,
+            "deduplicated",
+        });
         return;
     }
 
@@ -826,15 +837,16 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         payload_details.c_str()
     );
 
-    GBE_ReconnectLog(
-        "GBE_RECONNECT_DIAG",
-        "queued callback id=%d type=GameServerChangeRequested delay=0.00 source=PostConnectionStateMsg retry=%u once=1 server_id=%llu endpoint=%s endpoint_raw=%s",
-        GameServerChangeRequested_t::k_iCallback,
-        result.retry_count,
-        (unsigned long long)ctx.server_id,
-        result.endpoint.c_str(),
-        ctx.connect
-    );
+    GBE_ReconnectLogEvent({
+        "reconnect.callback",
+        gbe::dota_diagnostic::Reason::None,
+        gbe::dota_diagnostic::Source::CallbackQueue,
+        ctx.lobby_id,
+        ctx.generation,
+        ctx.server_id,
+        result.endpoint,
+        result.callback_queued ? "queued" : "skipped",
+    });
 
     const std::string connect_command = std::string("+connect ") + result.endpoint;
     GBE_ReconnectLog(

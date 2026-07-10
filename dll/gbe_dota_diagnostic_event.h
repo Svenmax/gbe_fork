@@ -2,6 +2,7 @@
 #define GBE_DOTA_DIAGNOSTIC_EVENT_H
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace gbe::dota_diagnostic {
@@ -27,6 +28,9 @@ enum class Reason : std::uint8_t {
     FinishedLoading,
     LoadFailed,
     LaunchPoll,
+    ParseFailed,
+    AlreadyQueued,
+    StaleGeneration,
 };
 
 enum class Source : std::uint8_t {
@@ -38,6 +42,8 @@ enum class Source : std::uint8_t {
     Direct,
     Wrapped,
     DelayedTask,
+    SerializedState,
+    CallbackQueue,
 };
 
 struct Event {
@@ -77,6 +83,9 @@ constexpr std::string_view describe_reason(Reason reason)
     case Reason::FinishedLoading: return "8053_finished_loading";
     case Reason::LoadFailed: return "8053_load_failed";
     case Reason::LaunchPoll: return "7034_launch_poll";
+    case Reason::ParseFailed: return "parse_failed";
+    case Reason::AlreadyQueued: return "already_queued";
+    case Reason::StaleGeneration: return "stale_generation";
     case Reason::Unknown: return "unknown";
     }
     return "unknown";
@@ -85,7 +94,7 @@ constexpr std::string_view describe_reason(Reason reason)
 constexpr Reason reason_from_string(std::string_view value)
 {
     for (std::uint8_t raw = static_cast<std::uint8_t>(Reason::None);
-         raw <= static_cast<std::uint8_t>(Reason::LaunchPoll);
+         raw <= static_cast<std::uint8_t>(Reason::StaleGeneration);
          ++raw) {
         const Reason reason = static_cast<Reason>(raw);
         if (describe_reason(reason) == value)
@@ -104,6 +113,8 @@ constexpr std::string_view describe_source(Source source)
     case Source::Direct: return "direct";
     case Source::Wrapped: return "wrapped";
     case Source::DelayedTask: return "delayed_task";
+    case Source::SerializedState: return "serialized_state";
+    case Source::CallbackQueue: return "callback_queue";
     case Source::Unknown: return "unknown";
     }
     return "unknown";
@@ -112,13 +123,35 @@ constexpr std::string_view describe_source(Source source)
 constexpr Source source_from_string(std::string_view value)
 {
     for (std::uint8_t raw = static_cast<std::uint8_t>(Source::Shared);
-         raw <= static_cast<std::uint8_t>(Source::DelayedTask);
+         raw <= static_cast<std::uint8_t>(Source::CallbackQueue);
          ++raw) {
         const Source source = static_cast<Source>(raw);
         if (describe_source(source) == value)
             return source;
     }
     return Source::Unknown;
+}
+
+inline std::string format_event(const Event &event)
+{
+    std::string output = "event=";
+    output.append(event.event);
+    output += " reason=";
+    output.append(describe_reason(event.reason));
+    output += " source=";
+    output.append(describe_source(event.source));
+    output += " lobby_id=" + std::to_string(event.lobby_id);
+    output += " generation=" + std::to_string(event.generation);
+    output += " server_id=" + std::to_string(event.server_id);
+    output += " endpoint=";
+    output.append(event.endpoint.empty() ? std::string_view{"-"} : event.endpoint);
+    output += " decision=";
+    output.append(event.decision.empty() ? std::string_view{"-"} : event.decision);
+    output += " message_id=";
+    output += event.has_message_id ? std::to_string(event.message_id) : "-";
+    output += " job_id=";
+    output += event.has_job_id ? std::to_string(event.job_id) : "-";
+    return output;
 }
 
 constexpr Event with_message_id(Event event, std::uint32_t message_id)

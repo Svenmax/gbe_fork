@@ -282,6 +282,9 @@ void test_diagnostic_reason_and_source_serialization()
         {diagnostic::Reason::FinishedLoading, "8053_finished_loading"},
         {diagnostic::Reason::LoadFailed, "8053_load_failed"},
         {diagnostic::Reason::LaunchPoll, "7034_launch_poll"},
+        {diagnostic::Reason::ParseFailed, "parse_failed"},
+        {diagnostic::Reason::AlreadyQueued, "already_queued"},
+        {diagnostic::Reason::StaleGeneration, "stale_generation"},
     };
     for (const auto &entry : reasons) {
         expect(diagnostic::describe_reason(entry.first) == entry.second, "diagnostic reason serialization is stable");
@@ -299,6 +302,8 @@ void test_diagnostic_reason_and_source_serialization()
         {diagnostic::Source::Direct, "direct"},
         {diagnostic::Source::Wrapped, "wrapped"},
         {diagnostic::Source::DelayedTask, "delayed_task"},
+        {diagnostic::Source::SerializedState, "serialized_state"},
+        {diagnostic::Source::CallbackQueue, "callback_queue"},
     };
     for (const auto &entry : sources) {
         expect(diagnostic::describe_source(entry.first) == entry.second, "diagnostic source serialization is stable");
@@ -309,6 +314,29 @@ void test_diagnostic_reason_and_source_serialization()
 
     expect(std::string(GBE_DescribeDotaReconnectPostSkipReason(GBE_DotaReconnectPostSkipReason::NoContext)) == "no_context", "legacy skip reason describe stays stable");
     expect(std::string(GBE_DescribeDotaReconnectPostSkipReason(GBE_DotaReconnectPostSkipReason::MissingEndpoint)) == "missing_endpoint", "legacy missing endpoint describe stays stable");
+
+    diagnostic::Event event{
+        "reconnect.callback",
+        diagnostic::Reason::AlreadyQueued,
+        diagnostic::Source::CallbackQueue,
+        42u,
+        7u,
+        99u,
+        "10.20.30.40:27015",
+        "deduplicated",
+    };
+    event = diagnostic::with_message_id(event, 0u);
+    event = diagnostic::with_job_id(event, 0u);
+    const std::string formatted = diagnostic::format_event(event);
+    expect(
+        formatted == "event=reconnect.callback reason=already_queued source=callback_queue lobby_id=42 generation=7 server_id=99 endpoint=10.20.30.40:27015 decision=deduplicated message_id=0 job_id=0",
+        "diagnostic event format and field order are stable");
+    expect(formatted.find("payload") == std::string::npos && formatted.find("password") == std::string::npos && formatted.find("endpoint_raw") == std::string::npos, "diagnostic event omits sensitive and raw payload fields");
+
+    const std::string minimal = diagnostic::format_event({"reconnect.context_selection"});
+    expect(
+        minimal == "event=reconnect.context_selection reason=unknown source=unknown lobby_id=0 generation=0 server_id=0 endpoint=- decision=- message_id=- job_id=-",
+        "diagnostic event absent fields use stable placeholders");
 }
 
 void test_properties()

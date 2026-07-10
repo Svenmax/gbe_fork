@@ -242,8 +242,11 @@
     - 实现：`gbe_dota_diagnostic_event.h` 新增统一 `Reason` 与 `Source` 枚举、constexpr `describe_reason()`/`reason_from_string()` 和 `describe_source()`/`source_from_string()`；reconnect `SourceKind`、context reject reason 和 post skip reason 复用统一类型，既有 describe API 委托集中序列化。lifecycle 核心路径将 runtime reset reconnect 保留、7034 custom runtime member refresh、7272 chat leave kick 判定，以及 7034 launch poll/8053 loading result details suppression 从 `strcmp` 分支迁移为枚举比较。原始 reason/source 字符串保持稳定，未知值统一映射 `Unknown`。
     - 测试：reconnect focused suite 增加 58 条断言，覆盖 20 个 reason、8 个 source、双向字符串映射、unknown fallback 和 legacy skip describe API；runtime reset 单测改为直接传入强类型 reason。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 223/223，registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
-  - [ ] 10.3 迁移 reconnect 诊断日志
+  - [x] 10.3 迁移 reconnect 诊断日志
     - 覆盖 context source selection、connect、dedup、callback、retry 和 stale generation。
+    - 实现：新增集中 `format_event()` 与 `GBE_ReconnectLogEvent()` sink adapter，按固定顺序输出 event、reason、source、lobby ID、generation、server ID、endpoint、decision、message ID 和 job ID；缺失文本与可选 ID 使用稳定 `-` 占位。context selection、direct connect、callback dedup/queue、retry、callback generation guard、queued lobby message 和 delayed task stale-generation 拒绝点已迁移到结构化事件；endpoint 仅记录规范化连接地址，message ID 使用 masked ID，日志不携带 serialized payload、raw state、session 或密码。
+    - 测试：reason/source inventory 扩展为 23 个 reason 和 10 个 source；reconnect focused suite 增加 13 条断言，覆盖新增映射往返、固定字段顺序、合法零值 message/job ID、缺失字段占位和敏感字段排除，断言总数增至 236/236。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 236/236，registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
   - [ ] 10.4 迁移生命周期诊断日志
     - 覆盖 transition decision、action execution、skip、failure 和 delayed task。
   - [ ] 10.5 增加事件格式与字段测试

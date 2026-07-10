@@ -483,6 +483,16 @@ bool Steam_Game_Coordinator::GBE_IsQueuedLobbyMessageCurrent(const GC_Message &m
         message.lobby_id == GBE_local_lobby.lobby_id &&
         message.generation == GBE_CurrentDotaLobbyGeneration();
     if (!current) {
+        GBE_ReconnectLogEvent(gbe::dota_diagnostic::with_message_id({
+            "reconnect.stale_generation",
+            gbe::dota_diagnostic::Reason::StaleGeneration,
+            gbe::dota_diagnostic::Source::CallbackQueue,
+            message.lobby_id,
+            message.generation,
+            0u,
+            {},
+            std::to_string(GBE_CurrentDotaLobbyGeneration()),
+        }, GBE_GC_MaskedEMsg(message.msg_type)));
         GBE_GC_DebugLog(
             "GC_CALLBACK",
             "rejected stale lobby message reason=stale_generation stage=%s msg=%u queued_lobby_id=%llu queued_generation=%llu current_lobby_id=%llu current_generation=%llu",
@@ -918,6 +928,16 @@ Steam_Game_Coordinator::GBE_DotaDeferredTaskConsumeResult Steam_Game_Coordinator
     slot = {};
 
     if (result.status == GBE_DotaDeferredTaskStatus::Stale) {
+        GBE_ReconnectLogEvent({
+            "reconnect.stale_generation",
+            gbe::dota_diagnostic::Reason::StaleGeneration,
+            gbe::dota_diagnostic::Source::DelayedTask,
+            result.lobby_id,
+            result.generation,
+            0u,
+            {},
+            std::to_string(GBE_CurrentDotaLobbyGeneration()),
+        });
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Rejected stale deferred task reason=stale_generation task=%s queued_lobby_id=%llu queued_generation=%llu current_lobby_id=%llu current_generation=%llu",

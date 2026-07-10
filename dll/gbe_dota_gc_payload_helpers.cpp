@@ -235,9 +235,30 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
             has_recent_context,
             gbe::dota_reconnect::SourceKind::Recent),
     });
-    if (!selection.selected)
+    if (!selection.selected) {
+        GBE_ReconnectLogEvent({
+            "reconnect.context_selection",
+            selection.reject_reason,
+            selection.source_kind,
+            0u,
+            0u,
+            0u,
+            {},
+            "rejected",
+        });
         return false;
+    }
     *out = selection.context;
+    GBE_ReconnectLogEvent({
+        "reconnect.context_selection",
+        gbe::dota_diagnostic::Reason::Selected,
+        selection.source_kind,
+        selection.context.lobby_id,
+        selection.context.generation,
+        selection.context.server_id,
+        selection.context.connect,
+        "selected",
+    });
     return true;
 }
 

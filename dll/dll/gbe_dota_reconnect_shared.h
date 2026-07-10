@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <cstdarg>
 
+#include "../gbe_dota_diagnostic_event.h"
+
 // Shared state for Dota 2 LAN reconnect interception.
 // Written by steam_game_coordinator.cpp, read by steam_networking_socketsserialized.cpp.
 
@@ -81,6 +83,12 @@ inline void GBE_ReconnectLog(const char *scope, const char *fmt, ...)
     va_end(args);
     std::fprintf(f, "\n");
     std::fclose(f);
+}
+
+inline void GBE_ReconnectLogEvent(const gbe::dota_diagnostic::Event &event)
+{
+    const std::string formatted = gbe::dota_diagnostic::format_event(event);
+    GBE_ReconnectLog("GBE_RECONNECT_EVENT", "%s", formatted.c_str());
 }
 
 #endif // __INCLUDED_GBE_DOTA_RECONNECT_SHARED_H__
