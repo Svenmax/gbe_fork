@@ -3,6 +3,7 @@
 
 #include "gbe_dota_gc_router.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -89,6 +90,37 @@ constexpr bool supports_mode(RequestMode modes, dota_gc_router::DotaGcRequestPat
 constexpr bool forwards_wrapped_session(SessionPolicy policy)
 {
     return policy == SessionPolicy::ForwardWrappedSession;
+}
+
+constexpr const Entry *find_entry(
+    const Entry *entries,
+    std::size_t entry_count,
+    std::uint32_t message_id,
+    dota_gc_router::DotaGcRequestPath path)
+{
+    for (std::size_t index = 0; index < entry_count; ++index) {
+        const Entry &entry = entries[index];
+        if (entry.message_id == message_id && supports_mode(entry.modes, path))
+            return &entry;
+    }
+    return nullptr;
+}
+
+constexpr bool has_unique_message_ids_per_mode(const Entry *entries, std::size_t entry_count)
+{
+    for (std::size_t left = 0; left < entry_count; ++left) {
+        for (std::size_t right = left + 1; right < entry_count; ++right) {
+            if (entries[left].message_id != entries[right].message_id)
+                continue;
+            if (supports_mode(entries[left].modes, dota_gc_router::DotaGcRequestPath::Direct) &&
+                supports_mode(entries[right].modes, dota_gc_router::DotaGcRequestPath::Direct))
+                return false;
+            if (supports_mode(entries[left].modes, dota_gc_router::DotaGcRequestPath::Wrapped) &&
+                supports_mode(entries[right].modes, dota_gc_router::DotaGcRequestPath::Wrapped))
+                return false;
+        }
+    }
+    return true;
 }
 
 } // namespace gbe::dota_handler_registry

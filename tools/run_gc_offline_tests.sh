@@ -104,6 +104,10 @@ build_and_run \
     dll/gbe_dota_lobby_state_store.cpp
 
 build_and_run \
+    gbe_dota_handler_registry_test \
+    tools/gbe_dota_handler_registry_test/gbe_dota_handler_registry_test.cpp
+
+build_and_run \
     gbe_proto_wire_test \
     tools/gbe_proto_wire_test/gbe_proto_wire_test.cpp \
     dll/gbe_proto_wire.cpp \

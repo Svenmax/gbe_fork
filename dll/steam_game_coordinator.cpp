@@ -356,13 +356,11 @@ bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc
         { 8800u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_coaching_summary, registry::HandlerId::CoachingSummary, nullptr },
     };
 
-    const registry::Entry *entry = nullptr;
-    for (const auto &e : kTable) {
-        if (e.message_id == context.inner_emsg && registry::supports_mode(e.modes, context.path)) {
-            entry = &e;
-            break;
-        }
-    }
+    const registry::Entry *entry = registry::find_entry(
+        kTable,
+        sizeof(kTable) / sizeof(kTable[0]),
+        context.inner_emsg,
+        context.path);
     if (!entry)
         return false;
 
