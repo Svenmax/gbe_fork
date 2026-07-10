@@ -331,9 +331,13 @@
     - 测试 harness：payload helper 与 handler smoke harness 使用真实 `gbe::dota_lobby_state::Store` owner，删除测试内旧 facade 和 mutable backing global；shell 与 Premake target 显式链接 `gbe_dota_lobby_state_store.cpp`。payload Store contract 覆盖增至 546/546，handler smoke 保持 77/77。
     - 门禁：新增 Audit 13，拒绝 10 个退役 shared lobby compatibility symbol 和 `GBE_shared_dota_lobby_state` 回流；正反 fixture 将 audit helper 增至 15/15。production `dll/**/*.{h,cpp}` 无退役符号残留。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 通过；reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 546/546，handler smoke 77/77，replay fixtures 7 组，audit helper 15/15，audit 13 项 0 问题，TSAN 无 race。
-  - [ ] 12.4 收紧架构 audit
+  - [x] 12.4 收紧架构 audit
     - 禁止 handler 高风险副作用直调、共享状态直访、平行 dispatch 表和 reconnect 手工字段映射。
     - 验收：为每条规则添加正反 fixture，确保 audit 能真实失败。
+    - 实现：Audit 7 的 handler side-effect scanner 支持注入 source text 与独立 baseline，保留 production 49 次调用和 20 项显式基线。新增 Audit 14，限制 typed post-login registry 只能位于 `steam_game_coordinator.cpp` 的 canonical owner，拒绝该 owner 旁的第二张 registry 表和 post-login owner 中基于 `request_emsg`/`inner_emsg` 的 message switch；template replay 的合法 `switch (request_emsg)` 保持允许。
+    - reconnect 与 shared 边界：Audit 14 拒绝 `gbe_dota_reconnect_context.cpp` 之外对 `GBE_DotaReconnectSource`/`GBE_DotaReconnectContext` canonical 字段的逐字段赋值，并复用 Audit 13 的退役 shared lobby facade/global 检查，避免维护平行符号库存。
+    - fixtures：新增 approved executor seam、canonical registry、canonical reconnect owner 和 Store snapshot 正例，以及 handler 直调、额外 registry、post-login switch、owner 外 reconnect mapping 和退役 shared facade 反例；审计 helper 增至 21/21。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 通过；reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 546/546，handler smoke 77/77，replay fixtures 7 组，audit helper 21/21，audit 14 项 0 问题，TSAN 无 race。
   - [ ] 12.5 完善分层 CI 门禁
     - 快速层：offline unit、property、replay、audit、diff check。
     - 生产层：Windows/Linux `api_experimental` x64 release。
