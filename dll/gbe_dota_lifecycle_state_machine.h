@@ -82,6 +82,7 @@ enum class EffectKind : std::uint8_t {
     LegacyLifecycleActionsRequested,
     RuntimeMemberUpdateRequested,
     RuntimeGameStateUpdateRequested,
+    LegacyTeardownActionsRequested,
 };
 
 struct Effect {
@@ -491,6 +492,49 @@ struct RuntimeGameStateRequest {
     std::uint32_t current_game_state{};
     std::uint32_t launch_phase{};
 };
+
+enum class TeardownStage : std::uint8_t {
+    Initiate,
+    Finalize,
+};
+
+struct TeardownRequest {
+    Event event{};
+    TeardownStage stage{TeardownStage::Initiate};
+    bool active{};
+    bool pending{};
+};
+
+constexpr MachineTransitionResult transition_teardown(
+    MachineState state,
+    const TeardownRequest &request)
+{
+    if (request.event.generation != 0u && request.event.generation != state.generation)
+        return rejected_machine_transition(state, DecisionReason::StaleGeneration);
+    if (request.event.kind != EventKind::Leave &&
+        request.event.kind != EventKind::Abandon &&
+        request.event.kind != EventKind::PostGame &&
+        request.event.kind != EventKind::Reset)
+        return rejected_machine_transition(state, DecisionReason::InvalidTransition);
+    if (!request.active)
+        return rejected_machine_transition(state, DecisionReason::RequestIgnored);
+    if ((request.stage == TeardownStage::Initiate && request.pending) ||
+        (request.stage == TeardownStage::Finalize && !request.pending))
+        return rejected_machine_transition(state, DecisionReason::AlreadyInState);
+    if (state.generation == std::numeric_limits<std::uint64_t>::max())
+        return rejected_machine_transition(state, DecisionReason::GenerationExhausted);
+
+    return {
+        state,
+        { { Effect{
+            EffectKind::LegacyTeardownActionsRequested,
+            state.lifecycle,
+            state.lifecycle,
+            state.generation } }, 1u },
+        DecisionReason::TransitionApplied,
+        DecisionStatus::Accepted,
+    };
+}
 
 constexpr MachineTransitionResult transition_runtime_game_state(
     MachineState state,

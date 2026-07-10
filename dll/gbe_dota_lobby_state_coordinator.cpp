@@ -25,6 +25,7 @@
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lifecycle_state_machine.h"
 #include "gbe_dota_lobby_state_store.h"
 #include "gbe_dota_reconnect_context.h"
 #include "gbe_gc_config.h"
@@ -568,6 +569,20 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
         );
     }
     if (postgame_observation.run_player_cleanup) {
+        gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+        machine_state.generation = GBE_CurrentDotaLobbyGeneration();
+        const auto teardown = gbe::dota_lifecycle_state_machine::transition_teardown(
+            machine_state,
+            { { gbe::dota_lifecycle_state_machine::EventKind::PostGame,
+                gbe::dota_lifecycle_state_machine::EventSource::Internal,
+                0u,
+                machine_state.generation },
+              gbe::dota_lifecycle_state_machine::TeardownStage::Initiate,
+              true,
+              false });
+        if (!teardown.accepted() || !teardown.effects.contains(
+                gbe::dota_lifecycle_state_machine::EffectKind::LegacyTeardownActionsRequested))
+            return true;
         const uint64 cleaning_lobby_id = GBE_local_lobby.lobby_id;
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",

@@ -448,9 +448,14 @@
     - Reconnect dedup：新增显式 `Reconnect` event，key 由 generation、server id 和 endpoint key 组成；相同 key 返回 `ReconnectAlreadyQueued`，server/endpoint 或 generation 变化重新产生 `ReconnectQueued` effect。recover/new generation 清空旧 key。
     - 测试：覆盖 generation 创建和复用、旧 callback 拒绝、同 key 去重、endpoint 变化、recover 后重新排队、dedup 清空和 generation exhaustion。
     - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
-  - [ ] 14.4 迁移核心 lifecycle planner
+  - [x] 14.4 迁移核心 lifecycle planner
     - 迁移 `7070`、`8052`、`8053`、`7034` 和 teardown 高风险路径。
     - executor 只消费 transition effects，store 只提交被接受的新状态。
+    - 已迁移 `7034` launch poll、runtime member/game-state update 与 `7070/8052/8053` custom lifecycle；production 仅在 accepted typed effect 存在时调用既有 planner/executor，payload、session、reason 和 action order 保持稳定。
+    - Teardown：新增纯 `transition_teardown` authorization，覆盖 `7040` leave、`7035` abandon、`7004` signout、delayed/finalize 和 player postgame cleanup；stale generation、重复/缺失 pending 状态和 generation exhaustion 返回稳定 typed reason。
+    - Generation ownership：teardown transition 保持 generation 不变并仅产生 `LegacyTeardownActionsRequested`；既有 `GcMemoryReset` 或 `DotaLobbyRuntimeClear` action 继续作为每条 teardown 路径的唯一 generation advance owner，避免 leave/reset 双推进。
+    - 顺序保持：既有 `25`、postgame `7010`、shared/runtime clear、generic lobby leave、settings clear 和 rich presence clear 顺序未变；executor 继续消费原 action lists。
+    - 验证：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题，TSAN 无 race。
   - [ ] 14.5 建立 transition table 完整性检查
     - 对每个 state/event 组合定义 accept、reject 或 ignore 结果。
     - 编译期或测试期检查未覆盖组合，防止隐式 default 行为。

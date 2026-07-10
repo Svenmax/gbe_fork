@@ -35,6 +35,7 @@
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lifecycle_state_machine.h"
 #include "gbe_dota_lobby_state_store.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -702,6 +703,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyListRequest(bool has_request_job
     }
 
     if (finishing_leave) {
+        gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+        machine_state.generation = GBE_CurrentDotaLobbyGeneration();
+        const auto teardown = gbe::dota_lifecycle_state_machine::transition_teardown(
+            machine_state,
+            { { gbe::dota_lifecycle_state_machine::EventKind::Leave,
+                gbe::dota_lifecycle_state_machine::transport_source(wrapped),
+                GBE_kDotaPracticeLobbyLeave,
+                machine_state.generation },
+              gbe::dota_lifecycle_state_machine::TeardownStage::Finalize,
+              true,
+              true });
+        if (!teardown.accepted() || !teardown.effects.contains(
+                gbe::dota_lifecycle_state_machine::EffectKind::LegacyTeardownActionsRequested))
+            return true;
         GBE_PushDotaCacheUnsubscribedResponse(response_25, wrapped, outer_session_field_raw, "7040_leave_after_lobby_list_25");
         ResetGCMemory("7040_leave_after_lobby_list", true, false, gbe::dota_lobby_generation::Boundary::Leave);
     }
@@ -1397,6 +1412,21 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
         return true;
     }
 
+    gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+    machine_state.generation = GBE_CurrentDotaLobbyGeneration();
+    const auto teardown = gbe::dota_lifecycle_state_machine::transition_teardown(
+        machine_state,
+        { { gbe::dota_lifecycle_state_machine::EventKind::Abandon,
+            gbe::dota_lifecycle_state_machine::transport_source(wrapped),
+            GBE_kDotaAbandonCurrentGame,
+            machine_state.generation },
+          gbe::dota_lifecycle_state_machine::TeardownStage::Initiate,
+          true,
+          GBE_local_lobby.abandon_postgame_active });
+    if (!teardown.accepted() || !teardown.effects.contains(
+            gbe::dota_lifecycle_state_machine::EffectKind::LegacyTeardownActionsRequested))
+        return true;
+
     if (d.discard_queued_launch_messages)
         GBE_DiscardQueuedDotaLaunchMessagesForAbandon("7035_ready_for_abandon_teardown");
     if (d.suppress_abandoned_lobby)
@@ -1448,6 +1478,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaGameMatchSignOutRequest(bool wrapped,
         return true;
 
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+        gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+        machine_state.generation = GBE_CurrentDotaLobbyGeneration();
+        const auto teardown = gbe::dota_lifecycle_state_machine::transition_teardown(
+            machine_state,
+            { { gbe::dota_lifecycle_state_machine::EventKind::PostGame,
+                gbe::dota_lifecycle_state_machine::transport_source(wrapped),
+                GBE_kDotaGameMatchSignOut,
+                machine_state.generation },
+              gbe::dota_lifecycle_state_machine::TeardownStage::Initiate,
+              true,
+              GBE_local_lobby.abandon_postgame_active });
+        if (!teardown.accepted() || !teardown.effects.contains(
+                gbe::dota_lifecycle_state_machine::EffectKind::LegacyTeardownActionsRequested))
+            return true;
         GBE_QueueDotaPostGameTeardown("7004_signout_postgame", wrapped, outer_session_field_raw, false, false, false);
         GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7004_signout_postgame_state");
 
@@ -1503,6 +1547,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
     }
 
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
+    gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+    machine_state.generation = GBE_CurrentDotaLobbyGeneration();
+    const auto teardown = gbe::dota_lifecycle_state_machine::transition_teardown(
+        machine_state,
+        { { gbe::dota_lifecycle_state_machine::EventKind::Leave,
+            gbe::dota_lifecycle_state_machine::transport_source(wrapped),
+            GBE_kDotaPracticeLobbyLeave,
+            machine_state.generation },
+          gbe::dota_lifecycle_state_machine::TeardownStage::Initiate,
+          true,
+          GBE_local_lobby.pending_leave_after_7040 });
+    if (!teardown.accepted() || !teardown.effects.contains(
+            gbe::dota_lifecycle_state_machine::EffectKind::LegacyTeardownActionsRequested))
+        return true;
     uint64 fallback_generic_lobby_id = 0ull;
     if (GBE_local_lobby.generic_lobby_id == 0ull) {
         CSteamID matched_generic_lobby_id = k_steamIDNil;

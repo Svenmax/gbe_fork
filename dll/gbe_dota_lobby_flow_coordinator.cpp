@@ -26,6 +26,7 @@
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lifecycle_state_machine.h"
 #include "gbe_dota_lobby_state_store.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
@@ -639,6 +640,21 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaAbandonAfterOtherLeftChannel(uint64
     if (GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.lobby_id != consumed_lobby_id)
         return;
 
+    gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+    machine_state.generation = GBE_CurrentDotaLobbyGeneration();
+    const auto teardown = gbe::dota_lifecycle_state_machine::transition_teardown(
+        machine_state,
+        { { gbe::dota_lifecycle_state_machine::EventKind::Abandon,
+            gbe::dota_lifecycle_state_machine::EventSource::Internal,
+            0u,
+            machine_state.generation },
+          gbe::dota_lifecycle_state_machine::TeardownStage::Finalize,
+          true,
+          GBE_local_lobby.abandon_postgame_active });
+    if (!teardown.accepted() || !teardown.effects.contains(
+            gbe::dota_lifecycle_state_machine::EffectKind::LegacyTeardownActionsRequested))
+        return;
+
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -656,6 +672,21 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
         return;
 
     if (!settings)
+        return;
+
+    gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+    machine_state.generation = GBE_CurrentDotaLobbyGeneration();
+    const auto teardown = gbe::dota_lifecycle_state_machine::transition_teardown(
+        machine_state,
+        { { gbe::dota_lifecycle_state_machine::EventKind::PostGame,
+            gbe::dota_lifecycle_state_machine::EventSource::Internal,
+            0u,
+            machine_state.generation },
+          gbe::dota_lifecycle_state_machine::TeardownStage::Finalize,
+          true,
+          true });
+    if (!teardown.accepted() || !teardown.effects.contains(
+            gbe::dota_lifecycle_state_machine::EffectKind::LegacyTeardownActionsRequested))
         return;
 
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();

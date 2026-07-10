@@ -347,6 +347,50 @@ int main()
     assert(!stale_game_state.accepted());
     assert(stale_game_state.reason == lifecycle::DecisionReason::StaleGeneration);
 
+    lifecycle::MachineState teardown_state{};
+    teardown_state.lifecycle = lifecycle::State::Running;
+    teardown_state.generation = 31u;
+    lifecycle::TeardownRequest leave_request{};
+    leave_request.event = { lifecycle::EventKind::Leave, lifecycle::EventSource::Direct, 7040u, 31u, 0u, 0u };
+    leave_request.active = true;
+    const auto leave_teardown = lifecycle::transition_teardown(teardown_state, leave_request);
+    assert(leave_teardown.accepted());
+    assert(leave_teardown.state.lifecycle == teardown_state.lifecycle);
+    assert(leave_teardown.state.generation == teardown_state.generation);
+    assert(leave_teardown.effects.contains(lifecycle::EffectKind::LegacyTeardownActionsRequested));
+
+    leave_request.pending = true;
+    const auto duplicate_leave = lifecycle::transition_teardown(teardown_state, leave_request);
+    assert(!duplicate_leave.accepted());
+    assert(duplicate_leave.reason == lifecycle::DecisionReason::AlreadyInState);
+
+    lifecycle::TeardownRequest abandon_finalize{};
+    abandon_finalize.event = { lifecycle::EventKind::Abandon, lifecycle::EventSource::Internal, 0u, 31u, 0u, 0u };
+    abandon_finalize.stage = lifecycle::TeardownStage::Finalize;
+    abandon_finalize.active = true;
+    abandon_finalize.pending = true;
+    const auto finalized_abandon = lifecycle::transition_teardown(teardown_state, abandon_finalize);
+    assert(finalized_abandon.accepted());
+    assert(finalized_abandon.state.generation == teardown_state.generation);
+
+    abandon_finalize.event.generation = 30u;
+    const auto stale_finalize = lifecycle::transition_teardown(teardown_state, abandon_finalize);
+    assert(!stale_finalize.accepted());
+    assert(stale_finalize.reason == lifecycle::DecisionReason::StaleGeneration);
+
+    abandon_finalize.event.generation = 31u;
+    abandon_finalize.pending = false;
+    const auto missing_finalize = lifecycle::transition_teardown(teardown_state, abandon_finalize);
+    assert(!missing_finalize.accepted());
+    assert(missing_finalize.reason == lifecycle::DecisionReason::AlreadyInState);
+
+    teardown_state.generation = std::numeric_limits<std::uint64_t>::max();
+    leave_request.event.generation = teardown_state.generation;
+    leave_request.pending = false;
+    const auto exhausted_teardown = lifecycle::transition_teardown(teardown_state, leave_request);
+    assert(!exhausted_teardown.accepted());
+    assert(exhausted_teardown.reason == lifecycle::DecisionReason::GenerationExhausted);
+
     std::cout << "gbe_dota_lifecycle_state_machine_test passed\n";
     return 0;
 }
