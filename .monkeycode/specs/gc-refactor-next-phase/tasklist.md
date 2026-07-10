@@ -1,16 +1,16 @@
 # GC 后续重构实施计划
 
-- [ ] 1. 固化当前 P0 修复基线
+- [x] 1. 固化当前 P0 修复基线
   - [x] 1.1 复核并提交当前行为修复
     - 范围：wrapped `8053` 行为一致性、跨大厅连接去重、reconnect `lobby_id` 传播、PR 生产构建门禁。
     - 排除未跟踪目录 `docs/superpowers/`，只纳入本轮已验证的生产代码、测试和工作流文件。
     - 依赖：无。
     - 验收：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 和 `git diff --check` 通过。
-  - [ ] 1.2 建立后续重构基线记录
+  - [x] 1.2 建立后续重构基线记录
     - 记录基线 commit SHA、GC offline 测试数量、replay fixture 数量和 audit 结果。
     - 后续每个阶段均与该基线比较行为、构建和测试结果。
     - 验收：基线信息可由 Git 和验证脚本重复获取。
-  - [ ] 1.3 检查点：确保所有测试通过，如有疑问请询问用户
+  - [x] 1.3 检查点：确保所有测试通过，如有疑问请询问用户
 
 - [ ] 2. P1 统一 direct/wrapped 自定义游戏生命周期执行器
   - [ ] 2.1 定义生命周期执行上下文
