@@ -439,9 +439,15 @@
     - 纯度边界：实现为 header-only constexpr 值变换，不引用 Store、coordinator、network、callback、logger、filesystem 或 mutable global state。当前 effect 仅描述 domain state change，production action 生成与执行留给 14.4。
     - 测试：覆盖 create/join 双入口、完整正常 progression、leave/abandon teardown、reset、重复事件、乱序 loading/loaded，以及编译期 transition 求值。
     - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
-  - [ ] 14.3 将 generation 与 reconnect 规则纳入状态机
+  - [x] 14.3 将 generation 与 reconnect 规则纳入状态机
     - 建模 generation 创建、复用、失效、旧 callback、重复消息和乱序事件。
     - reconnect dedup 状态变化由明确 event 驱动。
+    - 状态模型：新增 `MachineState`，组合 lifecycle state、当前 generation、generation-scoped reconnect key 和 callback queued 标记；`MachineTransitionResult` 保持纯值语义输出。
+    - Generation 边界：create、join、leave、reset 和 recover 明确推进 generation，并清空 reconnect dedup 状态；setup/loading/loaded/run/postgame 等普通同步事件复用当前 generation。达到 `uint64_t` 上限时返回稳定 `GenerationExhausted`。
+    - 异步安全：event generation 为 `0` 表示普通同步输入未携带代际；callback/reconnect 等异步输入携带非零 generation 并与当前值精确匹配，旧代际返回 `StaleGeneration`，状态与 effects 均保持不变。
+    - Reconnect dedup：新增显式 `Reconnect` event，key 由 generation、server id 和 endpoint key 组成；相同 key 返回 `ReconnectAlreadyQueued`，server/endpoint 或 generation 变化重新产生 `ReconnectQueued` effect。recover/new generation 清空旧 key。
+    - 测试：覆盖 generation 创建和复用、旧 callback 拒绝、同 key 去重、endpoint 变化、recover 后重新排队、dedup 清空和 generation exhaustion。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
   - [ ] 14.4 迁移核心 lifecycle planner
     - 迁移 `7070`、`8052`、`8053`、`7034` 和 teardown 高风险路径。
     - executor 只消费 transition effects，store 只提交被接受的新状态。

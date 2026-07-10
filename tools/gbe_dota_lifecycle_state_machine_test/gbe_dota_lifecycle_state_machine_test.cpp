@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 
 namespace lifecycle = gbe::dota_lifecycle_state_machine;
 
@@ -14,7 +15,7 @@ struct ExpectedMapping {
 
 constexpr lifecycle::Event event(lifecycle::EventKind kind)
 {
-    return { kind, lifecycle::EventSource::Internal, 0u };
+    return { kind, lifecycle::EventSource::Internal, 0u, 0u, 0u, 0u };
 }
 
 void assert_accepted(
@@ -121,6 +122,79 @@ int main()
     static_assert(compile_time_transition.accepted());
     static_assert(compile_time_transition.state == lifecycle::State::Loading);
     static_assert(compile_time_transition.effects.count == 1u);
+
+    lifecycle::MachineState machine{};
+    machine.generation = 5u;
+    const lifecycle::MachineTransitionResult created = lifecycle::transition(
+        machine,
+        event(lifecycle::EventKind::Create));
+    assert(created.accepted());
+    assert(created.state.lifecycle == lifecycle::State::Created);
+    assert(created.state.generation == 6u);
+    assert(created.effects.count == 2u);
+    assert(created.effects.values[1].kind == lifecycle::EffectKind::GenerationAdvanced);
+
+    const lifecycle::MachineTransitionResult setup = lifecycle::transition(
+        created.state,
+        event(lifecycle::EventKind::Setup));
+    assert(setup.accepted());
+    assert(setup.state.generation == created.state.generation);
+    assert(setup.effects.count == 1u);
+
+    const lifecycle::MachineTransitionResult reconnect = lifecycle::transition(
+        setup.state,
+        lifecycle::reconnect_event(setup.state.generation, 9001u, 27015u));
+    assert(reconnect.accepted());
+    assert(reconnect.reason == lifecycle::DecisionReason::ReconnectQueued);
+    assert(reconnect.state.reconnect_queued);
+    assert(reconnect.effects.count == 1u);
+    assert(reconnect.effects.values[0].kind == lifecycle::EffectKind::ReconnectQueued);
+
+    const lifecycle::MachineTransitionResult duplicate_reconnect = lifecycle::transition(
+        reconnect.state,
+        lifecycle::reconnect_event(reconnect.state.generation, 9001u, 27015u));
+    assert(!duplicate_reconnect.accepted());
+    assert(duplicate_reconnect.reason == lifecycle::DecisionReason::ReconnectAlreadyQueued);
+    assert(duplicate_reconnect.effects.empty());
+
+    const lifecycle::MachineTransitionResult changed_endpoint = lifecycle::transition(
+        reconnect.state,
+        lifecycle::reconnect_event(reconnect.state.generation, 9001u, 27016u));
+    assert(changed_endpoint.accepted());
+    assert(changed_endpoint.state.reconnect_key.endpoint_key == 27016u);
+
+    lifecycle::Event stale_loading = event(lifecycle::EventKind::Loading);
+    stale_loading.generation = setup.state.generation - 1u;
+    const lifecycle::MachineTransitionResult stale = lifecycle::transition(setup.state, stale_loading);
+    assert(!stale.accepted());
+    assert(stale.reason == lifecycle::DecisionReason::StaleGeneration);
+    assert(stale.state.lifecycle == setup.state.lifecycle);
+    assert(stale.state.generation == setup.state.generation);
+    assert(stale.effects.empty());
+
+    const lifecycle::MachineTransitionResult recovered = lifecycle::transition(
+        reconnect.state,
+        lifecycle::recover_event());
+    assert(recovered.accepted());
+    assert(recovered.state.generation == reconnect.state.generation + 1u);
+    assert(!recovered.state.reconnect_queued);
+    assert(recovered.effects.count == 1u);
+    assert(recovered.effects.values[0].kind == lifecycle::EffectKind::GenerationAdvanced);
+
+    const lifecycle::MachineTransitionResult reconnect_after_recover = lifecycle::transition(
+        recovered.state,
+        lifecycle::reconnect_event(recovered.state.generation, 9001u, 27015u));
+    assert(reconnect_after_recover.accepted());
+
+    lifecycle::MachineState exhausted{};
+    exhausted.lifecycle = lifecycle::State::PostGame;
+    exhausted.generation = std::numeric_limits<std::uint64_t>::max();
+    const lifecycle::MachineTransitionResult exhausted_reset = lifecycle::transition(
+        exhausted,
+        lifecycle::reset_event());
+    assert(!exhausted_reset.accepted());
+    assert(exhausted_reset.reason == lifecycle::DecisionReason::GenerationExhausted);
+    assert(exhausted_reset.state.lifecycle == lifecycle::State::PostGame);
 
     std::cout << "gbe_dota_lifecycle_state_machine_test passed\n";
     return 0;
