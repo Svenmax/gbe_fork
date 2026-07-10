@@ -32,6 +32,7 @@
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lobby_state_store.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_shared.h"
@@ -632,7 +633,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
 
     // If shared state was already cleared by the normal signout finalize (GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed),
     // do not re-publish stale local lobby state back into it. Instead, leave the generic lobby and clear local state.
-    if (d.leaving_postgame_channel && d.matches_current_postgame_channel && !GBE_HasSharedDotaLobbyState()) {
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    if (d.leaving_postgame_channel && d.matches_current_postgame_channel && !shared_lobby.valid) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Skipping publish after postgame 7272 because shared state was already cleared by signout finalize LobbyID=%llu",

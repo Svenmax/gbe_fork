@@ -151,7 +151,6 @@ static std::string make_fixed32_bytes(uint32_t value)
 // =====================================================================
 
 GBE_DotaLootListData GBE_vpk_loot_data;
-GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 bool GBE_recent_dota_reconnect_context_valid = false;
 GBE_DotaReconnectContext GBE_recent_dota_reconnect_context{};
 GBE_DotaServerHelloContext GBE_last_dota_server_hello_context{};
@@ -238,38 +237,41 @@ TEST_CASE(test_get_dota_reconnect_context)
 {
     EXPECT_FALSE(GBE_GetDotaReconnectContext(nullptr));
 
-    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+    auto &shared_store = GBE_GetSharedDotaLobbyStateStore();
+    shared_store.clear();
     GBE_ClearRecentDotaReconnectContext();
 
     GBE_DotaReconnectContext ctx{};
     EXPECT_FALSE(GBE_GetDotaReconnectContext(&ctx));
 
-    GBE_shared_dota_lobby_state.valid = true;
-    GBE_shared_dota_lobby_state.active = true;
-    GBE_shared_dota_lobby_state.generation = 77ull;
-    GBE_shared_dota_lobby_state.lobby_id = 67890ull;
-    GBE_shared_dota_lobby_state.state = 2;
-    GBE_shared_dota_lobby_state.game_state = 0;
-    GBE_shared_dota_lobby_state.connect = "127.0.0.1:27015";
-    GBE_shared_dota_lobby_state.server_id = 12345;
-    GBE_shared_dota_lobby_state.owner_steam_id = 76561198000000000ULL;
-    GBE_shared_dota_lobby_state.custom_game.game_id = 500ull;
-    GBE_shared_dota_lobby_state.owner_connected = true;
-    GBE_shared_dota_lobby_state.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+    GBE_SharedDotaLobbyState shared;
+    shared.valid = true;
+    shared.active = true;
+    shared.generation = 77ull;
+    shared.lobby_id = 67890ull;
+    shared.state = 2;
+    shared.game_state = 0;
+    shared.connect = "127.0.0.1:27015";
+    shared.server_id = 12345;
+    shared.owner_steam_id = 76561198000000000ULL;
+    shared.custom_game.game_id = 500ull;
+    shared.owner_connected = true;
+    shared.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+    shared_store.publish(shared);
 
     const auto source = gbe::dota_reconnect::source_from_shared_lobby_snapshot(
-        GBE_GetSharedDotaLobbyStateSnapshot());
+        shared_store.snapshot());
     EXPECT_TRUE(source.valid);
     EXPECT_TRUE(source.active);
-    EXPECT_TRUE(source.generation == GBE_shared_dota_lobby_state.generation);
-    EXPECT_TRUE(source.lobby_id == GBE_shared_dota_lobby_state.lobby_id);
-    EXPECT_TRUE(source.lobby_state == GBE_shared_dota_lobby_state.state);
-    EXPECT_TRUE(source.game_state == GBE_shared_dota_lobby_state.game_state);
-    EXPECT_TRUE(source.server_id == GBE_shared_dota_lobby_state.server_id);
-    EXPECT_TRUE(source.custom_game_id == GBE_shared_dota_lobby_state.custom_game.game_id);
-    EXPECT_TRUE(source.owner_connected == GBE_shared_dota_lobby_state.owner_connected);
-    EXPECT_TRUE(source.launch_phase == GBE_shared_dota_lobby_state.launch_phase);
-    EXPECT_TRUE(source.owner_steam_id == GBE_shared_dota_lobby_state.owner_steam_id);
+    EXPECT_TRUE(source.generation == shared.generation);
+    EXPECT_TRUE(source.lobby_id == shared.lobby_id);
+    EXPECT_TRUE(source.lobby_state == shared.state);
+    EXPECT_TRUE(source.game_state == shared.game_state);
+    EXPECT_TRUE(source.server_id == shared.server_id);
+    EXPECT_TRUE(source.custom_game_id == shared.custom_game.game_id);
+    EXPECT_TRUE(source.owner_connected == shared.owner_connected);
+    EXPECT_TRUE(source.launch_phase == shared.launch_phase);
+    EXPECT_TRUE(source.owner_steam_id == shared.owner_steam_id);
     EXPECT_STR_CONTAINS(source.connect, "127.0.0.1");
 
     EXPECT_TRUE(GBE_GetDotaReconnectContext(&ctx));
@@ -281,9 +283,9 @@ TEST_CASE(test_get_dota_reconnect_context)
     EXPECT_TRUE(ctx.owner_steam_id == 76561198000000000ULL);
     EXPECT_STR_CONTAINS(ctx.connect, "127.0.0.1");
 
-    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+    shared_store.clear();
     const auto empty_source = gbe::dota_reconnect::source_from_shared_lobby_snapshot(
-        GBE_GetSharedDotaLobbyStateSnapshot());
+        shared_store.snapshot());
     EXPECT_FALSE(empty_source.valid);
     EXPECT_FALSE(empty_source.active);
     EXPECT_TRUE(empty_source.connect.empty());
@@ -291,7 +293,8 @@ TEST_CASE(test_get_dota_reconnect_context)
 
 TEST_CASE(test_get_dota_reconnect_context_priority_and_fallback)
 {
-    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+    auto &shared_store = GBE_GetSharedDotaLobbyStateStore();
+    shared_store.clear();
     GBE_ClearRecentDotaReconnectContext();
 
     GBE_DotaReconnectContext recent{};
@@ -305,16 +308,18 @@ TEST_CASE(test_get_dota_reconnect_context_priority_and_fallback)
     std::strncpy(recent.connect, "10.2.0.1:27015 10.2.0.2:27015", sizeof(recent.connect) - 1);
     GBE_SetRecentDotaReconnectContext(recent);
 
-    GBE_shared_dota_lobby_state.valid = true;
-    GBE_shared_dota_lobby_state.active = true;
-    GBE_shared_dota_lobby_state.generation = 11ull;
-    GBE_shared_dota_lobby_state.lobby_id = 1001ull;
-    GBE_shared_dota_lobby_state.server_id = 1002ull;
-    GBE_shared_dota_lobby_state.state = 2u;
-    GBE_shared_dota_lobby_state.game_state = 2u;
-    GBE_shared_dota_lobby_state.custom_game.game_id = 1003ull;
-    GBE_shared_dota_lobby_state.owner_steam_id = 1004ull;
-    GBE_shared_dota_lobby_state.connect = "10.1.0.1:27015 10.1.0.2:27015";
+    GBE_SharedDotaLobbyState shared;
+    shared.valid = true;
+    shared.active = true;
+    shared.generation = 11ull;
+    shared.lobby_id = 1001ull;
+    shared.server_id = 1002ull;
+    shared.state = 2u;
+    shared.game_state = 2u;
+    shared.custom_game.game_id = 1003ull;
+    shared.owner_steam_id = 1004ull;
+    shared.connect = "10.1.0.1:27015 10.1.0.2:27015";
+    shared_store.publish(shared);
 
     GBE_DotaReconnectContext selected{};
     EXPECT_TRUE(GBE_GetDotaReconnectContext(&selected));
@@ -325,7 +330,8 @@ TEST_CASE(test_get_dota_reconnect_context_priority_and_fallback)
     EXPECT_TRUE(selected.owner_steam_id == 1004ull);
     EXPECT_STR_EQ("10.1.0.1:27015", selected.connect);
 
-    GBE_shared_dota_lobby_state.active = false;
+    shared.active = false;
+    shared_store.publish(shared);
     EXPECT_TRUE(GBE_GetDotaReconnectContext(&selected));
     EXPECT_TRUE(selected.generation == 22ull);
     EXPECT_TRUE(selected.lobby_id == 2001ull);
@@ -335,83 +341,44 @@ TEST_CASE(test_get_dota_reconnect_context_priority_and_fallback)
     EXPECT_STR_EQ("10.2.0.1:27015", selected.connect);
 
     GBE_ClearRecentDotaReconnectContext();
-    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+    shared_store.clear();
 }
 
 // =====================================================================
-// Test: GBE_IsDotaArcadeLobbyActive
+// Test: shared lobby Store snapshots
 // =====================================================================
 
-TEST_CASE(test_is_dota_arcade_lobby_active)
+TEST_CASE(test_shared_lobby_store_snapshot)
 {
-    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-    EXPECT_FALSE(GBE_HasSharedDotaLobbyState());
-    EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == 0ull);
-    EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == 0ull);
+    auto &shared_store = GBE_GetSharedDotaLobbyStateStore();
+    shared_store.clear();
 
-    GBE_shared_dota_lobby_state.lobby_id = 0x9901ull;
-    GBE_shared_dota_lobby_state.generic_lobby_id = 0x9902ull;
-    GBE_shared_dota_lobby_state.generation = 0x9903ull;
-    GBE_DotaSharedLobbyScalarSnapshot raw_invalid_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
-    EXPECT_FALSE(raw_invalid_snapshot.valid);
-    EXPECT_TRUE(raw_invalid_snapshot.generation == 0x9903ull);
-    EXPECT_TRUE(raw_invalid_snapshot.lobby_id == 0x9901ull);
-    EXPECT_TRUE(raw_invalid_snapshot.generic_lobby_id == 0x9902ull);
-    EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == 0ull);
-    EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == 0ull);
+    GBE_SharedDotaLobbyState state;
+    state.valid = true;
+    state.active = true;
+    state.generation = 0x9903ull;
+    state.lobby_id = 0x1234ull;
+    state.generic_lobby_id = 0x5678ull;
+    state.state = 2u;
+    state.game_state = 3u;
+    state.custom_game.game_id = 12345ull;
+    shared_store.publish(state);
 
-    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-    GBE_DotaSharedLobbyScalarSnapshot scalar_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
-    EXPECT_FALSE(scalar_snapshot.valid);
-    EXPECT_FALSE(scalar_snapshot.active);
-    EXPECT_TRUE(scalar_snapshot.lobby_id == 0ull);
-    EXPECT_TRUE(scalar_snapshot.generic_lobby_id == 0ull);
-    EXPECT_TRUE(scalar_snapshot.lobby_state == 0u);
-    EXPECT_TRUE(scalar_snapshot.game_state == 0u);
-    EXPECT_FALSE(GBE_IsDotaArcadeLobbyActive());
-    EXPECT_FALSE(GBE_IsSharedDotaArcadeLobbyActive());
-
-    GBE_shared_dota_lobby_state.valid = true;
-    GBE_shared_dota_lobby_state.active = true;
-    GBE_shared_dota_lobby_state.lobby_id = 0x1234ull;
-    GBE_shared_dota_lobby_state.generic_lobby_id = 0x5678ull;
-    GBE_shared_dota_lobby_state.state = 2u;
-    GBE_shared_dota_lobby_state.game_state = 3u;
-    GBE_shared_dota_lobby_state.custom_game.game_id = 0;
-    EXPECT_TRUE(GBE_HasSharedDotaLobbyState());
-    scalar_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
-    EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == scalar_snapshot.lobby_id);
-    EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == scalar_snapshot.generic_lobby_id);
-    EXPECT_TRUE(scalar_snapshot.valid);
-    EXPECT_TRUE(scalar_snapshot.active);
-    EXPECT_TRUE(scalar_snapshot.lobby_id == 0x1234ull);
-    EXPECT_TRUE(scalar_snapshot.generic_lobby_id == 0x5678ull);
-    EXPECT_TRUE(scalar_snapshot.lobby_state == 2u);
-    EXPECT_TRUE(scalar_snapshot.game_state == 3u);
-    EXPECT_FALSE(GBE_IsDotaArcadeLobbyActive());
-    EXPECT_FALSE(GBE_IsSharedDotaArcadeLobbyActive());
-
-    GBE_shared_dota_lobby_state.custom_game.game_id = 12345;
-    EXPECT_TRUE(GBE_IsDotaArcadeLobbyActive());
-    EXPECT_TRUE(GBE_IsSharedDotaArcadeLobbyActive());
-
-    GBE_shared_dota_lobby_state.active = false;
-    EXPECT_FALSE(GBE_IsDotaArcadeLobbyActive());
-    EXPECT_FALSE(GBE_IsSharedDotaArcadeLobbyActive());
-
-    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-    EXPECT_FALSE(GBE_HasSharedDotaLobbyState());
-    EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == 0ull);
-    EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == 0ull);
-    scalar_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
-    EXPECT_FALSE(scalar_snapshot.valid);
-    EXPECT_FALSE(scalar_snapshot.active);
-    EXPECT_TRUE(scalar_snapshot.lobby_id == 0ull);
-    EXPECT_TRUE(scalar_snapshot.generic_lobby_id == 0ull);
+    const auto snapshot = shared_store.snapshot();
+    EXPECT_TRUE(snapshot.valid);
+    EXPECT_TRUE(snapshot.active);
+    EXPECT_TRUE(snapshot.generation == 0x9903ull);
+    EXPECT_TRUE(snapshot.lobby_id == 0x1234ull);
+    EXPECT_TRUE(snapshot.generic_lobby_id == 0x5678ull);
+    EXPECT_TRUE(snapshot.state == 2u);
+    EXPECT_TRUE(snapshot.game_state == 3u);
+    EXPECT_TRUE(snapshot.custom_game.game_id == 12345ull);
+    EXPECT_TRUE(snapshot.valid && snapshot.active && snapshot.custom_game.game_id != 0ull);
 }
 
-TEST_CASE(test_clear_zeroes_valid_gated_id_helpers_property)
+TEST_CASE(test_shared_lobby_store_clear_property)
 {
+    auto &shared_store = GBE_GetSharedDotaLobbyStateStore();
     for (std::uint64_t seed = 1u; seed <= 64u; ++seed) {
         GBE_SharedDotaLobbyState state;
         state.valid = true;
@@ -419,13 +386,16 @@ TEST_CASE(test_clear_zeroes_valid_gated_id_helpers_property)
         state.generation = seed;
         state.lobby_id = seed * 100u + 1u;
         state.generic_lobby_id = seed * 100u + 2u;
-        GBE_GetSharedDotaLobbyStateStore().publish(state);
+        shared_store.publish(state);
 
-        GBE_ClearSharedDotaLobbyState();
+        shared_store.clear();
 
-        EXPECT_FALSE(GBE_HasSharedDotaLobbyState());
-        EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == 0ull);
-        EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == 0ull);
+        const auto snapshot = shared_store.snapshot();
+        EXPECT_FALSE(snapshot.valid);
+        EXPECT_FALSE(snapshot.active);
+        EXPECT_TRUE(snapshot.generation == 0ull);
+        EXPECT_TRUE(snapshot.lobby_id == 0ull);
+        EXPECT_TRUE(snapshot.generic_lobby_id == 0ull);
     }
 }
 
@@ -1281,9 +1251,9 @@ int main()
     test_get_dota_reconnect_context();
     test_get_dota_reconnect_context_priority_and_fallback();
 
-    std::printf("[4/26] GBE_IsDotaArcadeLobbyActive...\n");
-    test_is_dota_arcade_lobby_active();
-    test_clear_zeroes_valid_gated_id_helpers_property();
+    std::printf("[4/26] shared lobby Store snapshots...\n");
+    test_shared_lobby_store_snapshot();
+    test_shared_lobby_store_clear_property();
 
     std::printf("[5/26] GBE_DotaCustomGameDisplayName...\n");
     test_dota_custom_game_display_name();

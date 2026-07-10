@@ -34,22 +34,12 @@
 #include <mutex>
 
 std::recursive_mutex global_mutex;
-extern GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 
 gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore()
 {
-    static gbe::dota_lobby_state::Store store(GBE_shared_dota_lobby_state, global_mutex);
+    static GBE_SharedDotaLobbyState state;
+    static gbe::dota_lobby_state::Store store(state, global_mutex);
     return store;
-}
-
-GBE_SharedDotaLobbyState GBE_GetSharedDotaLobbyStateSnapshot()
-{
-    return GBE_GetSharedDotaLobbyStateStore().snapshot();
-}
-
-void GBE_ClearSharedDotaLobbyState()
-{
-    GBE_GetSharedDotaLobbyStateStore().clear();
 }
 
 // Include the pure item payload helpers TU inline (Phase 3.2.3).

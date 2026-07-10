@@ -38,6 +38,13 @@
 
 std::recursive_mutex global_mutex;
 
+gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore()
+{
+    static GBE_SharedDotaLobbyState state;
+    static gbe::dota_lobby_state::Store store(state, global_mutex);
+    return store;
+}
+
 // Include the pure item payload helpers TU inline (Phase 3.2.3).
 // This compiles the real GBE_ParseDotaEquipOps / GBE_ApplyDotaUnlockStyleBitmask
 // / GBE_SerializeEconItemToGcprotobuf / GBE_BuildSOSingleObjectFromItem against

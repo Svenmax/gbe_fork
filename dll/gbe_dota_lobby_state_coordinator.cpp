@@ -1230,7 +1230,7 @@ void Steam_Game_Coordinator::GBE_SyncSettingsLobbyFromGenericLobby(const char *r
 
 void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
 {
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
 
     if (!shared_lobby.valid) {
         GBE_GC_DebugLog(
@@ -1571,7 +1571,7 @@ uint64 Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerSteamId() const
     if (GBE_local_lobby.owner_steam_id != 0)
         return GBE_local_lobby.owner_steam_id;
 
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
     if (shared_lobby.owner_steam_id != 0)
         return shared_lobby.owner_steam_id;
 
@@ -1583,7 +1583,7 @@ uint32 Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerAccountId() const
     if (GBE_local_lobby.owner_account_id != 0)
         return GBE_local_lobby.owner_account_id;
 
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
     if (shared_lobby.owner_account_id != 0)
         return shared_lobby.owner_account_id;
 

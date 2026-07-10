@@ -307,6 +307,7 @@ struct TestFixture
         gc.test_set_dota_response_result(true);
         gc.test_set_member_runtime_result(true);
         gc.test_set_runtime_update_result(true);
+        GBE_GetSharedDotaLobbyStateStore().clear();
         // Clear the global server-GC hook so each test starts from a clean slate.
         g_test_steam_client.steam_matchmaking = nullptr;
         g_test_steam_client.steam_game_coordinator = nullptr;
@@ -854,7 +855,9 @@ static void test_chat_leave_postgame_channel_order()
     tf.gc.GBE_local_lobby.chat_channel_name = "postgame";
     tf.gc.GBE_local_lobby.chat_channel_type = 18u;
     tf.gc.GBE_local_lobby.abandon_postgame_active = true;
-    GBE_shared_dota_lobby_state.valid = true;
+    GBE_SharedDotaLobbyState shared;
+    shared.valid = true;
+    GBE_GetSharedDotaLobbyStateStore().publish(shared);
 
     const std::string session_raw = "leave-session-token";
     const std::string body = make_leave_chat_body(tf.gc.GBE_local_lobby.chat_channel_id);
@@ -874,7 +877,7 @@ static void test_chat_leave_postgame_channel_order()
     TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbySnapshotRefresh, "third action should publish lobby state");
     TEST_ASSERT(tf.recorder.actions[2].reason == "7272_leave_chat", "publish reason should identify leave chat");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.has_chat_channel, "postgame leave should clear local chat channel after 7014");
-    GBE_shared_dota_lobby_state.valid = false;
+    GBE_GetSharedDotaLobbyStateStore().clear();
 
     ++g_tests_passed;
 }
@@ -893,7 +896,7 @@ static void test_chat_leave_postgame_skips_stale_republish_after_shared_clear()
     tf.gc.GBE_local_lobby.chat_channel_name = "postgame";
     tf.gc.GBE_local_lobby.chat_channel_type = 18u;
     tf.gc.GBE_local_lobby.abandon_postgame_active = true;
-    GBE_shared_dota_lobby_state.valid = false;
+    GBE_GetSharedDotaLobbyStateStore().clear();
 
     const std::string session_raw = "stale-leave-session-token";
     const std::string body = make_leave_chat_body(tf.gc.GBE_local_lobby.chat_channel_id);
@@ -910,7 +913,7 @@ static void test_chat_leave_postgame_skips_stale_republish_after_shared_clear()
     TEST_ASSERT(tf.recorder.actions[1].lobby_state == "SERVERSETUP", "stale leave rich presence lobby state should reset to serversetup");
     TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::GenericLobbyLeave, "stale postgame cleanup should happen after rich presence update");
     TEST_ASSERT_EQ(tf.recorder.actions[2].item_id, 0xCAFEu, "stale postgame cleanup should record the stale lobby id");
-    TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "stale postgame leave should not republish cleared shared state");
+    TEST_ASSERT(!GBE_GetSharedDotaLobbyStateStore().snapshot().valid, "stale postgame leave should not republish cleared shared state");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "stale postgame leave should clear local lobby after skipping publish");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0ull, "stale postgame leave should clear local lobby id");
 
@@ -1640,9 +1643,11 @@ static void test_lobby_normal_signout_pending_clear_resets_state()
     tf.gc.GBE_local_lobby.active = true;
     tf.gc.GBE_local_lobby.lobby_id = 0x2500u;
     tf.gc.GBE_SetLastDotaLaunchStatePushedGameState(5u);
-    GBE_shared_dota_lobby_state.valid = true;
-    GBE_shared_dota_lobby_state.active = true;
-    GBE_shared_dota_lobby_state.lobby_id = 0x2500u;
+    GBE_SharedDotaLobbyState shared;
+    shared.valid = true;
+    shared.active = true;
+    shared.lobby_id = 0x2500u;
+    GBE_GetSharedDotaLobbyStateStore().publish(shared);
 
     tf.gc.GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(0x2500u);
     TEST_ASSERT(tf.gc.GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(), "normal signout pending flag should be set");
@@ -1657,7 +1662,7 @@ static void test_lobby_normal_signout_pending_clear_resets_state()
     tf.gc.GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed(consumed.lobby_id, "normal_signout_pending_clear_test");
 
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "normal signout finalize should clear local lobby state after cache unsubscribe");
-    TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "normal signout finalize should clear shared lobby state after cache unsubscribe");
+    TEST_ASSERT(!GBE_GetSharedDotaLobbyStateStore().snapshot().valid, "normal signout finalize should clear shared lobby state after cache unsubscribe");
     TEST_ASSERT_EQ(tf.gc.GBE_GetLastDotaLaunchStatePushedGameState(), 0u, "normal signout finalize should clear launch-state dedupe after cache unsubscribe");
     TEST_ASSERT_EQ(tf.settings.get_lobby().ConvertToUint64(), 0u, "normal signout finalize should clear settings lobby");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "normal signout finalize should record cache unsubscribe before local cleanup actions");
@@ -1786,18 +1791,21 @@ static void test_lobby_runtime_reset_clears_local_shared_and_last_launch_state()
     tf.gc.GBE_local_lobby.active = true;
     tf.gc.GBE_local_lobby.lobby_id = 0x5100u;
     tf.gc.GBE_SetLastDotaLaunchStatePushedGameState(7u);
-    GBE_shared_dota_lobby_state.valid = true;
-    GBE_shared_dota_lobby_state.active = true;
-    GBE_shared_dota_lobby_state.lobby_id = 0x5100u;
-    GBE_shared_dota_lobby_state.state = 4u;
-    GBE_shared_dota_lobby_state.game_state = 7u;
+    GBE_SharedDotaLobbyState shared;
+    shared.valid = true;
+    shared.active = true;
+    shared.lobby_id = 0x5100u;
+    shared.state = 4u;
+    shared.game_state = 7u;
+    GBE_GetSharedDotaLobbyStateStore().publish(shared);
 
     tf.gc.GBE_ClearDotaLobbyRuntimeState();
 
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "runtime reset should clear local lobby active flag");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0u, "runtime reset should clear local lobby id");
-    TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "runtime reset should clear shared lobby validity");
-    TEST_ASSERT_EQ(GBE_GetSharedDotaLobbyIdOrZero(), 0u, "runtime reset should clear shared lobby id");
+    const auto shared_after_reset = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    TEST_ASSERT(!shared_after_reset.valid, "runtime reset should clear shared lobby validity");
+    TEST_ASSERT_EQ(shared_after_reset.lobby_id, 0u, "runtime reset should clear shared lobby id");
     TEST_ASSERT_EQ(tf.gc.GBE_GetLastDotaLaunchStatePushedGameState(), 0u, "runtime reset should clear last pushed launch game state");
 
     ++g_tests_passed;
@@ -1965,11 +1973,13 @@ static void setup_postgame_observation_lobby(
     tf.gc.GBE_local_lobby.owner_name = owner_name;
     tf.settings.set_lobby(CSteamID(lobby_id));
 
-    GBE_shared_dota_lobby_state.valid = true;
-    GBE_shared_dota_lobby_state.active = true;
-    GBE_shared_dota_lobby_state.lobby_id = lobby_id;
-    GBE_shared_dota_lobby_state.state = 2u;
-    GBE_shared_dota_lobby_state.game_state = 2u;
+    GBE_SharedDotaLobbyState shared;
+    shared.valid = true;
+    shared.active = true;
+    shared.lobby_id = lobby_id;
+    shared.state = 2u;
+    shared.game_state = 2u;
+    GBE_GetSharedDotaLobbyStateStore().publish(shared);
 }
 
 static void setup_local_owner_postgame_observation_lobby(TestFixture &tf, uint64_t lobby_id)
@@ -2019,8 +2029,9 @@ static void test_lobby_host_client_postgame_observation_preserves_server_owned_s
     const bool result = tf.gc.GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("host_client_postgame_observation_test");
 
     TEST_ASSERT(result, "host client postgame observation should report handled runtime change");
-    TEST_ASSERT(GBE_HasSharedDotaLobbyState(), "host client postgame observation should preserve server-owned shared state");
-    TEST_ASSERT_EQ(GBE_GetSharedDotaLobbyIdOrZero(), 0x5101u, "shared lobby id should remain server-owned lobby id");
+    const auto shared = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    TEST_ASSERT(shared.valid, "host client postgame observation should preserve server-owned shared state");
+    TEST_ASSERT_EQ(shared.lobby_id, 0x5101u, "shared lobby id should remain server-owned lobby id");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.state, 3u, "local lobby should still observe postgame state");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "host client skip should only send refreshed details update");
     expect_push_action(tf.recorder.actions[0], GBE_kDotaPracticeLobbyDetailsUpdate, "host client skip should push details update");
@@ -2045,7 +2056,7 @@ static void test_lobby_host_client_postgame_observation_ignores_mismatched_serve
     const bool result = tf.gc.GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("host_client_mismatched_server_lobby_test");
 
     TEST_ASSERT(result, "mismatched server lobby should still report handled runtime change");
-    TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "mismatched server lobby should not preserve shared state");
+    TEST_ASSERT(!GBE_GetSharedDotaLobbyStateStore().snapshot().valid, "mismatched server lobby should not preserve shared state");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "mismatched server lobby should run player cleanup");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 6u, "mismatched server lobby should run player cleanup sequence");
     expect_push_action(tf.recorder.actions[0], GBE_kDotaPracticeLobbyDetailsUpdate, "mismatched server cleanup should push postgame details first");
@@ -2069,7 +2080,7 @@ static void test_lobby_player_postgame_observation_clears_shared_state_after_det
     const bool result = tf.gc.GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("player_postgame_observation_test");
 
     TEST_ASSERT(result, "player postgame observation should run cleanup");
-    TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "player postgame cleanup should clear shared state");
+    TEST_ASSERT(!GBE_GetSharedDotaLobbyStateStore().snapshot().valid, "player postgame cleanup should clear shared state");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "player postgame cleanup should clear local lobby");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 6u, "player postgame cleanup should push details, clear local state, then cache unsubscribe and settings lobby");
     expect_push_action(tf.recorder.actions[0], GBE_kDotaPracticeLobbyDetailsUpdate, "player cleanup should push postgame details first");
@@ -2097,7 +2108,7 @@ static void test_lobby_arcade_active_postgame_observation_preserves_shared_state
     const bool result = tf.gc.GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("arcade_active_postgame_observation_test");
 
     TEST_ASSERT(result, "arcade active postgame observation should report handled runtime change");
-    TEST_ASSERT(GBE_HasSharedDotaLobbyState(), "arcade active postgame observation should preserve shared state");
+    TEST_ASSERT(GBE_GetSharedDotaLobbyStateStore().snapshot().valid, "arcade active postgame observation should preserve shared state");
     TEST_ASSERT(tf.gc.GBE_local_lobby.active, "arcade active postgame observation should preserve local lobby");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.state, 3u, "arcade active local lobby should still observe postgame state");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 0u, "arcade active skip should not push cleanup or details update");
@@ -2123,7 +2134,7 @@ static void test_lobby_host_client_postgame_observation_takes_precedence_over_ar
     const bool result = tf.gc.GBE_MaybeNotifyDotaPracticeLobbyMembersChanged("host_client_arcade_postgame_observation_test");
 
     TEST_ASSERT(result, "host client arcade postgame observation should report handled runtime change");
-    TEST_ASSERT(GBE_HasSharedDotaLobbyState(), "host client arcade postgame observation should preserve server-owned shared state");
+    TEST_ASSERT(GBE_GetSharedDotaLobbyStateStore().snapshot().valid, "host client arcade postgame observation should preserve server-owned shared state");
     TEST_ASSERT(tf.gc.GBE_local_lobby.active, "host client arcade postgame observation should preserve local lobby");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.state, 3u, "host client arcade local lobby should observe postgame state");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 0u, "host-client arcade skip should preserve state without cleanup or details update");

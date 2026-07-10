@@ -35,6 +35,7 @@
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lobby_state_store.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_shared.h"
@@ -1043,9 +1044,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaInviteToLobbyRequest(const std::strin
 
     uint64 dota_lobby_id = GBE_local_lobby.lobby_id;
     CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
-    if ((!GBE_local_lobby.active || dota_lobby_id == 0 || !generic_lobby_id.IsLobby()) && GBE_HasSharedDotaLobbyState()) {
-        dota_lobby_id = GBE_GetSharedDotaLobbyIdOrZero();
-        generic_lobby_id = CSteamID((uint64)GBE_GetSharedDotaGenericLobbyIdOrZero());
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    if ((!GBE_local_lobby.active || dota_lobby_id == 0 || !generic_lobby_id.IsLobby()) && shared_lobby.valid) {
+        dota_lobby_id = shared_lobby.lobby_id;
+        generic_lobby_id = CSteamID((uint64)shared_lobby.generic_lobby_id);
     }
 
     Steam_Client *steam_client = get_steam_client();

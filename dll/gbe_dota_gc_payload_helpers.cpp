@@ -26,6 +26,7 @@
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_dota_lobby_state.h"
+#include "gbe_dota_lobby_state_store.h"
 #include "gbe_dota_reconnect_context.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
@@ -225,7 +226,7 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
     if (!out)
         return false;
 
-    const auto shared = GBE_GetSharedDotaLobbyStateSnapshot();
+    const auto shared = GBE_GetSharedDotaLobbyStateStore().snapshot();
     GBE_DotaReconnectContext recent_context{};
     const bool has_recent_context = GBE_GetRecentDotaReconnectContext(&recent_context);
     const auto selection = gbe::dota_reconnect::select_context({
@@ -260,50 +261,6 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
         "selected",
     });
     return true;
-}
-
-bool GBE_HasSharedDotaLobbyState()
-{
-    return GBE_GetSharedDotaLobbyStateSnapshot().valid;
-}
-
-uint64 GBE_GetSharedDotaLobbyIdOrZero()
-{
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
-    return shared_lobby.valid ? shared_lobby.lobby_id : 0ull;
-}
-
-uint64 GBE_GetSharedDotaGenericLobbyIdOrZero()
-{
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
-    return shared_lobby.valid ? shared_lobby.generic_lobby_id : 0ull;
-}
-
-GBE_DotaSharedLobbyScalarSnapshot GBE_GetSharedDotaLobbyScalarSnapshot()
-{
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
-    GBE_DotaSharedLobbyScalarSnapshot snapshot{};
-    snapshot.valid = shared_lobby.valid;
-    snapshot.active = shared_lobby.active;
-    snapshot.generation = shared_lobby.generation;
-    snapshot.lobby_id = shared_lobby.lobby_id;
-    snapshot.generic_lobby_id = shared_lobby.generic_lobby_id;
-    snapshot.lobby_state = shared_lobby.state;
-    snapshot.game_state = shared_lobby.game_state;
-    return snapshot;
-}
-
-bool GBE_IsSharedDotaArcadeLobbyActive()
-{
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
-    return shared_lobby.valid &&
-        shared_lobby.active &&
-        shared_lobby.custom_game.game_id != 0ull;
-}
-
-bool GBE_IsDotaArcadeLobbyActive()
-{
-    return GBE_IsSharedDotaArcadeLobbyActive();
 }
 
 bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64_t local_steam_id, GBE_DotaReconnectContext *out)

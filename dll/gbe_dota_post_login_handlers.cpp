@@ -698,7 +698,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         std::string response_body;
         bool found_game_w = false;
         gbe::gc_message::DotaSourceTVGame source_tv_game_w{};
-        const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
+        const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
 
         // First: check local shared lobby state (we are the host)
         if (shared_lobby.valid &&
@@ -795,7 +795,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         uint32 source_tv_port = 27020;
         uint64 tv_secret_code_w = 0;
         std::string connect_str_w;
-        const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
+        const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
         if (shared_lobby.valid && !shared_lobby.connect.empty()) {
             connect_str_w = shared_lobby.connect;
         } else {

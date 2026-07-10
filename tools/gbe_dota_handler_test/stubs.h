@@ -53,6 +53,7 @@
 // gbe_dota_lobby_state.h transitively includes gbe_dota_reconnect_shared.h
 // which provides GBE_DotaReconnectContext, GBE_SharedDotaLobbyState, etc.
 #include "dll/gbe_dota_lobby_state.h"
+#include "dll/gbe_dota_lobby_state_store.h"
 #include "dll/gbe_dota_lobby_launch_flow.h"
 
 namespace gbe::dota_lobby_flow {
@@ -70,12 +71,7 @@ GBE_DotaActionList abandon_finalize_action_list(
     const char *reason);
 }
 
-extern GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
-bool GBE_HasSharedDotaLobbyState();
-uint64_t GBE_GetSharedDotaLobbyIdOrZero();
-uint64_t GBE_GetSharedDotaGenericLobbyIdOrZero();
-void GBE_ClearSharedDotaLobbyState();
-void GBE_ClearSharedDotaLobbyForRuntimeReset();
+gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore();
 extern bool GBE_pending_reset_after_cache_unsubscribed;
 extern uint64_t GBE_pending_reset_after_cache_unsubscribed_lobby_id;
 extern bool GBE_pending_dota_normal_signout_finalize_after_25;
@@ -1010,7 +1006,7 @@ public:
     void GBE_ClearDotaLobbyRuntimeState()
     {
         GBE_local_lobby = GBE_LocalLobby{};
-        GBE_ClearSharedDotaLobbyForRuntimeReset();
+        GBE_GetSharedDotaLobbyStateStore().clear();
         GBE_ClearLastDotaLaunchStatePushedGameState();
     }
     void GBE_ClearSettingsLobbyForDotaSignout()
@@ -1082,7 +1078,7 @@ public:
     {
         if (gc_profile != GC_PROFILE_DOTA2)
             return;
-        const uint64 shared_lobby_id = GBE_shared_dota_lobby_state.lobby_id;
+        const uint64 shared_lobby_id = GBE_GetSharedDotaLobbyStateStore().snapshot().lobby_id;
         const uint64 lobby_id = consumed_lobby_id != 0 ? consumed_lobby_id : shared_lobby_id;
         for (const GBE_DotaAction &action : gbe::dota_lobby_flow::normal_signout_finalize_action_list(
                  lobby_id,

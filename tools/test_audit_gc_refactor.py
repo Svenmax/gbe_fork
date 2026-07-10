@@ -168,5 +168,29 @@ class RetiredReconnectTransitionLayerAuditTest(unittest.TestCase):
         )
 
 
+class RetiredSharedLobbyCompatibilityLayerAuditTest(unittest.TestCase):
+    def test_accepts_canonical_store_access(self):
+        sources = {
+            "gbe_dota_gc_internal.h": "gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore();",
+            "gbe_dota_lobby_handlers.cpp": "const auto shared = GBE_GetSharedDotaLobbyStateStore().snapshot();",
+        }
+        self.assertEqual([], audit.audit_retired_shared_lobby_compatibility_layers(sources))
+
+    def test_rejects_projection_facade_and_mutable_backing_global(self):
+        sources = {
+            "gbe_dota_gc_internal.h": "GBE_SharedDotaLobbyState GBE_GetSharedDotaLobbyStateSnapshot();",
+            "steam_game_coordinator.cpp": "GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;",
+        }
+        issues = audit.audit_retired_shared_lobby_compatibility_layers(sources)
+        self.assertIn(
+            "gbe_dota_gc_internal.h: retired shared lobby compatibility symbol GBE_GetSharedDotaLobbyStateSnapshot returned",
+            issues,
+        )
+        self.assertIn(
+            "steam_game_coordinator.cpp: retired shared lobby compatibility symbol GBE_shared_dota_lobby_state returned",
+            issues,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -139,6 +139,19 @@ RETIRED_RECONNECT_TRANSITION_SYMBOLS = (
     "describe_reject_reason",
     "GBE_DescribeDotaReconnectPostSkipReason",
 )
+RETIRED_SHARED_LOBBY_COMPATIBILITY_SYMBOLS = (
+    "GBE_DotaSharedLobbyScalarSnapshot",
+    "GBE_GetSharedDotaLobbyScalarSnapshot",
+    "GBE_HasSharedDotaLobbyState",
+    "GBE_GetSharedDotaLobbyIdOrZero",
+    "GBE_GetSharedDotaGenericLobbyIdOrZero",
+    "GBE_IsSharedDotaArcadeLobbyActive",
+    "GBE_IsDotaArcadeLobbyActive",
+    "GBE_GetSharedDotaLobbyStateSnapshot",
+    "GBE_ClearSharedDotaLobbyState",
+    "GBE_ClearSharedDotaLobbyForRuntimeReset",
+    "GBE_shared_dota_lobby_state",
+)
 HIGH_RISK_REASON_STRINGS = [
     "equip_forward_host_resubscribe_server",
     "equip_items_refresh",
@@ -535,6 +548,24 @@ def audit_retired_reconnect_transition_layers(source_texts=None):
     return issues
 
 
+def audit_retired_shared_lobby_compatibility_layers(source_texts=None):
+    """Prevent shared lobby projections and mutable backing state from returning."""
+    if source_texts is None:
+        source_texts = {}
+        for path in glob.glob(os.path.join(ROOT_DIR, "dll", "**", "*.h"), recursive=True):
+            source_texts[os.path.relpath(path, ROOT_DIR)] = read(path)
+        for path in glob.glob(os.path.join(ROOT_DIR, "dll", "*.cpp")):
+            source_texts[os.path.relpath(path, ROOT_DIR)] = read(path)
+
+    issues = []
+    for source_name, source_text in source_texts.items():
+        uncommented = strip_comments(source_text)
+        for symbol in RETIRED_SHARED_LOBBY_COMPATIBILITY_SYMBOLS:
+            if re.search(r"\b" + re.escape(symbol) + r"\b", uncommented):
+                issues.append(f"{source_name}: retired shared lobby compatibility symbol {symbol} returned")
+    return issues
+
+
 def extract_diagnostic_reason_inventory(header_text):
     """Derive typed diagnostic reason names and stable serialized values."""
     enum_match = re.search(r"enum\s+class\s+Reason\s*:[^{]+\{(?P<body>.*?)\};", header_text, re.S)
@@ -918,6 +949,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 13: Retired shared lobby compatibility layers")
+    print("=" * 70)
+    print("  Action: keep production shared lobby access on the canonical Store contract.")
+    shared_lobby_compatibility_issues = audit_retired_shared_lobby_compatibility_layers()
+    if not shared_lobby_compatibility_issues:
+        print("  All 10 retired shared lobby facades and the mutable backing global remain absent")
+    else:
+        for issue in shared_lobby_compatibility_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -935,8 +978,9 @@ def main():
     print(f"  Shared lobby global access issues:   {len(shared_lobby_global_issues)}")
     print(f"  Concurrency ownership issues:        {len(concurrency_ownership_issues)}")
     print(f"  Reconnect transition-layer issues:   {len(reconnect_transition_issues)}")
+    print(f"  Shared lobby compatibility issues:   {len(shared_lobby_compatibility_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues:
         sys.exit(1)
 
 

@@ -17,6 +17,8 @@
 
 #include "dll/steam_networking_sockets.h"
 #include "dll/gbe_dota_reconnect_shared.h"
+#include "gbe_dota_gc_internal.h"
+#include "gbe_dota_lobby_state_store.h"
 
 #include <cstdio>
 #include <cstring>
@@ -272,8 +274,12 @@ int64 Steam_Networking_Sockets::normalize_dota_arcade_loopback_user_data(std::ma
 {
     GBE_DotaReconnectContext dota_ctx{};
     const bool has_dota_ctx = GBE_GetDotaReconnectContext(&dota_ctx);
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    const bool shared_arcade_active = shared_lobby.valid &&
+        shared_lobby.active &&
+        shared_lobby.custom_game.game_id != 0ull;
     const bool arcade_context = settings->get_local_game_id().AppID() == GBE_kDotaAppId &&
-        ((has_dota_ctx && dota_ctx.custom_game_id != 0ull) || GBE_IsDotaArcadeLobbyActive()) &&
+        ((has_dota_ctx && dota_ctx.custom_game_id != 0ull) || shared_arcade_active) &&
         connect_socket != sbcs->connect_sockets.end() &&
         connect_socket->second.remote_id != k_HSteamNetConnection_Invalid;
     if (!arcade_context)

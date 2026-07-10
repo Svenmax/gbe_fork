@@ -25,6 +25,7 @@
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lobby_state_store.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -431,7 +432,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
 
     target->GBE_RestoreSharedDotaLobbyState(reason ? reason : "push_launch_state_to_client");
 
-    const GBE_DotaSharedLobbyScalarSnapshot shared_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
+    const auto shared_snapshot = GBE_GetSharedDotaLobbyStateStore().snapshot();
     context.shared_lobby_suppressed = target->GBE_ShouldSuppressDotaAbandonedLobby(shared_snapshot.lobby_id);
     plan = gbe::dota_lobby_flow::plan_launch_state_push(context);
     if (plan.skip_reason == gbe::dota_lobby_flow::LaunchStatePushSkipReason::SuppressedSharedLobby) {

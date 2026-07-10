@@ -34,12 +34,6 @@ namespace gbe::dota_lobby_state {
 class Store;
 }
 gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore();
-GBE_SharedDotaLobbyState GBE_GetSharedDotaLobbyStateSnapshot();
-bool GBE_HasSharedDotaLobbyState();
-uint64 GBE_GetSharedDotaLobbyIdOrZero();
-uint64 GBE_GetSharedDotaGenericLobbyIdOrZero();
-void GBE_ClearSharedDotaLobbyState();
-void GBE_ClearSharedDotaLobbyForRuntimeReset();
 
 
 #include <array>

@@ -36,7 +36,6 @@ const char *GBE_DescribeDotaLaunchPhase(uint32 phase)
     }
 }
 
-GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
 const char * const GBE_kDotaAbandonPersonaStateInitHex = "";
 bool GBE_pending_reset_after_cache_unsubscribed = false;
 uint64 GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
@@ -48,48 +47,6 @@ std::atomic<bool> GBE_dota_reconnect_eligible{true};
 bool GBE_dota_host_showcase_equip_pushed = false;
 const std::array<uint8, 8> GBE_kOldDotaLobbyIdVarint = { 0x83, 0xcf, 0xa2, 0xb4, 0xa2, 0xff, 0xf9, 0x34 };
 const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyMatchIdVarint = { 0xae, 0xbb, 0xa3, 0xcf, 0x06 };
-
-GBE_SharedDotaLobbyState GBE_GetSharedDotaLobbyStateSnapshot()
-{
-    return GBE_shared_dota_lobby_state;
-}
-
-bool GBE_HasSharedDotaLobbyState()
-{
-    return GBE_shared_dota_lobby_state.valid;
-}
-
-uint64 GBE_GetSharedDotaLobbyIdOrZero()
-{
-    return GBE_HasSharedDotaLobbyState() ? GBE_shared_dota_lobby_state.lobby_id : 0ull;
-}
-
-uint64 GBE_GetSharedDotaGenericLobbyIdOrZero()
-{
-    return GBE_HasSharedDotaLobbyState() ? GBE_shared_dota_lobby_state.generic_lobby_id : 0ull;
-}
-
-GBE_DotaSharedLobbyScalarSnapshot GBE_GetSharedDotaLobbyScalarSnapshot()
-{
-    GBE_DotaSharedLobbyScalarSnapshot snapshot{};
-    snapshot.valid = GBE_shared_dota_lobby_state.valid;
-    snapshot.active = GBE_shared_dota_lobby_state.active;
-    snapshot.lobby_id = GBE_shared_dota_lobby_state.lobby_id;
-    snapshot.generic_lobby_id = GBE_shared_dota_lobby_state.generic_lobby_id;
-    snapshot.lobby_state = GBE_shared_dota_lobby_state.state;
-    snapshot.game_state = GBE_shared_dota_lobby_state.game_state;
-    return snapshot;
-}
-
-void GBE_ClearSharedDotaLobbyState()
-{
-    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-}
-
-void GBE_ClearSharedDotaLobbyForRuntimeReset()
-{
-    GBE_ClearSharedDotaLobbyState();
-}
 
 bool GBE_GetRecentDotaReconnectContext(GBE_DotaReconnectContext *out)
 {
@@ -202,7 +159,7 @@ bool GBE_AdaptDotaJoinChatChannelResponsePayload(
 // GBE_SerializeEconItemToGcprotobuf, and GBE_BuildSOSingleObjectFromItem now
 // live in dll/gbe_dota_payload_item_helpers.cpp (Phase 3.2.3 extraction).
 // That TU is pure (no Steam_Game_Coordinator / Steam_Client / Settings /
-// GBE_shared_dota_lobby_state dependency), so the build script links it
+// shared lobby state dependency), so the build script links it
 // directly into the test binary — no stub duplication required.
 //
 // History: before 3.2.3, the test harness duplicated the real implementations

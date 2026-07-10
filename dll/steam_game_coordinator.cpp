@@ -73,21 +73,6 @@ gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore()
     return store;
 }
 
-GBE_SharedDotaLobbyState GBE_GetSharedDotaLobbyStateSnapshot()
-{
-    return GBE_GetSharedDotaLobbyStateStore().snapshot();
-}
-
-void GBE_ClearSharedDotaLobbyState()
-{
-    GBE_GetSharedDotaLobbyStateStore().clear();
-}
-
-void GBE_ClearSharedDotaLobbyForRuntimeReset()
-{
-    GBE_ClearSharedDotaLobbyState();
-}
-
 const GBE_DotaLootListData &GBE_GetDotaVpkLootData()
 {
     return GBE_vpk_loot_data;
@@ -518,7 +503,7 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         return;
 
     if (gc_profile == GC_PROFILE_DOTA2 && (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)) {
-        const GBE_DotaSharedLobbyScalarSnapshot shared_snapshot = GBE_GetSharedDotaLobbyScalarSnapshot();
+        const auto shared_snapshot = GBE_GetSharedDotaLobbyStateStore().snapshot();
         if (shared_snapshot.valid && shared_snapshot.active && shared_snapshot.lobby_id != 0) {
             GBE_RestoreSharedDotaLobbyState("queued_state_preapply");
         } else {
@@ -1145,7 +1130,7 @@ Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class N
         initialize_gc();
     }
 
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
         "coordinator init this=%p is_server=%u shared_lobby=%p shared_valid=%u active=%u lobby_id=%llu match_id=%llu state=%u game_state=%u",
@@ -1206,7 +1191,7 @@ void Steam_Game_Coordinator::initialize_gc()
 void Steam_Game_Coordinator::GBE_ClearDotaLobbyRuntimeState()
 {
     GBE_local_lobby = GBE_LocalLobby{};
-    GBE_ClearSharedDotaLobbyForRuntimeReset();
+    GBE_GetSharedDotaLobbyStateStore().clear();
     GBE_ClearLastDotaLaunchStatePushedGameState();
 }
 
@@ -1409,7 +1394,7 @@ std::string Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerName() const
     if (!GBE_local_lobby.owner_name.empty())
         return GBE_local_lobby.owner_name;
 
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
     if (!shared_lobby.owner_name.empty())
         return shared_lobby.owner_name;
 
