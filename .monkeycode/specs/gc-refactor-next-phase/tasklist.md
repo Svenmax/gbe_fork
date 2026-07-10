@@ -256,8 +256,11 @@
     - 断言关键事件字段齐全、reason 稳定、敏感 payload 不进入结构化日志。
     - 测试：在统一 formatter focused suite 增加 11 条断言，精确覆盖 reconnect callback、lifecycle transition decision、action execution、conditional skip、action failure 和 delayed-task queued 六类关键事件。每个样本断言固定十字段顺序、lobby/generation/server 身份、direct/wrapped/delayed source、稳定 reason、action decision，以及 message/job presence；另对 `payload=`、`session=`、`password=`、`raw_state=`、`endpoint_raw=` 和 `reason_text=` 六类敏感或自由文本字段执行排除断言。reconnect focused suite 从 242 增至 253/253。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
-  - [ ] 10.6 更新 reason inventory 审计
+  - [x] 10.6 更新 reason inventory 审计
     - 从枚举或集中表生成 inventory，检查测试覆盖和重复值。
+    - 实现：Audit 8 从 `gbe_dota_diagnostic_event.h` 的 `Reason` 枚举和 `describe_reason()` 集中映射直接派生 typed diagnostic inventory，检查枚举缺失映射、映射缺失枚举、重复稳定值、focused serialization inventory 缺项、额外项和序列化值漂移。原有 14 项高风险业务 reason 继续通过 `reason-trace-governance.md` 治理，避免与 typed diagnostic reason 混为一套手工清单。
+    - 测试：新增 6 个 Python focused regression tests，覆盖完整唯一 inventory 通过，以及缺失映射、额外映射、重复稳定值、focused coverage 缺失和 focused 值漂移五类失败；测试接入 fast/full offline 门禁。Audit 8 当前自动验证 26 项 typed diagnostic reason 和 14 项历史高风险业务 reason。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；audit helper 6/6，reconnect network 253/253，registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
   - [ ] 10.7 检查点：确保所有测试通过，如有疑问请询问用户
 
 - [ ] 11. P11 明确并验证并发模型

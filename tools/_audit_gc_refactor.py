@@ -29,6 +29,13 @@ TODO_MD = os.path.join(ROOT_DIR, "REFACTOR_TODO.md")
 RUN_GC_OFFLINE_TESTS_SH = os.path.join(ROOT_DIR, "tools", "run_gc_offline_tests.sh")
 PREMAKE5_LUA = os.path.join(ROOT_DIR, "premake5.lua")
 REASON_TRACE_GOVERNANCE_MD = os.path.join(ROOT_DIR, "docs", "gc", "reason-trace-governance.md")
+DIAGNOSTIC_EVENT_H = os.path.join(ROOT_DIR, "dll", "gbe_dota_diagnostic_event.h")
+DIAGNOSTIC_EVENT_TEST_CPP = os.path.join(
+    ROOT_DIR,
+    "tools",
+    "gbe_dota_reconnect_network_test",
+    "gbe_dota_reconnect_network_test.cpp",
+)
 GC_TUS = sorted(glob.glob(os.path.join(ROOT_DIR, "dll", "gbe_dota_*.cpp"))) + [MAIN_CPP]
 TEMPLATE_BLOB_OWNER_FILES = {
     "gbe_dota_template_replay_handlers.cpp",
@@ -429,8 +436,73 @@ def audit_lifecycle_side_effect_ownership():
     return issues
 
 
+def extract_diagnostic_reason_inventory(header_text):
+    """Derive typed diagnostic reason names and stable serialized values."""
+    enum_match = re.search(r"enum\s+class\s+Reason\s*:[^{]+\{(?P<body>.*?)\};", header_text, re.S)
+    if not enum_match:
+        return [], {}, ["Reason enum: missing from gbe_dota_diagnostic_event.h"]
+
+    enum_names = []
+    for entry in enum_match.group("body").split(","):
+        name = entry.split("//", 1)[0].strip()
+        if name:
+            enum_names.append(name.split("=", 1)[0].strip())
+
+    describe_match = re.search(
+        r"describe_reason\s*\([^)]*\)\s*\{(?P<body>.*?)\n\}",
+        header_text,
+        re.S,
+    )
+    if not describe_match:
+        return enum_names, {}, ["describe_reason: missing from gbe_dota_diagnostic_event.h"]
+
+    mappings = dict(re.findall(
+        r'case\s+Reason::(\w+)\s*:\s*return\s+"([^"]*)"\s*;',
+        describe_match.group("body"),
+    ))
+    return enum_names, mappings, []
+
+
+def audit_diagnostic_reason_inventory(header_text, focused_test_text):
+    """Check the centralized typed inventory and its focused test table."""
+    issues = []
+    enum_names, mappings, extraction_issues = extract_diagnostic_reason_inventory(header_text)
+    issues.extend(extraction_issues)
+
+    enum_name_set = set(enum_names)
+    mapping_name_set = set(mappings)
+    for name in sorted(enum_name_set - mapping_name_set):
+        issues.append(f"diagnostic Reason::{name}: missing stable describe_reason mapping")
+    for name in sorted(mapping_name_set - enum_name_set):
+        issues.append(f"diagnostic Reason::{name}: mapping has no enum entry")
+
+    values_to_names = {}
+    for name, value in mappings.items():
+        values_to_names.setdefault(value, []).append(name)
+    for value, names in sorted(values_to_names.items()):
+        if len(names) > 1:
+            issues.append(f"diagnostic reason value {value!r}: duplicate mapping for {', '.join(sorted(names))}")
+
+    focused_mappings = dict(re.findall(
+        r'\{diagnostic::Reason::(\w+),\s*"([^"]*)"\}',
+        focused_test_text,
+    ))
+    for name in enum_names:
+        expected_value = mappings.get(name)
+        if name not in focused_mappings:
+            issues.append(f"diagnostic Reason::{name}: missing from focused serialization inventory")
+        elif expected_value is not None and focused_mappings[name] != expected_value:
+            issues.append(
+                f"diagnostic Reason::{name}: focused value {focused_mappings[name]!r} does not match {expected_value!r}"
+            )
+    for name in sorted(set(focused_mappings) - enum_name_set):
+        issues.append(f"diagnostic Reason::{name}: focused inventory has no enum entry")
+
+    return issues, len(enum_names)
+
+
 def audit_reason_inventory():
-    """Ensure high-risk reasons stay documented and covered by tests/specs."""
+    """Audit typed diagnostic reasons plus legacy high-risk reason governance."""
     governance_text = read(REASON_TRACE_GOVERNANCE_MD) if os.path.exists(REASON_TRACE_GOVERNANCE_MD) else ""
     coverage_text = ""
     for pattern in (
@@ -441,13 +513,17 @@ def audit_reason_inventory():
         for path in glob.glob(pattern):
             coverage_text += "\n" + read(path)
 
-    issues = []
+    issues, diagnostic_reason_count = audit_diagnostic_reason_inventory(
+        read(DIAGNOSTIC_EVENT_H),
+        read(DIAGNOSTIC_EVENT_TEST_CPP),
+    )
+
     for reason in HIGH_RISK_REASON_STRINGS:
         if f"`{reason}`" not in governance_text:
             issues.append(f"{reason}: missing from reason-trace-governance.md high-risk inventory")
         if reason not in coverage_text:
             issues.append(f"{reason}: missing from focused tests or specs coverage text")
-    return issues
+    return issues, diagnostic_reason_count, len(HIGH_RISK_REASON_STRINGS)
 
 
 def audit_shared_lobby_global_access():
@@ -590,12 +666,13 @@ def main():
     print()
 
     print("=" * 70)
-    print("AUDIT 8: High-risk reason inventory")
+    print("AUDIT 8: Diagnostic and high-risk reason inventory")
     print("=" * 70)
-    print("  Action: document high-risk reason strings and keep matching test/spec coverage text.")
-    reason_issues = audit_reason_inventory()
+    print("  Action: derive typed reasons, reject duplicate values, and keep focused and legacy coverage aligned.")
+    reason_issues, diagnostic_reason_count, high_risk_reason_count = audit_reason_inventory()
     if not reason_issues:
-        print(f"  All {len(HIGH_RISK_REASON_STRINGS)} high-risk reason strings are documented and covered")
+        print(f"  All {diagnostic_reason_count} typed diagnostic reasons have unique mappings and focused coverage")
+        print(f"  All {high_risk_reason_count} legacy high-risk reason strings are documented and covered")
     else:
         for issue in reason_issues:
             print(f"  {issue}")

@@ -6,6 +6,10 @@ This note records the high-risk Dota GC reason strings that are part of the obse
 
 ## High-Risk Reason Inventory
 
+Typed diagnostic reasons are defined by the `Reason` enum and `describe_reason()` in `dll/gbe_dota_diagnostic_event.h`. Audit 8 derives that inventory directly, requires a unique stable value for every enum entry, and requires the focused serialization table in `tools/gbe_dota_reconnect_network_test/gbe_dota_reconnect_network_test.cpp` to match every name and value.
+
+The table below governs legacy business reason strings carried by action recorders and publish hooks. These values remain separate from the typed diagnostic event reason inventory.
+
 | Area | Reason | Keep or Rename | Coverage |
 | --- | --- | --- | --- |
 | Inventory equip | `equip_forward_host_resubscribe_server` | Keep | Handler smoke test asserts server GC cache push reason |
