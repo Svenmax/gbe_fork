@@ -1599,6 +1599,7 @@ bool test_dota_lobby_state_helpers()
 
     GBE_LocalLobby local{};
     local.active = true;
+    local.generation = 0x0101ull;
     local.lobby_id = 0x0102ull;
     local.generic_lobby_id = 0x0304ull;
     local.room_name = "room";
@@ -1623,6 +1624,7 @@ bool test_dota_lobby_state_helpers()
     shared.server_id = 0x1111ull;
     gbe::dota_lobby_state::publish_local_lobby_to_shared(local, false, shared);
     ok &= expect_true(shared.valid, "lobby state publish client valid");
+    ok &= expect_eq_u64(shared.generation, local.generation, "lobby state publish generation");
     ok &= expect_eq_u64(shared.lobby_id, local.lobby_id, "lobby state publish lobby id");
     ok &= expect_eq_string(shared.room_name, local.room_name, "lobby state publish room name");
     ok &= expect_eq_u64(shared.state, 4u, "lobby state client preserves higher state");
@@ -1641,6 +1643,7 @@ bool test_dota_lobby_state_helpers()
     GBE_LocalLobby restored{};
     gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, true, restored);
     ok &= expect_true(restored.active, "lobby state restore active");
+    ok &= expect_eq_u64(restored.generation, local.generation, "lobby state restore generation");
     ok &= expect_eq_u64(restored.lobby_id, local.lobby_id, "lobby state restore lobby id");
     ok &= expect_eq_u64(restored.generic_lobby_id, local.generic_lobby_id, "lobby state restore generic lobby id");
     ok &= expect_eq_string(restored.room_name, local.room_name, "lobby state restore room name");
@@ -1674,6 +1677,7 @@ bool test_dota_lobby_state_helpers()
 
     GBE_DotaReconnectContext reconnect{};
     ok &= expect_true(gbe::dota_lobby_state::build_reconnect_context(local, reconnect), "lobby state reconnect builds");
+    ok &= expect_eq_u64(reconnect.generation, local.generation, "lobby state reconnect generation");
     ok &= expect_eq_u64(reconnect.server_id, local.server_id, "lobby state reconnect server id");
     ok &= expect_eq_u64(reconnect.lobby_state, local.state, "lobby state reconnect lobby state");
     ok &= expect_eq_u64(reconnect.game_state, local.game_state, "lobby state reconnect game state");

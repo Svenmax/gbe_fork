@@ -2,5 +2,7 @@
 
 GBE_DotaReconnectContext make_reconnect_context()
 {
-    return {};
+    GBE_DotaReconnectContext context{};
+    context.generation = 1;
+    return context;
 }

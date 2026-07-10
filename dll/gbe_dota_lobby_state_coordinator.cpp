@@ -1270,6 +1270,10 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         }
 
         bool changed = false;
+        if (GBE_local_lobby.generation != GBE_shared_dota_lobby_state.generation) {
+            GBE_local_lobby.generation = GBE_shared_dota_lobby_state.generation;
+            changed = true;
+        }
         if (GBE_local_lobby.generic_lobby_id != GBE_shared_dota_lobby_state.generic_lobby_id) {
             GBE_local_lobby.generic_lobby_id = GBE_shared_dota_lobby_state.generic_lobby_id;
             changed = true;

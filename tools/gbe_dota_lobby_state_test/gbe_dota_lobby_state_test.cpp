@@ -606,6 +606,7 @@ bool test_stale_generic_lobby_state_regression()
     {
         GBE_SharedDotaLobbyState shared{};
         shared.active = true;
+        shared.generation = 17u;
         shared.custom_game.game_id = 500ull;
         shared.state = 4u;  // READYUP
         shared.game_state = 2u;  // in-game
@@ -613,6 +614,7 @@ bool test_stale_generic_lobby_state_regression()
         gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, true, local);
         ok &= expect_eq_u32(local.state, 2u, "adopt normalizes stale readyup to run for custom game");
         ok &= expect_eq_u32(local.game_state, 2u, "adopt keeps game_state");
+        ok &= expect_eq_u64(local.generation, shared.generation, "adopt preserves lobby generation");
     }
 
     // adopt_shared_lobby_to_local: no normalization for non-custom lobbies.
@@ -675,6 +677,7 @@ bool test_stale_generic_lobby_state_regression()
     // compose_queued_lobby_state_apply_plan: preserve_monotonic_game_state prevents stale reset.
     {
         GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 23u;
         lobby.state = 2u;
         lobby.game_state = 3u;  // current in-game progress
         auto plan = gbe::dota_lobby_state::compose_queued_lobby_state_apply_plan(
@@ -800,6 +803,7 @@ bool test_owner_disconnect_and_reconnect()
         GBE_DotaReconnectContext ctx{};
         bool result = gbe::dota_lobby_state::build_reconnect_context(lobby, ctx);
         ok &= expect_true(result, "reconnect context built for started game");
+        ok &= expect_eq_u64(ctx.generation, lobby.generation, "reconnect generation");
         ok &= expect_eq_u64(ctx.lobby_id, lobby.lobby_id, "reconnect lobby_id");
         ok &= expect_eq_u64(ctx.server_id, 700ull, "reconnect server_id");
         ok &= expect_eq_u32(ctx.lobby_state, 2u, "reconnect lobby_state");
@@ -1008,6 +1012,7 @@ bool test_reconnect_context_source_pipeline()
         source.kind = kind;
         source.valid = true;
         source.active = true;
+        source.generation = seed;
         source.lobby_id = seed + 1u;
         source.lobby_state = 2u;
         source.game_state = 2u;
@@ -1028,6 +1033,7 @@ bool test_reconnect_context_source_pipeline()
         ok &= expect_true(
             gbe::dota_reconnect::build_context(source, context) == RejectReason::None,
             "each reconnect source kind builds independently");
+        ok &= expect_eq_u64(context.generation, source.generation, "builder propagates reconnect generation");
         ok &= expect_eq_u64(context.lobby_id, source.lobby_id, "builder propagates reconnect lobby id");
         ok &= expect_eq_u64(context.server_id, source.server_id, "builder propagates reconnect server id");
         ok &= expect_eq_u64(context.custom_game_id, source.custom_game_id, "builder propagates reconnect custom game id");
@@ -1039,6 +1045,7 @@ bool test_reconnect_context_source_pipeline()
     auto selection = gbe::dota_reconnect::select_context({generic, local, recent, shared});
     ok &= expect_true(selection.selected, "source matrix selects a context");
     ok &= expect_true(selection.source_kind == SourceKind::Shared, "shared source has stable highest priority");
+    ok &= expect_eq_u64(selection.context.generation, shared.generation, "selected generation comes from shared source");
     ok &= expect_eq_u64(selection.context.lobby_id, shared.lobby_id, "selected fields come from shared source");
     ok &= expect_eq_u64(selection.context.server_id, shared.server_id, "selected server comes from shared source");
     ok &= expect_eq_u64(selection.context.owner_steam_id, shared.owner_steam_id, "selected owner comes from shared source");
@@ -1051,6 +1058,7 @@ bool test_reconnect_context_source_pipeline()
     selection = gbe::dota_reconnect::select_context({generic, invalid_shared, recent});
     ok &= expect_true(selection.selected, "invalid high-priority source falls back");
     ok &= expect_true(selection.source_kind == SourceKind::Recent, "recent source precedes generic recovery");
+    ok &= expect_eq_u64(selection.context.generation, recent.generation, "fallback generation uses recent source");
     ok &= expect_eq_u64(selection.context.lobby_id, recent.lobby_id, "fallback output uses one recent source");
 
     GBE_DotaReconnectContext rejected_context{};
@@ -1079,6 +1087,7 @@ bool test_reconnect_context_source_pipeline()
     GBE_LocalLobby generic_lobby = make_active_lobby();
     generic_lobby.state = 2u;
     generic_lobby.game_state = 2u;
+    generic_lobby.generation = 37u;
     generic_lobby.server_id = 700u;
     generic_lobby.connect = "10.1.1.1:27015";
     generic_lobby.custom_game.game_id = 500u;
@@ -1087,6 +1096,7 @@ bool test_reconnect_context_source_pipeline()
     generic_lobby.members.back().steam_id = 84u;
     Source generic_source = gbe::dota_reconnect::source_from_generic_lobby(generic_lobby, 84u);
     ok &= expect_true(generic_source.valid, "generic recovery accepts local lobby member");
+    ok &= expect_eq_u64(generic_source.generation, generic_lobby.generation, "generic recovery preserves generation");
     ok &= expect_true(
         gbe::dota_reconnect::build_context(generic_source, rejected_context) == RejectReason::None,
         "generic recovery uses common builder");
@@ -1597,6 +1607,7 @@ bool test_serialized_connection_state_scopes_dedup_to_lobby()
     GBE_DotaSerializedConnectionState state{};
 
     state.begin_lobby(100ull);
+    ok &= expect_true(state.lobby_id == 100ull && state.generation == 0ull, "serialized state records lobby identity");
     ok &= expect_true(state.should_connect_direct(700ull, "10.0.0.5:27015"), "first direct connect is allowed");
     state.record_direct_connect(700ull, "10.0.0.5:27015");
     ok &= expect_false(state.should_connect_direct(700ull, "10.0.0.5:27015"), "same lobby direct connect is deduplicated");
@@ -1631,6 +1642,15 @@ bool test_serialized_connection_state_scopes_dedup_to_lobby()
     ok &= expect_true(state.retry_count == 0u, "new lobby resets retry accounting");
     ok &= expect_true(state.callback_server_id == 0ull && state.callback_endpoint.empty(), "new lobby clears callback deduplication state");
     ok &= expect_true(state.direct_connect_server_id == 0ull && state.direct_connect_endpoint.empty(), "new lobby clears direct connect deduplication state");
+
+    state.begin_lobby(101ull, 9ull);
+    ok &= expect_true(state.lobby_id == 101ull && state.generation == 9ull, "serialized state stores generation alongside lobby id");
+    state.record_direct_connect(700ull, "10.0.0.5:27015");
+    state.record_engine_callback(700ull, "10.0.0.5:27015");
+    state.begin_lobby(101ull, 10ull);
+    ok &= expect_true(state.generation == 10ull, "same lobby refreshes serialized generation");
+    ok &= expect_false(state.should_connect_direct(700ull, "10.0.0.5:27015"), "P6.2 keeps lobby-id direct-connect dedup behavior");
+    ok &= expect_true(state.engine_callback_queued(700ull, "10.0.0.5:27015"), "P6.2 keeps lobby-id callback dedup behavior");
     return ok;
 }
 

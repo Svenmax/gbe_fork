@@ -144,9 +144,10 @@
     - 使用单调递增值并定义进程生命周期内的溢出行为。
     - 依赖：任务 4 和任务 6。
     - 实现：`Generation` 使用 `uint64`，零值表示未分配；`Create/Join/Leave/Reset/Recover` 均推进一次 generation；达到 `UINT64_MAX` 后拒绝分配并保持最大值，禁止回绕复用旧代际。
-  - [ ] 7.2 将 generation 加入 lobby snapshot 与 reconnect context
+  - [x] 7.2 将 generation 加入 lobby snapshot 与 reconnect context
     - `lobby_id` 保持协议身份，generation 专门用于本地异步状态代际。
     - 更新 shared、recent、local、generic recovery 和 serialized state。
+    - 实现：local/shared lobby、shared reconnect/scalar snapshot、四类 reconnect source、recent/context 和 serialized connection state 均独立携带 generation；现有 lobby-ID 去重行为保留至 7.4。
   - [ ] 7.3 将 generation 加入延迟任务和 callback
     - runtime lobby update、reconnect callback、postgame task 和延迟 publish 在执行前校验 generation。
     - 旧 generation 的任务返回明确 stale reason。

@@ -265,6 +265,7 @@ GBE_DotaSharedLobbyScalarSnapshot GBE_GetSharedDotaLobbyScalarSnapshot()
     GBE_DotaSharedLobbyScalarSnapshot snapshot{};
     snapshot.valid = GBE_shared_dota_lobby_state.valid;
     snapshot.active = GBE_shared_dota_lobby_state.active;
+    snapshot.generation = GBE_shared_dota_lobby_state.generation;
     snapshot.lobby_id = GBE_shared_dota_lobby_state.lobby_id;
     snapshot.generic_lobby_id = GBE_shared_dota_lobby_state.generic_lobby_id;
     snapshot.lobby_state = GBE_shared_dota_lobby_state.state;
@@ -278,6 +279,7 @@ GBE_DotaReconnectSharedStateSnapshot GBE_GetSharedDotaReconnectStateSnapshot()
     GBE_DotaReconnectSharedStateSnapshot snapshot{};
     snapshot.valid = GBE_shared_dota_lobby_state.valid;
     snapshot.active = GBE_shared_dota_lobby_state.active;
+    snapshot.generation = GBE_shared_dota_lobby_state.generation;
     snapshot.lobby_id = GBE_shared_dota_lobby_state.lobby_id;
     snapshot.lobby_state = GBE_shared_dota_lobby_state.state;
     snapshot.game_state = GBE_shared_dota_lobby_state.game_state;

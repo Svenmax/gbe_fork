@@ -18,6 +18,7 @@ struct DotaPracticeLobbyCreateRequest;
 struct GBE_LocalLobby
 {
     bool active{};
+    std::uint64_t generation{};
     std::uint64_t lobby_id{};
     std::uint64_t generic_lobby_id{};
     bool has_chat_channel{};
@@ -87,6 +88,7 @@ struct GBE_LocalLobby
 struct GBE_SharedDotaLobbyState {
     bool valid{};
     bool active{};
+    std::uint64_t generation{};
     std::uint64_t lobby_id{};
     std::uint64_t generic_lobby_id{};
     bool has_chat_channel{};

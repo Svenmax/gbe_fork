@@ -20,6 +20,7 @@ struct GBE_DotaReconnectSource {
     GBE_DotaReconnectSourceKind kind{GBE_DotaReconnectSourceKind::Shared};
     bool valid{};
     bool active{};
+    std::uint64_t generation{};
     std::uint64_t lobby_id{};
     std::uint32_t lobby_state{};
     std::uint32_t game_state{};

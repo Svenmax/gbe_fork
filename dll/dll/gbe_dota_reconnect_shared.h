@@ -9,7 +9,8 @@
 // Written by steam_game_coordinator.cpp, read by steam_networking_socketsserialized.cpp.
 
 struct GBE_DotaReconnectContext {
-    uint64_t lobby_id;        // Dota lobby generation for reconnect deduplication
+    uint64_t generation;      // Process-local lobby lifecycle generation
+    uint64_t lobby_id;        // Dota protocol lobby identity
     uint64_t server_id;       // lobby server_steamid (AnonGameServer)
     uint32_t lobby_state;     // lobby state (2 = RUN)
     uint32_t game_state;      // lobby game_state (2 = in-game, 3 = post-game)
@@ -21,6 +22,7 @@ struct GBE_DotaReconnectContext {
 struct GBE_DotaReconnectSharedStateSnapshot {
     bool valid{};
     bool active{};
+    uint64_t generation{};
     uint64_t lobby_id{};
     uint32_t lobby_state{};
     uint32_t game_state{};
@@ -39,6 +41,7 @@ struct GBE_DotaReconnectSharedStateSnapshot {
 struct GBE_DotaSharedLobbyScalarSnapshot {
     bool valid{};
     bool active{};
+    uint64_t generation{};
     uint64_t lobby_id{};
     uint64_t generic_lobby_id{};
     uint32_t lobby_state{};

@@ -5,6 +5,7 @@
 #include <string>
 
 struct GBE_DotaSerializedConnectionState {
+    std::uint64_t generation{};
     std::uint64_t lobby_id{};
     std::uint64_t last_post_server_id{};
     std::uint32_t retry_count{};
@@ -14,7 +15,7 @@ struct GBE_DotaSerializedConnectionState {
     std::uint64_t direct_connect_server_id{};
     std::string direct_connect_endpoint;
 
-    void begin_lobby(std::uint64_t current_lobby_id);
+    void begin_lobby(std::uint64_t current_lobby_id, std::uint64_t current_generation = 0);
     void begin_server(std::uint64_t server_id);
     bool should_connect_direct(std::uint64_t server_id, const std::string &endpoint) const;
     void record_direct_connect(std::uint64_t server_id, const std::string &endpoint);

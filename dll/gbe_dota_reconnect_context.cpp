@@ -28,6 +28,7 @@ Source source_from_shared_snapshot(const GBE_DotaReconnectSharedStateSnapshot &s
     source.kind = SourceKind::Shared;
     source.valid = snapshot.valid;
     source.active = snapshot.active;
+    source.generation = snapshot.generation;
     source.lobby_id = snapshot.lobby_id;
     source.lobby_state = snapshot.lobby_state;
     source.game_state = snapshot.game_state;
@@ -46,6 +47,7 @@ Source source_from_context(const GBE_DotaReconnectContext &context, bool valid, 
     source.kind = kind;
     source.valid = valid;
     source.active = true;
+    source.generation = context.generation;
     source.lobby_id = context.lobby_id;
     source.lobby_state = context.lobby_state;
     source.game_state = context.game_state;
@@ -62,6 +64,7 @@ Source source_from_local_lobby(const GBE_LocalLobby &lobby, SourceKind kind)
     source.kind = kind;
     source.valid = true;
     source.active = lobby.active;
+    source.generation = lobby.generation;
     source.lobby_id = lobby.lobby_id;
     source.lobby_state = lobby.state;
     source.game_state = lobby.game_state;
@@ -118,6 +121,7 @@ RejectReason build_context(const Source &source, GBE_DotaReconnectContext &conte
     if (endpoint.empty())
         return RejectReason::MissingEndpoint;
 
+    context.generation = source.generation;
     context.lobby_id = source.lobby_id;
     context.server_id = source.server_id;
     context.lobby_state = source.lobby_state;

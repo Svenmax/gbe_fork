@@ -523,6 +523,7 @@ void publish_local_lobby_to_shared(const GBE_LocalLobby &local, bool is_server, 
 {
     shared.valid = true;
     shared.active = local.active;
+    shared.generation = local.generation;
     shared.lobby_id = local.lobby_id;
     shared.generic_lobby_id = local.generic_lobby_id;
     shared.has_chat_channel = local.has_chat_channel;
@@ -590,6 +591,7 @@ void adopt_shared_lobby_to_local(
     GBE_LocalLobby &local)
 {
     local.active = shared.active;
+    local.generation = shared.generation;
     local.lobby_id = shared.lobby_id;
     local.generic_lobby_id = shared.generic_lobby_id;
     local.has_chat_channel = shared.has_chat_channel;

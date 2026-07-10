@@ -22,9 +22,11 @@ void expect(bool condition, const char *label)
 GBE_DotaReconnectContext make_context(
     std::uint64_t lobby_id = 100,
     std::uint64_t server_id = 200,
-    const char *endpoint = "10.20.30.40:27015")
+    const char *endpoint = "10.20.30.40:27015",
+    std::uint64_t generation = 1)
 {
     GBE_DotaReconnectContext context{};
+    context.generation = generation;
     context.lobby_id = lobby_id;
     context.server_id = server_id;
     context.lobby_state = 2;
@@ -150,6 +152,7 @@ void test_first_connection_contract()
     expect(std::string(queue.callback.m_rgchServer) == "10.20.30.40:27015", "callback server body");
     expect(queue.callback.m_rgchPassword[0] == '\0' && queue.delay == 0.0, "callback password and delay");
     expect(events == std::vector<std::string>({"context:primary", "eligible", "connect", "queue"}), "production call order");
+    expect(state.generation == provider.primary.generation && state.lobby_id == provider.primary.lobby_id, "serialized state receives context identities");
 }
 
 void test_dedup_and_generation_changes()
@@ -175,6 +178,11 @@ void test_dedup_and_generation_changes()
     provider.primary = make_context(101, 201, "10.20.30.41:27016");
     execute(provider, connector, queue, state);
     expect(connector.calls == 4 && queue.calls == 4, "endpoint change reconnects");
+
+    provider.primary = make_context(101, 201, "10.20.30.41:27016", 2);
+    const auto same_lobby_new_generation = execute(provider, connector, queue, state);
+    expect(state.generation == 2, "same lobby propagates a newer generation into serialized state");
+    expect(same_lobby_new_generation.callback_already_queued, "P6.2 preserves lobby-id callback dedup behavior");
 }
 
 void test_recovery_and_skip_paths()
