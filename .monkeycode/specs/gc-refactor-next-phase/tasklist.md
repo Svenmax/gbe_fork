@@ -360,7 +360,7 @@
   - [x] 12.7 检查点：确保所有测试通过，如有疑问请询问用户
     - P12 回归、行为基线、架构审计和并发门禁均已关闭，无待确认的协议、payload、action-order 或并发语义问题。production integration 由已配置的 blocking Windows/Linux release jobs 最终执行。
 
-- [ ] 13. P13 建立 GC Composition Root
+- [x] 13. P13 建立 GC Composition Root
   - [x] 13.1 定义应用级依赖容器
     - 建立唯一 GC/Dota composition root，集中拥有 lobby store、reconnect service、lifecycle executor、handler registry、callback scheduler 和 production adapters。
     - 依赖：任务 12。
@@ -415,7 +415,10 @@
     - 最小白名单仅包含 `GBE_shared_dota_lobby_store` 与 `GBE_dota_runtime_state` 两个非 owning compatibility locator，并记录其存在理由；layered CI 顺延为 Audit 17。
     - 注入式 fixtures：接受 immutable table/function 与两个 locator；拒绝业务 file static、namespace business state 和第三个未授权 locator。audit helper 由 31 增至 35。
     - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题，TSAN 无 race。
-  - [ ] 13.8 检查点：确保所有测试通过，如有疑问请询问用户
+  - [x] 13.8 检查点：确保所有测试通过，如有疑问请询问用户
+    - P13.1-P13.7 的应用级 owner、生命周期顺序、显式依赖注入、业务状态收敛、组装/销毁测试和全局状态审计均已关闭。
+    - 最终门禁：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题，TSAN 无 race。
+    - 本地 production generation 继续受 bundled Premake GLIBC 2.38 要求和缺少 Windows runner 限制；blocking Windows/Linux release jobs 保持最终 production integration gate。无待确认的 ABI、协议、payload、action-order、ownership 或并发语义问题。
 
 - [ ] 14. 核心 P15 建立显式纯状态机
   - [ ] 14.1 定义 Lobby lifecycle 状态与事件
