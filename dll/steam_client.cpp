@@ -1032,7 +1032,7 @@ void Steam_Client::UnregisterCallResult( class CCallbackBase *pCallback, SteamAP
 void Steam_Client::RunCallbacks(bool runClientCB, bool runGameserverCB)
 {
     PRINT_DEBUG("begin ------------------------------------------------------");
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    std::unique_lock<std::recursive_mutex> lock(global_mutex);
     cb_run_active = true;
 
     // PRINT_DEBUG("network *********");
@@ -1052,12 +1052,12 @@ void Steam_Client::RunCallbacks(bool runClientCB, bool runGameserverCB)
 
     if (runClientCB && IsUserLogIn()) {
         // PRINT_DEBUG("callback_results_client *********");
-        callback_results_client->runCallResults();
+        callback_results_client->runCallResults(lock);
     }
 
     if (runGameserverCB && IsServerInit()) {
         // PRINT_DEBUG("callback_results_server *********");
-        callback_results_server->runCallResults();
+        callback_results_server->runCallResults(lock);
     }
 
     // PRINT_DEBUG("callbacks_server *********");

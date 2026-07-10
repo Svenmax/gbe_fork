@@ -713,7 +713,7 @@ int Steam_Networking_Sockets_Serialized::GetCachedRelayTicket( uint32 idxTicket,
 void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pMsg, uint32 cbMsg )
 {
     PRINT_DEBUG_TODO();
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    std::unique_lock<std::recursive_mutex> lock(global_mutex);
 
     if (GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsConfigUpdated_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsConfigUpdated") ||
         GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsCert_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsCert") ||
@@ -725,13 +725,16 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     const uint64 local_id = settings->get_local_steam_id().ConvertToUint64();
     if (!reconnect_context_provider || !reconnect_direct_connector || !reconnect_callback_queue)
         return;
-    const GBE_DotaReconnectPostResult result = GBE_ExecuteDotaReconnectPostConnectionState(
+    GBE_DotaReconnectPostPlan reconnect_plan = GBE_PrepareDotaReconnectPostConnectionState(
         local_id,
         cbMsg,
         *reconnect_context_provider,
-        *reconnect_direct_connector,
-        *reconnect_callback_queue,
         dota_connection_state);
+    lock.unlock();
+    const GBE_DotaReconnectPostResult result = GBE_ExecuteDotaReconnectPostEffects(
+        std::move(reconnect_plan),
+        *reconnect_direct_connector,
+        *reconnect_callback_queue);
     const GBE_DotaReconnectContext &ctx = result.context;
     if (result.has_context) {
         GBE_ReconnectLogEvent({

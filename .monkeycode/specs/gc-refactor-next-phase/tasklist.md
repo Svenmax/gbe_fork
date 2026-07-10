@@ -271,8 +271,12 @@
     - 实现：新增 `docs/gc/concurrency-ownership.md`，明确 shared lobby store、recent reconnect context、per-instance serialized connection state、reconnect adapter probe cache、callback queue、delayed reconnect callback、per-coordinator delayed GC message 和 deferred lifecycle slot 的 owner、同步域、允许入口与异步 generation 校验。六个 owner 类型和共享接口增加 source-level 边界注释；当前 `global_mutex` 外层域、store 内部加锁、callback 解锁执行和 per-instance 状态约束均按现状记录，P11.2/P11.3 风险边界单独列出。
     - 审计：新增 Audit 11，要求 14 项关键 owner、入口和后续边界持续存在；audit helper regression suite 增至 7 个测试。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 253/253，registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 11 项 0 问题。
-  - [ ] 11.2 收敛锁获取顺序
+  - [x] 11.2 收敛锁获取顺序
     - 定义统一 lock order，消除持有全局锁时调用外部 callback/network API 的路径。
+    - 实现：`PostConnectionStateMsg()` 使用 `unique_lock<recursive_mutex>` 在 `global_mutex` 内执行 reconnect context 读取、serialized state 更新和 direct/callback dedup 预留，随后显式释放 process lock，再按既有 `connect -> callback queue` 顺序执行 network/callback effects。callback queue adapter 在自身入口重新进入既有 `global_mutex` 同步域，避免锁外访问 callback 容器。
+    - callback：`SteamCallResults::runCallResults()` 接收 owning `unique_lock`，通过统一 exception-safe RAII 边界在锁外执行普通 callback、call-result callback、completed callback 和 `cb_all`，返回后恢复锁并继续队列遍历；生产路径已移除裸 `global_mutex.unlock()/lock()`。
+    - 测试与审计：reconnect focused fake 断言 prepare 阶段不执行外部 effect、锁内预留 dedup 且 effects 保持顺序；callsystem 使用另一线程 `try_lock()` 证明已注册、late-registration replay 和 `cb_all` 均在 process lock 外执行。Audit 11 禁止 callsystem 裸锁操作并要求 production reconnect 保持 prepare/unlock/effects 顺序。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 259/259，callsystem guard 8/8，registry assertions 339/339，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit helper 8/8，audit 11 项 0 问题。
   - [ ] 11.3 将 serialized 实例状态限制在实例同步域
     - 明确 callback 与 `PostConnectionStateMsg()` 的串行化要求。
     - 必要时使用实例 mutex 或现有 run-callback 序列保证。

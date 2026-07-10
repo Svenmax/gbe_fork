@@ -7,6 +7,7 @@
 #include "steam/isteamfriends.h"
 #include "steam/steamnetworkingtypes.h"
 
+#include <array>
 #include <cstdint>
 #include <string>
 
@@ -51,6 +52,26 @@ struct GBE_DotaReconnectPostResult {
     bool callback_already_queued{};
     bool callback_queued{};
 };
+
+struct GBE_DotaReconnectPostPlan {
+    GBE_DotaReconnectPostResult result;
+    bool connect_direct{};
+    SteamNetworkingIPAddr direct_address{};
+    std::array<SteamNetworkingConfigValue_t, 3> direct_options{};
+    bool queue_callback{};
+    GameServerChangeRequested_t server_change{};
+};
+
+GBE_DotaReconnectPostPlan GBE_PrepareDotaReconnectPostConnectionState(
+    std::uint64_t local_steam_id,
+    std::uint32_t payload_size,
+    GBE_DotaReconnectContextProvider &context_provider,
+    GBE_DotaSerializedConnectionState &connection_state);
+
+GBE_DotaReconnectPostResult GBE_ExecuteDotaReconnectPostEffects(
+    GBE_DotaReconnectPostPlan plan,
+    GBE_DotaReconnectDirectConnector &direct_connector,
+    GBE_DotaReconnectCallbackQueue &callback_queue);
 
 GBE_DotaReconnectPostResult GBE_ExecuteDotaReconnectPostConnectionState(
     std::uint64_t local_steam_id,

@@ -274,8 +274,19 @@ void SteamCallResults::clear()
     callresults.clear();
 }
 
-void SteamCallResults::runCallResults()
+void SteamCallResults::runCallResults(std::unique_lock<std::recursive_mutex> &process_lock)
 {
+    auto run_unlocked = [&process_lock](const auto &callback) {
+        process_lock.unlock();
+        try {
+            callback();
+        } catch (...) {
+            process_lock.lock();
+            throw;
+        }
+        process_lock.lock();
+    };
+
     unsigned long current_size = static_cast<unsigned long>(callresults.size());
     for (unsigned i = 0; i < current_size; ++i) {
         unsigned index = i;
@@ -299,20 +310,18 @@ void SteamCallResults::runCallResults()
                     std::vector<class CCallbackBase *> temp_cbs = callresults[index].callbacks;
                     for (auto & cb : temp_cbs) {
                         PRINT_DEBUG("Calling callresult %p %i, kind=%i (0=callback, 1=call result)", cb, cb->GetICallback(), (int)run_call_completed_cb);
-                        global_mutex.unlock();
-
-                        //TODO: unlock relock doesn't work if mutex was locked more than once.
-                        if (run_call_completed_cb) { //run the right function depending on if it's a callback or a call result.
-                            cb->Run(&(result[0]), false, api_call);
-                        } else { // if this is a callback
-                            cb->Run(&(result[0]));
-                        }
+                        run_unlocked([&] {
+                            if (run_call_completed_cb) {
+                                cb->Run(&(result[0]), false, api_call);
+                            } else {
+                                cb->Run(&(result[0]));
+                            }
+                        });
 
                         // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                         //COULD BE DELETED SO DON'T TOUCH CB
                         // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-                        global_mutex.lock();
                         PRINT_DEBUG("callresult done");
                     }
                 }
@@ -327,23 +336,19 @@ void SteamCallResults::runCallResults()
 
                     for (auto & cb: callbacks) {
                         PRINT_DEBUG("Calling complete cb %p %i %llu", cb, iCallback, api_call);
-                        //TODO: check if this is a problem or not.
                         SteamAPICallCompleted_t temp = data;
-                        global_mutex.unlock();
-                        cb->Run(&temp);
-                        global_mutex.lock();
+                        run_unlocked([&] { cb->Run(&temp); });
                     }
 
                     if (cb_all) {
                         std::vector<char> res{};
                         res.resize(sizeof(data));
                         memcpy(&(res[0]), &data, sizeof(data));
-                        cb_all(res, data.k_iCallback);
+                        run_unlocked([&] { cb_all(res, data.k_iCallback); });
                     }
                 } else {
-                    if (cb_all) {
-                        cb_all(result, iCallback);
-                    }
+                    if (cb_all)
+                        run_unlocked([&] { cb_all(result, iCallback); });
                 }
             } else {
                 if (callresults[index].timed_out()) {

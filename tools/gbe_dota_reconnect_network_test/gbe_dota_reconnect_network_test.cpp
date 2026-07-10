@@ -160,6 +160,28 @@ void test_first_connection_contract()
     expect(state.generation == provider.primary.generation && state.lobby_id == provider.primary.lobby_id, "serialized state receives context identities");
 }
 
+void test_prepare_reserves_state_before_unlocked_effects()
+{
+    std::vector<std::string> events;
+    FakeProvider provider;
+    FakeConnector connector;
+    FakeQueue queue;
+    GBE_DotaSerializedConnectionState state;
+    provider.events = &events;
+    connector.events = &events;
+    queue.events = &events;
+
+    auto plan = GBE_PrepareDotaReconnectPostConnectionState(500, 64, provider, state);
+    expect(events == std::vector<std::string>({"context:primary", "eligible"}), "prepare phase excludes external effects");
+    expect(connector.calls == 0 && queue.calls == 0, "prepare phase does not call connector or callback queue");
+    expect(plan.connect_direct && plan.queue_callback, "prepare phase records both effects");
+    expect(state.engine_callback_queued(provider.primary.server_id, provider.primary.connect), "prepare phase reserves callback dedup key");
+
+    const auto result = GBE_ExecuteDotaReconnectPostEffects(std::move(plan), connector, queue);
+    expect(result.direct_connect_succeeded && result.callback_queued, "effect phase executes reserved work");
+    expect(events == std::vector<std::string>({"context:primary", "eligible", "connect", "queue"}), "effect phase preserves external call order");
+}
+
 void test_dedup_and_generation_changes()
 {
     FakeProvider provider;
@@ -462,6 +484,7 @@ void test_properties()
 int main()
 {
     test_first_connection_contract();
+    test_prepare_reserves_state_before_unlocked_effects();
     test_dedup_and_generation_changes();
     test_recovery_and_skip_paths();
     test_parse_and_connect_failures();

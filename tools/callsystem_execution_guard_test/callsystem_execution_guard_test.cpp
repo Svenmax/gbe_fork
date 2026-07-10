@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <thread>
 
 std::recursive_mutex global_mutex;
 
@@ -35,6 +36,22 @@ void expect(bool condition, const char *label)
 }
 
 std::uint64_t current_generation{};
+int cb_all_calls{};
+int cb_all_value{};
+bool cb_all_process_lock_available{};
+
+void capture_all(std::vector<char> result, int)
+{
+    ++cb_all_calls;
+    if (result.size() == sizeof(cb_all_value))
+        std::memcpy(&cb_all_value, result.data(), sizeof(cb_all_value));
+    std::thread lock_probe([] {
+        cb_all_process_lock_available = global_mutex.try_lock();
+        if (cb_all_process_lock_available)
+            global_mutex.unlock();
+    });
+    lock_probe.join();
+}
 
 bool guard_allows(const void *context, unsigned int context_size)
 {
@@ -49,11 +66,18 @@ class TestCallback final : public CCallbackBase {
 public:
     int calls{};
     int value{};
+    bool process_lock_available{};
 
     void Run(void *parameter) override
     {
         ++calls;
         std::memcpy(&value, parameter, sizeof(value));
+        std::thread lock_probe([this] {
+            process_lock_available = global_mutex.try_lock();
+            if (process_lock_available)
+                global_mutex.unlock();
+        });
+        lock_probe.join();
     }
 
     void Run(void *parameter, bool, SteamAPICall_t) override
@@ -69,9 +93,8 @@ public:
 
 void run_results(SteamCallResults &results)
 {
-    global_mutex.lock();
-    results.runCallResults();
-    global_mutex.unlock();
+    std::unique_lock<std::recursive_mutex> lock(global_mutex);
+    results.runCallResults(lock);
 }
 
 void test_registered_callback_guard()
@@ -105,6 +128,7 @@ void test_registered_callback_guard()
         SteamCallExecutionGuard(guard_allows, &generation, sizeof(generation)));
     run_results(results);
     expect(callback.calls == 1 && callback.value == current_value, "registered callback dispatches current execution");
+    expect(callback.process_lock_available, "registered callback executes outside process lock");
 }
 
 void test_late_registration_replay_guard()
@@ -145,6 +169,26 @@ void test_late_registration_replay_guard()
     expect(
         replay_callback.calls == 1 && replay_callback.value == current_value,
         "late-registration replay dispatches current execution");
+    expect(replay_callback.process_lock_available, "replayed callback executes outside process lock");
+}
+
+void test_callback_all_executes_outside_process_lock()
+{
+    SteamCallResults results;
+    SteamCallBacks callbacks(&results);
+    TestCallback callback;
+    callbacks.addCallBack(kTestCallback, &callback);
+    results.setCbAll(capture_all);
+    cb_all_calls = 0;
+    cb_all_value = 0;
+    cb_all_process_lock_available = false;
+
+    int value = 31;
+    callbacks.addCBResult(kTestCallback, &value, sizeof(value), 0.0);
+    run_results(results);
+
+    expect(cb_all_calls == 1 && cb_all_value == value, "callback-all receives queued result");
+    expect(cb_all_process_lock_available, "callback-all executes outside process lock");
 }
 
 } // namespace
@@ -153,6 +197,7 @@ int main()
 {
     test_registered_callback_guard();
     test_late_registration_replay_guard();
+    test_callback_all_executes_outside_process_lock();
     std::cout << "callsystem guard assertions: " << assertions - failures << "/" << assertions << std::endl;
     return failures == 0 ? 0 : 1;
 }

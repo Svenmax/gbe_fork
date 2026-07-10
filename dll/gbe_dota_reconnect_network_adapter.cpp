@@ -87,6 +87,7 @@ void GBE_DotaReconnectNetworkAdapter::queue_game_server_change(
 {
     if (!callbacks)
         return;
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
     callbacks->addCBResult(
         server_change.k_iCallback,
         const_cast<GameServerChangeRequested_t *>(&server_change),

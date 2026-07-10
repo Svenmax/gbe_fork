@@ -139,7 +139,7 @@ public:
 
     void clear();
 
-    void runCallResults();
+    void runCallResults(std::unique_lock<std::recursive_mutex> &process_lock);
 };
 
 struct Steam_Call_Back {

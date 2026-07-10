@@ -563,11 +563,32 @@ def audit_concurrency_ownership_contract():
         return ["concurrency-ownership.md: missing P11.1 ownership contract"]
 
     contract_text = read(CONCURRENCY_OWNERSHIP_MD)
-    return [
+    issues = [
         f"concurrency-ownership.md: missing required boundary {term}"
         for term in CONCURRENCY_OWNERSHIP_TERMS
         if f"`{term}`" not in contract_text and term not in contract_text
     ]
+    callsystem_text = read(os.path.join(ROOT_DIR, "dll", "callsystem.cpp"))
+    for forbidden in ("global_mutex.unlock()", "global_mutex.lock()"):
+        if forbidden in callsystem_text:
+            issues.append(f"callsystem.cpp: raw {forbidden} bypasses the owned callback lock boundary")
+
+    steam_client_text = read(os.path.join(ROOT_DIR, "dll", "steam_client.cpp"))
+    run_callbacks_pos = steam_client_text.find("void Steam_Client::RunCallbacks(")
+    run_callbacks_end = steam_client_text.find("\n}", run_callbacks_pos)
+    run_callbacks_text = steam_client_text[run_callbacks_pos:run_callbacks_end]
+    if "std::unique_lock<std::recursive_mutex> lock(global_mutex);" not in run_callbacks_text:
+        issues.append("steam_client.cpp: RunCallbacks must own global_mutex through unique_lock")
+    if "runCallResults(lock)" not in run_callbacks_text:
+        issues.append("steam_client.cpp: RunCallbacks must pass its owned lock to callback delivery")
+
+    serialized_text = read(os.path.join(ROOT_DIR, "dll", "steam_networking_socketsserialized.cpp"))
+    prepare_pos = serialized_text.find("GBE_PrepareDotaReconnectPostConnectionState(")
+    unlock_pos = serialized_text.find("lock.unlock();", prepare_pos)
+    effects_pos = serialized_text.find("GBE_ExecuteDotaReconnectPostEffects(", unlock_pos)
+    if prepare_pos < 0 or unlock_pos < 0 or effects_pos < 0 or not prepare_pos < unlock_pos < effects_pos:
+        issues.append("steam_networking_socketsserialized.cpp: reconnect prepare/unlock/effects order is missing")
+    return issues
 
 
 def main():
