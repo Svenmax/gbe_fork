@@ -222,6 +222,41 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
         )
 
 
+class MutableGcGlobalStateAuditTest(unittest.TestCase):
+    def test_accepts_immutable_data_functions_and_compatibility_locators(self):
+        sources = {
+            "steam_game_coordinator.cpp": """
+static gbe::dota_lobby_state::Store *GBE_shared_dota_lobby_store{};
+static gbe::dota::RuntimeState *GBE_dota_runtime_state{};
+static const registry::Entry kTable[] = {};
+static constexpr uint32 GBE_kMessage = 1u;
+static bool helper() { return true; }
+""",
+        }
+        self.assertEqual([], audit.audit_mutable_gc_global_state(sources))
+
+    def test_rejects_file_static_business_state(self):
+        sources = {"gbe_dota_welcome_coordinator.cpp": "static bool vpk_items_loaded = false;"}
+        self.assertIn(
+            "gbe_dota_welcome_coordinator.cpp:1: mutable GC static state vpk_items_loaded is not allowlisted",
+            audit.audit_mutable_gc_global_state(sources),
+        )
+
+    def test_rejects_namespace_business_state(self):
+        sources = {"gbe_dota_lobby_state.cpp": "GBE_SharedDotaLobbyState shared_lobby_state{};"}
+        self.assertIn(
+            "gbe_dota_lobby_state.cpp:1: mutable GC global state shared_lobby_state is not allowlisted",
+            audit.audit_mutable_gc_global_state(sources),
+        )
+
+    def test_rejects_unapproved_locator(self):
+        sources = {"steam_game_coordinator.cpp": "static SomeService *GBE_hidden_service{};"}
+        self.assertIn(
+            "steam_game_coordinator.cpp:1: mutable GC static state GBE_hidden_service is not allowlisted",
+            audit.audit_mutable_gc_global_state(sources),
+        )
+
+
 class RetiredLifecycleTransitionLayerAuditTest(unittest.TestCase):
     def test_accepts_registry_only_lifecycle_dispatch(self):
         sources = {

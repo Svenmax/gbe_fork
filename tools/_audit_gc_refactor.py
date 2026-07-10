@@ -39,6 +39,10 @@ DIAGNOSTIC_EVENT_TEST_CPP = os.path.join(
     "gbe_dota_reconnect_network_test.cpp",
 )
 GC_TUS = sorted(glob.glob(os.path.join(ROOT_DIR, "dll", "gbe_dota_*.cpp"))) + [MAIN_CPP]
+MUTABLE_GC_GLOBAL_ALLOWLIST = {
+    ("steam_game_coordinator.cpp", "GBE_shared_dota_lobby_store"): "non-owning compatibility locator",
+    ("steam_game_coordinator.cpp", "GBE_dota_runtime_state"): "non-owning compatibility locator",
+}
 TEMPLATE_BLOB_OWNER_FILES = {
     "gbe_dota_template_replay_handlers.cpp",
     "gbe_dota_gc_payload_helpers.cpp",
@@ -967,6 +971,39 @@ def audit_composition_root_lifecycle(
     return issues
 
 
+def audit_mutable_gc_global_state(sources=None):
+    """Reject mutable GC namespace/file static state outside narrow locators."""
+    if sources is None:
+        sources = {os.path.basename(path): read(path) for path in GC_TUS}
+
+    issues = []
+    declaration = re.compile(
+        r"^\s*(?P<static>static\s+)?(?P<type>(?:(?:const|constexpr)\s+)?[^(){};=]+?)"
+        r"\s+[&*]*\s*(?P<name>[A-Za-z_]\w*)\s*(?:=|\{|;)"
+    )
+    for filename, source_text in sources.items():
+        brace_depth = 0
+        for line_no, line in enumerate(strip_comments(source_text).splitlines(), 1):
+            stripped = line.strip()
+            match = declaration.match(line) if brace_depth == 0 else None
+            brace_depth += line.count("{") - line.count("}")
+            if not match:
+                continue
+            if stripped.startswith(("using ", "typedef ", "struct ", "class ", "enum ", "namespace ", "extern ")):
+                continue
+            declaration_text = match.group(0)
+            if "const" in match.group("type").split() or "constexpr" in declaration_text.split():
+                continue
+            if not match.group("static") and line[:1].isspace():
+                continue
+            symbol = match.group("name")
+            if (filename, symbol) in MUTABLE_GC_GLOBAL_ALLOWLIST:
+                continue
+            storage = "static" if match.group("static") else "global"
+            issues.append(f"{filename}:{line_no}: mutable GC {storage} state {symbol} is not allowlisted")
+    return issues
+
+
 def audit_concurrency_ownership_contract():
     """Keep the P11.1 state-owner and lock-boundary contract complete."""
     if not os.path.exists(CONCURRENCY_OWNERSHIP_MD):
@@ -1282,7 +1319,19 @@ def main():
     print()
 
     print("=" * 70)
-    print("AUDIT 16: Layered GC CI gates")
+    print("AUDIT 16: Mutable GC global state")
+    print("=" * 70)
+    print("  Action: keep mutable GC business state on application-owned instances.")
+    mutable_gc_global_issues = audit_mutable_gc_global_state()
+    if not mutable_gc_global_issues:
+        print(f"  Only {len(MUTABLE_GC_GLOBAL_ALLOWLIST)} non-owning compatibility locators remain; immutable tables and functions are accepted")
+    else:
+        for issue in mutable_gc_global_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
+    print("AUDIT 17: Layered GC CI gates")
     print("=" * 70)
     print("  Action: keep fast, production, and sanitizer PR checks separate and blocking.")
     layered_ci_issues = audit_layered_ci_gates()
@@ -1314,9 +1363,10 @@ def main():
     print(f"  Shared lobby compatibility issues:   {len(shared_lobby_compatibility_issues)}")
     print(f"  Architecture boundary issues:        {len(architecture_boundary_issues)}")
     print(f"  Composition root lifecycle issues:   {len(composition_root_lifecycle_issues)}")
+    print(f"  Mutable GC global state issues:       {len(mutable_gc_global_issues)}")
     print(f"  Layered CI gate issues:               {len(layered_ci_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or layered_ci_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues:
         sys.exit(1)
 
 

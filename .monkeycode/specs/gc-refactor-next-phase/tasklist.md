@@ -408,9 +408,13 @@
     - 异步边界：delayed work 与 callback 闭包仅持有弱生命周期引用；root 销毁后执行闭包成为安全空操作，未产生 effect 或 callback。
     - 重建隔离：首个 root 写入 lobby state 并执行 reconnect 后销毁；新 root 的 Store、context 调用计数、connector、callback history 和 generation 均从初始状态开始。
     - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 31/31，16 项 production audit 零问题，TSAN 无 race。
-  - [ ] 13.7 增加全局状态架构审计
+  - [x] 13.7 增加全局状态架构审计
     - 禁止新增业务可变 namespace/global/static 状态。
     - 为允许的 immutable 常量和底层兼容入口维护最小显式白名单。
+    - 新增 Audit 16：按顶层声明扫描全部 `gbe_dota_*.cpp` 与 `steam_game_coordinator.cpp`，默认拒绝可变 file static 和 namespace/global 状态；类型定义、alias、函数、`extern` 与 const/constexpr immutable data 自动分类。
+    - 最小白名单仅包含 `GBE_shared_dota_lobby_store` 与 `GBE_dota_runtime_state` 两个非 owning compatibility locator，并记录其存在理由；layered CI 顺延为 Audit 17。
+    - 注入式 fixtures：接受 immutable table/function 与两个 locator；拒绝业务 file static、namespace business state 和第三个未授权 locator。audit helper 由 31 增至 35。
+    - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题，TSAN 无 race。
   - [ ] 13.8 检查点：确保所有测试通过，如有疑问请询问用户
 
 - [ ] 14. 核心 P15 建立显式纯状态机
