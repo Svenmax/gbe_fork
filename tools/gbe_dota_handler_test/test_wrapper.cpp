@@ -51,6 +51,7 @@ std::recursive_mutex global_mutex;
 
 // Compile the shared lifecycle executor against the same recording seams used
 // by direct and wrapped handler smoke tests.
+#include "dll/gbe_dota_lifecycle_actions.cpp"
 #include "dll/gbe_dota_custom_game_lifecycle_coordinator.cpp"
 
 // Keep the wrapped custom-game lifecycle path executable in the lightweight

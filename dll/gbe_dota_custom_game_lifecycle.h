@@ -2,6 +2,7 @@
 #define __INCLUDED_GBE_DOTA_CUSTOM_GAME_LIFECYCLE_H__
 
 #include "gbe_dota_lobby_state.h"
+#include "gbe_dota_lifecycle_actions.h"
 
 #include <cstdint>
 #include <string>

@@ -4,45 +4,73 @@
 #include "dll/dll.h"
 #include "gbe_dota_custom_game_lifecycle.h"
 
+gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLifecycleActions(
+    const GBE_DotaActionList &actions,
+    bool wrapped,
+    const std::string *outer_session_field_raw)
+{
+    gbe::dota_lifecycle::ExecutionResult result;
+    for (const GBE_DotaAction &action : actions) {
+        if (action.only_when_runtime_update_not_queued && result.runtime_update_queued)
+            continue;
+
+        switch (action.type) {
+            case GBE_DotaActionType::LobbyStateApply:
+                GBE_local_lobby.state = action.lobby_state;
+                GBE_local_lobby.game_state = action.lobby_game_state;
+                break;
+            case GBE_DotaActionType::LobbyMemberRuntimeUpdate:
+                GBE_SetDotaLobbyMemberRuntimeState(
+                    action.target_steam_id,
+                    action.connected,
+                    action.hero_id,
+                    action.has_hero_id);
+                break;
+            case GBE_DotaActionType::LaunchPhaseMark:
+                GBE_MarkDotaLaunchPhase(action.launch_phase, action.reason.c_str(), false);
+                break;
+            case GBE_DotaActionType::LobbyLocalMemberData:
+                GBE_PublishDotaPracticeLobbyLocalMemberData(action.reason.c_str());
+                break;
+            case GBE_DotaActionType::RuntimeLobbyDetailsUpdate:
+                result.runtime_update_queued = GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(
+                    action.reason.c_str(),
+                    action.emsg,
+                    action.job_id,
+                    action.lobby_state,
+                    action.lobby_game_state,
+                    action.delay);
+                break;
+            case GBE_DotaActionType::SharedLobbyPublish:
+                GBE_PublishSharedDotaLobbyState(action.reason.c_str());
+                break;
+            case GBE_DotaActionType::PracticeLobbyDetailsUpdate:
+                GBE_SendDotaPracticeLobbyDetailsUpdate(
+                    wrapped,
+                    outer_session_field_raw,
+                    action.reason.c_str());
+                break;
+            default:
+                break;
+        }
+    }
+    return result;
+}
+
 bool Steam_Game_Coordinator::GBE_ExecuteDotaCustomGameLifecycleTransition(
     const gbe::dota_custom_game_lifecycle::ExecutionContext &context)
 {
-    const auto &transition = context.transition;
-    if (transition.apply_lobby_state && !transition.queue_runtime_lobby_update) {
-        GBE_local_lobby.state = transition.next_state;
-        GBE_local_lobby.game_state = transition.next_game_state;
-    }
+    gbe::dota_lifecycle::TransitionEffects effects;
+    effects.transition = context.transition;
+    effects.local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
+    effects.trigger_emsg = context.trigger_emsg;
+    effects.source_job = context.source_job;
+    effects.runtime_update_note = context.runtime_update_note;
+    effects.update_local_member_runtime = context.update_local_member_runtime;
+    effects.publish_local_member_data = context.publish_local_member_data;
 
-    if (context.update_local_member_runtime) {
-        const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
-        if (local_steam_id != 0ull)
-            GBE_SetDotaLobbyMemberRuntimeState(local_steam_id, true, 0u, false);
-    }
-
-    bool runtime_update_queued = false;
-    if (transition.queue_runtime_lobby_update) {
-        if (transition.mark_launch_phase)
-            GBE_MarkDotaLaunchPhase(transition.launch_phase, transition.reason.c_str());
-        runtime_update_queued = GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(
-            context.runtime_update_note,
-            context.trigger_emsg,
-            context.source_job,
-            transition.next_state,
-            transition.next_game_state,
-            transition.runtime_update_delay);
-    } else if (transition.mark_launch_phase) {
-        GBE_MarkDotaLaunchPhase(transition.launch_phase, transition.reason.c_str());
-    }
-
-    if (context.publish_local_member_data)
-        GBE_PublishDotaPracticeLobbyLocalMemberData(transition.reason.c_str());
-
-    if (!runtime_update_queued && (transition.publish_shared_state || transition.queue_runtime_lobby_update))
-        GBE_PublishSharedDotaLobbyState(transition.reason.c_str());
-    if (!runtime_update_queued && transition.send_details_update)
-        GBE_SendDotaPracticeLobbyDetailsUpdate(
-            context.wrapped,
-            context.outer_session_field_raw,
-            transition.reason.c_str());
-    return runtime_update_queued;
+    return GBE_ExecuteDotaLifecycleActions(
+        gbe::dota_lifecycle::build_transition_actions(effects),
+        context.wrapped,
+        context.outer_session_field_raw).runtime_update_queued;
 }

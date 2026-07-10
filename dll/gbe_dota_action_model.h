@@ -99,6 +99,12 @@
 //   PendingResetAfterCacheUnsubscribed lobby_id
 //   PendingResetAfterCacheUnsubscribedClear lobby_id
 //   PendingNormalSignoutFinalizeAfterCacheUnsubscribed lobby_id
+//   LobbyStateApply       lobby_state, lobby_game_state
+//   LobbyMemberRuntimeUpdate target_steam_id, connected, hero_id, has_hero_id
+//   LaunchPhaseMark       launch_phase, reason
+//   SharedLobbyPublish    reason
+//   PracticeLobbyDetailsUpdate reason
+//   RuntimeLobbyDetailsUpdate emsg, job_id, lobby_state, lobby_game_state, delay, reason
 
 #ifndef GBE_DOTA_ACTION_MODEL_H
 #define GBE_DOTA_ACTION_MODEL_H
@@ -135,6 +141,12 @@ enum class GBE_DotaActionType {
     PendingResetAfterCacheUnsubscribed, // defer full reset until cache unsubscribe is observed
     PendingResetAfterCacheUnsubscribedClear, // clear deferred reset after postgame teardown is queued
     PendingNormalSignoutFinalizeAfterCacheUnsubscribed, // defer normal signout cleanup until 25 is retrieved
+    LobbyStateApply,      // apply local lobby state and game state
+    LobbyMemberRuntimeUpdate, // apply connected/hero state to a lobby member
+    LaunchPhaseMark,      // advance launch phase without an implicit publish
+    SharedLobbyPublish,   // publish the current local lobby to shared state
+    PracticeLobbyDetailsUpdate, // send direct or wrapped practice lobby details
+    RuntimeLobbyDetailsUpdate, // queue a runtime practice lobby details update
 };
 
 struct GBE_DotaAction {
@@ -147,6 +159,14 @@ struct GBE_DotaAction {
     std::string reason;           // LobbySnapshotRefresh
     bool leave_generic_lobby{};   // GcMemoryReset
     bool clear_queued_messages{}; // GcMemoryReset
+    uint32_t lobby_state{};       // lifecycle state apply/runtime update
+    uint32_t lobby_game_state{};  // lifecycle state apply/runtime update
+    uint32_t launch_phase{};      // LaunchPhaseMark
+    uint32_t hero_id{};           // LobbyMemberRuntimeUpdate
+    bool connected{};             // LobbyMemberRuntimeUpdate
+    bool has_hero_id{};           // LobbyMemberRuntimeUpdate
+    bool only_when_runtime_update_not_queued{}; // runtime update fallback action
+    double delay{};               // RuntimeLobbyDetailsUpdate
 };
 
 // Ordered list of intended side effects built by a pure helper and consumed

@@ -343,6 +343,12 @@ struct RecordedAction
             case GBE_DotaActionType::PendingResetAfterCacheUnsubscribed: return "PendingResetAfterCacheUnsubscribed";
             case GBE_DotaActionType::PendingResetAfterCacheUnsubscribedClear: return "PendingResetAfterCacheUnsubscribedClear";
             case GBE_DotaActionType::PendingNormalSignoutFinalizeAfterCacheUnsubscribed: return "PendingNormalSignoutFinalizeAfterCacheUnsubscribed";
+            case GBE_DotaActionType::LobbyStateApply: return "LobbyStateApply";
+            case GBE_DotaActionType::LobbyMemberRuntimeUpdate: return "LobbyMemberRuntimeUpdate";
+            case GBE_DotaActionType::LaunchPhaseMark: return "LaunchPhaseMark";
+            case GBE_DotaActionType::SharedLobbyPublish: return "SharedLobbyPublish";
+            case GBE_DotaActionType::PracticeLobbyDetailsUpdate: return "PracticeLobbyDetailsUpdate";
+            case GBE_DotaActionType::RuntimeLobbyDetailsUpdate: return "RuntimeLobbyDetailsUpdate";
         }
         return "Unknown";
     }
@@ -1501,7 +1507,7 @@ public:
         push_incoming_now(26u | protobuf_mask, build_protomsg_header(26u, k_GIDNil, source_job) + std::string(note ? note : "runtime_update"));
         return true;
     }
-    void GBE_MarkDotaLaunchPhase(uint32 phase, const char *)
+    void GBE_MarkDotaLaunchPhase(uint32 phase, const char *, bool = true)
     {
         GBE_local_lobby.launch_phase = phase;
         if (g_action_recorder)
@@ -1603,6 +1609,7 @@ public:
     bool GBE_HandleDotaCustomGameStartedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaCustomGameFinishedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaWrappedCustomGameLifecycleRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
+    gbe::dota_lifecycle::ExecutionResult GBE_ExecuteDotaLifecycleActions(const GBE_DotaActionList &actions, bool wrapped = false, const std::string *outer_session_field_raw = nullptr);
     bool GBE_ExecuteDotaCustomGameLifecycleTransition(const gbe::dota_custom_game_lifecycle::ExecutionContext &context);
 
     // Other handlers declared in the real header but not defined in the

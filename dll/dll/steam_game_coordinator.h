@@ -249,7 +249,7 @@ public ISteamGameCoordinator
     void GBE_HandleDotaDirect7034LaunchPoll(uint32 request_emsg, uint64 source_job, bool &queued_runtime_lobby_update);
     bool GBE_HandleDotaDirect7034Request(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HasDotaLaunchServerSetupSync() const;
-    void GBE_MarkDotaLaunchPhase(uint32 phase, const char *reason);
+    void GBE_MarkDotaLaunchPhase(uint32 phase, const char *reason, bool publish_shared_state = true);
     bool GBE_MaybeQueueDotaPracticeLobbySteamAuthAck(const char *reason, uint64 request_job_id);
     bool GBE_TryAdvanceDotaLaunchToRun(const char *note, uint32 trigger_emsg, uint64 source_job, const char *reason, uint32 next_game_state = 0u);
     void GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason);
@@ -310,6 +310,7 @@ public ISteamGameCoordinator
     bool GBE_HandleDotaCustomGameStartedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaCustomGameFinishedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaWrappedCustomGameLifecycleRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
+    gbe::dota_lifecycle::ExecutionResult GBE_ExecuteDotaLifecycleActions(const GBE_DotaActionList &actions, bool wrapped = false, const std::string *outer_session_field_raw = nullptr);
     bool GBE_ExecuteDotaCustomGameLifecycleTransition(const gbe::dota_custom_game_lifecycle::ExecutionContext &context);
     bool GBE_HandleDotaMinimalVarintSuccessRequest(uint32 request_emsg, uint32 response_emsg, const char *log_note, const char *push_note, bool has_source_job, uint64 source_job);
     bool GBE_HandleDota7427NotificationsRequest(bool has_source_job, uint64 source_job);

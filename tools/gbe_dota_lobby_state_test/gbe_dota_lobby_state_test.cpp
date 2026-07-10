@@ -11,6 +11,7 @@
 //      arcade_launch_failed_before_connect, threshold).
 
 #include "dll/gbe_dota_lobby_state.h"
+#include "dll/gbe_dota_lifecycle_actions.h"
 #include "dll/gbe_dota_reconnect_context.h"
 #include "dll/gbe_dota_types.h"
 #include "dll/dll/gbe_dota_reconnect_shared.h"
@@ -381,6 +382,69 @@ bool test_launch_lifecycle_transition_decision()
         lobby.game_state = 10u;
         d = gbe::dota_lobby_state::compute_launch_poll_transition(lobby, "7034_launch_poll");
         ok &= expect_false(d.send_details_update, "7034 terminal state skips launch poll details");
+    }
+
+    return ok;
+}
+
+bool test_launch_lifecycle_action_sequence()
+{
+    bool ok = true;
+
+    {
+        gbe::dota_lifecycle::TransitionEffects effects;
+        effects.transition.apply_lobby_state = true;
+        effects.transition.next_state = 2u;
+        effects.transition.next_game_state = 1u;
+        effects.transition.mark_launch_phase = true;
+        effects.transition.launch_phase = GBE_kDotaLaunchPhaseLoaded;
+        effects.transition.publish_shared_state = true;
+        effects.transition.send_details_update = true;
+        effects.transition.reason = "8053_finished_loading";
+        effects.local_steam_id = 700ull;
+        effects.update_local_member_runtime = true;
+        effects.publish_local_member_data = true;
+
+        const GBE_DotaActionList actions = gbe::dota_lifecycle::build_transition_actions(effects);
+        ok &= expect_eq_u64(actions.size(), 6u, "8053 action count");
+        ok &= expect_true(actions[0].type == GBE_DotaActionType::LobbyStateApply, "8053 applies state first");
+        ok &= expect_true(actions[1].type == GBE_DotaActionType::LobbyMemberRuntimeUpdate, "8053 updates member runtime second");
+        ok &= expect_true(actions[2].type == GBE_DotaActionType::LaunchPhaseMark, "8053 marks launch phase third");
+        ok &= expect_true(actions[3].type == GBE_DotaActionType::LobbyLocalMemberData, "8053 publishes local member fourth");
+        ok &= expect_true(actions[4].type == GBE_DotaActionType::SharedLobbyPublish, "8053 publishes shared state fifth");
+        ok &= expect_true(actions[5].type == GBE_DotaActionType::PracticeLobbyDetailsUpdate, "8053 sends details last");
+    }
+
+    {
+        gbe::dota_lifecycle::TransitionEffects effects;
+        effects.transition.apply_lobby_state = true;
+        effects.transition.next_state = 2u;
+        effects.transition.next_game_state = 0u;
+        effects.transition.mark_launch_phase = true;
+        effects.transition.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+        effects.transition.queue_runtime_lobby_update = true;
+        effects.transition.reason = "8052_started_loading";
+        effects.trigger_emsg = 8052u;
+        effects.source_job = 123ull;
+        effects.runtime_update_note = "runtime packet after 8052";
+
+        const GBE_DotaActionList actions = gbe::dota_lifecycle::build_transition_actions(effects);
+        ok &= expect_eq_u64(actions.size(), 3u, "8052 action count");
+        ok &= expect_true(actions[0].type == GBE_DotaActionType::LaunchPhaseMark, "8052 marks launch phase first");
+        ok &= expect_true(actions[1].type == GBE_DotaActionType::RuntimeLobbyDetailsUpdate, "8052 queues runtime update second");
+        ok &= expect_true(actions[2].type == GBE_DotaActionType::SharedLobbyPublish, "8052 retains fallback shared publish");
+        ok &= expect_true(actions[2].only_when_runtime_update_not_queued, "8052 fallback publish is conditional");
+        ok &= expect_eq_u32(actions[1].emsg, 8052u, "8052 runtime emsg");
+        ok &= expect_eq_u64(actions[1].job_id, 123ull, "8052 runtime source job");
+    }
+
+    {
+        gbe::dota_lifecycle::TransitionEffects effects;
+        effects.transition.send_details_update = true;
+        effects.transition.reason = "7034_launch_poll";
+        const GBE_DotaActionList actions = gbe::dota_lifecycle::build_transition_actions(effects);
+        ok &= expect_eq_u64(actions.size(), 1u, "7034 poll action count");
+        ok &= expect_true(actions[0].type == GBE_DotaActionType::PracticeLobbyDetailsUpdate, "7034 poll sends details");
     }
 
     return ok;
@@ -1432,6 +1496,7 @@ int main()
     bool ok = true;
     ok &= test_valid_launch_progression();
     ok &= test_launch_lifecycle_transition_decision();
+    ok &= test_launch_lifecycle_action_sequence();
     ok &= test_stale_generic_lobby_state_regression();
     ok &= test_owner_disconnect_and_reconnect();
     ok &= test_reconnect_eligibility_decision();

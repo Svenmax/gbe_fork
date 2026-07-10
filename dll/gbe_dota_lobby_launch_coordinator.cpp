@@ -272,14 +272,15 @@ bool Steam_Game_Coordinator::GBE_HasDotaLaunchServerSetupSync() const
 }
 
 
-void Steam_Game_Coordinator::GBE_MarkDotaLaunchPhase(uint32 phase, const char *reason)
+void Steam_Game_Coordinator::GBE_MarkDotaLaunchPhase(uint32 phase, const char *reason, bool publish_shared_state)
 {
     if (GBE_local_lobby.launch_phase >= phase)
         return;
 
     const uint32 previous_phase = GBE_local_lobby.launch_phase;
     GBE_local_lobby.launch_phase = phase;
-    GBE_PublishSharedDotaLobbyState(reason ? reason : "launch_phase");
+    if (publish_shared_state)
+        GBE_PublishSharedDotaLobbyState(reason ? reason : "launch_phase");
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
         "advanced launch phase reason=%s lobby_id=%llu state=%u game_state=%u previous=%s next=%s",

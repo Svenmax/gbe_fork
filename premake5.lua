@@ -1390,6 +1390,8 @@ project "tool_gbe_dota_lobby_state_test"
         "dll/gbe_dota_reconnect_context.h",
         "dll/gbe_dota_lobby_state.cpp",
         "dll/gbe_dota_lobby_state.h",
+        "dll/gbe_dota_lifecycle_actions.cpp",
+        "dll/gbe_dota_lifecycle_actions.h",
         "dll/gbe_dota_chat_flow.cpp",
         "dll/gbe_dota_chat_flow.h",
         "dll/gbe_dota_lobby_launch_flow.cpp",

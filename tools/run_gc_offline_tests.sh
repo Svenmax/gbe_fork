@@ -163,6 +163,7 @@ if [[ "$FULL" -eq 1 ]]; then
         gbe_dota_lobby_state_test \
         tools/gbe_dota_lobby_state_test/gbe_dota_lobby_state_test.cpp \
         dll/gbe_dota_serialized_connection_state.cpp \
+        dll/gbe_dota_lifecycle_actions.cpp \
         dll/gbe_dota_lobby_state.cpp \
         dll/gbe_dota_reconnect_context.cpp \
         dll/gbe_dota_chat_flow.cpp \
