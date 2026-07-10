@@ -303,6 +303,139 @@ void test_concurrent_readers_observe_complete_versions()
     expect_eq_u64(fixture.store.snapshot().generation, iterations, "concurrent writer commits the final version");
 }
 
+void test_concurrent_compare_updates_commit_matching_generation_only()
+{
+    Fixture fixture;
+    constexpr std::uint64_t generation = 200u;
+    constexpr int writer_count = 4;
+    constexpr int updates_per_writer = 500;
+    fixture.store.publish(populated_state(generation));
+
+    std::atomic<bool> start{false};
+    std::atomic<int> applied_updates{0};
+    std::atomic<int> stale_updates{0};
+    std::vector<std::thread> writers;
+    writers.reserve(writer_count + 1);
+
+    for (int writer = 0; writer < writer_count; ++writer) {
+        writers.emplace_back([&] {
+            while (!start.load(std::memory_order_acquire)) {
+            }
+            for (int update = 0; update < updates_per_writer; ++update) {
+                const auto result = fixture.store.compare_update(generation, [](auto &candidate) {
+                    ++candidate.server_id;
+                    candidate.members.push_back(GBE_DotaLobbyMemberState{});
+                });
+                if (result == gbe::dota_lobby_state::StoreUpdateResult::Applied)
+                    applied_updates.fetch_add(1, std::memory_order_relaxed);
+            }
+        });
+    }
+
+    writers.emplace_back([&] {
+        while (!start.load(std::memory_order_acquire)) {
+        }
+        for (int update = 0; update < updates_per_writer; ++update) {
+            const auto result = fixture.store.compare_update(generation - 1u, [](auto &candidate) {
+                candidate.server_id = 0u;
+                candidate.connect = "stale-writer:27015";
+                candidate.members.clear();
+            });
+            if (result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration)
+                stale_updates.fetch_add(1, std::memory_order_relaxed);
+        }
+    });
+
+    start.store(true, std::memory_order_release);
+    for (auto &writer : writers)
+        writer.join();
+
+    const auto snapshot = fixture.store.snapshot();
+    const auto expected_applied = static_cast<std::uint64_t>(writer_count * updates_per_writer);
+    expect_eq_u64(static_cast<std::uint64_t>(applied_updates.load()), expected_applied, "all matching concurrent updates apply");
+    expect_eq_u64(static_cast<std::uint64_t>(stale_updates.load()), updates_per_writer, "all stale concurrent updates are rejected");
+    expect_eq_u64(snapshot.generation, generation, "concurrent compare updates preserve generation");
+    expect_eq_u64(snapshot.server_id, 404u + expected_applied, "concurrent compare updates commit every scalar increment");
+    expect_eq_u64(snapshot.members.size(), 1u + expected_applied, "concurrent compare updates commit every vector append");
+    expect_eq_string(snapshot.connect, "127.0.0.1:27015", "stale concurrent updates preserve endpoint");
+}
+
+void test_concurrent_clear_and_publish_expose_complete_states()
+{
+    Fixture fixture;
+    constexpr std::uint64_t iterations = 1000u;
+    constexpr int reader_count = 4;
+    std::atomic<bool> start{false};
+    std::atomic<bool> writer_done{false};
+    std::atomic<int> inconsistent_snapshots{0};
+
+    auto make_version = [](std::uint64_t version) {
+        GBE_SharedDotaLobbyState state;
+        state.valid = true;
+        state.active = true;
+        state.generation = version;
+        state.lobby_id = version;
+        state.server_id = version;
+        state.connect = std::to_string(version);
+        state.members.resize(1u);
+        state.cache_service_list.push_back(static_cast<std::uint32_t>(version));
+        return state;
+    };
+
+    std::vector<std::thread> readers;
+    readers.reserve(reader_count);
+    for (int reader = 0; reader < reader_count; ++reader) {
+        readers.emplace_back([&] {
+            while (!start.load(std::memory_order_acquire)) {
+            }
+            do {
+                const auto snapshot = fixture.store.snapshot();
+                const bool complete_empty =
+                    !snapshot.valid &&
+                    !snapshot.active &&
+                    snapshot.generation == 0u &&
+                    snapshot.lobby_id == 0u &&
+                    snapshot.server_id == 0u &&
+                    snapshot.connect.empty() &&
+                    snapshot.members.empty() &&
+                    snapshot.cache_service_list.empty();
+                const auto version = snapshot.generation;
+                const bool complete_published =
+                    snapshot.valid &&
+                    snapshot.active &&
+                    version != 0u &&
+                    snapshot.lobby_id == version &&
+                    snapshot.server_id == version &&
+                    snapshot.connect == std::to_string(version) &&
+                    snapshot.members.size() == 1u &&
+                    snapshot.cache_service_list.size() == 1u &&
+                    snapshot.cache_service_list.front() == static_cast<std::uint32_t>(version);
+                if (!complete_empty && !complete_published)
+                    inconsistent_snapshots.fetch_add(1, std::memory_order_relaxed);
+            } while (!writer_done.load(std::memory_order_acquire));
+        });
+    }
+
+    std::thread writer([&] {
+        start.store(true, std::memory_order_release);
+        for (std::uint64_t version = 1u; version <= iterations; ++version) {
+            fixture.store.publish(make_version(version));
+            fixture.store.clear();
+        }
+        fixture.store.publish(make_version(iterations + 1u));
+        writer_done.store(true, std::memory_order_release);
+    });
+
+    writer.join();
+    for (auto &reader : readers)
+        reader.join();
+
+    const auto final_snapshot = fixture.store.snapshot();
+    expect_eq_u64(static_cast<std::uint64_t>(inconsistent_snapshots.load()), 0u, "concurrent clear and publish expose complete states");
+    expect_eq_u64(final_snapshot.generation, iterations + 1u, "concurrent clear and publish commit final version");
+    expect_eq_u64(final_snapshot.lobby_id, iterations + 1u, "final published state remains complete after clear interleaving");
+}
+
 } // namespace
 
 int main()
@@ -318,6 +451,8 @@ int main()
     test_delayed_writer_cannot_overwrite_new_generation();
     test_clear_resets_complete_state();
     test_concurrent_readers_observe_complete_versions();
+    test_concurrent_compare_updates_commit_matching_generation_only();
+    test_concurrent_clear_and_publish_expose_complete_states();
 
     if (failures != 0) {
         std::fprintf(stderr, "gbe_dota_lobby_state_store_test failed: %d assertion(s)\n", failures);

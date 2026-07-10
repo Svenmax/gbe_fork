@@ -188,8 +188,9 @@
     - 保留 store implementation 和必要测试 fixture 的受控访问。
     - 增加 audit，阻止新增 `GBE_shared_dota_lobby_state` 直读直写。
     - 实现：移除 internal header 的 mutable extern，将 production backing state 收口为 store accessor 内的函数局部静态对象；诊断日志改为记录稳定 store 地址；Audit 10 扫描全部 GC production TUs 与 internal header，发现旧全局符号即失败，测试 fixture 继续保留受控独立状态。
-  - [ ] 8.6 增加 store 单元与并发测试
+  - [x] 8.6 增加 store 单元与并发测试
     - 覆盖 snapshot 一致性、generation compare/update、clear、并发 reader/writer 和 stale write。
+    - 实现：focused suite 覆盖 snapshot 值隔离、完整 publish/clear、matching 与 stale generation compare/update、单调 publish 和 delayed stale writer；新增 4 个 matching writer 并发提交 2,000 次跨字段 update，同时拒绝 500 次 stale update，并由 4 个 reader 验证 1,000 次 publish/clear 交替只能暴露完整空状态或完整发布版本。
   - [ ] 8.7 增加 store 属性测试
     - 属性 P7-A：snapshot 始终表示一次完整状态版本。
     - 属性 P7-B：失败的 stale update 不改变 store。
