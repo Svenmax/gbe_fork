@@ -176,9 +176,10 @@
     - 集中 `global_mutex` 使用和状态拷贝规则。
     - 禁止向调用方暴露可变共享状态引用。
     - 实现：production accessor 将唯一 store 实例绑定到既有 `GBE_shared_dota_lobby_state + global_mutex` 同步域，底层 clear 已经由 store 执行；并发 reader/writer 测试验证每个值快照只包含一个完整版本的跨字段数据。
-  - [ ] 8.3 迁移 shared lobby 读取路径
+  - [x] 8.3 迁移 shared lobby 读取路径
     - 迁移 reconnect、payload、rich presence、postgame、lobby ownership 和诊断读取。
     - 每个业务操作使用单个一致 snapshot。
+    - 实现：新增完整值快照 facade 并委托 production store；scalar/reconnect helper、arcade 判断、完整 restore、direct/wrapped watch 与 spectate response、joinable modes、normal signout、owner fallback 和 coordinator 诊断均在业务操作入口捕获一次快照后使用。
   - [ ] 8.4 迁移 shared lobby 写入路径
     - 迁移 publish、clear、runtime member update 和 lifecycle state update。
     - generation 不匹配的写入返回 stale 结果。

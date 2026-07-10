@@ -33,6 +33,12 @@
 #include <mutex>
 
 std::recursive_mutex global_mutex;
+extern GBE_SharedDotaLobbyState GBE_shared_dota_lobby_state;
+
+GBE_SharedDotaLobbyState GBE_GetSharedDotaLobbyStateSnapshot()
+{
+    return GBE_shared_dota_lobby_state;
+}
 
 // Include the pure item payload helpers TU inline (Phase 3.2.3).
 // gbe_dota_gc_payload_helpers.cpp no longer defines GBE_ParseDotaEquipOps /

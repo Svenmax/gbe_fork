@@ -49,6 +49,11 @@ bool GBE_dota_host_showcase_equip_pushed = false;
 const std::array<uint8, 8> GBE_kOldDotaLobbyIdVarint = { 0x83, 0xcf, 0xa2, 0xb4, 0xa2, 0xff, 0xf9, 0x34 };
 const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyMatchIdVarint = { 0xae, 0xbb, 0xa3, 0xcf, 0x06 };
 
+GBE_SharedDotaLobbyState GBE_GetSharedDotaLobbyStateSnapshot()
+{
+    return GBE_shared_dota_lobby_state;
+}
+
 bool GBE_HasSharedDotaLobbyState()
 {
     return GBE_shared_dota_lobby_state.valid;

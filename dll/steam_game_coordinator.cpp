@@ -71,6 +71,11 @@ gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore()
     return store;
 }
 
+GBE_SharedDotaLobbyState GBE_GetSharedDotaLobbyStateSnapshot()
+{
+    return GBE_GetSharedDotaLobbyStateStore().snapshot();
+}
+
 void GBE_ClearSharedDotaLobbyState()
 {
     GBE_GetSharedDotaLobbyStateStore().clear();
@@ -1117,18 +1122,19 @@ Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class N
         initialize_gc();
     }
 
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
         "coordinator init this=%p is_server=%u shared_lobby=%p shared_valid=%u active=%u lobby_id=%llu match_id=%llu state=%u game_state=%u",
         static_cast<void *>(this),
         this->is_server ? 1u : 0u,
         static_cast<void *>(&GBE_shared_dota_lobby_state),
-        GBE_shared_dota_lobby_state.valid ? 1u : 0u,
-        GBE_shared_dota_lobby_state.active ? 1u : 0u,
-        static_cast<unsigned long long>(GBE_shared_dota_lobby_state.lobby_id),
-        static_cast<unsigned long long>(GBE_shared_dota_lobby_state.match_id),
-        GBE_shared_dota_lobby_state.state,
-        GBE_shared_dota_lobby_state.game_state
+        shared_lobby.valid ? 1u : 0u,
+        shared_lobby.active ? 1u : 0u,
+        static_cast<unsigned long long>(shared_lobby.lobby_id),
+        static_cast<unsigned long long>(shared_lobby.match_id),
+        shared_lobby.state,
+        shared_lobby.game_state
     );
 }
 
@@ -1379,8 +1385,9 @@ std::string Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerName() const
     if (!GBE_local_lobby.owner_name.empty())
         return GBE_local_lobby.owner_name;
 
-    if (!GBE_shared_dota_lobby_state.owner_name.empty())
-        return GBE_shared_dota_lobby_state.owner_name;
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
+    if (!shared_lobby.owner_name.empty())
+        return shared_lobby.owner_name;
 
     return std::string(settings->get_local_name());
 }

@@ -243,53 +243,52 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
 
 bool GBE_HasSharedDotaLobbyState()
 {
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return GBE_shared_dota_lobby_state.valid;
+    return GBE_GetSharedDotaLobbyStateSnapshot().valid;
 }
 
 uint64 GBE_GetSharedDotaLobbyIdOrZero()
 {
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return GBE_shared_dota_lobby_state.valid ? GBE_shared_dota_lobby_state.lobby_id : 0ull;
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
+    return shared_lobby.valid ? shared_lobby.lobby_id : 0ull;
 }
 
 uint64 GBE_GetSharedDotaGenericLobbyIdOrZero()
 {
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return GBE_shared_dota_lobby_state.valid ? GBE_shared_dota_lobby_state.generic_lobby_id : 0ull;
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
+    return shared_lobby.valid ? shared_lobby.generic_lobby_id : 0ull;
 }
 
 GBE_DotaSharedLobbyScalarSnapshot GBE_GetSharedDotaLobbyScalarSnapshot()
 {
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
     GBE_DotaSharedLobbyScalarSnapshot snapshot{};
-    snapshot.valid = GBE_shared_dota_lobby_state.valid;
-    snapshot.active = GBE_shared_dota_lobby_state.active;
-    snapshot.generation = GBE_shared_dota_lobby_state.generation;
-    snapshot.lobby_id = GBE_shared_dota_lobby_state.lobby_id;
-    snapshot.generic_lobby_id = GBE_shared_dota_lobby_state.generic_lobby_id;
-    snapshot.lobby_state = GBE_shared_dota_lobby_state.state;
-    snapshot.game_state = GBE_shared_dota_lobby_state.game_state;
+    snapshot.valid = shared_lobby.valid;
+    snapshot.active = shared_lobby.active;
+    snapshot.generation = shared_lobby.generation;
+    snapshot.lobby_id = shared_lobby.lobby_id;
+    snapshot.generic_lobby_id = shared_lobby.generic_lobby_id;
+    snapshot.lobby_state = shared_lobby.state;
+    snapshot.game_state = shared_lobby.game_state;
     return snapshot;
 }
 
 GBE_DotaReconnectSharedStateSnapshot GBE_GetSharedDotaReconnectStateSnapshot()
 {
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
     GBE_DotaReconnectSharedStateSnapshot snapshot{};
-    snapshot.valid = GBE_shared_dota_lobby_state.valid;
-    snapshot.active = GBE_shared_dota_lobby_state.active;
-    snapshot.generation = GBE_shared_dota_lobby_state.generation;
-    snapshot.lobby_id = GBE_shared_dota_lobby_state.lobby_id;
-    snapshot.lobby_state = GBE_shared_dota_lobby_state.state;
-    snapshot.game_state = GBE_shared_dota_lobby_state.game_state;
-    snapshot.server_id = GBE_shared_dota_lobby_state.server_id;
-    snapshot.has_connect = !GBE_shared_dota_lobby_state.connect.empty();
-    snapshot.custom_game_id = GBE_shared_dota_lobby_state.custom_game.game_id;
-    snapshot.owner_connected = GBE_shared_dota_lobby_state.owner_connected;
-    snapshot.launch_phase = GBE_shared_dota_lobby_state.launch_phase;
-    snapshot.owner_steam_id = GBE_shared_dota_lobby_state.owner_steam_id;
-    const std::string endpoint = gbe::proto_wire::get_dota_practice_lobby_first_connect_endpoint(GBE_shared_dota_lobby_state.connect);
+    snapshot.valid = shared_lobby.valid;
+    snapshot.active = shared_lobby.active;
+    snapshot.generation = shared_lobby.generation;
+    snapshot.lobby_id = shared_lobby.lobby_id;
+    snapshot.lobby_state = shared_lobby.state;
+    snapshot.game_state = shared_lobby.game_state;
+    snapshot.server_id = shared_lobby.server_id;
+    snapshot.has_connect = !shared_lobby.connect.empty();
+    snapshot.custom_game_id = shared_lobby.custom_game.game_id;
+    snapshot.owner_connected = shared_lobby.owner_connected;
+    snapshot.launch_phase = shared_lobby.launch_phase;
+    snapshot.owner_steam_id = shared_lobby.owner_steam_id;
+    const std::string endpoint = gbe::proto_wire::get_dota_practice_lobby_first_connect_endpoint(shared_lobby.connect);
     std::strncpy(snapshot.connect, endpoint.c_str(), sizeof(snapshot.connect) - 1);
     snapshot.connect[sizeof(snapshot.connect) - 1] = '\0';
     return snapshot;
@@ -297,9 +296,10 @@ GBE_DotaReconnectSharedStateSnapshot GBE_GetSharedDotaReconnectStateSnapshot()
 
 bool GBE_IsSharedDotaArcadeLobbyActive()
 {
-    return GBE_shared_dota_lobby_state.valid &&
-        GBE_shared_dota_lobby_state.active &&
-        GBE_shared_dota_lobby_state.custom_game.game_id != 0ull;
+    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
+    return shared_lobby.valid &&
+        shared_lobby.active &&
+        shared_lobby.custom_game.game_id != 0ull;
 }
 
 bool GBE_IsDotaArcadeLobbyActive()

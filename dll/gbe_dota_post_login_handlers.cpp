@@ -700,25 +700,26 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         std::string response_body;
         bool found_game_w = false;
         gbe::gc_message::DotaSourceTVGame source_tv_game_w{};
+        const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
 
         // First: check local shared lobby state (we are the host)
-        if (GBE_shared_dota_lobby_state.valid &&
-            GBE_shared_dota_lobby_state.active &&
-            GBE_shared_dota_lobby_state.game_state >= 1u &&
-            GBE_shared_dota_lobby_state.server_id != 0) {
+        if (shared_lobby.valid &&
+            shared_lobby.active &&
+            shared_lobby.game_state >= 1u &&
+            shared_lobby.server_id != 0) {
 
-            source_tv_game_w.start_time = GBE_shared_dota_lobby_state.game_start_time != 0
-                ? GBE_shared_dota_lobby_state.game_start_time
+            source_tv_game_w.start_time = shared_lobby.game_start_time != 0
+                ? shared_lobby.game_start_time
                 : static_cast<uint32>(std::time(nullptr) - 300);
-            source_tv_game_w.server_id = GBE_shared_dota_lobby_state.server_id;
-            source_tv_game_w.lobby_id = GBE_shared_dota_lobby_state.lobby_id;
-            int32 game_time = GBE_shared_dota_lobby_state.game_start_time != 0
-                ? static_cast<int32>(std::time(nullptr)) - static_cast<int32>(GBE_shared_dota_lobby_state.game_start_time)
+            source_tv_game_w.server_id = shared_lobby.server_id;
+            source_tv_game_w.lobby_id = shared_lobby.lobby_id;
+            int32 game_time = shared_lobby.game_start_time != 0
+                ? static_cast<int32>(std::time(nullptr)) - static_cast<int32>(shared_lobby.game_start_time)
                 : 300;
             source_tv_game_w.game_time = static_cast<uint32>(game_time);
-            source_tv_game_w.game_mode = GBE_shared_dota_lobby_state.game_mode;
-            source_tv_game_w.match_id = GBE_shared_dota_lobby_state.match_id;
-            for (const auto &member : GBE_shared_dota_lobby_state.members) {
+            source_tv_game_w.game_mode = shared_lobby.game_mode;
+            source_tv_game_w.match_id = shared_lobby.match_id;
+            for (const auto &member : shared_lobby.members) {
                 if (member.account_id == 0) continue;
                 source_tv_game_w.players.push_back(gbe::gc_message::DotaSourceTVPlayer{member.account_id, member.hero_id, member.slot, member.team});
             }
@@ -768,7 +769,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         GBE_GC_DebugLog("GC_DOTA_LOBBY",
             "[WATCH] replied 8010 FindTopSourceTVGamesResponse found=%d local_valid=%d",
             found_game_w ? 1 : 0,
-            GBE_shared_dota_lobby_state.valid ? 1 : 0);
+            shared_lobby.valid ? 1 : 0);
         return true;
     }
 
@@ -796,8 +797,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         uint32 source_tv_port = 27020;
         uint64 tv_secret_code_w = 0;
         std::string connect_str_w;
-        if (GBE_shared_dota_lobby_state.valid && !GBE_shared_dota_lobby_state.connect.empty()) {
-            connect_str_w = GBE_shared_dota_lobby_state.connect;
+        const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
+        if (shared_lobby.valid && !shared_lobby.connect.empty()) {
+            connect_str_w = shared_lobby.connect;
         } else {
             const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("7091_wrapped_watch_game");
             for (const auto &snap : snapshots) {

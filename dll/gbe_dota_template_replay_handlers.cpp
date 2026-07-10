@@ -329,6 +329,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
         }
         case GBE_kDotaJoinableCustomGameModesRequest: {
             const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("7466_joinable_custom_modes");
+            const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
             std::vector<gbe::gc_message::DotaJoinableCustomGameMode> modes;
 
             for (const GBE_LocalLobby &snapshot : snapshots) {
@@ -338,8 +339,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             }
             if (GBE_local_lobby.active)
                 modes.push_back(gbe::gc_message::DotaJoinableCustomGameMode{GBE_local_lobby.custom_game.game_id, static_cast<uint32>(GBE_local_lobby.members.size())});
-            if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.active)
-                modes.push_back(gbe::gc_message::DotaJoinableCustomGameMode{GBE_shared_dota_lobby_state.custom_game.game_id, static_cast<uint32>(GBE_shared_dota_lobby_state.members.size())});
+            if (shared_lobby.valid && shared_lobby.active)
+                modes.push_back(gbe::gc_message::DotaJoinableCustomGameMode{shared_lobby.custom_game.game_id, static_cast<uint32>(shared_lobby.members.size())});
 
             std::string response_body;
             const size_t mode_count = gbe::gc_message::build_dota_joinable_custom_game_modes_body(modes, response_body);
@@ -419,24 +420,25 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             // Build response from local shared lobby state OR remote generic lobbies.
             gbe::gc_message::DotaSourceTVGame source_tv_game{};
             bool found_game = false;
+            const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
 
             // First: check local shared lobby state (we are the host)
             if (!found_game &&
-                GBE_shared_dota_lobby_state.valid &&
-                GBE_shared_dota_lobby_state.active &&
-                GBE_shared_dota_lobby_state.game_state >= 1u &&
-                GBE_shared_dota_lobby_state.server_id != 0) {
-                source_tv_game.start_time = GBE_shared_dota_lobby_state.game_start_time != 0
-                    ? GBE_shared_dota_lobby_state.game_start_time
+                shared_lobby.valid &&
+                shared_lobby.active &&
+                shared_lobby.game_state >= 1u &&
+                shared_lobby.server_id != 0) {
+                source_tv_game.start_time = shared_lobby.game_start_time != 0
+                    ? shared_lobby.game_start_time
                     : static_cast<uint32>(std::time(nullptr) - 300);
-                source_tv_game.server_id = GBE_shared_dota_lobby_state.server_id;
-                source_tv_game.lobby_id = GBE_shared_dota_lobby_state.lobby_id;
-                source_tv_game.game_time = GBE_shared_dota_lobby_state.game_start_time != 0
-                    ? static_cast<uint32>(std::time(nullptr)) - static_cast<uint32>(GBE_shared_dota_lobby_state.game_start_time)
+                source_tv_game.server_id = shared_lobby.server_id;
+                source_tv_game.lobby_id = shared_lobby.lobby_id;
+                source_tv_game.game_time = shared_lobby.game_start_time != 0
+                    ? static_cast<uint32>(std::time(nullptr)) - static_cast<uint32>(shared_lobby.game_start_time)
                     : 300u;
-                source_tv_game.game_mode = GBE_shared_dota_lobby_state.game_mode;
-                source_tv_game.match_id = GBE_shared_dota_lobby_state.match_id;
-                for (const auto &member : GBE_shared_dota_lobby_state.members) {
+                source_tv_game.game_mode = shared_lobby.game_mode;
+                source_tv_game.match_id = shared_lobby.match_id;
+                for (const auto &member : shared_lobby.members) {
                     if (member.account_id == 0) continue;
                     source_tv_game.players.push_back(gbe::gc_message::DotaSourceTVPlayer{member.account_id, member.hero_id, member.slot, member.team});
                 }
@@ -485,7 +487,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 "FindTopSourceTVGames -> response found=%d source_job=%llu local_valid=%d",
                 found_game ? 1 : 0,
                 static_cast<unsigned long long>(source_job),
-                GBE_shared_dota_lobby_state.valid ? 1 : 0);
+                shared_lobby.valid ? 1 : 0);
             return true;
         }
         case 7073: {
@@ -514,9 +516,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
 
             // Find the server_steamid from local shared state or remote lobbies
             uint64 spectate_server_steamid = 0;
+            const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
 
-            if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.server_id != 0) {
-                spectate_server_steamid = GBE_shared_dota_lobby_state.server_id;
+            if (shared_lobby.valid && shared_lobby.server_id != 0) {
+                spectate_server_steamid = shared_lobby.server_id;
             } else {
                 const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("7073_spectate_friend");
                 for (const auto &snap : snapshots) {
@@ -576,8 +579,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             uint32 source_tv_port = 27020; // default SourceTV port
             uint64 tv_secret_code = 0;
             std::string connect_str;
-            if (GBE_shared_dota_lobby_state.valid && !GBE_shared_dota_lobby_state.connect.empty()) {
-                connect_str = GBE_shared_dota_lobby_state.connect;
+            const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
+            if (shared_lobby.valid && !shared_lobby.connect.empty()) {
+                connect_str = shared_lobby.connect;
             } else {
                 // Fallback: find connect from remote generic lobbies
                 const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("7091_watch_game");
