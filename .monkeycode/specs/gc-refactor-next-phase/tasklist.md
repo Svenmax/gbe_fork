@@ -384,8 +384,9 @@
     - Steam 兼容入口只定位所属实例并转发调用。
     - Store 切片：`Steam_Client` 将 production shared lobby Store 显式传入 client/server coordinator；coordinator-owned handlers 和 flow/coordinator TUs 统一通过实例窄访问器读取或更新 Store。Audit 14 禁止这些业务路径回退到全局 accessor。提交：`6cab09f8`。
     - Reconnect 切片：client/server production reconnect adapter 改由 `Steam_Client` 明确拥有，并通过三个窄接口注入 serialized sockets；serialized service 不再内嵌隐藏 production adapter。Audit 15 校验 direct sockets、adapter、serialized service、coordinator 的正向构造与反向销毁顺序。提交：`ea91926f`。
-    - 已验证切片：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 27/27，16 项 production audit 零问题，TSAN 无 race。
-    - 待完成：提取可注入的 canonical production registry view，并建立 lifecycle executor 窄 port；完成后再关闭 13.3。
+    - Registry 切片：`GBE_ProductionDotaHandlerRegistry()` 唯一拥有 canonical 27 项 typed table，`Steam_Client` 将同一只读 view 显式注入 client/server coordinator，dispatcher 仅通过实例 view 执行查找。Audit 4 从 factory 派生 mapping，Audit 14 拒绝 dispatcher 恢复 static table 或绕过注入 view。提交：`8444af45`。
+    - 已验证切片：Registry 切片 GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 28/28，16 项 production audit 零问题。Store/reconnect 切片的 Clang TSAN 无 race。
+    - 待完成：建立 coordinator-bound lifecycle executor 窄 port；完成后再关闭 13.3。
   - [ ] 13.4 收敛业务 singleton 和文件级可变 static
     - 将业务状态迁移到 composition root 所拥有的实例。
     - 保留协议常量、immutable lookup table 和受控进程基础设施。
