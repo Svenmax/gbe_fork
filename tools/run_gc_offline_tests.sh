@@ -80,6 +80,10 @@ compile_header_test \
     composition_root_header_compile \
     tools/gbe_dota_header_compile_test/composition_root_header_compile.cpp
 
+compile_header_test \
+    lifecycle_state_machine_header_compile \
+    tools/gbe_dota_header_compile_test/lifecycle_state_machine_header_compile.cpp
+
 printf '[run] %s\n' audit_gc_refactor_test
 python3 tools/test_audit_gc_refactor.py
 
@@ -124,6 +128,10 @@ build_and_run \
     dll/gbe_dota_reconnect_network.cpp \
     dll/gbe_dota_serialized_connection_state.cpp \
     dll/gbe_proto_wire.cpp
+
+build_and_run \
+    gbe_dota_lifecycle_state_machine_test \
+    tools/gbe_dota_lifecycle_state_machine_test/gbe_dota_lifecycle_state_machine_test.cpp
 
 build_and_run \
     gbe_dota_concurrency_stress_test \

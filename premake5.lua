@@ -1463,6 +1463,22 @@ project "tool_gbe_dota_composition_root_test"
 -- End tool_gbe_dota_composition_root_test
 
 
+-- Project tool_gbe_dota_lifecycle_state_machine_test
+project "tool_gbe_dota_lifecycle_state_machine_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_lifecycle_state_machine_test"))
+    targetname "gbe_dota_lifecycle_state_machine_test_%{cfg.platform}"
+
+    files {
+        "tools/gbe_dota_lifecycle_state_machine_test/gbe_dota_lifecycle_state_machine_test.cpp",
+        "tools/gbe_dota_header_compile_test/lifecycle_state_machine_header_compile.cpp",
+        "dll/gbe_dota_lifecycle_state_machine.h",
+        "dll/gbe_dota_protocol_constants.h",
+    }
+-- End tool_gbe_dota_lifecycle_state_machine_test
+
+
 -- Project tool_gbe_dota_concurrency_stress_test
 project "tool_gbe_dota_concurrency_stress_test"
     kind "ConsoleApp"

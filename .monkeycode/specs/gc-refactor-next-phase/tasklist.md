@@ -421,10 +421,15 @@
     - 本地 production generation 继续受 bundled Premake GLIBC 2.38 要求和缺少 Windows runner 限制；blocking Windows/Linux release jobs 保持最终 production integration gate。无待确认的 ABI、协议、payload、action-order、ownership 或并发语义问题。
 
 - [ ] 14. 核心 P15 建立显式纯状态机
-  - [ ] 14.1 定义 Lobby lifecycle 状态与事件
+  - [x] 14.1 定义 Lobby lifecycle 状态与事件
     - 将 create、join、setup、loading、loaded、run、postgame、leave、abandon 和 reset 表达为强类型 state/event。
     - 依赖：任务 6、任务 7 和任务 13。
     - direct/wrapped 消息映射为相同 domain event。
+    - 实现：新增 dependency-light `gbe::dota_lifecycle_state_machine` domain contract；`State` 覆盖 idle、created、joined、setup、loading、loaded、running 和 postgame，`EventKind` 覆盖任务要求的十类 lifecycle event，`EventSource` 区分 internal、direct 和 wrapped 来源。
+    - Transport mapping：create `7038`、join `7044`、setup `7041`、loading `8052`、loaded `8053`、run `7070`、postgame `7004`、leave `7040`、abandon `7035` 映射到统一 domain kind；direct/wrapped 仅保留来源元数据，unknown EMsg 明确返回 unmapped，reset 由内部 event factory 产生。
+    - 边界：本任务只固定 domain vocabulary 和 transport-to-domain mapping，不引入 transition 规则或 production handler 接线；后续 14.2 和 14.4 分别负责纯 transition 与核心路径迁移。
+    - 测试与构建：新增 header self-containment 和 focused mapping test，覆盖九类 transport event 的 direct/wrapped 等价、source 保留、unknown mapping 与 internal reset，并接入 fast/full shell gate 和独立 Premake target。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
   - [ ] 14.2 实现纯 transition 函数
     - 输入 immutable state 和 event，输出 new state、effects、decision reason 和 accepted/rejected 状态。
     - transition 内禁止执行网络、callback、日志、文件或全局状态副作用。
