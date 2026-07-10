@@ -21,6 +21,16 @@ void Store::publish(Snapshot state)
     state_ = std::move(state);
 }
 
+StoreUpdateResult Store::publish_if_generation_current_or_newer(Snapshot state)
+{
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    if (state.generation < state_.generation)
+        return StoreUpdateResult::StaleGeneration;
+
+    state_ = std::move(state);
+    return StoreUpdateResult::Applied;
+}
+
 void Store::clear()
 {
     publish(Snapshot{});

@@ -34,6 +34,7 @@
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_lobby_state.h"
+#include "gbe_dota_lobby_state_store.h"
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -150,8 +151,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(uint32 reques
         !preserve_existing_lan_connect) {
         const std::string previous_connect = GBE_local_lobby.connect;
         GBE_local_lobby.connect = runtime_connect;
-        if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id)
-            GBE_shared_dota_lobby_state.connect = runtime_connect;
+        const auto shared_update_result = GBE_GetSharedDotaLobbyStateStore().compare_update(
+            GBE_local_lobby.generation,
+            [&](GBE_SharedDotaLobbyState &shared_lobby) {
+                if (shared_lobby.valid && shared_lobby.lobby_id == GBE_local_lobby.lobby_id)
+                    shared_lobby.connect = runtime_connect;
+            });
+        if (shared_update_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "skipped stale shared lobby connect update reason=4508_game_server_info lobby_id=%llu generation=%llu candidate=%s",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(GBE_local_lobby.generation),
+                runtime_connect.c_str());
+        }
 
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",

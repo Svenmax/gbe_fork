@@ -180,9 +180,10 @@
     - 迁移 reconnect、payload、rich presence、postgame、lobby ownership 和诊断读取。
     - 每个业务操作使用单个一致 snapshot。
     - 实现：新增完整值快照 facade 并委托 production store；scalar/reconnect helper、arcade 判断、完整 restore、direct/wrapped watch 与 spectate response、joinable modes、normal signout、owner fallback 和 coordinator 诊断均在业务操作入口捕获一次快照后使用。
-  - [ ] 8.4 迁移 shared lobby 写入路径
+  - [x] 8.4 迁移 shared lobby 写入路径
     - 迁移 publish、clear、runtime member update 和 lifecycle state update。
     - generation 不匹配的写入返回 stale 结果。
+    - 实现：完整 shared publish 在既有 `global_mutex` 同步域内构造候选快照，并通过 generation 单调 publish 拒绝旧代际覆盖；generic metadata、4508 runtime connect 和 gameserver-derived server ID 使用 `compare_update(local.generation)`，代际不匹配时跳过写入并记录 stale 诊断；clear 继续统一委托 store。
   - [ ] 8.5 移除 production 中的直接全局访问
     - 保留 store implementation 和必要测试 fixture 的受控访问。
     - 增加 audit，阻止新增 `GBE_shared_dota_lobby_state` 直读直写。

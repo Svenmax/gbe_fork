@@ -25,6 +25,7 @@
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lobby_state_store.h"
 #include "gbe_dota_reconnect_context.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
@@ -47,6 +48,7 @@
 #include <iomanip>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 #include <steammessages.pb.h>
 #include <tf2/base_gcmessages.pb.h>
@@ -369,7 +371,18 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
         return;
     }
 
-    gbe::dota_lobby_state::publish_local_lobby_to_shared(GBE_local_lobby, is_server, GBE_shared_dota_lobby_state);
+    auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    gbe::dota_lobby_state::publish_local_lobby_to_shared(GBE_local_lobby, is_server, shared_lobby);
+    const auto publish_result = GBE_GetSharedDotaLobbyStateStore().publish_if_generation_current_or_newer(std::move(shared_lobby));
+    if (publish_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "publish skipped for stale lobby generation reason=%s lobby_id=%llu generation=%llu",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(GBE_local_lobby.generation));
+        return;
+    }
 
     GBE_DotaReconnectContext reconnect_context{};
     if (gbe::dota_lobby_state::build_reconnect_context(GBE_local_lobby, reconnect_context)) {
@@ -1084,11 +1097,23 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey, scalar_publish_data.match_id.c_str());
     GBE_local_lobby.connect = publish_data.connect;
     GBE_local_lobby.server_id = publish_data.server_id;
-    if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id) {
-        GBE_shared_dota_lobby_state.connect = GBE_local_lobby.connect;
-        if (gbe::dota_lobby_flow::should_clear_lobby_server_id_for_metadata_publish(GBE_local_lobby.match_id)) {
-            GBE_shared_dota_lobby_state.server_id = 0ull;
-        }
+    const auto shared_update_result = GBE_GetSharedDotaLobbyStateStore().compare_update(
+        GBE_local_lobby.generation,
+        [&](GBE_SharedDotaLobbyState &shared_lobby) {
+            if (!shared_lobby.valid || shared_lobby.lobby_id != GBE_local_lobby.lobby_id)
+                return;
+
+            shared_lobby.connect = GBE_local_lobby.connect;
+            if (gbe::dota_lobby_flow::should_clear_lobby_server_id_for_metadata_publish(GBE_local_lobby.match_id))
+                shared_lobby.server_id = 0ull;
+        });
+    if (shared_update_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipped stale shared lobby metadata update reason=%s lobby_id=%llu generation=%llu",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(GBE_local_lobby.generation));
     }
 
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey, std::to_string(publish_data.server_id).c_str());
@@ -1679,8 +1704,21 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
 
     const uint64 previous_server_id = GBE_local_lobby.server_id;
     GBE_local_lobby.server_id = derived_server_id;
-    if (GBE_shared_dota_lobby_state.valid && GBE_shared_dota_lobby_state.lobby_id == GBE_local_lobby.lobby_id)
-        GBE_shared_dota_lobby_state.server_id = derived_server_id;
+    const auto shared_update_result = GBE_GetSharedDotaLobbyStateStore().compare_update(
+        GBE_local_lobby.generation,
+        [&](GBE_SharedDotaLobbyState &shared_lobby) {
+            if (shared_lobby.valid && shared_lobby.lobby_id == GBE_local_lobby.lobby_id)
+                shared_lobby.server_id = derived_server_id;
+        });
+    if (shared_update_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SYNC",
+            "skipped stale shared lobby server_id update reason=%s lobby_id=%llu generation=%llu derived=%llu",
+            reason ? reason : "unknown",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(GBE_local_lobby.generation),
+            static_cast<unsigned long long>(derived_server_id));
+    }
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",

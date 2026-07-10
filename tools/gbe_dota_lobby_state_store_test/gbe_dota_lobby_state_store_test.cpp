@@ -112,6 +112,45 @@ void test_snapshot_is_immutable_copy()
     expect_eq_u64(current.members.size(), 1u, "snapshot vectors are detached from caller mutations");
 }
 
+void test_monotonic_publish_accepts_current_and_newer_generations()
+{
+    Fixture fixture;
+    fixture.store.publish(populated_state(8u));
+
+    auto current = populated_state(8u);
+    current.server_id = 505u;
+    const auto current_result = fixture.store.publish_if_generation_current_or_newer(current);
+
+    auto newer = populated_state(9u);
+    newer.server_id = 606u;
+    const auto newer_result = fixture.store.publish_if_generation_current_or_newer(newer);
+    const auto snapshot = fixture.store.snapshot();
+
+    expect_true(current_result == gbe::dota_lobby_state::StoreUpdateResult::Applied, "monotonic publish accepts current generation");
+    expect_true(newer_result == gbe::dota_lobby_state::StoreUpdateResult::Applied, "monotonic publish accepts newer generation");
+    expect_eq_u64(snapshot.generation, 9u, "monotonic publish advances generation");
+    expect_eq_u64(snapshot.server_id, 606u, "monotonic publish commits newer state");
+}
+
+void test_monotonic_publish_rejects_older_generation()
+{
+    Fixture fixture;
+    fixture.store.publish(populated_state(10u));
+
+    auto stale = populated_state(9u);
+    stale.lobby_id = 808u;
+    stale.server_id = 707u;
+    stale.connect = "stale-publish:27015";
+    const auto result = fixture.store.publish_if_generation_current_or_newer(stale);
+    const auto snapshot = fixture.store.snapshot();
+
+    expect_true(result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration, "monotonic publish reports stale generation");
+    expect_eq_u64(snapshot.generation, 10u, "monotonic publish preserves current generation");
+    expect_eq_u64(snapshot.lobby_id, 101u, "monotonic publish preserves current lobby ID");
+    expect_eq_u64(snapshot.server_id, 404u, "monotonic publish preserves current server ID");
+    expect_eq_string(snapshot.connect, "127.0.0.1:27015", "monotonic publish preserves current endpoint");
+}
+
 void test_update_commits_complete_candidate()
 {
     Fixture fixture;
@@ -159,6 +198,31 @@ void test_compare_update_rejects_stale_generation_without_mutation()
     expect_true(!mutator_called, "stale generation update skips the mutator");
     expect_eq_u64(snapshot.server_id, 404u, "stale generation update preserves state");
     expect_eq_string(snapshot.connect, "127.0.0.1:27015", "stale generation update preserves complete snapshot");
+}
+
+void test_delayed_writer_cannot_overwrite_new_generation()
+{
+    Fixture fixture;
+    const auto delayed_generation = 12u;
+    fixture.store.publish(populated_state(delayed_generation));
+
+    auto replacement = populated_state(13u);
+    replacement.lobby_id = 808u;
+    replacement.server_id = 909u;
+    replacement.connect = "10.0.0.9:27015";
+    fixture.store.publish(replacement);
+
+    const auto result = fixture.store.compare_update(delayed_generation, [](auto &candidate) {
+        candidate.server_id = 707u;
+        candidate.connect = "stale-writer:27015";
+    });
+    const auto snapshot = fixture.store.snapshot();
+
+    expect_true(result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration, "delayed writer reports stale generation");
+    expect_eq_u64(snapshot.generation, 13u, "delayed writer preserves replacement generation");
+    expect_eq_u64(snapshot.lobby_id, 808u, "delayed writer preserves replacement lobby ID");
+    expect_eq_u64(snapshot.server_id, 909u, "delayed writer preserves replacement server ID");
+    expect_eq_string(snapshot.connect, "10.0.0.9:27015", "delayed writer preserves replacement endpoint");
 }
 
 void test_clear_resets_complete_state()
@@ -246,9 +310,12 @@ int main()
     test_default_snapshot_is_empty();
     test_publish_replaces_complete_snapshot();
     test_snapshot_is_immutable_copy();
+    test_monotonic_publish_accepts_current_and_newer_generations();
+    test_monotonic_publish_rejects_older_generation();
     test_update_commits_complete_candidate();
     test_compare_update_applies_matching_generation();
     test_compare_update_rejects_stale_generation_without_mutation();
+    test_delayed_writer_cannot_overwrite_new_generation();
     test_clear_resets_complete_state();
     test_concurrent_readers_observe_complete_versions();
 
