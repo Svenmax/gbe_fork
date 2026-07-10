@@ -20,6 +20,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 namespace {
@@ -30,6 +31,33 @@ bool expect_true(bool value, const char *label)
         return true;
     std::cerr << "failed: " << label << std::endl;
     return false;
+}
+
+std::string lifecycle_action_fingerprint(const GBE_DotaActionList &actions)
+{
+    std::ostringstream fingerprint;
+    for (const GBE_DotaAction &action : actions) {
+        fingerprint
+            << static_cast<unsigned int>(action.type) << '|'
+            << action.emsg << '|'
+            << action.payload << '|'
+            << action.target_steam_id << '|'
+            << action.item_id << '|'
+            << action.job_id << '|'
+            << action.reason << '|'
+            << action.leave_generic_lobby << '|'
+            << action.clear_queued_messages << '|'
+            << action.lobby_state << '|'
+            << action.lobby_game_state << '|'
+            << action.launch_phase << '|'
+            << action.hero_id << '|'
+            << action.connected << '|'
+            << action.has_hero_id << '|'
+            << action.only_when_previous_action_succeeded << '|'
+            << action.only_when_runtime_update_not_queued << '|'
+            << action.delay << ';';
+    }
+    return fingerprint.str();
 }
 
 bool expect_false(bool value, const char *label)
@@ -462,6 +490,64 @@ bool test_launch_lifecycle_action_sequence()
         ok &= expect_true(actions[0].type == GBE_DotaActionType::PracticeLobbyDetailsUpdate, "7034 poll sends details");
     }
 
+    return ok;
+}
+
+bool test_lifecycle_action_properties()
+{
+    bool ok = true;
+
+    for (unsigned int mask = 0u; mask < 256u; ++mask) {
+        gbe::dota_lifecycle::TransitionEffects effects;
+        effects.transition.apply_lobby_state = (mask & 1u) != 0u;
+        effects.transition.next_state = 2u;
+        effects.transition.next_game_state = 3u;
+        effects.update_local_member_runtime = (mask & 2u) != 0u;
+        effects.local_steam_id = effects.update_local_member_runtime ? 700ull : 0ull;
+        effects.transition.mark_launch_phase = (mask & 4u) != 0u;
+        effects.transition.launch_phase = GBE_kDotaLaunchPhaseLoaded;
+        effects.transition.queue_runtime_lobby_update = (mask & 8u) != 0u;
+        effects.publish_local_member_data = (mask & 16u) != 0u;
+        effects.transition.publish_shared_state = (mask & 32u) != 0u;
+        effects.transition.send_details_update = (mask & 64u) != 0u;
+        effects.fallback_publish_on_runtime_update_failure = (mask & 128u) != 0u;
+        effects.transition.runtime_update_delay = 0.25;
+        effects.transition.reason = "P5_property";
+        effects.trigger_emsg = 7034u;
+        effects.source_job = 123ull;
+        effects.runtime_update_note = "P5_runtime";
+
+        const GBE_DotaActionList first = gbe::dota_lifecycle::build_transition_actions(effects);
+        const GBE_DotaActionList second = gbe::dota_lifecycle::build_transition_actions(effects);
+        ok &= expect_true(
+            lifecycle_action_fingerprint(first) == lifecycle_action_fingerprint(second),
+            "P5-A identical effects produce identical action sequences");
+
+        std::size_t runtime_index = first.size();
+        std::size_t local_publish_index = first.size();
+        std::size_t shared_publish_index = first.size();
+        std::size_t details_index = first.size();
+        for (std::size_t i = 0; i < first.size(); ++i) {
+            switch (first[i].type) {
+                case GBE_DotaActionType::RuntimeLobbyDetailsUpdate: runtime_index = i; break;
+                case GBE_DotaActionType::LobbyLocalMemberData: local_publish_index = i; break;
+                case GBE_DotaActionType::SharedLobbyPublish: shared_publish_index = i; break;
+                case GBE_DotaActionType::PracticeLobbyDetailsUpdate: details_index = i; break;
+                default: break;
+            }
+        }
+        if (runtime_index < first.size() && local_publish_index < first.size())
+            ok &= expect_true(runtime_index < local_publish_index, "P5-B runtime precedes local publish");
+        if (local_publish_index < first.size() && shared_publish_index < first.size())
+            ok &= expect_true(local_publish_index < shared_publish_index, "P5-B local publish precedes shared publish");
+        if (shared_publish_index < first.size() && details_index < first.size())
+            ok &= expect_true(shared_publish_index < details_index, "P5-B shared publish precedes details update");
+    }
+
+    const gbe::dota_lifecycle::TransitionEffects empty_effects;
+    ok &= expect_true(
+        gbe::dota_lifecycle::build_transition_actions(empty_effects).empty(),
+        "P5-C empty effects produce no actions");
     return ok;
 }
 
@@ -1512,6 +1598,7 @@ int main()
     ok &= test_valid_launch_progression();
     ok &= test_launch_lifecycle_transition_decision();
     ok &= test_launch_lifecycle_action_sequence();
+    ok &= test_lifecycle_action_properties();
     ok &= test_stale_generic_lobby_state_regression();
     ok &= test_owner_disconnect_and_reconnect();
     ok &= test_reconnect_eligibility_decision();

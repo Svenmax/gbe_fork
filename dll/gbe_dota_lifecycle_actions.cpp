@@ -35,13 +35,6 @@ GBE_DotaActionList build_transition_actions(const TransitionEffects &effects)
         actions.push_back(std::move(action));
     }
 
-    if (effects.publish_local_member_data) {
-        GBE_DotaAction action;
-        action.type = GBE_DotaActionType::LobbyLocalMemberData;
-        action.reason = transition.reason;
-        actions.push_back(std::move(action));
-    }
-
     if (transition.queue_runtime_lobby_update) {
         GBE_DotaAction action;
         action.type = GBE_DotaActionType::RuntimeLobbyDetailsUpdate;
@@ -51,6 +44,13 @@ GBE_DotaActionList build_transition_actions(const TransitionEffects &effects)
         action.lobby_game_state = transition.next_game_state;
         action.delay = transition.runtime_update_delay;
         action.reason = effects.runtime_update_note ? effects.runtime_update_note : transition.reason;
+        actions.push_back(std::move(action));
+    }
+
+    if (effects.publish_local_member_data) {
+        GBE_DotaAction action;
+        action.type = GBE_DotaActionType::LobbyLocalMemberData;
+        action.reason = transition.reason;
         actions.push_back(std::move(action));
     }
 

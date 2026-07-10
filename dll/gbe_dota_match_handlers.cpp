@@ -676,8 +676,18 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034StrategyTimeFallback(
                 GBE_local_lobby.game_state,
                 gbe::proto_wire::format_dota7034_summary(body, body_size).c_str()
             );
-        } else if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime AP hero_selection fallback strategy_time", request_emsg, source_job, 2u, 3u, 1.0)) {
-            queued_runtime_lobby_update = true;
+        } else {
+            gbe::dota_lifecycle::TransitionEffects effects;
+            effects.transition.queue_runtime_lobby_update = true;
+            effects.transition.next_state = 2u;
+            effects.transition.next_game_state = 3u;
+            effects.transition.runtime_update_delay = 1.0;
+            effects.transition.reason = "runtime AP hero_selection fallback strategy_time";
+            effects.trigger_emsg = request_emsg;
+            effects.source_job = source_job;
+            effects.runtime_update_note = effects.transition.reason.c_str();
+            if (GBE_ExecuteDotaLifecycleActions(gbe::dota_lifecycle::build_transition_actions(effects)).runtime_update_queued)
+                queued_runtime_lobby_update = true;
         }
     }
 }
@@ -829,7 +839,16 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034WaitForPlayers(
     if (custom_game_launch || GBE_local_lobby.state != 2u || GBE_local_lobby.game_state != 1u)
         return;
 
-    if (!GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8870/7034 wait_for_players", request_emsg, source_job, 2u, 1u))
+    gbe::dota_lifecycle::TransitionEffects wait_for_players_effects;
+    wait_for_players_effects.transition.queue_runtime_lobby_update = true;
+    wait_for_players_effects.transition.next_state = 2u;
+    wait_for_players_effects.transition.next_game_state = 1u;
+    wait_for_players_effects.transition.reason = "runtime packet after 8870/7034 wait_for_players";
+    wait_for_players_effects.trigger_emsg = request_emsg;
+    wait_for_players_effects.source_job = source_job;
+    wait_for_players_effects.runtime_update_note = wait_for_players_effects.transition.reason.c_str();
+    if (!GBE_ExecuteDotaLifecycleActions(
+            gbe::dota_lifecycle::build_transition_actions(wait_for_players_effects)).runtime_update_queued)
         return;
 
     queued_runtime_lobby_update = true;
@@ -850,8 +869,18 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034WaitForPlayers(
             GBE_local_lobby.game_state,
             gbe::proto_wire::format_dota7034_summary(body, body_size).c_str()
         );
-    } else if (GBE_TryQueueDotaRuntimeLobbyDetailsUpdate("runtime packet after 8870/7034 hero_selection", request_emsg, source_job, 2u, 2u)) {
-        queued_runtime_lobby_update = true;
+    } else {
+        gbe::dota_lifecycle::TransitionEffects hero_selection_effects;
+        hero_selection_effects.transition.queue_runtime_lobby_update = true;
+        hero_selection_effects.transition.next_state = 2u;
+        hero_selection_effects.transition.next_game_state = 2u;
+        hero_selection_effects.transition.reason = "runtime packet after 8870/7034 hero_selection";
+        hero_selection_effects.trigger_emsg = request_emsg;
+        hero_selection_effects.source_job = source_job;
+        hero_selection_effects.runtime_update_note = hero_selection_effects.transition.reason.c_str();
+        if (GBE_ExecuteDotaLifecycleActions(
+                gbe::dota_lifecycle::build_transition_actions(hero_selection_effects)).runtime_update_queued)
+            queued_runtime_lobby_update = true;
     }
 }
 

@@ -42,12 +42,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedCustomGameLifecycleRequest(con
                 GBE_local_lobby, ready_state, GBE_kDotaLaunchPhaseRunQueued,
                 "7070_wrapped_custom_game_ready_up_run_ack");
         if (ready_up.apply_lobby_state) {
-            GBE_local_lobby.state = ready_up.next_state;
-            GBE_local_lobby.game_state = ready_up.next_game_state;
-            if (ready_up.publish_shared_state)
-                GBE_PublishSharedDotaLobbyState(ready_up.reason.c_str());
-            if (ready_up.send_details_update)
-                GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, ready_up.reason.c_str());
+            gbe::dota_custom_game_lifecycle::ExecutionContext execution{};
+            execution.transition = ready_up;
+            execution.wrapped = true;
+            execution.outer_session_field_raw = &context.outer_session_field_raw;
+            GBE_ExecuteDotaCustomGameLifecycleTransition(execution);
         }
         return true;
     }

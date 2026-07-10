@@ -65,9 +65,14 @@ HIGH_RISK_SIDE_EFFECT_APIS = [
     "GBE_PublishSharedDotaLobbyState",
     "GBE_PublishDotaPracticeLobbyMetadata",
     "GBE_PublishDotaPracticeLobbyLocalMemberData",
+    "GBE_SetDotaLobbyMemberRuntimeState",
+    "GBE_TryQueueDotaRuntimeLobbyDetailsUpdate",
+    "GBE_MarkDotaLaunchPhase",
+    "GBE_SendDotaPracticeLobbyDetailsUpdate",
 ]
 HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE = {
     ("gbe_dota_chat_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 5,
+    ("gbe_dota_chat_handlers.cpp", "GBE_SendDotaPracticeLobbyDetailsUpdate"): 3,
     ("gbe_dota_inventory_handlers.cpp", "GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot"): 1,
     ("gbe_dota_inventory_handlers.cpp", "GBE_PushDotaPlayerEquippedItemsCacheToGC"): 2,
     ("gbe_dota_inventory_handlers.cpp", "GBE_SaveDotaItemsFromExecutor"): 1,
@@ -77,13 +82,35 @@ HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE = {
     ("gbe_dota_lobby_handlers.cpp", "GBE_PublishDotaPracticeLobbyLocalMemberData"): 4,
     ("gbe_dota_lobby_handlers.cpp", "GBE_PublishDotaPracticeLobbyMetadata"): 2,
     ("gbe_dota_lobby_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 7,
+    ("gbe_dota_lobby_handlers.cpp", "GBE_SendDotaPracticeLobbyDetailsUpdate"): 5,
     ("gbe_dota_match_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 2,
     ("gbe_dota_match_handlers.cpp", "GBE_PushDotaPlayerEquippedItemsCacheToGC"): 2,
     ("gbe_dota_misc_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 2,
+    ("gbe_dota_misc_handlers.cpp", "GBE_SendDotaPracticeLobbyDetailsUpdate"): 1,
+    ("gbe_dota_post_login_handlers.cpp", "GBE_MarkDotaLaunchPhase"): 1,
     ("gbe_dota_post_login_handlers.cpp", "GBE_PublishDotaPracticeLobbyMetadata"): 1,
     ("gbe_dota_post_login_handlers.cpp", "save_items_to_file"): 1,
     ("gbe_dota_template_replay_handlers.cpp", "save_items_to_file"): 4,
-    ("gbe_dota_wrapped_custom_game_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 1,
+}
+LIFECYCLE_EXECUTOR_OWNER = "gbe_dota_custom_game_lifecycle_coordinator.cpp"
+LIFECYCLE_PLANNER = "gbe_dota_lifecycle_actions.cpp"
+LIFECYCLE_SIDE_EFFECT_APIS = [
+    "GBE_SetDotaLobbyMemberRuntimeState",
+    "GBE_TryQueueDotaRuntimeLobbyDetailsUpdate",
+    "GBE_MarkDotaLaunchPhase",
+    "GBE_PublishDotaPracticeLobbyLocalMemberData",
+    "GBE_PublishSharedDotaLobbyState",
+    "GBE_SendDotaPracticeLobbyDetailsUpdate",
+]
+MIGRATED_LIFECYCLE_HANDLER_FORBIDDEN_APIS = {
+    "gbe_dota_match_handlers.cpp": {
+        "GBE_SetDotaLobbyMemberRuntimeState",
+        "GBE_TryQueueDotaRuntimeLobbyDetailsUpdate",
+        "GBE_MarkDotaLaunchPhase",
+        "GBE_PublishDotaPracticeLobbyLocalMemberData",
+        "GBE_SendDotaPracticeLobbyDetailsUpdate",
+    },
+    "gbe_dota_wrapped_custom_game_handlers.cpp": set(LIFECYCLE_SIDE_EFFECT_APIS),
 }
 HIGH_RISK_REASON_STRINGS = [
     "equip_forward_host_resubscribe_server",
@@ -345,6 +372,30 @@ def audit_handler_side_effect_seams(tu_paths):
     return issues, sum(actual.values()), len(HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE)
 
 
+def audit_lifecycle_side_effect_ownership():
+    """Keep lifecycle planning pure and migrated handlers behind the executor."""
+    issues = []
+    owner_path = os.path.join(ROOT_DIR, "dll", LIFECYCLE_EXECUTOR_OWNER)
+    owner_text = strip_comments(read(owner_path))
+    for api in LIFECYCLE_SIDE_EFFECT_APIS:
+        if not re.search(r"\b" + re.escape(api) + r"\s*\(", owner_text):
+            issues.append(f"{LIFECYCLE_EXECUTOR_OWNER}: executor owner no longer calls required lifecycle API {api}")
+
+    planner_path = os.path.join(ROOT_DIR, "dll", LIFECYCLE_PLANNER)
+    planner_text = strip_comments(read(planner_path))
+    for api in LIFECYCLE_SIDE_EFFECT_APIS:
+        if re.search(r"\b" + re.escape(api) + r"\s*\(", planner_text):
+            issues.append(f"{LIFECYCLE_PLANNER}: pure planner directly calls lifecycle side-effect API {api}")
+
+    for base, forbidden_apis in sorted(MIGRATED_LIFECYCLE_HANDLER_FORBIDDEN_APIS.items()):
+        handler_text = strip_comments(read(os.path.join(ROOT_DIR, "dll", base)))
+        for api in sorted(forbidden_apis):
+            if re.search(r"\b" + re.escape(api) + r"\s*\(", handler_text):
+                issues.append(f"{base}: migrated lifecycle handler directly calls {api}; route through {LIFECYCLE_EXECUTOR_OWNER}")
+
+    return issues
+
+
 def audit_reason_inventory():
     """Ensure high-risk reasons stay documented and covered by tests/specs."""
     governance_text = read(REASON_TRACE_GOVERNANCE_MD) if os.path.exists(REASON_TRACE_GOVERNANCE_MD) else ""
@@ -505,6 +556,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 9: Lifecycle side-effect ownership")
+    print("=" * 70)
+    print("  Action: keep lifecycle planners pure and migrated handlers behind the lifecycle executor owner.")
+    lifecycle_ownership_issues = audit_lifecycle_side_effect_ownership()
+    if not lifecycle_ownership_issues:
+        print(f"  All {len(LIFECYCLE_SIDE_EFFECT_APIS)} lifecycle side-effect APIs remain owned by {LIFECYCLE_EXECUTOR_OWNER}")
+    else:
+        for issue in lifecycle_ownership_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -518,8 +581,9 @@ def main():
     print(f"  Source-list inclusion issues:        {len(source_list_issues)}")
     print(f"  Handler side-effect seam issues:     {len(side_effect_issues)}")
     print(f"  High-risk reason inventory issues:   {len(reason_issues)}")
+    print(f"  Lifecycle ownership issues:          {len(lifecycle_ownership_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues:
         sys.exit(1)
 
 

@@ -297,6 +297,9 @@ struct TestFixture
         gc.GBE_ClearLastDotaDirectConnectCallbackSignature();
         gc.test_set_active_server_lobby(false);
         gc.test_clear_next_lobby_capture();
+        gc.test_set_dota_response_result(true);
+        gc.test_set_member_runtime_result(true);
+        gc.test_set_runtime_update_result(true);
         // Clear the global server-GC hook so each test starts from a clean slate.
         g_test_steam_client.steam_matchmaking = nullptr;
         g_test_steam_client.steam_game_coordinator = nullptr;
@@ -2438,6 +2441,91 @@ static void test_custom_game_lifecycle_duplicate_messages_are_deterministic()
     ++g_tests_passed;
 }
 
+static void test_lifecycle_executor_empty_and_conditional_actions()
+{
+    TestFixture tf;
+    tf.reset();
+
+    const gbe::dota_lifecycle::ExecutionResult empty_result =
+        tf.gc.GBE_ExecuteDotaLifecycleActions({});
+    TEST_ASSERT(empty_result.succeeded, "empty lifecycle action list should succeed");
+    TEST_ASSERT(tf.recorder.actions.empty(), "empty lifecycle action list should record no actions");
+    TEST_ASSERT(tf.recorder.lifecycle_events.empty(), "empty lifecycle action list should record no lifecycle events");
+
+    tf.gc.test_set_member_runtime_result(false);
+    const GBE_DotaActionList member_actions = gbe::dota_lifecycle::build_member_runtime_actions(
+        700ull, true, 11u, true, "conditional_member_publish");
+    const gbe::dota_lifecycle::ExecutionResult member_result =
+        tf.gc.GBE_ExecuteDotaLifecycleActions(member_actions);
+    TEST_ASSERT(!member_result.state_changed, "failed member mutation should report no state change");
+    TEST_ASSERT(tf.recorder.lifecycle_events == std::vector<std::string>({"runtime_state"}),
+        "failed member mutation should skip conditional shared publish");
+
+    tf.reset();
+    tf.gc.test_set_runtime_update_result(false);
+    gbe::dota_lifecycle::TransitionEffects effects;
+    effects.transition.queue_runtime_lobby_update = true;
+    effects.transition.next_state = 2u;
+    effects.transition.next_game_state = 1u;
+    effects.transition.send_details_update = true;
+    effects.transition.reason = "runtime_fallback";
+    effects.fallback_publish_on_runtime_update_failure = true;
+    const gbe::dota_lifecycle::ExecutionResult runtime_result =
+        tf.gc.GBE_ExecuteDotaLifecycleActions(gbe::dota_lifecycle::build_transition_actions(effects));
+    TEST_ASSERT(!runtime_result.runtime_update_queued, "failed runtime update should remain unqueued");
+    TEST_ASSERT(runtime_result.details_update_sent, "failed runtime update should execute details fallback");
+    TEST_ASSERT(tf.recorder.lifecycle_events == std::vector<std::string>({"runtime_update", "shared_publish", "details_update"}),
+        "failed runtime update should execute ordered fallback actions");
+
+    ++g_tests_passed;
+}
+
+static void test_lifecycle_executor_push_routes_and_failure_policy()
+{
+    TestFixture tf;
+    tf.reset();
+
+    GBE_DotaAction push;
+    push.type = GBE_DotaActionType::PushIncomingNow;
+    push.emsg = 7014u | GBE_kProtoMask;
+    push.payload = "payload";
+    push.reason = "action_reason";
+    GBE_DotaAction follow_up;
+    follow_up.type = GBE_DotaActionType::PendingResetAfterCacheUnsubscribed;
+    follow_up.item_id = 55ull;
+    const GBE_DotaActionList actions = {push, follow_up};
+
+    std::string session = "session";
+    gbe::dota_lifecycle::ExecutionOptions options;
+    options.wrapped = true;
+    options.outer_session_field_raw = &session;
+    options.push_route = gbe::dota_lifecycle::PushRoute::DotaResponse;
+    options.push_reason_override = "override_reason";
+    tf.gc.test_set_dota_response_result(false);
+    const gbe::dota_lifecycle::ExecutionResult continue_result =
+        tf.gc.GBE_ExecuteDotaLifecycleActions(actions, options);
+    TEST_ASSERT(continue_result.succeeded, "non-aborting push failure should continue execution");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "Dota response route should record one wrapped push");
+    TEST_ASSERT(tf.recorder.actions[0].wrapped, "Dota response route should preserve wrapper mode");
+    TEST_ASSERT(tf.recorder.actions[0].session_raw == session, "Dota response route should preserve session");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "override_reason", "push reason override should be applied");
+    TEST_ASSERT(tf.gc.GBE_HasPendingResetAfterCacheUnsubscribed(), "non-aborting push failure should execute follow-up action");
+
+    tf.reset();
+    tf.gc.GBE_ClearPendingResetAfterCacheUnsubscribed();
+    tf.gc.test_set_dota_response_result(false);
+    options.push_route = gbe::dota_lifecycle::PushRoute::CacheUnsubscribedResponse;
+    options.abort_on_push_failure = true;
+    const gbe::dota_lifecycle::ExecutionResult abort_result =
+        tf.gc.GBE_ExecuteDotaLifecycleActions(actions, options);
+    TEST_ASSERT(!abort_result.succeeded, "aborting push failure should fail execution");
+    TEST_ASSERT(!tf.gc.GBE_HasPendingResetAfterCacheUnsubscribed(), "aborting push failure should skip follow-up action");
+    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[0]), GBE_kDotaCacheUnsubscribed,
+        "cache-unsubscribed route should use message 25");
+
+    ++g_tests_passed;
+}
+
 static void test_match_7034_connected_player_updates_runtime_before_response()
 {
     TestFixture tf;
@@ -2828,6 +2916,12 @@ int main()
 
     std::printf("[run] test_custom_game_lifecycle_duplicate_messages_are_deterministic\n");
     RUN_TEST(test_custom_game_lifecycle_duplicate_messages_are_deterministic);
+
+    std::printf("[run] test_lifecycle_executor_empty_and_conditional_actions\n");
+    RUN_TEST(test_lifecycle_executor_empty_and_conditional_actions);
+
+    std::printf("[run] test_lifecycle_executor_push_routes_and_failure_policy\n");
+    RUN_TEST(test_lifecycle_executor_push_routes_and_failure_policy);
 
     std::printf("[run] test_match_7034_connected_player_updates_runtime_before_response\n");
     RUN_TEST(test_match_7034_connected_player_updates_runtime_before_response);

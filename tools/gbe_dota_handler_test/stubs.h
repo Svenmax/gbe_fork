@@ -1124,7 +1124,7 @@ public:
             g_action_recorder->record_dota_response(inner_emsg | protobuf_mask, inner_message, wrapped, outer_session_field_raw, reason);
         if (out_wrapped_message)
             *out_wrapped_message = inner_message;
-        return true;
+        return m_test_dota_response_result;
     }
 
     bool GBE_PushDotaCacheUnsubscribedResponse(const std::string &message, bool wrapped, const std::string *outer_session_field_raw, const char *reason)
@@ -1477,6 +1477,8 @@ public:
     {
         if (g_action_recorder)
             g_action_recorder->record_runtime_state(steam_id, connected, hero_id, has_hero_id);
+        if (!m_test_member_runtime_result)
+            return false;
         if (steam_id == GBE_local_lobby.owner_steam_id) {
             GBE_local_lobby.owner_connected = connected;
             if (has_hero_id)
@@ -1505,7 +1507,7 @@ public:
         if (g_action_recorder)
             g_action_recorder->lifecycle_events.push_back("runtime_update");
         push_incoming_now(26u | protobuf_mask, build_protomsg_header(26u, k_GIDNil, source_job) + std::string(note ? note : "runtime_update"));
-        return true;
+        return m_test_runtime_update_result;
     }
     void GBE_MarkDotaLaunchPhase(uint32 phase, const char *, bool = true)
     {
@@ -1540,6 +1542,9 @@ public:
         m_test_has_next_lobby_capture = false;
     }
     void test_set_custom_game_launch_setup_flow_result(bool v) { m_test_custom_game_launch_setup_flow_result = v; }
+    void test_set_dota_response_result(bool v) { m_test_dota_response_result = v; }
+    void test_set_member_runtime_result(bool v) { m_test_member_runtime_result = v; }
+    void test_set_runtime_update_result(bool v) { m_test_runtime_update_result = v; }
 
     // --- Handler declarations (defined in handler .cpp via test_wrapper) ---
     // Inventory domain
@@ -1625,6 +1630,9 @@ private:
     bool m_test_has_next_lobby_capture = false;
     GBE_LocalLobby m_test_next_lobby_capture{};
     bool m_test_custom_game_launch_setup_flow_result = false;
+    bool m_test_dota_response_result = true;
+    bool m_test_member_runtime_result = true;
+    bool m_test_runtime_update_result = true;
 };
 
 // =====================================================================
