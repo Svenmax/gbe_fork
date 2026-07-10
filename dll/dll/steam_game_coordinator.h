@@ -20,6 +20,7 @@
 
 #include "base.h"
 #include "econ_item.h"
+#include "gbe_dota_connection_dedup_key.h"
 #include "gbe_dota_custom_game_lifecycle.h"
 #include "gbe_dota_lobby_generation.h"
 #include "gbe_dota_lobby_state.h"
@@ -144,7 +145,7 @@ public ISteamGameCoordinator
     GBE_DotaDeferredTaskSlot GBE_pending_dota_normal_signout_finalize_slot;
     GBE_DotaDeferredTaskSlot GBE_pending_reset_after_cache_unsubscribed_slot;
     std::string GBE_last_dota_launch_persona_signature;
-    std::string GBE_last_dota_direct_connect_callback_signature;
+    gbe::dota_connection::DedupKey GBE_last_dota_direct_connect_callback_key;
     std::chrono::high_resolution_clock::time_point GBE_last_lobby_poll_time{};
     uint64 GBE_last_broadcast_dota_match_id{};
 
@@ -170,6 +171,7 @@ public ISteamGameCoordinator
     void parse_gc_config();
     bool is_welcome_message(const GC_Message &message);
     uint64 GBE_CurrentDotaLobbyGeneration() const;
+    static bool GBE_IsCurrentDotaLobbyCallbackGeneration(const void *context, unsigned int context_size);
     GBE_DotaGenerationAdvanceResult GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary boundary, const char *reason);
     bool GBE_IsQueuedLobbyMessageCurrent(const GC_Message &message, const char *stage) const;
     GBE_DotaDeferredTaskConsumeResult GBE_ConsumeDotaDeferredTask(GBE_DotaDeferredTaskSlot &slot, const char *task_name);
@@ -194,9 +196,9 @@ public ISteamGameCoordinator
     const std::string &GBE_GetLastDotaLaunchPersonaSignature() const;
     void GBE_SetLastDotaLaunchPersonaSignature(const std::string &signature);
     void GBE_ClearLastDotaLaunchPersonaSignature();
-    const std::string &GBE_GetLastDotaDirectConnectCallbackSignature() const;
-    void GBE_SetLastDotaDirectConnectCallbackSignature(const std::string &signature);
-    void GBE_ClearLastDotaDirectConnectCallbackSignature();
+    const gbe::dota_connection::DedupKey &GBE_GetLastDotaDirectConnectCallbackKey() const;
+    void GBE_SetLastDotaDirectConnectCallbackKey(const gbe::dota_connection::DedupKey &key);
+    void GBE_ClearLastDotaDirectConnectCallbackKey();
     bool GBE_ShouldDiscardQueuedDotaLaunchMessageForAbandon(uint32 masked_emsg) const;
     bool GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel() const;
     bool GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed() const;

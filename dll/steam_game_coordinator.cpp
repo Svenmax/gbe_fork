@@ -803,19 +803,19 @@ void Steam_Game_Coordinator::GBE_ClearLastDotaLaunchPersonaSignature()
     GBE_last_dota_launch_persona_signature.clear();
 }
 
-const std::string &Steam_Game_Coordinator::GBE_GetLastDotaDirectConnectCallbackSignature() const
+const gbe::dota_connection::DedupKey &Steam_Game_Coordinator::GBE_GetLastDotaDirectConnectCallbackKey() const
 {
-    return GBE_last_dota_direct_connect_callback_signature;
+    return GBE_last_dota_direct_connect_callback_key;
 }
 
-void Steam_Game_Coordinator::GBE_SetLastDotaDirectConnectCallbackSignature(const std::string &signature)
+void Steam_Game_Coordinator::GBE_SetLastDotaDirectConnectCallbackKey(const gbe::dota_connection::DedupKey &key)
 {
-    GBE_last_dota_direct_connect_callback_signature = signature;
+    GBE_last_dota_direct_connect_callback_key = key;
 }
 
-void Steam_Game_Coordinator::GBE_ClearLastDotaDirectConnectCallbackSignature()
+void Steam_Game_Coordinator::GBE_ClearLastDotaDirectConnectCallbackKey()
 {
-    GBE_last_dota_direct_connect_callback_signature.clear();
+    GBE_last_dota_direct_connect_callback_key = {};
 }
 
 bool Steam_Game_Coordinator::GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed() const

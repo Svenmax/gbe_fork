@@ -152,9 +152,10 @@
     - runtime lobby update、reconnect callback、postgame task 和延迟 publish 在执行前校验 generation。
     - 旧 generation 的任务返回明确 stale reason。
     - 实现：coordinator 在 Create、Join、Leave、Reset、Recover 提交边界分配 generation；延迟 lobby 消息捕获 `lobby_id + generation` 并在状态应用、publish 和入队前拒绝旧代际；postgame slot 返回 `Current/Stale/Empty`；reconnect callback 通过通用 execution guard 在实际 dispatch 前校验 generation。现有 lobby-ID 去重行为继续保留至 7.4。
-  - [ ] 7.4 迁移现有 lobby ID 去重用途
+  - [x] 7.4 迁移现有 lobby ID 去重用途
     - 连接和 callback 去重改用 generation，server/endpoint 继续作为同代际键。
     - 保留 lobby ID 用于协议匹配和日志。
+    - 实现：serialized reconnect 和 lobby-flow callback bundle 使用类型化 `generation + server_id + endpoint` 键；generation 变化清除 retry、payload、direct-connect 和 callback 状态，同 generation 下 lobby ID 仅同步；callback 在实际 dispatch 前继续校验 generation。
   - [ ] 7.5 增加 generation 生命周期测试
     - 覆盖快速退房重进、相同 lobby ID 复用、异步回调晚到、旧延迟任务和状态重置。
   - [ ] 7.6 增加 generation 属性测试

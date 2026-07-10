@@ -1386,6 +1386,7 @@ project "tool_gbe_dota_lobby_state_test"
         "tools/gbe_dota_header_compile_test/serialized_connection_state_header_compile.cpp",
         "dll/gbe_dota_serialized_connection_state.cpp",
         "dll/dll/gbe_dota_serialized_connection_state.h",
+        "dll/gbe_dota_connection_dedup_key.h",
         "dll/gbe_dota_reconnect_context.cpp",
         "dll/gbe_dota_reconnect_context.h",
         "dll/gbe_dota_lobby_state.cpp",
@@ -1427,6 +1428,7 @@ project "tool_gbe_dota_reconnect_network_test"
         "dll/gbe_dota_reconnect_network.h",
         "dll/gbe_dota_serialized_connection_state.cpp",
         "dll/dll/gbe_dota_serialized_connection_state.h",
+        "dll/gbe_dota_connection_dedup_key.h",
         "dll/gbe_proto_wire.cpp",
         "dll/gbe_proto_wire.h",
     }

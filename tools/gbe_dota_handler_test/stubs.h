@@ -45,6 +45,7 @@
 #include "dll/gbe_dota_protocol_constants.h"
 #include "dll/gbe_dota_custom_game.h"
 #include "dll/gbe_dota_custom_game_lifecycle.h"
+#include "dll/gbe_dota_connection_dedup_key.h"
 #include "dll/gbe_dota_gc_router.h"
 #include "dll/gbe_dota_lobby_generation.h"
 #include "dll/gbe_dota_types.h"
@@ -1024,9 +1025,9 @@ public:
     const std::string &GBE_GetLastDotaLaunchPersonaSignature() const { return GBE_last_dota_launch_persona_signature; }
     void GBE_SetLastDotaLaunchPersonaSignature(const std::string &signature) { GBE_last_dota_launch_persona_signature = signature; }
     void GBE_ClearLastDotaLaunchPersonaSignature() { GBE_last_dota_launch_persona_signature.clear(); }
-    const std::string &GBE_GetLastDotaDirectConnectCallbackSignature() const { return GBE_last_dota_direct_connect_callback_signature; }
-    void GBE_SetLastDotaDirectConnectCallbackSignature(const std::string &signature) { GBE_last_dota_direct_connect_callback_signature = signature; }
-    void GBE_ClearLastDotaDirectConnectCallbackSignature() { GBE_last_dota_direct_connect_callback_signature.clear(); }
+    const gbe::dota_connection::DedupKey &GBE_GetLastDotaDirectConnectCallbackKey() const { return GBE_last_dota_direct_connect_callback_key; }
+    void GBE_SetLastDotaDirectConnectCallbackKey(const gbe::dota_connection::DedupKey &key) { GBE_last_dota_direct_connect_callback_key = key; }
+    void GBE_ClearLastDotaDirectConnectCallbackKey() { GBE_last_dota_direct_connect_callback_key = {}; }
     void GBE_SetPendingDotaAbandonFinalizeAfterOtherLeftChannel(uint64 lobby_id)
     {
         GBE_pending_dota_abandon_finalize_after_7014 = true;
@@ -1138,7 +1139,7 @@ public:
     bool GBE_dota_private_lobby_snapshot_replayed{};
     uint32 GBE_last_dota_launch_state_pushed_game_state{};
     std::string GBE_last_dota_launch_persona_signature;
-    std::string GBE_last_dota_direct_connect_callback_signature;
+    gbe::dota_connection::DedupKey GBE_last_dota_direct_connect_callback_key;
 
     // --- Core recording side-effect methods ---
 

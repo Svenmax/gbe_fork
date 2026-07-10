@@ -301,7 +301,7 @@ struct TestFixture
         gc.GBE_ClearDotaHostShowcaseEquipPushed();
         gc.GBE_ClearLastDotaLaunchStatePushedGameState();
         gc.GBE_ClearLastDotaLaunchPersonaSignature();
-        gc.GBE_ClearLastDotaDirectConnectCallbackSignature();
+        gc.GBE_ClearLastDotaDirectConnectCallbackKey();
         gc.test_set_active_server_lobby(false);
         gc.test_clear_next_lobby_capture();
         gc.test_set_dota_response_result(true);

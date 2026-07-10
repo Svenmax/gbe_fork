@@ -1,6 +1,8 @@
 #ifndef __INCLUDED_GBE_DOTA_SERIALIZED_CONNECTION_STATE_H__
 #define __INCLUDED_GBE_DOTA_SERIALIZED_CONNECTION_STATE_H__
 
+#include "../gbe_dota_connection_dedup_key.h"
+
 #include <cstdint>
 #include <string>
 
@@ -10,10 +12,8 @@ struct GBE_DotaSerializedConnectionState {
     std::uint64_t last_post_server_id{};
     std::uint32_t retry_count{};
     std::uint32_t last_post_size{};
-    std::uint64_t callback_server_id{};
-    std::string callback_endpoint;
-    std::uint64_t direct_connect_server_id{};
-    std::string direct_connect_endpoint;
+    gbe::dota_connection::DedupKey callback_key;
+    gbe::dota_connection::DedupKey direct_connect_key;
 
     void begin_lobby(std::uint64_t current_lobby_id, std::uint64_t current_generation = 0);
     void begin_server(std::uint64_t server_id);

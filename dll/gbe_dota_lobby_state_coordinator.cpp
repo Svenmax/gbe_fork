@@ -479,23 +479,22 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
         return false;
 
     // When lobby member state changes on the client during pre-game
-    // (game_state == 0), clear the direct-connect callback dedup signature
+    // (game_state == 0), clear the direct-connect callback dedup key
     // and allow the private lobby snapshot to be replayed.  This ensures that
     // GameServerChangeRequested_t is re-sent with the real IP address when the
     // lobby state transitions during initial match setup.
     //
-    // During an active match (game_state >= 1), do NOT clear the signature.
+    // During an active match (game_state >= 1), keep the key stable.
     // The host sends member-change updates continuously (e.g. when a player
     // disconnects), and clearing the signature would allow every subsequent
     // queued_state apply to re-fire GameServerChangeRequested_t, causing an
-    // automatic reconnect loop.  Manual reconnect uses restore_client_runtime
-    // which has its own signature-clearing logic (line ~11336-11350).
+    // automatic reconnect loop. Manual reconnect has its own key-clearing path.
     if (!is_server && !gbe::dota_lobby_flow::lobby_members_equal(previous_members, GBE_local_lobby.members) && GBE_local_lobby.game_state == 0u) {
-        GBE_ClearLastDotaDirectConnectCallbackSignature();
+        GBE_ClearLastDotaDirectConnectCallbackKey();
         GBE_ClearDotaPrivateLobbySnapshotReplayed();
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
-            "cleared direct connect signature and snapshot replay flag on member change reason=%s lobby_id=%llu state=%u game_state=%u",
+            "cleared direct connect key and snapshot replay flag on member change reason=%s lobby_id=%llu state=%u game_state=%u",
             reason ? reason : "unknown",
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
             GBE_local_lobby.state,

@@ -1601,13 +1601,13 @@ bool test_active_lobby_owned_by_local_user()
     return ok;
 }
 
-bool test_serialized_connection_state_scopes_dedup_to_lobby()
+bool test_serialized_connection_state_scopes_dedup_to_generation()
 {
     bool ok = true;
     GBE_DotaSerializedConnectionState state{};
 
-    state.begin_lobby(100ull);
-    ok &= expect_true(state.lobby_id == 100ull && state.generation == 0ull, "serialized state records lobby identity");
+    state.begin_lobby(100ull, 1ull);
+    ok &= expect_true(state.lobby_id == 100ull && state.generation == 1ull, "serialized state records lobby identity");
     ok &= expect_true(state.should_connect_direct(700ull, "10.0.0.5:27015"), "first direct connect is allowed");
     state.record_direct_connect(700ull, "10.0.0.5:27015");
     ok &= expect_false(state.should_connect_direct(700ull, "10.0.0.5:27015"), "same lobby direct connect is deduplicated");
@@ -1622,7 +1622,7 @@ bool test_serialized_connection_state_scopes_dedup_to_lobby()
     ok &= expect_true(state.engine_callback_queued(700ull, "10.0.0.6:27015"), "changed callback endpoint becomes the new deduplication key");
 
     GBE_DotaSerializedConnectionState other_instance{};
-    other_instance.begin_lobby(100ull);
+    other_instance.begin_lobby(100ull, 1ull);
     ok &= expect_true(other_instance.should_connect_direct(700ull, "10.0.0.5:27015"), "serialized socket instances keep independent direct connect state");
     ok &= expect_false(other_instance.engine_callback_queued(700ull, "10.0.0.5:27015"), "serialized socket instances keep independent callback state");
 
@@ -1633,24 +1633,26 @@ bool test_serialized_connection_state_scopes_dedup_to_lobby()
     ok &= expect_false(state.engine_callback_queued(701ull, "10.0.0.5:27015"), "same lobby allows a callback for a different server");
     ok &= expect_true(state.retry_count == 0u, "server change resets retry accounting");
     ok &= expect_true(state.last_post_size == 0u, "server change resets the last posted payload size");
-    ok &= expect_true(state.callback_server_id == 0ull && state.callback_endpoint.empty(), "server change clears callback deduplication state");
+    ok &= expect_true(state.callback_key == gbe::dota_connection::DedupKey{}, "server change clears callback deduplication state");
 
-    state.begin_lobby(101ull);
-    ok &= expect_true(state.should_connect_direct(700ull, "10.0.0.5:27015"), "new lobby allows the same direct endpoint");
-    ok &= expect_false(state.engine_callback_queued(700ull, "10.0.0.5:27015"), "new lobby allows the same engine callback endpoint");
-    ok &= expect_true(state.last_post_server_id == 0ull, "new lobby resets the posted server generation");
-    ok &= expect_true(state.retry_count == 0u, "new lobby resets retry accounting");
-    ok &= expect_true(state.callback_server_id == 0ull && state.callback_endpoint.empty(), "new lobby clears callback deduplication state");
-    ok &= expect_true(state.direct_connect_server_id == 0ull && state.direct_connect_endpoint.empty(), "new lobby clears direct connect deduplication state");
+    state.begin_lobby(101ull, 1ull);
+    ok &= expect_false(state.should_connect_direct(700ull, "10.0.0.6:27015"), "lobby id only synchronizes within the same generation");
 
+    state.retry_count = 4u;
+    state.last_post_size = 512u;
     state.begin_lobby(101ull, 9ull);
     ok &= expect_true(state.lobby_id == 101ull && state.generation == 9ull, "serialized state stores generation alongside lobby id");
+    ok &= expect_true(state.last_post_server_id == 0ull, "generation change resets the posted server generation");
+    ok &= expect_true(state.retry_count == 0u, "generation change resets retry accounting");
+    ok &= expect_true(state.last_post_size == 0u, "generation change clears the last posted payload size");
+    ok &= expect_true(state.callback_key == gbe::dota_connection::DedupKey{}, "generation change clears callback deduplication state");
+    ok &= expect_true(state.direct_connect_key == gbe::dota_connection::DedupKey{}, "generation change clears direct connect deduplication state");
     state.record_direct_connect(700ull, "10.0.0.5:27015");
     state.record_engine_callback(700ull, "10.0.0.5:27015");
     state.begin_lobby(101ull, 10ull);
     ok &= expect_true(state.generation == 10ull, "same lobby refreshes serialized generation");
-    ok &= expect_false(state.should_connect_direct(700ull, "10.0.0.5:27015"), "P6.2 keeps lobby-id direct-connect dedup behavior");
-    ok &= expect_true(state.engine_callback_queued(700ull, "10.0.0.5:27015"), "P6.2 keeps lobby-id callback dedup behavior");
+    ok &= expect_true(state.should_connect_direct(700ull, "10.0.0.5:27015"), "new generation allows the same direct endpoint");
+    ok &= expect_false(state.engine_callback_queued(700ull, "10.0.0.5:27015"), "new generation allows the same engine callback endpoint");
     return ok;
 }
 
@@ -1674,7 +1676,7 @@ int main()
     ok &= test_teardown_retrieval_decision();
     ok &= test_postgame_observation_decision();
     ok &= test_active_lobby_owned_by_local_user();
-    ok &= test_serialized_connection_state_scopes_dedup_to_lobby();
+    ok &= test_serialized_connection_state_scopes_dedup_to_generation();
 
     if (!ok)
         return 1;

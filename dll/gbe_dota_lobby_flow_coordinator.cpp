@@ -17,6 +17,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "dll/callsystem.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_proto_buf_header.h"
@@ -54,6 +55,15 @@
 
 using namespace gamecoordinator::tf2;
 
+namespace {
+
+struct GBE_DotaLobbyCallbackGenerationGuardContext {
+    const Steam_Game_Coordinator *coordinator{};
+    std::uint64_t generation{};
+};
+
+} // namespace
+
 // --- List X: lobby-flow-only static constants (moved from steam_game_coordinator.cpp) ---
 
 static constexpr const char *GBE_kDotaLaunchPersonaStateInitServerSetupHex =
@@ -76,7 +86,21 @@ static constexpr const char *GBE_kDotaLaunchPersonaStatePrivateLobbyRunHex =
 
 void Steam_Game_Coordinator::GBE_ResetDotaPracticeLobbyLaunchPeripheralState()
 {
-    GBE_ClearLastDotaDirectConnectCallbackSignature();
+    GBE_ClearLastDotaDirectConnectCallbackKey();
+}
+
+
+bool Steam_Game_Coordinator::GBE_IsCurrentDotaLobbyCallbackGeneration(
+    const void *context,
+    unsigned int context_size)
+{
+    if (!context || context_size != sizeof(GBE_DotaLobbyCallbackGenerationGuardContext))
+        return false;
+
+    GBE_DotaLobbyCallbackGenerationGuardContext guard_context{};
+    std::memcpy(&guard_context, context, sizeof(guard_context));
+    return guard_context.coordinator
+        && guard_context.coordinator->GBE_CurrentDotaLobbyGeneration() == guard_context.generation;
 }
 
 
@@ -263,7 +287,7 @@ void Steam_Game_Coordinator::GBE_ResetDotaPracticeLobbyLaunchRichPresenceToServe
 void Steam_Game_Coordinator::GBE_ClearDotaPracticeLobbyLaunchRichPresence()
 {
     GBE_ClearLastDotaLaunchPersonaSignature();
-    GBE_ClearLastDotaDirectConnectCallbackSignature();
+    GBE_ClearLastDotaDirectConnectCallbackKey();
 
     Steam_Client *steam_client = get_steam_client();
     if (!steam_client || !steam_client->steam_friends)
@@ -321,14 +345,12 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
 
     const std::string endpoint = gbe::proto_wire::select_dota_arcade_connect_endpoint_for_local_player(raw_endpoint, local_steam_id, owner_steam_id);
 
-    std::string signature;
-    signature.reserve(96);
-    signature.append(std::to_string(GBE_local_lobby.lobby_id));
-    signature.push_back('|');
-    signature.append(std::to_string(GBE_local_lobby.match_id));
-    signature.push_back('|');
-    signature.append(endpoint);
-    if (signature == GBE_GetLastDotaDirectConnectCallbackSignature()) {
+    const std::uint64_t generation = GBE_CurrentDotaLobbyGeneration();
+    const gbe::dota_connection::DedupKey callback_key{
+        gbe::dota_lobby_generation::Generation{generation},
+        GBE_local_lobby.server_id,
+        endpoint};
+    if (callback_key == GBE_GetLastDotaDirectConnectCallbackKey()) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "skipping duplicate direct connect callback reason=%s lobby_id=%llu endpoint=%s",
@@ -340,9 +362,14 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     }
 
     const std::string connect_command = std::string("+connect ") + endpoint;
+    const GBE_DotaLobbyCallbackGenerationGuardContext guard_context{this, generation};
+    const SteamCallExecutionGuard execution_guard(
+        GBE_IsCurrentDotaLobbyCallbackGeneration,
+        &guard_context,
+        sizeof(guard_context));
     GameServerChangeRequested_t server_change{};
     std::strncpy(server_change.m_rgchServer, endpoint.c_str(), sizeof(server_change.m_rgchServer) - 1);
-    callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0);
+    callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0, false, execution_guard);
 
     GBE_GC_DebugLog(
         "GC_DOTA_CONNECT_DIAG",
@@ -366,7 +393,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
         GameRichPresenceJoinRequested_t rich_join{};
         rich_join.m_steamIDFriend = CSteamID(owner_steam_id);
         std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
-        callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
+        callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25, false, execution_guard);
 
         GBE_GC_DebugLog(
             "GC_DOTA_CONNECT_DIAG",
@@ -399,7 +426,7 @@ void Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallbac
     const bool reconnect_eligible_after_trigger = arcade_custom_launch;
     if (!reconnect_eligible_after_trigger)
         GBE_SetDotaReconnectEligible(false);
-    GBE_SetLastDotaDirectConnectCallbackSignature(signature);
+    GBE_SetLastDotaDirectConnectCallbackKey(callback_key);
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
         "queued direct connect trigger reason=%s lobby_id=%llu match_id=%llu endpoint=%s endpoint_raw=%s command=%s local_is_owner=%u arcade=%u reconnect_eligible=%u",

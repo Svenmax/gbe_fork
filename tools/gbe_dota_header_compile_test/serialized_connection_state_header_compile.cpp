@@ -4,5 +4,6 @@ GBE_DotaSerializedConnectionState make_serialized_connection_state()
 {
     GBE_DotaSerializedConnectionState state{};
     state.generation = 1;
+    state.direct_connect_key.generation = gbe::dota_lobby_generation::Generation{1};
     return state;
 }

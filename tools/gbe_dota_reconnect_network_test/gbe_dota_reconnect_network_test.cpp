@@ -172,21 +172,29 @@ void test_dedup_and_generation_changes()
     expect(duplicate.callback_already_queued && duplicate.retry_count == 2 && duplicate.size_changed, "duplicate retry metadata");
 
     provider.primary = make_context(101, 200, "10.20.30.40:27015");
-    execute(provider, connector, queue, state);
-    expect(connector.calls == 2 && queue.calls == 2, "new lobby generation reconnects reused endpoint");
+    const auto same_generation_new_lobby = execute(provider, connector, queue, state);
+    expect(connector.calls == 1 && queue.calls == 1, "same generation reused endpoint remains deduplicated after lobby id sync");
+    expect(same_generation_new_lobby.callback_already_queued && state.lobby_id == 101, "same generation synchronizes the new lobby id");
 
     provider.primary = make_context(101, 201, "10.20.30.40:27015");
     execute(provider, connector, queue, state);
-    expect(connector.calls == 3 && queue.calls == 3, "server change reconnects");
+    expect(connector.calls == 2 && queue.calls == 2, "server change reconnects");
 
     provider.primary = make_context(101, 201, "10.20.30.41:27016");
     execute(provider, connector, queue, state);
-    expect(connector.calls == 4 && queue.calls == 4, "endpoint change reconnects");
+    expect(connector.calls == 3 && queue.calls == 3, "endpoint change reconnects");
 
     provider.primary = make_context(101, 201, "10.20.30.41:27016", 2);
     const auto same_lobby_new_generation = execute(provider, connector, queue, state);
     expect(state.generation == 2, "same lobby propagates a newer generation into serialized state");
-    expect(same_lobby_new_generation.callback_already_queued, "P6.2 preserves lobby-id callback dedup behavior");
+    expect(connector.calls == 4 && queue.calls == 4, "same lobby new generation reconnects reused server endpoint");
+    expect(same_lobby_new_generation.callback_queued && !same_lobby_new_generation.callback_already_queued, "same lobby new generation queues callback again");
+    expect(same_lobby_new_generation.retry_count == 1 && same_lobby_new_generation.size_changed, "generation change clears retry and payload state");
+
+    provider.primary.lobby_id = 102;
+    const auto same_generation_new_lobby_id = execute(provider, connector, queue, state);
+    expect(connector.calls == 4 && queue.calls == 4, "same generation server endpoint remains deduplicated across lobby id sync");
+    expect(same_generation_new_lobby_id.callback_already_queued && state.lobby_id == 102, "lobby id synchronizes without resetting generation state");
 }
 
 void test_recovery_and_skip_paths()
@@ -260,7 +268,7 @@ void test_properties()
             execute(provider, connector, queue, state, static_cast<std::uint32_t>(seed + repeat));
         expect(queue.calls == 1, "P8-A callback at most once per generation key");
 
-        provider.primary.lobby_id += 1;
+        provider.primary.generation += 1;
         execute(provider, connector, queue, state);
         expect(connector.calls == 2 && queue.calls == 2, "P8-B generation change restores connection opportunity");
     }
