@@ -82,8 +82,10 @@ Use `260707-refactor-gc-dev-baseline` for `dev` integration. It is based directl
 - Implementation plan: `.monkeycode/specs/gc-refactor-next-phase/tasklist.md`
 - Baseline details: `.monkeycode/specs/gc-refactor-next-phase/baseline.md`
 - Payload helper assertions: 240 passed
-- Handler smoke tests: 64 passed
+- Handler smoke tests: 68 passed
 - Replay fixtures: 7 passed
 - GC audit checks: 8 passed with 0 issues
 
-The next implementation stage is P1, which consolidates direct and wrapped custom-game lifecycle execution while preserving protocol parsing and wire behavior.
+P1 unified direct and wrapped custom-game lifecycle execution behind a shared coordinator executor.
+
+P3 moved serialized reconnect connection state into `gbe_dota_serialized_connection_state.{h,cpp}`, removed its `<string>` dependency from the shared reconnect header, and added standalone header compile checks. The next implementation stage is P4, which unifies reconnect context production and source selection.

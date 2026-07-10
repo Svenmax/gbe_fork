@@ -13,6 +13,7 @@
 #include "dll/gbe_dota_lobby_state.h"
 #include "dll/gbe_dota_types.h"
 #include "dll/dll/gbe_dota_reconnect_shared.h"
+#include "dll/dll/gbe_dota_serialized_connection_state.h"
 #include "dll/gbe_dota_protocol_constants.h"
 
 #include <cstring>
@@ -1285,25 +1286,36 @@ bool test_serialized_connection_state_scopes_dedup_to_lobby()
     state.record_direct_connect(700ull, "10.0.0.5:27015");
     ok &= expect_false(state.should_connect_direct(700ull, "10.0.0.5:27015"), "same lobby direct connect is deduplicated");
     ok &= expect_true(state.should_connect_direct(700ull, "10.0.0.6:27015"), "same lobby allows a different direct endpoint");
+    state.record_direct_connect(700ull, "10.0.0.6:27015");
+    ok &= expect_false(state.should_connect_direct(700ull, "10.0.0.6:27015"), "changed direct endpoint becomes the new deduplication key");
 
     state.record_engine_callback(700ull, "10.0.0.5:27015");
     ok &= expect_true(state.engine_callback_queued(700ull, "10.0.0.5:27015"), "same lobby engine callback is deduplicated");
     ok &= expect_false(state.engine_callback_queued(700ull, "10.0.0.6:27015"), "same lobby allows a callback for a different endpoint");
+    state.record_engine_callback(700ull, "10.0.0.6:27015");
+    ok &= expect_true(state.engine_callback_queued(700ull, "10.0.0.6:27015"), "changed callback endpoint becomes the new deduplication key");
 
     GBE_DotaSerializedConnectionState other_instance{};
     other_instance.begin_lobby(100ull);
     ok &= expect_true(other_instance.should_connect_direct(700ull, "10.0.0.5:27015"), "serialized socket instances keep independent direct connect state");
     ok &= expect_false(other_instance.engine_callback_queued(700ull, "10.0.0.5:27015"), "serialized socket instances keep independent callback state");
 
+    state.retry_count = 4u;
+    state.last_post_size = 512u;
     state.begin_server(701ull);
     ok &= expect_true(state.should_connect_direct(701ull, "10.0.0.5:27015"), "same lobby allows a different direct server");
     ok &= expect_false(state.engine_callback_queued(701ull, "10.0.0.5:27015"), "same lobby allows a callback for a different server");
+    ok &= expect_true(state.retry_count == 0u, "server change resets retry accounting");
+    ok &= expect_true(state.last_post_size == 0u, "server change resets the last posted payload size");
+    ok &= expect_true(state.callback_server_id == 0ull && state.callback_endpoint.empty(), "server change clears callback deduplication state");
 
     state.begin_lobby(101ull);
     ok &= expect_true(state.should_connect_direct(700ull, "10.0.0.5:27015"), "new lobby allows the same direct endpoint");
     ok &= expect_false(state.engine_callback_queued(700ull, "10.0.0.5:27015"), "new lobby allows the same engine callback endpoint");
     ok &= expect_true(state.last_post_server_id == 0ull, "new lobby resets the posted server generation");
     ok &= expect_true(state.retry_count == 0u, "new lobby resets retry accounting");
+    ok &= expect_true(state.callback_server_id == 0ull && state.callback_endpoint.empty(), "new lobby clears callback deduplication state");
+    ok &= expect_true(state.direct_connect_server_id == 0ull && state.direct_connect_endpoint.empty(), "new lobby clears direct connect deduplication state");
     return ok;
 }
 

@@ -41,24 +41,25 @@
   - [x] 2.7 检查点：确保所有测试通过，如有疑问请询问用户
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；handler smoke 68/68，payload helpers 240/240，replay fixtures 7 组，audit 8 项 0 问题。
 
-- [ ] 3. P3 收窄 reconnect 模块职责和头文件依赖
-  - [ ] 3.1 创建 serialized connection state 窄模块
+- [x] 3. P3 收窄 reconnect 模块职责和头文件依赖
+  - [x] 3.1 创建 serialized connection state 窄模块
     - 新建专用头文件和必要的实现文件，迁移 `GBE_DotaSerializedConnectionState`。
     - 模块仅拥有 lobby/server/endpoint 代际、retry 和 callback/direct 去重状态。
     - 依赖：任务 1；可与任务 2 独立实施。
-  - [ ] 3.2 清理 reconnect shared 公共头文件
+  - [x] 3.2 清理 reconnect shared 公共头文件
     - `gbe_dota_reconnect_shared.h` 仅保留跨模块 context、snapshot、标量 helper 和公共函数声明。
     - 移除连接实现状态及其 `<string>` 依赖传播。
     - 验收：现有调用方只包含其实际需要的窄头文件。
-  - [ ] 3.3 调整 production 与 offline test 源列表
+  - [x] 3.3 调整 production 与 offline test 源列表
     - 更新 Premake、shell test source list 和 audit source ownership。
     - 验收：production target 与 offline tests 使用同一个状态实现。
-  - [ ] 3.4 增加 include 自包含编译测试
+  - [x] 3.4 增加 include 自包含编译测试
     - 分别单独编译 reconnect shared header 和 serialized state header 的最小 translation unit。
     - 验收：头文件不依赖 include 顺序或偶然的传递 include。
-  - [ ] 3.5 保留并扩展状态对象单元测试
+  - [x] 3.5 保留并扩展状态对象单元测试
     - 覆盖 lobby 切换、server 切换、endpoint 切换、双实例隔离、retry reset 和 callback/direct 双状态 reset。
-  - [ ] 3.6 检查点：确保所有测试通过，如有疑问请询问用户
+  - [x] 3.6 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：两个 reconnect 头文件自包含编译通过；`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；handler smoke 68/68，payload helpers 240/240，replay fixtures 7 组，audit 8 项 0 问题。
 
 - [ ] 4. P4 统一 reconnect context 生产管线
   - [ ] 4.1 定义规范化 reconnect source model

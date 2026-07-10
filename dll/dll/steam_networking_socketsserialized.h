@@ -19,7 +19,7 @@
 #define __INCLUDED_STEAM_NETWORKING_SOCKETSERIALIZED_H__
 
 #include "base.h"
-#include "gbe_dota_reconnect_shared.h"
+#include "gbe_dota_serialized_connection_state.h"
 
 class Steam_Networking_Sockets_Serialized :
 public ISteamNetworkingSocketsSerialized002,

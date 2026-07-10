@@ -44,6 +44,22 @@ build_and_run() {
     "$BUILD_DIR/$name"
 }
 
+compile_header_test() {
+    local name="$1"
+    local source="$2"
+
+    printf '[build] %s\n' "$name"
+    "$CXX_BIN" "${COMMON_FLAGS[@]}" -c "$source" -o "$BUILD_DIR/$name.o"
+}
+
+compile_header_test \
+    reconnect_shared_header_compile \
+    tools/gbe_dota_header_compile_test/reconnect_shared_header_compile.cpp
+
+compile_header_test \
+    serialized_connection_state_header_compile \
+    tools/gbe_dota_header_compile_test/serialized_connection_state_header_compile.cpp
+
 build_and_run \
     gc_message_utils_test \
     tools/gc_message_utils_test/gc_message_utils_test.cpp \
@@ -133,6 +149,7 @@ if [[ "$FULL" -eq 1 ]]; then
     build_and_run \
         gbe_dota_lobby_state_test \
         tools/gbe_dota_lobby_state_test/gbe_dota_lobby_state_test.cpp \
+        dll/gbe_dota_serialized_connection_state.cpp \
         dll/gbe_dota_lobby_state.cpp \
         dll/gbe_dota_chat_flow.cpp \
         dll/gbe_dota_lobby_launch_flow.cpp \

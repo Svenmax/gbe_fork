@@ -1378,6 +1378,10 @@ project "tool_gbe_dota_lobby_state_test"
     ---------
     files {
         "tools/gbe_dota_lobby_state_test/gbe_dota_lobby_state_test.cpp",
+        "tools/gbe_dota_header_compile_test/reconnect_shared_header_compile.cpp",
+        "tools/gbe_dota_header_compile_test/serialized_connection_state_header_compile.cpp",
+        "dll/gbe_dota_serialized_connection_state.cpp",
+        "dll/dll/gbe_dota_serialized_connection_state.h",
         "dll/gbe_dota_lobby_state.cpp",
         "dll/gbe_dota_lobby_state.h",
         "dll/gbe_dota_chat_flow.cpp",
