@@ -9,6 +9,7 @@
 #include <vector>
 
 struct GBE_LocalLobby;
+struct GBE_SharedDotaLobbyState;
 
 using GBE_DotaReconnectSourceKind = gbe::dota_diagnostic::Source;
 
@@ -42,7 +43,7 @@ struct Selection {
     GBE_DotaReconnectContext context{};
 };
 
-Source source_from_shared_snapshot(const GBE_DotaReconnectSharedStateSnapshot &snapshot);
+Source source_from_shared_lobby_snapshot(const GBE_SharedDotaLobbyState &snapshot);
 Source source_from_context(const GBE_DotaReconnectContext &context, bool valid, SourceKind kind);
 Source source_from_local_lobby(const GBE_LocalLobby &lobby, SourceKind kind = SourceKind::Local);
 Source source_from_generic_lobby(const GBE_LocalLobby &lobby, std::uint64_t local_steam_id);

@@ -55,6 +55,7 @@
 #include "dll/gbe_dota_payload_lobby_helpers.h"
 #include "dll/gbe_dota_payload_wire_helpers.h"
 #include "dll/gbe_dota_protocol_constants.h"
+#include "dll/gbe_dota_reconnect_context.h"
 #include "dll/gbe_dota_request_router.h"
 #include "dll/gbe_proto_buf_header.h"
 #include "dll/gbe_dota_custom_game.h"
@@ -256,20 +257,20 @@ TEST_CASE(test_get_dota_reconnect_context)
     GBE_shared_dota_lobby_state.owner_connected = true;
     GBE_shared_dota_lobby_state.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
 
-    GBE_DotaReconnectSharedStateSnapshot snapshot = GBE_GetSharedDotaReconnectStateSnapshot();
-    EXPECT_TRUE(snapshot.valid);
-    EXPECT_TRUE(snapshot.active);
-    EXPECT_TRUE(snapshot.generation == GBE_shared_dota_lobby_state.generation);
-    EXPECT_TRUE(snapshot.lobby_id == GBE_shared_dota_lobby_state.lobby_id);
-    EXPECT_TRUE(snapshot.lobby_state == GBE_shared_dota_lobby_state.state);
-    EXPECT_TRUE(snapshot.game_state == GBE_shared_dota_lobby_state.game_state);
-    EXPECT_TRUE(snapshot.server_id == GBE_shared_dota_lobby_state.server_id);
-    EXPECT_TRUE(snapshot.has_connect);
-    EXPECT_TRUE(snapshot.custom_game_id == GBE_shared_dota_lobby_state.custom_game.game_id);
-    EXPECT_TRUE(snapshot.owner_connected == GBE_shared_dota_lobby_state.owner_connected);
-    EXPECT_TRUE(snapshot.launch_phase == GBE_shared_dota_lobby_state.launch_phase);
-    EXPECT_TRUE(snapshot.owner_steam_id == GBE_shared_dota_lobby_state.owner_steam_id);
-    EXPECT_STR_CONTAINS(snapshot.connect, "127.0.0.1");
+    const auto source = gbe::dota_reconnect::source_from_shared_lobby_snapshot(
+        GBE_GetSharedDotaLobbyStateSnapshot());
+    EXPECT_TRUE(source.valid);
+    EXPECT_TRUE(source.active);
+    EXPECT_TRUE(source.generation == GBE_shared_dota_lobby_state.generation);
+    EXPECT_TRUE(source.lobby_id == GBE_shared_dota_lobby_state.lobby_id);
+    EXPECT_TRUE(source.lobby_state == GBE_shared_dota_lobby_state.state);
+    EXPECT_TRUE(source.game_state == GBE_shared_dota_lobby_state.game_state);
+    EXPECT_TRUE(source.server_id == GBE_shared_dota_lobby_state.server_id);
+    EXPECT_TRUE(source.custom_game_id == GBE_shared_dota_lobby_state.custom_game.game_id);
+    EXPECT_TRUE(source.owner_connected == GBE_shared_dota_lobby_state.owner_connected);
+    EXPECT_TRUE(source.launch_phase == GBE_shared_dota_lobby_state.launch_phase);
+    EXPECT_TRUE(source.owner_steam_id == GBE_shared_dota_lobby_state.owner_steam_id);
+    EXPECT_STR_CONTAINS(source.connect, "127.0.0.1");
 
     EXPECT_TRUE(GBE_GetDotaReconnectContext(&ctx));
     EXPECT_TRUE(ctx.generation == 77ull);
@@ -281,10 +282,11 @@ TEST_CASE(test_get_dota_reconnect_context)
     EXPECT_STR_CONTAINS(ctx.connect, "127.0.0.1");
 
     GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
-    snapshot = GBE_GetSharedDotaReconnectStateSnapshot();
-    EXPECT_FALSE(snapshot.valid);
-    EXPECT_FALSE(snapshot.active);
-    EXPECT_FALSE(snapshot.has_connect);
+    const auto empty_source = gbe::dota_reconnect::source_from_shared_lobby_snapshot(
+        GBE_GetSharedDotaLobbyStateSnapshot());
+    EXPECT_FALSE(empty_source.valid);
+    EXPECT_FALSE(empty_source.active);
+    EXPECT_TRUE(empty_source.connect.empty());
 }
 
 TEST_CASE(test_get_dota_reconnect_context_priority_and_fallback)

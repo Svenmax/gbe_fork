@@ -21,22 +21,6 @@ struct GBE_DotaReconnectContext {
     uint64_t owner_steam_id;  // lobby owner for GameRichPresenceJoinRequested
 };
 
-struct GBE_DotaReconnectSharedStateSnapshot {
-    bool valid{};
-    bool active{};
-    uint64_t generation{};
-    uint64_t lobby_id{};
-    uint32_t lobby_state{};
-    uint32_t game_state{};
-    uint64_t server_id{};
-    bool has_connect{};
-    uint64_t custom_game_id{};
-    bool owner_connected{};
-    uint32_t launch_phase{};
-    uint64_t owner_steam_id{};
-    char connect[128]{};
-};
-
 // Raw immutable scalar snapshot. Field values are copied as-is even when
 // valid is false; use the valid-gated id helpers when invalid state should
 // map lobby ids to zero.
@@ -59,7 +43,6 @@ inline bool GBE_DotaReconnectContextIsStarted(const GBE_DotaReconnectContext &ct
 // Returns false if no active lobby or game not started.
 bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out);
 GBE_DotaSharedLobbyScalarSnapshot GBE_GetSharedDotaLobbyScalarSnapshot();
-GBE_DotaReconnectSharedStateSnapshot GBE_GetSharedDotaReconnectStateSnapshot();
 bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64_t local_steam_id, GBE_DotaReconnectContext *out);
 bool GBE_IsSharedDotaArcadeLobbyActive();
 bool GBE_IsDotaArcadeLobbyActive();

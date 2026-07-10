@@ -2,6 +2,7 @@
 #include "dll/gbe_dota_gc_wire.h"
 #include "dll/gbe_dota_lobby_state.h"
 #include "dll/gbe_dota_protocol_constants.h"
+#include "dll/gbe_dota_reconnect_context.h"
 #include "dll/gbe_gc_message_utils.h"
 #include "dll/gbe_proto_wire.h"
 
@@ -1676,7 +1677,10 @@ bool test_dota_lobby_state_helpers()
     ok &= expect_eq_u64(restored.state, 4u, "lobby state restore preserves readyup state without normalization");
 
     GBE_DotaReconnectContext reconnect{};
-    ok &= expect_true(gbe::dota_lobby_state::build_reconnect_context(local, reconnect), "lobby state reconnect builds");
+    auto reconnect_source = gbe::dota_reconnect::source_from_local_lobby(local);
+    ok &= expect_true(
+        gbe::dota_reconnect::build_context(reconnect_source, reconnect) == gbe::dota_reconnect::RejectReason::None,
+        "lobby state reconnect builds");
     ok &= expect_eq_u64(reconnect.generation, local.generation, "lobby state reconnect generation");
     ok &= expect_eq_u64(reconnect.server_id, local.server_id, "lobby state reconnect server id");
     ok &= expect_eq_u64(reconnect.lobby_state, local.state, "lobby state reconnect lobby state");
@@ -1686,7 +1690,10 @@ bool test_dota_lobby_state_helpers()
     ok &= expect_eq_string(reconnect.connect, "10.0.0.1:27015", "lobby state reconnect first endpoint");
 
     local.server_id = 0ull;
-    ok &= expect_true(!gbe::dota_lobby_state::build_reconnect_context(local, reconnect), "lobby state reconnect rejects missing server");
+    reconnect_source = gbe::dota_reconnect::source_from_local_lobby(local);
+    ok &= expect_true(
+        gbe::dota_reconnect::build_context(reconnect_source, reconnect) != gbe::dota_reconnect::RejectReason::None,
+        "lobby state reconnect rejects missing server");
 
     gbe::proto_wire::DotaPracticeLobbyCreateRequest create_request{};
     create_request.has_pass_key = true;

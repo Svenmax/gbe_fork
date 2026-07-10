@@ -79,22 +79,7 @@ bool is_complete_version(const GBE_SharedDotaLobbyState &snapshot)
 
 bool builds_matching_context(const GBE_SharedDotaLobbyState &snapshot)
 {
-    GBE_DotaReconnectSharedStateSnapshot reconnect_snapshot{};
-    reconnect_snapshot.valid = snapshot.valid;
-    reconnect_snapshot.active = snapshot.active;
-    reconnect_snapshot.generation = snapshot.generation;
-    reconnect_snapshot.lobby_id = snapshot.lobby_id;
-    reconnect_snapshot.lobby_state = snapshot.state;
-    reconnect_snapshot.game_state = snapshot.game_state;
-    reconnect_snapshot.server_id = snapshot.server_id;
-    reconnect_snapshot.has_connect = !snapshot.connect.empty();
-    reconnect_snapshot.custom_game_id = snapshot.custom_game.game_id;
-    reconnect_snapshot.owner_connected = snapshot.owner_connected;
-    reconnect_snapshot.launch_phase = snapshot.launch_phase;
-    reconnect_snapshot.owner_steam_id = snapshot.owner_steam_id;
-    std::strncpy(reconnect_snapshot.connect, snapshot.connect.c_str(), sizeof(reconnect_snapshot.connect) - 1u);
-
-    const auto source = gbe::dota_reconnect::source_from_shared_snapshot(reconnect_snapshot);
+    const auto source = gbe::dota_reconnect::source_from_shared_lobby_snapshot(snapshot);
     GBE_DotaReconnectContext context{};
     return gbe::dota_reconnect::build_context(source, context) == gbe::dota_reconnect::RejectReason::None &&
         context.generation == snapshot.generation &&

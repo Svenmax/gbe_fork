@@ -225,11 +225,11 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
     if (!out)
         return false;
 
-    const GBE_DotaReconnectSharedStateSnapshot shared = GBE_GetSharedDotaReconnectStateSnapshot();
+    const auto shared = GBE_GetSharedDotaLobbyStateSnapshot();
     GBE_DotaReconnectContext recent_context{};
     const bool has_recent_context = GBE_GetRecentDotaReconnectContext(&recent_context);
     const auto selection = gbe::dota_reconnect::select_context({
-        gbe::dota_reconnect::source_from_shared_snapshot(shared),
+        gbe::dota_reconnect::source_from_shared_lobby_snapshot(shared),
         gbe::dota_reconnect::source_from_context(
             recent_context,
             has_recent_context,
@@ -290,28 +290,6 @@ GBE_DotaSharedLobbyScalarSnapshot GBE_GetSharedDotaLobbyScalarSnapshot()
     snapshot.generic_lobby_id = shared_lobby.generic_lobby_id;
     snapshot.lobby_state = shared_lobby.state;
     snapshot.game_state = shared_lobby.game_state;
-    return snapshot;
-}
-
-GBE_DotaReconnectSharedStateSnapshot GBE_GetSharedDotaReconnectStateSnapshot()
-{
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateSnapshot();
-    GBE_DotaReconnectSharedStateSnapshot snapshot{};
-    snapshot.valid = shared_lobby.valid;
-    snapshot.active = shared_lobby.active;
-    snapshot.generation = shared_lobby.generation;
-    snapshot.lobby_id = shared_lobby.lobby_id;
-    snapshot.lobby_state = shared_lobby.state;
-    snapshot.game_state = shared_lobby.game_state;
-    snapshot.server_id = shared_lobby.server_id;
-    snapshot.has_connect = !shared_lobby.connect.empty();
-    snapshot.custom_game_id = shared_lobby.custom_game.game_id;
-    snapshot.owner_connected = shared_lobby.owner_connected;
-    snapshot.launch_phase = shared_lobby.launch_phase;
-    snapshot.owner_steam_id = shared_lobby.owner_steam_id;
-    const std::string endpoint = gbe::proto_wire::get_dota_practice_lobby_first_connect_endpoint(shared_lobby.connect);
-    std::strncpy(snapshot.connect, endpoint.c_str(), sizeof(snapshot.connect) - 1);
-    snapshot.connect[sizeof(snapshot.connect) - 1] = '\0';
     return snapshot;
 }
 

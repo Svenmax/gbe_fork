@@ -289,7 +289,6 @@ void adopt_shared_lobby_to_local(
     bool clear_server_id_without_match,
     bool normalize_custom_readyup_run_state,
     GBE_LocalLobby &local);
-bool build_reconnect_context(const GBE_LocalLobby &local, GBE_DotaReconnectContext &context);
 bool is_active_lobby_owned_by_local_user(
     const GBE_LocalLobby &lobby,
     std::uint64_t lobby_id,

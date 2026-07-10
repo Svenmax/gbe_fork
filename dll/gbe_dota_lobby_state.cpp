@@ -779,13 +779,6 @@ RuntimeResetDecision compute_runtime_reset_decision(dota_diagnostic::Reason reas
     return d;
 }
 
-bool build_reconnect_context(const GBE_LocalLobby &local, GBE_DotaReconnectContext &context)
-{
-    return gbe::dota_reconnect::build_context(
-        gbe::dota_reconnect::source_from_local_lobby(local),
-        context) == gbe::dota_reconnect::RejectReason::None;
-}
-
 bool is_active_lobby_owned_by_local_user(
     const GBE_LocalLobby &lobby,
     std::uint64_t lobby_id,

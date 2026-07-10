@@ -22,7 +22,7 @@ int source_priority(SourceKind kind)
 
 } // namespace
 
-Source source_from_shared_snapshot(const GBE_DotaReconnectSharedStateSnapshot &snapshot)
+Source source_from_shared_lobby_snapshot(const GBE_SharedDotaLobbyState &snapshot)
 {
     Source source{};
     source.kind = SourceKind::Shared;
@@ -30,10 +30,10 @@ Source source_from_shared_snapshot(const GBE_DotaReconnectSharedStateSnapshot &s
     source.active = snapshot.active;
     source.generation = snapshot.generation;
     source.lobby_id = snapshot.lobby_id;
-    source.lobby_state = snapshot.lobby_state;
+    source.lobby_state = snapshot.state;
     source.game_state = snapshot.game_state;
     source.server_id = snapshot.server_id;
-    source.custom_game_id = snapshot.custom_game_id;
+    source.custom_game_id = snapshot.custom_game.game_id;
     source.owner_connected = snapshot.owner_connected;
     source.launch_phase = snapshot.launch_phase;
     source.owner_steam_id = snapshot.owner_steam_id;

@@ -832,7 +832,8 @@ bool test_owner_disconnect_and_reconnect()
         lobby.connect = "1.2.3.4:27015";
         lobby.owner_steam_id = 42ull;
         GBE_DotaReconnectContext ctx{};
-        bool result = gbe::dota_lobby_state::build_reconnect_context(lobby, ctx);
+        const auto source = gbe::dota_reconnect::source_from_local_lobby(lobby);
+        bool result = gbe::dota_reconnect::build_context(source, ctx) == gbe::dota_reconnect::RejectReason::None;
         ok &= expect_true(result, "reconnect context built for started game");
         ok &= expect_eq_u64(ctx.generation, lobby.generation, "reconnect generation");
         ok &= expect_eq_u64(ctx.lobby_id, lobby.lobby_id, "reconnect lobby_id");
@@ -852,7 +853,8 @@ bool test_owner_disconnect_and_reconnect()
         lobby.server_id = 700ull;
         lobby.connect = "1.2.3.4:27015";
         GBE_DotaReconnectContext ctx{};
-        ok &= expect_false(gbe::dota_lobby_state::build_reconnect_context(lobby, ctx), "reconnect rejected when inactive");
+        const auto source = gbe::dota_reconnect::source_from_local_lobby(lobby);
+        ok &= expect_false(gbe::dota_reconnect::build_context(source, ctx) == gbe::dota_reconnect::RejectReason::None, "reconnect rejected when inactive");
     }
 
     // build_reconnect_context: rejected when game not started (state<2 AND game_state<2).
@@ -863,7 +865,8 @@ bool test_owner_disconnect_and_reconnect()
         lobby.server_id = 700ull;
         lobby.connect = "1.2.3.4:27015";
         GBE_DotaReconnectContext ctx{};
-        ok &= expect_false(gbe::dota_lobby_state::build_reconnect_context(lobby, ctx), "reconnect rejected when game not started");
+        const auto source = gbe::dota_reconnect::source_from_local_lobby(lobby);
+        ok &= expect_false(gbe::dota_reconnect::build_context(source, ctx) == gbe::dota_reconnect::RejectReason::None, "reconnect rejected when game not started");
     }
 
     // build_reconnect_context: accepted when game_state>=2 even if state<2.
@@ -874,7 +877,8 @@ bool test_owner_disconnect_and_reconnect()
         lobby.server_id = 700ull;
         lobby.connect = "1.2.3.4:27015";
         GBE_DotaReconnectContext ctx{};
-        ok &= expect_true(gbe::dota_lobby_state::build_reconnect_context(lobby, ctx), "reconnect accepted via game_state>=2");
+        const auto source = gbe::dota_reconnect::source_from_local_lobby(lobby);
+        ok &= expect_true(gbe::dota_reconnect::build_context(source, ctx) == gbe::dota_reconnect::RejectReason::None, "reconnect accepted via game_state>=2");
     }
 
     // build_reconnect_context: rejected when server_id is zero.
@@ -885,7 +889,8 @@ bool test_owner_disconnect_and_reconnect()
         lobby.server_id = 0ull;
         lobby.connect = "1.2.3.4:27015";
         GBE_DotaReconnectContext ctx{};
-        ok &= expect_false(gbe::dota_lobby_state::build_reconnect_context(lobby, ctx), "reconnect rejected when server_id zero");
+        const auto source = gbe::dota_reconnect::source_from_local_lobby(lobby);
+        ok &= expect_false(gbe::dota_reconnect::build_context(source, ctx) == gbe::dota_reconnect::RejectReason::None, "reconnect rejected when server_id zero");
     }
 
     // build_reconnect_context: rejected when connect empty.
@@ -896,7 +901,8 @@ bool test_owner_disconnect_and_reconnect()
         lobby.server_id = 700ull;
         lobby.connect = "";
         GBE_DotaReconnectContext ctx{};
-        ok &= expect_false(gbe::dota_lobby_state::build_reconnect_context(lobby, ctx), "reconnect rejected when connect empty");
+        const auto source = gbe::dota_reconnect::source_from_local_lobby(lobby);
+        ok &= expect_false(gbe::dota_reconnect::build_context(source, ctx) == gbe::dota_reconnect::RejectReason::None, "reconnect rejected when connect empty");
     }
 
     return ok;

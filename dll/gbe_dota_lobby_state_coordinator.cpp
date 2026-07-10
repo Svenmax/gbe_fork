@@ -387,7 +387,9 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
     }
 
     GBE_DotaReconnectContext reconnect_context{};
-    if (gbe::dota_lobby_state::build_reconnect_context(GBE_local_lobby, reconnect_context)) {
+    const auto reconnect_source = gbe::dota_reconnect::source_from_local_lobby(GBE_local_lobby);
+    if (gbe::dota_reconnect::build_context(reconnect_source, reconnect_context) ==
+        gbe::dota_reconnect::RejectReason::None) {
         GBE_SetRecentDotaReconnectContext(reconnect_context);
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
