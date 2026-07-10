@@ -92,6 +92,16 @@ constexpr bool forwards_wrapped_session(SessionPolicy policy)
     return policy == SessionPolicy::ForwardWrappedSession;
 }
 
+constexpr bool is_high_risk(LifecycleClass lifecycle)
+{
+    return lifecycle == LifecycleClass::LobbyMutation || lifecycle == LifecycleClass::LobbyLifecycle;
+}
+
+constexpr bool has_test_fixture(const Entry &entry)
+{
+    return entry.fixture != nullptr && entry.fixture[0] != '\0';
+}
+
 constexpr const Entry *find_entry(
     const Entry *entries,
     std::size_t entry_count,
@@ -119,6 +129,15 @@ constexpr bool has_unique_message_ids_per_mode(const Entry *entries, std::size_t
                 supports_mode(entries[right].modes, dota_gc_router::DotaGcRequestPath::Wrapped))
                 return false;
         }
+    }
+    return true;
+}
+
+constexpr bool all_high_risk_entries_have_fixture(const Entry *entries, std::size_t entry_count)
+{
+    for (std::size_t index = 0; index < entry_count; ++index) {
+        if (is_high_risk(entries[index].lifecycle) && !has_test_fixture(entries[index]))
+            return false;
     }
     return true;
 }

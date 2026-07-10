@@ -220,10 +220,12 @@
     - 覆盖 message ID 唯一性、模式匹配、session 策略、未知消息和 handler 选择。
     - 实现：dependency-light registry contract 增加 constexpr `find_entry()` 与 `has_unique_message_ids_per_mode()`；production dispatcher 改用同一查找 helper；新增独立 `gbe_dota_handler_registry_test`，通过 direct-only、wrapped-only、dual-mode、同 ID 分离 mode 和重复 mode 合成表覆盖 message ID 唯一性、全部 path 匹配、session policy、unknown fallback 和 handler identity 选择，并接入 shell/Premake 测试源列表。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；registry assertions 19/19，reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
-  - [ ] 9.6 增加 registry 属性测试
+  - [x] 9.6 增加 registry 属性测试
     - 属性 P9-A：同一 mode 下 message ID 唯一。
     - 属性 P9-B：每个高风险 lifecycle entry 都有测试 fixture。
     - 属性 P9-C：registry 顺序不影响按 ID 查找结果。
+    - 实现：registry contract 增加 constexpr `is_high_risk()`、`has_test_fixture()` 和 `all_high_risk_entries_have_fixture()`；P9-A 对 64 个 seed 各生成 16 项唯一 mode 表并注入一项同 mode 重叠重复，分别断言通过与失败；P9-B 对 64 个 seed 生成混合 lifecycle 表，断言完整高风险 fixture 通过并在移除首个高风险 fixture 后失败；P9-C 对 64 个 seed 生成 16 项唯一 registry，执行确定性 Fisher-Yates 重排，并逐项比较 direct/wrapped handler、policy、lifecycle 和 fixture 选择结果。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；registry assertions 339/339，其中新增属性断言 320 条；production Audit 4 同时验证 24 项 registry 与 13 项真实高风险 fixture；reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
   - [ ] 9.7 检查点：确保所有测试通过，如有疑问请询问用户
 
 - [ ] 10. P10 标准化 GC 观测与诊断事件
