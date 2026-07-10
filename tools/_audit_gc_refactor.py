@@ -256,7 +256,10 @@ def audit_post_login_dispatch(main_text):
 
     issues = []
     for emsg, adapter, handler in POST_LOGIN_DISPATCH_ENTRIES:
-        table_pattern = re.compile(r"\{\s*" + re.escape(emsg) + r"\s*,\s*" + re.escape(adapter) + r"\s*\}")
+        table_pattern = re.compile(
+            r"\{\s*" + re.escape(emsg) +
+            r"\s*,\s*registry::RequestMode::DirectAndWrapped\s*,.*?\b" + re.escape(adapter) + r"\s*,",
+        )
         if not table_pattern.search(dispatch_text):
             issues.append(f"{emsg}: missing table entry for {adapter}")
 
@@ -268,7 +271,10 @@ def audit_post_login_dispatch(main_text):
             issues.append(f"{adapter}: missing adapter call to {handler}")
 
     for emsg, adapter, handler in POST_LOGIN_DIRECT_DISPATCH_ENTRIES:
-        table_pattern = re.compile(r"\{\s*" + re.escape(emsg) + r"\s*,\s*" + re.escape(adapter) + r"\s*\}")
+        table_pattern = re.compile(
+            r"\{\s*" + re.escape(emsg) +
+            r"\s*,\s*registry::RequestMode::Direct\s*,.*?\b" + re.escape(adapter) + r"\s*,",
+        )
         if not table_pattern.search(dispatch_text):
             issues.append(f"{emsg}: missing direct-only table entry for {adapter}")
 
@@ -280,7 +286,10 @@ def audit_post_login_dispatch(main_text):
         if not adapter_pattern.search(dispatch_text):
             issues.append(f"{adapter}: missing direct path guard or call to {handler}")
 
-    found_entries = re.findall(r"\{\s*(GBE_k[A-Za-z0-9_]+|\d+u)\s*,\s*(adapt_[A-Za-z0-9_]+)\s*\}", dispatch_text)
+    found_entries = re.findall(
+        r"\{\s*(GBE_k[A-Za-z0-9_]+|\d+u)\s*,\s*registry::RequestMode::[A-Za-z]+\s*,.*?\b(adapt_[A-Za-z0-9_]+)\s*,",
+        dispatch_text,
+    )
     expected_pairs = {(emsg, adapter) for emsg, adapter, _ in POST_LOGIN_DISPATCH_ENTRIES}
     expected_pairs.update((emsg, adapter) for emsg, adapter, _ in POST_LOGIN_DIRECT_DISPATCH_ENTRIES)
     found_pairs = set(found_entries)

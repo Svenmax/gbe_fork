@@ -22,6 +22,7 @@
 #include "gbe_proto_buf_header.h"
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_custom_lobby_http.h"
+#include "gbe_dota_handler_registry.h"
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
@@ -57,6 +58,7 @@
 #include <tf2/tf_gcmessages.pb.h>
 
 using namespace gamecoordinator::tf2;
+namespace registry = gbe::dota_handler_registry;
 
 constexpr int GC_MIN_VERSION = 20091217;
 
@@ -234,11 +236,6 @@ bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc
     if (!context.valid)
         return false;
 
-    using Adapter = bool (*)(Steam_Game_Coordinator *self,
-                             const gbe::dota_gc_router::DotaGcRequestContext &c,
-                             const std::string *outer_session_field_raw);
-    struct Entry { std::uint32_t emsg; Adapter adapter; };
-
     auto adapt_join_chat_channel = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
         return self->GBE_HandleDotaJoinChatChannelRequest(c.body, c.wrapped, sess);
     };
@@ -330,38 +327,38 @@ bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc
 
     // Order follows the original switch arm order (chat -> lobby lifecycle ->
     // broadcast) to preserve the historical scan sequence. Linear lookup is
-    // fine: the table has 16 entries and runs at most once per inbound GC
+    // fine: the table has 24 entries and runs at most once per inbound GC
     // message. `static const` avoids re-initializing on every call.
-    static const Entry kTable[] = {
-        { GBE_kDotaJoinChatChannel,                     adapt_join_chat_channel           },
-        { GBE_kDotaPracticeLobbyCreate,                 adapt_practice_lobby_create       },
-        { GBE_kDotaLobbyList,                           adapt_lobby_list                  },
-        { GBE_kDotaCustomLobbyListRequest,              adapt_custom_lobby_list           },
-        { GBE_kDotaFriendPracticeLobbyListRequest,      adapt_friend_practice_lobby_list  },
-        { GBE_kGCInviteToLobby,                         adapt_invite_to_lobby             },
-        { GBE_kGCLobbyInviteResponse,                   adapt_lobby_invite_response       },
-        { GBE_kDotaPracticeLobbyJoin,                   adapt_practice_lobby_join         },
-        { GBE_kDotaPracticeLobbyLeave,                  adapt_practice_lobby_leave        },
-        { GBE_kDotaPracticeLobbyLaunch,                 adapt_practice_lobby_launch       },
-        { GBE_kDotaPracticeLobbySetDetails,             adapt_practice_lobby_set_details  },
-        { GBE_kDotaPracticeLobbySetTeamSlot,            adapt_practice_lobby_set_team_slot},
-        { GBE_kDotaPracticeLobbyKick,                   adapt_practice_lobby_kick         },
-        { GBE_kDotaPracticeLobbyJoinBroadcastChannel,   adapt_practice_lobby_join_broadcast },
-        { GBE_kDotaLobbyUpdateBroadcastChannelInfo,     adapt_lobby_update_broadcast_info },
-        { GBE_kDotaPracticeLobbyCloseBroadcastChannel,  adapt_practice_lobby_close_broadcast },
-        { 7427u,                                        adapt_direct_7427_notifications  },
-        { 4523u,                                        adapt_direct_upload_rate          },
-        { 8879u,                                        adapt_direct_rank                 },
-        { 7534u,                                        adapt_direct_profile_card         },
-        { 2581u,                                        adapt_direct_lookup_account_name  },
-        { 7503u,                                        adapt_direct_emoticon_data        },
-        { 8095u,                                        adapt_direct_conduct_scorecard    },
-        { 8800u,                                        adapt_direct_coaching_summary     },
+    static const registry::Entry kTable[] = {
+        { GBE_kDotaJoinChatChannel, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_join_chat_channel, registry::HandlerId::JoinChatChannel },
+        { GBE_kDotaPracticeLobbyCreate, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_practice_lobby_create, registry::HandlerId::PracticeLobbyCreate },
+        { GBE_kDotaLobbyList, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyRead, adapt_lobby_list, registry::HandlerId::LobbyList },
+        { GBE_kDotaCustomLobbyListRequest, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyRead, adapt_custom_lobby_list, registry::HandlerId::CustomLobbyList },
+        { GBE_kDotaFriendPracticeLobbyListRequest, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyRead, adapt_friend_practice_lobby_list, registry::HandlerId::FriendPracticeLobbyList },
+        { GBE_kGCInviteToLobby, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_invite_to_lobby, registry::HandlerId::InviteToLobby },
+        { GBE_kGCLobbyInviteResponse, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_lobby_invite_response, registry::HandlerId::LobbyInviteResponse },
+        { GBE_kDotaPracticeLobbyJoin, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_practice_lobby_join, registry::HandlerId::PracticeLobbyJoin },
+        { GBE_kDotaPracticeLobbyLeave, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_practice_lobby_leave, registry::HandlerId::PracticeLobbyLeave },
+        { GBE_kDotaPracticeLobbyLaunch, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_practice_lobby_launch, registry::HandlerId::PracticeLobbyLaunch },
+        { GBE_kDotaPracticeLobbySetDetails, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_practice_lobby_set_details, registry::HandlerId::PracticeLobbySetDetails },
+        { GBE_kDotaPracticeLobbySetTeamSlot, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_practice_lobby_set_team_slot, registry::HandlerId::PracticeLobbySetTeamSlot },
+        { GBE_kDotaPracticeLobbyKick, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_practice_lobby_kick, registry::HandlerId::PracticeLobbyKick },
+        { GBE_kDotaPracticeLobbyJoinBroadcastChannel, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_practice_lobby_join_broadcast, registry::HandlerId::PracticeLobbyJoinBroadcastChannel },
+        { GBE_kDotaLobbyUpdateBroadcastChannelInfo, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_lobby_update_broadcast_info, registry::HandlerId::LobbyUpdateBroadcastChannelInfo },
+        { GBE_kDotaPracticeLobbyCloseBroadcastChannel, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_practice_lobby_close_broadcast, registry::HandlerId::PracticeLobbyCloseBroadcastChannel },
+        { 7427u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_7427_notifications, registry::HandlerId::Notifications7427 },
+        { 4523u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_upload_rate, registry::HandlerId::UploadRate },
+        { 8879u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_rank, registry::HandlerId::Rank },
+        { 7534u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_profile_card, registry::HandlerId::ProfileCard },
+        { 2581u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_lookup_account_name, registry::HandlerId::LookupAccountName },
+        { 7503u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_emoticon_data, registry::HandlerId::EmoticonData },
+        { 8095u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_conduct_scorecard, registry::HandlerId::ConductScorecard },
+        { 8800u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_coaching_summary, registry::HandlerId::CoachingSummary },
     };
 
-    const Entry *entry = nullptr;
+    const registry::Entry *entry = nullptr;
     for (const auto &e : kTable) {
-        if (e.emsg == context.inner_emsg) {
+        if (e.message_id == context.inner_emsg && registry::supports_mode(e.modes, context.path)) {
             entry = &e;
             break;
         }
@@ -369,7 +366,9 @@ bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc
     if (!entry)
         return false;
 
-    const std::string *outer_session_field_raw = gbe::dota_gc_router::outer_session_field_or_null(context);
+    const std::string *outer_session_field_raw = registry::forwards_wrapped_session(entry->session_policy)
+        ? gbe::dota_gc_router::outer_session_field_or_null(context)
+        : nullptr;
     const char *path = context.wrapped ? "wrapped" : "direct";
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",

@@ -204,9 +204,10 @@
     - 字段包含 message ID、direct/wrapped 模式、session 策略、生命周期分类、adapter 和 handler。
     - 依赖：任务 2 和任务 6。
     - 实现：新增 dependency-light `gbe_dota_handler_registry.h`，定义强类型 `RequestMode`、`SessionPolicy`、`LifecycleClass`、`HandlerId`、统一 adapter 函数指针和聚合 `Entry`；constexpr helper 统一 direct/wrapped path 匹配与 wrapped session 转发判断，独立 header compile test 验证自包含与类型契约。
-  - [ ] 9.2 迁移 post-login dispatch 映射
+  - [x] 9.2 迁移 post-login dispatch 映射
     - 使用 registry 驱动 direct 与 wrapped 分发。
     - 保持未知消息 fallback 和日志行为。
+    - 实现：现有 24 项表全部迁移为 typed `Entry`；16 项声明 `DirectAndWrapped + ForwardWrappedSession`，8 项声明 `Direct + Ignore`，查找同时匹配 message ID 与 request path，session pointer 按 policy 生成；adapter、线性扫描顺序、成功命中后的日志文本和未命中返回 false fallback 保持稳定。
   - [ ] 9.3 从 registry 生成审计数据
     - audit 直接读取或解析 registry，移除手工维护的平行 dispatch 清单。
   - [ ] 9.4 建立 fixture 关联机制
