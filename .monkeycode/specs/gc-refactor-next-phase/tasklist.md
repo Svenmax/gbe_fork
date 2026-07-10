@@ -113,29 +113,30 @@
   - [x] 5.8 检查点：确保所有测试通过，如有疑问请询问用户
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 156/156，payload helpers 252/252，handler smoke 68/68，replay fixtures 7 组，audit 8 项 0 问题。
 
-- [ ] 6. P5 将大厅生命周期副作用事务化
-  - [ ] 6.1 定义 transition effects 和 action model
+- [x] 6. P5 将大厅生命周期副作用事务化
+  - [x] 6.1 定义 transition effects 和 action model
     - 统一表达 runtime、launch phase、local publish、shared publish、details update、delayed update 和 response 动作。
     - 依赖：任务 2 和任务 5。
-  - [ ] 6.2 实现固定顺序的 lifecycle executor
+  - [x] 6.2 实现固定顺序的 lifecycle executor
     - executor 接受不可变 plan 并执行 action list。
     - 每个 action 记录 reason、lobby generation 和必要 session 数据。
-  - [ ] 6.3 迁移 `7070`、`8052`、`8053`
+  - [x] 6.3 迁移 `7070`、`8052`、`8053`
     - 将已统一的自定义游戏生命周期执行器落到通用 action model。
     - 删除专用 executor 中重复的副作用编排。
-  - [ ] 6.4 迁移 `7034` runtime 更新路径
+  - [x] 6.4 迁移 `7034` runtime 更新路径
     - 统一 connected/disconnected、game state、hero state 和 launch poll 的 action 顺序。
     - 保持 response 和 showcase repush guard 行为。
-  - [ ] 6.5 增加 action executor 单元测试
+  - [x] 6.5 增加 action executor 单元测试
     - 覆盖每个可选 action、组合 action、失败前置条件和固定顺序。
-  - [ ] 6.6 增加生命周期属性测试
+  - [x] 6.6 增加生命周期属性测试
     - 属性 P5-A：同一 plan 多次序列化得到相同 action sequence。
     - 属性 P5-B：action dependency 始终满足 runtime → local publish → shared publish → details update。
     - 属性 P5-C：空 effects 不执行副作用。
-  - [ ] 6.7 更新审计规则
+  - [x] 6.7 更新审计规则
     - 只允许 executor owner 直接调用高风险生命周期副作用 API。
     - 验收：handler 和 planner 新增直调会使 audit 失败。
-  - [ ] 6.8 检查点：确保所有测试通过，如有疑问请询问用户
+  - [x] 6.8 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 156/156，payload helpers 252/252，handler smoke 70/70，replay fixtures 7 组，audit 9 项 0 问题。
 
 - [ ] 7. P6 引入显式 Lobby Generation
   - [ ] 7.1 定义 generation 类型和分配规则
