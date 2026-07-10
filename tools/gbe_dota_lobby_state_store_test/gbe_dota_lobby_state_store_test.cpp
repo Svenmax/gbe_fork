@@ -436,6 +436,80 @@ void test_concurrent_clear_and_publish_expose_complete_states()
     expect_eq_u64(final_snapshot.lobby_id, iterations + 1u, "final published state remains complete after clear interleaving");
 }
 
+void test_property_snapshots_always_represent_complete_versions()
+{
+    Fixture fixture;
+
+    for (std::uint64_t seed = 1u; seed <= 64u; ++seed) {
+        for (std::uint64_t step = 1u; step <= 32u; ++step) {
+            const auto version = seed * 1000u + step;
+            GBE_SharedDotaLobbyState state;
+            state.valid = true;
+            state.active = (version % 2u) != 0u;
+            state.generation = version;
+            state.lobby_id = version + 1u;
+            state.generic_lobby_id = version + 2u;
+            state.server_id = version + 3u;
+            state.connect = std::to_string(version);
+            state.owner_name = "owner-" + std::to_string(version);
+            state.members.resize(static_cast<std::size_t>(version % 4u + 1u));
+            state.cache_service_list.push_back(static_cast<std::uint32_t>(version));
+            fixture.store.publish(state);
+
+            const auto snapshot = fixture.store.snapshot();
+            const bool complete =
+                snapshot.valid == state.valid &&
+                snapshot.active == state.active &&
+                snapshot.generation == state.generation &&
+                snapshot.lobby_id == state.lobby_id &&
+                snapshot.generic_lobby_id == state.generic_lobby_id &&
+                snapshot.server_id == state.server_id &&
+                snapshot.connect == state.connect &&
+                snapshot.owner_name == state.owner_name &&
+                snapshot.members.size() == state.members.size() &&
+                snapshot.cache_service_list == state.cache_service_list;
+            expect_true(complete, "P7-A snapshot represents one complete published version");
+        }
+    }
+}
+
+void test_property_stale_updates_never_change_store()
+{
+    for (std::uint64_t seed = 1u; seed <= 64u; ++seed) {
+        Fixture fixture;
+        auto current = populated_state(seed + 100u);
+        current.lobby_id = seed * 10u + 1u;
+        current.generic_lobby_id = seed * 10u + 2u;
+        current.server_id = seed * 10u + 3u;
+        current.connect = "current-" + std::to_string(seed);
+        current.owner_name = "owner-" + std::to_string(seed);
+        fixture.store.publish(current);
+        const auto before = fixture.store.snapshot();
+        bool mutator_called = false;
+
+        const auto result = fixture.store.compare_update(current.generation - 1u, [&](auto &candidate) {
+            mutator_called = true;
+            candidate = GBE_SharedDotaLobbyState{};
+        });
+        const auto after = fixture.store.snapshot();
+        const bool unchanged =
+            after.valid == before.valid &&
+            after.active == before.active &&
+            after.generation == before.generation &&
+            after.lobby_id == before.lobby_id &&
+            after.generic_lobby_id == before.generic_lobby_id &&
+            after.server_id == before.server_id &&
+            after.connect == before.connect &&
+            after.owner_name == before.owner_name &&
+            after.members.size() == before.members.size() &&
+            after.cache_service_list == before.cache_service_list;
+
+        expect_true(result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration, "P7-B stale update reports stale");
+        expect_true(!mutator_called, "P7-B stale update skips mutator");
+        expect_true(unchanged, "P7-B stale update preserves the complete store state");
+    }
+}
+
 } // namespace
 
 int main()
@@ -453,6 +527,8 @@ int main()
     test_concurrent_readers_observe_complete_versions();
     test_concurrent_compare_updates_commit_matching_generation_only();
     test_concurrent_clear_and_publish_expose_complete_states();
+    test_property_snapshots_always_represent_complete_versions();
+    test_property_stale_updates_never_change_store();
 
     if (failures != 0) {
         std::fprintf(stderr, "gbe_dota_lobby_state_store_test failed: %d assertion(s)\n", failures);

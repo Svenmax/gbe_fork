@@ -214,6 +214,7 @@ printf '[build] %s\n' gbe_dota_gc_payload_helpers_test
     dll/gbe_dota_lobby_payload_flow.cpp \
     dll/gbe_dota_lobby_flow.cpp \
     dll/gbe_dota_lobby_state.cpp \
+    dll/gbe_dota_lobby_state_store.cpp \
     dll/gbe_dota_reconnect_context.cpp \
     dll/gbe_dota_lobby_publish.cpp \
     dll/gbe_dota_lobby_snapshot.cpp \

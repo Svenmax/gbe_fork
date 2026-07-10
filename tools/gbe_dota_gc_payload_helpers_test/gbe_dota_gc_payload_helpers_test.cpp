@@ -50,6 +50,7 @@
 
 // Include GBE headers for function declarations
 #include "dll/gbe_dota_gc_internal.h"
+#include "dll/gbe_dota_lobby_state_store.h"
 #include "dll/gbe_dota_payload_item_helpers.h"
 #include "dll/gbe_dota_payload_lobby_helpers.h"
 #include "dll/gbe_dota_payload_wire_helpers.h"
@@ -405,6 +406,25 @@ TEST_CASE(test_is_dota_arcade_lobby_active)
     EXPECT_FALSE(scalar_snapshot.active);
     EXPECT_TRUE(scalar_snapshot.lobby_id == 0ull);
     EXPECT_TRUE(scalar_snapshot.generic_lobby_id == 0ull);
+}
+
+TEST_CASE(test_clear_zeroes_valid_gated_id_helpers_property)
+{
+    for (std::uint64_t seed = 1u; seed <= 64u; ++seed) {
+        GBE_SharedDotaLobbyState state;
+        state.valid = true;
+        state.active = true;
+        state.generation = seed;
+        state.lobby_id = seed * 100u + 1u;
+        state.generic_lobby_id = seed * 100u + 2u;
+        GBE_GetSharedDotaLobbyStateStore().publish(state);
+
+        GBE_ClearSharedDotaLobbyState();
+
+        EXPECT_FALSE(GBE_HasSharedDotaLobbyState());
+        EXPECT_TRUE(GBE_GetSharedDotaLobbyIdOrZero() == 0ull);
+        EXPECT_TRUE(GBE_GetSharedDotaGenericLobbyIdOrZero() == 0ull);
+    }
 }
 
 // =====================================================================
@@ -1261,6 +1281,7 @@ int main()
 
     std::printf("[4/26] GBE_IsDotaArcadeLobbyActive...\n");
     test_is_dota_arcade_lobby_active();
+    test_clear_zeroes_valid_gated_id_helpers_property();
 
     std::printf("[5/26] GBE_DotaCustomGameDisplayName...\n");
     test_dota_custom_game_display_name();
