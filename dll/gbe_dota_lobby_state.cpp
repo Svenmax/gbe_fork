@@ -772,10 +772,10 @@ PostgameObservationDecision compute_postgame_observation_decision(
     return d;
 }
 
-RuntimeResetDecision compute_runtime_reset_decision(const char *reason)
+RuntimeResetDecision compute_runtime_reset_decision(dota_diagnostic::Reason reason)
 {
     RuntimeResetDecision d{};
-    d.preserve_reconnect_context = reason && std::strcmp(reason, "7035_disconnect_current_game_after_25") == 0;
+    d.preserve_reconnect_context = reason == dota_diagnostic::Reason::DisconnectCurrentGameAfterCacheUnsubscribed;
     return d;
 }
 

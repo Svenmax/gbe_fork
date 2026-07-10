@@ -1254,22 +1254,23 @@ bool test_runtime_reset_reconnect_preserve_decision()
     bool ok = true;
 
     {
-        auto d = gbe::dota_lobby_state::compute_runtime_reset_decision("7035_disconnect_current_game_after_25");
+        auto d = gbe::dota_lobby_state::compute_runtime_reset_decision(
+            gbe::dota_diagnostic::Reason::DisconnectCurrentGameAfterCacheUnsubscribed);
         ok &= expect_true(d.preserve_reconnect_context, "7035 current-game disconnect reset preserves reconnect context");
     }
 
     {
-        auto d = gbe::dota_lobby_state::compute_runtime_reset_decision("shutdown_gc");
+        auto d = gbe::dota_lobby_state::compute_runtime_reset_decision(gbe::dota_diagnostic::Reason::Unknown);
         ok &= expect_false(d.preserve_reconnect_context, "shutdown reset clears reconnect context");
     }
 
     {
-        auto d = gbe::dota_lobby_state::compute_runtime_reset_decision("7040_leave_practice_lobby");
+        auto d = gbe::dota_lobby_state::compute_runtime_reset_decision(gbe::dota_diagnostic::Reason::Unknown);
         ok &= expect_false(d.preserve_reconnect_context, "ordinary leave reset clears reconnect context");
     }
 
     {
-        auto d = gbe::dota_lobby_state::compute_runtime_reset_decision(nullptr);
+        auto d = gbe::dota_lobby_state::compute_runtime_reset_decision(gbe::dota_diagnostic::Reason::Unknown);
         ok &= expect_false(d.preserve_reconnect_context, "unknown reset clears reconnect context");
     }
 

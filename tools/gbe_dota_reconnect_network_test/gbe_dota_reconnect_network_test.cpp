@@ -3,6 +3,7 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -256,6 +257,60 @@ void test_parse_and_connect_failures()
     expect(failed_connector.calls == 1 && failed_queue.calls == 1, "completed failed attempt follows dedup policy");
 }
 
+void test_diagnostic_reason_and_source_serialization()
+{
+    namespace diagnostic = gbe::dota_diagnostic;
+
+    const std::pair<diagnostic::Reason, const char *> reasons[] = {
+        {diagnostic::Reason::Unknown, "unknown"},
+        {diagnostic::Reason::None, "none"},
+        {diagnostic::Reason::Selected, "selected"},
+        {diagnostic::Reason::InvalidSource, "invalid_source"},
+        {diagnostic::Reason::Inactive, "inactive"},
+        {diagnostic::Reason::GameNotStarted, "game_not_started"},
+        {diagnostic::Reason::MissingServerId, "missing_server_id"},
+        {diagnostic::Reason::MissingEndpoint, "missing_endpoint"},
+        {diagnostic::Reason::NoEligibleSource, "no_eligible_source"},
+        {diagnostic::Reason::NoContext, "no_context"},
+        {diagnostic::Reason::OrdinaryPracticeLobby, "ordinary_practice_lobby"},
+        {diagnostic::Reason::ReconnectIneligible, "reconnect_ineligible"},
+        {diagnostic::Reason::StateNotReady, "state_not_ready"},
+        {diagnostic::Reason::LocalOwner, "local_owner"},
+        {diagnostic::Reason::DisconnectCurrentGameAfterCacheUnsubscribed, "7035_disconnect_current_game_after_25"},
+        {diagnostic::Reason::CustomRuntimeMemberRefresh, "7034_custom_runtime_member_refresh"},
+        {diagnostic::Reason::LeaveChat, "7272_leave_chat"},
+        {diagnostic::Reason::FinishedLoading, "8053_finished_loading"},
+        {diagnostic::Reason::LoadFailed, "8053_load_failed"},
+        {diagnostic::Reason::LaunchPoll, "7034_launch_poll"},
+    };
+    for (const auto &entry : reasons) {
+        expect(diagnostic::describe_reason(entry.first) == entry.second, "diagnostic reason serialization is stable");
+        if (entry.first != diagnostic::Reason::Unknown)
+            expect(diagnostic::reason_from_string(entry.second) == entry.first, "diagnostic reason parsing round-trips");
+    }
+    expect(diagnostic::reason_from_string("unregistered_reason") == diagnostic::Reason::Unknown, "unknown diagnostic reason falls back");
+
+    const std::pair<diagnostic::Source, const char *> sources[] = {
+        {diagnostic::Source::Unknown, "unknown"},
+        {diagnostic::Source::Shared, "shared"},
+        {diagnostic::Source::Recent, "recent"},
+        {diagnostic::Source::Local, "local"},
+        {diagnostic::Source::GenericRecovery, "generic_recovery"},
+        {diagnostic::Source::Direct, "direct"},
+        {diagnostic::Source::Wrapped, "wrapped"},
+        {diagnostic::Source::DelayedTask, "delayed_task"},
+    };
+    for (const auto &entry : sources) {
+        expect(diagnostic::describe_source(entry.first) == entry.second, "diagnostic source serialization is stable");
+        if (entry.first != diagnostic::Source::Unknown)
+            expect(diagnostic::source_from_string(entry.second) == entry.first, "diagnostic source parsing round-trips");
+    }
+    expect(diagnostic::source_from_string("unregistered_source") == diagnostic::Source::Unknown, "unknown diagnostic source falls back");
+
+    expect(std::string(GBE_DescribeDotaReconnectPostSkipReason(GBE_DotaReconnectPostSkipReason::NoContext)) == "no_context", "legacy skip reason describe stays stable");
+    expect(std::string(GBE_DescribeDotaReconnectPostSkipReason(GBE_DotaReconnectPostSkipReason::MissingEndpoint)) == "missing_endpoint", "legacy missing endpoint describe stays stable");
+}
+
 void test_properties()
 {
     for (std::uint64_t seed = 1; seed <= 64; ++seed) {
@@ -296,6 +351,7 @@ int main()
     test_dedup_and_generation_changes();
     test_recovery_and_skip_paths();
     test_parse_and_connect_failures();
+    test_diagnostic_reason_and_source_serialization();
     test_properties();
     std::cout << "reconnect network assertions: " << assertions - failures << "/" << assertions << std::endl;
     return failures == 0 ? 0 : 1;

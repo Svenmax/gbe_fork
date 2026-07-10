@@ -132,14 +132,5 @@ GBE_DotaReconnectPostResult GBE_ExecuteDotaReconnectPostConnectionState(
 
 const char *GBE_DescribeDotaReconnectPostSkipReason(GBE_DotaReconnectPostSkipReason reason)
 {
-    switch (reason) {
-        case GBE_DotaReconnectPostSkipReason::None: return "none";
-        case GBE_DotaReconnectPostSkipReason::NoContext: return "no_context";
-        case GBE_DotaReconnectPostSkipReason::OrdinaryPracticeLobby: return "ordinary_practice_lobby";
-        case GBE_DotaReconnectPostSkipReason::ReconnectIneligible: return "reconnect_ineligible";
-        case GBE_DotaReconnectPostSkipReason::StateNotReady: return "state_not_ready";
-        case GBE_DotaReconnectPostSkipReason::MissingEndpoint: return "missing_endpoint";
-        case GBE_DotaReconnectPostSkipReason::LocalOwner: return "local_owner";
-    }
-    return "unknown";
+    return gbe::dota_diagnostic::describe_reason(reason).data();
 }

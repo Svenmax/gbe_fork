@@ -3,6 +3,7 @@
 
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_serialized_connection_state.h"
+#include "gbe_dota_diagnostic_event.h"
 #include "steam/isteamfriends.h"
 #include "steam/steamnetworkingtypes.h"
 
@@ -34,15 +35,7 @@ struct GBE_DotaReconnectCallbackQueue {
         std::uint64_t generation) = 0;
 };
 
-enum class GBE_DotaReconnectPostSkipReason : std::uint8_t {
-    None,
-    NoContext,
-    OrdinaryPracticeLobby,
-    ReconnectIneligible,
-    StateNotReady,
-    MissingEndpoint,
-    LocalOwner,
-};
+using GBE_DotaReconnectPostSkipReason = gbe::dota_diagnostic::Reason;
 
 struct GBE_DotaReconnectPostResult {
     bool has_context{};

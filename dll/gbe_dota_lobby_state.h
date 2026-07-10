@@ -2,6 +2,7 @@
 #define GBE_DOTA_LOBBY_STATE_H
 
 #include "gbe_dota_types.h"
+#include "gbe_dota_diagnostic_event.h"
 #include "dll/gbe_dota_reconnect_shared.h"
 
 #include <chrono>
@@ -392,7 +393,7 @@ PostgameObservationDecision compute_postgame_observation_decision(
     std::uint32_t previous_state,
     std::uint32_t current_state,
     std::uint64_t lobby_id);
-RuntimeResetDecision compute_runtime_reset_decision(const char *reason);
+RuntimeResetDecision compute_runtime_reset_decision(dota_diagnostic::Reason reason);
 
 CreateLobbyPlan compose_create_lobby_plan(
     const proto_wire::DotaPracticeLobbyCreateRequest &request,

@@ -665,20 +665,20 @@ bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped
         return false;
     }
 
-    const char *details_reason = reason ? reason : "";
+    const auto details_reason = gbe::dota_diagnostic::reason_from_string(reason ? reason : "");
     const bool arcade_runtime_loading_result =
         !wrapped &&
         lobby.custom_game.game_id != 0ull &&
         lobby.match_id != 0ull &&
         lobby.launch_phase >= GBE_kDotaLaunchPhaseLoaded &&
-        (std::strcmp(details_reason, "8053_finished_loading") == 0 ||
-            std::strcmp(details_reason, "8053_load_failed") == 0);
+        (details_reason == gbe::dota_diagnostic::Reason::FinishedLoading ||
+            details_reason == gbe::dota_diagnostic::Reason::LoadFailed);
     const bool arcade_runtime_poll =
         !wrapped &&
         lobby.custom_game.game_id != 0ull &&
         lobby.match_id != 0ull &&
         lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued &&
-        std::strcmp(details_reason, "7034_launch_poll") == 0;
+        details_reason == gbe::dota_diagnostic::Reason::LaunchPoll;
     if (arcade_runtime_loading_result || arcade_runtime_poll) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",

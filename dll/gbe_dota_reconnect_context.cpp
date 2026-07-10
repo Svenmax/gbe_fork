@@ -164,27 +164,12 @@ Selection select_context(const std::vector<Source> &sources)
 
 const char *describe_source_kind(SourceKind kind)
 {
-    switch (kind) {
-        case SourceKind::Shared: return "shared";
-        case SourceKind::Recent: return "recent";
-        case SourceKind::Local: return "local";
-        case SourceKind::GenericRecovery: return "generic_recovery";
-    }
-    return "unknown";
+    return gbe::dota_diagnostic::describe_source(kind).data();
 }
 
 const char *describe_reject_reason(RejectReason reason)
 {
-    switch (reason) {
-        case RejectReason::None: return "none";
-        case RejectReason::InvalidSource: return "invalid_source";
-        case RejectReason::Inactive: return "inactive";
-        case RejectReason::GameNotStarted: return "game_not_started";
-        case RejectReason::MissingServerId: return "missing_server_id";
-        case RejectReason::MissingEndpoint: return "missing_endpoint";
-        case RejectReason::NoEligibleSource: return "no_eligible_source";
-    }
-    return "unknown";
+    return gbe::dota_diagnostic::describe_reason(reason).data();
 }
 
 } // namespace gbe::dota_reconnect

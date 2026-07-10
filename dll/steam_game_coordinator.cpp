@@ -1351,7 +1351,8 @@ bool Steam_Game_Coordinator::ResetGCMemory(
     }
 
     const gbe::dota_lobby_state::RuntimeResetDecision reset_decision =
-        gbe::dota_lobby_state::compute_runtime_reset_decision(reason);
+        gbe::dota_lobby_state::compute_runtime_reset_decision(
+            gbe::dota_diagnostic::reason_from_string(reason ? reason : ""));
     clear_dota_runtime_state(reset_decision.preserve_reconnect_context);
     GBE_local_lobby.generation = next_generation;
 

@@ -195,7 +195,9 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                 if (!generic_custom_game_penalties_raw.empty())
                     GBE_local_lobby.custom_game.penalties = gbe::proto_wire::parse_uint32_or_zero(generic_custom_game_penalties_raw.c_str()) != 0u;
 
-                const bool custom_runtime_member_refresh = reason && std::strcmp(reason, "7034_custom_runtime_member_refresh") == 0;
+                const bool custom_runtime_member_refresh =
+                    gbe::dota_diagnostic::reason_from_string(reason ? reason : "") ==
+                    gbe::dota_diagnostic::Reason::CustomRuntimeMemberRefresh;
                 const bool repaired_owner = custom_runtime_member_refresh ? false : steam_client->steam_matchmaking->RepairLobbyOwnerIfMissing(generic_lobby_id, reason ? reason : "capture_current_lobby_state");
                 if (repaired_owner) {
                     GBE_GC_DebugLog(
@@ -761,7 +763,9 @@ bool Steam_Game_Coordinator::GBE_MaybeHandleDotaPracticeLobbyKicked(const char *
         return false;
     if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.generic_lobby_id == 0)
         return false;
-    const bool after_chat_leave = std::strcmp(reason ? reason : "", "7272_leave_chat") == 0;
+    const bool after_chat_leave =
+        gbe::dota_diagnostic::reason_from_string(reason ? reason : "") ==
+        gbe::dota_diagnostic::Reason::LeaveChat;
     if (!GBE_local_lobby.has_chat_channel && !after_chat_leave)
         return false;
 

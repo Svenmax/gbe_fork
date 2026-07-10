@@ -2,6 +2,7 @@
 #define __INCLUDED_GBE_DOTA_RECONNECT_CONTEXT_H__
 
 #include "dll/gbe_dota_reconnect_shared.h"
+#include "gbe_dota_diagnostic_event.h"
 
 #include <cstdint>
 #include <string>
@@ -9,12 +10,7 @@
 
 struct GBE_LocalLobby;
 
-enum class GBE_DotaReconnectSourceKind : std::uint8_t {
-    Shared,
-    Recent,
-    Local,
-    GenericRecovery,
-};
+using GBE_DotaReconnectSourceKind = gbe::dota_diagnostic::Source;
 
 struct GBE_DotaReconnectSource {
     GBE_DotaReconnectSourceKind kind{GBE_DotaReconnectSourceKind::Shared};
@@ -35,16 +31,7 @@ struct GBE_DotaReconnectSource {
 namespace gbe::dota_reconnect {
 
 using SourceKind = GBE_DotaReconnectSourceKind;
-
-enum class RejectReason : std::uint8_t {
-    None,
-    InvalidSource,
-    Inactive,
-    GameNotStarted,
-    MissingServerId,
-    MissingEndpoint,
-    NoEligibleSource,
-};
+using RejectReason = gbe::dota_diagnostic::Reason;
 
 using Source = GBE_DotaReconnectSource;
 
