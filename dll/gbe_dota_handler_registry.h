@@ -69,6 +69,7 @@ struct Entry {
     LifecycleClass lifecycle{LifecycleClass::None};
     Adapter adapter{};
     HandlerId handler{HandlerId::Unknown};
+    const char *fixture{};
 };
 
 constexpr bool supports_mode(RequestMode modes, dota_gc_router::DotaGcRequestPath path)

@@ -23,6 +23,8 @@ PUBLIC_HEADERS = [
     os.path.join(ROOT_DIR, "dll", "dll", "gbe_dota_reconnect_shared.h"),
 ]
 MAIN_CPP = os.path.join(ROOT_DIR, "dll", "steam_game_coordinator.cpp")
+HANDLER_SMOKE_CPP = os.path.join(ROOT_DIR, "tools", "gbe_dota_handler_test", "smoke_test.cpp")
+REPLAY_FIXTURE_DIR = os.path.join(ROOT_DIR, "tools", "gc_replay_test", "fixtures")
 TODO_MD = os.path.join(ROOT_DIR, "REFACTOR_TODO.md")
 RUN_GC_OFFLINE_TESTS_SH = os.path.join(ROOT_DIR, "tools", "run_gc_offline_tests.sh")
 PREMAKE5_LUA = os.path.join(ROOT_DIR, "premake5.lua")
@@ -236,7 +238,8 @@ def audit_post_login_dispatch(main_text):
         r"registry::SessionPolicy::([A-Za-z]+)\s*,\s*"
         r"registry::LifecycleClass::([A-Za-z]+)\s*,\s*"
         r"(adapt_[A-Za-z0-9_]+)\s*,\s*"
-        r"registry::HandlerId::([A-Za-z0-9_]+)\s*\}",
+        r"registry::HandlerId::([A-Za-z0-9_]+)\s*,\s*"
+        r"(nullptr|\"[^\"]+\")\s*\}",
     )
     entries = entry_pattern.findall(table_text)
 
@@ -251,8 +254,23 @@ def audit_post_login_dispatch(main_text):
     if len(entries) != raw_entry_count:
         issues.append(f"registry parse covered {len(entries)} of {raw_entry_count} entries")
 
+    smoke_text = read(HANDLER_SMOKE_CPP)
+    smoke_tests = set(re.findall(r"^static void (test_[A-Za-z0-9_]+)\(\)", smoke_text, re.MULTILINE))
+    replay_labels = {}
+    for fixture_path in glob.glob(os.path.join(REPLAY_FIXTURE_DIR, "*.txt")):
+        if fixture_path.endswith(".expected.txt"):
+            continue
+        fixture_name = os.path.basename(fixture_path)[:-4]
+        labels = set()
+        for line in read(fixture_path).splitlines():
+            fields = line.split(maxsplit=2)
+            if len(fields) == 3:
+                labels.add(fields[2])
+        replay_labels[fixture_name] = labels
+
     registered_adapters = set()
-    for emsg, mode, session_policy, lifecycle, adapter, handler_id in entries:
+    high_risk_entries = 0
+    for emsg, mode, session_policy, lifecycle, adapter, handler_id, fixture_literal in entries:
         registered_adapters.add(adapter)
         body = adapters.get(adapter)
         if body is None:
@@ -276,10 +294,31 @@ def audit_post_login_dispatch(main_text):
         if lifecycle not in {"None", "LobbyRead", "LobbyMutation", "LobbyLifecycle"}:
             issues.append(f"{emsg}: registry entry has unknown lifecycle class {lifecycle}")
 
+        fixture = None if fixture_literal == "nullptr" else fixture_literal[1:-1]
+        if lifecycle in {"LobbyMutation", "LobbyLifecycle"}:
+            high_risk_entries += 1
+            if fixture is None:
+                issues.append(f"{emsg}: high-risk {lifecycle} entry has no smoke/replay fixture")
+                continue
+        if fixture is None:
+            continue
+        fixture_parts = fixture.split(":")
+        if len(fixture_parts) == 2 and fixture_parts[0] == "smoke":
+            if fixture_parts[1] not in smoke_tests:
+                issues.append(f"{emsg}: smoke fixture {fixture_parts[1]} does not exist")
+        elif len(fixture_parts) == 3 and fixture_parts[0] == "replay":
+            fixture_name, label = fixture_parts[1], fixture_parts[2]
+            if fixture_name not in replay_labels:
+                issues.append(f"{emsg}: replay fixture file {fixture_name}.txt does not exist")
+            elif label not in replay_labels[fixture_name]:
+                issues.append(f"{emsg}: replay label {label} does not exist in {fixture_name}.txt")
+        else:
+            issues.append(f"{emsg}: fixture {fixture} must use smoke:<test> or replay:<file>:<label>")
+
     for adapter in sorted(set(adapters) - registered_adapters):
         issues.append(f"{adapter}: adapter lambda is not referenced by the typed registry")
 
-    return issues, len(entries)
+    return issues, len(entries), high_risk_entries
 
 
 def audit_template_blob_ownership(tu_paths):
@@ -504,9 +543,9 @@ def main():
     print("AUDIT 4: Post-login dispatch table mapping")
     print("=" * 70)
     print("  Action: keep the dispatch table aligned with the original post-login switch mapping.")
-    dispatch_issues, total_entries = audit_post_login_dispatch(main_text)
+    dispatch_issues, total_entries, high_risk_entries = audit_post_login_dispatch(main_text)
     if not dispatch_issues:
-        print(f"  All {total_entries} typed registry entries resolve to one handler adapter")
+        print(f"  All {total_entries} typed registry entries resolve to one handler adapter; {high_risk_entries} high-risk entries reference live fixtures")
     else:
         for issue in dispatch_issues:
             print(f"  {issue}")

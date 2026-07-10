@@ -10,6 +10,7 @@ constexpr registry::Entry entry{
     registry::LifecycleClass::LobbyLifecycle,
     nullptr,
     registry::HandlerId::PracticeLobbyCreate,
+    "smoke:test_lobby_create_records_cache_subscription_before_pushes",
 };
 
 static_assert(registry::supports_mode(entry.modes, router::DotaGcRequestPath::Direct));
@@ -17,3 +18,4 @@ static_assert(registry::supports_mode(entry.modes, router::DotaGcRequestPath::Wr
 static_assert(!registry::supports_mode(entry.modes, router::DotaGcRequestPath::Unknown));
 static_assert(registry::forwards_wrapped_session(entry.session_policy));
 static_assert(entry.handler == registry::HandlerId::PracticeLobbyCreate);
+static_assert(entry.fixture[0] == 's');

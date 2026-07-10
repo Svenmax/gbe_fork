@@ -1290,6 +1290,60 @@ static void test_lobby_close_broadcast_publishes_before_details()
     ++g_tests_passed;
 }
 
+static void test_lobby_invite_to_lobby_preserves_wrapped_response()
+{
+    TestFixture tf;
+    tf.reset();
+    Steam_Matchmaking matchmaking;
+    g_test_steam_client.steam_matchmaking = &matchmaking;
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x451200u;
+    tf.gc.GBE_local_lobby.generic_lobby_id = CSteamID(0x4512u, k_EChatInstanceFlagLobby, k_EUniversePublic, k_EAccountTypeChat).ConvertToUint64();
+
+    const std::string body = WireBodyBuilder()
+        .varint(1u, 0x0102u)
+        .varint(2u, 77u)
+        .take();
+    const std::string session_raw = "invite-session-token";
+    const bool result = tf.gc.GBE_HandleDotaInviteToLobbyRequest(body, true, &session_raw);
+
+    TEST_ASSERT(result, "invite handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "invite should push one invitation-created response");
+    expect_push_payload(tf.recorder.actions[0], GBE_kGCInvitationCreated, "invite should push 4502");
+    TEST_ASSERT(tf.recorder.actions[0].wrapped, "invite response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[0].session_raw == session_raw, "invite response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "4512_invitation_created", "invite response should preserve reason");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_invite_response_decline_pushes_remove_then_unsubscribe()
+{
+    TestFixture tf;
+    tf.reset();
+
+    const std::string body = WireBodyBuilder()
+        .varint(1u, 0x451300u)
+        .varint(2u, 0u)
+        .varint(3u, 78u)
+        .take();
+    const std::string session_raw = "invite-response-session-token";
+    const bool result = tf.gc.GBE_HandleDotaLobbyInviteResponseRequest(body, true, &session_raw);
+
+    TEST_ASSERT(result, "declined invite response handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "declined invite should push remove then cache unsubscribe");
+    expect_push_payload(tf.recorder.actions[0], GBE_kDotaPracticeLobbyDetailsUpdate, "declined invite should push remove 2011 first");
+    TEST_ASSERT(tf.recorder.actions[0].wrapped, "remove response should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[0].session_raw == session_raw, "remove response should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "4513_decline_remove_2011", "remove response should preserve reason");
+    expect_push_payload(tf.recorder.actions[1], GBE_kDotaCacheUnsubscribed, "declined invite should push cache unsubscribe second");
+    TEST_ASSERT(tf.recorder.actions[1].wrapped, "cache unsubscribe should preserve wrapped flag");
+    TEST_ASSERT(tf.recorder.actions[1].session_raw == session_raw, "cache unsubscribe should preserve session field");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "4513_decline_25", "cache unsubscribe should preserve reason");
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_create_records_cache_subscription_before_pushes()
 {
     TestFixture tf;
@@ -2973,6 +3027,12 @@ int main()
 
     std::printf("[run] test_lobby_close_broadcast_publishes_before_details\n");
     RUN_TEST(test_lobby_close_broadcast_publishes_before_details);
+
+    std::printf("[run] test_lobby_invite_to_lobby_preserves_wrapped_response\n");
+    RUN_TEST(test_lobby_invite_to_lobby_preserves_wrapped_response);
+
+    std::printf("[run] test_lobby_invite_response_decline_pushes_remove_then_unsubscribe\n");
+    RUN_TEST(test_lobby_invite_response_decline_pushes_remove_then_unsubscribe);
 
     std::printf("[run] test_lobby_create_records_cache_subscription_before_pushes\n");
     RUN_TEST(test_lobby_create_records_cache_subscription_before_pushes);

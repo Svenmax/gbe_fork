@@ -211,9 +211,11 @@
   - [x] 9.3 从 registry 生成审计数据
     - audit 直接读取或解析 registry，移除手工维护的平行 dispatch 清单。
     - 实现：Audit 4 直接解析 production `kTable` 的六个 typed 字段，并按 adapter 名称提取 lambda 与实际 `GBE_HandleDota*Request` 调用；自动检查 entry 解析完整性、adapter 存在性与孤立项、单 handler 调用、direct path guard、session policy、handler identity 和 lifecycle class，entry 总数由 registry 自动计算，Python 中两份 24 项平行清单已移除。
-  - [ ] 9.4 建立 fixture 关联机制
+  - [x] 9.4 建立 fixture 关联机制
     - 每个高风险 registry entry 关联 smoke/replay fixture 标识。
     - CI 审计缺失 fixture 的新增高风险 handler。
+    - 实现：`Entry` 增加 dependency-light `const char *fixture` 元数据；13 个 `LobbyMutation`/`LobbyLifecycle` 条目全部关联真实 `smoke:<test_name>` 或 `replay:<fixture>:<label>` 标识，InviteToLobby 与 LobbyInviteResponse 补充真实 handler smoke 覆盖；Audit 4 动态读取 smoke 函数和 replay fixture 文件，拒绝高风险空关联、未知标识格式、缺失测试函数、缺失 replay 文件或失效 label。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，24 项 typed registry 与 13 项高风险 fixture 关联通过审计，audit 10 项 0 问题。
   - [ ] 9.5 增加 registry 单元测试
     - 覆盖 message ID 唯一性、模式匹配、session 策略、未知消息和 handler 选择。
   - [ ] 9.6 增加 registry 属性测试
