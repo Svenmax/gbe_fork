@@ -41,7 +41,6 @@
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_dota_custom_game.h"
-#include "gbe_dota_gc_router.h"
 #include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_gc_message_utils.h"

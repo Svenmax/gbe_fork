@@ -78,6 +78,7 @@ bool is_supported_dota_wrapped_post_login_request(std::uint32_t inner_emsg)
         case 7044u:
         case 7046u:
         case 7047u:
+        case 7070u:
         case 7081u:
         case 7091u:
         case 7111u:
@@ -86,6 +87,8 @@ bool is_supported_dota_wrapped_post_login_request(std::uint32_t inner_emsg)
         case 7367u:
         case 8009u:
         case 8011u:
+        case 8052u:
+        case 8053u:
         case 8054u:
         case 8246u:
             return true;
