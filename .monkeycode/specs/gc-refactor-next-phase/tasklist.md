@@ -252,8 +252,10 @@
     - 实现：将结构化 sink 扩展为通用 `GBE_DiagnosticLogEvent()`，reconnect 与 lifecycle 分别使用稳定 scope。custom-game transition 入口记录 planned/no-actions decision、direct/wrapped source、trigger message 和 source job；统一 lifecycle executor 为每个 action 记录 execution/failure，为 conditional follow-up 记录 previous-action-failed 或 runtime-update-queued skip，为 runtime details update 记录 delayed-task queued/failure。action decision 来自覆盖全部 33 个 action type 的 constexpr 稳定名称；lobby ID、generation 和 server ID 在 action 执行前捕获，避免 reset/clear 后身份漂移。lifecycle 结构化事件不记录 endpoint、payload、outer session 或自由 reason 文本。
     - 测试：diagnostic reason inventory 增加 `previous_action_failed`、`runtime_update_queued` 和 `action_failed` 的稳定序列化与往返断言；handler focused suite 增加 state、delayed、push 三类 action 名称稳定性断言。reconnect focused suite 增至 242/242，handler smoke 仍为 77/77。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，replay fixtures 7 组，audit 10 项 0 问题。
-  - [ ] 10.5 增加事件格式与字段测试
+  - [x] 10.5 增加事件格式与字段测试
     - 断言关键事件字段齐全、reason 稳定、敏感 payload 不进入结构化日志。
+    - 测试：在统一 formatter focused suite 增加 11 条断言，精确覆盖 reconnect callback、lifecycle transition decision、action execution、conditional skip、action failure 和 delayed-task queued 六类关键事件。每个样本断言固定十字段顺序、lobby/generation/server 身份、direct/wrapped/delayed source、稳定 reason、action decision，以及 message/job presence；另对 `payload=`、`session=`、`password=`、`raw_state=`、`endpoint_raw=` 和 `reason_text=` 六类敏感或自由文本字段执行排除断言。reconnect focused suite 从 242 增至 253/253。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
   - [ ] 10.6 更新 reason inventory 审计
     - 从枚举或集中表生成 inventory，检查测试覆盖和重复值。
   - [ ] 10.7 检查点：确保所有测试通过，如有疑问请询问用户

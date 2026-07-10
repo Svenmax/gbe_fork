@@ -340,6 +340,89 @@ void test_diagnostic_reason_and_source_serialization()
     expect(
         minimal == "event=reconnect.context_selection reason=unknown source=unknown lobby_id=0 generation=0 server_id=0 endpoint=- decision=- message_id=- job_id=-",
         "diagnostic event absent fields use stable placeholders");
+
+    diagnostic::Event transition{
+        "lifecycle.transition_decision",
+        diagnostic::Reason::FinishedLoading,
+        diagnostic::Source::Wrapped,
+        7001u,
+        12u,
+        9001u,
+        {},
+        "planned",
+    };
+    transition = diagnostic::with_message_id(transition, 8053u);
+    transition = diagnostic::with_job_id(transition, 0x8053ABCDu);
+    expect(
+        diagnostic::format_event(transition) == "event=lifecycle.transition_decision reason=8053_finished_loading source=wrapped lobby_id=7001 generation=12 server_id=9001 endpoint=- decision=planned message_id=8053 job_id=2152967117",
+        "lifecycle transition event includes stable identity and request fields");
+
+    expect(
+        diagnostic::format_event({
+            "lifecycle.action_execution",
+            diagnostic::Reason::None,
+            diagnostic::Source::Direct,
+            7001u,
+            12u,
+            9001u,
+            {},
+            "shared_lobby_publish",
+        }) == "event=lifecycle.action_execution reason=none source=direct lobby_id=7001 generation=12 server_id=9001 endpoint=- decision=shared_lobby_publish message_id=- job_id=-",
+        "lifecycle action execution event includes stable action decision");
+
+    expect(
+        diagnostic::format_event({
+            "lifecycle.action_skip",
+            diagnostic::Reason::PreviousActionFailed,
+            diagnostic::Source::Direct,
+            7001u,
+            12u,
+            9001u,
+            {},
+            "shared_lobby_publish",
+        }) == "event=lifecycle.action_skip reason=previous_action_failed source=direct lobby_id=7001 generation=12 server_id=9001 endpoint=- decision=shared_lobby_publish message_id=- job_id=-",
+        "lifecycle conditional skip reason remains stable");
+
+    expect(
+        diagnostic::format_event({
+            "lifecycle.action_failure",
+            diagnostic::Reason::ActionFailed,
+            diagnostic::Source::Wrapped,
+            7001u,
+            12u,
+            9001u,
+            {},
+            "practice_lobby_details_update",
+        }) == "event=lifecycle.action_failure reason=action_failed source=wrapped lobby_id=7001 generation=12 server_id=9001 endpoint=- decision=practice_lobby_details_update message_id=- job_id=-",
+        "lifecycle action failure reason and source remain stable");
+
+    diagnostic::Event delayed{
+        "lifecycle.delayed_task_queued",
+        diagnostic::Reason::CustomRuntimeMemberRefresh,
+        diagnostic::Source::DelayedTask,
+        7001u,
+        12u,
+        9001u,
+        {},
+        "runtime_lobby_details_update",
+    };
+    delayed = diagnostic::with_message_id(delayed, 7034u);
+    delayed = diagnostic::with_job_id(delayed, 0x7034u);
+    const std::string delayed_formatted = diagnostic::format_event(delayed);
+    expect(
+        delayed_formatted == "event=lifecycle.delayed_task_queued reason=7034_custom_runtime_member_refresh source=delayed_task lobby_id=7001 generation=12 server_id=9001 endpoint=- decision=runtime_lobby_details_update message_id=7034 job_id=28724",
+        "lifecycle delayed task event includes message and job identity");
+
+    const char *forbidden_fields[] = {
+        "payload=",
+        "session=",
+        "password=",
+        "raw_state=",
+        "endpoint_raw=",
+        "reason_text=",
+    };
+    for (const char *field : forbidden_fields)
+        expect(delayed_formatted.find(field) == std::string::npos, "structured diagnostic event excludes sensitive free-form fields");
 }
 
 void test_properties()
