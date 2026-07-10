@@ -401,9 +401,13 @@
     - Client/gameserver：分别驱动对应 role 的 reconnect service，断言 context provider、direct connector 和 callback queue 只在所属 role 被调用，generation 准确转发。
     - Offline fake：构造两个独立 root，断言 lobby Store、callback scheduler、context provider、direct connector 和 callback queue 的对象身份与调用状态完全隔离。
     - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 31/31，16 项 production audit 零问题，TSAN 无 race。
-  - [ ] 13.6 增加生命周期销毁测试
+  - [x] 13.6 增加生命周期销毁测试
     - 验证 delayed task 和 callback 不会在依赖销毁后访问悬空对象。
     - 验证重复创建/销毁应用上下文不会继承上一实例业务状态。
+    - 销毁探针：九个 root-owned lifecycle dependencies 使用共享外置计数器记录存活与析构；root 离开作用域后全部释放且每个对象只析构一次。
+    - 异步边界：delayed work 与 callback 闭包仅持有弱生命周期引用；root 销毁后执行闭包成为安全空操作，未产生 effect 或 callback。
+    - 重建隔离：首个 root 写入 lobby state 并执行 reconnect 后销毁；新 root 的 Store、context 调用计数、connector、callback history 和 generation 均从初始状态开始。
+    - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 31/31，16 项 production audit 零问题，TSAN 无 race。
   - [ ] 13.7 增加全局状态架构审计
     - 禁止新增业务可变 namespace/global/static 状态。
     - 为允许的 immutable 常量和底层兼容入口维护最小显式白名单。

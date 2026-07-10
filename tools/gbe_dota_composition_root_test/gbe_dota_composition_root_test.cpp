@@ -2,8 +2,10 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -17,19 +19,68 @@ void expect_true(bool condition, const char *message)
     ++failures;
 }
 
+struct LifetimeState {
+    int live_dependencies{};
+    int destroyed_dependencies{};
+    int delayed_effects{};
+    int callbacks{};
+};
+
 struct FakeLifecycleExecutor final : gbe::dota::LifecycleExecutor {
+    explicit FakeLifecycleExecutor(std::shared_ptr<LifetimeState> lifetime = {})
+        : lifetime(std::move(lifetime))
+    {
+        if (this->lifetime)
+            ++this->lifetime->live_dependencies;
+    }
+
+    ~FakeLifecycleExecutor() override
+    {
+        if (lifetime) {
+            --lifetime->live_dependencies;
+            ++lifetime->destroyed_dependencies;
+        }
+    }
+
+    std::shared_ptr<LifetimeState> lifetime;
 };
 
 struct FakeCallbackScheduler final : gbe::dota::CallbackScheduler {
-    explicit FakeCallbackScheduler(std::uint32_t identity = 0u)
-        : identity(identity)
+    explicit FakeCallbackScheduler(std::uint32_t identity = 0u, std::shared_ptr<LifetimeState> lifetime = {})
+        : identity(identity), lifetime(std::move(lifetime))
     {
+        if (this->lifetime)
+            ++this->lifetime->live_dependencies;
+    }
+
+    ~FakeCallbackScheduler() override
+    {
+        if (lifetime) {
+            --lifetime->live_dependencies;
+            ++lifetime->destroyed_dependencies;
+        }
     }
 
     std::uint32_t identity{};
+    std::shared_ptr<LifetimeState> lifetime;
 };
 
 struct FakeContextProvider final : GBE_DotaReconnectContextProvider {
+    explicit FakeContextProvider(std::shared_ptr<LifetimeState> lifetime = {})
+        : lifetime(std::move(lifetime))
+    {
+        if (this->lifetime)
+            ++this->lifetime->live_dependencies;
+    }
+
+    ~FakeContextProvider() override
+    {
+        if (lifetime) {
+            --lifetime->live_dependencies;
+            ++lifetime->destroyed_dependencies;
+        }
+    }
+
     bool get_context(std::uint64_t, bool, GBE_DotaReconnectContext &context) override
     {
         ++get_context_calls;
@@ -48,9 +99,25 @@ struct FakeContextProvider final : GBE_DotaReconnectContextProvider {
     GBE_DotaReconnectContext next_context{};
     int get_context_calls{};
     mutable int eligible_calls{};
+    std::shared_ptr<LifetimeState> lifetime;
 };
 
 struct FakeDirectConnector final : GBE_DotaReconnectDirectConnector {
+    explicit FakeDirectConnector(std::shared_ptr<LifetimeState> lifetime = {})
+        : lifetime(std::move(lifetime))
+    {
+        if (this->lifetime)
+            ++this->lifetime->live_dependencies;
+    }
+
+    ~FakeDirectConnector() override
+    {
+        if (lifetime) {
+            --lifetime->live_dependencies;
+            ++lifetime->destroyed_dependencies;
+        }
+    }
+
     std::uint32_t connect_by_ip_address(
         const SteamNetworkingIPAddr &,
         int,
@@ -62,9 +129,25 @@ struct FakeDirectConnector final : GBE_DotaReconnectDirectConnector {
 
     int calls{};
     std::uint32_t connection{77u};
+    std::shared_ptr<LifetimeState> lifetime;
 };
 
 struct FakeCallbackQueue final : GBE_DotaReconnectCallbackQueue {
+    explicit FakeCallbackQueue(std::shared_ptr<LifetimeState> lifetime = {})
+        : lifetime(std::move(lifetime))
+    {
+        if (this->lifetime)
+            ++this->lifetime->live_dependencies;
+    }
+
+    ~FakeCallbackQueue() override
+    {
+        if (lifetime) {
+            --lifetime->live_dependencies;
+            ++lifetime->destroyed_dependencies;
+        }
+    }
+
     void queue_game_server_change(
         const GameServerChangeRequested_t &,
         double,
@@ -76,6 +159,7 @@ struct FakeCallbackQueue final : GBE_DotaReconnectCallbackQueue {
 
     int calls{};
     std::uint64_t last_generation{};
+    std::shared_ptr<LifetimeState> lifetime;
 };
 
 struct Fixture {
@@ -90,26 +174,28 @@ struct Fixture {
     FakeDirectConnector *server_direct_connector{};
     FakeCallbackQueue *server_callback_queue{};
     std::unique_ptr<gbe::dota::CompositionRoot> root;
+    std::shared_ptr<LifetimeState> lifetime;
 
-    explicit Fixture(std::uint32_t identity = 0u)
+    explicit Fixture(std::uint32_t identity = 0u, std::shared_ptr<LifetimeState> lifetime = {})
+        : lifetime(std::move(lifetime))
     {
-        auto lifecycle = std::make_unique<FakeLifecycleExecutor>();
+        auto lifecycle = std::make_unique<FakeLifecycleExecutor>(this->lifetime);
         lifecycle_executor = lifecycle.get();
-        auto client_scheduler_owner = std::make_unique<FakeCallbackScheduler>(identity + 1u);
+        auto client_scheduler_owner = std::make_unique<FakeCallbackScheduler>(identity + 1u, this->lifetime);
         client_scheduler = client_scheduler_owner.get();
-        auto client_context_owner = std::make_unique<FakeContextProvider>();
+        auto client_context_owner = std::make_unique<FakeContextProvider>(this->lifetime);
         client_context_provider = client_context_owner.get();
-        auto client_direct_owner = std::make_unique<FakeDirectConnector>();
+        auto client_direct_owner = std::make_unique<FakeDirectConnector>(this->lifetime);
         client_direct_connector = client_direct_owner.get();
-        auto client_queue_owner = std::make_unique<FakeCallbackQueue>();
+        auto client_queue_owner = std::make_unique<FakeCallbackQueue>(this->lifetime);
         client_callback_queue = client_queue_owner.get();
-        auto server_scheduler_owner = std::make_unique<FakeCallbackScheduler>(identity + 2u);
+        auto server_scheduler_owner = std::make_unique<FakeCallbackScheduler>(identity + 2u, this->lifetime);
         server_scheduler = server_scheduler_owner.get();
-        auto server_context_owner = std::make_unique<FakeContextProvider>();
+        auto server_context_owner = std::make_unique<FakeContextProvider>(this->lifetime);
         server_context_provider = server_context_owner.get();
-        auto server_direct_owner = std::make_unique<FakeDirectConnector>();
+        auto server_direct_owner = std::make_unique<FakeDirectConnector>(this->lifetime);
         server_direct_connector = server_direct_owner.get();
-        auto server_queue_owner = std::make_unique<FakeCallbackQueue>();
+        auto server_queue_owner = std::make_unique<FakeCallbackQueue>(this->lifetime);
         server_callback_queue = server_queue_owner.get();
 
         root = std::make_unique<gbe::dota::CompositionRoot>(
@@ -261,6 +347,56 @@ void test_offline_fake_assemblies_are_isolated()
     expect_true(second.client_scheduler->identity == 401u, "second offline fake owns its callback scheduler identity");
 }
 
+void test_delayed_work_expires_with_root_dependencies()
+{
+    auto lifetime = std::make_shared<LifetimeState>();
+    std::vector<std::function<void()>> delayed_work;
+    std::vector<std::function<void()>> callbacks;
+    {
+        Fixture fixture(500u, lifetime);
+        expect_true(lifetime->live_dependencies == 9, "root owns all lifecycle-tested dependencies");
+        std::weak_ptr<LifetimeState> weak_lifetime = lifetime;
+        delayed_work.emplace_back([weak_lifetime]() {
+            if (auto state = weak_lifetime.lock(); state && state->live_dependencies > 0)
+                ++state->delayed_effects;
+        });
+        callbacks.emplace_back([weak_lifetime]() {
+            if (auto state = weak_lifetime.lock(); state && state->live_dependencies > 0)
+                ++state->callbacks;
+        });
+    }
+
+    expect_true(lifetime->live_dependencies == 0, "root destruction releases every owned dependency");
+    expect_true(lifetime->destroyed_dependencies == 9, "every owned dependency is destroyed exactly once");
+    delayed_work.front()();
+    callbacks.front()();
+    expect_true(lifetime->delayed_effects == 0, "delayed work becomes inert after dependency destruction");
+    expect_true(lifetime->callbacks == 0, "callback becomes inert after dependency destruction");
+}
+
+void test_recreated_root_starts_without_previous_state()
+{
+    {
+        Fixture first(600u);
+        GBE_SharedDotaLobbyState state;
+        state.valid = true;
+        state.generation = 61u;
+        state.lobby_id = 601u;
+        first.root->lobby_store().publish(state);
+        configure_reconnect_context(*first.client_context_provider, 62u);
+        execute_reconnect(first.root->client());
+        expect_true(first.client_callback_queue->calls == 1, "first root records callback activity before destruction");
+    }
+
+    Fixture second(700u);
+    const auto snapshot = second.root->lobby_store().snapshot();
+    expect_true(!snapshot.valid, "recreated root starts with empty lobby state");
+    expect_true(second.client_context_provider->get_context_calls == 0, "recreated root starts with unused reconnect context");
+    expect_true(second.client_direct_connector->calls == 0, "recreated root starts with unused direct connector");
+    expect_true(second.client_callback_queue->calls == 0, "recreated root starts with an empty callback queue history");
+    expect_true(second.client_callback_queue->last_generation == 0u, "recreated root does not inherit callback generation");
+}
+
 } // namespace
 
 int main()
@@ -272,6 +408,8 @@ int main()
     test_client_assembly_uses_client_dependencies_only();
     test_gameserver_assembly_uses_gameserver_dependencies_only();
     test_offline_fake_assemblies_are_isolated();
+    test_delayed_work_expires_with_root_dependencies();
+    test_recreated_root_starts_without_previous_state();
 
     if (failures != 0) {
         std::fprintf(stderr, "gbe_dota_composition_root_test failed: %d\n", failures);
