@@ -159,10 +159,11 @@
   - [x] 7.5 增加 generation 生命周期测试
     - 覆盖快速退房重进、相同 lobby ID 复用、异步回调晚到、旧延迟任务和状态重置。
     - 实现：handler smoke 通过真实 `Join -> Leave -> same-ID Join` 验证 generation `1 -> 2 -> 3` 严格变化，并拒绝首次 Join 捕获的 delayed runtime update；callsystem guard 覆盖已注册与晚注册 callback；既有 postgame、delayed runtime 和 reset 测试覆盖旧任务拒绝与新 generation 保留。
-  - [ ] 7.6 增加 generation 属性测试
+  - [x] 7.6 增加 generation 属性测试
     - 属性 P6-A：新大厅生命周期 generation 严格变化。
     - 属性 P6-B：旧 generation action 永远不能修改当前 lobby state。
     - 属性 P6-C：generation 变化清除所有代际内去重记录。
+    - 实现：P6-A 对 64 条序列各执行 32 次混合 Create/Join/Leave/Reset/Recover boundary，断言每次严格加一；P6-B 对 64 个同 lobby ID 场景推进不同 boundary 后投递旧 runtime action，断言状态与 incoming queue 不变；P6-C 对 64 组 serialized connection state 断言 generation 变化清除 retry、payload、server、direct-connect 和 callback 去重状态。
   - [ ] 7.7 检查点：确保所有测试通过，如有疑问请询问用户
 
 - [ ] 8. P7 收敛全局大厅共享状态访问

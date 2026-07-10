@@ -595,6 +595,37 @@ bool test_lobby_generation_allocation_rules()
     return ok;
 }
 
+bool test_lobby_generation_properties()
+{
+    using gbe::dota_lobby_generation::Boundary;
+    using gbe::dota_lobby_generation::Counter;
+    using gbe::dota_lobby_generation::Generation;
+
+    const Boundary boundaries[] = {
+        Boundary::Create,
+        Boundary::Join,
+        Boundary::Leave,
+        Boundary::Reset,
+        Boundary::Recover,
+    };
+    bool ok = true;
+    for (std::uint64_t seed = 1u; seed <= 64u; ++seed) {
+        Counter counter(Generation{seed * 1024u});
+        for (std::uint64_t step = 0u; step < 32u; ++step) {
+            const Generation previous = counter.current();
+            const Boundary boundary = boundaries[(seed + step) % 5u];
+            const auto result = counter.advance(boundary);
+            ok &= expect_true(result.advanced, "P6-A lifecycle generation advances before exhaustion");
+            ok &= expect_eq_u64(result.previous.value, previous.value, "P6-A advance reports the prior generation");
+            ok &= expect_eq_u64(result.current.value, previous.value + 1u, "P6-A new lifecycle generation changes strictly by one");
+            ok &= expect_true(
+                gbe::dota_lobby_generation::is_newer(result.current, result.previous),
+                "P6-A new lifecycle generation is strictly newer");
+        }
+    }
+    return ok;
+}
+
 // ---- Category 2: stale generic lobby state regression ----------------------
 
 bool test_stale_generic_lobby_state_regression()
@@ -1656,6 +1687,35 @@ bool test_serialized_connection_state_scopes_dedup_to_generation()
     return ok;
 }
 
+bool test_generation_change_clears_connection_dedup_properties()
+{
+    bool ok = true;
+    for (std::uint64_t seed = 1u; seed <= 64u; ++seed) {
+        const std::uint64_t lobby_id = 1000u + seed;
+        const std::uint64_t server_id = 2000u + seed;
+        const std::string endpoint = "10.20.30." + std::to_string(seed) + ":27015";
+        GBE_DotaSerializedConnectionState state{};
+        state.begin_lobby(lobby_id, seed);
+        state.begin_server(server_id);
+        state.retry_count = static_cast<std::uint32_t>(seed);
+        state.last_post_size = static_cast<std::uint32_t>(seed * 17u);
+        state.record_direct_connect(server_id, endpoint);
+        state.record_engine_callback(server_id, endpoint);
+
+        state.begin_lobby(lobby_id, seed + 1u);
+
+        ok &= expect_eq_u64(state.generation, seed + 1u, "P6-C generation change stores the new generation");
+        ok &= expect_eq_u64(state.last_post_server_id, 0u, "P6-C generation change clears posted server state");
+        ok &= expect_eq_u32(state.retry_count, 0u, "P6-C generation change clears retry state");
+        ok &= expect_eq_u32(state.last_post_size, 0u, "P6-C generation change clears payload size state");
+        ok &= expect_true(state.callback_key == gbe::dota_connection::DedupKey{}, "P6-C generation change clears callback dedup state");
+        ok &= expect_true(state.direct_connect_key == gbe::dota_connection::DedupKey{}, "P6-C generation change clears direct-connect dedup state");
+        ok &= expect_true(state.should_connect_direct(server_id, endpoint), "P6-C new generation restores direct-connect opportunity");
+        ok &= expect_false(state.engine_callback_queued(server_id, endpoint), "P6-C new generation restores callback opportunity");
+    }
+    return ok;
+}
+
 } // namespace
 
 int main()
@@ -1666,6 +1726,7 @@ int main()
     ok &= test_launch_lifecycle_action_sequence();
     ok &= test_lifecycle_action_properties();
     ok &= test_lobby_generation_allocation_rules();
+    ok &= test_lobby_generation_properties();
     ok &= test_stale_generic_lobby_state_regression();
     ok &= test_owner_disconnect_and_reconnect();
     ok &= test_reconnect_eligibility_decision();
@@ -1677,6 +1738,7 @@ int main()
     ok &= test_postgame_observation_decision();
     ok &= test_active_lobby_owned_by_local_user();
     ok &= test_serialized_connection_state_scopes_dedup_to_generation();
+    ok &= test_generation_change_clears_connection_dedup_properties();
 
     if (!ok)
         return 1;

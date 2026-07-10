@@ -1663,6 +1663,50 @@ static void test_lobby_stale_delayed_runtime_task_is_rejected()
     ++g_tests_passed;
 }
 
+static void test_lobby_stale_generation_action_property()
+{
+    const gbe::dota_lobby_generation::Boundary boundaries[] = {
+        gbe::dota_lobby_generation::Boundary::Create,
+        gbe::dota_lobby_generation::Boundary::Join,
+        gbe::dota_lobby_generation::Boundary::Leave,
+        gbe::dota_lobby_generation::Boundary::Reset,
+        gbe::dota_lobby_generation::Boundary::Recover,
+    };
+    TestFixture tf;
+    for (uint64 seed = 1u; seed <= 64u; ++seed) {
+        tf.reset();
+        tf.gc.GBE_local_lobby.active = true;
+        tf.gc.GBE_local_lobby.lobby_id = 0x6000u + seed;
+        tf.gc.GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Create, "P6_B_capture");
+        tf.gc.GBE_local_lobby.generation = tf.gc.GBE_CurrentDotaLobbyGeneration();
+        tf.gc.push_incoming(
+            GBE_kDotaPracticeLobbyDetailsUpdate | Steam_Game_Coordinator::protobuf_mask,
+            "P6_B_stale_runtime",
+            0.1,
+            true,
+            static_cast<uint32>(seed % 5u + 1u),
+            static_cast<uint32>(seed % 9u + 1u));
+
+        const auto boundary = boundaries[seed % 5u];
+        tf.gc.GBE_AdvanceDotaLobbyGeneration(boundary, "P6_B_current");
+        tf.gc.GBE_local_lobby.generation = tf.gc.GBE_CurrentDotaLobbyGeneration();
+        tf.gc.GBE_local_lobby.state = static_cast<uint32>(100u + seed);
+        tf.gc.GBE_local_lobby.game_state = static_cast<uint32>(200u + seed);
+        const uint32 current_state = tf.gc.GBE_local_lobby.state;
+        const uint32 current_game_state = tf.gc.GBE_local_lobby.game_state;
+
+        const auto status = tf.gc.test_deliver_next_pending_message();
+        TEST_ASSERT(
+            status == Steam_Game_Coordinator::GBE_DotaDeferredTaskStatus::Stale,
+            "P6-B old generation action should always report stale");
+        TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.state, current_state, "P6-B stale action should never modify current lobby state");
+        TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, current_game_state, "P6-B stale action should never modify current game state");
+        TEST_ASSERT(tf.gc.incoming_messages.empty(), "P6-B stale action should never enter the incoming queue");
+    }
+
+    ++g_tests_passed;
+}
+
 static void test_lobby_reset_retains_new_generation()
 {
     TestFixture tf;
@@ -2962,6 +3006,9 @@ int main()
 
     std::printf("[run] test_lobby_stale_delayed_runtime_task_is_rejected\n");
     RUN_TEST(test_lobby_stale_delayed_runtime_task_is_rejected);
+
+    std::printf("[run] test_lobby_stale_generation_action_property\n");
+    RUN_TEST(test_lobby_stale_generation_action_property);
 
     std::printf("[run] test_lobby_reset_retains_new_generation\n");
     RUN_TEST(test_lobby_reset_retains_new_generation);
