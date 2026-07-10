@@ -456,9 +456,14 @@
     - Generation ownership：teardown transition 保持 generation 不变并仅产生 `LegacyTeardownActionsRequested`；既有 `GcMemoryReset` 或 `DotaLobbyRuntimeClear` action 继续作为每条 teardown 路径的唯一 generation advance owner，避免 leave/reset 双推进。
     - 顺序保持：既有 `25`、postgame `7010`、shared/runtime clear、generic lobby leave、settings clear 和 rich presence clear 顺序未变；executor 继续消费原 action lists。
     - 验证：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题，TSAN 无 race。
-  - [ ] 14.5 建立 transition table 完整性检查
+  - [x] 14.5 建立 transition table 完整性检查
     - 对每个 state/event 组合定义 accept、reject 或 ignore 结果。
     - 编译期或测试期检查未覆盖组合，防止隐式 default 行为。
+    - Canonical domain：`State::Count`、`EventKind::Count` 与 `all_states`、`all_event_kinds` 固定 8 个 lifecycle state 和 13 个 event，新增枚举值时必须同步进入 canonical 集合和 exhaustive switch。
+    - 分类契约：`TransitionDisposition` 将 `TransitionApplied` 分类为 accepted、`AlreadyInState` 分类为 ignored、`InvalidTransition` 分类为 rejected；每种分类同时检查 accepted flag、reason 和 effect presence。
+    - 完整性：`constexpr transition_table_complete()` 编译期遍历全部 104 个 state/event 组合，并由 `static_assert` 阻止遗漏或不一致结果进入构建。
+    - Focused test：固定当前 transition table 分布为 26 accepted、10 ignored、68 rejected，并断言总数为 104。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
   - [ ] 14.6 增加状态机示例测试
     - 覆盖正常 launch、load failure、重复 loading/loaded、乱序 loaded、postgame、leave、abandon 和 reconnect。
   - [ ] 14.7 增加状态机属性测试

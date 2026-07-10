@@ -85,6 +85,32 @@ int main()
 
     static_assert(static_cast<std::uint8_t>(lifecycle::State::Idle) == 0u);
     static_assert(static_cast<std::uint8_t>(lifecycle::State::PostGame) == 7u);
+    static_assert(lifecycle::all_states.size() == 8u);
+    static_assert(lifecycle::all_event_kinds.size() == 13u);
+    static_assert(lifecycle::transition_table_complete());
+
+    std::size_t accepted_pairs = 0u;
+    std::size_t rejected_pairs = 0u;
+    std::size_t ignored_pairs = 0u;
+    for (const lifecycle::State state : lifecycle::all_states) {
+        for (const lifecycle::EventKind kind : lifecycle::all_event_kinds) {
+            switch (lifecycle::transition_disposition(state, kind)) {
+                case lifecycle::TransitionDisposition::Accepted:
+                    ++accepted_pairs;
+                    break;
+                case lifecycle::TransitionDisposition::Rejected:
+                    ++rejected_pairs;
+                    break;
+                case lifecycle::TransitionDisposition::Ignored:
+                    ++ignored_pairs;
+                    break;
+            }
+        }
+    }
+    assert(accepted_pairs == 26u);
+    assert(rejected_pairs == 68u);
+    assert(ignored_pairs == 10u);
+    assert(accepted_pairs + rejected_pairs + ignored_pairs == 104u);
 
     assert_accepted(lifecycle::State::Idle, lifecycle::EventKind::Create, lifecycle::State::Created);
     assert_accepted(lifecycle::State::Idle, lifecycle::EventKind::Join, lifecycle::State::Joined);

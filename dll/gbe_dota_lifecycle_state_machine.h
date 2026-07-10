@@ -19,6 +19,7 @@ enum class State : std::uint8_t {
     Loaded,
     Running,
     PostGame,
+    Count,
 };
 
 enum class EventKind : std::uint8_t {
@@ -35,7 +36,35 @@ enum class EventKind : std::uint8_t {
     Recover,
     Reconnect,
     RuntimePoll,
+    Count,
 };
+
+inline constexpr std::array<State, static_cast<std::size_t>(State::Count)> all_states{{
+    State::Idle,
+    State::Created,
+    State::Joined,
+    State::Setup,
+    State::Loading,
+    State::Loaded,
+    State::Running,
+    State::PostGame,
+}};
+
+inline constexpr std::array<EventKind, static_cast<std::size_t>(EventKind::Count)> all_event_kinds{{
+    EventKind::Create,
+    EventKind::Join,
+    EventKind::Setup,
+    EventKind::Loading,
+    EventKind::Loaded,
+    EventKind::Run,
+    EventKind::PostGame,
+    EventKind::Leave,
+    EventKind::Abandon,
+    EventKind::Reset,
+    EventKind::Recover,
+    EventKind::Reconnect,
+    EventKind::RuntimePoll,
+}};
 
 enum class EventSource : std::uint8_t {
     Internal,
@@ -60,6 +89,12 @@ struct EventMapping {
 enum class DecisionStatus : std::uint8_t {
     Accepted,
     Rejected,
+};
+
+enum class TransitionDisposition : std::uint8_t {
+    Accepted,
+    Rejected,
+    Ignored,
 };
 
 enum class DecisionReason : std::uint8_t {
@@ -272,6 +307,8 @@ constexpr TransitionResult transition(State state, const Event &event)
         case EventKind::Reconnect:
         case EventKind::RuntimePoll:
             return rejected_transition(state, DecisionReason::InvalidTransition);
+        case EventKind::Count:
+            return rejected_transition(state, DecisionReason::InvalidTransition);
     }
 
     if (valid)
@@ -280,6 +317,46 @@ constexpr TransitionResult transition(State state, const Event &event)
         return rejected_transition(state, DecisionReason::AlreadyInState);
     return rejected_transition(state, DecisionReason::InvalidTransition);
 }
+
+constexpr TransitionDisposition transition_disposition(State state, EventKind kind)
+{
+    const TransitionResult result = transition(
+        state,
+        { kind, EventSource::Internal, 0u, 0u, 0u, 0u });
+    if (result.accepted())
+        return TransitionDisposition::Accepted;
+    if (result.reason == DecisionReason::AlreadyInState)
+        return TransitionDisposition::Ignored;
+    return TransitionDisposition::Rejected;
+}
+
+constexpr bool transition_table_complete()
+{
+    if (all_states.size() != static_cast<std::size_t>(State::Count) ||
+        all_event_kinds.size() != static_cast<std::size_t>(EventKind::Count))
+        return false;
+
+    for (const State state : all_states) {
+        for (const EventKind kind : all_event_kinds) {
+            const TransitionResult result = transition(
+                state,
+                { kind, EventSource::Internal, 0u, 0u, 0u, 0u });
+            const TransitionDisposition disposition = transition_disposition(state, kind);
+            if (disposition == TransitionDisposition::Accepted &&
+                (!result.accepted() || result.reason != DecisionReason::TransitionApplied || result.effects.empty()))
+                return false;
+            if (disposition == TransitionDisposition::Ignored &&
+                (result.accepted() || result.reason != DecisionReason::AlreadyInState || !result.effects.empty()))
+                return false;
+            if (disposition == TransitionDisposition::Rejected &&
+                (result.accepted() || result.reason != DecisionReason::InvalidTransition || !result.effects.empty()))
+                return false;
+        }
+    }
+    return true;
+}
+
+static_assert(transition_table_complete(), "lifecycle transition table must classify every state/event pair");
 
 constexpr bool advances_generation(EventKind kind)
 {
