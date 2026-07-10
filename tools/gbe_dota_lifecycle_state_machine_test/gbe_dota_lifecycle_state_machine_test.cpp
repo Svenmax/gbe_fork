@@ -196,6 +196,47 @@ int main()
     assert(exhausted_reset.reason == lifecycle::DecisionReason::GenerationExhausted);
     assert(exhausted_reset.state.lifecycle == lifecycle::State::PostGame);
 
+    lifecycle::MachineState poll_state{};
+    poll_state.lifecycle = lifecycle::State::Running;
+    poll_state.generation = 42u;
+    const lifecycle::MachineTransitionResult poll = lifecycle::transition_runtime_poll(
+        poll_state,
+        lifecycle::runtime_poll_event(42u, 7034u),
+        1u,
+        0u);
+    assert(poll.accepted());
+    assert(poll.state.lifecycle == poll_state.lifecycle);
+    assert(poll.state.generation == poll_state.generation);
+    assert(poll.effects.count == 1u);
+    assert(poll.effects.values[0].kind == lifecycle::EffectKind::PracticeLobbyDetailsRequested);
+
+    lifecycle::MachineState initial_poll_state{};
+    const lifecycle::MachineTransitionResult initial_poll = lifecycle::transition_runtime_poll(
+        initial_poll_state,
+        lifecycle::runtime_poll_event(0u, 7034u),
+        1u,
+        0u);
+    assert(initial_poll.accepted());
+    assert(initial_poll.effects.count == 1u);
+
+    const lifecycle::MachineTransitionResult terminal_poll = lifecycle::transition_runtime_poll(
+        poll_state,
+        lifecycle::runtime_poll_event(42u, 7034u),
+        2u,
+        10u);
+    assert(!terminal_poll.accepted());
+    assert(terminal_poll.reason == lifecycle::DecisionReason::TerminalState);
+    assert(terminal_poll.effects.empty());
+
+    const lifecycle::MachineTransitionResult stale_poll = lifecycle::transition_runtime_poll(
+        poll_state,
+        lifecycle::runtime_poll_event(41u, 7034u),
+        1u,
+        0u);
+    assert(!stale_poll.accepted());
+    assert(stale_poll.reason == lifecycle::DecisionReason::StaleGeneration);
+    assert(stale_poll.effects.empty());
+
     std::cout << "gbe_dota_lifecycle_state_machine_test passed\n";
     return 0;
 }

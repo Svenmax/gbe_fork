@@ -2965,6 +2965,32 @@ static void test_match_7034_launch_poll_records_details_update_before_response()
     ++g_tests_passed;
 }
 
+static void test_match_7034_terminal_launch_poll_skips_details_update()
+{
+    TestFixture tf;
+    tf.reset();
+
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7034F0u;
+    tf.gc.GBE_local_lobby.match_id = 0x7034F1u;
+    tf.gc.GBE_local_lobby.server_id = 0x7034F2u;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 10u;
+    tf.gc.GBE_local_lobby.launch_phase = GBE_kDotaLaunchPhaseLoaded;
+
+    std::string body;
+    const bool result = tf.gc.GBE_HandleDotaDirect7034Request(
+        7034u,
+        reinterpret_cast<const uint8 *>(body.data()), body.size(), false, 0u);
+
+    TEST_ASSERT(result, "terminal 7034 launch poll handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 0u, "terminal launch poll should skip details update");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "terminal launch poll should still emit 7034 response");
+    expect_push_payload(tf.recorder.actions[0], 7034u, "terminal launch poll should preserve response");
+
+    ++g_tests_passed;
+}
+
 // =====================================================================
 // Main
 // =====================================================================
@@ -3203,6 +3229,9 @@ int main()
 
     std::printf("[run] test_match_7034_launch_poll_records_details_update_before_response\n");
     RUN_TEST(test_match_7034_launch_poll_records_details_update_before_response);
+
+    std::printf("[run] test_match_7034_terminal_launch_poll_skips_details_update\n");
+    RUN_TEST(test_match_7034_terminal_launch_poll_skips_details_update);
 
     std::printf("\n=== Results: %d passed, %d failed, %d total ===\n",
                 g_tests_passed, g_tests_failed, g_tests_run);

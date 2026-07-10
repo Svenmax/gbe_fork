@@ -33,6 +33,7 @@
 #include "gbe_dota_request_router.h"
 #include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lifecycle_state_machine.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_shared.h"
@@ -750,13 +751,23 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034LaunchPoll(
     uint64 source_job,
     bool &queued_runtime_lobby_update)
 {
-    const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision launch_poll =
-        gbe::dota_lobby_state::compute_launch_poll_transition(
-            GBE_local_lobby,
-            "7034_launch_poll");
-    if (!launch_poll.send_details_update)
+    const uint64 generation = GBE_CurrentDotaLobbyGeneration();
+    gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+    machine_state.generation = generation;
+    const gbe::dota_lifecycle_state_machine::MachineTransitionResult transition =
+        gbe::dota_lifecycle_state_machine::transition_runtime_poll(
+            machine_state,
+            gbe::dota_lifecycle_state_machine::runtime_poll_event(generation, request_emsg),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state);
+    if (!transition.accepted() || transition.effects.count != 1u ||
+        transition.effects.values[0].kind !=
+            gbe::dota_lifecycle_state_machine::EffectKind::PracticeLobbyDetailsRequested)
         return;
 
+    gbe::dota_lobby_state::LaunchLifecycleTransitionDecision launch_poll{};
+    launch_poll.send_details_update = true;
+    launch_poll.reason = "7034_launch_poll";
     gbe::dota_lifecycle::TransitionEffects effects;
     effects.transition = launch_poll;
     if (GBE_ExecuteDotaLifecycleActions(gbe::dota_lifecycle::build_transition_actions(effects)).details_update_sent) {

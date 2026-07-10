@@ -34,6 +34,7 @@ enum class EventKind : std::uint8_t {
     Reset,
     Recover,
     Reconnect,
+    RuntimePoll,
 };
 
 enum class EventSource : std::uint8_t {
@@ -69,12 +70,14 @@ enum class DecisionReason : std::uint8_t {
     GenerationExhausted,
     ReconnectQueued,
     ReconnectAlreadyQueued,
+    TerminalState,
 };
 
 enum class EffectKind : std::uint8_t {
     StateChanged,
     GenerationAdvanced,
     ReconnectQueued,
+    PracticeLobbyDetailsRequested,
 };
 
 struct Effect {
@@ -188,6 +191,11 @@ constexpr Event reconnect_event(
     return { EventKind::Reconnect, EventSource::Internal, 0u, generation, server_id, endpoint_key };
 }
 
+constexpr Event runtime_poll_event(std::uint64_t generation, std::uint32_t message_id)
+{
+    return { EventKind::RuntimePoll, EventSource::Direct, message_id, generation, 0u, 0u };
+}
+
 constexpr TransitionResult accepted_transition(State from, State to)
 {
     return {
@@ -248,6 +256,7 @@ constexpr TransitionResult transition(State state, const Event &event)
             break;
         case EventKind::Recover:
         case EventKind::Reconnect:
+        case EventKind::RuntimePoll:
             return rejected_transition(state, DecisionReason::InvalidTransition);
     }
 
@@ -336,6 +345,31 @@ constexpr MachineTransitionResult transition(MachineState state, const Event &ev
     }
 
     return { state, effects, DecisionReason::TransitionApplied, DecisionStatus::Accepted };
+}
+
+constexpr MachineTransitionResult transition_runtime_poll(
+    MachineState state,
+    const Event &event,
+    std::uint32_t legacy_lobby_state,
+    std::uint32_t legacy_game_state)
+{
+    if (event.kind != EventKind::RuntimePoll)
+        return rejected_machine_transition(state, DecisionReason::InvalidTransition);
+    if (event.generation != 0u && event.generation != state.generation)
+        return rejected_machine_transition(state, DecisionReason::StaleGeneration);
+    if (legacy_lobby_state == 2u && legacy_game_state == 10u)
+        return rejected_machine_transition(state, DecisionReason::TerminalState);
+
+    return {
+        state,
+        { { Effect{
+            EffectKind::PracticeLobbyDetailsRequested,
+            state.lifecycle,
+            state.lifecycle,
+            state.generation } }, 1u },
+        DecisionReason::TransitionApplied,
+        DecisionStatus::Accepted,
+    };
 }
 
 } // namespace gbe::dota_lifecycle_state_machine
