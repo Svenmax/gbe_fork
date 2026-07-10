@@ -6,12 +6,34 @@
 
 #include <cstdint>
 
+class Steam_Game_Coordinator;
+
 namespace gbe::dota_lifecycle {
+
+enum class PushRoute {
+    Immediate,
+    DotaResponse,
+    CacheUnsubscribedResponse,
+};
+
+struct ExecutionOptions {
+    bool wrapped{};
+    const std::string *outer_session_field_raw{};
+    PushRoute push_route{ PushRoute::Immediate };
+    const char *push_reason_override{};
+    bool abort_on_push_failure{};
+    Steam_Game_Coordinator *client_target{};
+    const GBE_LocalLobby *client_lobby_restore{};
+    bool mirror_launch_peripheral_to_client_target{};
+    bool route_rich_presence_to_client_target{};
+    bool route_push_to_client_target{};
+};
 
 struct ExecutionResult {
     bool runtime_update_queued{};
     bool state_changed{};
     bool details_update_sent{};
+    bool succeeded{ true };
 };
 
 struct TransitionEffects {

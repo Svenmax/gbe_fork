@@ -1609,7 +1609,9 @@ public:
     bool GBE_HandleDotaCustomGameStartedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaCustomGameFinishedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaWrappedCustomGameLifecycleRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
-    gbe::dota_lifecycle::ExecutionResult GBE_ExecuteDotaLifecycleActions(const GBE_DotaActionList &actions, bool wrapped = false, const std::string *outer_session_field_raw = nullptr);
+    gbe::dota_lifecycle::ExecutionResult GBE_ExecuteDotaLifecycleActions(
+        const GBE_DotaActionList &actions,
+        const gbe::dota_lifecycle::ExecutionOptions &options = {});
     bool GBE_ExecuteDotaCustomGameLifecycleTransition(const gbe::dota_custom_game_lifecycle::ExecutionContext &context);
 
     // Other handlers declared in the real header but not defined in the

@@ -3,14 +3,15 @@
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
 #include "gbe_dota_custom_game_lifecycle.h"
+#include "gbe_dota_protocol_constants.h"
 
 gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLifecycleActions(
     const GBE_DotaActionList &actions,
-    bool wrapped,
-    const std::string *outer_session_field_raw)
+    const gbe::dota_lifecycle::ExecutionOptions &options)
 {
     gbe::dota_lifecycle::ExecutionResult result;
     bool previous_action_succeeded = true;
+    bool abort_execution = false;
     for (const GBE_DotaAction &action : actions) {
         if (action.only_when_previous_action_succeeded && !previous_action_succeeded)
             continue;
@@ -52,13 +53,97 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
                 break;
             case GBE_DotaActionType::PracticeLobbyDetailsUpdate:
                 result.details_update_sent = GBE_SendDotaPracticeLobbyDetailsUpdate(
-                    wrapped,
-                    outer_session_field_raw,
+                    options.wrapped,
+                    options.outer_session_field_raw,
                     action.reason.c_str());
                 previous_action_succeeded = result.details_update_sent;
                 break;
+            case GBE_DotaActionType::LaunchMessagesDiscardedForAbandon:
+                GBE_DiscardQueuedDotaLaunchMessagesForAbandon(action.reason.c_str());
+                break;
+            case GBE_DotaActionType::PendingResetAfterCacheUnsubscribed:
+                GBE_SetPendingResetAfterCacheUnsubscribed(action.item_id);
+                break;
+            case GBE_DotaActionType::PendingResetAfterCacheUnsubscribedClear:
+                GBE_ClearPendingResetAfterCacheUnsubscribed(action.item_id);
+                break;
+            case GBE_DotaActionType::PendingNormalSignoutFinalizeAfterCacheUnsubscribed:
+                GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(action.item_id);
+                break;
+            case GBE_DotaActionType::AbandonedLobbySuppressed:
+                GBE_MarkDotaAbandonedLobbySuppressed(action.item_id, action.reason.c_str());
+                break;
+            case GBE_DotaActionType::GcMemoryReset:
+                ResetGCMemory(action.reason.c_str(), action.leave_generic_lobby, action.clear_queued_messages);
+                break;
+            case GBE_DotaActionType::SettingsLobbyClear:
+                GBE_ClearSettingsLobbyForDotaSignout();
+                break;
+            case GBE_DotaActionType::LaunchPeripheralReset:
+                if (options.mirror_launch_peripheral_to_client_target &&
+                    options.client_target &&
+                    options.client_target != this &&
+                    !options.client_target->is_server) {
+                    options.client_target->GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+                    if (options.client_lobby_restore && options.client_lobby_restore->active && options.client_lobby_restore->lobby_id != 0)
+                        options.client_target->GBE_local_lobby = *options.client_lobby_restore;
+                    options.client_target->GBE_ClearLastDotaLaunchStatePushedGameState();
+                }
+                GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+                break;
+            case GBE_DotaActionType::DotaLobbyRuntimeClear:
+                GBE_ClearDotaLobbyRuntimeState();
+                break;
+            case GBE_DotaActionType::RichPresenceClear: {
+                Steam_Game_Coordinator *target = options.route_rich_presence_to_client_target
+                    ? options.client_target
+                    : this;
+                if (target && target->gc_profile == GC_PROFILE_DOTA2)
+                    target->GBE_ClearDotaPracticeLobbyLaunchRichPresence();
+                break;
+            }
+            case GBE_DotaActionType::PushIncomingNow: {
+                Steam_Game_Coordinator *target = options.route_push_to_client_target
+                    ? options.client_target
+                    : this;
+                if (!target || target->gc_profile != GC_PROFILE_DOTA2) {
+                    previous_action_succeeded = false;
+                    abort_execution = true;
+                    break;
+                }
+                const char *push_reason = options.push_reason_override
+                    ? options.push_reason_override
+                    : action.reason.c_str();
+                switch (options.push_route) {
+                    case gbe::dota_lifecycle::PushRoute::Immediate:
+                        target->push_incoming_now(action.emsg, action.payload);
+                        break;
+                    case gbe::dota_lifecycle::PushRoute::DotaResponse:
+                        previous_action_succeeded = target->GBE_PushDotaResponse(
+                            action.emsg & ~GBE_kProtoMask,
+                            action.payload,
+                            options.wrapped,
+                            options.outer_session_field_raw,
+                            push_reason);
+                        abort_execution = options.abort_on_push_failure && !previous_action_succeeded;
+                        break;
+                    case gbe::dota_lifecycle::PushRoute::CacheUnsubscribedResponse:
+                        previous_action_succeeded = target->GBE_PushDotaCacheUnsubscribedResponse(
+                            action.payload,
+                            options.wrapped,
+                            options.outer_session_field_raw,
+                            push_reason);
+                        abort_execution = options.abort_on_push_failure && !previous_action_succeeded;
+                        break;
+                }
+                break;
+            }
             default:
                 break;
+        }
+        if (abort_execution) {
+            result.succeeded = false;
+            break;
         }
     }
     return result;
@@ -77,8 +162,10 @@ bool Steam_Game_Coordinator::GBE_ExecuteDotaCustomGameLifecycleTransition(
     effects.publish_local_member_data = context.publish_local_member_data;
     effects.fallback_publish_on_runtime_update_failure = context.transition.queue_runtime_lobby_update;
 
+    gbe::dota_lifecycle::ExecutionOptions options;
+    options.wrapped = context.wrapped;
+    options.outer_session_field_raw = context.outer_session_field_raw;
     return GBE_ExecuteDotaLifecycleActions(
         gbe::dota_lifecycle::build_transition_actions(effects),
-        context.wrapped,
-        context.outer_session_field_raw).runtime_update_queued;
+        options).runtime_update_queued;
 }

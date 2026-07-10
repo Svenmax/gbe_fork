@@ -603,19 +603,13 @@ bool Steam_Game_Coordinator::GBE_QueueDotaPostGameTeardown(const char *reason, b
         push_cache_unsubscribed,
         push_postgame_join,
         reason ? reason : "postgame_teardown");
-    for (const GBE_DotaAction &action : postgame_actions) {
-        switch (action.type) {
-            case GBE_DotaActionType::PushIncomingNow:
-                if (!GBE_PushDotaResponse(action.emsg & ~GBE_kProtoMask, action.payload, wrapped, outer_session_field_raw, action.reason.c_str()))
-                    return false;
-                break;
-            case GBE_DotaActionType::PendingResetAfterCacheUnsubscribedClear:
-                GBE_ClearPendingResetAfterCacheUnsubscribed(action.item_id);
-                break;
-            default:
-                break;
-        }
-    }
+    gbe::dota_lifecycle::ExecutionOptions postgame_options;
+    postgame_options.wrapped = wrapped;
+    postgame_options.outer_session_field_raw = outer_session_field_raw;
+    postgame_options.push_route = gbe::dota_lifecycle::PushRoute::DotaResponse;
+    postgame_options.abort_on_push_failure = true;
+    if (!GBE_ExecuteDotaLifecycleActions(postgame_actions, postgame_options).succeeded)
+        return false;
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Queued postgame teardown cache_unsub=%u postgame_join=%u; deferring reset until 7272/7014 LobbyID=%llu pre_channel=%llu post_channel=%llu reason=%s",
