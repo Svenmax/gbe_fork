@@ -62,6 +62,8 @@
 #include "steam_gameserverstats.h"
 #include "steam_gameserver_items.h"
 
+class GBE_DotaReconnectNetworkAdapter;
+
 #include "overlay/steam_overlay.h"
 #include "playtime.h"
 #include "callback_wrapper.h"
@@ -198,6 +200,9 @@ public:
     bool using_old_callbacks{};
 
     int client_user_ref_count{};
+
+    GBE_DotaReconnectNetworkAdapter *dota_reconnect_adapter_client{};
+    GBE_DotaReconnectNetworkAdapter *dota_reconnect_adapter_server{};
 
     template <class T>
     class Reusable_Numbers {

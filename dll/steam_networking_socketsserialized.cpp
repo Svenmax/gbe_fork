@@ -421,24 +421,6 @@ void Steam_Networking_Sockets_Serialized::steam_run_every_runcb(void *object)
     steam_networkingsockets->RunCallbacks();
 }
 
-Steam_Networking_Sockets_Serialized::Steam_Networking_Sockets_Serialized(class Settings *settings, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, class Steam_Networking_Sockets *direct_sockets)
-    : production_reconnect_adapter(callbacks, direct_sockets)
-{
-    this->settings = settings;
-    this->network = network;
-    this->callback_results = callback_results;
-    this->callbacks = callbacks;
-    this->run_every_runcb = run_every_runcb;
-    this->reconnect_context_provider = &production_reconnect_adapter;
-    this->reconnect_direct_connector = &production_reconnect_adapter;
-    this->reconnect_callback_queue = &production_reconnect_adapter;
-
-    this->network->setCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
-    this->network->setCallback(CALLBACK_ID_NETWORKING_SOCKETS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
-    this->run_every_runcb->add(&Steam_Networking_Sockets_Serialized::steam_run_every_runcb, this);
-
-}
-
 Steam_Networking_Sockets_Serialized::Steam_Networking_Sockets_Serialized(
     class Settings *settings,
     class Networking *network,
@@ -448,7 +430,6 @@ Steam_Networking_Sockets_Serialized::Steam_Networking_Sockets_Serialized(
     GBE_DotaReconnectContextProvider *context_provider,
     GBE_DotaReconnectDirectConnector *direct_connector,
     GBE_DotaReconnectCallbackQueue *callback_queue)
-    : production_reconnect_adapter(nullptr, nullptr)
 {
     this->settings = settings;
     this->network = network;

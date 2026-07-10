@@ -104,9 +104,11 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
     Steam_Client::Steam_Client()
     {
         steam_networking_sockets = new Steam_Networking_Sockets();
+        dota_reconnect_adapter_client = new GBE_DotaReconnectNetworkAdapter();
         steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized();
         steam_game_coordinator = new Steam_Game_Coordinator();
         steam_gameserver_networking_sockets = new Steam_Networking_Sockets();
+        dota_reconnect_adapter_server = new GBE_DotaReconnectNetworkAdapter();
         steam_gameserver_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized();
         steam_gameserver_game_coordinator = new Steam_Game_Coordinator();
     }
@@ -114,9 +116,11 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
     {
         DEL_INST(steam_gameserver_game_coordinator);
         DEL_INST(steam_gameserver_networking_sockets_serialized);
+        DEL_INST(dota_reconnect_adapter_server);
         DEL_INST(steam_gameserver_networking_sockets);
         DEL_INST(steam_game_coordinator);
         DEL_INST(steam_networking_sockets_serialized);
+        DEL_INST(dota_reconnect_adapter_client);
         DEL_INST(steam_networking_sockets);
     }
     """
@@ -127,26 +131,30 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
     def test_rejects_coordinator_before_services(self):
         source = self.STEAM_CLIENT.replace(
             "        steam_networking_sockets = new Steam_Networking_Sockets();\n"
+            "        dota_reconnect_adapter_client = new GBE_DotaReconnectNetworkAdapter();\n"
             "        steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized();\n"
             "        steam_game_coordinator = new Steam_Game_Coordinator();",
             "        steam_game_coordinator = new Steam_Game_Coordinator();\n"
             "        steam_networking_sockets = new Steam_Networking_Sockets();\n"
+            "        dota_reconnect_adapter_client = new GBE_DotaReconnectNetworkAdapter();\n"
             "        steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized();",
         )
         self.assertIn(
-            "steam_client.cpp: client GC construction must order direct sockets, serialized services, then coordinator",
+            "steam_client.cpp: client GC construction must order direct sockets, reconnect adapter, serialized services, then coordinator",
             audit.audit_composition_root_lifecycle(source),
         )
 
     def test_rejects_service_destroyed_before_coordinator(self):
         source = self.STEAM_CLIENT.replace(
             "        DEL_INST(steam_gameserver_game_coordinator);\n"
-            "        DEL_INST(steam_gameserver_networking_sockets_serialized);",
             "        DEL_INST(steam_gameserver_networking_sockets_serialized);\n"
+            "        DEL_INST(dota_reconnect_adapter_server);",
+            "        DEL_INST(steam_gameserver_networking_sockets_serialized);\n"
+            "        DEL_INST(dota_reconnect_adapter_server);\n"
             "        DEL_INST(steam_gameserver_game_coordinator);",
         )
         self.assertIn(
-            "steam_client.cpp: gameserver GC destruction must order coordinator, serialized services, then direct sockets",
+            "steam_client.cpp: gameserver GC destruction must order coordinator, serialized services, reconnect adapter, then direct sockets",
             audit.audit_composition_root_lifecycle(source),
         )
 

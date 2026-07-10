@@ -19,7 +19,7 @@
 #define __INCLUDED_STEAM_NETWORKING_SOCKETSERIALIZED_H__
 
 #include "base.h"
-#include "gbe_dota_reconnect_network_adapter.h"
+#include "gbe_dota_reconnect_network.h"
 #include "gbe_dota_serialized_connection_state.h"
 
 class Steam_Networking_Sockets_Serialized :
@@ -36,7 +36,6 @@ public ISteamNetworkingSocketsSerialized005
     GBE_DotaReconnectContextProvider *reconnect_context_provider{};
     GBE_DotaReconnectDirectConnector *reconnect_direct_connector{};
     GBE_DotaReconnectCallbackQueue *reconnect_callback_queue{};
-    GBE_DotaReconnectNetworkAdapter production_reconnect_adapter;
     GBE_DotaSerializedConnectionSynchronizer dota_connection_synchronizer;
     GBE_DotaSerializedConnectionState dota_connection_state{};
 
@@ -44,7 +43,6 @@ public ISteamNetworkingSocketsSerialized005
     static void steam_run_every_runcb(void *object);
 
 public:
-    Steam_Networking_Sockets_Serialized(class Settings *settings, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, class Steam_Networking_Sockets *direct_sockets);
     Steam_Networking_Sockets_Serialized(
         class Settings *settings,
         class Networking *network,

@@ -18,6 +18,7 @@
 #include "dll/steam_client.h"
 #include "dll/settings_parser.h"
 #include "dll/dll.h"
+#include "dll/gbe_dota_reconnect_network_adapter.h"
 
 namespace {
 
@@ -142,7 +143,8 @@ Steam_Client::Steam_Client()
     steam_video = new Steam_Video();
     steam_parental = new Steam_Parental();
     steam_networking_sockets = new Steam_Networking_Sockets(settings_client, network, callback_results_client, callbacks_client, run_every_runcb, NULL);
-    steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_client, network, callback_results_client, callbacks_client, run_every_runcb, steam_networking_sockets);
+    dota_reconnect_adapter_client = new GBE_DotaReconnectNetworkAdapter(callbacks_client, steam_networking_sockets);
+    steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_client, network, callback_results_client, callbacks_client, run_every_runcb, dota_reconnect_adapter_client, dota_reconnect_adapter_client, dota_reconnect_adapter_client);
     steam_networking_messages = new Steam_Networking_Messages(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_game_coordinator = new Steam_Game_Coordinator(settings_client, network, local_storage, callbacks_client, run_every_runcb, GBE_GetSharedDotaLobbyStateStore(), false);
     steam_networking_utils = new Steam_Networking_Utils(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
@@ -170,7 +172,8 @@ Steam_Client::Steam_Client()
     steam_gameserver_ugc = new Steam_UGC(settings_server, ugc_bridge, local_storage, callback_results_server, callbacks_server);
     steam_gameserver_apps = new Steam_Apps(settings_server, callback_results_server, callbacks_server);
     steam_gameserver_networking_sockets = new Steam_Networking_Sockets(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, steam_networking_sockets->get_shared_between_client_server());
-    steam_gameserver_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, steam_gameserver_networking_sockets);
+    dota_reconnect_adapter_server = new GBE_DotaReconnectNetworkAdapter(callbacks_server, steam_gameserver_networking_sockets);
+    steam_gameserver_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, dota_reconnect_adapter_server, dota_reconnect_adapter_server, dota_reconnect_adapter_server);
     steam_gameserver_networking_messages = new Steam_Networking_Messages(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
     steam_gameserver_game_coordinator = new Steam_Game_Coordinator(settings_server, network, local_storage, callbacks_server, run_every_runcb, GBE_GetSharedDotaLobbyStateStore(), true);
     steam_masterserver_updater = new Steam_Masterserver_Updater(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, steam_gameserver);
@@ -214,6 +217,7 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_gameserver_apps);
     DEL_INST(steam_gameserver_game_coordinator);
     DEL_INST(steam_gameserver_networking_sockets_serialized);
+    DEL_INST(dota_reconnect_adapter_server);
     DEL_INST(steam_gameserver_networking_sockets);
     DEL_INST(steam_gameserver_networking_messages);
     DEL_INST(steam_masterserver_updater);
@@ -240,6 +244,7 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_parental);
     DEL_INST(steam_game_coordinator);
     DEL_INST(steam_networking_sockets_serialized);
+    DEL_INST(dota_reconnect_adapter_client);
     DEL_INST(steam_networking_sockets);
     DEL_INST(steam_networking_messages);
     DEL_INST(steam_networking_utils);

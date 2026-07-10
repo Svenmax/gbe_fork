@@ -875,33 +875,41 @@ def audit_composition_root_lifecycle(steam_client_text=None):
         (
             "client",
             "steam_networking_sockets = new Steam_Networking_Sockets(",
+            "dota_reconnect_adapter_client = new GBE_DotaReconnectNetworkAdapter(",
             "steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(",
             "steam_game_coordinator = new Steam_Game_Coordinator(",
             "DEL_INST(steam_game_coordinator);",
             "DEL_INST(steam_networking_sockets_serialized);",
+            "DEL_INST(dota_reconnect_adapter_client);",
             "DEL_INST(steam_networking_sockets);",
         ),
         (
             "gameserver",
             "steam_gameserver_networking_sockets = new Steam_Networking_Sockets(",
+            "dota_reconnect_adapter_server = new GBE_DotaReconnectNetworkAdapter(",
             "steam_gameserver_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(",
             "steam_gameserver_game_coordinator = new Steam_Game_Coordinator(",
             "DEL_INST(steam_gameserver_game_coordinator);",
             "DEL_INST(steam_gameserver_networking_sockets_serialized);",
+            "DEL_INST(dota_reconnect_adapter_server);",
             "DEL_INST(steam_gameserver_networking_sockets);",
         ),
     )
-    for role, direct_new, serialized_new, coordinator_new, coordinator_del, serialized_del, direct_del in roles:
-        construction = tuple(constructor_text.find(token) for token in (direct_new, serialized_new, coordinator_new))
-        if min(construction) < 0 or not construction[0] < construction[1] < construction[2]:
+    for role, direct_new, adapter_new, serialized_new, coordinator_new, coordinator_del, serialized_del, adapter_del, direct_del in roles:
+        construction = tuple(constructor_text.find(token) for token in (direct_new, adapter_new, serialized_new, coordinator_new))
+        if min(construction) < 0 or not construction[0] < construction[1] < construction[2] < construction[3]:
             issues.append(
-                f"steam_client.cpp: {role} GC construction must order direct sockets, serialized services, then coordinator"
+                f"steam_client.cpp: {role} GC construction must order direct sockets, reconnect adapter, serialized services, then coordinator"
             )
-        destruction = tuple(destructor_text.find(token) for token in (coordinator_del, serialized_del, direct_del))
-        if min(destruction) < 0 or not destruction[0] < destruction[1] < destruction[2]:
+        destruction = tuple(destructor_text.find(token) for token in (coordinator_del, serialized_del, adapter_del, direct_del))
+        if min(destruction) < 0 or not destruction[0] < destruction[1] < destruction[2] < destruction[3]:
             issues.append(
-                f"steam_client.cpp: {role} GC destruction must order coordinator, serialized services, then direct sockets"
+                f"steam_client.cpp: {role} GC destruction must order coordinator, serialized services, reconnect adapter, then direct sockets"
             )
+
+    serialized_header = read(os.path.join(ROOT_DIR, "dll", "dll", "steam_networking_socketsserialized.h"))
+    if "production_reconnect_adapter" in strip_comments(serialized_header):
+        issues.append("steam_networking_socketsserialized.h: serialized service owns a hidden production reconnect adapter")
     return issues
 
 
