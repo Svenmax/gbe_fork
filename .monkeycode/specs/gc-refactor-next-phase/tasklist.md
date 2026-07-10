@@ -265,9 +265,12 @@
     - 检查点：P10.1-P10.6 已完成，结构化 reconnect/lifecycle 事件、typed reason/source、固定字段格式、敏感字段排除和自动派生 inventory 审计均已落地。完整 GC 验证通过，未发现需要用户裁决的协议、日志或兼容性疑问。
 
 - [ ] 11. P11 明确并验证并发模型
-  - [ ] 11.1 标注状态线程所有权和锁边界
+  - [x] 11.1 标注状态线程所有权和锁边界
     - 为 lobby store、recent context、serialized state、callback queue 和 delayed tasks 定义 owner 与访问规则。
     - 依赖：任务 5、任务 7 和任务 8。
+    - 实现：新增 `docs/gc/concurrency-ownership.md`，明确 shared lobby store、recent reconnect context、per-instance serialized connection state、reconnect adapter probe cache、callback queue、delayed reconnect callback、per-coordinator delayed GC message 和 deferred lifecycle slot 的 owner、同步域、允许入口与异步 generation 校验。六个 owner 类型和共享接口增加 source-level 边界注释；当前 `global_mutex` 外层域、store 内部加锁、callback 解锁执行和 per-instance 状态约束均按现状记录，P11.2/P11.3 风险边界单独列出。
+    - 审计：新增 Audit 11，要求 14 项关键 owner、入口和后续边界持续存在；audit helper regression suite 增至 7 个测试。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 253/253，registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 11 项 0 问题。
   - [ ] 11.2 收敛锁获取顺序
     - 定义统一 lock order，消除持有全局锁时调用外部 callback/network API 的路径。
   - [ ] 11.3 将 serialized 实例状态限制在实例同步域

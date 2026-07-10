@@ -7,6 +7,8 @@
 #include <string>
 
 struct GBE_DotaSerializedConnectionState {
+    // Owned by one Steam_Networking_Sockets_Serialized instance. Access is
+    // serialized by that instance's PostConnectionStateMsg synchronization.
     std::uint64_t generation{};
     std::uint64_t lobby_id{};
     std::uint64_t last_post_server_id{};

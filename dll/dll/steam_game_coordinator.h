@@ -110,6 +110,8 @@ public ISteamGameCoordinator
         uint64 generation{};
     };
 
+    // Per-coordinator delayed message queue. Queue, drain, and lobby-state
+    // application run in the global_mutex-protected coordinator domain.
     std::vector<GC_Message> pending_messages;
     std::queue<GC_Message> incoming_messages;
     uint64 pending_message_sequence{};

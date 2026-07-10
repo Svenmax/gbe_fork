@@ -29,6 +29,8 @@ public:
     StoreUpdateResult compare_update(std::uint64_t expected_generation, const Mutator &mutator);
 
 private:
+    // Process-shared state. Every access is serialized by mutex_; mutators
+    // must remain local data transformations and must not call external APIs.
     Snapshot &state_;
     std::recursive_mutex &mutex_;
 };

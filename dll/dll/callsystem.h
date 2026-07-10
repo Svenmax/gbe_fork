@@ -95,6 +95,8 @@ struct Steam_Call_Result {
 };
 
 class SteamCallResults {
+    // Queue mutation and draining run in the Steam_Client callback domain,
+    // currently serialized by global_mutex. User callbacks execute unlocked.
     std::vector<struct Steam_Call_Result> callresults{};
     std::vector<class CCallbackBase *> completed_callbacks{};
     void (*cb_all)(std::vector<char> result, int callback) = nullptr;
@@ -150,6 +152,8 @@ struct Steam_Call_Back {
 };
 
 class SteamCallBacks {
+    // Registry and queued callback delivery share SteamCallResults ownership.
+    // Delayed callbacks retain copied payload and execution-guard context.
     std::map<int, struct Steam_Call_Back> callbacks{};
     SteamCallResults *results{};
 

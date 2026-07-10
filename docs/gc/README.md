@@ -18,3 +18,4 @@ These documents preserve the long-term maintenance guidance extracted from the G
 - `reason-trace-governance.md`: high-risk reason string inventory used by `tools/_audit_gc_refactor.py`.
 - `response-seam-status.md`: response helper matrix covering replaced call sites, recorder contracts, and direct-call stop conditions.
 - `dependency-ownership-map.md`: dependency ownership map for future facade extraction and Dota sub-object readiness checks.
+- `concurrency-ownership.md`: P11 state ownership, synchronization domains, asynchronous generation guards, and lock-boundary follow-ups.

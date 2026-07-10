@@ -29,6 +29,7 @@ TODO_MD = os.path.join(ROOT_DIR, "REFACTOR_TODO.md")
 RUN_GC_OFFLINE_TESTS_SH = os.path.join(ROOT_DIR, "tools", "run_gc_offline_tests.sh")
 PREMAKE5_LUA = os.path.join(ROOT_DIR, "premake5.lua")
 REASON_TRACE_GOVERNANCE_MD = os.path.join(ROOT_DIR, "docs", "gc", "reason-trace-governance.md")
+CONCURRENCY_OWNERSHIP_MD = os.path.join(ROOT_DIR, "docs", "gc", "concurrency-ownership.md")
 DIAGNOSTIC_EVENT_H = os.path.join(ROOT_DIR, "dll", "gbe_dota_diagnostic_event.h")
 DIAGNOSTIC_EVENT_TEST_CPP = os.path.join(
     ROOT_DIR,
@@ -139,6 +140,22 @@ HIGH_RISK_REASON_STRINGS = [
     "8053_load_failed",
 ]
 RETIRED_SHARED_LOBBY_GLOBAL = "GBE_shared_dota_lobby_state"
+CONCURRENCY_OWNERSHIP_TERMS = [
+    "Shared lobby store",
+    "Recent reconnect context",
+    "Serialized connection state",
+    "Callback queue",
+    "Delayed reconnect callback",
+    "Delayed GC message",
+    "Deferred lifecycle slot",
+    "GBE_GetSharedDotaLobbyStateStore()",
+    "GBE_GetRecentDotaReconnectContext()",
+    "Steam_Networking_Sockets_Serialized::PostConnectionStateMsg()",
+    "Steam_Client::RunCallbacks()",
+    "SteamCallResults::runCallResults()",
+    "P11.2",
+    "P11.3",
+]
 
 
 def read(path):
@@ -540,6 +557,19 @@ def audit_shared_lobby_global_access():
     return issues
 
 
+def audit_concurrency_ownership_contract():
+    """Keep the P11.1 state-owner and lock-boundary contract complete."""
+    if not os.path.exists(CONCURRENCY_OWNERSHIP_MD):
+        return ["concurrency-ownership.md: missing P11.1 ownership contract"]
+
+    contract_text = read(CONCURRENCY_OWNERSHIP_MD)
+    return [
+        f"concurrency-ownership.md: missing required boundary {term}"
+        for term in CONCURRENCY_OWNERSHIP_TERMS
+        if f"`{term}`" not in contract_text and term not in contract_text
+    ]
+
+
 def main():
     header_text = read(INTERNAL_H)
     real_decls = extract_header_symbols(header_text)
@@ -703,6 +733,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 11: Concurrency ownership contract")
+    print("=" * 70)
+    print("  Action: keep GC state owners, synchronization domains, and async boundaries explicit.")
+    concurrency_ownership_issues = audit_concurrency_ownership_contract()
+    if not concurrency_ownership_issues:
+        print(f"  All {len(CONCURRENCY_OWNERSHIP_TERMS)} required P11.1 ownership boundaries are documented")
+    else:
+        for issue in concurrency_ownership_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -718,8 +760,9 @@ def main():
     print(f"  High-risk reason inventory issues:   {len(reason_issues)}")
     print(f"  Lifecycle ownership issues:          {len(lifecycle_ownership_issues)}")
     print(f"  Shared lobby global access issues:   {len(shared_lobby_global_issues)}")
+    print(f"  Concurrency ownership issues:        {len(concurrency_ownership_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues:
         sys.exit(1)
 
 

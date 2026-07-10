@@ -76,5 +76,21 @@ class DiagnosticReasonInventoryAuditTest(unittest.TestCase):
         )
 
 
+class ConcurrencyOwnershipAuditTest(unittest.TestCase):
+    def test_contract_terms_cover_p11_state_and_follow_up_boundaries(self):
+        required = set(audit.CONCURRENCY_OWNERSHIP_TERMS)
+        self.assertTrue({
+            "Shared lobby store",
+            "Recent reconnect context",
+            "Serialized connection state",
+            "Callback queue",
+            "Delayed reconnect callback",
+            "Delayed GC message",
+            "Deferred lifecycle slot",
+            "P11.2",
+            "P11.3",
+        }.issubset(required))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -63,6 +63,8 @@ GBE_DotaReconnectSharedStateSnapshot GBE_GetSharedDotaReconnectStateSnapshot();
 bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64_t local_steam_id, GBE_DotaReconnectContext *out);
 bool GBE_IsSharedDotaArcadeLobbyActive();
 bool GBE_IsDotaArcadeLobbyActive();
+// Process-shared fallback context. Callers participate in the global_mutex
+// synchronization domain until this state receives a dedicated owner.
 bool GBE_GetRecentDotaReconnectContext(GBE_DotaReconnectContext *out);
 void GBE_SetRecentDotaReconnectContext(const GBE_DotaReconnectContext &ctx);
 void GBE_ClearRecentDotaReconnectContext();
