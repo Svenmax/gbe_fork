@@ -436,6 +436,58 @@ bool Steam_Game_Coordinator::is_welcome_message(const GC_Message &message)
         msg_type == 4005);
 }
 
+uint64 Steam_Game_Coordinator::GBE_CurrentDotaLobbyGeneration() const
+{
+    return GBE_dota_lobby_generation_counter.current().value;
+}
+
+Steam_Game_Coordinator::GBE_DotaGenerationAdvanceResult Steam_Game_Coordinator::GBE_AdvanceDotaLobbyGeneration(
+    gbe::dota_lobby_generation::Boundary boundary,
+    const char *reason)
+{
+    const auto result = GBE_dota_lobby_generation_counter.advance(boundary);
+    if (!result.advanced) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Refusing lifecycle generation reuse after counter exhaustion boundary=%u generation=%llu reason=%s",
+            static_cast<unsigned int>(boundary),
+            static_cast<unsigned long long>(result.current.value),
+            reason ? reason : "unknown");
+        return GBE_DotaGenerationAdvanceResult::Exhausted;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] Advanced lifecycle generation boundary=%u previous=%llu current=%llu reason=%s",
+        static_cast<unsigned int>(boundary),
+        static_cast<unsigned long long>(result.previous.value),
+        static_cast<unsigned long long>(result.current.value),
+        reason ? reason : "unknown");
+    return GBE_DotaGenerationAdvanceResult::Advanced;
+}
+
+bool Steam_Game_Coordinator::GBE_IsQueuedLobbyMessageCurrent(const GC_Message &message, const char *stage) const
+{
+    if (!message.validate_lobby_generation)
+        return true;
+
+    const bool current = message.lobby_id != 0 &&
+        message.lobby_id == GBE_local_lobby.lobby_id &&
+        message.generation == GBE_CurrentDotaLobbyGeneration();
+    if (!current) {
+        GBE_GC_DebugLog(
+            "GC_CALLBACK",
+            "rejected stale lobby message reason=stale_generation stage=%s msg=%u queued_lobby_id=%llu queued_generation=%llu current_lobby_id=%llu current_generation=%llu",
+            stage ? stage : "unknown",
+            GBE_GC_MaskedEMsg(message.msg_type),
+            static_cast<unsigned long long>(message.lobby_id),
+            static_cast<unsigned long long>(message.generation),
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(GBE_CurrentDotaLobbyGeneration()));
+    }
+    return current;
+}
+
 void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message)
 {
     if (!message.apply_lobby_state)
@@ -521,6 +573,9 @@ void Steam_Game_Coordinator::push_incoming(uint32 msg_type, const std::string &m
     new_item.apply_lobby_state = apply_lobby_state;
     new_item.lobby_state = lobby_state;
     new_item.lobby_game_state = lobby_game_state;
+    new_item.lobby_id = GBE_local_lobby.lobby_id;
+    new_item.generation = GBE_CurrentDotaLobbyGeneration();
+    new_item.validate_lobby_generation = gc_profile == GC_PROFILE_DOTA2 && apply_lobby_state;
     pending_messages.push_back(new_item);
 
     GBE_GC_DebugLog(
@@ -777,57 +832,94 @@ void Steam_Game_Coordinator::GBE_SetPendingDotaAbandonFinalizeAfterOtherLeftChan
 {
     GBE_pending_dota_abandon_finalize_after_7014 = true;
     GBE_pending_dota_abandon_finalize_lobby_id = lobby_id;
+    GBE_pending_dota_abandon_finalize_slot = {lobby_id, GBE_CurrentDotaLobbyGeneration(), true};
 }
 
-uint64 Steam_Game_Coordinator::GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel()
+Steam_Game_Coordinator::GBE_DotaDeferredTaskConsumeResult Steam_Game_Coordinator::GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel()
 {
-    const uint64 lobby_id = GBE_pending_dota_abandon_finalize_lobby_id;
-    GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel();
-    return lobby_id;
+    const auto result = GBE_ConsumeDotaDeferredTask(GBE_pending_dota_abandon_finalize_slot, "abandon_finalize_after_7014");
+    GBE_pending_dota_abandon_finalize_after_7014 = false;
+    GBE_pending_dota_abandon_finalize_lobby_id = 0;
+    return result;
 }
 
 void Steam_Game_Coordinator::GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel()
 {
     GBE_pending_dota_abandon_finalize_after_7014 = false;
     GBE_pending_dota_abandon_finalize_lobby_id = 0;
+    GBE_pending_dota_abandon_finalize_slot = {};
 }
 
 void Steam_Game_Coordinator::GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(uint64 lobby_id)
 {
     GBE_pending_dota_normal_signout_finalize_after_25 = true;
     GBE_pending_dota_normal_signout_finalize_lobby_id = lobby_id;
+    GBE_pending_dota_normal_signout_finalize_slot = {lobby_id, GBE_CurrentDotaLobbyGeneration(), true};
 }
 
-uint64 Steam_Game_Coordinator::GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed()
+Steam_Game_Coordinator::GBE_DotaDeferredTaskConsumeResult Steam_Game_Coordinator::GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed()
 {
-    const uint64 lobby_id = GBE_pending_dota_normal_signout_finalize_lobby_id;
-    GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
-    return lobby_id;
+    const auto result = GBE_ConsumeDotaDeferredTask(GBE_pending_dota_normal_signout_finalize_slot, "normal_signout_finalize_after_25");
+    GBE_pending_dota_normal_signout_finalize_after_25 = false;
+    GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+    return result;
 }
 
 void Steam_Game_Coordinator::GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed()
 {
     GBE_pending_dota_normal_signout_finalize_after_25 = false;
     GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
+    GBE_pending_dota_normal_signout_finalize_slot = {};
 }
 
 void Steam_Game_Coordinator::GBE_SetPendingResetAfterCacheUnsubscribed(uint64 lobby_id)
 {
     GBE_pending_reset_after_cache_unsubscribed = true;
     GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
+    GBE_pending_reset_after_cache_unsubscribed_slot = {lobby_id, GBE_CurrentDotaLobbyGeneration(), true};
 }
 
 void Steam_Game_Coordinator::GBE_ClearPendingResetAfterCacheUnsubscribed(uint64 retained_lobby_id)
 {
     GBE_pending_reset_after_cache_unsubscribed = false;
     GBE_pending_reset_after_cache_unsubscribed_lobby_id = retained_lobby_id;
+    GBE_pending_reset_after_cache_unsubscribed_slot = {};
 }
 
-uint64 Steam_Game_Coordinator::GBE_ConsumePendingResetAfterCacheUnsubscribed()
+Steam_Game_Coordinator::GBE_DotaDeferredTaskConsumeResult Steam_Game_Coordinator::GBE_ConsumePendingResetAfterCacheUnsubscribed()
 {
-    const uint64 lobby_id = GBE_pending_reset_after_cache_unsubscribed_lobby_id;
-    GBE_ClearPendingResetAfterCacheUnsubscribed();
-    return lobby_id;
+    const auto result = GBE_ConsumeDotaDeferredTask(GBE_pending_reset_after_cache_unsubscribed_slot, "reset_after_25");
+    GBE_pending_reset_after_cache_unsubscribed = false;
+    GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
+    return result;
+}
+
+Steam_Game_Coordinator::GBE_DotaDeferredTaskConsumeResult Steam_Game_Coordinator::GBE_ConsumeDotaDeferredTask(
+    GBE_DotaDeferredTaskSlot &slot,
+    const char *task_name)
+{
+    if (!slot.pending)
+        return {};
+
+    GBE_DotaDeferredTaskConsumeResult result;
+    result.lobby_id = slot.lobby_id;
+    result.generation = slot.generation;
+    result.status = slot.lobby_id == GBE_local_lobby.lobby_id && slot.generation == GBE_CurrentDotaLobbyGeneration()
+        ? GBE_DotaDeferredTaskStatus::Current
+        : GBE_DotaDeferredTaskStatus::Stale;
+    slot = {};
+
+    if (result.status == GBE_DotaDeferredTaskStatus::Stale) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_LOBBY",
+            "[LOBBY] Rejected stale deferred task reason=stale_generation task=%s queued_lobby_id=%llu queued_generation=%llu current_lobby_id=%llu current_generation=%llu",
+            task_name ? task_name : "unknown",
+            static_cast<unsigned long long>(result.lobby_id),
+            static_cast<unsigned long long>(result.generation),
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(GBE_CurrentDotaLobbyGeneration()));
+    }
+    return result;
 }
 
 void Steam_Game_Coordinator::push_incoming_now(uint32 msg_type, const std::string &message, bool apply_lobby_state, uint32 lobby_state, uint32 lobby_game_state)
@@ -841,6 +933,11 @@ void Steam_Game_Coordinator::push_incoming_now(uint32 msg_type, const std::strin
     new_item.apply_lobby_state = apply_lobby_state;
     new_item.lobby_state = lobby_state;
     new_item.lobby_game_state = lobby_game_state;
+    new_item.lobby_id = GBE_local_lobby.lobby_id;
+    new_item.generation = GBE_CurrentDotaLobbyGeneration();
+    new_item.validate_lobby_generation = gc_profile == GC_PROFILE_DOTA2 && apply_lobby_state;
+    if (!GBE_IsQueuedLobbyMessageCurrent(new_item, "enqueue_immediate"))
+        return;
     GBE_ApplyQueuedLobbyState(new_item);
     incoming_messages.push(new_item);
 
@@ -1214,13 +1311,22 @@ std::string Steam_Game_Coordinator::GBE_GetDotaJoinableCustomLobbiesHTTPJSON(uin
     return response.dump();
 }
 
-void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generic_lobby, bool clear_queued_messages)
+bool Steam_Game_Coordinator::ResetGCMemory(
+    const char *reason,
+    bool leave_generic_lobby,
+    bool clear_queued_messages,
+    gbe::dota_lobby_generation::Boundary generation_boundary,
+    bool generation_already_advanced)
 {
     const uint64 previous_lobby_id = GBE_local_lobby.lobby_id;
     const uint64 previous_match_id = GBE_local_lobby.match_id;
     const uint64 previous_generic_lobby_id = GBE_local_lobby.generic_lobby_id;
     const size_t previous_pending_count = pending_messages.size();
     const size_t previous_incoming_count = incoming_messages.size();
+    if (!generation_already_advanced &&
+        GBE_AdvanceDotaLobbyGeneration(generation_boundary, reason) == GBE_DotaGenerationAdvanceResult::Exhausted)
+        return false;
+    const uint64 next_generation = GBE_CurrentDotaLobbyGeneration();
 
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
     GBE_ClearDotaPracticeLobbyLaunchRichPresence();
@@ -1238,6 +1344,7 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
     const gbe::dota_lobby_state::RuntimeResetDecision reset_decision =
         gbe::dota_lobby_state::compute_runtime_reset_decision(reason);
     clear_dota_runtime_state(reset_decision.preserve_reconnect_context);
+    GBE_local_lobby.generation = next_generation;
 
     GBE_ClearPendingResetAfterCacheUnsubscribed();
     if (previous_lobby_id != 0 && GBE_suppressed_dota_abandon_lobby_id != previous_lobby_id)
@@ -1258,6 +1365,7 @@ void Steam_Game_Coordinator::ResetGCMemory(const char *reason, bool leave_generi
         previous_pending_count,
         previous_incoming_count
     );
+    return true;
 }
 
 std::string Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerName() const
@@ -1602,7 +1710,7 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
         return k_EGCResultNoMessage;
     }
 
-    GC_Message &message = incoming_messages.front();
+    GC_Message message = incoming_messages.front();
 
     uint32 outsize = static_cast<uint32>(message.msg_body.size());
     if (outsize > cubDest) {
@@ -1662,7 +1770,10 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
     }
 
     if (teardown_decision.finalize_abandon_after_7014) {
-        const uint64 finalize_lobby_id = GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel();
+        const auto pending = GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel();
+        if (pending.status != GBE_DotaDeferredTaskStatus::Current)
+            return k_EGCResultOK;
+        const uint64 finalize_lobby_id = pending.lobby_id;
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Consumed pending 7014; finalizing abandon teardown LobbyID=%llu channel=%llu",
@@ -1673,7 +1784,10 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
     }
 
     if (teardown_decision.finalize_normal_signout_after_25) {
-        const uint64 finalize_lobby_id = GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
+        const auto pending = GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
+        if (pending.status != GBE_DotaDeferredTaskStatus::Current)
+            return k_EGCResultOK;
+        const uint64 finalize_lobby_id = pending.lobby_id;
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Consumed normal signout 25; finalizing postgame teardown LobbyID=%llu",
@@ -1683,7 +1797,10 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
     }
 
     if (teardown_decision.reset_after_cache_unsubscribed) {
-        const uint64 pending_lobby_id = GBE_ConsumePendingResetAfterCacheUnsubscribed();
+        const auto pending = GBE_ConsumePendingResetAfterCacheUnsubscribed();
+        if (pending.status != GBE_DotaDeferredTaskStatus::Current)
+            return k_EGCResultOK;
+        const uint64 pending_lobby_id = pending.lobby_id;
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Consumed pending 25; applying deferred current-game reset for LobbyID=%llu",
@@ -1825,7 +1942,15 @@ void Steam_Game_Coordinator::RunCallbacks()
         }
 
         if (check_timedout(it->created, it->post_in)) {
+            if (!GBE_IsQueuedLobbyMessageCurrent(*it, "delay_expired")) {
+                it = pending_messages.erase(it);
+                continue;
+            }
             GBE_ApplyQueuedLobbyState(*it);
+            if (!GBE_IsQueuedLobbyMessageCurrent(*it, "before_incoming_queue")) {
+                it = pending_messages.erase(it);
+                continue;
+            }
             incoming_messages.push(*it);
 
             GCMessageAvailable_t data{};

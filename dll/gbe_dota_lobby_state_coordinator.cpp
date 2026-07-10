@@ -28,6 +28,7 @@
 #include "gbe_dota_reconnect_context.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
+#include <algorithm>
 #include "gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
@@ -835,7 +836,7 @@ bool Steam_Game_Coordinator::GBE_MaybeHandleDotaPracticeLobbyKicked(const char *
 
     push_incoming_now(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25);
     push_incoming_now(GBE_kDotaPopup | GBE_kProtoMask, response_7102, 0.01);
-    ResetGCMemory("7081_kicked_from_lobby", false, false);
+    ResetGCMemory("7081_kicked_from_lobby", false, false, gbe::dota_lobby_generation::Boundary::Leave);
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Detected local user kicked from generic Dota lobby. queued 25 and 7102 LobbyID=%llu generic_lobby_id=%llu reason=%s",
@@ -1250,6 +1251,16 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             }
 
             gbe::dota_lobby_state::adopt_shared_lobby_to_local(GBE_shared_dota_lobby_state, false, true, GBE_local_lobby);
+            const uint64 recovery_base_generation = std::max(
+                GBE_CurrentDotaLobbyGeneration(),
+                GBE_local_lobby.generation);
+            GBE_dota_lobby_generation_counter = gbe::dota_lobby_generation::Counter(
+                gbe::dota_lobby_generation::Generation{recovery_base_generation});
+            if (GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Recover, reason) == GBE_DotaGenerationAdvanceResult::Exhausted) {
+                GBE_local_lobby = {};
+                return;
+            }
+            GBE_local_lobby.generation = GBE_CurrentDotaLobbyGeneration();
 
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
@@ -1270,8 +1281,15 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         }
 
         bool changed = false;
-        if (GBE_local_lobby.generation != GBE_shared_dota_lobby_state.generation) {
-            GBE_local_lobby.generation = GBE_shared_dota_lobby_state.generation;
+        const uint64 synchronized_generation = std::max(
+            GBE_CurrentDotaLobbyGeneration(),
+            GBE_shared_dota_lobby_state.generation);
+        if (synchronized_generation != GBE_CurrentDotaLobbyGeneration()) {
+            GBE_dota_lobby_generation_counter = gbe::dota_lobby_generation::Counter(
+                gbe::dota_lobby_generation::Generation{synchronized_generation});
+        }
+        if (GBE_local_lobby.generation != synchronized_generation) {
+            GBE_local_lobby.generation = synchronized_generation;
             changed = true;
         }
         if (GBE_local_lobby.generic_lobby_id != GBE_shared_dota_lobby_state.generic_lobby_id) {

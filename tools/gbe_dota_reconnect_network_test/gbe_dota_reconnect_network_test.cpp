@@ -97,15 +97,18 @@ struct FakeQueue final : GBE_DotaReconnectCallbackQueue {
     std::uint32_t calls{};
     GameServerChangeRequested_t callback{};
     double delay{-1.0};
+    std::uint64_t generation{};
     std::vector<std::string> *events{};
 
     void queue_game_server_change(
         const GameServerChangeRequested_t &candidate_callback,
-        double candidate_delay) override
+        double candidate_delay,
+        std::uint64_t candidate_generation) override
     {
         ++calls;
         callback = candidate_callback;
         delay = candidate_delay;
+        generation = candidate_generation;
         if (events)
             events->push_back("queue");
     }
@@ -151,6 +154,7 @@ void test_first_connection_contract()
     expect(connector.options[2].m_eValue == k_ESteamNetworkingConfig_Unencrypted && connector.options[2].m_val.m_int32 == 2, "unencrypted option");
     expect(std::string(queue.callback.m_rgchServer) == "10.20.30.40:27015", "callback server body");
     expect(queue.callback.m_rgchPassword[0] == '\0' && queue.delay == 0.0, "callback password and delay");
+    expect(queue.generation == provider.primary.generation, "callback receives reconnect generation");
     expect(events == std::vector<std::string>({"context:primary", "eligible", "connect", "queue"}), "production call order");
     expect(state.generation == provider.primary.generation && state.lobby_id == provider.primary.lobby_id, "serialized state receives context identities");
 }

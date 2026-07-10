@@ -148,9 +148,10 @@
     - `lobby_id` 保持协议身份，generation 专门用于本地异步状态代际。
     - 更新 shared、recent、local、generic recovery 和 serialized state。
     - 实现：local/shared lobby、shared reconnect/scalar snapshot、四类 reconnect source、recent/context 和 serialized connection state 均独立携带 generation；现有 lobby-ID 去重行为保留至 7.4。
-  - [ ] 7.3 将 generation 加入延迟任务和 callback
+  - [x] 7.3 将 generation 加入延迟任务和 callback
     - runtime lobby update、reconnect callback、postgame task 和延迟 publish 在执行前校验 generation。
     - 旧 generation 的任务返回明确 stale reason。
+    - 实现：coordinator 在 Create、Join、Leave、Reset、Recover 提交边界分配 generation；延迟 lobby 消息捕获 `lobby_id + generation` 并在状态应用、publish 和入队前拒绝旧代际；postgame slot 返回 `Current/Stale/Empty`；reconnect callback 通过通用 execution guard 在实际 dispatch 前校验 generation。现有 lobby-ID 去重行为继续保留至 7.4。
   - [ ] 7.4 迁移现有 lobby ID 去重用途
     - 连接和 callback 去重改用 generation，server/endpoint 继续作为同代际键。
     - 保留 lobby ID 用于协议匹配和日志。

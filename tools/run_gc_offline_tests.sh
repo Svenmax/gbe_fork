@@ -83,6 +83,13 @@ build_and_run \
     dll/gbe_proto_wire.cpp
 
 build_and_run \
+    callsystem_execution_guard_test \
+    -Idll \
+    -DGBE_CALLSYSTEM_STANDALONE_TEST \
+    tools/callsystem_execution_guard_test/callsystem_execution_guard_test.cpp \
+    dll/callsystem.cpp
+
+build_and_run \
     gbe_proto_wire_test \
     tools/gbe_proto_wire_test/gbe_proto_wire_test.cpp \
     dll/gbe_proto_wire.cpp \

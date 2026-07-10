@@ -74,7 +74,11 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
                 GBE_MarkDotaAbandonedLobbySuppressed(action.item_id, action.reason.c_str());
                 break;
             case GBE_DotaActionType::GcMemoryReset:
-                ResetGCMemory(action.reason.c_str(), action.leave_generic_lobby, action.clear_queued_messages);
+                previous_action_succeeded = ResetGCMemory(
+                    action.reason.c_str(),
+                    action.leave_generic_lobby,
+                    action.clear_queued_messages,
+                    action.generation_boundary);
                 break;
             case GBE_DotaActionType::SettingsLobbyClear:
                 GBE_ClearSettingsLobbyForDotaSignout();
@@ -92,7 +96,15 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
                 GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
                 break;
             case GBE_DotaActionType::DotaLobbyRuntimeClear:
-                GBE_ClearDotaLobbyRuntimeState();
+                if (GBE_AdvanceDotaLobbyGeneration(action.generation_boundary, action.reason.c_str()) == GBE_DotaGenerationAdvanceResult::Exhausted) {
+                    previous_action_succeeded = false;
+                    break;
+                }
+                {
+                    const uint64 next_generation = GBE_CurrentDotaLobbyGeneration();
+                    GBE_ClearDotaLobbyRuntimeState();
+                    GBE_local_lobby.generation = next_generation;
+                }
                 break;
             case GBE_DotaActionType::RichPresenceClear: {
                 Steam_Game_Coordinator *target = options.route_rich_presence_to_client_target

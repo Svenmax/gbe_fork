@@ -430,6 +430,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     create_context.owner_slot = 1u;
 
     const gbe::dota_lobby_state::CreateLobbyResetPlan reset_plan = gbe::dota_lobby_flow::create_lobby_reset_plan_from_context(create_context);
+    if (GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Create, "7038_create") == GBE_DotaGenerationAdvanceResult::Exhausted)
+        return true;
     const GBE_DotaActionList create_actions = gbe::dota_lobby_flow::create_lobby_action_list(
         gbe::dota_lobby_flow::create_lobby_action_plan_from_reset_plan(reset_plan),
         wrapped);
@@ -440,7 +442,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         ResetGCMemory(
             create_actions[create_action_index].reason.c_str(),
             create_actions[create_action_index].leave_generic_lobby,
-            create_actions[create_action_index].clear_queued_messages);
+            create_actions[create_action_index].clear_queued_messages,
+            gbe::dota_lobby_generation::Boundary::Create,
+            true);
         ++create_action_index;
     }
 
@@ -478,6 +482,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         create_plan,
         create_context.parsed_request && create_context.request.has_lobby_details);
     GBE_local_lobby = state_apply_plan.lobby;
+    GBE_local_lobby.generation = GBE_CurrentDotaLobbyGeneration();
     if (state_apply_plan.normalize_custom_game_details)
         GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, GBE_local_lobby.custom_game);
     if (state_apply_plan.normalize_arcade_member_slots)
@@ -697,7 +702,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyListRequest(bool has_request_job
 
     if (finishing_leave) {
         GBE_PushDotaCacheUnsubscribedResponse(response_25, wrapped, outer_session_field_raw, "7040_leave_after_lobby_list_25");
-        ResetGCMemory("7040_leave_after_lobby_list", true, false);
+        ResetGCMemory("7040_leave_after_lobby_list", true, false, gbe::dota_lobby_generation::Boundary::Leave);
     }
 
     if (!GBE_PushDotaResponse(GBE_kDotaLobbyListResponse, response_8012, wrapped, outer_session_field_raw, "8012_lobby_list"))
@@ -867,7 +872,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
     join_context.player_pool_team = GBE_kDotaTeamPlayerPool;
 
     const gbe::dota_lobby_state::JoinLobbyMergePlan join_plan = gbe::dota_lobby_flow::join_lobby_merge_plan_from_context(join_context);
+    if (GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Join, "7044_join") == GBE_DotaGenerationAdvanceResult::Exhausted)
+        return true;
     GBE_local_lobby = join_plan.lobby;
+    GBE_local_lobby.generation = GBE_CurrentDotaLobbyGeneration();
 
     const GBE_DotaActionList join_actions = gbe::dota_lobby_flow::join_lobby_action_list(
         gbe::dota_lobby_flow::join_lobby_action_plan_from_context(join_context),
@@ -1963,7 +1971,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDestroyLobbyRequest(uint64 request_jo
         return true;
     }
 
-    ResetGCMemory("8246_destroy", true, true);
+    ResetGCMemory("8246_destroy", true, true, gbe::dota_lobby_generation::Boundary::Leave);
     push_incoming_now(outbound_25.emsg, outbound_25.payload);
     GBE_LogDotaResponsePacket("8246_destroy_25", GBE_kDotaCacheUnsubscribed, wrapped, response_25, outbound_25.payload, lobby_id, 0u, 0u);
     if (has_request_job) {

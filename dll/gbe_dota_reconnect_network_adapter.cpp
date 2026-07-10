@@ -3,6 +3,24 @@
 #include "dll/callsystem.h"
 #include "dll/steam_networking_sockets.h"
 
+#include <cstring>
+
+namespace {
+
+bool is_current_dota_reconnect_generation(const void *guard_context, unsigned int guard_context_size)
+{
+    if (!guard_context || guard_context_size != sizeof(std::uint64_t))
+        return false;
+
+    std::uint64_t expected_generation{};
+    std::memcpy(&expected_generation, guard_context, sizeof(expected_generation));
+    GBE_DotaReconnectContext current_context{};
+    return GBE_GetDotaReconnectContext(&current_context)
+        && current_context.generation == expected_generation;
+}
+
+} // namespace
+
 GBE_DotaReconnectNetworkAdapter::GBE_DotaReconnectNetworkAdapter(
     SteamCallBacks *callbacks,
     Steam_Networking_Sockets *direct_sockets)
@@ -51,7 +69,8 @@ std::uint32_t GBE_DotaReconnectNetworkAdapter::connect_by_ip_address(
 
 void GBE_DotaReconnectNetworkAdapter::queue_game_server_change(
     const GameServerChangeRequested_t &server_change,
-    double delay_seconds)
+    double delay_seconds,
+    std::uint64_t generation)
 {
     if (!callbacks)
         return;
@@ -59,5 +78,10 @@ void GBE_DotaReconnectNetworkAdapter::queue_game_server_change(
         server_change.k_iCallback,
         const_cast<GameServerChangeRequested_t *>(&server_change),
         sizeof(server_change),
-        delay_seconds);
+        delay_seconds,
+        false,
+        SteamCallExecutionGuard(
+            is_current_dota_reconnect_generation,
+            &generation,
+            sizeof(generation)));
 }

@@ -124,7 +124,7 @@ GBE_DotaReconnectPostResult GBE_ExecuteDotaReconnectPostConnectionState(
     GameServerChangeRequested_t server_change{};
     std::strncpy(server_change.m_rgchServer, result.endpoint.c_str(), sizeof(server_change.m_rgchServer) - 1);
     server_change.m_rgchServer[sizeof(server_change.m_rgchServer) - 1] = '\0';
-    callback_queue.queue_game_server_change(server_change, 0.0);
+    callback_queue.queue_game_server_change(server_change, 0.0, result.context.generation);
     connection_state.record_engine_callback(result.context.server_id, result.endpoint);
     result.callback_queued = true;
     return result;

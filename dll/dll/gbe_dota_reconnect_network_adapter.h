@@ -36,7 +36,8 @@ public:
         const SteamNetworkingConfigValue_t *options) override;
     void queue_game_server_change(
         const GameServerChangeRequested_t &server_change,
-        double delay_seconds) override;
+        double delay_seconds,
+        std::uint64_t generation) override;
 };
 
 #endif // __INCLUDED_GBE_DOTA_RECONNECT_NETWORK_ADAPTER_H__

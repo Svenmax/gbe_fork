@@ -30,7 +30,8 @@ struct GBE_DotaReconnectCallbackQueue {
     virtual ~GBE_DotaReconnectCallbackQueue() = default;
     virtual void queue_game_server_change(
         const GameServerChangeRequested_t &server_change,
-        double delay_seconds) = 0;
+        double delay_seconds,
+        std::uint64_t generation) = 0;
 };
 
 enum class GBE_DotaReconnectPostSkipReason : std::uint8_t {

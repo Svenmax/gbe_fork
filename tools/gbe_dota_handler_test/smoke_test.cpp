@@ -288,7 +288,14 @@ struct TestFixture
     {
         recorder.clear();
         gc.items.clear();
+        gc.pending_messages.clear();
+        while (!gc.incoming_messages.empty())
+            gc.incoming_messages.pop();
         gc.GBE_local_lobby = GBE_LocalLobby{};
+        gc.GBE_dota_lobby_generation_counter = gbe::dota_lobby_generation::Counter{};
+        gc.GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel();
+        gc.GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
+        gc.GBE_ClearPendingResetAfterCacheUnsubscribed();
         gc.GBE_ClearDotaLoginSyncSent();
         gc.GBE_ClearDotaPrivateLobbySnapshotReplayed();
         gc.GBE_ClearDotaHostShowcaseEquipPushed();
@@ -996,6 +1003,7 @@ static void test_lobby_leave_queues_25_then_clears_local_lobby()
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "leave lobby should clear active flag after 25 response");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0u, "leave lobby should clear lobby id after 25 response");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.generic_lobby_id, 0u, "leave lobby should clear generic lobby id after 25 response");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.generation, 1ull, "leave should retain the newly allocated generation after clearing lobby state");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.has_chat_channel, "leave lobby should clear chat channel state");
 
     ++g_tests_passed;
@@ -1357,6 +1365,7 @@ static void test_lobby_create_arcade_unsubscribes_previous_before_new_lobby()
 
     TEST_ASSERT(result, "arcade create handler should return true");
     TEST_ASSERT(tf.gc.GBE_local_lobby.active, "arcade create should activate replacement lobby");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.generation, 1ull, "create should allocate exactly one generation");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.custom_game.game_id, 0xC0FFEEu, "arcade create should preserve requested custom game id");
     TEST_ASSERT(tf.gc.GBE_local_lobby.custom_game.mode == "arcade_addon", "arcade create should normalize custom mode from installed mod metadata");
     TEST_ASSERT(tf.gc.GBE_local_lobby.custom_game.map_name == "arcade_map", "arcade create should normalize custom map from installed mod metadata");
@@ -1390,6 +1399,7 @@ static void test_lobby_join_records_cache_subscription_before_pushes()
 
     TEST_ASSERT(result, "join lobby handler should return true");
     TEST_ASSERT(tf.gc.GBE_local_lobby.active, "join lobby should activate local lobby");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.generation, 1ull, "join should allocate exactly one generation");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0x704400ull, "join lobby should preserve requested lobby id");
     TEST_ASSERT(tf.gc.GBE_local_lobby.pass_key == "join-pass", "join lobby should preserve field 3 pass key");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "join lobby should publish local/shared state, record cache subscription, then push 24 and 7113");
@@ -1503,11 +1513,12 @@ static void test_lobby_abandon_finalize_after_other_left_resets_state()
     tf.gc.GBE_SetPendingDotaAbandonFinalizeAfterOtherLeftChannel(0x7014u);
     TEST_ASSERT(tf.gc.GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel(), "abandon finalize pending flag should be set");
 
-    const uint64_t consumed_lobby_id = tf.gc.GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel();
-    TEST_ASSERT_EQ(consumed_lobby_id, 0x7014u, "abandon finalize consume should return pending lobby id");
+    const auto consumed = tf.gc.GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel();
+    TEST_ASSERT(consumed.status == Steam_Game_Coordinator::GBE_DotaDeferredTaskStatus::Current, "abandon finalize consume should report current");
+    TEST_ASSERT_EQ(consumed.lobby_id, 0x7014u, "abandon finalize consume should return pending lobby id");
     TEST_ASSERT(!tf.gc.GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel(), "abandon finalize consume should clear pending flag");
 
-    tf.gc.GBE_FinalizeDotaAbandonAfterOtherLeftChannel(consumed_lobby_id, "abandon_finalize_after_7014_test");
+    tf.gc.GBE_FinalizeDotaAbandonAfterOtherLeftChannel(consumed.lobby_id, "abandon_finalize_after_7014_test");
 
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "abandon finalize should clear local lobby state");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "abandon finalize should execute one reset action");
@@ -1535,13 +1546,14 @@ static void test_lobby_normal_signout_pending_clear_resets_state()
     tf.gc.GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(0x2500u);
     TEST_ASSERT(tf.gc.GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(), "normal signout pending flag should be set");
 
-    const uint64_t consumed_lobby_id = tf.gc.GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
-    TEST_ASSERT_EQ(consumed_lobby_id, 0x2500u, "normal signout consume should return pending lobby id");
+    const auto consumed = tf.gc.GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
+    TEST_ASSERT(consumed.status == Steam_Game_Coordinator::GBE_DotaDeferredTaskStatus::Current, "normal signout consume should report current");
+    TEST_ASSERT_EQ(consumed.lobby_id, 0x2500u, "normal signout consume should return pending lobby id");
     TEST_ASSERT(!tf.gc.GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(), "normal signout consume should clear pending flag");
-    TEST_ASSERT_EQ(tf.gc.GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(), 0u, "normal signout pending lobby id should be cleared");
+    TEST_ASSERT(tf.gc.GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed().status == Steam_Game_Coordinator::GBE_DotaDeferredTaskStatus::Empty, "normal signout pending slot should be empty after consume");
 
-    tf.gc.push_incoming_now(GBE_kDotaCacheUnsubscribed | Steam_Game_Coordinator::protobuf_mask, std::to_string(consumed_lobby_id));
-    tf.gc.GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed(consumed_lobby_id, "normal_signout_pending_clear_test");
+    tf.gc.push_incoming_now(GBE_kDotaCacheUnsubscribed | Steam_Game_Coordinator::protobuf_mask, std::to_string(consumed.lobby_id));
+    tf.gc.GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed(consumed.lobby_id, "normal_signout_pending_clear_test");
 
     TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "normal signout finalize should clear local lobby state after cache unsubscribe");
     TEST_ASSERT(!GBE_HasSharedDotaLobbyState(), "normal signout finalize should clear shared lobby state after cache unsubscribe");
@@ -1550,7 +1562,7 @@ static void test_lobby_normal_signout_pending_clear_resets_state()
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "normal signout finalize should record cache unsubscribe before local cleanup actions");
     expect_push_action(tf.recorder.actions[0], GBE_kDotaCacheUnsubscribed, "normal signout finalize should push cache unsubscribe first");
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::SettingsLobbyClear, "normal signout settings clear should happen after cache unsubscribe");
-    TEST_ASSERT_EQ(tf.recorder.actions[1].item_id, consumed_lobby_id, "normal signout settings clear should preserve consumed lobby id");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].item_id, consumed.lobby_id, "normal signout settings clear should preserve consumed lobby id");
     TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LaunchPeripheralReset, "normal signout should reset launch peripheral after settings clear");
     TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::DotaLobbyRuntimeClear, "normal signout should clear shared/local runtime after launch reset");
     TEST_ASSERT(tf.recorder.actions[3].reason == "normal_signout_pending_clear_test", "normal signout runtime clear reason should be recorded");
@@ -1558,6 +1570,65 @@ static void test_lobby_normal_signout_pending_clear_resets_state()
 
     tf.gc.GBE_ClearSettingsLobbyForDotaSignout();
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "settings lobby clear should be a no-op when settings lobby is already empty");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_stale_postgame_task_is_rejected()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x2600u;
+    tf.gc.GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Create, "test_create");
+    tf.gc.GBE_local_lobby.generation = tf.gc.GBE_CurrentDotaLobbyGeneration();
+    tf.gc.GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(0x2600u);
+
+    tf.gc.GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Reset, "test_reset");
+    tf.gc.GBE_local_lobby.generation = tf.gc.GBE_CurrentDotaLobbyGeneration();
+    const auto consumed = tf.gc.GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
+
+    TEST_ASSERT(consumed.status == Steam_Game_Coordinator::GBE_DotaDeferredTaskStatus::Stale, "old postgame task should report stale");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.active, "stale postgame task should preserve current lobby state");
+    TEST_ASSERT(tf.recorder.actions.empty(), "stale postgame task should not finalize or reset");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_stale_delayed_runtime_task_is_rejected()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x2650u;
+    tf.gc.GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Create, "test_create");
+    tf.gc.GBE_local_lobby.generation = tf.gc.GBE_CurrentDotaLobbyGeneration();
+    tf.gc.push_incoming(GBE_kDotaPracticeLobbyDetailsUpdate | Steam_Game_Coordinator::protobuf_mask, "runtime", 0.1, true, 2u, 4u);
+
+    tf.gc.GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Reset, "test_reset");
+    tf.gc.GBE_local_lobby.generation = tf.gc.GBE_CurrentDotaLobbyGeneration();
+    const auto status = tf.gc.test_deliver_next_pending_message();
+
+    TEST_ASSERT(status == Steam_Game_Coordinator::GBE_DotaDeferredTaskStatus::Stale, "old delayed runtime task should report stale");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.state, 0u, "stale delayed runtime task should not apply lobby state");
+    TEST_ASSERT(tf.gc.incoming_messages.empty(), "stale delayed runtime task should not enter incoming queue");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_reset_retains_new_generation()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x2700u;
+    tf.gc.GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Create, "test_create");
+    tf.gc.GBE_local_lobby.generation = tf.gc.GBE_CurrentDotaLobbyGeneration();
+
+    tf.gc.ResetGCMemory("7035_disconnect_current_game_after_25", true, true);
+
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.generation, 2ull, "reset should retain the newly allocated generation");
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "reset should clear active lobby state");
 
     ++g_tests_passed;
 }
@@ -2835,6 +2906,15 @@ int main()
 
     std::printf("[run] test_lobby_normal_signout_pending_clear_resets_state\n");
     RUN_TEST(test_lobby_normal_signout_pending_clear_resets_state);
+
+    std::printf("[run] test_lobby_stale_postgame_task_is_rejected\n");
+    RUN_TEST(test_lobby_stale_postgame_task_is_rejected);
+
+    std::printf("[run] test_lobby_stale_delayed_runtime_task_is_rejected\n");
+    RUN_TEST(test_lobby_stale_delayed_runtime_task_is_rejected);
+
+    std::printf("[run] test_lobby_reset_retains_new_generation\n");
+    RUN_TEST(test_lobby_reset_retains_new_generation);
 
     std::printf("[run] test_lobby_runtime_reset_clears_local_shared_and_last_launch_state\n");
     RUN_TEST(test_lobby_runtime_reset_clears_local_shared_and_last_launch_state);

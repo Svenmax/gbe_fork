@@ -109,6 +109,8 @@
 #ifndef GBE_DOTA_ACTION_MODEL_H
 #define GBE_DOTA_ACTION_MODEL_H
 
+#include "gbe_dota_lobby_generation.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -168,6 +170,7 @@ struct GBE_DotaAction {
     bool only_when_previous_action_succeeded{}; // conditional follow-up action
     bool only_when_runtime_update_not_queued{}; // runtime update fallback action
     double delay{};               // RuntimeLobbyDetailsUpdate
+    gbe::dota_lobby_generation::Boundary generation_boundary{gbe::dota_lobby_generation::Boundary::Reset}; // GcMemoryReset / DotaLobbyRuntimeClear
 };
 
 // Ordered list of intended side effects built by a pure helper and consumed

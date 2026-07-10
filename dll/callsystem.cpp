@@ -17,6 +17,34 @@
 
 #include "dll/callsystem.h"
 
+#ifdef GBE_CALLSYSTEM_STANDALONE_TEST
+extern std::recursive_mutex global_mutex;
+bool check_timedout(
+    std::chrono::high_resolution_clock::time_point old,
+    double timeout,
+    std::chrono::high_resolution_clock::time_point now = std::chrono::high_resolution_clock::now());
+SteamAPICall_t generate_steam_api_call_id();
+#define PRINT_DEBUG(...)
+#endif
+
+
+SteamCallExecutionGuard::SteamCallExecutionGuard(
+    SteamCallExecutionGuardFunction function,
+    const void *context,
+    unsigned int context_size)
+    : function(function)
+{
+    if (context && context_size > 0) {
+        this->context.resize(context_size);
+        memcpy(this->context.data(), context, context_size);
+    }
+}
+
+bool SteamCallExecutionGuard::allows_execution() const
+{
+    return !function || function(context.data(), static_cast<unsigned int>(context.size()));
+}
+
 
 void CCallbackMgr::SetRegister(class CCallbackBase *pCallback, int iCallback)
 {
@@ -37,7 +65,14 @@ bool CCallbackMgr::isServer(class CCallbackBase *pCallback)
 
 
 
-Steam_Call_Result::Steam_Call_Result(SteamAPICall_t a, int icb, void *r, unsigned int s, double r_in, bool run_cc_cb)
+Steam_Call_Result::Steam_Call_Result(
+    SteamAPICall_t a,
+    int icb,
+    void *r,
+    unsigned int s,
+    double r_in,
+    bool run_cc_cb,
+    const SteamCallExecutionGuard &execution_guard)
 {
     api_call = a;
     result.resize(s);
@@ -47,6 +82,7 @@ Steam_Call_Result::Steam_Call_Result(SteamAPICall_t a, int icb, void *r, unsigne
     run_in = r_in;
     run_call_completed_cb = run_cc_cb;
     iCallback = icb;
+    this->execution_guard = execution_guard;
     created = std::chrono::high_resolution_clock::now();
 }
 
@@ -178,7 +214,14 @@ void SteamCallResults::rmCallBack(class CCallbackBase *cb)
     }
 }
 
-SteamAPICall_t SteamCallResults::addCallResult(SteamAPICall_t api_call, int iCallback, void *result, unsigned int size, double timeout, bool run_call_completed_cb)
+SteamAPICall_t SteamCallResults::addCallResult(
+    SteamAPICall_t api_call,
+    int iCallback,
+    void *result,
+    unsigned int size,
+    double timeout,
+    bool run_call_completed_cb,
+    const SteamCallExecutionGuard &execution_guard)
 {
     PRINT_DEBUG("%i", iCallback);
     auto cb_result = std::find_if(callresults.begin(), callresults.end(), [api_call](struct Steam_Call_Result const& item) { return item.api_call == api_call; });
@@ -187,13 +230,13 @@ SteamAPICall_t SteamCallResults::addCallResult(SteamAPICall_t api_call, int iCal
         if (cb_result->reserved) {
             std::chrono::high_resolution_clock::time_point created = cb_result->created;
             std::vector<class CCallbackBase *> temp_cbs = cb_result->callbacks;
-            *cb_result = Steam_Call_Result(api_call, iCallback, result, size, timeout, run_call_completed_cb);
+            *cb_result = Steam_Call_Result(api_call, iCallback, result, size, timeout, run_call_completed_cb, execution_guard);
             cb_result->callbacks = temp_cbs;
             cb_result->created = created;
             return cb_result->api_call;
         }
     } else {
-        struct Steam_Call_Result res = Steam_Call_Result(api_call, iCallback, result, size, timeout, run_call_completed_cb);
+        struct Steam_Call_Result res = Steam_Call_Result(api_call, iCallback, result, size, timeout, run_call_completed_cb, execution_guard);
         callresults.push_back(res);
         return callresults.back().api_call;
     }
@@ -210,9 +253,15 @@ SteamAPICall_t SteamCallResults::reserveCallResult()
     return callresults.back().api_call;
 }
 
-SteamAPICall_t SteamCallResults::addCallResult(int iCallback, void *result, unsigned int size, double timeout, bool run_call_completed_cb)
+SteamAPICall_t SteamCallResults::addCallResult(
+    int iCallback,
+    void *result,
+    unsigned int size,
+    double timeout,
+    bool run_call_completed_cb,
+    const SteamCallExecutionGuard &execution_guard)
 {
-    return addCallResult(generate_steam_api_call_id(), iCallback, result, size, timeout, run_call_completed_cb);
+    return addCallResult(generate_steam_api_call_id(), iCallback, result, size, timeout, run_call_completed_cb, execution_guard);
 }
 
 void SteamCallResults::setCbAll(void (*cb_all)(std::vector<char> result, int callback))
@@ -233,6 +282,10 @@ void SteamCallResults::runCallResults()
 
         if (!callresults[index].to_delete) {
             if (callresults[index].can_execute()) {
+                if (!callresults[index].execution_guard.allows_execution()) {
+                    callresults[index].to_delete = true;
+                    continue;
+                }
                 std::vector<char> result = callresults[index].result;
                 SteamAPICall_t api_call = callresults[index].api_call;
                 bool run_call_completed_cb = callresults[index].run_call_completed_cb;
@@ -338,18 +391,30 @@ void SteamCallBacks::addCallBack(int iCallback, class CCallbackBase *cb)
         CCallbackMgr::SetRegister(cb, iCallback);
         for (auto & res: callbacks[iCallback].results) {
             //TODO: timeout?
-            SteamAPICall_t api_id = results->addCallResult(iCallback, &(res[0]), static_cast<unsigned long>(res.size()), 0.0, false);
+            SteamAPICall_t api_id = results->addCallResult(
+                iCallback,
+                res.data.data(),
+                static_cast<unsigned long>(res.data.size()),
+                0.0,
+                false,
+                res.execution_guard);
             results->addCallBack(api_id, cb);
         }
     }
 }
 
-void SteamCallBacks::addCBResult(int iCallback, void *result, unsigned int size, double timeout, bool dont_post_if_already)
+void SteamCallBacks::addCBResult(
+    int iCallback,
+    void *result,
+    unsigned int size,
+    double timeout,
+    bool dont_post_if_already,
+    const SteamCallExecutionGuard &execution_guard)
 {
     if (dont_post_if_already) {
         for (auto & r : callbacks[iCallback].results) {
-            if (r.size() == size) {
-                if (memcmp(&(r[0]), result, size) == 0) {
+            if (r.data.size() == size) {
+                if (memcmp(r.data.data(), result, size) == 0) {
                     //cb already posted
                     return;
                 }
@@ -357,17 +422,18 @@ void SteamCallBacks::addCBResult(int iCallback, void *result, unsigned int size,
         }
     }
 
-    std::vector<char> temp{};
-    temp.resize(size);
-    memcpy(&(temp[0]), result, size);
-    callbacks[iCallback].results.push_back(temp);
+    Steam_Call_Back::Result stored_result{};
+    stored_result.data.resize(size);
+    memcpy(stored_result.data.data(), result, size);
+    stored_result.execution_guard = execution_guard;
+    callbacks[iCallback].results.push_back(stored_result);
     for (auto cb: callbacks[iCallback].callbacks) {
-        SteamAPICall_t api_id = results->addCallResult(iCallback, result, size, timeout, false);
+        SteamAPICall_t api_id = results->addCallResult(iCallback, result, size, timeout, false, execution_guard);
         results->addCallBack(api_id, cb);
     }
 
     if (callbacks[iCallback].callbacks.empty()) {
-        results->addCallResult(iCallback, result, size, timeout, false);
+        results->addCallResult(iCallback, result, size, timeout, false, execution_guard);
     }
 }
 

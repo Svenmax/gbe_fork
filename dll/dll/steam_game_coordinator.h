@@ -21,6 +21,7 @@
 #include "base.h"
 #include "econ_item.h"
 #include "gbe_dota_custom_game_lifecycle.h"
+#include "gbe_dota_lobby_generation.h"
 #include "gbe_dota_lobby_state.h"
 #include <unordered_set>
 
@@ -80,11 +81,38 @@ public ISteamGameCoordinator
         bool apply_lobby_state{};
         uint32 lobby_state{};
         uint32 lobby_game_state{};
+        uint64 lobby_id{};
+        uint64 generation{};
+        bool validate_lobby_generation{};
+    };
+
+    enum class GBE_DotaGenerationAdvanceResult : uint8 {
+        Advanced,
+        Exhausted,
+    };
+
+    enum class GBE_DotaDeferredTaskStatus : uint8 {
+        Current,
+        Stale,
+        Empty,
+    };
+
+    struct GBE_DotaDeferredTaskSlot {
+        uint64 lobby_id{};
+        uint64 generation{};
+        bool pending{};
+    };
+
+    struct GBE_DotaDeferredTaskConsumeResult {
+        GBE_DotaDeferredTaskStatus status{GBE_DotaDeferredTaskStatus::Empty};
+        uint64 lobby_id{};
+        uint64 generation{};
     };
 
     std::vector<GC_Message> pending_messages;
     std::queue<GC_Message> incoming_messages;
     uint64 pending_message_sequence{};
+    gbe::dota_lobby_generation::Counter GBE_dota_lobby_generation_counter;
 
     enum GC_Profile
     {
@@ -112,6 +140,9 @@ public ISteamGameCoordinator
     uint64 GBE_pending_dota_abandon_finalize_lobby_id{};
     bool GBE_pending_dota_normal_signout_finalize_after_25{};
     uint64 GBE_pending_dota_normal_signout_finalize_lobby_id{};
+    GBE_DotaDeferredTaskSlot GBE_pending_dota_abandon_finalize_slot;
+    GBE_DotaDeferredTaskSlot GBE_pending_dota_normal_signout_finalize_slot;
+    GBE_DotaDeferredTaskSlot GBE_pending_reset_after_cache_unsubscribed_slot;
     std::string GBE_last_dota_launch_persona_signature;
     std::string GBE_last_dota_direct_connect_callback_signature;
     std::chrono::high_resolution_clock::time_point GBE_last_lobby_poll_time{};
@@ -138,6 +169,10 @@ public ISteamGameCoordinator
     Steam_GameServer_Items *server_items();
     void parse_gc_config();
     bool is_welcome_message(const GC_Message &message);
+    uint64 GBE_CurrentDotaLobbyGeneration() const;
+    GBE_DotaGenerationAdvanceResult GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary boundary, const char *reason);
+    bool GBE_IsQueuedLobbyMessageCurrent(const GC_Message &message, const char *stage) const;
+    GBE_DotaDeferredTaskConsumeResult GBE_ConsumeDotaDeferredTask(GBE_DotaDeferredTaskSlot &slot, const char *task_name);
     void clear_dota_runtime_state(bool preserve_reconnect_context);
     void GBE_ClearDotaLobbyRuntimeState();
     void GBE_ApplyQueuedLobbyState(const GC_Message &message);
@@ -167,14 +202,14 @@ public ISteamGameCoordinator
     bool GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed() const;
     bool GBE_HasPendingResetAfterCacheUnsubscribed() const;
     void GBE_SetPendingDotaAbandonFinalizeAfterOtherLeftChannel(uint64 lobby_id);
-    uint64 GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel();
+    GBE_DotaDeferredTaskConsumeResult GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel();
     void GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel();
     void GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(uint64 lobby_id);
-    uint64 GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
+    GBE_DotaDeferredTaskConsumeResult GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
     void GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
     void GBE_SetPendingResetAfterCacheUnsubscribed(uint64 lobby_id);
     void GBE_ClearPendingResetAfterCacheUnsubscribed(uint64 retained_lobby_id = 0);
-    uint64 GBE_ConsumePendingResetAfterCacheUnsubscribed();
+    GBE_DotaDeferredTaskConsumeResult GBE_ConsumePendingResetAfterCacheUnsubscribed();
     bool GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bool connected);
     bool GBE_SetDotaLobbyMemberRuntimeState(uint64 steam_id, bool connected, uint32 hero_id, bool has_hero_id);
     bool GBE_ShouldHoldDotaLanLaunchForRemoteMembers(uint32 next_game_state, uint32 *remote_count_out, uint32 *connected_remote_count_out) const;
@@ -265,7 +300,12 @@ public ISteamGameCoordinator
     std::vector<GBE_LocalLobby> GBE_GetDotaGenericLobbySnapshots(const char *reason);
     bool GBE_HostHasActiveDotaServerLobby(uint64 lobby_id) const;
     void GBE_RestoreSharedDotaLobbyState(const char *reason);
-    void ResetGCMemory(const char *reason = nullptr, bool leave_generic_lobby = true, bool clear_queued_messages = true);
+    bool ResetGCMemory(
+        const char *reason = nullptr,
+        bool leave_generic_lobby = true,
+        bool clear_queued_messages = true,
+        gbe::dota_lobby_generation::Boundary generation_boundary = gbe::dota_lobby_generation::Boundary::Reset,
+        bool generation_already_advanced = false);
     void GBE_LeaveGenericLobby();
     void GBE_ClearSettingsLobbyForDotaSignout();
     void GBE_SyncSettingsLobbyFromGenericLobby(const char *reason);

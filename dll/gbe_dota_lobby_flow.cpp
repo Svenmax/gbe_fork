@@ -167,7 +167,9 @@ GBE_DotaActionList leave_lobby_cache_unsubscribed_action_list(
     const std::string action_reason = reason ? reason : std::string();
     actions.push_back(GBE_DotaAction{ GBE_DotaActionType::AbandonedLobbySuppressed, 0u, std::string(), 0ull, lobby_id, 0ull, action_reason });
     actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25, 0ull, 0ull, 0ull, action_reason });
-    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::GcMemoryReset, 0u, std::string(), 0ull, 0ull, 0ull, action_reason, true, false });
+    GBE_DotaAction reset_action{ GBE_DotaActionType::GcMemoryReset, 0u, std::string(), 0ull, 0ull, 0ull, action_reason, true, false };
+    reset_action.generation_boundary = gbe::dota_lobby_generation::Boundary::Leave;
+    actions.push_back(std::move(reset_action));
     return actions;
 }
 
@@ -228,7 +230,9 @@ GBE_DotaActionList abandon_finalize_action_list(
 {
     GBE_DotaActionList actions;
     const std::string action_reason = reason ? reason : "7014_abandon_finalize";
-    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::GcMemoryReset, 0u, std::string(), 0ull, 0ull, 0ull, action_reason, true, false });
+    GBE_DotaAction reset_action{ GBE_DotaActionType::GcMemoryReset, 0u, std::string(), 0ull, 0ull, 0ull, action_reason, true, false };
+    reset_action.generation_boundary = gbe::dota_lobby_generation::Boundary::Leave;
+    actions.push_back(std::move(reset_action));
     return actions;
 }
 
