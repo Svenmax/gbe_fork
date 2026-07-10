@@ -81,6 +81,8 @@ struct FakeConnector final : GBE_DotaReconnectDirectConnector {
     SteamNetworkingIPAddr address{};
     std::vector<SteamNetworkingConfigValue_t> options;
     std::vector<std::string> *events{};
+    std::recursive_mutex *probed_mutex{};
+    bool lock_available_during_call{};
 
     std::uint32_t connect_by_ip_address(
         const SteamNetworkingIPAddr &candidate_address,
@@ -92,6 +94,13 @@ struct FakeConnector final : GBE_DotaReconnectDirectConnector {
         options.assign(candidate_options, candidate_options + option_count);
         if (events)
             events->push_back("connect");
+        if (probed_mutex) {
+            std::thread probe([&] {
+                std::unique_lock<std::recursive_mutex> lock(*probed_mutex, std::try_to_lock);
+                lock_available_during_call = lock.owns_lock();
+            });
+            probe.join();
+        }
         return returned_connection;
     }
 };
@@ -102,6 +111,8 @@ struct FakeQueue final : GBE_DotaReconnectCallbackQueue {
     double delay{-1.0};
     std::uint64_t generation{};
     std::vector<std::string> *events{};
+    std::recursive_mutex *probed_mutex{};
+    bool lock_available_during_call{};
 
     void queue_game_server_change(
         const GameServerChangeRequested_t &candidate_callback,
@@ -114,6 +125,13 @@ struct FakeQueue final : GBE_DotaReconnectCallbackQueue {
         generation = candidate_generation;
         if (events)
             events->push_back("queue");
+        if (probed_mutex) {
+            std::thread probe([&] {
+                std::unique_lock<std::recursive_mutex> lock(*probed_mutex, std::try_to_lock);
+                lock_available_during_call = lock.owns_lock();
+            });
+            probe.join();
+        }
     }
 };
 
@@ -505,6 +523,86 @@ void test_properties()
     expect(connector_b.calls == 1 && queue_b.calls == 1, "P8-C second instance remains independent");
 }
 
+void test_concurrency_properties()
+{
+    for (std::uint64_t seed = 1u; seed <= 64u; ++seed) {
+        std::recursive_mutex store_mutex;
+        FakeProvider provider;
+        provider.primary = make_context(1000u + seed, 2000u + seed, "10.1.2.3:27015", seed);
+        FakeConnector connector;
+        FakeQueue queue;
+        GBE_DotaSerializedConnectionState state;
+        connector.probed_mutex = &store_mutex;
+        queue.probed_mutex = &store_mutex;
+
+        GBE_DotaReconnectPostPlan plan;
+        {
+            std::lock_guard<std::recursive_mutex> lock(store_mutex);
+            plan = GBE_PrepareDotaReconnectPostConnectionState(500u, 64u, provider, state);
+        }
+        const auto result = GBE_ExecuteDotaReconnectPostEffects(std::move(plan), connector, queue);
+        expect(result.direct_connect_attempted && result.callback_queued, "P11-B prepared reconnect executes both external effects");
+        expect(connector.lock_available_during_call, "P11-B network fake runs outside the store lock");
+        expect(queue.lock_available_during_call, "P11-B callback fake runs outside the store lock");
+    }
+
+    for (std::uint64_t seed = 1u; seed <= 64u; ++seed) {
+        GBE_DotaSerializedConnectionSynchronizer synchronizer_a;
+        GBE_DotaSerializedConnectionSynchronizer synchronizer_b;
+        GBE_DotaSerializedConnectionState state_a;
+        GBE_DotaSerializedConnectionState state_b;
+        FakeProvider provider_a;
+        FakeProvider provider_b;
+        FakeConnector connector_a;
+        FakeConnector connector_b;
+        FakeQueue queue_a;
+        FakeQueue queue_b;
+        std::atomic<bool> start{};
+
+        provider_a.primary = make_context(1000u + seed, 2000u + seed, "10.10.1.1:27015", seed * 2u);
+        provider_b.primary = make_context(3000u + seed, 4000u + seed, "10.10.2.2:27016", seed * 2u + 1u);
+        std::thread worker_a([&] {
+            while (!start.load(std::memory_order_acquire)) {
+            }
+            auto lock = synchronizer_a.acquire();
+            for (int repeat = 0; repeat < 4; ++repeat)
+                execute(provider_a, connector_a, queue_a, state_a, 64u + static_cast<std::uint32_t>(repeat));
+        });
+        std::thread worker_b([&] {
+            while (!start.load(std::memory_order_acquire)) {
+            }
+            auto lock = synchronizer_b.acquire();
+            for (int repeat = 0; repeat < 4; ++repeat)
+                execute(provider_b, connector_b, queue_b, state_b, 80u + static_cast<std::uint32_t>(repeat));
+        });
+
+        start.store(true, std::memory_order_release);
+        worker_a.join();
+        worker_b.join();
+        const auto state_b_before = state_b;
+
+        provider_a.primary.generation += 1000u;
+        {
+            auto lock = synchronizer_a.acquire();
+            execute(provider_a, connector_a, queue_a, state_a);
+        }
+
+        expect(state_a.generation == provider_a.primary.generation && state_a.lobby_id == provider_a.primary.lobby_id, "P11-C first serialized instance owns its generated state");
+        expect(state_b.generation == provider_b.primary.generation && state_b.lobby_id == provider_b.primary.lobby_id, "P11-C second serialized instance owns its generated state");
+        expect(
+            state_b.generation == state_b_before.generation &&
+                state_b.lobby_id == state_b_before.lobby_id &&
+                state_b.last_post_server_id == state_b_before.last_post_server_id &&
+                state_b.retry_count == state_b_before.retry_count &&
+                state_b.last_post_size == state_b_before.last_post_size &&
+                state_b.callback_key == state_b_before.callback_key &&
+                state_b.direct_connect_key == state_b_before.direct_connect_key,
+            "P11-C mutation of one serialized instance cannot change another instance");
+        expect(connector_a.calls == 2u && queue_a.calls == 2u, "P11-C first instance keeps an independent dedup history");
+        expect(connector_b.calls == 1u && queue_b.calls == 1u, "P11-C second instance keeps an independent dedup history");
+    }
+}
+
 } // namespace
 
 int main()
@@ -517,6 +615,7 @@ int main()
     test_parse_and_connect_failures();
     test_diagnostic_reason_and_source_serialization();
     test_properties();
+    test_concurrency_properties();
     std::cout << "reconnect network assertions: " << assertions - failures << "/" << assertions << std::endl;
     return failures == 0 ? 0 : 1;
 }

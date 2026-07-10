@@ -46,3 +46,9 @@ This contract records the current thread ownership and synchronization boundarie
 ## ThreadSanitizer Gate
 
 `tools/run_gc_tsan_tests.sh` builds the reconnect network/state focused test and the bounded shared-store/context stress test with ThreadSanitizer. The sanitizer exits on the first race report. Pull requests run this gate in the blocking `gc-tsan` Ubuntu job with Clang.
+
+## Concurrency Properties
+
+- P11-A runs deterministic concurrent publish and compare/update histories and requires the final state to match the maximal accepted generation plus every accepted mutation at that generation.
+- P11-B prepares reconnect work while the store lock is held, then requires network and callback fakes to acquire the same mutex from another thread during effect execution.
+- P11-C runs two serialized instances with separate synchronizers, states, connectors, and callback queues, then requires mutation and dedup history to remain instance-local.

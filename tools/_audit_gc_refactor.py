@@ -628,6 +628,23 @@ def audit_concurrency_ownership_contract():
     for required in ("gc-tsan:", "CXX: clang++", "bash tools/run_gc_tsan_tests.sh"):
         if required not in workflow_text:
             issues.append(f"emu-pull-request.yml: missing P11.5 TSAN CI boundary {required}")
+
+    store_test_text = read(os.path.join(ROOT_DIR, "tools", "gbe_dota_lobby_state_store_test", "gbe_dota_lobby_state_store_test.cpp"))
+    reconnect_test_text = read(os.path.join(ROOT_DIR, "tools", "gbe_dota_reconnect_network_test", "gbe_dota_reconnect_network_test.cpp"))
+    for required in (
+        "P11-A accepted generation history reaches its maximal linearization point",
+        "P11-A accepted final-generation updates linearize exactly once",
+    ):
+        if required not in store_test_text:
+            issues.append(f"gbe_dota_lobby_state_store_test.cpp: missing P11.6 property {required}")
+    for required in (
+        "P11-B network fake runs outside the store lock",
+        "P11-B callback fake runs outside the store lock",
+        "P11-C mutation of one serialized instance cannot change another instance",
+        "P11-C second instance keeps an independent dedup history",
+    ):
+        if required not in reconnect_test_text:
+            issues.append(f"gbe_dota_reconnect_network_test.cpp: missing P11.6 property {required}")
     return issues
 
 

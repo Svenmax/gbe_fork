@@ -1,5 +1,6 @@
 #include "dll/gbe_dota_lobby_state_store.h"
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -510,6 +511,77 @@ void test_property_stale_updates_never_change_store()
     }
 }
 
+void test_property_accepted_generation_updates_are_linearizable()
+{
+    constexpr std::uint64_t generations = 32u;
+    constexpr int publisher_count = 2;
+    constexpr int updater_count = 2;
+    constexpr int updates_per_writer = 512;
+
+    for (std::uint64_t seed = 1u; seed <= 64u; ++seed) {
+        Fixture fixture;
+        const std::uint64_t base_generation = seed * 1000u;
+        std::array<std::atomic<std::uint64_t>, generations + 1u> applied_updates{};
+        std::atomic<bool> start{};
+        std::vector<std::thread> workers;
+
+        auto make_generation = [](std::uint64_t generation) {
+            auto state = populated_state(generation);
+            state.lobby_id = generation * 10u + 1u;
+            state.server_id = generation * 10000u;
+            state.connect = "generation-" + std::to_string(generation);
+            return state;
+        };
+
+        fixture.store.publish(make_generation(base_generation));
+        workers.reserve(publisher_count + updater_count);
+        for (int publisher = 0; publisher < publisher_count; ++publisher) {
+            workers.emplace_back([&, publisher] {
+                while (!start.load(std::memory_order_acquire)) {
+                }
+                for (std::uint64_t step = 0u; step < generations / publisher_count; ++step) {
+                    const auto ordinal = step * publisher_count + static_cast<std::uint64_t>(publisher);
+                    const auto offset = (ordinal * 17u + seed) % generations + 1u;
+                    fixture.store.publish_if_generation_current_or_newer(make_generation(base_generation + offset));
+                    std::this_thread::yield();
+                }
+            });
+        }
+        for (int updater = 0; updater < updater_count; ++updater) {
+            workers.emplace_back([&, updater] {
+                while (!start.load(std::memory_order_acquire)) {
+                }
+                for (int step = 0; step < updates_per_writer; ++step) {
+                    const auto offset =
+                        (static_cast<std::uint64_t>(step) * 13u + static_cast<std::uint64_t>(updater) * 7u + seed) % generations + 1u;
+                    fixture.store.compare_update(base_generation + offset, [&, offset](auto &candidate) {
+                        ++candidate.server_id;
+                        applied_updates[offset].fetch_add(1u, std::memory_order_relaxed);
+                    });
+                    std::this_thread::yield();
+                }
+            });
+        }
+
+        start.store(true, std::memory_order_release);
+        for (auto &worker : workers)
+            worker.join();
+
+        const auto final_generation = base_generation + generations;
+        fixture.store.compare_update(final_generation, [&](auto &candidate) {
+            ++candidate.server_id;
+            applied_updates[generations].fetch_add(1u, std::memory_order_relaxed);
+        });
+        const auto snapshot = fixture.store.snapshot();
+        const auto final_updates = applied_updates[generations].load(std::memory_order_relaxed);
+
+        expect_eq_u64(snapshot.generation, final_generation, "P11-A accepted generation history reaches its maximal linearization point");
+        expect_eq_u64(snapshot.lobby_id, final_generation * 10u + 1u, "P11-A final snapshot comes from the maximal accepted publish");
+        expect_eq_u64(snapshot.server_id, final_generation * 10000u + final_updates, "P11-A accepted final-generation updates linearize exactly once");
+        expect_eq_string(snapshot.connect, "generation-" + std::to_string(final_generation), "P11-A stale histories cannot replace the final generation");
+    }
+}
+
 } // namespace
 
 int main()
@@ -529,6 +601,7 @@ int main()
     test_concurrent_clear_and_publish_expose_complete_states();
     test_property_snapshots_always_represent_complete_versions();
     test_property_stale_updates_never_change_store();
+    test_property_accepted_generation_updates_are_linearizable();
 
     if (failures != 0) {
         std::fprintf(stderr, "gbe_dota_lobby_state_store_test failed: %d assertion(s)\n", failures);

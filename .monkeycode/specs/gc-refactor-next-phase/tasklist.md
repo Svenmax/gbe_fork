@@ -295,10 +295,13 @@
     - 实现：新增 `tools/run_gc_tsan_tests.sh`，以 `-fsanitize=thread -O1 -g -fno-omit-frame-pointer -pthread` 构建并运行 reconnect network/state focused test 与 P11.4 shared lobby/reconnect context stress test。`TSAN_OPTIONS=halt_on_error=1:exitcode=66` 使首个 race 报告立即以非零状态失败。
     - CI：PR workflow 新增独立必过 `gc-tsan` job，在 Ubuntu 24.04 安装 Clang 并以 `CXX=clang++` 执行最小门禁。Audit 11 要求 sanitizer flags、race 退出策略、两个 focused target 和 PR workflow 接线持续存在；audit helper 增至 9/9。
     - 验证：`CXX=c++ bash tools/run_gc_tsan_tests.sh` 在当前环境通过，reconnect network 262/262，concurrency stress 通过且无 ThreadSanitizer 报告。Clang TSAN 由 PR `gc-tsan` job 持续执行。
-  - [ ] 11.6 增加并发属性测试
+  - [x] 11.6 增加并发属性测试
     - 属性 P11-A：任意并发历史中的已接受 generation update 可线性化。
     - 属性 P11-B：callback/network fake 在 store lock 外被调用。
     - 属性 P11-C：跨实例 serialized state 不共享可变内存。
+    - P11-A：64 个确定性 seed 各自运行 2 个乱序 monotonic publisher 与 2 个 matching generation updater；断言最终 snapshot 位于最大 generation 的 publish 线性化点，并且该 generation 的每个已接受 update 仅贡献一次完整 state mutation。
+    - P11-B：64 个 seed 通过 prepare/effects seam 在 store lock 内完成 context/state/dedup 预留，释放后执行 connector 和 callback queue fake；fake 从另一线程 `try_lock` 同一 mutex，证明两类外部 effect 均位于 store lock 外。
+    - P11-C：64 组双实例并发历史各自拥有 synchronizer、serialized state、connector 和 callback queue；断言各自 generation/lobby/dedup 历史独立，后续仅修改实例 A 时实例 B 的全部可变字段保持不变。Audit 11 要求 P11-A/B/C 的关键属性标签持续存在。
   - [ ] 11.7 检查点：确保所有测试通过，如有疑问请询问用户
 
 - [ ] 12. P12 删除过渡层并固化架构门禁
