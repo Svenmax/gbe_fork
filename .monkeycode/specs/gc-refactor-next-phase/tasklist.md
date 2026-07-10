@@ -264,7 +264,7 @@
   - [x] 10.7 检查点：确保所有测试通过，如有疑问请询问用户
     - 检查点：P10.1-P10.6 已完成，结构化 reconnect/lifecycle 事件、typed reason/source、固定字段格式、敏感字段排除和自动派生 inventory 审计均已落地。完整 GC 验证通过，未发现需要用户裁决的协议、日志或兼容性疑问。
 
-- [ ] 11. P11 明确并验证并发模型
+- [x] 11. P11 明确并验证并发模型
   - [x] 11.1 标注状态线程所有权和锁边界
     - 为 lobby store、recent context、serialized state、callback queue 和 delayed tasks 定义 owner 与访问规则。
     - 依赖：任务 5、任务 7 和任务 8。
@@ -302,7 +302,10 @@
     - P11-A：64 个确定性 seed 各自运行 2 个乱序 monotonic publisher 与 2 个 matching generation updater；断言最终 snapshot 位于最大 generation 的 publish 线性化点，并且该 generation 的每个已接受 update 仅贡献一次完整 state mutation。
     - P11-B：64 个 seed 通过 prepare/effects seam 在 store lock 内完成 context/state/dedup 预留，释放后执行 connector 和 callback queue fake；fake 从另一线程 `try_lock` 同一 mutex，证明两类外部 effect 均位于 store lock 外。
     - P11-C：64 组双实例并发历史各自拥有 synchronizer、serialized state、connector 和 callback queue；断言各自 generation/lobby/dedup 历史独立，后续仅修改实例 A 时实例 B 的全部可变字段保持不变。Audit 11 要求 P11-A/B/C 的关键属性标签持续存在。
-  - [ ] 11.7 检查点：确保所有测试通过，如有疑问请询问用户
+  - [x] 11.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - 检查点：P11.1-P11.6 已完成。shared lobby store、recent reconnect context、serialized state、callback queue 和 delayed task 的 ownership 与访问规则已固化；production lock order 为 `global_mutex -> serialized instance mutex -> prepare/dedup reservation -> release instance mutex -> release global_mutex -> external effects`。
+    - 并发门禁：有界 1 writer/4 reader 压力历史通过；P11-A generation 线性化、P11-B 锁外 network/callback effect、P11-C 跨实例隔离属性各运行 64 个确定性 seed；PR workflow 具备独立阻断式 Clang TSAN job。
+    - 终验：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 均通过；reconnect network 774/774，callsystem guard 8/8，registry 339/339，payload 449/449，handler 77/77，replay fixtures 7 组，audit helper 9/9，audit 11 项 0 问题，TSAN 无 race 报告。未发现需要用户裁决的协议、并发或兼容性疑问。
 
 - [ ] 12. P12 删除过渡层并固化架构门禁
   - [ ] 12.1 删除生命周期重复 handler 逻辑
