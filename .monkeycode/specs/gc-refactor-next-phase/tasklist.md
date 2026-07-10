@@ -338,10 +338,15 @@
     - reconnect 与 shared 边界：Audit 14 拒绝 `gbe_dota_reconnect_context.cpp` 之外对 `GBE_DotaReconnectSource`/`GBE_DotaReconnectContext` canonical 字段的逐字段赋值，并复用 Audit 13 的退役 shared lobby facade/global 检查，避免维护平行符号库存。
     - fixtures：新增 approved executor seam、canonical registry、canonical reconnect owner 和 Store snapshot 正例，以及 handler 直调、额外 registry、post-login switch、owner 外 reconnect mapping 和退役 shared facade 反例；审计 helper 增至 21/21。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 通过；reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 546/546，handler smoke 77/77，replay fixtures 7 组，audit helper 21/21，audit 14 项 0 问题，TSAN 无 race。
-  - [ ] 12.5 完善分层 CI 门禁
+  - [x] 12.5 完善分层 CI 门禁
     - 快速层：offline unit、property、replay、audit、diff check。
     - 生产层：Windows/Linux `api_experimental` x64 release。
     - 并发层：TSAN 最小目标。
+    - 快速层：PR `gc-verification` 使用 `run_gc_verification.sh --fast --base-sha <PR base>`，运行 header compile、unit/property、4 组高信号 replay、audit helper、production audit 和 base diff check。完整 7 组 replay 与附加 domain suites 保留在 `--full` 阶段闸口。
+    - 生产层：保留独立 reusable Windows/Linux jobs，均以 `continue_on_error: false` 构建 `api_experimental`、x64、release，避免 offline pass 掩盖 production integration failure。
+    - 并发层：保留独立 Ubuntu Clang TSAN job，执行 reconnect network 与 shared-store/reconnect stress 最小目标，`halt_on_error=1:exitcode=66` 在首个 race 阻断。
+    - 门禁：新增 Audit 15 和可注入正反 fixtures，拒绝 fast job 回退到 `--full` 或缺少 base SHA、Windows/Linux release matrix 漂移、production failure 非阻断、TSAN 编译器/脚本漂移，以及 fast verification 缺失 offline/audit/diff 或关键 unit/property/replay target；审计 helper 增至 23/23。
+    - 验证：`bash tools/run_gc_verification.sh --fast --base-sha origin/dev`、`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 通过；reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 546/546，handler smoke 77/77，full replay fixtures 7 组，audit helper 23/23，audit 15 项 0 问题，TSAN 无 race。
   - [ ] 12.6 执行全仓回归验证
     - 运行 full GC verification、生产构建、Clang/GCC 编译、replay fixtures 和 TSAN。
     - 对比任务 1 基线，确认 message mapping、payload summary 和 action sequence 保持稳定。
