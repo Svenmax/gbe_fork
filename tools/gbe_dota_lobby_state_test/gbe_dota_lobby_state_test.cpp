@@ -589,6 +589,7 @@ bool test_owner_disconnect_and_reconnect()
         GBE_DotaReconnectContext ctx{};
         bool result = gbe::dota_lobby_state::build_reconnect_context(lobby, ctx);
         ok &= expect_true(result, "reconnect context built for started game");
+        ok &= expect_eq_u64(ctx.lobby_id, lobby.lobby_id, "reconnect lobby_id");
         ok &= expect_eq_u64(ctx.server_id, 700ull, "reconnect server_id");
         ok &= expect_eq_u32(ctx.lobby_state, 2u, "reconnect lobby_state");
         ok &= expect_eq_u32(ctx.game_state, 2u, "reconnect game_state");
@@ -1274,6 +1275,38 @@ bool test_active_lobby_owned_by_local_user()
     return ok;
 }
 
+bool test_serialized_connection_state_scopes_dedup_to_lobby()
+{
+    bool ok = true;
+    GBE_DotaSerializedConnectionState state{};
+
+    state.begin_lobby(100ull);
+    ok &= expect_true(state.should_connect_direct(700ull, "10.0.0.5:27015"), "first direct connect is allowed");
+    state.record_direct_connect(700ull, "10.0.0.5:27015");
+    ok &= expect_false(state.should_connect_direct(700ull, "10.0.0.5:27015"), "same lobby direct connect is deduplicated");
+    ok &= expect_true(state.should_connect_direct(700ull, "10.0.0.6:27015"), "same lobby allows a different direct endpoint");
+
+    state.record_engine_callback(700ull, "10.0.0.5:27015");
+    ok &= expect_true(state.engine_callback_queued(700ull, "10.0.0.5:27015"), "same lobby engine callback is deduplicated");
+    ok &= expect_false(state.engine_callback_queued(700ull, "10.0.0.6:27015"), "same lobby allows a callback for a different endpoint");
+
+    GBE_DotaSerializedConnectionState other_instance{};
+    other_instance.begin_lobby(100ull);
+    ok &= expect_true(other_instance.should_connect_direct(700ull, "10.0.0.5:27015"), "serialized socket instances keep independent direct connect state");
+    ok &= expect_false(other_instance.engine_callback_queued(700ull, "10.0.0.5:27015"), "serialized socket instances keep independent callback state");
+
+    state.begin_server(701ull);
+    ok &= expect_true(state.should_connect_direct(701ull, "10.0.0.5:27015"), "same lobby allows a different direct server");
+    ok &= expect_false(state.engine_callback_queued(701ull, "10.0.0.5:27015"), "same lobby allows a callback for a different server");
+
+    state.begin_lobby(101ull);
+    ok &= expect_true(state.should_connect_direct(700ull, "10.0.0.5:27015"), "new lobby allows the same direct endpoint");
+    ok &= expect_false(state.engine_callback_queued(700ull, "10.0.0.5:27015"), "new lobby allows the same engine callback endpoint");
+    ok &= expect_true(state.last_post_server_id == 0ull, "new lobby resets the posted server generation");
+    ok &= expect_true(state.retry_count == 0u, "new lobby resets retry accounting");
+    return ok;
+}
+
 } // namespace
 
 int main()
@@ -1290,6 +1323,7 @@ int main()
     ok &= test_teardown_retrieval_decision();
     ok &= test_postgame_observation_decision();
     ok &= test_active_lobby_owned_by_local_user();
+    ok &= test_serialized_connection_state_scopes_dedup_to_lobby();
 
     if (!ok)
         return 1;

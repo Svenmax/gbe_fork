@@ -236,6 +236,7 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
         shared.owner_connected,
         shared.launch_phase);
     if (shared_eligibility.context_eligible) {
+        out->lobby_id = shared.lobby_id;
         out->server_id = shared.server_id;
         out->lobby_state = shared.lobby_state;
         out->game_state = shared.game_state;
@@ -303,6 +304,7 @@ GBE_DotaReconnectSharedStateSnapshot GBE_GetSharedDotaReconnectStateSnapshot()
     GBE_DotaReconnectSharedStateSnapshot snapshot{};
     snapshot.valid = GBE_shared_dota_lobby_state.valid;
     snapshot.active = GBE_shared_dota_lobby_state.active;
+    snapshot.lobby_id = GBE_shared_dota_lobby_state.lobby_id;
     snapshot.lobby_state = GBE_shared_dota_lobby_state.state;
     snapshot.game_state = GBE_shared_dota_lobby_state.game_state;
     snapshot.server_id = GBE_shared_dota_lobby_state.server_id;

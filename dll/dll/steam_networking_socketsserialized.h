@@ -19,6 +19,7 @@
 #define __INCLUDED_STEAM_NETWORKING_SOCKETSERIALIZED_H__
 
 #include "base.h"
+#include "gbe_dota_reconnect_shared.h"
 
 class Steam_Networking_Sockets_Serialized :
 public ISteamNetworkingSocketsSerialized002,
@@ -32,6 +33,7 @@ public ISteamNetworkingSocketsSerialized005
     class SteamCallBacks *callbacks{};
     class RunEveryRunCB *run_every_runcb{};
     class Steam_Networking_Sockets *direct_sockets{};
+    GBE_DotaSerializedConnectionState dota_connection_state{};
 
     static void steam_callback(void *object, Common_Message *msg);
     static void steam_run_every_runcb(void *object);

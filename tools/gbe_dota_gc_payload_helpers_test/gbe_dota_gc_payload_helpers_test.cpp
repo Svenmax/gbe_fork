@@ -244,6 +244,7 @@ TEST_CASE(test_get_dota_reconnect_context)
 
     GBE_shared_dota_lobby_state.valid = true;
     GBE_shared_dota_lobby_state.active = true;
+    GBE_shared_dota_lobby_state.lobby_id = 67890ull;
     GBE_shared_dota_lobby_state.state = 2;
     GBE_shared_dota_lobby_state.game_state = 0;
     GBE_shared_dota_lobby_state.connect = "127.0.0.1:27015";
@@ -256,6 +257,7 @@ TEST_CASE(test_get_dota_reconnect_context)
     GBE_DotaReconnectSharedStateSnapshot snapshot = GBE_GetSharedDotaReconnectStateSnapshot();
     EXPECT_TRUE(snapshot.valid);
     EXPECT_TRUE(snapshot.active);
+    EXPECT_TRUE(snapshot.lobby_id == GBE_shared_dota_lobby_state.lobby_id);
     EXPECT_TRUE(snapshot.lobby_state == GBE_shared_dota_lobby_state.state);
     EXPECT_TRUE(snapshot.game_state == GBE_shared_dota_lobby_state.game_state);
     EXPECT_TRUE(snapshot.server_id == GBE_shared_dota_lobby_state.server_id);
@@ -267,6 +269,7 @@ TEST_CASE(test_get_dota_reconnect_context)
     EXPECT_STR_CONTAINS(snapshot.connect, "127.0.0.1");
 
     EXPECT_TRUE(GBE_GetDotaReconnectContext(&ctx));
+    EXPECT_TRUE(ctx.lobby_id == 67890ull);
     EXPECT_TRUE(ctx.server_id == 12345);
     EXPECT_TRUE(ctx.lobby_state == 2);
     EXPECT_TRUE(ctx.custom_game_id == 500ull);

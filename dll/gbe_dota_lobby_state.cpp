@@ -792,6 +792,7 @@ bool build_reconnect_context(const GBE_LocalLobby &local, GBE_DotaReconnectConte
     if (!eligibility.context_eligible)
         return false;
 
+    context.lobby_id = local.lobby_id;
     context.server_id = local.server_id;
     context.lobby_state = local.state;
     context.game_state = local.game_state;

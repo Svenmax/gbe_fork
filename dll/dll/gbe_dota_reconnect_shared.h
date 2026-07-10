@@ -5,11 +5,13 @@
 #include <cstdio>
 #include <cstdarg>
 #include <atomic>
+#include <string>
 
 // Shared state for Dota 2 LAN reconnect interception.
 // Written by steam_game_coordinator.cpp, read by steam_networking_socketsserialized.cpp.
 
 struct GBE_DotaReconnectContext {
+    uint64_t lobby_id;        // Dota lobby generation for reconnect deduplication
     uint64_t server_id;       // lobby server_steamid (AnonGameServer)
     uint32_t lobby_state;     // lobby state (2 = RUN)
     uint32_t game_state;      // lobby game_state (2 = in-game, 3 = post-game)
@@ -21,6 +23,7 @@ struct GBE_DotaReconnectContext {
 struct GBE_DotaReconnectSharedStateSnapshot {
     bool valid{};
     bool active{};
+    uint64_t lobby_id{};
     uint32_t lobby_state{};
     uint32_t game_state{};
     uint64_t server_id{};
@@ -30,6 +33,58 @@ struct GBE_DotaReconnectSharedStateSnapshot {
     uint32_t launch_phase{};
     uint64_t owner_steam_id{};
     char connect[128]{};
+};
+
+struct GBE_DotaSerializedConnectionState {
+    uint64_t lobby_id{};
+    uint64_t last_post_server_id{};
+    uint32_t retry_count{};
+    uint32_t last_post_size{};
+    uint64_t callback_server_id{};
+    std::string callback_endpoint;
+    uint64_t direct_connect_server_id{};
+    std::string direct_connect_endpoint;
+
+    void begin_lobby(uint64_t current_lobby_id)
+    {
+        if (lobby_id == current_lobby_id)
+            return;
+        *this = {};
+        lobby_id = current_lobby_id;
+    }
+
+    void begin_server(uint64_t server_id)
+    {
+        if (last_post_server_id == server_id)
+            return;
+        last_post_server_id = server_id;
+        retry_count = 0;
+        last_post_size = 0;
+        callback_server_id = 0;
+        callback_endpoint.clear();
+    }
+
+    bool should_connect_direct(uint64_t server_id, const std::string &endpoint) const
+    {
+        return direct_connect_server_id != server_id || direct_connect_endpoint != endpoint;
+    }
+
+    void record_direct_connect(uint64_t server_id, const std::string &endpoint)
+    {
+        direct_connect_server_id = server_id;
+        direct_connect_endpoint = endpoint;
+    }
+
+    bool engine_callback_queued(uint64_t server_id, const std::string &endpoint) const
+    {
+        return callback_server_id == server_id && callback_endpoint == endpoint;
+    }
+
+    void record_engine_callback(uint64_t server_id, const std::string &endpoint)
+    {
+        callback_server_id = server_id;
+        callback_endpoint = endpoint;
+    }
 };
 
 // Raw immutable scalar snapshot. Field values are copied as-is even when

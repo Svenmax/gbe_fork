@@ -2138,8 +2138,15 @@ static void test_wrapped_custom_game_finished_loading_handles_success_and_failur
         .take();
     TEST_ASSERT(tf.gc.GBE_HandleDotaWrappedCustomGameLifecycleRequest(
         make_wrapped_custom_game_context(8053u, success)), "wrapped 8053 success handler should return true");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "wrapped 8053 success should publish the updated lifecycle state");
-    TEST_ASSERT(tf.recorder.actions[0].reason == "8053_wrapped_finished_loading", "wrapped 8053 success reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.runtime_states.size(), 1u, "wrapped 8053 success should update local member runtime state");
+    TEST_ASSERT_EQ(tf.recorder.runtime_states[0].steam_id, tf.settings.get_local_steam_id().ConvertToUint64(), "wrapped 8053 should update the local member");
+    TEST_ASSERT(tf.recorder.runtime_states[0].connected, "wrapped 8053 should mark the local member connected");
+    TEST_ASSERT_EQ(tf.recorder.runtime_states[0].action_sequence_index, 0u, "wrapped 8053 should update runtime state before publishing member data");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "wrapped 8053 success should publish local member data before shared state");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbyLocalMemberData, "wrapped 8053 should publish local member data after runtime state");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "8053_wrapped_finished_loading", "wrapped 8053 local member reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "wrapped 8053 should publish shared state after local member data");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "8053_wrapped_finished_loading", "wrapped 8053 shared state reason should be preserved");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.launch_phase, GBE_kDotaLaunchPhaseLoaded, "wrapped 8053 success should mark launch loaded");
 
     tf.reset();

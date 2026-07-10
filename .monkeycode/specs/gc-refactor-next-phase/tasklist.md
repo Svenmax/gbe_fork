@@ -1,0 +1,352 @@
+# GC 后续重构实施计划
+
+- [ ] 1. 固化当前 P0 修复基线
+  - [x] 1.1 复核并提交当前行为修复
+    - 范围：wrapped `8053` 行为一致性、跨大厅连接去重、reconnect `lobby_id` 传播、PR 生产构建门禁。
+    - 排除未跟踪目录 `docs/superpowers/`，只纳入本轮已验证的生产代码、测试和工作流文件。
+    - 依赖：无。
+    - 验收：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 和 `git diff --check` 通过。
+  - [ ] 1.2 建立后续重构基线记录
+    - 记录基线 commit SHA、GC offline 测试数量、replay fixture 数量和 audit 结果。
+    - 后续每个阶段均与该基线比较行为、构建和测试结果。
+    - 验收：基线信息可由 Git 和验证脚本重复获取。
+  - [ ] 1.3 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 2. P1 统一 direct/wrapped 自定义游戏生命周期执行器
+  - [ ] 2.1 定义生命周期执行上下文
+    - 在 Dota domain/coordinator 边界定义共享 context，承载 transition decision、wrapped 模式、outer session、reason、request job 和 details update 参数。
+    - 保持 direct/wrapped 消息解析逻辑位于各自 adapter。
+    - 依赖：任务 1。
+    - 验收：context 不依赖具体 protobuf request 类型，不改变 wire payload。
+  - [ ] 2.2 实现共享 `8052` transition executor
+    - 统一 launch phase、runtime lobby update、shared snapshot 和 details update 的执行顺序。
+    - 保留 wrapped session 字段和 direct response 语义。
+    - 验收：direct/wrapped handler 只负责 parse、context mapping、executor 调用和日志。
+  - [ ] 2.3 实现共享 `8053` transition executor
+    - 固定执行顺序：更新 lobby state、更新 local member runtime、标记 launch phase、发布 local member metadata、发布 shared snapshot、发送 details update。
+    - 显式处理 load failure、lobby ID 不匹配、重复消息和 inactive lobby。
+    - 验收：direct/wrapped 不再分别维护同一组副作用调用。
+  - [ ] 2.4 增加 direct/wrapped 表驱动单元测试
+    - 覆盖 `8052`、`8053` 成功、失败、重复、inactive lobby、lobby ID 匹配与不匹配。
+    - 对相同 transition 输入断言 direct/wrapped 的 domain action sequence 等价。
+    - 对 wrapped 路径额外断言 outer session 和 wrapped details update 参数。
+  - [ ] 2.5 增加生命周期 action sequence 属性测试
+    - 属性 P1-A：成功 `8053` 中 runtime state 始终早于 local member publish，local member publish 始终早于 shared publish。
+    - 属性 P1-B：load failure 不产生 connected runtime state 或 loaded launch phase。
+    - 属性 P1-C：不匹配 lobby ID 不改变任何 lobby/runtime 状态。
+  - [ ] 2.6 更新副作用审计基线
+    - 共享 executor 成为高风险副作用的批准 owner。
+    - 从 direct/wrapped handler 基线中移除已迁移的直接调用。
+    - 验收：audit 能阻止 handler 重新引入 publish/runtime 副作用直调。
+  - [ ] 2.7 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 3. P3 收窄 reconnect 模块职责和头文件依赖
+  - [ ] 3.1 创建 serialized connection state 窄模块
+    - 新建专用头文件和必要的实现文件，迁移 `GBE_DotaSerializedConnectionState`。
+    - 模块仅拥有 lobby/server/endpoint 代际、retry 和 callback/direct 去重状态。
+    - 依赖：任务 1；可与任务 2 独立实施。
+  - [ ] 3.2 清理 reconnect shared 公共头文件
+    - `gbe_dota_reconnect_shared.h` 仅保留跨模块 context、snapshot、标量 helper 和公共函数声明。
+    - 移除连接实现状态及其 `<string>` 依赖传播。
+    - 验收：现有调用方只包含其实际需要的窄头文件。
+  - [ ] 3.3 调整 production 与 offline test 源列表
+    - 更新 Premake、shell test source list 和 audit source ownership。
+    - 验收：production target 与 offline tests 使用同一个状态实现。
+  - [ ] 3.4 增加 include 自包含编译测试
+    - 分别单独编译 reconnect shared header 和 serialized state header 的最小 translation unit。
+    - 验收：头文件不依赖 include 顺序或偶然的传递 include。
+  - [ ] 3.5 保留并扩展状态对象单元测试
+    - 覆盖 lobby 切换、server 切换、endpoint 切换、双实例隔离、retry reset 和 callback/direct 双状态 reset。
+  - [ ] 3.6 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 4. P4 统一 reconnect context 生产管线
+  - [ ] 4.1 定义规范化 reconnect source model
+    - 建立 `GBE_DotaReconnectSource`，统一表示 shared、recent、local 和 generic lobby recovery 输入。
+    - 字段包含 source kind、lobby ID、server ID、state、game state、custom game、owner、endpoint 和 launch 状态。
+    - 依赖：任务 3。
+  - [ ] 4.2 实现唯一 context builder
+    - 集中 eligibility 判断、endpoint 规范化、字段复制和 context 构造。
+    - 消除各生产路径的手工字段映射。
+    - 验收：新增 context 字段只需修改一个 builder。
+  - [ ] 4.3 实现显式来源优先级策略
+    - 固定 shared、recent、generic recovery 的选择顺序和 fallback 条件。
+    - 返回 source kind 和拒绝原因，供日志与测试使用。
+  - [ ] 4.4 迁移全部 reconnect context 调用方
+    - 迁移 payload helper、lobby coordinator、networking sockets、Steam user 和其他 context consumer。
+    - 删除旧的重复 mapping helper。
+  - [ ] 4.5 增加来源矩阵单元测试
+    - 覆盖每种来源独立有效、多个来源同时有效、上游无效回退、endpoint 缺失、server 缺失和 inactive 状态。
+    - 断言全部字段包括 `lobby_id` 完整传播。
+  - [ ] 4.6 增加 context builder 属性测试
+    - 属性 P4-A：有效输出始终包含非零 server ID 和非空规范化 endpoint。
+    - 属性 P4-B：输出字段全部来自被选中的单一 source，不发生跨 source 混合。
+    - 属性 P4-C：source 优先级对输入枚举顺序保持稳定。
+  - [ ] 4.7 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 5. P8 建立可测试的 production reconnect 网络边界
+  - [ ] 5.1 定义窄网络接口
+    - 定义 direct connector、callback queue 和 reconnect context provider 接口。
+    - 接口使用项目现有 Steam 类型和错误表达，避免复制网络协议模型。
+    - 依赖：任务 4。
+  - [ ] 5.2 实现 production adapter
+    - adapter 封装 `ConnectByIPAddress`、callback 入队和 context 获取。
+    - 保持连接 options、callback 类型、delay 和日志字段不变。
+  - [ ] 5.3 将依赖注入 serialized sockets
+    - production 构造路径注入真实 adapter，offline tests 注入 fake。
+    - 保证 client 和 gameserver serialized socket 实例各自拥有状态和依赖。
+  - [ ] 5.4 重构 `PostConnectionStateMsg()` 为编排函数
+    - 分离 payload 诊断、context 决策、direct connect、callback dedup 和日志。
+    - 保持现有 public API 和调用时序。
+  - [ ] 5.5 增加完整 production-path 单元测试
+    - 覆盖首次连接、同大厅重复、跨大厅复用 endpoint、同大厅 server/endpoint 变化、解析失败和缺少 context。
+    - 断言 connect options、callback body、调用次数和执行顺序。
+  - [ ] 5.6 增加双实例与失败重试测试
+    - 验证 client/gameserver 实例互不抑制。
+    - 验证 direct connect 返回失败时的记录与后续 retry 策略符合设计。
+  - [ ] 5.7 增加 reconnect 编排属性测试
+    - 属性 P8-A：同 generation、server、endpoint 最多入队一次 engine callback。
+    - 属性 P8-B：generation 变化后首个有效消息必定重新获得连接机会。
+    - 属性 P8-C：一个实例的输入不会改变另一个实例的决策。
+  - [ ] 5.8 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 6. P5 将大厅生命周期副作用事务化
+  - [ ] 6.1 定义 transition effects 和 action model
+    - 统一表达 runtime、launch phase、local publish、shared publish、details update、delayed update 和 response 动作。
+    - 依赖：任务 2 和任务 5。
+  - [ ] 6.2 实现固定顺序的 lifecycle executor
+    - executor 接受不可变 plan 并执行 action list。
+    - 每个 action 记录 reason、lobby generation 和必要 session 数据。
+  - [ ] 6.3 迁移 `7070`、`8052`、`8053`
+    - 将已统一的自定义游戏生命周期执行器落到通用 action model。
+    - 删除专用 executor 中重复的副作用编排。
+  - [ ] 6.4 迁移 `7034` runtime 更新路径
+    - 统一 connected/disconnected、game state、hero state 和 launch poll 的 action 顺序。
+    - 保持 response 和 showcase repush guard 行为。
+  - [ ] 6.5 增加 action executor 单元测试
+    - 覆盖每个可选 action、组合 action、失败前置条件和固定顺序。
+  - [ ] 6.6 增加生命周期属性测试
+    - 属性 P5-A：同一 plan 多次序列化得到相同 action sequence。
+    - 属性 P5-B：action dependency 始终满足 runtime → local publish → shared publish → details update。
+    - 属性 P5-C：空 effects 不执行副作用。
+  - [ ] 6.7 更新审计规则
+    - 只允许 executor owner 直接调用高风险生命周期副作用 API。
+    - 验收：handler 和 planner 新增直调会使 audit 失败。
+  - [ ] 6.8 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 7. P6 引入显式 Lobby Generation
+  - [ ] 7.1 定义 generation 类型和分配规则
+    - 明确创建、加入、离开、重置和恢复大厅时 generation 的变化规则。
+    - 使用单调递增值并定义进程生命周期内的溢出行为。
+    - 依赖：任务 4 和任务 6。
+  - [ ] 7.2 将 generation 加入 lobby snapshot 与 reconnect context
+    - `lobby_id` 保持协议身份，generation 专门用于本地异步状态代际。
+    - 更新 shared、recent、local、generic recovery 和 serialized state。
+  - [ ] 7.3 将 generation 加入延迟任务和 callback
+    - runtime lobby update、reconnect callback、postgame task 和延迟 publish 在执行前校验 generation。
+    - 旧 generation 的任务返回明确 stale reason。
+  - [ ] 7.4 迁移现有 lobby ID 去重用途
+    - 连接和 callback 去重改用 generation，server/endpoint 继续作为同代际键。
+    - 保留 lobby ID 用于协议匹配和日志。
+  - [ ] 7.5 增加 generation 生命周期测试
+    - 覆盖快速退房重进、相同 lobby ID 复用、异步回调晚到、旧延迟任务和状态重置。
+  - [ ] 7.6 增加 generation 属性测试
+    - 属性 P6-A：新大厅生命周期 generation 严格变化。
+    - 属性 P6-B：旧 generation action 永远不能修改当前 lobby state。
+    - 属性 P6-C：generation 变化清除所有代际内去重记录。
+  - [ ] 7.7 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 8. P7 收敛全局大厅共享状态访问
+  - [ ] 8.1 定义 lobby state store 接口
+    - 提供 immutable snapshot、publish/update、clear 和 generation-aware compare/update 操作。
+    - 依赖：任务 7。
+  - [ ] 8.2 实现线程安全 store
+    - 集中 `global_mutex` 使用和状态拷贝规则。
+    - 禁止向调用方暴露可变共享状态引用。
+  - [ ] 8.3 迁移 shared lobby 读取路径
+    - 迁移 reconnect、payload、rich presence、postgame、lobby ownership 和诊断读取。
+    - 每个业务操作使用单个一致 snapshot。
+  - [ ] 8.4 迁移 shared lobby 写入路径
+    - 迁移 publish、clear、runtime member update 和 lifecycle state update。
+    - generation 不匹配的写入返回 stale 结果。
+  - [ ] 8.5 移除 production 中的直接全局访问
+    - 保留 store implementation 和必要测试 fixture 的受控访问。
+    - 增加 audit，阻止新增 `GBE_shared_dota_lobby_state` 直读直写。
+  - [ ] 8.6 增加 store 单元与并发测试
+    - 覆盖 snapshot 一致性、generation compare/update、clear、并发 reader/writer 和 stale write。
+  - [ ] 8.7 增加 store 属性测试
+    - 属性 P7-A：snapshot 始终表示一次完整状态版本。
+    - 属性 P7-B：失败的 stale update 不改变 store。
+    - 属性 P7-C：clear 后所有 valid-gated ID helper 返回零。
+  - [ ] 8.8 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 9. P9 建立类型化 GC Handler Registry
+  - [ ] 9.1 定义 registry entry 类型
+    - 字段包含 message ID、direct/wrapped 模式、session 策略、生命周期分类、adapter 和 handler。
+    - 依赖：任务 2 和任务 6。
+  - [ ] 9.2 迁移 post-login dispatch 映射
+    - 使用 registry 驱动 direct 与 wrapped 分发。
+    - 保持未知消息 fallback 和日志行为。
+  - [ ] 9.3 从 registry 生成审计数据
+    - audit 直接读取或解析 registry，移除手工维护的平行 dispatch 清单。
+  - [ ] 9.4 建立 fixture 关联机制
+    - 每个高风险 registry entry 关联 smoke/replay fixture 标识。
+    - CI 审计缺失 fixture 的新增高风险 handler。
+  - [ ] 9.5 增加 registry 单元测试
+    - 覆盖 message ID 唯一性、模式匹配、session 策略、未知消息和 handler 选择。
+  - [ ] 9.6 增加 registry 属性测试
+    - 属性 P9-A：同一 mode 下 message ID 唯一。
+    - 属性 P9-B：每个高风险 lifecycle entry 都有测试 fixture。
+    - 属性 P9-C：registry 顺序不影响按 ID 查找结果。
+  - [ ] 9.7 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 10. P10 标准化 GC 观测与诊断事件
+  - [ ] 10.1 定义结构化事件模型
+    - 统一 event、reason、source、lobby ID、generation、server ID、endpoint、decision、message ID 和 job ID 字段。
+    - 依赖：任务 4、任务 7 和任务 9。
+  - [ ] 10.2 定义 reason/source 强类型枚举
+    - 替换 reconnect 和 lifecycle 核心路径中的自由字符串分支判断。
+    - 保留稳定字符串序列化用于日志与现有测试。
+  - [ ] 10.3 迁移 reconnect 诊断日志
+    - 覆盖 context source selection、connect、dedup、callback、retry 和 stale generation。
+  - [ ] 10.4 迁移生命周期诊断日志
+    - 覆盖 transition decision、action execution、skip、failure 和 delayed task。
+  - [ ] 10.5 增加事件格式与字段测试
+    - 断言关键事件字段齐全、reason 稳定、敏感 payload 不进入结构化日志。
+  - [ ] 10.6 更新 reason inventory 审计
+    - 从枚举或集中表生成 inventory，检查测试覆盖和重复值。
+  - [ ] 10.7 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 11. P11 明确并验证并发模型
+  - [ ] 11.1 标注状态线程所有权和锁边界
+    - 为 lobby store、recent context、serialized state、callback queue 和 delayed tasks 定义 owner 与访问规则。
+    - 依赖：任务 5、任务 7 和任务 8。
+  - [ ] 11.2 收敛锁获取顺序
+    - 定义统一 lock order，消除持有全局锁时调用外部 callback/network API 的路径。
+  - [ ] 11.3 将 serialized 实例状态限制在实例同步域
+    - 明确 callback 与 `PostConnectionStateMsg()` 的串行化要求。
+    - 必要时使用实例 mutex 或现有 run-callback 序列保证。
+  - [ ] 11.4 增加并发压力单元测试
+    - 有界并发执行 snapshot/read/update/clear/context build，断言无崩溃、无 torn snapshot、无 stale write 生效。
+  - [ ] 11.5 增加 ThreadSanitizer CI target
+    - 构建最小 GC state/reconnect 测试集并执行 TSAN。
+    - 将确定性 data race 作为 PR 阻断条件。
+  - [ ] 11.6 增加并发属性测试
+    - 属性 P11-A：任意并发历史中的已接受 generation update 可线性化。
+    - 属性 P11-B：callback/network fake 在 store lock 外被调用。
+    - 属性 P11-C：跨实例 serialized state 不共享可变内存。
+  - [ ] 11.7 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 12. P12 删除过渡层并固化架构门禁
+  - [ ] 12.1 删除生命周期重复 handler 逻辑
+    - 清理 direct/wrapped 中已被 planner/executor/registry 替代的分支和 helper。
+    - 依赖：任务 2、任务 6 和任务 9。
+  - [ ] 12.2 删除 reconnect 重复 mapping 与旧状态 API
+    - 清理旧 context builder、全局连接状态、lobby ID 代际兼容路径和未使用声明。
+    - 依赖：任务 3、任务 4、任务 5 和任务 7。
+  - [ ] 12.3 删除 shared lobby 全局直访兼容层
+    - production 统一通过 lobby state store。
+    - 依赖：任务 8。
+  - [ ] 12.4 收紧架构 audit
+    - 禁止 handler 高风险副作用直调、共享状态直访、平行 dispatch 表和 reconnect 手工字段映射。
+    - 验收：为每条规则添加正反 fixture，确保 audit 能真实失败。
+  - [ ] 12.5 完善分层 CI 门禁
+    - 快速层：offline unit、property、replay、audit、diff check。
+    - 生产层：Windows/Linux `api_experimental` x64 release。
+    - 并发层：TSAN 最小目标。
+  - [ ] 12.6 执行全仓回归验证
+    - 运行 full GC verification、生产构建、Clang/GCC 编译、replay fixtures 和 TSAN。
+    - 对比任务 1 基线，确认 message mapping、payload summary 和 action sequence 保持稳定。
+  - [ ] 12.7 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 13. P13 建立 GC Composition Root
+  - [ ] 13.1 定义应用级依赖容器
+    - 建立唯一 GC/Dota composition root，集中拥有 lobby store、reconnect service、lifecycle executor、handler registry、callback scheduler 和 production adapters。
+    - 依赖：任务 12。
+    - 保持 Steam API 对外入口和现有对象 ABI 稳定。
+  - [ ] 13.2 明确对象生命周期和构造顺序
+    - 定义 settings、network、callbacks、store、services、coordinator 的初始化和销毁顺序。
+    - 禁止 service 在构造期间访问尚未完成初始化的依赖。
+  - [ ] 13.3 将业务依赖改为显式注入
+    - 从 reconnect、lifecycle、registry 和 store 调用链开始迁移构造参数或窄 context 引用。
+    - Steam 兼容入口只定位所属实例并转发调用。
+  - [ ] 13.4 收敛业务 singleton 和文件级可变 static
+    - 将业务状态迁移到 composition root 所拥有的实例。
+    - 保留协议常量、immutable lookup table 和受控进程基础设施。
+  - [ ] 13.5 增加 composition root 构造测试
+    - 覆盖 client、gameserver、offline fake 三种组装方式。
+    - 断言实例间 store、reconnect state、callback scheduler 和 adapters 互相隔离。
+  - [ ] 13.6 增加生命周期销毁测试
+    - 验证 delayed task 和 callback 不会在依赖销毁后访问悬空对象。
+    - 验证重复创建/销毁应用上下文不会继承上一实例业务状态。
+  - [ ] 13.7 增加全局状态架构审计
+    - 禁止新增业务可变 namespace/global/static 状态。
+    - 为允许的 immutable 常量和底层兼容入口维护最小显式白名单。
+  - [ ] 13.8 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 14. 核心 P15 建立显式纯状态机
+  - [ ] 14.1 定义 Lobby lifecycle 状态与事件
+    - 将 create、join、setup、loading、loaded、run、postgame、leave、abandon 和 reset 表达为强类型 state/event。
+    - 依赖：任务 6、任务 7 和任务 13。
+    - direct/wrapped 消息映射为相同 domain event。
+  - [ ] 14.2 实现纯 transition 函数
+    - 输入 immutable state 和 event，输出 new state、effects、decision reason 和 accepted/rejected 状态。
+    - transition 内禁止执行网络、callback、日志、文件或全局状态副作用。
+  - [ ] 14.3 将 generation 与 reconnect 规则纳入状态机
+    - 建模 generation 创建、复用、失效、旧 callback、重复消息和乱序事件。
+    - reconnect dedup 状态变化由明确 event 驱动。
+  - [ ] 14.4 迁移核心 lifecycle planner
+    - 迁移 `7070`、`8052`、`8053`、`7034` 和 teardown 高风险路径。
+    - executor 只消费 transition effects，store 只提交被接受的新状态。
+  - [ ] 14.5 建立 transition table 完整性检查
+    - 对每个 state/event 组合定义 accept、reject 或 ignore 结果。
+    - 编译期或测试期检查未覆盖组合，防止隐式 default 行为。
+  - [ ] 14.6 增加状态机示例测试
+    - 覆盖正常 launch、load failure、重复 loading/loaded、乱序 loaded、postgame、leave、abandon 和 reconnect。
+  - [ ] 14.7 增加状态机属性测试
+    - 属性 P15-A：任意事件序列都不能绕过合法 launch progression 进入 loaded/run。
+    - 属性 P15-B：旧 generation 事件不能改变当前状态或产生当前代际 effects。
+    - 属性 P15-C：重复事件保持幂等，或返回稳定的明确拒绝结果。
+    - 属性 P15-D：load failure 永远不产生 connected/loaded effects。
+    - 属性 P15-E：teardown 最终进入可重复清理的稳定状态。
+  - [ ] 14.8 增加 model-based differential test
+    - 使用简化 reference transition table 生成事件序列，与 C++ transition 比较状态、effects 和 reason。
+    - 保存失败随机种子，保证回归可重复。
+  - [ ] 14.9 更新架构审计
+    - 禁止核心 lifecycle handler、executor 和 store 绕过 transition 函数直接决定状态转移。
+  - [ ] 14.10 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 15. 设置 P14、P16、P17 条件决策门禁
+  - [ ] 15.1 建立 P14 Actor 触发条件检查
+    - 汇总 TSAN 结果、锁复杂度、乱序 callback 缺陷和跨线程状态访问数量。
+    - 当存在持续竞态、锁顺序难以稳定或多线程直接写业务状态时，创建 P14 单一状态所有者实施清单。
+    - 当前条件未触发时维持 store、generation 和显式锁模型。
+  - [ ] 15.2 建立 P16 形式化验证触发条件检查
+    - 评估状态组合规模、重复/乱序缺陷数量、故障代价和多人长期维护需求。
+    - 条件触发时仅对 Lobby lifecycle、generation 和 reconnect dedup 建立 TLA+/Alloy 模型。
+  - [ ] 15.3 建立 P17 模型一致性门禁触发条件检查
+    - P16 模型进入长期维护后，再增加模型生成测试向量、C++ differential test 和 CI model checker。
+    - 模型未成为受维护交付物时，不建立双轨 CI。
+  - [ ] 15.4 将决策依据固化为可重复检查
+    - 使用 TSAN 报告、缺陷记录、状态机覆盖率和 CI 时间作为输入。
+    - 每次重大并发或状态机扩展后重新执行该决策检查。
+  - [ ] 15.5 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [ ] 16. 完成后续重构架构验收
+  - [ ] 16.1 验收 handler 职责边界
+    - handler 只执行 registry dispatch、parse、context mapping、planner/executor 调用和结构化日志。
+  - [ ] 16.2 验收状态与副作用边界
+    - domain planner 保持纯决策；executor 拥有副作用；store 拥有共享状态；network adapter 拥有 Steam 网络调用。
+  - [ ] 16.3 验收依赖与对象生命周期
+    - composition root 拥有业务对象和可变状态，业务 service 使用显式依赖，实例之间保持隔离。
+  - [ ] 16.4 验收核心状态机
+    - Lobby lifecycle、generation 和 reconnect 的核心转移只由纯 transition 函数产生。
+  - [ ] 16.5 验收代际与异步安全
+    - 所有延迟任务、reconnect callback 和 runtime update 都携带并校验 generation。
+  - [ ] 16.6 验收测试可信度
+    - 每条高风险 lifecycle/reconnect 路径同时具备纯逻辑测试、executor 测试和 production-path fake 集成测试。
+    - 核心状态机具备属性测试和 model-based differential test。
+  - [ ] 16.7 验收 CI 门禁
+    - offline、audit、Windows/Linux production build 和 TSAN 均为明确且可定位失败的检查项。
+  - [ ] 16.8 验收投资边界
+    - P14、P16、P17 依据任务 15 的客观触发条件决定，避免默认扩大重构范围。
+  - [ ] 16.9 最终检查点：确保所有测试通过，如有疑问请询问用户

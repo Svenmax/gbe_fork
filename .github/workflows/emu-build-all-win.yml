@@ -20,6 +20,10 @@ on:
         required: false
         type: string
         default: ""
+      continue_on_error:
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
     # allows manual trigger
     inputs:
@@ -35,6 +39,10 @@ on:
         required: false
         type: string
         default: '["debug","release"]'
+      continue_on_error:
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: "write"
@@ -60,7 +68,7 @@ jobs:
     needs: ["deps"]
     runs-on: "windows-2025-vs2026"
     if: ${{ !cancelled() }}
-    continue-on-error: true
+    continue-on-error: ${{ inputs.continue_on_error }}
 
     strategy:
       fail-fast: false

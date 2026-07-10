@@ -1167,6 +1167,7 @@ bool Steam_Game_Coordinator::GBE_TryRecoverDotaReconnectContextFromGenericLobbie
             continue;
 
         *out = GBE_DotaReconnectContext{};
+        out->lobby_id = snapshot.lobby_id;
         out->server_id = snapshot.server_id;
         out->lobby_state = snapshot.state;
         out->game_state = snapshot.game_state;

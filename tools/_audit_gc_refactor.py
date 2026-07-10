@@ -82,6 +82,7 @@ HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE = {
     ("gbe_dota_post_login_handlers.cpp", "GBE_PublishDotaPracticeLobbyMetadata"): 1,
     ("gbe_dota_post_login_handlers.cpp", "save_items_to_file"): 1,
     ("gbe_dota_template_replay_handlers.cpp", "save_items_to_file"): 4,
+    ("gbe_dota_wrapped_custom_game_handlers.cpp", "GBE_PublishDotaPracticeLobbyLocalMemberData"): 1,
     ("gbe_dota_wrapped_custom_game_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 3,
 }
 HIGH_RISK_REASON_STRINGS = [

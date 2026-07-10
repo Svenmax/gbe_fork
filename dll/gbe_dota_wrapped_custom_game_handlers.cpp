@@ -97,8 +97,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedCustomGameLifecycleRequest(con
         GBE_local_lobby.state = finished_loading.next_state;
         GBE_local_lobby.game_state = finished_loading.next_game_state;
     }
-    if (!load_failed)
-        GBE_MarkDotaLaunchPhase(finished_loading.launch_phase, finished_loading.reason.c_str());
+    if (!load_failed) {
+        const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
+        if (local_steam_id != 0ull)
+            GBE_SetDotaLobbyMemberRuntimeState(local_steam_id, true, 0u, false);
+        if (finished_loading.mark_launch_phase)
+            GBE_MarkDotaLaunchPhase(finished_loading.launch_phase, finished_loading.reason.c_str());
+        GBE_PublishDotaPracticeLobbyLocalMemberData(finished_loading.reason.c_str());
+    }
     if (finished_loading.publish_shared_state)
         GBE_PublishSharedDotaLobbyState(finished_loading.reason.c_str());
     if (finished_loading.send_details_update)
