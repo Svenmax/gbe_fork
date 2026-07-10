@@ -43,6 +43,7 @@
 
 #include "dll/gbe_dota_protocol_constants.h"
 #include "dll/gbe_dota_custom_game.h"
+#include "dll/gbe_dota_custom_game_lifecycle.h"
 #include "dll/gbe_dota_gc_router.h"
 #include "dll/gbe_dota_types.h"
 #include "dll/gbe_proto_wire.h"
@@ -377,6 +378,7 @@ public:
     std::vector<RecordedRuntimeState> runtime_states;
     std::vector<RecordedPracticeLobbyDetailsUpdate> practice_lobby_details_updates;
     std::vector<RecordedLobbyKick> lobby_kicks;
+    std::vector<std::string> lifecycle_events;
 
     void clear()
     {
@@ -384,6 +386,7 @@ public:
         runtime_states.clear();
         practice_lobby_details_updates.clear();
         lobby_kicks.clear();
+        lifecycle_events.clear();
     }
 
     void record_runtime_state(uint64 steam_id, bool connected, uint32 hero_id, bool has_hero_id)
@@ -395,6 +398,7 @@ public:
         state.has_hero_id = has_hero_id;
         state.action_sequence_index = actions.size();
         runtime_states.push_back(state);
+        lifecycle_events.push_back("runtime_state");
     }
 
     void record_practice_lobby_details_update(bool preserve_server_id, const std::string *message_override, const char *reason)
@@ -406,6 +410,7 @@ public:
         update.reason = reason ? reason : "";
         update.action_sequence_index = actions.size();
         practice_lobby_details_updates.push_back(std::move(update));
+        lifecycle_events.push_back("details_update");
     }
 
     void record_lobby_kick(uint64 lobby_id, uint64 member_id)
@@ -1230,8 +1235,10 @@ public:
     bool GBE_TryAdvanceDotaLaunchToRun(const char *, uint32, uint64, const char *, uint32 = 0u) { return false; }
     void GBE_PublishSharedDotaLobbyState(const char *reason)
     {
-        if (g_action_recorder)
+        if (g_action_recorder) {
             g_action_recorder->record_lobby_snapshot_refresh(reason);
+            g_action_recorder->lifecycle_events.push_back("shared_publish");
+        }
     }
     bool GBE_TrySyncDotaLobbyServerIdFromGameServer(const char *) { return false; }
     bool GBE_SendDotaPracticeLobbyDetailsUpdate(bool preserve_server_id, const std::string *message_override, const char *reason)
@@ -1271,8 +1278,10 @@ public:
     bool GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_LocalLobby &) { return false; }
     void GBE_PublishDotaPracticeLobbyLocalMemberData(const char *reason)
     {
-        if (g_action_recorder)
+        if (g_action_recorder) {
             g_action_recorder->record_lobby_local_member_data(reason);
+            g_action_recorder->lifecycle_events.push_back("local_member_publish");
+        }
     }
     void GBE_SyncSettingsLobbyFromGenericLobby(const char *reason)
     {
@@ -1487,10 +1496,17 @@ public:
         (void)trigger_emsg; (void)delay;
         GBE_local_lobby.state = next_state;
         GBE_local_lobby.game_state = next_game_state;
+        if (g_action_recorder)
+            g_action_recorder->lifecycle_events.push_back("runtime_update");
         push_incoming_now(26u | protobuf_mask, build_protomsg_header(26u, k_GIDNil, source_job) + std::string(note ? note : "runtime_update"));
         return true;
     }
-    void GBE_MarkDotaLaunchPhase(uint32 phase, const char *) { GBE_local_lobby.launch_phase = phase; }
+    void GBE_MarkDotaLaunchPhase(uint32 phase, const char *)
+    {
+        GBE_local_lobby.launch_phase = phase;
+        if (g_action_recorder)
+            g_action_recorder->lifecycle_events.push_back("launch_phase");
+    }
     uint64 GBE_GetDotaLobbyOwnerSteamId() const { return GBE_local_lobby.owner_steam_id; }
     const std::vector<Econ_Item> &get_items() { return items; }
     std::string serialize_item_to_gcprotobuf(const Econ_Item &item, CSteamID steam_id) { return item_to_gcprotobuf(item, steam_id); }
@@ -1587,6 +1603,7 @@ public:
     bool GBE_HandleDotaCustomGameStartedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaCustomGameFinishedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaWrappedCustomGameLifecycleRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
+    bool GBE_ExecuteDotaCustomGameLifecycleTransition(const gbe::dota_custom_game_lifecycle::ExecutionContext &context);
 
     // Other handlers declared in the real header but not defined in the
     // inventory TU - we don't need them here. If a future domain test

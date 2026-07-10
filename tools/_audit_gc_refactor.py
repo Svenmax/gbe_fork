@@ -34,6 +34,7 @@ TEMPLATE_BLOB_OWNER_FILES = {
 SOURCE_LIST_AUDIT_EXEMPTIONS = {
     "gbe_dota_chat_handlers.cpp": "compiled through handler test wrapper",
     "gbe_dota_connection_lifecycle.cpp": "production lifecycle TU, not directly offline-buildable",
+    "gbe_dota_custom_game_lifecycle_coordinator.cpp": "production coordinator TU, compiled through handler test wrapper",
     "gbe_dota_gc_payload_helpers.cpp": "compiled through payload helper test wrapper",
     "gbe_dota_inventory_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
     "gbe_dota_inventory_handlers.cpp": "compiled through handler test wrapper",
@@ -75,15 +76,13 @@ HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE = {
     ("gbe_dota_lobby_handlers.cpp", "GBE_PublishDotaPracticeLobbyLocalMemberData"): 4,
     ("gbe_dota_lobby_handlers.cpp", "GBE_PublishDotaPracticeLobbyMetadata"): 2,
     ("gbe_dota_lobby_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 7,
-    ("gbe_dota_match_handlers.cpp", "GBE_PublishDotaPracticeLobbyLocalMemberData"): 1,
-    ("gbe_dota_match_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 7,
+    ("gbe_dota_match_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 5,
     ("gbe_dota_match_handlers.cpp", "GBE_PushDotaPlayerEquippedItemsCacheToGC"): 2,
     ("gbe_dota_misc_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 2,
     ("gbe_dota_post_login_handlers.cpp", "GBE_PublishDotaPracticeLobbyMetadata"): 1,
     ("gbe_dota_post_login_handlers.cpp", "save_items_to_file"): 1,
     ("gbe_dota_template_replay_handlers.cpp", "save_items_to_file"): 4,
-    ("gbe_dota_wrapped_custom_game_handlers.cpp", "GBE_PublishDotaPracticeLobbyLocalMemberData"): 1,
-    ("gbe_dota_wrapped_custom_game_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 3,
+    ("gbe_dota_wrapped_custom_game_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 1,
 }
 HIGH_RISK_REASON_STRINGS = [
     "equip_forward_host_resubscribe_server",

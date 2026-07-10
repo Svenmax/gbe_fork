@@ -3,6 +3,7 @@
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
 #include "gbe_dota_custom_game.h"
+#include "gbe_dota_custom_game_lifecycle.h"
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_lobby_state.h"
 #include "gbe_dota_protocol_constants.h"
@@ -70,19 +71,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedCustomGameLifecycleRequest(con
             gbe::dota_lobby_state::compute_custom_game_started_loading_transition(
                 GBE_local_lobby, true, GBE_kDotaLaunchPhaseSetupSynced,
                 GBE_kDotaLaunchPhaseRunQueued, "8052_wrapped_started_loading");
-        bool advanced_to_run = false;
-        if (started_loading.queue_runtime_lobby_update) {
-            if (started_loading.mark_launch_phase)
-                GBE_MarkDotaLaunchPhase(started_loading.launch_phase, started_loading.reason.c_str());
-            advanced_to_run = GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(
-                "custom game wrapped 8052 started loading", context.inner_emsg,
-                context.request_job_id, started_loading.next_state, started_loading.next_game_state,
-                started_loading.runtime_update_delay);
-        }
-        if (!advanced_to_run && (started_loading.publish_shared_state || started_loading.queue_runtime_lobby_update)) {
-            GBE_PublishSharedDotaLobbyState(started_loading.reason.c_str());
-            GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, started_loading.reason.c_str());
-        }
+        gbe::dota_custom_game_lifecycle::ExecutionContext execution{};
+        execution.transition = started_loading;
+        execution.wrapped = true;
+        execution.outer_session_field_raw = &context.outer_session_field_raw;
+        execution.trigger_emsg = context.inner_emsg;
+        execution.source_job = context.request_job_id;
+        execution.runtime_update_note = "custom game wrapped 8052 started loading";
+        GBE_ExecuteDotaCustomGameLifecycleTransition(execution);
         return true;
     }
 
@@ -93,22 +89,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedCustomGameLifecycleRequest(con
         gbe::dota_lobby_state::compute_custom_game_finished_loading_transition(
             GBE_local_lobby, true, load_failed, GBE_kDotaLaunchPhaseRunQueued,
             GBE_kDotaLaunchPhaseLoaded, reason);
-    if (finished_loading.apply_lobby_state) {
-        GBE_local_lobby.state = finished_loading.next_state;
-        GBE_local_lobby.game_state = finished_loading.next_game_state;
-    }
-    if (!load_failed) {
-        const uint64 local_steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0ull;
-        if (local_steam_id != 0ull)
-            GBE_SetDotaLobbyMemberRuntimeState(local_steam_id, true, 0u, false);
-        if (finished_loading.mark_launch_phase)
-            GBE_MarkDotaLaunchPhase(finished_loading.launch_phase, finished_loading.reason.c_str());
-        GBE_PublishDotaPracticeLobbyLocalMemberData(finished_loading.reason.c_str());
-    }
-    if (finished_loading.publish_shared_state)
-        GBE_PublishSharedDotaLobbyState(finished_loading.reason.c_str());
-    if (finished_loading.send_details_update)
-        GBE_SendDotaPracticeLobbyDetailsUpdate(true, &context.outer_session_field_raw, finished_loading.reason.c_str());
+    gbe::dota_custom_game_lifecycle::ExecutionContext execution{};
+    execution.transition = finished_loading;
+    execution.wrapped = true;
+    execution.outer_session_field_raw = &context.outer_session_field_raw;
+    execution.trigger_emsg = context.inner_emsg;
+    execution.source_job = context.request_job_id;
+    execution.update_local_member_runtime = !load_failed;
+    execution.publish_local_member_data = !load_failed;
+    GBE_ExecuteDotaCustomGameLifecycleTransition(execution);
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Applied wrapped 8053 lobby_id=%llu loading_duration=%llu result_code=%llu signon_states=%llu load_failed=%u result_text=%s",

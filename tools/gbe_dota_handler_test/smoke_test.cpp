@@ -2275,6 +2275,169 @@ static void test_match_finished_loading_failure_preserves_reason()
     ++g_tests_passed;
 }
 
+static bool invoke_custom_game_lifecycle(
+    TestFixture &tf,
+    bool wrapped,
+    uint32_t emsg,
+    const std::string &body,
+    JobID_t source_job = 0x8053ABCDu)
+{
+    if (wrapped) {
+        return tf.gc.GBE_HandleDotaWrappedCustomGameLifecycleRequest(
+            make_wrapped_custom_game_context(emsg, body, source_job));
+    }
+    if (emsg == 8052u) {
+        return tf.gc.GBE_HandleDotaCustomGameStartedLoadingRequest(
+            reinterpret_cast<const uint8 *>(body.data()), body.size(), true, source_job);
+    }
+    return tf.gc.GBE_HandleDotaCustomGameFinishedLoadingRequest(
+        reinterpret_cast<const uint8 *>(body.data()), body.size(), true, source_job);
+}
+
+static void test_custom_game_lifecycle_direct_wrapped_action_sequence_equivalence()
+{
+    struct Case {
+        bool load_failed;
+        std::vector<std::string> expected_events;
+    };
+    const Case cases[] = {
+        {false, {"runtime_state", "launch_phase", "local_member_publish", "shared_publish", "details_update"}},
+        {true, {"shared_publish", "details_update"}},
+    };
+
+    for (const Case &test_case : cases) {
+        std::vector<std::string> direct_events;
+        for (bool wrapped : {false, true}) {
+            TestFixture tf;
+            tf.reset();
+            setup_custom_game_lobby(tf);
+            const std::string body = WireBodyBuilder()
+                .varint(1u, tf.gc.GBE_local_lobby.lobby_id)
+                .varint(3u, test_case.load_failed ? 2u : 0u)
+                .bytes(4u, test_case.load_failed ? "#GameUI_Disconnect_Test" : "")
+                .take();
+
+            TEST_ASSERT(invoke_custom_game_lifecycle(tf, wrapped, 8053u, body), "8053 equivalence case should be handled");
+            TEST_ASSERT(tf.recorder.lifecycle_events == test_case.expected_events, "8053 lifecycle event order should match the shared executor contract");
+            if (wrapped) {
+                TEST_ASSERT(tf.recorder.lifecycle_events == direct_events, "direct and wrapped 8053 should produce equivalent domain event order");
+                TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "wrapped 8053 should send one details update");
+                TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "wrapped 8053 should preserve wrapper mode");
+                TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override == "\x1A\x03sid", "wrapped 8053 should preserve outer session data");
+            } else {
+                direct_events = tf.recorder.lifecycle_events;
+                TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "direct 8053 should send one details update");
+                TEST_ASSERT(!tf.recorder.practice_lobby_details_updates[0].preserve_server_id, "direct 8053 should use direct details mode");
+                TEST_ASSERT(tf.recorder.practice_lobby_details_updates[0].message_override.empty(), "direct 8053 should have no outer session data");
+            }
+        }
+    }
+
+    ++g_tests_passed;
+}
+
+static void test_custom_game_lifecycle_8052_direct_wrapped_action_sequence_equivalence()
+{
+    std::vector<std::string> direct_events;
+    for (bool wrapped : {false, true}) {
+        TestFixture tf;
+        tf.reset();
+        setup_custom_game_lobby(tf);
+        tf.gc.GBE_local_lobby.match_id = 0x805200u;
+        tf.gc.GBE_local_lobby.connect = "127.0.0.1:27015";
+        tf.gc.GBE_local_lobby.launch_phase = GBE_kDotaLaunchPhaseSetupSynced;
+        const std::string body = WireBodyBuilder()
+            .varint(1u, tf.gc.GBE_local_lobby.lobby_id)
+            .varint(2u, 0x8052u)
+            .varint(4u, 12345u)
+            .take();
+
+        TEST_ASSERT(invoke_custom_game_lifecycle(tf, wrapped, 8052u, body), "8052 equivalence case should be handled");
+        const std::vector<std::string> expected_events = {"launch_phase", "runtime_update"};
+        TEST_ASSERT(tf.recorder.lifecycle_events == expected_events, "8052 should mark launch phase before queueing runtime update");
+        if (wrapped) {
+            TEST_ASSERT(tf.recorder.lifecycle_events == direct_events, "direct and wrapped 8052 should produce equivalent domain event order");
+        } else {
+            direct_events = tf.recorder.lifecycle_events;
+        }
+        TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.state, 2u, "8052 runtime update should apply run state");
+        TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, 0u, "8052 runtime update should preserve pre-game state");
+        TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.launch_phase, GBE_kDotaLaunchPhaseRunQueued, "8052 should advance launch phase to run queued");
+    }
+
+    ++g_tests_passed;
+}
+
+static void test_custom_game_lifecycle_ignores_inactive_and_mismatched_lobbies()
+{
+    for (uint32_t emsg : {8052u, 8053u}) {
+        for (bool wrapped : {false, true}) {
+            TestFixture tf;
+            tf.reset();
+            setup_custom_game_lobby(tf);
+            const uint64_t original_lobby_id = tf.gc.GBE_local_lobby.lobby_id;
+            const uint64_t original_custom_game_id = tf.gc.GBE_local_lobby.custom_game.game_id;
+            const std::string mismatched_body = WireBodyBuilder()
+                .varint(1u, original_lobby_id + 1u)
+                .varint(2u, 0xDEADu)
+                .varint(3u, 0u)
+                .varint(4u, 99999u)
+                .take();
+
+            TEST_ASSERT(invoke_custom_game_lifecycle(tf, wrapped, emsg, mismatched_body), "mismatched lifecycle request should be consumed");
+            TEST_ASSERT(tf.recorder.lifecycle_events.empty(), "mismatched lifecycle request should produce no lifecycle events");
+            TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, original_lobby_id, "mismatched lifecycle request should preserve lobby identity");
+            TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.custom_game.game_id, original_custom_game_id, "mismatched lifecycle request should preserve custom game identity");
+            TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.launch_phase, GBE_kDotaLaunchPhaseRunQueued, "mismatched lifecycle request should preserve launch phase");
+
+            tf.reset();
+            const std::string inactive_body = WireBodyBuilder().varint(1u, original_lobby_id).take();
+            TEST_ASSERT(invoke_custom_game_lifecycle(tf, wrapped, emsg, inactive_body), "inactive lifecycle request should be consumed");
+            TEST_ASSERT(tf.recorder.lifecycle_events.empty(), "inactive lifecycle request should produce no lifecycle events");
+            TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "inactive lifecycle request should preserve inactive lobby state");
+        }
+    }
+
+    ++g_tests_passed;
+}
+
+static void test_custom_game_lifecycle_duplicate_messages_are_deterministic()
+{
+    for (uint32_t emsg : {8052u, 8053u}) {
+        for (bool wrapped : {false, true}) {
+            TestFixture tf;
+            tf.reset();
+            setup_custom_game_lobby(tf);
+            if (emsg == 8052u) {
+                tf.gc.GBE_local_lobby.match_id = 0x805200u;
+                tf.gc.GBE_local_lobby.connect = "127.0.0.1:27015";
+                tf.gc.GBE_local_lobby.launch_phase = GBE_kDotaLaunchPhaseSetupSynced;
+            }
+            const std::string body = WireBodyBuilder()
+                .varint(1u, tf.gc.GBE_local_lobby.lobby_id)
+                .varint(2u, 0x8052u)
+                .varint(3u, 0u)
+                .varint(4u, 12345u)
+                .take();
+
+            TEST_ASSERT(invoke_custom_game_lifecycle(tf, wrapped, emsg, body), "first lifecycle request should be handled");
+            const std::vector<std::string> first_events = tf.recorder.lifecycle_events;
+            tf.recorder.clear();
+            TEST_ASSERT(invoke_custom_game_lifecycle(tf, wrapped, emsg, body), "duplicate lifecycle request should be handled");
+            TEST_ASSERT(tf.recorder.lifecycle_events == first_events, "duplicate lifecycle request should preserve deterministic lifecycle ordering");
+            if (emsg == 8053u) {
+                TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.launch_phase, GBE_kDotaLaunchPhaseLoaded, "duplicate 8053 should preserve loaded phase");
+                TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, 1u, "duplicate 8053 should preserve monotonic game state");
+            } else {
+                TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.launch_phase, GBE_kDotaLaunchPhaseRunQueued, "duplicate 8052 should preserve run-queued phase");
+                TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, 0u, "duplicate 8052 should preserve pre-game state");
+            }
+        }
+    }
+
+    ++g_tests_passed;
+}
+
 static void test_match_7034_connected_player_updates_runtime_before_response()
 {
     TestFixture tf;
@@ -2653,6 +2816,18 @@ int main()
 
     std::printf("[run] test_match_finished_loading_failure_preserves_reason\n");
     RUN_TEST(test_match_finished_loading_failure_preserves_reason);
+
+    std::printf("[run] test_custom_game_lifecycle_direct_wrapped_action_sequence_equivalence\n");
+    RUN_TEST(test_custom_game_lifecycle_direct_wrapped_action_sequence_equivalence);
+
+    std::printf("[run] test_custom_game_lifecycle_8052_direct_wrapped_action_sequence_equivalence\n");
+    RUN_TEST(test_custom_game_lifecycle_8052_direct_wrapped_action_sequence_equivalence);
+
+    std::printf("[run] test_custom_game_lifecycle_ignores_inactive_and_mismatched_lobbies\n");
+    RUN_TEST(test_custom_game_lifecycle_ignores_inactive_and_mismatched_lobbies);
+
+    std::printf("[run] test_custom_game_lifecycle_duplicate_messages_are_deterministic\n");
+    RUN_TEST(test_custom_game_lifecycle_duplicate_messages_are_deterministic);
 
     std::printf("[run] test_match_7034_connected_player_updates_runtime_before_response\n");
     RUN_TEST(test_match_7034_connected_player_updates_runtime_before_response);

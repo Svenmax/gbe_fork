@@ -12,33 +12,34 @@
     - 验收：基线信息可由 Git 和验证脚本重复获取。
   - [x] 1.3 检查点：确保所有测试通过，如有疑问请询问用户
 
-- [ ] 2. P1 统一 direct/wrapped 自定义游戏生命周期执行器
-  - [ ] 2.1 定义生命周期执行上下文
+- [x] 2. P1 统一 direct/wrapped 自定义游戏生命周期执行器
+  - [x] 2.1 定义生命周期执行上下文
     - 在 Dota domain/coordinator 边界定义共享 context，承载 transition decision、wrapped 模式、outer session、reason、request job 和 details update 参数。
     - 保持 direct/wrapped 消息解析逻辑位于各自 adapter。
     - 依赖：任务 1。
     - 验收：context 不依赖具体 protobuf request 类型，不改变 wire payload。
-  - [ ] 2.2 实现共享 `8052` transition executor
+  - [x] 2.2 实现共享 `8052` transition executor
     - 统一 launch phase、runtime lobby update、shared snapshot 和 details update 的执行顺序。
     - 保留 wrapped session 字段和 direct response 语义。
     - 验收：direct/wrapped handler 只负责 parse、context mapping、executor 调用和日志。
-  - [ ] 2.3 实现共享 `8053` transition executor
+  - [x] 2.3 实现共享 `8053` transition executor
     - 固定执行顺序：更新 lobby state、更新 local member runtime、标记 launch phase、发布 local member metadata、发布 shared snapshot、发送 details update。
     - 显式处理 load failure、lobby ID 不匹配、重复消息和 inactive lobby。
     - 验收：direct/wrapped 不再分别维护同一组副作用调用。
-  - [ ] 2.4 增加 direct/wrapped 表驱动单元测试
+  - [x] 2.4 增加 direct/wrapped 表驱动单元测试
     - 覆盖 `8052`、`8053` 成功、失败、重复、inactive lobby、lobby ID 匹配与不匹配。
     - 对相同 transition 输入断言 direct/wrapped 的 domain action sequence 等价。
     - 对 wrapped 路径额外断言 outer session 和 wrapped details update 参数。
-  - [ ] 2.5 增加生命周期 action sequence 属性测试
+  - [x] 2.5 增加生命周期 action sequence 属性测试
     - 属性 P1-A：成功 `8053` 中 runtime state 始终早于 local member publish，local member publish 始终早于 shared publish。
     - 属性 P1-B：load failure 不产生 connected runtime state 或 loaded launch phase。
     - 属性 P1-C：不匹配 lobby ID 不改变任何 lobby/runtime 状态。
-  - [ ] 2.6 更新副作用审计基线
+  - [x] 2.6 更新副作用审计基线
     - 共享 executor 成为高风险副作用的批准 owner。
     - 从 direct/wrapped handler 基线中移除已迁移的直接调用。
     - 验收：audit 能阻止 handler 重新引入 publish/runtime 副作用直调。
-  - [ ] 2.7 检查点：确保所有测试通过，如有疑问请询问用户
+  - [x] 2.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；handler smoke 68/68，payload helpers 240/240，replay fixtures 7 组，audit 8 项 0 问题。
 
 - [ ] 3. P3 收窄 reconnect 模块职责和头文件依赖
   - [ ] 3.1 创建 serialized connection state 窄模块

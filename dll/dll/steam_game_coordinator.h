@@ -20,6 +20,7 @@
 
 #include "base.h"
 #include "econ_item.h"
+#include "gbe_dota_custom_game_lifecycle.h"
 #include "gbe_dota_lobby_state.h"
 #include <unordered_set>
 
@@ -309,6 +310,7 @@ public ISteamGameCoordinator
     bool GBE_HandleDotaCustomGameStartedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaCustomGameFinishedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaWrappedCustomGameLifecycleRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
+    bool GBE_ExecuteDotaCustomGameLifecycleTransition(const gbe::dota_custom_game_lifecycle::ExecutionContext &context);
     bool GBE_HandleDotaMinimalVarintSuccessRequest(uint32 request_emsg, uint32 response_emsg, const char *log_note, const char *push_note, bool has_source_job, uint64 source_job);
     bool GBE_HandleDota7427NotificationsRequest(bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaUploadRateRequest(bool has_source_job, uint64 source_job);
