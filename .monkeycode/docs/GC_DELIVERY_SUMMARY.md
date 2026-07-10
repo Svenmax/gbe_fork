@@ -81,11 +81,13 @@ Use `260707-refactor-gc-dev-baseline` for `dev` integration. It is based directl
 - Baseline record: `b8c022dc docs(gc): record next refactor baseline`
 - Implementation plan: `.monkeycode/specs/gc-refactor-next-phase/tasklist.md`
 - Baseline details: `.monkeycode/specs/gc-refactor-next-phase/baseline.md`
-- Payload helper assertions: 240 passed
+- Payload helper assertions: 252 passed
 - Handler smoke tests: 68 passed
 - Replay fixtures: 7 passed
 - GC audit checks: 8 passed with 0 issues
 
 P1 unified direct and wrapped custom-game lifecycle execution behind a shared coordinator executor.
 
-P3 moved serialized reconnect connection state into `gbe_dota_serialized_connection_state.{h,cpp}`, removed its `<string>` dependency from the shared reconnect header, and added standalone header compile checks. The next implementation stage is P4, which unifies reconnect context production and source selection.
+P3 moved serialized reconnect connection state into `gbe_dota_serialized_connection_state.{h,cpp}`, removed its `<string>` dependency from the shared reconnect header, and added standalone header compile checks.
+
+P4 added `gbe_dota_reconnect_context.{h,cpp}` as the canonical reconnect source pipeline. Shared, recent, local, and generic recovery inputs now use one eligibility and endpoint-normalization builder, with explicit source priority and rejection reasons. The next implementation stage is P8, which introduces a testable production reconnect network boundary.

@@ -11,6 +11,7 @@
 //      arcade_launch_failed_before_connect, threshold).
 
 #include "dll/gbe_dota_lobby_state.h"
+#include "dll/gbe_dota_reconnect_context.h"
 #include "dll/gbe_dota_types.h"
 #include "dll/dll/gbe_dota_reconnect_shared.h"
 #include "dll/dll/gbe_dota_serialized_connection_state.h"
@@ -786,6 +787,111 @@ bool test_reconnect_eligibility_decision()
     return ok;
 }
 
+bool test_reconnect_context_source_pipeline()
+{
+    using gbe::dota_reconnect::RejectReason;
+    using gbe::dota_reconnect::Source;
+    using gbe::dota_reconnect::SourceKind;
+
+    bool ok = true;
+    auto make_source = [](SourceKind kind, std::uint64_t seed) {
+        Source source{};
+        source.kind = kind;
+        source.valid = true;
+        source.active = true;
+        source.lobby_id = seed + 1u;
+        source.lobby_state = 2u;
+        source.game_state = 2u;
+        source.server_id = seed + 2u;
+        source.custom_game_id = seed + 3u;
+        source.owner_steam_id = seed + 4u;
+        source.connect = "10.0.0." + std::to_string(seed % 200u + 1u) + ":27015 10.0.1.1:27016";
+        return source;
+    };
+
+    const Source shared = make_source(SourceKind::Shared, 100u);
+    const Source recent = make_source(SourceKind::Recent, 200u);
+    const Source local = make_source(SourceKind::Local, 300u);
+    const Source generic = make_source(SourceKind::GenericRecovery, 400u);
+
+    for (const Source &source : {shared, recent, local, generic}) {
+        GBE_DotaReconnectContext context{};
+        ok &= expect_true(
+            gbe::dota_reconnect::build_context(source, context) == RejectReason::None,
+            "each reconnect source kind builds independently");
+        ok &= expect_eq_u64(context.lobby_id, source.lobby_id, "builder propagates reconnect lobby id");
+        ok &= expect_eq_u64(context.server_id, source.server_id, "builder propagates reconnect server id");
+        ok &= expect_eq_u64(context.custom_game_id, source.custom_game_id, "builder propagates reconnect custom game id");
+        ok &= expect_eq_u64(context.owner_steam_id, source.owner_steam_id, "builder propagates reconnect owner");
+        ok &= expect_false(std::string(context.connect).empty(), "valid reconnect output has endpoint");
+        ok &= expect_true(std::string(context.connect).find(' ') == std::string::npos, "reconnect endpoint is normalized");
+    }
+
+    auto selection = gbe::dota_reconnect::select_context({generic, local, recent, shared});
+    ok &= expect_true(selection.selected, "source matrix selects a context");
+    ok &= expect_true(selection.source_kind == SourceKind::Shared, "shared source has stable highest priority");
+    ok &= expect_eq_u64(selection.context.lobby_id, shared.lobby_id, "selected fields come from shared source");
+    ok &= expect_eq_u64(selection.context.server_id, shared.server_id, "selected server comes from shared source");
+    ok &= expect_eq_u64(selection.context.owner_steam_id, shared.owner_steam_id, "selected owner comes from shared source");
+
+    selection = gbe::dota_reconnect::select_context({recent, generic, local, shared});
+    ok &= expect_true(selection.source_kind == SourceKind::Shared, "source priority is independent of input order");
+
+    Source invalid_shared = shared;
+    invalid_shared.active = false;
+    selection = gbe::dota_reconnect::select_context({generic, invalid_shared, recent});
+    ok &= expect_true(selection.selected, "invalid high-priority source falls back");
+    ok &= expect_true(selection.source_kind == SourceKind::Recent, "recent source precedes generic recovery");
+    ok &= expect_eq_u64(selection.context.lobby_id, recent.lobby_id, "fallback output uses one recent source");
+
+    GBE_DotaReconnectContext rejected_context{};
+    Source rejected = shared;
+    rejected.active = false;
+    ok &= expect_true(
+        gbe::dota_reconnect::build_context(rejected, rejected_context) == RejectReason::Inactive,
+        "builder reports inactive source");
+    rejected = shared;
+    rejected.lobby_state = 1u;
+    rejected.game_state = 1u;
+    ok &= expect_true(
+        gbe::dota_reconnect::build_context(rejected, rejected_context) == RejectReason::GameNotStarted,
+        "builder reports game not started");
+    rejected = shared;
+    rejected.server_id = 0u;
+    ok &= expect_true(
+        gbe::dota_reconnect::build_context(rejected, rejected_context) == RejectReason::MissingServerId,
+        "builder reports missing server");
+    rejected = shared;
+    rejected.connect.clear();
+    ok &= expect_true(
+        gbe::dota_reconnect::build_context(rejected, rejected_context) == RejectReason::MissingEndpoint,
+        "builder reports missing endpoint");
+
+    GBE_LocalLobby generic_lobby = make_active_lobby();
+    generic_lobby.state = 2u;
+    generic_lobby.game_state = 2u;
+    generic_lobby.server_id = 700u;
+    generic_lobby.connect = "10.1.1.1:27015";
+    generic_lobby.custom_game.game_id = 500u;
+    generic_lobby.owner_steam_id = 42u;
+    generic_lobby.members.push_back(GBE_DotaLobbyMemberState{});
+    generic_lobby.members.back().steam_id = 84u;
+    Source generic_source = gbe::dota_reconnect::source_from_generic_lobby(generic_lobby, 84u);
+    ok &= expect_true(generic_source.valid, "generic recovery accepts local lobby member");
+    ok &= expect_true(
+        gbe::dota_reconnect::build_context(generic_source, rejected_context) == RejectReason::None,
+        "generic recovery uses common builder");
+    ok &= expect_false(
+        gbe::dota_reconnect::source_from_generic_lobby(generic_lobby, 42u).valid,
+        "generic recovery excludes local owner");
+    generic_lobby.custom_game.game_id = 0u;
+    ok &= expect_false(
+        gbe::dota_reconnect::source_from_generic_lobby(generic_lobby, 84u).valid,
+        "generic recovery excludes ordinary practice lobby");
+
+    return ok;
+}
+
 bool test_reconnect_interception_decision()
 {
     bool ok = true;
@@ -1329,6 +1435,7 @@ int main()
     ok &= test_stale_generic_lobby_state_regression();
     ok &= test_owner_disconnect_and_reconnect();
     ok &= test_reconnect_eligibility_decision();
+    ok &= test_reconnect_context_source_pipeline();
     ok &= test_reconnect_interception_decision();
     ok &= test_runtime_reset_reconnect_preserve_decision();
     ok &= test_post_game_teardown_suppression();

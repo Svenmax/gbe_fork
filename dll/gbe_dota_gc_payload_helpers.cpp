@@ -26,6 +26,7 @@
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_dota_lobby_state.h"
+#include "gbe_dota_reconnect_context.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -225,46 +226,19 @@ bool GBE_GetDotaReconnectContext(GBE_DotaReconnectContext *out)
         return false;
 
     const GBE_DotaReconnectSharedStateSnapshot shared = GBE_GetSharedDotaReconnectStateSnapshot();
-    const auto shared_eligibility = gbe::dota_lobby_state::compute_reconnect_eligibility_decision(
-        shared.valid,
-        shared.active,
-        shared.lobby_state,
-        shared.game_state,
-        shared.server_id,
-        shared.has_connect,
-        shared.custom_game_id,
-        shared.owner_connected,
-        shared.launch_phase);
-    if (shared_eligibility.context_eligible) {
-        out->lobby_id = shared.lobby_id;
-        out->server_id = shared.server_id;
-        out->lobby_state = shared.lobby_state;
-        out->game_state = shared.game_state;
-        out->custom_game_id = shared.custom_game_id;
-        std::strncpy(out->connect, shared.connect, sizeof(out->connect) - 1);
-        out->connect[sizeof(out->connect) - 1] = '\0';
-        out->owner_steam_id = shared.owner_steam_id;
-        return true;
-    }
-
     GBE_DotaReconnectContext recent_context{};
     const bool has_recent_context = GBE_GetRecentDotaReconnectContext(&recent_context);
-    const auto recent_eligibility = gbe::dota_lobby_state::compute_reconnect_eligibility_decision(
-        has_recent_context,
-        true,
-        recent_context.lobby_state,
-        recent_context.game_state,
-        recent_context.server_id,
-        recent_context.connect[0] != '\0',
-        recent_context.custom_game_id,
-        false,
-        0u);
-    if (recent_eligibility.context_eligible) {
-        *out = recent_context;
-        return true;
-    }
-
-    return false;
+    const auto selection = gbe::dota_reconnect::select_context({
+        gbe::dota_reconnect::source_from_shared_snapshot(shared),
+        gbe::dota_reconnect::source_from_context(
+            recent_context,
+            has_recent_context,
+            gbe::dota_reconnect::SourceKind::Recent),
+    });
+    if (!selection.selected)
+        return false;
+    *out = selection.context;
+    return true;
 }
 
 bool GBE_HasSharedDotaLobbyState()

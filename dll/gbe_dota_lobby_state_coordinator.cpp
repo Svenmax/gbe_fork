@@ -25,6 +25,7 @@
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_reconnect_context.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -1147,35 +1148,12 @@ bool Steam_Game_Coordinator::GBE_TryRecoverDotaReconnectContextFromGenericLobbie
 
     const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("recover_reconnect_context");
     for (const GBE_LocalLobby &snapshot : snapshots) {
-        if (!snapshot.active ||
-            snapshot.custom_game.game_id == 0ull ||
-            snapshot.server_id == 0ull ||
-            snapshot.connect.empty() ||
-            (snapshot.state < 2u && snapshot.game_state < 2u))
+        const gbe::dota_reconnect::Source source =
+            gbe::dota_reconnect::source_from_generic_lobby(snapshot, local_steam_id);
+        GBE_DotaReconnectContext recovered{};
+        if (gbe::dota_reconnect::build_context(source, recovered) != gbe::dota_reconnect::RejectReason::None)
             continue;
-        if (local_steam_id != 0ull && snapshot.owner_steam_id == local_steam_id)
-            continue;
-
-        bool local_in_lobby = local_steam_id == 0ull;
-        for (const GBE_DotaLobbyMemberState &member : snapshot.members) {
-            if (member.steam_id == local_steam_id) {
-                local_in_lobby = true;
-                break;
-            }
-        }
-        if (!local_in_lobby)
-            continue;
-
-        *out = GBE_DotaReconnectContext{};
-        out->lobby_id = snapshot.lobby_id;
-        out->server_id = snapshot.server_id;
-        out->lobby_state = snapshot.state;
-        out->game_state = snapshot.game_state;
-        out->custom_game_id = snapshot.custom_game.game_id;
-        const std::string endpoint = gbe::proto_wire::get_dota_practice_lobby_first_connect_endpoint(snapshot.connect);
-        std::strncpy(out->connect, endpoint.c_str(), sizeof(out->connect) - 1);
-        out->connect[sizeof(out->connect) - 1] = '\0';
-        out->owner_steam_id = snapshot.owner_steam_id;
+        *out = recovered;
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "recovered arcade reconnect context from generic lobby local=%llu dota_lobby_id=%llu server_id=%llu state=%u game_state=%u custom_game_id=%llu endpoint=%s owner=%llu",

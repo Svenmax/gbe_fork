@@ -61,29 +61,30 @@
   - [x] 3.6 检查点：确保所有测试通过，如有疑问请询问用户
     - 验证：两个 reconnect 头文件自包含编译通过；`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；handler smoke 68/68，payload helpers 240/240，replay fixtures 7 组，audit 8 项 0 问题。
 
-- [ ] 4. P4 统一 reconnect context 生产管线
-  - [ ] 4.1 定义规范化 reconnect source model
+- [x] 4. P4 统一 reconnect context 生产管线
+  - [x] 4.1 定义规范化 reconnect source model
     - 建立 `GBE_DotaReconnectSource`，统一表示 shared、recent、local 和 generic lobby recovery 输入。
     - 字段包含 source kind、lobby ID、server ID、state、game state、custom game、owner、endpoint 和 launch 状态。
     - 依赖：任务 3。
-  - [ ] 4.2 实现唯一 context builder
+  - [x] 4.2 实现唯一 context builder
     - 集中 eligibility 判断、endpoint 规范化、字段复制和 context 构造。
     - 消除各生产路径的手工字段映射。
     - 验收：新增 context 字段只需修改一个 builder。
-  - [ ] 4.3 实现显式来源优先级策略
+  - [x] 4.3 实现显式来源优先级策略
     - 固定 shared、recent、generic recovery 的选择顺序和 fallback 条件。
     - 返回 source kind 和拒绝原因，供日志与测试使用。
-  - [ ] 4.4 迁移全部 reconnect context 调用方
+  - [x] 4.4 迁移全部 reconnect context 调用方
     - 迁移 payload helper、lobby coordinator、networking sockets、Steam user 和其他 context consumer。
     - 删除旧的重复 mapping helper。
-  - [ ] 4.5 增加来源矩阵单元测试
+  - [x] 4.5 增加来源矩阵单元测试
     - 覆盖每种来源独立有效、多个来源同时有效、上游无效回退、endpoint 缺失、server 缺失和 inactive 状态。
     - 断言全部字段包括 `lobby_id` 完整传播。
-  - [ ] 4.6 增加 context builder 属性测试
+  - [x] 4.6 增加 context builder 属性测试
     - 属性 P4-A：有效输出始终包含非零 server ID 和非空规范化 endpoint。
     - 属性 P4-B：输出字段全部来自被选中的单一 source，不发生跨 source 混合。
     - 属性 P4-C：source 优先级对输入枚举顺序保持稳定。
-  - [ ] 4.7 检查点：确保所有测试通过，如有疑问请询问用户
+  - [x] 4.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；payload helpers 252/252，handler smoke 68/68，replay fixtures 7 组，audit 8 项 0 问题。
 
 - [ ] 5. P8 建立可测试的 production reconnect 网络边界
   - [ ] 5.1 定义窄网络接口

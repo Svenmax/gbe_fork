@@ -283,6 +283,51 @@ TEST_CASE(test_get_dota_reconnect_context)
     EXPECT_FALSE(snapshot.has_connect);
 }
 
+TEST_CASE(test_get_dota_reconnect_context_priority_and_fallback)
+{
+    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+    GBE_ClearRecentDotaReconnectContext();
+
+    GBE_DotaReconnectContext recent{};
+    recent.lobby_id = 2001ull;
+    recent.server_id = 2002ull;
+    recent.lobby_state = 2u;
+    recent.game_state = 2u;
+    recent.custom_game_id = 2003ull;
+    recent.owner_steam_id = 2004ull;
+    std::strncpy(recent.connect, "10.2.0.1:27015 10.2.0.2:27015", sizeof(recent.connect) - 1);
+    GBE_SetRecentDotaReconnectContext(recent);
+
+    GBE_shared_dota_lobby_state.valid = true;
+    GBE_shared_dota_lobby_state.active = true;
+    GBE_shared_dota_lobby_state.lobby_id = 1001ull;
+    GBE_shared_dota_lobby_state.server_id = 1002ull;
+    GBE_shared_dota_lobby_state.state = 2u;
+    GBE_shared_dota_lobby_state.game_state = 2u;
+    GBE_shared_dota_lobby_state.custom_game.game_id = 1003ull;
+    GBE_shared_dota_lobby_state.owner_steam_id = 1004ull;
+    GBE_shared_dota_lobby_state.connect = "10.1.0.1:27015 10.1.0.2:27015";
+
+    GBE_DotaReconnectContext selected{};
+    EXPECT_TRUE(GBE_GetDotaReconnectContext(&selected));
+    EXPECT_TRUE(selected.lobby_id == 1001ull);
+    EXPECT_TRUE(selected.server_id == 1002ull);
+    EXPECT_TRUE(selected.custom_game_id == 1003ull);
+    EXPECT_TRUE(selected.owner_steam_id == 1004ull);
+    EXPECT_STR_EQ("10.1.0.1:27015", selected.connect);
+
+    GBE_shared_dota_lobby_state.active = false;
+    EXPECT_TRUE(GBE_GetDotaReconnectContext(&selected));
+    EXPECT_TRUE(selected.lobby_id == 2001ull);
+    EXPECT_TRUE(selected.server_id == 2002ull);
+    EXPECT_TRUE(selected.custom_game_id == 2003ull);
+    EXPECT_TRUE(selected.owner_steam_id == 2004ull);
+    EXPECT_STR_EQ("10.2.0.1:27015", selected.connect);
+
+    GBE_ClearRecentDotaReconnectContext();
+    GBE_shared_dota_lobby_state = GBE_SharedDotaLobbyState{};
+}
+
 // =====================================================================
 // Test: GBE_IsDotaArcadeLobbyActive
 // =====================================================================
@@ -1203,6 +1248,7 @@ int main()
 
     std::printf("[3/26] GBE_GetDotaReconnectContext...\n");
     test_get_dota_reconnect_context();
+    test_get_dota_reconnect_context_priority_and_fallback();
 
     std::printf("[4/26] GBE_IsDotaArcadeLobbyActive...\n");
     test_is_dota_arcade_lobby_active();

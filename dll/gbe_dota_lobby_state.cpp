@@ -1,4 +1,5 @@
 #include "gbe_dota_lobby_state.h"
+#include "gbe_dota_reconnect_context.h"
 
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_gc_wire.h"
@@ -778,30 +779,9 @@ RuntimeResetDecision compute_runtime_reset_decision(const char *reason)
 
 bool build_reconnect_context(const GBE_LocalLobby &local, GBE_DotaReconnectContext &context)
 {
-    context = GBE_DotaReconnectContext{};
-    const auto eligibility = compute_reconnect_eligibility_decision(
-        true,
-        local.active,
-        local.state,
-        local.game_state,
-        local.server_id,
-        !local.connect.empty(),
-        local.custom_game.game_id,
-        local.owner_connected,
-        local.launch_phase);
-    if (!eligibility.context_eligible)
-        return false;
-
-    context.lobby_id = local.lobby_id;
-    context.server_id = local.server_id;
-    context.lobby_state = local.state;
-    context.game_state = local.game_state;
-    context.custom_game_id = local.custom_game.game_id;
-    const std::string endpoint = proto_wire::get_dota_practice_lobby_first_connect_endpoint(local.connect);
-    std::strncpy(context.connect, endpoint.c_str(), sizeof(context.connect) - 1);
-    context.connect[sizeof(context.connect) - 1] = '\0';
-    context.owner_steam_id = local.owner_steam_id;
-    return true;
+    return gbe::dota_reconnect::build_context(
+        gbe::dota_reconnect::source_from_local_lobby(local),
+        context) == gbe::dota_reconnect::RejectReason::None;
 }
 
 bool is_active_lobby_owned_by_local_user(
