@@ -48,6 +48,7 @@
 #include <sstream>
 #include <iomanip>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <vector>
 #include <steammessages.pb.h>
@@ -216,11 +217,8 @@ using GBE_Dota7034RequestShape = gbe::proto_wire::Dota7034RequestShape;
 // stay as explicit `if` branches in their own functions — they were never part
 // of this switch and do not belong in the table.
 
-bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc_router::DotaGcRequestContext &context)
+registry::View Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry()
 {
-    if (!context.valid)
-        return false;
-
     auto adapt_join_chat_channel = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
         return self->GBE_HandleDotaJoinChatChannelRequest(c.body, c.wrapped, sess);
     };
@@ -315,7 +313,7 @@ bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc
 
     // Order follows the original switch arm order (chat -> lobby lifecycle ->
     // broadcast) to preserve the historical scan sequence. Linear lookup is
-    // fine: the table has 24 entries and runs at most once per inbound GC
+    // fine: the table has 27 entries and runs at most once per inbound GC
     // message. `static const` avoids re-initializing on every call.
     static const registry::Entry kTable[] = {
         { GBE_kDotaJoinChatChannel, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_join_chat_channel, registry::HandlerId::JoinChatChannel, "smoke:test_chat_join_channel" },
@@ -347,9 +345,17 @@ bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc
         { 8800u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_coaching_summary, registry::HandlerId::CoachingSummary, nullptr },
     };
 
+    return {kTable, sizeof(kTable) / sizeof(kTable[0])};
+}
+
+bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc_router::DotaGcRequestContext &context)
+{
+    if (!context.valid)
+        return false;
+
     const registry::Entry *entry = registry::find_entry(
-        kTable,
-        sizeof(kTable) / sizeof(kTable[0]),
+        handler_registry.entries,
+        handler_registry.size,
         context.inner_emsg,
         context.path);
     if (!entry)
@@ -1103,14 +1109,18 @@ void Steam_Game_Coordinator::steam_run_every_runcb(void *object)
     steam_gamecoordinator->RunCallbacks();
 }
 
-Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, bool is_server)
+Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, registry::View handler_registry, bool is_server)
 {
+    if (!handler_registry.entries || handler_registry.size == 0u)
+        throw std::invalid_argument("Dota handler registry is required");
+
     this->settings = settings;
     this->network = network;
     this->local_storage = local_storage;
     this->callbacks = callbacks;
     this->run_every_runcb = run_every_runcb;
     this->shared_lobby_store = &shared_lobby_store;
+    this->handler_registry = handler_registry;
     this->is_server = is_server;
 
     this->network->setCallback(CALLBACK_ID_GAMESERVER_ITEMS, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);

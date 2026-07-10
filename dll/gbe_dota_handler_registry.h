@@ -76,6 +76,11 @@ struct Entry {
     const char *fixture{};
 };
 
+struct View {
+    const Entry *entries{};
+    std::size_t size{};
+};
+
 constexpr bool supports_mode(RequestMode modes, dota_gc_router::DotaGcRequestPath path)
 {
     const auto mask = static_cast<std::uint8_t>(modes);

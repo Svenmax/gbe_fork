@@ -22,6 +22,7 @@
 #include "econ_item.h"
 #include "gbe_dota_connection_dedup_key.h"
 #include "gbe_dota_custom_game_lifecycle.h"
+#include "gbe_dota_handler_registry.h"
 #include "gbe_dota_lobby_generation.h"
 #include "gbe_dota_lobby_state.h"
 #include <unordered_set>
@@ -75,6 +76,7 @@ public ISteamGameCoordinator
     class SteamCallBacks *callbacks{};
     class RunEveryRunCB *run_every_runcb{};
     gbe::dota_lobby_state::Store *shared_lobby_store{};
+    gbe::dota_handler_registry::View handler_registry{};
     bool is_server{};
 
     struct GC_Message
@@ -408,7 +410,8 @@ public ISteamGameCoordinator
     static void steam_run_every_runcb(void *object);
 
 public:
-    Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, bool is_server);
+    static gbe::dota_handler_registry::View GBE_ProductionDotaHandlerRegistry();
+    Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, gbe::dota_handler_registry::View handler_registry, bool is_server);
     ~Steam_Game_Coordinator();
 
     void initialize_gc();

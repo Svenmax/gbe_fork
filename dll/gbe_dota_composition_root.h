@@ -51,10 +51,7 @@ public:
     virtual ~CallbackScheduler() = default;
 };
 
-struct HandlerRegistryView {
-    const dota_handler_registry::Entry *entries{};
-    std::size_t size{};
-};
+using HandlerRegistryView = dota_handler_registry::View;
 
 class ReconnectService {
 public:

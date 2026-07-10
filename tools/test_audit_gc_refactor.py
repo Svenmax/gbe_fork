@@ -283,9 +283,12 @@ class ArchitectureBoundaryAuditTest(unittest.TestCase):
     def test_accepts_canonical_architecture_owners(self):
         sources = {
             "steam_game_coordinator.cpp": """
-                bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const Context &context) {
+                registry::View Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry() {
                     static const registry::Entry kTable[] = {};
-                    return registry::find_entry(kTable, 0, context.inner_emsg, context.path);
+                    return {kTable, 0};
+                }
+                bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const Context &context) {
+                    return registry::find_entry(handler_registry.entries, handler_registry.size, context.inner_emsg, context.path);
                 }
             """,
             "gbe_dota_post_login_handlers.cpp": "return GBE_DispatchDotaPostLoginRequest(context);",
@@ -302,6 +305,21 @@ class ArchitectureBoundaryAuditTest(unittest.TestCase):
             "gbe_dota_lobby_handlers.cpp": "const auto shared = GBE_SharedLobbyStore().snapshot();",
         }
         self.assertEqual([], audit.audit_architecture_boundaries(sources))
+
+    def test_rejects_registry_table_owned_by_dispatcher(self):
+        sources = {
+            "steam_game_coordinator.cpp": """
+                bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const Context &context) {
+                    static const registry::Entry kTable[] = {};
+                    return registry::find_entry(kTable, 0, context.inner_emsg, context.path);
+                }
+            """,
+        }
+        issues = audit.audit_architecture_boundaries(sources)
+        self.assertIn(
+            "steam_game_coordinator.cpp: post-login dispatcher owns a registry table instead of consuming the injected view",
+            issues,
+        )
 
     def test_rejects_global_store_access_in_coordinator_business_path(self):
         sources = {

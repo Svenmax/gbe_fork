@@ -301,17 +301,17 @@ def extract_defined_symbols(tu_paths):
 
 
 def audit_post_login_dispatch(main_text):
-    start = main_text.find("bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest")
+    start = main_text.find("registry::View Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry")
     if start < 0:
-        return ["GBE_DispatchDotaPostLoginRequest definition not found"], 0
-    end = main_text.find("bool Steam_Game_Coordinator::gc_enabled", start)
-    dispatch_text = main_text[start:end if end >= 0 else len(main_text)]
+        return ["GBE_ProductionDotaHandlerRegistry definition not found"], 0
+    end = main_text.find("bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest", start)
+    factory_text = main_text[start:end if end >= 0 else len(main_text)]
 
-    table_start = dispatch_text.find("static const registry::Entry kTable[]")
-    table_end = dispatch_text.find("};", table_start)
+    table_start = factory_text.find("static const registry::Entry kTable[]")
+    table_end = factory_text.find("};", table_start)
     if table_start < 0 or table_end < 0:
         return ["typed post-login registry table not found"], 0
-    table_text = dispatch_text[table_start:table_end]
+    table_text = factory_text[table_start:table_end]
 
     entry_pattern = re.compile(
         r"\{\s*(GBE_k[A-Za-z0-9_]+|\d+u)\s*,\s*"
@@ -328,7 +328,7 @@ def audit_post_login_dispatch(main_text):
         r"auto\s+(adapt_[A-Za-z0-9_]+)\s*=\s*\+\[\]\(.*?\)\s*->\s*bool\s*\{(.*?)\n\s*\};",
         re.DOTALL,
     )
-    adapters = dict(adapter_pattern.findall(dispatch_text[:table_start]))
+    adapters = dict(adapter_pattern.findall(factory_text[:table_start]))
 
     issues = []
     raw_entry_count = len(re.findall(r"^\s*\{", table_text, re.MULTILINE))
@@ -628,6 +628,13 @@ def audit_architecture_boundaries(source_texts=None):
         if base == POST_LOGIN_REGISTRY_OWNER:
             if registry_count > 1:
                 issues.append(f"{base}: parallel typed post-login registry returned beside the canonical kTable")
+            dispatch_start = uncommented.find("bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest")
+            dispatch_end = uncommented.find("bool Steam_Game_Coordinator::gc_enabled", dispatch_start)
+            dispatch_text = uncommented[dispatch_start:dispatch_end if dispatch_end >= 0 else len(uncommented)]
+            if "static const registry::Entry" in dispatch_text:
+                issues.append(f"{base}: post-login dispatcher owns a registry table instead of consuming the injected view")
+            if "handler_registry.entries" not in dispatch_text or "handler_registry.size" not in dispatch_text:
+                issues.append(f"{base}: post-login dispatcher does not consume the injected registry view")
         elif registry_count:
             issues.append(f"{base}: parallel typed post-login registry returned outside {POST_LOGIN_REGISTRY_OWNER}")
 
