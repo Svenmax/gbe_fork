@@ -315,9 +315,14 @@
     - 兼容性：direct 7070 继续直接返回 7170，wrapped 7070 继续保留 outer session；8052/8053 保持 direct/wrapped reason、runtime update note、lobby ID 过滤、load-failure 分支和 action sequence。现有 direct/wrapped equivalence、session forwarding、inactive/mismatched lobby 和 duplicate determinism smoke tests继续通过。
     - 门禁：Audit 4 动态验证 27 项 typed registry 与 16 项高风险 fixture。Audit 9 新增退役层审计，拒绝四个旧 handler 符号或 7070/8052/8053 post-login 手工 fallback 回流；审计 helper 增至 11/11。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 774/774，callsystem guard 8/8，registry assertions 339/339，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit helper 11/11，audit 11 项 0 问题。
-  - [ ] 12.2 删除 reconnect 重复 mapping 与旧状态 API
+  - [x] 12.2 删除 reconnect 重复 mapping 与旧状态 API
     - 清理旧 context builder、全局连接状态、lobby ID 代际兼容路径和未使用声明。
     - 依赖：任务 3、任务 4、任务 5 和任务 7。
+    - mapping 收口：删除 `GBE_DotaReconnectSharedStateSnapshot`、`GBE_GetSharedDotaReconnectStateSnapshot()`、`source_from_shared_snapshot()` 和 `gbe::dota_lobby_state::build_reconnect_context()`。shared/local/generic/recent source 全部通过 `gbe_dota_reconnect_context.cpp` 中的 typed source adapter 和唯一 `build_context()` 管线，shared adapter 直接消费 immutable `GBE_SharedDotaLobbyState` snapshot，endpoint 继续仅在 canonical builder 中解析。
+    - 状态 API：serialized reconnect state 删除未被生产读取的 `lobby_id` 和默认 generation 兼容参数，`begin_lobby(lobby_id, generation)` 收紧为显式 `begin_generation(generation)`。dedup identity 继续为 `generation + server_id + endpoint`；同 generation 的 lobby ID 变化保留 retry/dedup 状态，generation 变化清理 server、retry、payload、callback 和 direct-connect 状态。
+    - 声明清理：删除零调用的 `describe_source_kind()`、`describe_reject_reason()` 和 `GBE_DescribeDotaReconnectPostSkipReason()`，统一使用 typed diagnostic `describe_source()` / `describe_reason()`。recent reconnect context 与 reconnect eligibility 仍承担 shared clear 后 fallback 和 one-shot interception 生命周期语义，继续保留；shared scalar facade 归 12.3 清理。
+    - 门禁：新增 Audit 12，拒绝 7 个退役 reconnect transition symbol、serialized `lobby_id`、`begin_lobby` 和默认 generation 回流，并要求 `begin_generation` 持续存在。正反 fixture 将 audit helper 增至 13/13。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 通过；reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 448/448，handler smoke 77/77，replay fixtures 7 组，audit helper 13/13，audit 12 项 0 问题，TSAN 无 race。
   - [ ] 12.3 删除 shared lobby 全局直访兼容层
     - production 统一通过 lobby state store。
     - 依赖：任务 8。
