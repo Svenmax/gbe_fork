@@ -1644,8 +1644,8 @@ bool test_serialized_connection_state_scopes_dedup_to_generation()
     bool ok = true;
     GBE_DotaSerializedConnectionState state{};
 
-    state.begin_lobby(100ull, 1ull);
-    ok &= expect_true(state.lobby_id == 100ull && state.generation == 1ull, "serialized state records lobby identity");
+    state.begin_generation(1ull);
+    ok &= expect_true(state.generation == 1ull, "serialized state records lobby generation");
     ok &= expect_true(state.should_connect_direct(700ull, "10.0.0.5:27015"), "first direct connect is allowed");
     state.record_direct_connect(700ull, "10.0.0.5:27015");
     ok &= expect_false(state.should_connect_direct(700ull, "10.0.0.5:27015"), "same lobby direct connect is deduplicated");
@@ -1660,7 +1660,7 @@ bool test_serialized_connection_state_scopes_dedup_to_generation()
     ok &= expect_true(state.engine_callback_queued(700ull, "10.0.0.6:27015"), "changed callback endpoint becomes the new deduplication key");
 
     GBE_DotaSerializedConnectionState other_instance{};
-    other_instance.begin_lobby(100ull, 1ull);
+    other_instance.begin_generation(1ull);
     ok &= expect_true(other_instance.should_connect_direct(700ull, "10.0.0.5:27015"), "serialized socket instances keep independent direct connect state");
     ok &= expect_false(other_instance.engine_callback_queued(700ull, "10.0.0.5:27015"), "serialized socket instances keep independent callback state");
 
@@ -1673,13 +1673,13 @@ bool test_serialized_connection_state_scopes_dedup_to_generation()
     ok &= expect_true(state.last_post_size == 0u, "server change resets the last posted payload size");
     ok &= expect_true(state.callback_key == gbe::dota_connection::DedupKey{}, "server change clears callback deduplication state");
 
-    state.begin_lobby(101ull, 1ull);
-    ok &= expect_false(state.should_connect_direct(700ull, "10.0.0.6:27015"), "lobby id only synchronizes within the same generation");
+    state.begin_generation(1ull);
+    ok &= expect_false(state.should_connect_direct(700ull, "10.0.0.6:27015"), "same generation preserves direct-connect deduplication");
 
     state.retry_count = 4u;
     state.last_post_size = 512u;
-    state.begin_lobby(101ull, 9ull);
-    ok &= expect_true(state.lobby_id == 101ull && state.generation == 9ull, "serialized state stores generation alongside lobby id");
+    state.begin_generation(9ull);
+    ok &= expect_true(state.generation == 9ull, "serialized state stores the current generation");
     ok &= expect_true(state.last_post_server_id == 0ull, "generation change resets the posted server generation");
     ok &= expect_true(state.retry_count == 0u, "generation change resets retry accounting");
     ok &= expect_true(state.last_post_size == 0u, "generation change clears the last posted payload size");
@@ -1687,8 +1687,8 @@ bool test_serialized_connection_state_scopes_dedup_to_generation()
     ok &= expect_true(state.direct_connect_key == gbe::dota_connection::DedupKey{}, "generation change clears direct connect deduplication state");
     state.record_direct_connect(700ull, "10.0.0.5:27015");
     state.record_engine_callback(700ull, "10.0.0.5:27015");
-    state.begin_lobby(101ull, 10ull);
-    ok &= expect_true(state.generation == 10ull, "same lobby refreshes serialized generation");
+    state.begin_generation(10ull);
+    ok &= expect_true(state.generation == 10ull, "serialized state advances to the next generation");
     ok &= expect_true(state.should_connect_direct(700ull, "10.0.0.5:27015"), "new generation allows the same direct endpoint");
     ok &= expect_false(state.engine_callback_queued(700ull, "10.0.0.5:27015"), "new generation allows the same engine callback endpoint");
     return ok;
@@ -1698,18 +1698,17 @@ bool test_generation_change_clears_connection_dedup_properties()
 {
     bool ok = true;
     for (std::uint64_t seed = 1u; seed <= 64u; ++seed) {
-        const std::uint64_t lobby_id = 1000u + seed;
         const std::uint64_t server_id = 2000u + seed;
         const std::string endpoint = "10.20.30." + std::to_string(seed) + ":27015";
         GBE_DotaSerializedConnectionState state{};
-        state.begin_lobby(lobby_id, seed);
+        state.begin_generation(seed);
         state.begin_server(server_id);
         state.retry_count = static_cast<std::uint32_t>(seed);
         state.last_post_size = static_cast<std::uint32_t>(seed * 17u);
         state.record_direct_connect(server_id, endpoint);
         state.record_engine_callback(server_id, endpoint);
 
-        state.begin_lobby(lobby_id, seed + 1u);
+        state.begin_generation(seed + 1u);
 
         ok &= expect_eq_u64(state.generation, seed + 1u, "P6-C generation change stores the new generation");
         ok &= expect_eq_u64(state.last_post_server_id, 0u, "P6-C generation change clears posted server state");

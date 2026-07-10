@@ -1,10 +1,7 @@
 #include "dll/gbe_dota_serialized_connection_state.h"
 
-void GBE_DotaSerializedConnectionState::begin_lobby(
-    std::uint64_t current_lobby_id,
-    std::uint64_t current_generation)
+void GBE_DotaSerializedConnectionState::begin_generation(std::uint64_t current_generation)
 {
-    lobby_id = current_lobby_id;
     if (generation == current_generation)
         return;
 

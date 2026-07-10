@@ -91,7 +91,7 @@ GBE_DotaReconnectPostPlan GBE_PrepareDotaReconnectPostConnectionState(
         return plan;
     }
 
-    connection_state.begin_lobby(result.context.lobby_id, result.context.generation);
+    connection_state.begin_generation(result.context.generation);
     connection_state.begin_server(result.context.server_id);
 
     if (connection_state.should_connect_direct(result.context.server_id, result.endpoint)) {

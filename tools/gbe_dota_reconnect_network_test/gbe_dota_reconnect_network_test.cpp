@@ -177,7 +177,7 @@ void test_first_connection_contract()
     expect(queue.callback.m_rgchPassword[0] == '\0' && queue.delay == 0.0, "callback password and delay");
     expect(queue.generation == provider.primary.generation, "callback receives reconnect generation");
     expect(events == std::vector<std::string>({"context:primary", "eligible", "connect", "queue"}), "production call order");
-    expect(state.generation == provider.primary.generation && state.lobby_id == provider.primary.lobby_id, "serialized state receives context identities");
+    expect(state.generation == provider.primary.generation, "serialized state receives context generation");
 }
 
 void test_prepare_reserves_state_before_unlocked_effects()
@@ -241,7 +241,7 @@ void test_dedup_and_generation_changes()
     provider.primary = make_context(101, 200, "10.20.30.40:27015");
     const auto same_generation_new_lobby = execute(provider, connector, queue, state);
     expect(connector.calls == 1 && queue.calls == 1, "same generation reused endpoint remains deduplicated after lobby id sync");
-    expect(same_generation_new_lobby.callback_already_queued && state.lobby_id == 101, "same generation synchronizes the new lobby id");
+    expect(same_generation_new_lobby.callback_already_queued && state.generation == 1, "same generation preserves deduplication across lobby id changes");
 
     provider.primary = make_context(101, 201, "10.20.30.40:27015");
     execute(provider, connector, queue, state);
@@ -261,7 +261,7 @@ void test_dedup_and_generation_changes()
     provider.primary.lobby_id = 102;
     const auto same_generation_new_lobby_id = execute(provider, connector, queue, state);
     expect(connector.calls == 4 && queue.calls == 4, "same generation server endpoint remains deduplicated across lobby id sync");
-    expect(same_generation_new_lobby_id.callback_already_queued && state.lobby_id == 102, "lobby id synchronizes without resetting generation state");
+    expect(same_generation_new_lobby_id.callback_already_queued && state.generation == 2, "lobby id changes preserve generation-scoped state");
 }
 
 void test_recovery_and_skip_paths()
@@ -587,11 +587,10 @@ void test_concurrency_properties()
             execute(provider_a, connector_a, queue_a, state_a);
         }
 
-        expect(state_a.generation == provider_a.primary.generation && state_a.lobby_id == provider_a.primary.lobby_id, "P11-C first serialized instance owns its generated state");
-        expect(state_b.generation == provider_b.primary.generation && state_b.lobby_id == provider_b.primary.lobby_id, "P11-C second serialized instance owns its generated state");
+        expect(state_a.generation == provider_a.primary.generation, "P11-C first serialized instance owns its generated state");
+        expect(state_b.generation == provider_b.primary.generation, "P11-C second serialized instance owns its generated state");
         expect(
             state_b.generation == state_b_before.generation &&
-                state_b.lobby_id == state_b_before.lobby_id &&
                 state_b.last_post_server_id == state_b_before.last_post_server_id &&
                 state_b.retry_count == state_b_before.retry_count &&
                 state_b.last_post_size == state_b_before.last_post_size &&

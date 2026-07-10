@@ -26,14 +26,13 @@ struct GBE_DotaSerializedConnectionState {
     // Owned by one Steam_Networking_Sockets_Serialized instance. Access is
     // serialized by that instance's GBE_DotaSerializedConnectionSynchronizer.
     std::uint64_t generation{};
-    std::uint64_t lobby_id{};
     std::uint64_t last_post_server_id{};
     std::uint32_t retry_count{};
     std::uint32_t last_post_size{};
     gbe::dota_connection::DedupKey callback_key;
     gbe::dota_connection::DedupKey direct_connect_key;
 
-    void begin_lobby(std::uint64_t current_lobby_id, std::uint64_t current_generation = 0);
+    void begin_generation(std::uint64_t current_generation);
     void begin_server(std::uint64_t server_id);
     bool should_connect_direct(std::uint64_t server_id, const std::string &endpoint) const;
     void record_direct_connect(std::uint64_t server_id, const std::string &endpoint);
