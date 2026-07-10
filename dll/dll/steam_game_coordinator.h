@@ -42,6 +42,10 @@ struct LaunchStatePushPlan;
 struct LaunchStatePayloadBuildRequest;
 }
 
+namespace gbe::dota_lobby_state {
+class Store;
+}
+
 class Steam_User_Items;
 class Steam_GameServer_Items;
 struct GCMsgHdr_t;
@@ -70,6 +74,7 @@ public ISteamGameCoordinator
     class Local_Storage *local_storage{};
     class SteamCallBacks *callbacks{};
     class RunEveryRunCB *run_every_runcb{};
+    gbe::dota_lobby_state::Store *shared_lobby_store{};
     bool is_server{};
 
     struct GC_Message
@@ -178,6 +183,7 @@ public ISteamGameCoordinator
     bool GBE_IsQueuedLobbyMessageCurrent(const GC_Message &message, const char *stage) const;
     GBE_DotaDeferredTaskConsumeResult GBE_ConsumeDotaDeferredTask(GBE_DotaDeferredTaskSlot &slot, const char *task_name);
     void clear_dota_runtime_state(bool preserve_reconnect_context);
+    gbe::dota_lobby_state::Store &GBE_SharedLobbyStore() const;
     void GBE_ClearDotaLobbyRuntimeState();
     void GBE_ApplyQueuedLobbyState(const GC_Message &message);
     bool GBE_ShouldSuppressDotaAbandonedLobby(uint64 lobby_id) const;
@@ -402,7 +408,7 @@ public ISteamGameCoordinator
     static void steam_run_every_runcb(void *object);
 
 public:
-    Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, bool is_server);
+    Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, bool is_server);
     ~Steam_Game_Coordinator();
 
     void initialize_gc();

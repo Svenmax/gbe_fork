@@ -432,7 +432,7 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
 
     target->GBE_RestoreSharedDotaLobbyState(reason ? reason : "push_launch_state_to_client");
 
-    const auto shared_snapshot = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    const auto shared_snapshot = GBE_SharedLobbyStore().snapshot();
     context.shared_lobby_suppressed = target->GBE_ShouldSuppressDotaAbandonedLobby(shared_snapshot.lobby_id);
     plan = gbe::dota_lobby_flow::plan_launch_state_push(context);
     if (plan.skip_reason == gbe::dota_lobby_flow::LaunchStatePushSkipReason::SuppressedSharedLobby) {

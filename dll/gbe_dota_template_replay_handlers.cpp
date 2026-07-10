@@ -330,7 +330,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
         }
         case GBE_kDotaJoinableCustomGameModesRequest: {
             const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("7466_joinable_custom_modes");
-            const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+            const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
             std::vector<gbe::gc_message::DotaJoinableCustomGameMode> modes;
 
             for (const GBE_LocalLobby &snapshot : snapshots) {
@@ -421,7 +421,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             // Build response from local shared lobby state OR remote generic lobbies.
             gbe::gc_message::DotaSourceTVGame source_tv_game{};
             bool found_game = false;
-            const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+            const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
 
             // First: check local shared lobby state (we are the host)
             if (!found_game &&
@@ -517,7 +517,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
 
             // Find the server_steamid from local shared state or remote lobbies
             uint64 spectate_server_steamid = 0;
-            const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+            const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
 
             if (shared_lobby.valid && shared_lobby.server_id != 0) {
                 spectate_server_steamid = shared_lobby.server_id;
@@ -580,7 +580,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             uint32 source_tv_port = 27020; // default SourceTV port
             uint64 tv_secret_code = 0;
             std::string connect_str;
-            const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+            const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
             if (shared_lobby.valid && !shared_lobby.connect.empty()) {
                 connect_str = shared_lobby.connect;
             } else {

@@ -633,7 +633,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
 
     // If shared state was already cleared by the normal signout finalize (GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed),
     // do not re-publish stale local lobby state back into it. Instead, leave the generic lobby and clear local state.
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
     if (d.leaving_postgame_channel && d.matches_current_postgame_channel && !shared_lobby.valid) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",

@@ -503,7 +503,7 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         return;
 
     if (gc_profile == GC_PROFILE_DOTA2 && (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)) {
-        const auto shared_snapshot = GBE_GetSharedDotaLobbyStateStore().snapshot();
+        const auto shared_snapshot = GBE_SharedLobbyStore().snapshot();
         if (shared_snapshot.valid && shared_snapshot.active && shared_snapshot.lobby_id != 0) {
             GBE_RestoreSharedDotaLobbyState("queued_state_preapply");
         } else {
@@ -1103,13 +1103,14 @@ void Steam_Game_Coordinator::steam_run_every_runcb(void *object)
     steam_gamecoordinator->RunCallbacks();
 }
 
-Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, bool is_server)
+Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, bool is_server)
 {
     this->settings = settings;
     this->network = network;
     this->local_storage = local_storage;
     this->callbacks = callbacks;
     this->run_every_runcb = run_every_runcb;
+    this->shared_lobby_store = &shared_lobby_store;
     this->is_server = is_server;
 
     this->network->setCallback(CALLBACK_ID_GAMESERVER_ITEMS, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
@@ -1130,13 +1131,13 @@ Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class N
         initialize_gc();
     }
 
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
         "coordinator init this=%p is_server=%u shared_lobby=%p shared_valid=%u active=%u lobby_id=%llu match_id=%llu state=%u game_state=%u",
         static_cast<void *>(this),
         this->is_server ? 1u : 0u,
-        static_cast<void *>(&GBE_GetSharedDotaLobbyStateStore()),
+        static_cast<void *>(&GBE_SharedLobbyStore()),
         shared_lobby.valid ? 1u : 0u,
         shared_lobby.active ? 1u : 0u,
         static_cast<unsigned long long>(shared_lobby.lobby_id),
@@ -1144,6 +1145,11 @@ Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class N
         shared_lobby.state,
         shared_lobby.game_state
     );
+}
+
+gbe::dota_lobby_state::Store &Steam_Game_Coordinator::GBE_SharedLobbyStore() const
+{
+    return *shared_lobby_store;
 }
 
 Steam_Game_Coordinator::~Steam_Game_Coordinator()
@@ -1191,7 +1197,7 @@ void Steam_Game_Coordinator::initialize_gc()
 void Steam_Game_Coordinator::GBE_ClearDotaLobbyRuntimeState()
 {
     GBE_local_lobby = GBE_LocalLobby{};
-    GBE_GetSharedDotaLobbyStateStore().clear();
+    GBE_SharedLobbyStore().clear();
     GBE_ClearLastDotaLaunchStatePushedGameState();
 }
 
@@ -1394,7 +1400,7 @@ std::string Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerName() const
     if (!GBE_local_lobby.owner_name.empty())
         return GBE_local_lobby.owner_name;
 
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
     if (!shared_lobby.owner_name.empty())
         return shared_lobby.owner_name;
 

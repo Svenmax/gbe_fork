@@ -1044,7 +1044,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaInviteToLobbyRequest(const std::strin
 
     uint64 dota_lobby_id = GBE_local_lobby.lobby_id;
     CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
     if ((!GBE_local_lobby.active || dota_lobby_id == 0 || !generic_lobby_id.IsLobby()) && shared_lobby.valid) {
         dota_lobby_id = shared_lobby.lobby_id;
         generic_lobby_id = CSteamID((uint64)shared_lobby.generic_lobby_id);

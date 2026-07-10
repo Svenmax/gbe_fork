@@ -991,6 +991,7 @@ public:
     bool GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel() const { return GBE_pending_dota_abandon_finalize_after_7014; }
     bool GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed() const { return GBE_pending_dota_normal_signout_finalize_after_25; }
     bool GBE_HasPendingResetAfterCacheUnsubscribed() const { return GBE_pending_reset_after_cache_unsubscribed; }
+    gbe::dota_lobby_state::Store &GBE_SharedLobbyStore() const { return GBE_GetSharedDotaLobbyStateStore(); }
     bool GBE_HasSentDotaLoginSync() const { return GBE_dota_login_sync_sent; }
     void GBE_MarkDotaLoginSyncSent() { GBE_dota_login_sync_sent = true; }
     void GBE_ClearDotaLoginSyncSent() { GBE_dota_login_sync_sent = false; }

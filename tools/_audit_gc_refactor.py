@@ -634,6 +634,13 @@ def audit_architecture_boundaries(source_texts=None):
         if base in {POST_LOGIN_REGISTRY_OWNER, "gbe_dota_post_login_handlers.cpp"} and post_login_switch.search(uncommented):
             issues.append(f"{base}: post-login message switch bypasses the typed registry")
 
+        if (
+            base.startswith("gbe_dota_")
+            and (base.endswith("_handlers.cpp") or base.endswith("_coordinator.cpp"))
+            and "GBE_GetSharedDotaLobbyStateStore()" in uncommented
+        ):
+            issues.append(f"{base}: coordinator business path bypasses the injected shared lobby Store")
+
     reconnect_types = (
         (r"(?:GBE_DotaReconnectSource|(?:gbe::)?dota_reconnect::Source)", "source", RECONNECT_SOURCE_FIELDS),
         (r"GBE_DotaReconnectContext", "context", RECONNECT_CONTEXT_FIELDS),

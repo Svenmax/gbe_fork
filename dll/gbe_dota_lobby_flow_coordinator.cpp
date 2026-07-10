@@ -659,7 +659,7 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
         return;
 
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
     const uint64 shared_lobby_id = shared_lobby.lobby_id;
     const uint64 lobby_id = consumed_lobby_id != 0 ? consumed_lobby_id : shared_lobby_id;
     const GBE_LocalLobby postgame_lobby = GBE_local_lobby;

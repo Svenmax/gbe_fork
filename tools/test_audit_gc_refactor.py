@@ -224,7 +224,7 @@ class RetiredSharedLobbyCompatibilityLayerAuditTest(unittest.TestCase):
     def test_accepts_canonical_store_access(self):
         sources = {
             "gbe_dota_gc_internal.h": "gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore();",
-            "gbe_dota_lobby_handlers.cpp": "const auto shared = GBE_GetSharedDotaLobbyStateStore().snapshot();",
+            "gbe_dota_lobby_handlers.cpp": "const auto shared = GBE_SharedLobbyStore().snapshot();",
         }
         self.assertEqual([], audit.audit_retired_shared_lobby_compatibility_layers(sources))
 
@@ -291,9 +291,18 @@ class ArchitectureBoundaryAuditTest(unittest.TestCase):
                 }
             """,
             "gbe_dota_gc_payload_helpers.cpp": "return dota_reconnect::build_context(source, context);",
-            "gbe_dota_lobby_handlers.cpp": "const auto shared = GBE_GetSharedDotaLobbyStateStore().snapshot();",
+            "gbe_dota_lobby_handlers.cpp": "const auto shared = GBE_SharedLobbyStore().snapshot();",
         }
         self.assertEqual([], audit.audit_architecture_boundaries(sources))
+
+    def test_rejects_global_store_access_in_coordinator_business_path(self):
+        sources = {
+            "gbe_dota_lobby_handlers.cpp": "const auto shared = GBE_GetSharedDotaLobbyStateStore().snapshot();",
+        }
+        self.assertIn(
+            "gbe_dota_lobby_handlers.cpp: coordinator business path bypasses the injected shared lobby Store",
+            audit.audit_architecture_boundaries(sources),
+        )
 
     def test_rejects_parallel_post_login_registry_and_switch(self):
         sources = {

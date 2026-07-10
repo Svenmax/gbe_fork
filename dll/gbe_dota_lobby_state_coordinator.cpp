@@ -373,9 +373,9 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
         return;
     }
 
-    auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    auto shared_lobby = GBE_SharedLobbyStore().snapshot();
     gbe::dota_lobby_state::publish_local_lobby_to_shared(GBE_local_lobby, is_server, shared_lobby);
-    const auto publish_result = GBE_GetSharedDotaLobbyStateStore().publish_if_generation_current_or_newer(std::move(shared_lobby));
+    const auto publish_result = GBE_SharedLobbyStore().publish_if_generation_current_or_newer(std::move(shared_lobby));
     if (publish_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
@@ -407,7 +407,7 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
         "GC_DOTA_SYNC",
         "published shared lobby this=%p shared_lobby=%p reason=%s active=%u lobby_id=%llu generic_lobby_id=%llu match_id=%llu owner_steam_id=%llu owner_account_id=%u state=%u game_state=%u launch_phase=%s team=%u slot=%u connect=%s",
         static_cast<void *>(this),
-        static_cast<void *>(&GBE_GetSharedDotaLobbyStateStore()),
+        static_cast<void *>(&GBE_SharedLobbyStore()),
         reason ? reason : "unknown",
         GBE_local_lobby.active ? 1u : 0u,
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
@@ -1103,7 +1103,7 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey, scalar_publish_data.match_id.c_str());
     GBE_local_lobby.connect = publish_data.connect;
     GBE_local_lobby.server_id = publish_data.server_id;
-    const auto shared_update_result = GBE_GetSharedDotaLobbyStateStore().compare_update(
+    const auto shared_update_result = GBE_SharedLobbyStore().compare_update(
         GBE_local_lobby.generation,
         [&](GBE_SharedDotaLobbyState &shared_lobby) {
             if (!shared_lobby.valid || shared_lobby.lobby_id != GBE_local_lobby.lobby_id)
@@ -1230,14 +1230,14 @@ void Steam_Game_Coordinator::GBE_SyncSettingsLobbyFromGenericLobby(const char *r
 
 void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
 {
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
 
     if (!shared_lobby.valid) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "restore skipped this=%p shared_lobby=%p reason=%s valid=0",
             static_cast<void *>(this),
-            static_cast<void *>(&GBE_GetSharedDotaLobbyStateStore()),
+            static_cast<void *>(&GBE_SharedLobbyStore()),
             reason ? reason : "unknown"
         );
         return;
@@ -1248,7 +1248,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             "GC_DOTA_SYNC",
             "restore skipped for suppressed abandoned lobby this=%p shared_lobby=%p reason=%s lobby_id=%llu active=%u state=%u game_state=%u",
             static_cast<void *>(this),
-            static_cast<void *>(&GBE_GetSharedDotaLobbyStateStore()),
+            static_cast<void *>(&GBE_SharedLobbyStore()),
             reason ? reason : "unknown",
             static_cast<unsigned long long>(shared_lobby.lobby_id),
             shared_lobby.active ? 1u : 0u,
@@ -1296,7 +1296,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 "GC_DOTA_SYNC",
                 "adopted full shared lobby on client this=%p shared_lobby=%p reason=%s lobby_id=%llu state=%u game_state=%u server_id=%llu",
                 static_cast<void *>(this),
-                static_cast<void *>(&GBE_GetSharedDotaLobbyStateStore()),
+                static_cast<void *>(&GBE_SharedLobbyStore()),
                 reason ? reason : "unknown",
                 static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                 GBE_local_lobby.state,
@@ -1515,7 +1515,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 "GC_DOTA_SYNC",
                 "adopted shared runtime on client this=%p shared_lobby=%p reason=%s lobby_id=%llu generic_lobby_id=%llu old_server_id=%llu new_server_id=%llu old_connect=%s new_connect=%s",
                 static_cast<void *>(this),
-                static_cast<void *>(&GBE_GetSharedDotaLobbyStateStore()),
+                static_cast<void *>(&GBE_SharedLobbyStore()),
                 reason ? reason : "unknown",
                 static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
                 static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
@@ -1548,7 +1548,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         "GC_DOTA_SYNC",
         "restored shared lobby this=%p shared_lobby=%p reason=%s active=%u lobby_id=%llu generic_lobby_id=%llu match_id=%llu owner_steam_id=%llu owner_account_id=%u state=%u game_state=%u team=%u slot=%u connect=%s",
         static_cast<void *>(this),
-        static_cast<void *>(&GBE_GetSharedDotaLobbyStateStore()),
+        static_cast<void *>(&GBE_SharedLobbyStore()),
         reason ? reason : "unknown",
         GBE_local_lobby.active ? 1u : 0u,
         static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
@@ -1571,7 +1571,7 @@ uint64 Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerSteamId() const
     if (GBE_local_lobby.owner_steam_id != 0)
         return GBE_local_lobby.owner_steam_id;
 
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
     if (shared_lobby.owner_steam_id != 0)
         return shared_lobby.owner_steam_id;
 
@@ -1583,7 +1583,7 @@ uint32 Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerAccountId() const
     if (GBE_local_lobby.owner_account_id != 0)
         return GBE_local_lobby.owner_account_id;
 
-    const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
     if (shared_lobby.owner_account_id != 0)
         return shared_lobby.owner_account_id;
 
@@ -1710,7 +1710,7 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
 
     const uint64 previous_server_id = GBE_local_lobby.server_id;
     GBE_local_lobby.server_id = derived_server_id;
-    const auto shared_update_result = GBE_GetSharedDotaLobbyStateStore().compare_update(
+    const auto shared_update_result = GBE_SharedLobbyStore().compare_update(
         GBE_local_lobby.generation,
         [&](GBE_SharedDotaLobbyState &shared_lobby) {
             if (shared_lobby.valid && shared_lobby.lobby_id == GBE_local_lobby.lobby_id)

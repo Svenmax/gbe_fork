@@ -151,7 +151,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(uint32 reques
         !preserve_existing_lan_connect) {
         const std::string previous_connect = GBE_local_lobby.connect;
         GBE_local_lobby.connect = runtime_connect;
-        const auto shared_update_result = GBE_GetSharedDotaLobbyStateStore().compare_update(
+        const auto shared_update_result = GBE_SharedLobbyStore().compare_update(
             GBE_local_lobby.generation,
             [&](GBE_SharedDotaLobbyState &shared_lobby) {
                 if (shared_lobby.valid && shared_lobby.lobby_id == GBE_local_lobby.lobby_id)
@@ -698,7 +698,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         std::string response_body;
         bool found_game_w = false;
         gbe::gc_message::DotaSourceTVGame source_tv_game_w{};
-        const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+        const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
 
         // First: check local shared lobby state (we are the host)
         if (shared_lobby.valid &&
@@ -795,7 +795,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
         uint32 source_tv_port = 27020;
         uint64 tv_secret_code_w = 0;
         std::string connect_str_w;
-        const auto shared_lobby = GBE_GetSharedDotaLobbyStateStore().snapshot();
+        const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
         if (shared_lobby.valid && !shared_lobby.connect.empty()) {
             connect_str_w = shared_lobby.connect;
         } else {
