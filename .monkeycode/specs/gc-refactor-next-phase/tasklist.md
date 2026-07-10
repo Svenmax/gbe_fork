@@ -167,7 +167,7 @@
   - [x] 7.7 检查点：确保所有测试通过，如有疑问请询问用户
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 165/165，callsystem guard 4/4，payload helpers 257/257，handler smoke 75/75，replay fixtures 7 组，audit 9 项 0 问题。
 
-- [ ] 8. P7 收敛全局大厅共享状态访问
+- [x] 8. P7 收敛全局大厅共享状态访问
   - [x] 8.1 定义 lobby state store 接口
     - 提供 immutable snapshot、publish/update、clear 和 generation-aware compare/update 操作。
     - 依赖：任务 7。
@@ -196,7 +196,8 @@
     - 属性 P7-B：失败的 stale update 不改变 store。
     - 属性 P7-C：clear 后所有 valid-gated ID helper 返回零。
     - 实现：P7-A 对 64 个 seed 各发布并读取 32 个跨 scalar/string/vector 字段版本，断言每个 snapshot 完整匹配单一版本；P7-B 对 64 个当前 generation 投递旧一代 compare/update，断言 mutator 从未执行且完整状态逐字段保持；P7-C 对 64 组非零 lobby/generic lobby ID 通过真实 store clear facade 清空，断言两个 valid-gated ID helper 均返回零。
-  - [ ] 8.8 检查点：确保所有测试通过，如有疑问请询问用户
+  - [x] 8.8 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 75/75，replay fixtures 7 组，audit 10 项 0 问题。
 
 - [ ] 9. P9 建立类型化 GC Handler Registry
   - [ ] 9.1 定义 registry entry 类型
