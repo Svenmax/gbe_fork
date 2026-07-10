@@ -2064,6 +2064,100 @@ static void setup_custom_game_lobby(TestFixture &tf)
     tf.gc.GBE_local_lobby.custom_game.game_id = 0xBEEF00u;
 }
 
+static gbe::dota_gc_router::DotaGcRequestContext make_wrapped_custom_game_context(
+    uint32_t inner_emsg, const std::string &body, JobID_t request_job_id = 0xC0FFEEu)
+{
+    gbe::dota_gc_router::DotaGcRequestContext context{};
+    context.valid = true;
+    context.inner_emsg = inner_emsg;
+    context.body = body;
+    context.has_request_job = true;
+    context.request_job_id = request_job_id;
+    context.outer_session_field_raw = "\x1A\x03sid";
+    return context;
+}
+
+static void test_wrapped_custom_game_ready_up_returns_7170_and_preserves_session()
+{
+    TestFixture tf;
+    tf.reset();
+    setup_custom_game_lobby(tf);
+
+    const std::string body = WireBodyBuilder().varint(1u, 1u).take();
+    const gbe::dota_gc_router::DotaGcRequestContext context =
+        make_wrapped_custom_game_context(7070u, body, 0x7070ABCDu);
+    const bool result = tf.gc.GBE_HandleDotaWrappedCustomGameLifecycleRequest(context);
+
+    TEST_ASSERT(result, "wrapped ready-up handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "wrapped ready-up should respond then publish state");
+    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[0]), 7170u, "wrapped ready-up should return 7170");
+    TEST_ASSERT(tf.recorder.actions[0].wrapped, "wrapped ready-up response should retain wrapper flag");
+    TEST_ASSERT(tf.recorder.actions[0].session_raw == context.outer_session_field_raw, "wrapped ready-up should retain outer session");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7070_ready_up_status", "wrapped ready-up response reason should be preserved");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7070_wrapped_custom_game_ready_up_run_ack", "wrapped ready-up should publish its lifecycle transition");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, 1u, "wrapped ready-up should advance game state");
+
+    ++g_tests_passed;
+}
+
+static void test_wrapped_custom_game_started_loading_updates_state()
+{
+    TestFixture tf;
+    tf.reset();
+    setup_custom_game_lobby(tf);
+
+    const std::string body = WireBodyBuilder()
+        .varint(1u, tf.gc.GBE_local_lobby.lobby_id)
+        .varint(2u, 0x8052u)
+        .varint(4u, 12345u)
+        .take();
+    const bool result = tf.gc.GBE_HandleDotaWrappedCustomGameLifecycleRequest(
+        make_wrapped_custom_game_context(8052u, body));
+
+    TEST_ASSERT(result, "wrapped started-loading handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "wrapped 8052 should publish when runtime queue declines");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "8052_wrapped_started_loading", "wrapped 8052 publish reason should be preserved");
+    TEST_ASSERT_EQ(tf.recorder.practice_lobby_details_updates.size(), 1u, "wrapped 8052 should send details update");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.custom_game.game_id, 0x8052u, "wrapped 8052 should update custom game id");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_start_time, 12345u, "wrapped 8052 should update game start time");
+
+    ++g_tests_passed;
+}
+
+static void test_wrapped_custom_game_finished_loading_handles_success_and_failure()
+{
+    TestFixture tf;
+    tf.reset();
+    setup_custom_game_lobby(tf);
+
+    const std::string success = WireBodyBuilder()
+        .varint(1u, tf.gc.GBE_local_lobby.lobby_id)
+        .varint(2u, 33u)
+        .varint(3u, 0u)
+        .varint(4u, 4u)
+        .take();
+    TEST_ASSERT(tf.gc.GBE_HandleDotaWrappedCustomGameLifecycleRequest(
+        make_wrapped_custom_game_context(8053u, success)), "wrapped 8053 success handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "wrapped 8053 success should publish the updated lifecycle state");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "8053_wrapped_finished_loading", "wrapped 8053 success reason should be preserved");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.launch_phase, GBE_kDotaLaunchPhaseLoaded, "wrapped 8053 success should mark launch loaded");
+
+    tf.reset();
+    setup_custom_game_lobby(tf);
+    const std::string failure = WireBodyBuilder()
+        .varint(1u, tf.gc.GBE_local_lobby.lobby_id)
+        .varint(3u, 2u)
+        .bytes(4u, "#GameUI_Disconnect_Test")
+        .take();
+    TEST_ASSERT(tf.gc.GBE_HandleDotaWrappedCustomGameLifecycleRequest(
+        make_wrapped_custom_game_context(8053u, failure)), "wrapped 8053 failure handler should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "wrapped 8053 failure should publish state");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "8053_wrapped_load_failed", "wrapped 8053 failure reason should be preserved");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.launch_phase, GBE_kDotaLaunchPhaseRunQueued, "wrapped 8053 failure should retain queued launch phase");
+
+    ++g_tests_passed;
+}
+
 static void test_match_ready_up_queues_7170_then_runtime_update()
 {
     TestFixture tf;
@@ -2534,6 +2628,15 @@ int main()
 
     std::printf("[run] test_match_ready_up_queues_7170_then_runtime_update\n");
     RUN_TEST(test_match_ready_up_queues_7170_then_runtime_update);
+
+    std::printf("[run] test_wrapped_custom_game_ready_up_returns_7170_and_preserves_session\n");
+    RUN_TEST(test_wrapped_custom_game_ready_up_returns_7170_and_preserves_session);
+
+    std::printf("[run] test_wrapped_custom_game_started_loading_updates_state\n");
+    RUN_TEST(test_wrapped_custom_game_started_loading_updates_state);
+
+    std::printf("[run] test_wrapped_custom_game_finished_loading_handles_success_and_failure\n");
+    RUN_TEST(test_wrapped_custom_game_finished_loading_handles_success_and_failure);
 
     std::printf("[run] test_match_started_loading_updates_custom_game_before_publish\n");
     RUN_TEST(test_match_started_loading_updates_custom_game_before_publish);

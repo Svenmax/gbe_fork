@@ -77,7 +77,10 @@ int main()
     ok &= expect_true(should_trace_dota_proto_boundary(0x8000119fu), "trace masked 4511");
     ok &= expect_true(!should_trace_dota_proto_boundary(7273u), "ignore chat message");
     ok &= expect_true(is_supported_dota_wrapped_post_login_request(7009u), "supported wrapped 7009");
+    ok &= expect_true(is_supported_dota_wrapped_post_login_request(7070u), "supported wrapped custom game ready up");
     ok &= expect_true(is_supported_dota_wrapped_post_login_request(7091u), "supported wrapped 7091");
+    ok &= expect_true(is_supported_dota_wrapped_post_login_request(8052u), "supported wrapped custom game started loading");
+    ok &= expect_true(is_supported_dota_wrapped_post_login_request(8053u), "supported wrapped custom game finished loading");
     ok &= expect_true(!is_supported_dota_wrapped_post_login_request(7042u), "unsupported wrapped 7042 preserves old gate");
     ok &= expect_true(!is_supported_dota_wrapped_post_login_request(7273u), "unsupported wrapped 7273");
 

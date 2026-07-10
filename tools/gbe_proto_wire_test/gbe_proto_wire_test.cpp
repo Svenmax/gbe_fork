@@ -1,6 +1,7 @@
 #include "dll/gbe_dota_gc_router.h"
 #include "dll/gbe_dota_gc_wire.h"
 #include "dll/gbe_dota_lobby_state.h"
+#include "dll/gbe_dota_protocol_constants.h"
 #include "dll/gbe_gc_message_utils.h"
 #include "dll/gbe_proto_wire.h"
 
@@ -1533,6 +1534,65 @@ bool test_dota_gc_router_response_helpers()
     return ok;
 }
 
+bool test_dota_gc_router_wrapped_custom_game_lifecycle_requests()
+{
+    using namespace gbe::proto_wire;
+
+    bool ok = true;
+    const std::string session_field_raw("custom-game-session");
+    const std::uint64_t request_job_id = 0x0102030405060708ull;
+    const std::uint32_t custom_game_lifecycle_emsgs[] = {7070u, 8052u, 8053u};
+
+    for (const std::uint32_t inner_emsg : custom_game_lifecycle_emsgs) {
+        std::string inner_header;
+        append_fixed64_field(inner_header, 10u, request_job_id);
+
+        std::string inner_body;
+        append_varint_field(inner_body, 1u, 99u);
+
+        std::string inner_payload;
+        append_little_endian32(inner_payload, gbe::gc_message::with_proto_mask(inner_emsg));
+        append_little_endian32(inner_payload, static_cast<std::uint32_t>(inner_header.size()));
+        inner_payload.append(inner_header);
+        inner_payload.append(inner_body);
+
+        std::string outer_header;
+        append_bytes_field(outer_header, 2u, session_field_raw);
+
+        std::string outer_body;
+        append_varint_field(outer_body, 1u, 570u);
+        append_varint_field(outer_body, 2u, gbe::gc_message::with_proto_mask(inner_emsg));
+        append_bytes_field(outer_body, 3u, inner_payload);
+
+        std::string wrapped_request;
+        append_little_endian32(wrapped_request, gbe::gc_message::with_proto_mask(GBE_kEMsgClientToGC));
+        append_little_endian32(wrapped_request, static_cast<std::uint32_t>(outer_header.size()));
+        wrapped_request.append(outer_header);
+        wrapped_request.append(outer_body);
+
+        gbe::dota_gc_router::DotaGcRequestContext context{};
+        ok &= expect_true(
+            gbe::dota_gc_router::extract_wrapped_post_login_request(
+                wrapped_request.data(),
+                static_cast<std::uint32_t>(wrapped_request.size()),
+                GBE_kEMsgClientToGC,
+                context),
+            "extract wrapped custom game lifecycle request");
+        ok &= expect_true(context.valid, "wrapped custom game lifecycle context valid");
+        ok &= expect_true(context.wrapped, "wrapped custom game lifecycle context wrapped");
+        ok &= expect_eq_u64(context.inner_emsg, inner_emsg, "wrapped custom game lifecycle emsg");
+        ok &= expect_eq_string(context.outer_session_field_raw, session_field_raw, "wrapped custom game lifecycle session");
+        ok &= expect_true(context.has_request_job, "wrapped custom game lifecycle has request job");
+        ok &= expect_eq_u64(context.request_job_id, request_job_id, "wrapped custom game lifecycle request job");
+        ok &= expect_eq_string(context.body, inner_body, "wrapped custom game lifecycle body");
+        ok &= expect_true(
+            gbe::gc_message::is_supported_dota_wrapped_post_login_request(context.inner_emsg),
+            "wrapped custom game lifecycle reaches post login gate");
+    }
+
+    return ok;
+}
+
 bool test_dota_lobby_state_helpers()
 {
     bool ok = true;
@@ -2837,6 +2897,7 @@ int main()
     bool ok = true;
     ok &= test_basic_wire_and_parsers();
     ok &= test_dota_gc_router_response_helpers();
+    ok &= test_dota_gc_router_wrapped_custom_game_lifecycle_requests();
     ok &= test_dota_lobby_state_helpers();
     ok &= test_patch_and_rewrite_helpers();
     ok &= test_summary_helpers();

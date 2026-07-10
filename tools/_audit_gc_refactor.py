@@ -51,6 +51,7 @@ SOURCE_LIST_AUDIT_EXEMPTIONS = {
     "gbe_dota_post_login_handlers.cpp": "production dispatcher TU, covered by registry audit",
     "gbe_dota_template_replay_handlers.cpp": "production template replay TU with canned payload ownership",
     "gbe_dota_welcome_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
+    "gbe_dota_wrapped_custom_game_handlers.cpp": "compiled through handler test wrapper",
 }
 HIGH_RISK_SIDE_EFFECT_APIS = [
     "save_items_to_file",
@@ -79,9 +80,9 @@ HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE = {
     ("gbe_dota_match_handlers.cpp", "GBE_PushDotaPlayerEquippedItemsCacheToGC"): 2,
     ("gbe_dota_misc_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 2,
     ("gbe_dota_post_login_handlers.cpp", "GBE_PublishDotaPracticeLobbyMetadata"): 1,
-    ("gbe_dota_post_login_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 3,
     ("gbe_dota_post_login_handlers.cpp", "save_items_to_file"): 1,
     ("gbe_dota_template_replay_handlers.cpp", "save_items_to_file"): 4,
+    ("gbe_dota_wrapped_custom_game_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 3,
 }
 HIGH_RISK_REASON_STRINGS = [
     "equip_forward_host_resubscribe_server",

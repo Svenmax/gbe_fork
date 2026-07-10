@@ -43,6 +43,7 @@
 
 #include "dll/gbe_dota_protocol_constants.h"
 #include "dll/gbe_dota_custom_game.h"
+#include "dll/gbe_dota_gc_router.h"
 #include "dll/gbe_dota_types.h"
 #include "dll/gbe_proto_wire.h"
 // gbe_dota_lobby_state.h transitively includes gbe_dota_reconnect_shared.h
@@ -1585,6 +1586,7 @@ public:
     bool GBE_HandleDotaCustomGameReadyUpRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaCustomGameStartedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaCustomGameFinishedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaWrappedCustomGameLifecycleRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
 
     // Other handlers declared in the real header but not defined in the
     // inventory TU - we don't need them here. If a future domain test

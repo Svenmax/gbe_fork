@@ -49,6 +49,10 @@ std::recursive_mutex global_mutex;
 // This compiles the real handler definitions against our stub class.
 #include "dll/gbe_dota_inventory_handlers.cpp"
 
+// Keep the wrapped custom-game lifecycle path executable in the lightweight
+// harness without pulling in the full post-login dispatcher dependency graph.
+#include "dll/gbe_dota_wrapped_custom_game_handlers.cpp"
+
 struct TestEquipPlannerSummary {
     bool parse_failed{};
     size_t equip_op_count{};
