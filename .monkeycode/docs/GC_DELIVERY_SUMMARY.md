@@ -74,3 +74,16 @@ Create the `dev` PR from `260707-refactor-gc-dev-baseline` using the content in 
 ## Integration Recommendation
 
 Use `260707-refactor-gc-dev-baseline` for `dev` integration. It is based directly on `origin/dev`, contains the verified two-commit migration chain, and avoids the unrelated-history review problem on `trae/agent-inRF11`.
+
+## Next Refactor Baseline
+
+- P0 behavior baseline: `f9d7bc48 fix(gc): harden reconnect lifecycle behavior`
+- Baseline record: `b8c022dc docs(gc): record next refactor baseline`
+- Implementation plan: `.monkeycode/specs/gc-refactor-next-phase/tasklist.md`
+- Baseline details: `.monkeycode/specs/gc-refactor-next-phase/baseline.md`
+- Payload helper assertions: 240 passed
+- Handler smoke tests: 64 passed
+- Replay fixtures: 7 passed
+- GC audit checks: 8 passed with 0 issues
+
+The next implementation stage is P1, which consolidates direct and wrapped custom-game lifecycle execution while preserving protocol parsing and wire behavior.
