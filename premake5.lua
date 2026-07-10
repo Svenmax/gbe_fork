@@ -1437,6 +1437,32 @@ project "tool_gbe_dota_lobby_state_store_test"
 -- End tool_gbe_dota_lobby_state_store_test
 
 
+-- Project tool_gbe_dota_composition_root_test
+project "tool_gbe_dota_composition_root_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_composition_root_test"))
+    targetname "gbe_dota_composition_root_test_%{cfg.platform}"
+
+    files {
+        "tools/gbe_dota_composition_root_test/gbe_dota_composition_root_test.cpp",
+        "tools/gbe_dota_header_compile_test/composition_root_header_compile.cpp",
+        "dll/gbe_dota_composition_root.cpp",
+        "dll/gbe_dota_composition_root.h",
+        "dll/gbe_dota_lobby_state_store.cpp",
+        "dll/gbe_dota_lobby_state_store.h",
+        "dll/gbe_dota_reconnect_network.cpp",
+        "dll/gbe_dota_reconnect_network.h",
+        "dll/gbe_dota_serialized_connection_state.cpp",
+        "dll/dll/gbe_dota_serialized_connection_state.h",
+        "dll/gbe_dota_handler_registry.h",
+        "dll/gbe_dota_gc_router.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gbe_dota_composition_root_test
+
+
 -- Project tool_gbe_dota_concurrency_stress_test
 project "tool_gbe_dota_concurrency_stress_test"
     kind "ConsoleApp"

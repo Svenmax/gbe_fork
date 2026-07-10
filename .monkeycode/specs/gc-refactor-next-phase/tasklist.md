@@ -361,10 +361,16 @@
     - P12 回归、行为基线、架构审计和并发门禁均已关闭，无待确认的协议、payload、action-order 或并发语义问题。production integration 由已配置的 blocking Windows/Linux release jobs 最终执行。
 
 - [ ] 13. P13 建立 GC Composition Root
-  - [ ] 13.1 定义应用级依赖容器
+  - [x] 13.1 定义应用级依赖容器
     - 建立唯一 GC/Dota composition root，集中拥有 lobby store、reconnect service、lifecycle executor、handler registry、callback scheduler 和 production adapters。
     - 依赖：任务 12。
     - 保持 Steam API 对外入口和现有对象 ABI 稳定。
+    - 实现：新增 `gbe::dota::CompositionRoot`，内嵌拥有 shared lobby backing state、mutex 和 `dota_lobby_state::Store`；通过 `unique_ptr` 拥有 lifecycle executor、client/server callback scheduler，以及每个 role 的 reconnect context provider、direct connector 和 callback queue。root 从 canonical production table 复制并拥有 immutable typed handler registry entries，对外仅暴露只读 `HandlerRegistryView`。
+    - role 边界：`RoleContext` 为 client/server 分别拥有 scheduler 与 reconnect adapters，同时共享同一个 application lobby Store。`ReconnectService` 复用现有 prepare/effects 管线，提供分阶段和组合执行入口，保持外部效果边界不变。
+    - ABI 边界：本任务仅定义并验证容器，不修改 `Steam_Game_Coordinator`、Steam API 接口或 production 对象布局；production 构造顺序、owner 接入和调用链注入分别留给 13.2、13.3。
+    - 测试：新增 header self-containment 与 focused composition-root tests，覆盖六类依赖绑定、ownership 转移后的引用稳定、client/server Store 共享、双 root 状态隔离，以及 reconnect service 对 owned adapters 的调用。
+    - 构建：新模块接入 fast/full shell gate 和独立 Premake test target；Audit 6 识别的 testable split GC TU 从 17 增至 18，shell/Premake source-list 均完整。
+    - 验证：GCC `run_gc_verification.sh --full`、Clang fast offline gate 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 23/23，15 项 audit 0 问题，TSAN 无 race。
   - [ ] 13.2 明确对象生命周期和构造顺序
     - 定义 settings、network、callbacks、store、services、coordinator 的初始化和销毁顺序。
     - 禁止 service 在构造期间访问尚未完成初始化的依赖。

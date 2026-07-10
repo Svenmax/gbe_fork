@@ -76,6 +76,10 @@ compile_header_test \
     diagnostic_event_header_compile \
     tools/gbe_dota_header_compile_test/diagnostic_event_header_compile.cpp
 
+compile_header_test \
+    composition_root_header_compile \
+    tools/gbe_dota_header_compile_test/composition_root_header_compile.cpp
+
 printf '[run] %s\n' audit_gc_refactor_test
 python3 tools/test_audit_gc_refactor.py
 
@@ -110,6 +114,16 @@ build_and_run \
     -pthread \
     tools/gbe_dota_lobby_state_store_test/gbe_dota_lobby_state_store_test.cpp \
     dll/gbe_dota_lobby_state_store.cpp
+
+build_and_run \
+    gbe_dota_composition_root_test \
+    -pthread \
+    tools/gbe_dota_composition_root_test/gbe_dota_composition_root_test.cpp \
+    dll/gbe_dota_composition_root.cpp \
+    dll/gbe_dota_lobby_state_store.cpp \
+    dll/gbe_dota_reconnect_network.cpp \
+    dll/gbe_dota_serialized_connection_state.cpp \
+    dll/gbe_proto_wire.cpp
 
 build_and_run \
     gbe_dota_concurrency_stress_test \
