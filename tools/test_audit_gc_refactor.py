@@ -295,5 +295,93 @@ class ArchitectureBoundaryAuditTest(unittest.TestCase):
         )
 
 
+class LayeredCiGateAuditTest(unittest.TestCase):
+    WORKFLOW = """
+        emu-win-release:
+          uses: "./.github/workflows/emu-build-all-win.yml"
+          with:
+            matrix_prj: '["api_experimental"]'
+            matrix_arch: '["x64"]'
+            matrix_cfg: '["release"]'
+            continue_on_error: false
+        emu-linux-release:
+          uses: "./.github/workflows/emu-build-all-linux.yml"
+          with:
+            matrix_prj: '["api_experimental"]'
+            matrix_arch: '["x64"]'
+            matrix_cfg: '["release"]'
+            continue_on_error: false
+        gc-verification:
+          runs-on: "ubuntu-24.04"
+          steps:
+            - uses: actions/checkout@v6
+              with:
+                fetch-depth: 0
+            - run: bash tools/run_gc_verification.sh --fast --base-sha "${{ github.event.pull_request.base.sha }}"
+        gc-tsan:
+          runs-on: "ubuntu-24.04"
+          env:
+            CXX: clang++
+          run: bash tools/run_gc_tsan_tests.sh
+    """
+    VERIFICATION = """
+        tools/run_gc_offline_tests.sh
+        python3 tools/_audit_gc_refactor.py
+        git diff --check "$BASE_SHA..HEAD"
+    """
+    OFFLINE = """
+        python3 tools/test_audit_gc_refactor.py
+        gbe_dota_reconnect_network_test
+        gbe_dota_lobby_state_store_test
+        gbe_dota_concurrency_stress_test
+        gbe_dota_handler_registry_test
+        gc_replay_test
+    """
+    TSAN = """
+        -fsanitize=thread
+        halt_on_error=1:exitcode=66
+        gbe_dota_reconnect_network_test
+        gbe_dota_concurrency_stress_test
+    """
+
+    def test_accepts_blocking_fast_production_and_tsan_layers(self):
+        self.assertEqual(
+            [],
+            audit.audit_layered_ci_gates(
+                self.WORKFLOW,
+                self.VERIFICATION,
+                self.OFFLINE,
+                self.TSAN,
+            ),
+        )
+
+    def test_rejects_full_fast_job_and_missing_production_or_tsan_boundaries(self):
+        workflow = self.WORKFLOW.replace("--fast", "--full")
+        workflow = workflow.replace("matrix_cfg: '[\"release\"]'", "matrix_cfg: '[\"debug\"]'", 1)
+        workflow = workflow.replace("CXX: clang++", "CXX: c++")
+        issues = audit.audit_layered_ci_gates(
+            workflow,
+            self.VERIFICATION.replace("python3 tools/_audit_gc_refactor.py", ""),
+            self.OFFLINE,
+            self.TSAN,
+        )
+        self.assertIn(
+            "emu-pull-request.yml: fast GC layer must run run_gc_verification.sh --fast with the PR base SHA",
+            issues,
+        )
+        self.assertIn(
+            "emu-pull-request.yml: Windows production layer must build api_experimental x64 release with failures blocking",
+            issues,
+        )
+        self.assertIn(
+            "emu-pull-request.yml: TSAN layer must use Clang and run the dedicated sanitizer script",
+            issues,
+        )
+        self.assertIn(
+            "run_gc_verification.sh: fast layer is missing architecture audit execution",
+            issues,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

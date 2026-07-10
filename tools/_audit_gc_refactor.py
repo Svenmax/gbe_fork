@@ -30,6 +30,7 @@ RUN_GC_OFFLINE_TESTS_SH = os.path.join(ROOT_DIR, "tools", "run_gc_offline_tests.
 PREMAKE5_LUA = os.path.join(ROOT_DIR, "premake5.lua")
 REASON_TRACE_GOVERNANCE_MD = os.path.join(ROOT_DIR, "docs", "gc", "reason-trace-governance.md")
 CONCURRENCY_OWNERSHIP_MD = os.path.join(ROOT_DIR, "docs", "gc", "concurrency-ownership.md")
+PR_WORKFLOW_YML = os.path.join(ROOT_DIR, ".github", "workflows", "emu-pull-request.yml")
 DIAGNOSTIC_EVENT_H = os.path.join(ROOT_DIR, "dll", "gbe_dota_diagnostic_event.h")
 DIAGNOSTIC_EVENT_TEST_CPP = os.path.join(
     ROOT_DIR,
@@ -661,6 +662,94 @@ def audit_architecture_boundaries(source_texts=None):
     return issues
 
 
+def extract_yaml_job(workflow_text, job_name):
+    match = re.search(r"^(?P<indent>[ \t]*)" + re.escape(job_name) + r":[ \t]*$", workflow_text, re.MULTILINE)
+    if not match:
+        return ""
+    indent = match.group("indent")
+    next_job = re.search(r"^" + re.escape(indent) + r"[A-Za-z0-9_-]+:[ \t]*$", workflow_text[match.end():], re.MULTILINE)
+    end = match.end() + next_job.start() if next_job else len(workflow_text)
+    return workflow_text[match.start():end]
+
+
+def audit_layered_ci_gates(workflow_text=None, verification_text=None, offline_text=None, tsan_text=None):
+    """Keep PR checks split into fast, production, and sanitizer blocking layers."""
+    if workflow_text is None:
+        workflow_text = read(PR_WORKFLOW_YML)
+    if verification_text is None:
+        verification_text = read(RUN_GC_OFFLINE_TESTS_SH.replace("run_gc_offline_tests.sh", "run_gc_verification.sh"))
+    if offline_text is None:
+        offline_text = read(RUN_GC_OFFLINE_TESTS_SH)
+    if tsan_text is None:
+        tsan_text = read(os.path.join(ROOT_DIR, "tools", "run_gc_tsan_tests.sh"))
+
+    issues = []
+    fast_job = extract_yaml_job(workflow_text, "gc-verification")
+    if (
+        "run_gc_verification.sh --fast --base-sha" not in fast_job
+        or "github.event.pull_request.base.sha" not in fast_job
+        or "continue-on-error: true" in fast_job
+    ):
+        issues.append("emu-pull-request.yml: fast GC layer must run run_gc_verification.sh --fast with the PR base SHA")
+
+    production_jobs = (
+        ("emu-win-release", "emu-build-all-win.yml", "Windows"),
+        ("emu-linux-release", "emu-build-all-linux.yml", "Linux"),
+    )
+    for job_name, reusable_workflow, platform in production_jobs:
+        job = extract_yaml_job(workflow_text, job_name)
+        required_patterns = (
+            re.escape(reusable_workflow),
+            r"matrix_prj:\s*['\"]?\[[^\]]*api_experimental[^\]]*\]",
+            r"matrix_arch:\s*['\"]?\[[^\]]*x64[^\]]*\]",
+            r"matrix_cfg:\s*['\"]?\[[^\]]*release[^\]]*\]",
+            r"continue_on_error:\s*false\b",
+        )
+        if any(not re.search(pattern, job) for pattern in required_patterns):
+            issues.append(
+                f"emu-pull-request.yml: {platform} production layer must build api_experimental x64 release with failures blocking"
+            )
+
+    tsan_job = extract_yaml_job(workflow_text, "gc-tsan")
+    if (
+        "CXX: clang++" not in tsan_job
+        or "bash tools/run_gc_tsan_tests.sh" not in tsan_job
+        or "continue-on-error: true" in tsan_job
+    ):
+        issues.append("emu-pull-request.yml: TSAN layer must use Clang and run the dedicated sanitizer script")
+
+    verification_requirements = (
+        ("tools/run_gc_offline_tests.sh", "offline unit/property/replay execution"),
+        ("python3 tools/_audit_gc_refactor.py", "architecture audit execution"),
+        ("git diff --check", "diff check execution"),
+    )
+    for required, description in verification_requirements:
+        if required not in verification_text:
+            issues.append(f"run_gc_verification.sh: fast layer is missing {description}")
+
+    offline_requirements = (
+        "python3 tools/test_audit_gc_refactor.py",
+        "gbe_dota_reconnect_network_test",
+        "gbe_dota_lobby_state_store_test",
+        "gbe_dota_concurrency_stress_test",
+        "gbe_dota_handler_registry_test",
+        "gc_replay_test",
+    )
+    for required in offline_requirements:
+        if required not in offline_text:
+            issues.append(f"run_gc_offline_tests.sh: fast layer is missing required target {required}")
+
+    for required in (
+        "-fsanitize=thread",
+        "halt_on_error=1:exitcode=66",
+        "gbe_dota_reconnect_network_test",
+        "gbe_dota_concurrency_stress_test",
+    ):
+        if required not in tsan_text:
+            issues.append(f"run_gc_tsan_tests.sh: sanitizer layer is missing required boundary {required}")
+    return issues
+
+
 def extract_diagnostic_reason_inventory(header_text):
     """Derive typed diagnostic reason names and stable serialized values."""
     enum_match = re.search(r"enum\s+class\s+Reason\s*:[^{]+\{(?P<body>.*?)\};", header_text, re.S)
@@ -1068,6 +1157,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 15: Layered GC CI gates")
+    print("=" * 70)
+    print("  Action: keep fast, production, and sanitizer PR checks separate and blocking.")
+    layered_ci_issues = audit_layered_ci_gates()
+    if not layered_ci_issues:
+        print("  Fast offline/audit/diff, Windows/Linux release, and Clang TSAN layers remain blocking")
+    else:
+        for issue in layered_ci_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -1087,8 +1188,9 @@ def main():
     print(f"  Reconnect transition-layer issues:   {len(reconnect_transition_issues)}")
     print(f"  Shared lobby compatibility issues:   {len(shared_lobby_compatibility_issues)}")
     print(f"  Architecture boundary issues:        {len(architecture_boundary_issues)}")
+    print(f"  Layered CI gate issues:               {len(layered_ci_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or layered_ci_issues:
         sys.exit(1)
 
 

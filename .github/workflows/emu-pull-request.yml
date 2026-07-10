@@ -81,10 +81,10 @@ jobs:
           sudo apt update -y
           sudo apt install -y build-essential python3
 
-      - name: "Run full GC verification"
+      - name: "Run fast GC verification"
         shell: "bash"
         working-directory: "${{ github.workspace }}"
-        run: bash tools/run_gc_verification.sh --full --base-sha "${{ github.event.pull_request.base.sha }}"
+        run: bash tools/run_gc_verification.sh --fast --base-sha "${{ github.event.pull_request.base.sha }}"
 
   gc-tsan:
     name: "gc thread sanitizer"
