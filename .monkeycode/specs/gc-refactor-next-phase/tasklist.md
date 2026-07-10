@@ -261,7 +261,8 @@
     - 实现：Audit 8 从 `gbe_dota_diagnostic_event.h` 的 `Reason` 枚举和 `describe_reason()` 集中映射直接派生 typed diagnostic inventory，检查枚举缺失映射、映射缺失枚举、重复稳定值、focused serialization inventory 缺项、额外项和序列化值漂移。原有 14 项高风险业务 reason 继续通过 `reason-trace-governance.md` 治理，避免与 typed diagnostic reason 混为一套手工清单。
     - 测试：新增 6 个 Python focused regression tests，覆盖完整唯一 inventory 通过，以及缺失映射、额外映射、重复稳定值、focused coverage 缺失和 focused 值漂移五类失败；测试接入 fast/full offline 门禁。Audit 8 当前自动验证 26 项 typed diagnostic reason 和 14 项历史高风险业务 reason。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；audit helper 6/6，reconnect network 253/253，registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
-  - [ ] 10.7 检查点：确保所有测试通过，如有疑问请询问用户
+  - [x] 10.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - 检查点：P10.1-P10.6 已完成，结构化 reconnect/lifecycle 事件、typed reason/source、固定字段格式、敏感字段排除和自动派生 inventory 审计均已落地。完整 GC 验证通过，未发现需要用户裁决的协议、日志或兼容性疑问。
 
 - [ ] 11. P11 明确并验证并发模型
   - [ ] 11.1 标注状态线程所有权和锁边界
