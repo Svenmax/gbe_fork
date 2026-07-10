@@ -42,3 +42,7 @@ This contract records the current thread ownership and synchronization boundarie
 ## Bounded Stress Gate
 
 `gbe_dota_concurrency_stress_test` runs one writer and four readers across 1,000 generations. The writer combines monotonic publish, matching and stale compare/update, and clear operations. Each reader validates one immutable snapshot version and builds a reconnect context from that same value. The gate requires zero torn snapshots, zero context identity drift, zero stale mutator execution, and a complete final generation.
+
+## ThreadSanitizer Gate
+
+`tools/run_gc_tsan_tests.sh` builds the reconnect network/state focused test and the bounded shared-store/context stress test with ThreadSanitizer. The sanitizer exits on the first race report. Pull requests run this gate in the blocking `gc-tsan` Ubuntu job with Clang.

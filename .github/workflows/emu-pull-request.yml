@@ -85,3 +85,25 @@ jobs:
         shell: "bash"
         working-directory: "${{ github.workspace }}"
         run: bash tools/run_gc_verification.sh --full --base-sha "${{ github.event.pull_request.base.sha }}"
+
+  gc-tsan:
+    name: "gc thread sanitizer"
+    runs-on: "ubuntu-24.04"
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+
+    steps:
+      - name: "Checkout branch"
+        uses: actions/checkout@v6
+
+      - name: "Install Clang"
+        shell: "bash"
+        run: |
+          sudo apt update -y
+          sudo apt install -y clang
+
+      - name: "Run GC ThreadSanitizer tests"
+        shell: "bash"
+        working-directory: "${{ github.workspace }}"
+        env:
+          CXX: clang++
+        run: bash tools/run_gc_tsan_tests.sh

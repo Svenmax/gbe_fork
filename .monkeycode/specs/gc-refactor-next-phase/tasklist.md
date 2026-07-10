@@ -289,9 +289,12 @@
     - 实现：新增独立 `gbe_dota_concurrency_stress_test`，以 1 个 writer 和 4 个 reader 执行 1,000 个 generation 的有界历史。writer 交替执行完整 monotonic publish、matching compare/update、stale compare/update 和周期 clear；reader 每次只读取一个 immutable snapshot，校验 generation、lobby/server/custom game/owner/endpoint/string/vector 字段属于同一完整版本，并从该版本通过 production reconnect source/context builder 生成 context。
     - 验收：断言 reader 全部执行、torn snapshot 为零、context identity 漂移为零、999 次 stale update 全部返回 `StaleGeneration`、stale mutator 调用为零，并验证最终 generation 1001 的完整状态。测试接入 fast/full shell 门禁与 Premake target；Audit 11 要求关键操作、零错误断言和双入口接线持续存在。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；concurrency stress 通过，reconnect network 262/262，callsystem guard 8/8，registry assertions 339/339，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit helper 8/8，audit 11 项 0 问题。
-  - [ ] 11.5 增加 ThreadSanitizer CI target
+  - [x] 11.5 增加 ThreadSanitizer CI target
     - 构建最小 GC state/reconnect 测试集并执行 TSAN。
     - 将确定性 data race 作为 PR 阻断条件。
+    - 实现：新增 `tools/run_gc_tsan_tests.sh`，以 `-fsanitize=thread -O1 -g -fno-omit-frame-pointer -pthread` 构建并运行 reconnect network/state focused test 与 P11.4 shared lobby/reconnect context stress test。`TSAN_OPTIONS=halt_on_error=1:exitcode=66` 使首个 race 报告立即以非零状态失败。
+    - CI：PR workflow 新增独立必过 `gc-tsan` job，在 Ubuntu 24.04 安装 Clang 并以 `CXX=clang++` 执行最小门禁。Audit 11 要求 sanitizer flags、race 退出策略、两个 focused target 和 PR workflow 接线持续存在；audit helper 增至 9/9。
+    - 验证：`CXX=c++ bash tools/run_gc_tsan_tests.sh` 在当前环境通过，reconnect network 262/262，concurrency stress 通过且无 ThreadSanitizer 报告。Clang TSAN 由 PR `gc-tsan` job 持续执行。
   - [ ] 11.6 增加并发属性测试
     - 属性 P11-A：任意并发历史中的已接受 generation update 可线性化。
     - 属性 P11-B：callback/network fake 在 store lock 外被调用。

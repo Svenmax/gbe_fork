@@ -94,6 +94,10 @@ class ConcurrencyOwnershipAuditTest(unittest.TestCase):
     def test_production_lock_boundary_audit_passes(self):
         self.assertEqual([], audit.audit_concurrency_ownership_contract())
 
+    def test_tsan_gate_audit_passes(self):
+        issues = audit.audit_concurrency_ownership_contract()
+        self.assertFalse([issue for issue in issues if "P11.5" in issue or "TSAN" in issue])
+
 
 if __name__ == "__main__":
     unittest.main()

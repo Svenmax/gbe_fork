@@ -613,6 +613,21 @@ def audit_concurrency_ownership_contract():
     for owner, text in (("run_gc_offline_tests.sh", shell_text), ("premake5.lua", premake_text)):
         if "gbe_dota_concurrency_stress_test" not in text:
             issues.append(f"{owner}: missing P11.4 concurrency stress test wiring")
+
+    tsan_path = os.path.join(ROOT_DIR, "tools", "run_gc_tsan_tests.sh")
+    tsan_text = read(tsan_path) if os.path.exists(tsan_path) else ""
+    workflow_text = read(os.path.join(ROOT_DIR, ".github", "workflows", "emu-pull-request.yml"))
+    for required in (
+        "-fsanitize=thread",
+        "halt_on_error=1:exitcode=66",
+        "gbe_dota_reconnect_network_test",
+        "gbe_dota_concurrency_stress_test",
+    ):
+        if required not in tsan_text:
+            issues.append(f"run_gc_tsan_tests.sh: missing P11.5 TSAN boundary {required}")
+    for required in ("gc-tsan:", "CXX: clang++", "bash tools/run_gc_tsan_tests.sh"):
+        if required not in workflow_text:
+            issues.append(f"emu-pull-request.yml: missing P11.5 TSAN CI boundary {required}")
     return issues
 
 
