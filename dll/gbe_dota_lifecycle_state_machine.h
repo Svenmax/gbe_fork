@@ -80,6 +80,8 @@ enum class EffectKind : std::uint8_t {
     ReconnectQueued,
     PracticeLobbyDetailsRequested,
     LegacyLifecycleActionsRequested,
+    RuntimeMemberUpdateRequested,
+    RuntimeGameStateUpdateRequested,
 };
 
 struct Effect {
@@ -450,6 +452,67 @@ constexpr MachineTransitionResult transition_custom_game_request(
         default:
             return rejected_machine_transition(state.machine, DecisionReason::InvalidTransition);
     }
+}
+
+struct RuntimeMemberRequest {
+    std::uint64_t generation{};
+    std::uint64_t steam_id{};
+    bool connected{};
+    std::uint32_t hero_id{};
+    bool has_hero_id{};
+};
+
+constexpr MachineTransitionResult transition_runtime_member(
+    MachineState state,
+    const RuntimeMemberRequest &request)
+{
+    if (request.generation != 0u && request.generation != state.generation)
+        return rejected_machine_transition(state, DecisionReason::StaleGeneration);
+    if (request.steam_id == 0u)
+        return rejected_machine_transition(state, DecisionReason::RequestIgnored);
+    return {
+        state,
+        { { Effect{
+            EffectKind::RuntimeMemberUpdateRequested,
+            state.lifecycle,
+            state.lifecycle,
+            state.generation } }, 1u },
+        DecisionReason::TransitionApplied,
+        DecisionStatus::Accepted,
+    };
+}
+
+struct RuntimeGameStateRequest {
+    std::uint64_t generation{};
+    bool custom_game_launch{};
+    bool has_game_state{};
+    std::uint32_t requested_game_state{};
+    std::uint32_t lobby_state{};
+    std::uint32_t current_game_state{};
+    std::uint32_t launch_phase{};
+};
+
+constexpr MachineTransitionResult transition_runtime_game_state(
+    MachineState state,
+    const RuntimeGameStateRequest &request,
+    std::uint32_t run_queued_launch_phase)
+{
+    if (request.generation != 0u && request.generation != state.generation)
+        return rejected_machine_transition(state, DecisionReason::StaleGeneration);
+    if (!request.custom_game_launch || request.lobby_state != 2u ||
+        request.launch_phase < run_queued_launch_phase || !request.has_game_state ||
+        request.requested_game_state <= request.current_game_state)
+        return rejected_machine_transition(state, DecisionReason::RequestIgnored);
+    return {
+        state,
+        { { Effect{
+            EffectKind::RuntimeGameStateUpdateRequested,
+            state.lifecycle,
+            state.lifecycle,
+            state.generation } }, 1u },
+        DecisionReason::TransitionApplied,
+        DecisionStatus::Accepted,
+    };
 }
 
 } // namespace gbe::dota_lifecycle_state_machine

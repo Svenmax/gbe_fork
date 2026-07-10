@@ -292,6 +292,61 @@ int main()
     assert(!stale_custom_loading.accepted());
     assert(stale_custom_loading.reason == lifecycle::DecisionReason::StaleGeneration);
 
+    lifecycle::MachineState runtime_state{};
+    runtime_state.lifecycle = lifecycle::State::Running;
+    runtime_state.generation = 21u;
+    const auto connected_member = lifecycle::transition_runtime_member(
+        runtime_state,
+        { 21u, 7001u, true, 86u, true });
+    assert(connected_member.accepted());
+    assert(connected_member.state.lifecycle == runtime_state.lifecycle);
+    assert(connected_member.effects.contains(lifecycle::EffectKind::RuntimeMemberUpdateRequested));
+
+    const auto invalid_member = lifecycle::transition_runtime_member(
+        runtime_state,
+        { 21u, 0u, true, 86u, true });
+    assert(!invalid_member.accepted());
+    assert(invalid_member.reason == lifecycle::DecisionReason::RequestIgnored);
+
+    const auto stale_member = lifecycle::transition_runtime_member(
+        runtime_state,
+        { 20u, 7001u, false, 0u, false });
+    assert(!stale_member.accepted());
+    assert(stale_member.reason == lifecycle::DecisionReason::StaleGeneration);
+
+    lifecycle::RuntimeGameStateRequest game_state_request{};
+    game_state_request.generation = 21u;
+    game_state_request.custom_game_launch = true;
+    game_state_request.has_game_state = true;
+    game_state_request.requested_game_state = 2u;
+    game_state_request.lobby_state = 2u;
+    game_state_request.current_game_state = 1u;
+    game_state_request.launch_phase = 3u;
+    const auto game_state_update = lifecycle::transition_runtime_game_state(
+        runtime_state,
+        game_state_request,
+        3u);
+    assert(game_state_update.accepted());
+    assert(game_state_update.state.lifecycle == runtime_state.lifecycle);
+    assert(game_state_update.effects.contains(lifecycle::EffectKind::RuntimeGameStateUpdateRequested));
+
+    game_state_request.requested_game_state = 1u;
+    const auto duplicate_game_state = lifecycle::transition_runtime_game_state(
+        runtime_state,
+        game_state_request,
+        3u);
+    assert(!duplicate_game_state.accepted());
+    assert(duplicate_game_state.reason == lifecycle::DecisionReason::RequestIgnored);
+
+    game_state_request.requested_game_state = 2u;
+    game_state_request.generation = 20u;
+    const auto stale_game_state = lifecycle::transition_runtime_game_state(
+        runtime_state,
+        game_state_request,
+        3u);
+    assert(!stale_game_state.accepted());
+    assert(stale_game_state.reason == lifecycle::DecisionReason::StaleGeneration);
+
     std::cout << "gbe_dota_lifecycle_state_machine_test passed\n";
     return 0;
 }

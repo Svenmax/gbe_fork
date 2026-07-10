@@ -355,6 +355,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Request(
         for (const GBE_Dota7034ConnectedPlayer &connected_player : request.connected_players) {
             if (!connected_player.has_steam_id || connected_player.steam_id == 0ull)
                 continue;
+            gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+            machine_state.generation = GBE_CurrentDotaLobbyGeneration();
+            const auto transition = gbe::dota_lifecycle_state_machine::transition_runtime_member(
+                machine_state,
+                {
+                    machine_state.generation,
+                    connected_player.steam_id,
+                    true,
+                    connected_player.hero_id,
+                    connected_player.has_hero_id,
+                });
+            if (!transition.accepted() || !transition.effects.contains(
+                    gbe::dota_lifecycle_state_machine::EffectKind::RuntimeMemberUpdateRequested))
+                continue;
             const uint32 previous_owner_hero_id = GBE_local_lobby.owner_hero_id;
             const auto execution = GBE_ExecuteDotaLifecycleActions(
                 gbe::dota_lifecycle::build_member_runtime_actions(
@@ -494,6 +508,14 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034DisconnectedPlayers(
     for (const GBE_Dota7034DisconnectedPlayer &disconnected_player : disconnected_players) {
         if (!disconnected_player.has_steam_id || disconnected_player.steam_id == 0ull)
             continue;
+        gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+        machine_state.generation = GBE_CurrentDotaLobbyGeneration();
+        const auto transition = gbe::dota_lifecycle_state_machine::transition_runtime_member(
+            machine_state,
+            { machine_state.generation, disconnected_player.steam_id, false, 0u, false });
+        if (!transition.accepted() || !transition.effects.contains(
+                gbe::dota_lifecycle_state_machine::EffectKind::RuntimeMemberUpdateRequested))
+            continue;
         const auto execution = GBE_ExecuteDotaLifecycleActions(
             gbe::dota_lifecycle::build_member_runtime_actions(
                 disconnected_player.steam_id,
@@ -526,15 +548,30 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034RuntimeUpdates(
 {
     const bool request_advances_to_hero_selection = request.has_game_state && request.game_state >= 2u;
 
-    const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision runtime_game_state =
-        gbe::dota_lobby_state::compute_runtime_game_state_transition(
-            GBE_local_lobby,
+    gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+    machine_state.generation = GBE_CurrentDotaLobbyGeneration();
+    const auto transition = gbe::dota_lifecycle_state_machine::transition_runtime_game_state(
+        machine_state,
+        {
+            machine_state.generation,
             custom_game_launch,
             request.has_game_state,
             request.game_state,
-            GBE_kDotaLaunchPhaseRunQueued,
-            "custom game 7034 game_state");
-    if (runtime_game_state.queue_runtime_lobby_update) {
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            GBE_local_lobby.launch_phase,
+        },
+        GBE_kDotaLaunchPhaseRunQueued);
+    if (transition.accepted() && transition.effects.contains(
+            gbe::dota_lifecycle_state_machine::EffectKind::RuntimeGameStateUpdateRequested)) {
+        const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision runtime_game_state =
+            gbe::dota_lobby_state::compute_runtime_game_state_transition(
+                GBE_local_lobby,
+                custom_game_launch,
+                request.has_game_state,
+                request.game_state,
+                GBE_kDotaLaunchPhaseRunQueued,
+                "custom game 7034 game_state");
         gbe::dota_lifecycle::TransitionEffects effects;
         effects.transition = runtime_game_state;
         effects.trigger_emsg = request_emsg;
