@@ -49,6 +49,7 @@ SOURCE_LIST_AUDIT_EXEMPTIONS = {
     "gbe_dota_payload_item_helpers.cpp": "compiled through test wrappers",
     "gbe_dota_payload_lobby_helpers.cpp": "compiled through payload helper test wrapper",
     "gbe_dota_payload_wire_helpers.cpp": "compiled through payload helper test wrapper",
+    "gbe_dota_reconnect_network_adapter.cpp": "production Steam networking adapter, covered through the reconnect network boundary",
     "gbe_dota_post_login_handlers.cpp": "production dispatcher TU, covered by registry audit",
     "gbe_dota_template_replay_handlers.cpp": "production template replay TU with canned payload ownership",
     "gbe_dota_welcome_coordinator.cpp": "production coordinator TU, not directly offline-buildable",

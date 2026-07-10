@@ -60,6 +60,10 @@ compile_header_test \
     serialized_connection_state_header_compile \
     tools/gbe_dota_header_compile_test/serialized_connection_state_header_compile.cpp
 
+compile_header_test \
+    reconnect_network_header_compile \
+    tools/gbe_dota_header_compile_test/reconnect_network_header_compile.cpp
+
 build_and_run \
     gc_message_utils_test \
     tools/gc_message_utils_test/gc_message_utils_test.cpp \
@@ -70,6 +74,13 @@ build_and_run \
     gbe_gc_config_test \
     tools/gbe_gc_config_test/gbe_gc_config_test.cpp \
     dll/gbe_gc_config.cpp
+
+build_and_run \
+    gbe_dota_reconnect_network_test \
+    tools/gbe_dota_reconnect_network_test/gbe_dota_reconnect_network_test.cpp \
+    dll/gbe_dota_reconnect_network.cpp \
+    dll/gbe_dota_serialized_connection_state.cpp \
+    dll/gbe_proto_wire.cpp
 
 build_and_run \
     gbe_proto_wire_test \

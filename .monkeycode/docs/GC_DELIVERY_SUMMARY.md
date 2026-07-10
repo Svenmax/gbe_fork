@@ -91,3 +91,7 @@ P1 unified direct and wrapped custom-game lifecycle execution behind a shared co
 P3 moved serialized reconnect connection state into `gbe_dota_serialized_connection_state.{h,cpp}`, removed its `<string>` dependency from the shared reconnect header, and added standalone header compile checks.
 
 P4 added `gbe_dota_reconnect_context.{h,cpp}` as the canonical reconnect source pipeline. Shared, recent, local, and generic recovery inputs now use one eligibility and endpoint-normalization builder, with explicit source priority and rejection reasons. The next implementation stage is P8, which introduces a testable production reconnect network boundary.
+
+P8 added `gbe_dota_reconnect_network.{h,cpp}` as the shared production/offline reconnect orchestrator and `gbe_dota_reconnect_network_adapter.{h,cpp}` as the Steam boundary for context lookup, `ConnectByIPAddress`, and `GameServerChangeRequested_t` queueing. `PostConnectionStateMsg()` now delegates reconnect decisions and side effects through injected narrow interfaces while each client or gameserver serialized socket instance retains independent reconnect state and generic recovery probe cache.
+
+P8 verification passed with 156/156 reconnect network assertions, 252/252 payload helper assertions, 68/68 handler smoke tests, 7 replay fixtures, and 8 audit groups with 0 issues. The next implementation stage is P5, which transactionally models lobby lifecycle effects.

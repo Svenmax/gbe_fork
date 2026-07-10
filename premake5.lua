@@ -1411,6 +1411,26 @@ project "tool_gbe_dota_lobby_state_test"
 -- End tool_gbe_dota_lobby_state_test
 
 
+-- Project tool_gbe_dota_reconnect_network_test
+project "tool_gbe_dota_reconnect_network_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_reconnect_network_test"))
+    targetname "gbe_dota_reconnect_network_test_%{cfg.platform}"
+
+    files {
+        "tools/gbe_dota_reconnect_network_test/gbe_dota_reconnect_network_test.cpp",
+        "tools/gbe_dota_header_compile_test/reconnect_network_header_compile.cpp",
+        "dll/gbe_dota_reconnect_network.cpp",
+        "dll/gbe_dota_reconnect_network.h",
+        "dll/gbe_dota_serialized_connection_state.cpp",
+        "dll/dll/gbe_dota_serialized_connection_state.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gbe_dota_reconnect_network_test
+
+
 if _OPTIONS["with-gc-tests"] then
 group "tools/tests"
 

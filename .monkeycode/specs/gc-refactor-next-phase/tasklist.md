@@ -86,31 +86,32 @@
   - [x] 4.7 检查点：确保所有测试通过，如有疑问请询问用户
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；payload helpers 252/252，handler smoke 68/68，replay fixtures 7 组，audit 8 项 0 问题。
 
-- [ ] 5. P8 建立可测试的 production reconnect 网络边界
-  - [ ] 5.1 定义窄网络接口
+- [x] 5. P8 建立可测试的 production reconnect 网络边界
+  - [x] 5.1 定义窄网络接口
     - 定义 direct connector、callback queue 和 reconnect context provider 接口。
     - 接口使用项目现有 Steam 类型和错误表达，避免复制网络协议模型。
     - 依赖：任务 4。
-  - [ ] 5.2 实现 production adapter
+  - [x] 5.2 实现 production adapter
     - adapter 封装 `ConnectByIPAddress`、callback 入队和 context 获取。
     - 保持连接 options、callback 类型、delay 和日志字段不变。
-  - [ ] 5.3 将依赖注入 serialized sockets
+  - [x] 5.3 将依赖注入 serialized sockets
     - production 构造路径注入真实 adapter，offline tests 注入 fake。
     - 保证 client 和 gameserver serialized socket 实例各自拥有状态和依赖。
-  - [ ] 5.4 重构 `PostConnectionStateMsg()` 为编排函数
+  - [x] 5.4 重构 `PostConnectionStateMsg()` 为编排函数
     - 分离 payload 诊断、context 决策、direct connect、callback dedup 和日志。
     - 保持现有 public API 和调用时序。
-  - [ ] 5.5 增加完整 production-path 单元测试
+  - [x] 5.5 增加完整 production-path 单元测试
     - 覆盖首次连接、同大厅重复、跨大厅复用 endpoint、同大厅 server/endpoint 变化、解析失败和缺少 context。
     - 断言 connect options、callback body、调用次数和执行顺序。
-  - [ ] 5.6 增加双实例与失败重试测试
+  - [x] 5.6 增加双实例与失败重试测试
     - 验证 client/gameserver 实例互不抑制。
     - 验证 direct connect 返回失败时的记录与后续 retry 策略符合设计。
-  - [ ] 5.7 增加 reconnect 编排属性测试
+  - [x] 5.7 增加 reconnect 编排属性测试
     - 属性 P8-A：同 generation、server、endpoint 最多入队一次 engine callback。
     - 属性 P8-B：generation 变化后首个有效消息必定重新获得连接机会。
     - 属性 P8-C：一个实例的输入不会改变另一个实例的决策。
-  - [ ] 5.8 检查点：确保所有测试通过，如有疑问请询问用户
+  - [x] 5.8 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 156/156，payload helpers 252/252，handler smoke 68/68，replay fixtures 7 组，audit 8 项 0 问题。
 
 - [ ] 6. P5 将大厅生命周期副作用事务化
   - [ ] 6.1 定义 transition effects 和 action model

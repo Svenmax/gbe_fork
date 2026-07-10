@@ -25,9 +25,7 @@
 #include <cstring>
 #include <algorithm>
 #include <string>
-#include <ctime>
 #include <vector>
-#include <cstdlib>
 
 namespace {
 
@@ -391,44 +389,6 @@ std::vector<uint8_t> GBE_BuildSerializedNetworkingCert(CSteamID steam_id, uint32
     return cert;
 }
 
-bool GBE_ParseIPv4Endpoint(const std::string &endpoint, SteamNetworkingIPAddr *address)
-{
-    if (!address)
-        return false;
-
-    const size_t port_pos = endpoint.find(':');
-    if (port_pos == std::string::npos)
-        return false;
-
-    unsigned long octets[4] = {};
-    size_t start = 0;
-    for (int i = 0; i < 4; ++i) {
-        const size_t end = endpoint.find(i == 3 ? ':' : '.', start);
-        if (end == std::string::npos || end <= start)
-            return false;
-
-        const std::string segment = endpoint.substr(start, end - start);
-        char *parse_end = nullptr;
-        octets[i] = std::strtoul(segment.c_str(), &parse_end, 10);
-        if (!parse_end || *parse_end != '\0' || octets[i] > 255)
-            return false;
-
-        start = end + 1;
-    }
-
-    if (start != port_pos + 1)
-        return false;
-
-    char *port_end = nullptr;
-    const unsigned long port = std::strtoul(endpoint.c_str() + port_pos + 1, &port_end, 10);
-    if (!port_end || *port_end != '\0' || port == 0 || port > 65535)
-        return false;
-
-    const uint32 ip = static_cast<uint32>((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]);
-    address->SetIPv4(ip, static_cast<uint16>(port));
-    return true;
-}
-
 std::string GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(const char *connect, uint64 local_steam_id, uint64 owner_steam_id)
 {
     const std::string endpoint = connect ? connect : "";
@@ -462,18 +422,46 @@ void Steam_Networking_Sockets_Serialized::steam_run_every_runcb(void *object)
 }
 
 Steam_Networking_Sockets_Serialized::Steam_Networking_Sockets_Serialized(class Settings *settings, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, class Steam_Networking_Sockets *direct_sockets)
+    : production_reconnect_adapter(callbacks, direct_sockets)
 {
     this->settings = settings;
     this->network = network;
     this->callback_results = callback_results;
     this->callbacks = callbacks;
     this->run_every_runcb = run_every_runcb;
-    this->direct_sockets = direct_sockets;
+    this->reconnect_context_provider = &production_reconnect_adapter;
+    this->reconnect_direct_connector = &production_reconnect_adapter;
+    this->reconnect_callback_queue = &production_reconnect_adapter;
 
     this->network->setCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
     this->network->setCallback(CALLBACK_ID_NETWORKING_SOCKETS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
     this->run_every_runcb->add(&Steam_Networking_Sockets_Serialized::steam_run_every_runcb, this);
 
+}
+
+Steam_Networking_Sockets_Serialized::Steam_Networking_Sockets_Serialized(
+    class Settings *settings,
+    class Networking *network,
+    class SteamCallResults *callback_results,
+    class SteamCallBacks *callbacks,
+    class RunEveryRunCB *run_every_runcb,
+    GBE_DotaReconnectContextProvider *context_provider,
+    GBE_DotaReconnectDirectConnector *direct_connector,
+    GBE_DotaReconnectCallbackQueue *callback_queue)
+    : production_reconnect_adapter(nullptr, nullptr)
+{
+    this->settings = settings;
+    this->network = network;
+    this->callback_results = callback_results;
+    this->callbacks = callbacks;
+    this->run_every_runcb = run_every_runcb;
+    this->reconnect_context_provider = context_provider;
+    this->reconnect_direct_connector = direct_connector;
+    this->reconnect_callback_queue = callback_queue;
+
+    this->network->setCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
+    this->network->setCallback(CALLBACK_ID_NETWORKING_SOCKETS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
+    this->run_every_runcb->add(&Steam_Networking_Sockets_Serialized::steam_run_every_runcb, this);
 }
 
 Steam_Networking_Sockets_Serialized::~Steam_Networking_Sockets_Serialized()
@@ -735,47 +723,30 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
     }
 
     const uint64 local_id = settings->get_local_steam_id().ConvertToUint64();
-    GBE_DotaReconnectContext ctx{};
-    bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
-    if (has_ctx && ctx.custom_game_id == 0ull)
+    if (!reconnect_context_provider || !reconnect_direct_connector || !reconnect_callback_queue)
         return;
-
-    const bool eligible_before = GBE_IsDotaReconnectEligible();
-    if (!eligible_before)
-        return;
-
-    if (!has_ctx) {
-        static std::time_t s_last_recover_probe_time = 0;
-        static uint64 s_last_recover_probe_local_id = 0;
-        static bool s_last_recover_probe_has_ctx = false;
-        static GBE_DotaReconnectContext s_last_recover_probe_ctx{};
-
-        const std::time_t now = std::time(nullptr);
-        if (s_last_recover_probe_local_id != local_id || s_last_recover_probe_time != now) {
-            s_last_recover_probe_local_id = local_id;
-            s_last_recover_probe_time = now;
-            s_last_recover_probe_ctx = GBE_DotaReconnectContext{};
-            s_last_recover_probe_has_ctx = GBE_TryRecoverDotaReconnectContextFromGenericLobbies(local_id, &s_last_recover_probe_ctx);
-        }
-        if (s_last_recover_probe_has_ctx) {
-            ctx = s_last_recover_probe_ctx;
-            has_ctx = true;
-        }
-    }
-
-    if (!has_ctx || ctx.custom_game_id == 0ull)
+    const GBE_DotaReconnectPostResult result = GBE_ExecuteDotaReconnectPostConnectionState(
+        local_id,
+        cbMsg,
+        *reconnect_context_provider,
+        *reconnect_direct_connector,
+        *reconnect_callback_queue,
+        dota_connection_state);
+    if (!result.has_context ||
+        result.skip_reason == GBE_DotaReconnectPostSkipReason::OrdinaryPracticeLobby ||
+        result.skip_reason == GBE_DotaReconnectPostSkipReason::ReconnectIneligible)
         return;
 
     const std::string payload_prefix = GBE_FormatPayloadPrefix(pMsg, cbMsg);
     const std::string payload_fields = GBE_FormatSerializedPayloadFields(pMsg, cbMsg);
     const std::string payload_details = GBE_FormatSerializedStateDetails(pMsg, cbMsg);
-    const std::string endpoint = GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(ctx.connect, local_id, ctx.owner_steam_id);
+    const GBE_DotaReconnectContext &ctx = result.context;
     const auto decision = gbe::dota_lobby_state::compute_reconnect_interception_decision(
         ctx,
-        has_ctx,
+        result.has_context,
         local_id,
         ctx.server_id,
-        eligible_before);
+        true);
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
         "PostConnectionStateMsg gate size=%u prefix=%s fields=%s details=%s has_ctx=%u server_id=%llu game_state=%u custom_game_id=%llu arcade=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s endpoint_raw=%s local_is_owner=%u",
@@ -783,84 +754,61 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         payload_prefix.c_str(),
         payload_fields.c_str(),
         payload_details.c_str(),
-        has_ctx ? 1u : 0u,
+        result.has_context ? 1u : 0u,
         (unsigned long long)ctx.server_id,
         ctx.game_state,
         (unsigned long long)ctx.custom_game_id,
         decision.arcade_context ? 1u : 0u,
         decision.state_ready ? 1u : 0u,
         decision.has_connect ? 1u : 0u,
-        eligible_before ? 1u : 0u,
-        endpoint.c_str(),
+        1u,
+        result.endpoint.c_str(),
         ctx.connect,
         decision.local_is_owner ? 1u : 0u
     );
 
-    if (!decision.state_ready || !decision.has_connect)
+    if (result.skip_reason == GBE_DotaReconnectPostSkipReason::StateNotReady ||
+        result.skip_reason == GBE_DotaReconnectPostSkipReason::MissingEndpoint)
         return;
 
-    if (!decision.reconnect_eligible) {
-        GBE_ReconnectLog(
-            "GBE_RECONNECT_DIAG",
-            "skipping PostConnectionStateMsg direct connect reason=reconnect_not_eligible server_id=%llu endpoint=%s endpoint_raw=%s",
-            (unsigned long long)ctx.server_id,
-            endpoint.c_str(),
-            ctx.connect
-        );
-        return;
-    }
-
-    if (decision.local_is_owner) {
+    if (result.skip_reason == GBE_DotaReconnectPostSkipReason::LocalOwner) {
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
             "skipping PostConnectionStateMsg direct connect for local owner server_id=%llu endpoint=%s endpoint_raw=%s",
             (unsigned long long)ctx.server_id,
-            endpoint.c_str(),
+            result.endpoint.c_str(),
             ctx.connect
         );
         return;
     }
 
-    dota_connection_state.begin_lobby(ctx.lobby_id);
-    dota_connection_state.begin_server(ctx.server_id);
-
-    if (direct_sockets && dota_connection_state.should_connect_direct(ctx.server_id, endpoint)) {
-        SteamNetworkingIPAddr address{};
-        if (GBE_ParseIPv4Endpoint(endpoint, &address)) {
-            SteamNetworkingConfigValue_t options[3] = {};
-            options[0].SetInt32(k_ESteamNetworkingConfig_IP_AllowWithoutAuth, 2);
-            options[1].SetInt32(k_ESteamNetworkingConfig_IPLocalHost_AllowWithoutAuth, 2);
-            options[2].SetInt32(k_ESteamNetworkingConfig_Unencrypted, 2);
-            const HSteamNetConnection connection = direct_sockets->ConnectByIPAddress(address, 3, options);
-            dota_connection_state.record_direct_connect(ctx.server_id, endpoint);
-            GBE_ReconnectLog(
-                "GBE_RECONNECT_DIAG",
-                "direct ConnectByIPAddress source=PostConnectionStateMsg server_id=%llu endpoint=%s connection=%u options=IP_AllowWithoutAuth:2,IPLocalHost_AllowWithoutAuth:2,Unencrypted:2",
-                (unsigned long long)ctx.server_id,
-                endpoint.c_str(),
-                connection
-            );
-        } else {
+    if (result.direct_connect_attempted) {
+        if (result.direct_connect_parse_failed) {
             GBE_ReconnectLog(
                 "GBE_RECONNECT_DIAG",
                 "skipped direct ConnectByIPAddress reason=parse_failed server_id=%llu endpoint=%s",
                 (unsigned long long)ctx.server_id,
-                endpoint.c_str()
+                result.endpoint.c_str()
+            );
+        } else {
+            GBE_ReconnectLog(
+                "GBE_RECONNECT_DIAG",
+                "direct ConnectByIPAddress source=PostConnectionStateMsg server_id=%llu endpoint=%s connection=%u options=IP_AllowWithoutAuth:2,IPLocalHost_AllowWithoutAuth:2,Unencrypted:2",
+                (unsigned long long)ctx.server_id,
+                result.endpoint.c_str(),
+                result.connection
             );
         }
     }
 
-    ++dota_connection_state.retry_count;
-    const bool size_changed = cbMsg != dota_connection_state.last_post_size;
-    dota_connection_state.last_post_size = cbMsg;
-    if (dota_connection_state.engine_callback_queued(ctx.server_id, endpoint)) {
+    if (result.callback_already_queued) {
         GBE_ReconnectLog(
             "GBE_RECONNECT_DIAG",
             "skipped engine callback source=PostConnectionStateMsg reason=already_queued retry=%u size_changed=%u server_id=%llu endpoint=%s endpoint_raw=%s",
-            dota_connection_state.retry_count,
-            size_changed ? 1u : 0u,
+            result.retry_count,
+            result.size_changed ? 1u : 0u,
             (unsigned long long)ctx.server_id,
-            endpoint.c_str(),
+            result.endpoint.c_str(),
             ctx.connect
         );
         return;
@@ -870,7 +818,7 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         "GBE_RECONNECT_DIAG",
         "skipped synthetic callback id=%d source=PostConnectionStateMsg reason=outgoing_state_blob_queue_engine_once retry=%u server_id=%llu size=%u prefix=%s fields=%s details=%s",
         SteamNetworkingSocketsRecvP2PRendezvous_t::k_iCallback,
-        dota_connection_state.retry_count,
+        result.retry_count,
         (unsigned long long)ctx.server_id,
         cbMsg,
         payload_prefix.c_str(),
@@ -878,26 +826,21 @@ void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pM
         payload_details.c_str()
     );
 
-    GameServerChangeRequested_t server_change{};
-    std::strncpy(server_change.m_rgchServer, endpoint.c_str(), sizeof(server_change.m_rgchServer) - 1);
-    server_change.m_rgchServer[sizeof(server_change.m_rgchServer) - 1] = '\0';
-    callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0);
-    dota_connection_state.record_engine_callback(ctx.server_id, endpoint);
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
         "queued callback id=%d type=GameServerChangeRequested delay=0.00 source=PostConnectionStateMsg retry=%u once=1 server_id=%llu endpoint=%s endpoint_raw=%s",
-        server_change.k_iCallback,
-        dota_connection_state.retry_count,
+        GameServerChangeRequested_t::k_iCallback,
+        result.retry_count,
         (unsigned long long)ctx.server_id,
-        endpoint.c_str(),
+        result.endpoint.c_str(),
         ctx.connect
     );
 
-    const std::string connect_command = std::string("+connect ") + endpoint;
+    const std::string connect_command = std::string("+connect ") + result.endpoint;
     GBE_ReconnectLog(
         "GBE_RECONNECT_DIAG",
         "skipping GameRichPresenceJoinRequested source=PostConnectionStateMsg reason=arcade_direct_connect_uses_server_change retry=%u command=%s owner=%llu",
-        dota_connection_state.retry_count,
+        result.retry_count,
         connect_command.c_str(),
         (unsigned long long)ctx.owner_steam_id
     );
