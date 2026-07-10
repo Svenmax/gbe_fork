@@ -323,9 +323,14 @@
     - 声明清理：删除零调用的 `describe_source_kind()`、`describe_reject_reason()` 和 `GBE_DescribeDotaReconnectPostSkipReason()`，统一使用 typed diagnostic `describe_source()` / `describe_reason()`。recent reconnect context 与 reconnect eligibility 仍承担 shared clear 后 fallback 和 one-shot interception 生命周期语义，继续保留；shared scalar facade 归 12.3 清理。
     - 门禁：新增 Audit 12，拒绝 7 个退役 reconnect transition symbol、serialized `lobby_id`、`begin_lobby` 和默认 generation 回流，并要求 `begin_generation` 持续存在。正反 fixture 将 audit helper 增至 13/13。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 通过；reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 448/448，handler smoke 77/77，replay fixtures 7 组，audit helper 13/13，audit 12 项 0 问题，TSAN 无 race。
-  - [ ] 12.3 删除 shared lobby 全局直访兼容层
+  - [x] 12.3 删除 shared lobby 全局直访兼容层
     - production 统一通过 lobby state store。
     - 依赖：任务 8。
+    - Store 收口：删除 `GBE_DotaSharedLobbyScalarSnapshot`、scalar/snapshot/has/id/arcade predicate/clear 等 10 个 compatibility facade。production shared lobby 仅由 `GBE_GetSharedDotaLobbyStateStore()` 暴露，读取使用单次完整 immutable `snapshot()`，发布与 generation-guarded 更新继续使用 Store contract，runtime reset 直接调用 `clear()`。
+    - 行为保持：reconnect selection、queued-state preapply、invite fallback、7272 stale republish 判定、launch suppression、arcade networking fallback、post-login/template/lobby flow 均改为每个操作捕获一次完整 snapshot。invite 的 valid/lobby/generic identity 和其他跨字段 predicate 来自同一版本，避免多次 scalar getter 观察不同版本。
+    - 测试 harness：payload helper 与 handler smoke harness 使用真实 `gbe::dota_lobby_state::Store` owner，删除测试内旧 facade 和 mutable backing global；shell 与 Premake target 显式链接 `gbe_dota_lobby_state_store.cpp`。payload Store contract 覆盖增至 546/546，handler smoke 保持 77/77。
+    - 门禁：新增 Audit 13，拒绝 10 个退役 shared lobby compatibility symbol 和 `GBE_shared_dota_lobby_state` 回流；正反 fixture 将 audit helper 增至 15/15。production `dll/**/*.{h,cpp}` 无退役符号残留。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 通过；reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 546/546，handler smoke 77/77，replay fixtures 7 组，audit helper 15/15，audit 13 项 0 问题，TSAN 无 race。
   - [ ] 12.4 收紧架构 audit
     - 禁止 handler 高风险副作用直调、共享状态直访、平行 dispatch 表和 reconnect 手工字段映射。
     - 验收：为每条规则添加正反 fixture，确保 audit 能真实失败。
