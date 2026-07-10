@@ -1695,10 +1695,7 @@ public:
     bool GBE_HandleDotaDirect7034Response(uint32 request_emsg, const gbe::proto_wire::Dota7034RequestShape &shape, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     void GBE_HandleDotaDirect7034LaunchPoll(uint32 request_emsg, uint64 source_job, bool &queued_runtime_lobby_update);
     void GBE_HandleDotaDirect7034WaitForPlayers(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, bool has_teams, uint64 source_job, bool &queued_runtime_lobby_update);
-    bool GBE_HandleDotaCustomGameReadyUpRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
-    bool GBE_HandleDotaCustomGameStartedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
-    bool GBE_HandleDotaCustomGameFinishedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
-    bool GBE_HandleDotaWrappedCustomGameLifecycleRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
+    bool GBE_HandleDotaCustomGameLifecycleRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
     gbe::dota_lifecycle::ExecutionResult GBE_ExecuteDotaLifecycleActions(
         const GBE_DotaActionList &actions,
         const gbe::dota_lifecycle::ExecutionOptions &options = {});

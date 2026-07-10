@@ -284,6 +284,9 @@ bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc
     auto adapt_practice_lobby_close_broadcast = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
         return self->GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest(c.body, c.wrapped, sess);
     };
+    auto adapt_custom_game_lifecycle = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
+        return self->GBE_HandleDotaCustomGameLifecycleRequest(c);
+    };
     auto adapt_direct_7427_notifications = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
         if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
             return false;
@@ -346,6 +349,9 @@ bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc
         { GBE_kDotaPracticeLobbyJoinBroadcastChannel, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_practice_lobby_join_broadcast, registry::HandlerId::PracticeLobbyJoinBroadcastChannel, "smoke:test_lobby_join_broadcast_publishes_before_details_and_ack" },
         { GBE_kDotaLobbyUpdateBroadcastChannelInfo, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_lobby_update_broadcast_info, registry::HandlerId::LobbyUpdateBroadcastChannelInfo, "smoke:test_lobby_update_broadcast_publishes_before_details" },
         { GBE_kDotaPracticeLobbyCloseBroadcastChannel, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_practice_lobby_close_broadcast, registry::HandlerId::PracticeLobbyCloseBroadcastChannel, "smoke:test_lobby_close_broadcast_publishes_before_details" },
+        { 7070u, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_custom_game_lifecycle, registry::HandlerId::CustomGameReadyUp, "smoke:test_custom_game_lifecycle_direct_wrapped_action_sequence_equivalence" },
+        { 8052u, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_custom_game_lifecycle, registry::HandlerId::CustomGameStartedLoading, "smoke:test_custom_game_lifecycle_8052_direct_wrapped_action_sequence_equivalence" },
+        { 8053u, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_custom_game_lifecycle, registry::HandlerId::CustomGameFinishedLoading, "smoke:test_custom_game_lifecycle_direct_wrapped_action_sequence_equivalence" },
         { 7427u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_7427_notifications, registry::HandlerId::Notifications7427, nullptr },
         { 4523u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_upload_rate, registry::HandlerId::UploadRate, nullptr },
         { 8879u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_rank, registry::HandlerId::Rank, nullptr },

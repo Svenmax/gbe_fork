@@ -99,5 +99,31 @@ class ConcurrencyOwnershipAuditTest(unittest.TestCase):
         self.assertFalse([issue for issue in issues if "P11.5" in issue or "TSAN" in issue])
 
 
+class RetiredLifecycleTransitionLayerAuditTest(unittest.TestCase):
+    def test_accepts_registry_only_lifecycle_dispatch(self):
+        sources = {
+            "steam_game_coordinator.h": "bool GBE_HandleDotaCustomGameLifecycleRequest();",
+            "gbe_dota_match_handlers.cpp": "void GBE_HandleDotaDirect7034Request() {}",
+            "gbe_dota_post_login_handlers.cpp": "return GBE_DispatchDotaPostLoginRequest(context);",
+        }
+        self.assertEqual([], audit.audit_retired_lifecycle_transition_layers(sources))
+
+    def test_rejects_retired_handler_and_manual_fallback(self):
+        sources = {
+            "steam_game_coordinator.h": "bool GBE_HandleDotaCustomGameReadyUpRequest();",
+            "gbe_dota_match_handlers.cpp": "",
+            "gbe_dota_post_login_handlers.cpp": "if (request_emsg == 7070u) return true;",
+        }
+        issues = audit.audit_retired_lifecycle_transition_layers(sources)
+        self.assertIn(
+            "steam_game_coordinator.h: retired lifecycle handler GBE_HandleDotaCustomGameReadyUpRequest returned",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_post_login_handlers.cpp: lifecycle emsg 7070u bypasses the typed registry",
+            issues,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

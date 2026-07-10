@@ -259,18 +259,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     if (GBE_DispatchDotaPostLoginRequest(request_context))
         return true;
 
-    if (request_emsg == 7070u) {
-        return GBE_HandleDotaCustomGameReadyUpRequest(proto_context.body, proto_context.body_size, has_source_job, source_job);
-    }
-
-    if (request_emsg == 8052u) {
-        return GBE_HandleDotaCustomGameStartedLoadingRequest(proto_context.body, proto_context.body_size, has_source_job, source_job);
-    }
-
-    if (request_emsg == 8053u) {
-        return GBE_HandleDotaCustomGameFinishedLoadingRequest(proto_context.body, proto_context.body_size, has_source_job, source_job);
-    }
-
     if (request_emsg == GBE_kDotaChatMessage) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
@@ -661,9 +649,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
 
         return GBE_HandleDotaGameMatchSignOutRequest(true, &context.outer_session_field_raw, context.has_request_job, context.request_job_id);
     }
-
-    if (context.inner_emsg == 7070u || context.inner_emsg == 8052u || context.inner_emsg == 8053u)
-        return GBE_HandleDotaWrappedCustomGameLifecycleRequest(context);
 
     if (context.inner_emsg == GBE_kDotaLeaveChatChannel) {
         GBE_GC_DebugLog(

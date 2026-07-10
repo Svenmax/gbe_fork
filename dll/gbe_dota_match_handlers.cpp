@@ -15,32 +15,22 @@
    License along with the Goldberg Emulator; if not, see
    <http://www.gnu.org/licenses/>.  */
 
-// Direct 7034 match-flow and custom-game loading lifecycle handlers for the
-// Dota Game Coordinator. Extracted from gbe_dota_handlers.cpp (Phase 3.1.5a)
-// to group the 7034 connected-players / strategy-time / runtime-update /
-// launch-poll / wait-for-players request family together with the 7070/8052/8053
-// custom-game ready-up / started-loading / finished-loading flow that advances
-// the same launch_phase state machine.
+// Direct 7034 match-flow handlers for the Dota Game Coordinator. Extracted
+// from gbe_dota_handlers.cpp (Phase 3.1.5a) to group the connected-players,
+// strategy-time, runtime-update, launch-poll, and wait-for-players family.
 //
 // Responsibility boundary: owns the local lobby launch-phase advancement,
 // runtime lobby details update queuing, and connected-players response
-// construction triggered by the 7034 match-flow and the custom-game loading
-// lifecycle. Side-effect ownership and ordering are unchanged from the prior
-// monolithic handler file; only the file location moved. The single
+// construction triggered by the 7034 match-flow. Side-effect ownership and
+// ordering are unchanged from the prior monolithic handler file. The single
 // handler-local static GBE_AdaptDota7034ConnectedPlayersResponsePayload moved
 // with the 7034 handlers (List X, kept `static` in new TU); no cross-TU
 // symbols needed externalization (List Y = 0).
-//
-// Migration note: the three custom-game loading handlers were previously
-// extracted to dll/gbe_dota_custom_game_handlers.cpp (Phase 3.1.5) and have
-// been merged into this file because they are a sub-phase of the 7034 launch
-// flow. The standalone custom_game_handlers.cpp was removed.
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
-#include "gbe_dota_custom_game.h"
 #include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_gc_message_utils.h"
@@ -69,9 +59,6 @@ using GBE_Dota7034RequestShape = gbe::proto_wire::Dota7034RequestShape;
 using GBE_Dota7034RuntimeRequest = gbe::proto_wire::Dota7034RuntimeRequest;
 using GBE_Dota7034ConnectedPlayer = gbe::proto_wire::Dota7034ConnectedPlayer;
 using GBE_Dota7034DisconnectedPlayer = gbe::proto_wire::Dota7034DisconnectedPlayer;
-using GBE_Dota7070ReadyUpRequest = gbe::proto_wire::Dota7070ReadyUpRequest;
-using GBE_Dota8052StartedLoadingRequest = gbe::proto_wire::Dota8052StartedLoadingRequest;
-using GBE_Dota8053FinishedLoadingRequest = gbe::proto_wire::Dota8053FinishedLoadingRequest;
 
 
 // ============================================================================
@@ -81,7 +68,7 @@ using GBE_Dota8053FinishedLoadingRequest = gbe::proto_wire::Dota8053FinishedLoad
 //
 // Cross-handler boundary note: this file owns per-handler request
 // parsing/mutation/response/side-effect sequencing for the 7034 match-flow
-// family and the custom-game loading lifecycle. The 7034 entry handler fans
+// family. The 7034 entry handler fans
 // out to internal helper methods (OwnerHeroKnownEquipReplay,
 // DisconnectedPlayers, RuntimeUpdates -> WaitForPlayers / StrategyTime ->
 // Fallback / Preserve / LaunchPoll, Response) which together form the 7034
@@ -185,46 +172,6 @@ using GBE_Dota8053FinishedLoadingRequest = gbe::proto_wire::Dota8053FinishedLoad
 //   Invariant: wait_for_players precedes hero_selection; hero_selection is
 //   suppressed while remote members not yet connected.
 //
-// GBE_HandleDotaCustomGameReadyUpRequest (emsg 7070 -> 7170 + state mutation):
-//   1. Parse: ready_state (field 1)
-//   2. build_dota_ready_up_status_payload (pure) -> push_incoming_now(7170)
-//      [coordinator]
-//   3. If ready_state==1 && state==2 && game_state<1 &&
-//      launch_phase>=RunQueued:
-//      a. GBE_local_lobby.game_state = 1 [coordinator mutation]
-//      b. PublishSharedDotaLobbyState [publish]
-//      c. GBE_SendDotaPracticeLobbyDetailsUpdate [coordinator: emits 26]
-//   Invariant: 7170 precedes state mutation; mutation precedes publish precedes
-//   details update.
-//
-// GBE_HandleDotaCustomGameStartedLoadingRequest (emsg 8052 -> launch advance OR
-// publish + details update):
-//   1. Parse: lobby_id (field 1), custom_game_id (field 2), start_time (field 4)
-//   2. If lobby_id matches:
-//      a. If custom_game_id!=0: GBE_local_lobby.custom_game.game_id =
-//         custom_game_id [coordinator mutation]
-//      b. If start_time!=0: GBE_local_lobby.game_start_time = start_time
-//         [coordinator mutation]
-//      c. GBE_TryAdvanceDotaLaunchToRun [coordinator: emits 26]; if !advanced:
-//         PublishSharedDotaLobbyState [publish] +
-//         GBE_SendDotaPracticeLobbyDetailsUpdate [coordinator: emits 26]
-//   Invariant: launch advance attempt precedes publish+details fallback.
-//
-// GBE_HandleDotaCustomGameFinishedLoadingRequest (emsg 8053 -> state mutation +
-// publish + details update):
-//   1. parse_dota8053_result (pure)
-//   2. If lobby_id matches:
-//      a. If launch_phase>=RunQueued: state=2; if game_state<1: game_state=1
-//         [coordinator mutation]
-//      b. Else if state<2: state=2 [coordinator mutation]
-//      c. dota8053_indicates_load_failure (pure decision)
-//      d. If !load_failed: GBE_SetDotaLobbyMemberRuntimeState(local, true, 0,
-//         false) [coordinator mutation] + GBE_MarkDotaLaunchPhase(Loaded) +
-//         PublishDotaPracticeLobbyLocalMemberData [publish]
-//      e. PublishSharedDotaLobbyState [publish]
-//      f. GBE_SendDotaPracticeLobbyDetailsUpdate [coordinator: emits 26]
-//   Invariant: state mutation precedes local member data publish precedes
-//   shared lobby publish precedes details update.
 // ============================================================================
 
 static bool GBE_AdaptDota7034ConnectedPlayersResponsePayload(
@@ -882,131 +829,4 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034WaitForPlayers(
                 gbe::dota_lifecycle::build_transition_actions(hero_selection_effects)).runtime_update_queued)
             queued_runtime_lobby_update = true;
     }
-}
-
-
-bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameReadyUpRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job)
-{
-    GBE_GC_DebugLog(
-        "GC_DOTA_LOBBY",
-        "[LOBBY] Received direct 7070 source_job=%llu body_size=%zu body_prefix=%s",
-        static_cast<unsigned long long>(source_job),
-        body_size,
-        gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 48).c_str()
-    );
-
-    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && gbe::dota_custom_game::has_custom_game_details(GBE_local_lobby.custom_game)) {
-        const GBE_Dota7070ReadyUpRequest request = gbe::proto_wire::parse_dota7070_ready_up_request(body, body_size);
-        std::string response_7170;
-        if (gbe::gc_message::build_dota_ready_up_status_payload(has_source_job, source_job, GBE_local_lobby.lobby_id, 0u, request.ready_state != 0u ? request.ready_state : 1u, response_7170))
-            push_incoming_now(7170u | GBE_kProtoMask, response_7170);
-
-        const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision ready_up =
-            gbe::dota_lobby_state::compute_custom_game_ready_up_transition(
-                GBE_local_lobby,
-                request.ready_state,
-                GBE_kDotaLaunchPhaseRunQueued,
-                "7070_custom_game_ready_up_run_ack");
-        if (ready_up.apply_lobby_state) {
-            gbe::dota_lifecycle::TransitionEffects effects;
-            effects.transition = ready_up;
-            GBE_ExecuteDotaLifecycleActions(gbe::dota_lifecycle::build_transition_actions(effects));
-        }
-    }
-    return true;
-}
-
-
-bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameStartedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job)
-{
-    GBE_GC_DebugLog(
-        "GC_DOTA_LOBBY",
-        "[LOBBY] Received direct 8052 source_job=%llu body_size=%zu body_prefix=%s",
-        static_cast<unsigned long long>(source_job),
-        body_size,
-        gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 48).c_str()
-    );
-
-    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && gbe::dota_custom_game::has_custom_game_details(GBE_local_lobby.custom_game)) {
-        const GBE_Dota8052StartedLoadingRequest request = gbe::proto_wire::parse_dota8052_started_loading_request(body, body_size);
-
-        if (request.lobby_id == 0 || request.lobby_id == GBE_local_lobby.lobby_id) {
-            if (request.custom_game_id != 0)
-                GBE_local_lobby.custom_game.game_id = request.custom_game_id;
-            if (request.start_time != 0)
-                GBE_local_lobby.game_start_time = static_cast<uint32>(request.start_time);
-            const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision started_loading =
-                gbe::dota_lobby_state::compute_custom_game_started_loading_transition(
-                    GBE_local_lobby,
-                    true,
-                    GBE_kDotaLaunchPhaseSetupSynced,
-                    GBE_kDotaLaunchPhaseRunQueued,
-                    "8052_started_loading");
-            gbe::dota_custom_game_lifecycle::ExecutionContext execution{};
-            execution.transition = started_loading;
-            execution.trigger_emsg = 8052u;
-            execution.source_job = source_job;
-            execution.runtime_update_note = "custom game 8052 started loading";
-            const bool advanced_to_run = GBE_ExecuteDotaCustomGameLifecycleTransition(execution);
-            if (advanced_to_run) {
-                GBE_GC_DebugLog(
-                    "GC_DOTA_LOBBY",
-                    "[LOBBY] Advanced custom game RUN after 8052 lobby_id=%llu custom_game_id=%llu start_time=%llu state=%u game_state=%u",
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    static_cast<unsigned long long>(request.custom_game_id),
-                    static_cast<unsigned long long>(request.start_time),
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state
-                );
-            }
-        }
-    }
-    return true;
-}
-
-
-bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameFinishedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job)
-{
-    GBE_GC_DebugLog(
-        "GC_DOTA_LOBBY",
-        "[LOBBY] Received direct 8053 source_job=%llu body_size=%zu body_prefix=%s",
-        static_cast<unsigned long long>(source_job),
-        body_size,
-        gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 48).c_str()
-    );
-
-    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && gbe::dota_custom_game::has_custom_game_details(GBE_local_lobby.custom_game)) {
-        const GBE_Dota8053FinishedLoadingRequest request = gbe::proto_wire::parse_dota8053_finished_loading_request(body, body_size);
-
-        if (request.lobby_id == 0 || request.lobby_id == GBE_local_lobby.lobby_id) {
-            const bool load_failed = gbe::proto_wire::dota8053_indicates_load_failure(request.result_code, request.result_text);
-            const char *reason = load_failed ? "8053_load_failed" : "8053_finished_loading";
-            const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision finished_loading =
-                gbe::dota_lobby_state::compute_custom_game_finished_loading_transition(
-                    GBE_local_lobby,
-                    true,
-                    load_failed,
-                    GBE_kDotaLaunchPhaseRunQueued,
-                    GBE_kDotaLaunchPhaseLoaded,
-                    reason);
-            gbe::dota_custom_game_lifecycle::ExecutionContext execution{};
-            execution.transition = finished_loading;
-            execution.trigger_emsg = 8053u;
-            execution.source_job = source_job;
-            execution.update_local_member_runtime = !load_failed;
-            execution.publish_local_member_data = !load_failed;
-            GBE_ExecuteDotaCustomGameLifecycleTransition(execution);
-            GBE_GC_DebugLog(
-                "GC_DOTA_LOBBY",
-                "[LOBBY] Applied direct 8053 lobby_id=%llu loading_duration=%llu result_code=%llu signon_states=%llu load_failed=%u result_text=%s",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                static_cast<unsigned long long>(request.loading_duration),
-                static_cast<unsigned long long>(request.result_code),
-                static_cast<unsigned long long>(request.signon_states),
-                load_failed ? 1u : 0u,
-                request.result_text.c_str()
-            );
-        }
-    }
-    return true;
 }

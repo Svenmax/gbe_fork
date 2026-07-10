@@ -54,9 +54,9 @@ std::recursive_mutex global_mutex;
 #include "dll/gbe_dota_lifecycle_actions.cpp"
 #include "dll/gbe_dota_custom_game_lifecycle_coordinator.cpp"
 
-// Keep the wrapped custom-game lifecycle path executable in the lightweight
+// Keep both custom-game lifecycle request paths executable in the lightweight
 // harness without pulling in the full post-login dispatcher dependency graph.
-#include "dll/gbe_dota_wrapped_custom_game_handlers.cpp"
+#include "dll/gbe_dota_custom_game_lifecycle_handlers.cpp"
 
 struct TestEquipPlannerSummary {
     bool parse_failed{};

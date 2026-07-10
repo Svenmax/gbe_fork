@@ -2293,6 +2293,21 @@ static gbe::dota_gc_router::DotaGcRequestContext make_wrapped_custom_game_contex
     context.has_request_job = true;
     context.request_job_id = request_job_id;
     context.outer_session_field_raw = "\x1A\x03sid";
+    context.wrapped = true;
+    context.path = gbe::dota_gc_router::DotaGcRequestPath::Wrapped;
+    return context;
+}
+
+static gbe::dota_gc_router::DotaGcRequestContext make_direct_custom_game_context(
+    uint32_t inner_emsg, const std::string &body, JobID_t request_job_id)
+{
+    gbe::dota_gc_router::DotaGcRequestContext context{};
+    context.valid = true;
+    context.inner_emsg = inner_emsg;
+    context.body = body;
+    context.has_request_job = true;
+    context.request_job_id = request_job_id;
+    context.path = gbe::dota_gc_router::DotaGcRequestPath::Direct;
     return context;
 }
 
@@ -2305,7 +2320,7 @@ static void test_wrapped_custom_game_ready_up_returns_7170_and_preserves_session
     const std::string body = WireBodyBuilder().varint(1u, 1u).take();
     const gbe::dota_gc_router::DotaGcRequestContext context =
         make_wrapped_custom_game_context(7070u, body, 0x7070ABCDu);
-    const bool result = tf.gc.GBE_HandleDotaWrappedCustomGameLifecycleRequest(context);
+    const bool result = tf.gc.GBE_HandleDotaCustomGameLifecycleRequest(context);
 
     TEST_ASSERT(result, "wrapped ready-up handler should return true");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "wrapped ready-up should respond then publish state");
@@ -2330,7 +2345,7 @@ static void test_wrapped_custom_game_started_loading_updates_state()
         .varint(2u, 0x8052u)
         .varint(4u, 12345u)
         .take();
-    const bool result = tf.gc.GBE_HandleDotaWrappedCustomGameLifecycleRequest(
+    const bool result = tf.gc.GBE_HandleDotaCustomGameLifecycleRequest(
         make_wrapped_custom_game_context(8052u, body));
 
     TEST_ASSERT(result, "wrapped started-loading handler should return true");
@@ -2355,7 +2370,7 @@ static void test_wrapped_custom_game_finished_loading_handles_success_and_failur
         .varint(3u, 0u)
         .varint(4u, 4u)
         .take();
-    TEST_ASSERT(tf.gc.GBE_HandleDotaWrappedCustomGameLifecycleRequest(
+    TEST_ASSERT(tf.gc.GBE_HandleDotaCustomGameLifecycleRequest(
         make_wrapped_custom_game_context(8053u, success)), "wrapped 8053 success handler should return true");
     TEST_ASSERT_EQ(tf.recorder.runtime_states.size(), 1u, "wrapped 8053 success should update local member runtime state");
     TEST_ASSERT_EQ(tf.recorder.runtime_states[0].steam_id, tf.settings.get_local_steam_id().ConvertToUint64(), "wrapped 8053 should update the local member");
@@ -2375,7 +2390,7 @@ static void test_wrapped_custom_game_finished_loading_handles_success_and_failur
         .varint(3u, 2u)
         .bytes(4u, "#GameUI_Disconnect_Test")
         .take();
-    TEST_ASSERT(tf.gc.GBE_HandleDotaWrappedCustomGameLifecycleRequest(
+    TEST_ASSERT(tf.gc.GBE_HandleDotaCustomGameLifecycleRequest(
         make_wrapped_custom_game_context(8053u, failure)), "wrapped 8053 failure handler should return true");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "wrapped 8053 failure should publish state");
     TEST_ASSERT(tf.recorder.actions[0].reason == "8053_wrapped_load_failed", "wrapped 8053 failure reason should be preserved");
@@ -2393,8 +2408,8 @@ static void test_match_ready_up_queues_7170_then_runtime_update()
     const std::string body = WireBodyBuilder()
         .varint(1u, 1u)
         .take();
-    bool result = tf.gc.GBE_HandleDotaCustomGameReadyUpRequest(
-        reinterpret_cast<const uint8 *>(body.data()), body.size(), true, 0x7070u);
+    bool result = tf.gc.GBE_HandleDotaCustomGameLifecycleRequest(
+        make_direct_custom_game_context(7070u, body, 0x7070u));
 
     TEST_ASSERT(result, "ready-up handler should return true");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "ready-up should queue response then publish runtime state");
@@ -2421,8 +2436,8 @@ static void test_match_started_loading_updates_custom_game_before_publish()
         .varint(2u, 0x8052u)
         .varint(4u, 12345u)
         .take();
-    bool result = tf.gc.GBE_HandleDotaCustomGameStartedLoadingRequest(
-        reinterpret_cast<const uint8 *>(body.data()), body.size(), true, 0x8052u);
+    bool result = tf.gc.GBE_HandleDotaCustomGameLifecycleRequest(
+        make_direct_custom_game_context(8052u, body, 0x8052u));
 
     TEST_ASSERT(result, "started-loading handler should return true");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "8052 should publish one lobby state refresh when run advance stub declines");
@@ -2449,8 +2464,8 @@ static void test_match_finished_loading_marks_loaded_before_publish()
         .varint(3u, 0u)
         .varint(4u, 4u)
         .take();
-    bool result = tf.gc.GBE_HandleDotaCustomGameFinishedLoadingRequest(
-        reinterpret_cast<const uint8 *>(body.data()), body.size(), true, 0x8053u);
+    bool result = tf.gc.GBE_HandleDotaCustomGameLifecycleRequest(
+        make_direct_custom_game_context(8053u, body, 0x8053u));
 
     TEST_ASSERT(result, "finished-loading handler should return true");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "8053 success should publish local member data before shared state");
@@ -2479,8 +2494,8 @@ static void test_match_finished_loading_failure_preserves_reason()
         .varint(3u, 2u)
         .bytes(4u, "#GameUI_Disconnect_Test")
         .take();
-    bool result = tf.gc.GBE_HandleDotaCustomGameFinishedLoadingRequest(
-        reinterpret_cast<const uint8 *>(body.data()), body.size(), true, 0x8053u);
+    bool result = tf.gc.GBE_HandleDotaCustomGameLifecycleRequest(
+        make_direct_custom_game_context(8053u, body, 0x8053u));
 
     TEST_ASSERT(result, "failed finished-loading handler should return true");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "8053 load failure should publish one lobby state refresh");
@@ -2502,15 +2517,11 @@ static bool invoke_custom_game_lifecycle(
     JobID_t source_job = 0x8053ABCDu)
 {
     if (wrapped) {
-        return tf.gc.GBE_HandleDotaWrappedCustomGameLifecycleRequest(
+        return tf.gc.GBE_HandleDotaCustomGameLifecycleRequest(
             make_wrapped_custom_game_context(emsg, body, source_job));
     }
-    if (emsg == 8052u) {
-        return tf.gc.GBE_HandleDotaCustomGameStartedLoadingRequest(
-            reinterpret_cast<const uint8 *>(body.data()), body.size(), true, source_job);
-    }
-    return tf.gc.GBE_HandleDotaCustomGameFinishedLoadingRequest(
-        reinterpret_cast<const uint8 *>(body.data()), body.size(), true, source_job);
+    return tf.gc.GBE_HandleDotaCustomGameLifecycleRequest(
+        make_direct_custom_game_context(emsg, body, source_job));
 }
 
 static void test_custom_game_lifecycle_direct_wrapped_action_sequence_equivalence()

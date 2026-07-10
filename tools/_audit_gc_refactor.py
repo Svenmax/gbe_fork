@@ -64,7 +64,7 @@ SOURCE_LIST_AUDIT_EXEMPTIONS = {
     "gbe_dota_post_login_handlers.cpp": "production dispatcher TU, covered by registry audit",
     "gbe_dota_template_replay_handlers.cpp": "production template replay TU with canned payload ownership",
     "gbe_dota_welcome_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
-    "gbe_dota_wrapped_custom_game_handlers.cpp": "compiled through handler test wrapper",
+    "gbe_dota_custom_game_lifecycle_handlers.cpp": "compiled through handler test wrapper",
 }
 HIGH_RISK_SIDE_EFFECT_APIS = [
     "save_items_to_file",
@@ -121,8 +121,15 @@ MIGRATED_LIFECYCLE_HANDLER_FORBIDDEN_APIS = {
         "GBE_PublishDotaPracticeLobbyLocalMemberData",
         "GBE_SendDotaPracticeLobbyDetailsUpdate",
     },
-    "gbe_dota_wrapped_custom_game_handlers.cpp": set(LIFECYCLE_SIDE_EFFECT_APIS),
+    "gbe_dota_custom_game_lifecycle_handlers.cpp": set(LIFECYCLE_SIDE_EFFECT_APIS),
 }
+RETIRED_LIFECYCLE_HANDLER_SYMBOLS = (
+    "GBE_HandleDotaCustomGameReadyUpRequest",
+    "GBE_HandleDotaCustomGameStartedLoadingRequest",
+    "GBE_HandleDotaCustomGameFinishedLoadingRequest",
+    "GBE_HandleDotaWrappedCustomGameLifecycleRequest",
+)
+RETIRED_LIFECYCLE_FALLBACK_EMSGS = ("7070u", "8052u", "8053u")
 HIGH_RISK_REASON_STRINGS = [
     "equip_forward_host_resubscribe_server",
     "equip_items_refresh",
@@ -450,6 +457,29 @@ def audit_lifecycle_side_effect_ownership():
             if re.search(r"\b" + re.escape(api) + r"\s*\(", handler_text):
                 issues.append(f"{base}: migrated lifecycle handler directly calls {api}; route through {LIFECYCLE_EXECUTOR_OWNER}")
 
+    return issues
+
+
+def audit_retired_lifecycle_transition_layers(source_texts=None):
+    """Prevent retired lifecycle entrypoints and manual dispatch fallbacks from returning."""
+    if source_texts is None:
+        source_texts = {
+            "steam_game_coordinator.h": read(os.path.join(ROOT_DIR, "dll", "dll", "steam_game_coordinator.h")),
+            "gbe_dota_match_handlers.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_match_handlers.cpp")),
+            "gbe_dota_post_login_handlers.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_post_login_handlers.cpp")),
+        }
+
+    issues = []
+    for source_name, source_text in source_texts.items():
+        uncommented = strip_comments(source_text)
+        for symbol in RETIRED_LIFECYCLE_HANDLER_SYMBOLS:
+            if re.search(r"\b" + re.escape(symbol) + r"\b", uncommented):
+                issues.append(f"{source_name}: retired lifecycle handler {symbol} returned")
+
+    post_login_text = strip_comments(source_texts.get("gbe_dota_post_login_handlers.cpp", ""))
+    for emsg in RETIRED_LIFECYCLE_FALLBACK_EMSGS:
+        if re.search(r"\b" + re.escape(emsg) + r"\b", post_login_text):
+            issues.append(f"gbe_dota_post_login_handlers.cpp: lifecycle emsg {emsg} bypasses the typed registry")
     return issues
 
 
@@ -791,8 +821,9 @@ def main():
     print("=" * 70)
     print("  Action: keep lifecycle planners pure and migrated handlers behind the lifecycle executor owner.")
     lifecycle_ownership_issues = audit_lifecycle_side_effect_ownership()
+    lifecycle_ownership_issues.extend(audit_retired_lifecycle_transition_layers())
     if not lifecycle_ownership_issues:
-        print(f"  All {len(LIFECYCLE_SIDE_EFFECT_APIS)} lifecycle side-effect APIs remain owned by {LIFECYCLE_EXECUTOR_OWNER}")
+        print(f"  All {len(LIFECYCLE_SIDE_EFFECT_APIS)} lifecycle side-effect APIs remain owned by {LIFECYCLE_EXECUTOR_OWNER}; retired entrypoints and manual fallbacks remain absent")
     else:
         for issue in lifecycle_ownership_issues:
             print(f"  {issue}")

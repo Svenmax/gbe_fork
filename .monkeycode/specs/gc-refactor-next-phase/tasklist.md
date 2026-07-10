@@ -308,9 +308,13 @@
     - 终验：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 均通过；reconnect network 774/774，callsystem guard 8/8，registry 339/339，payload 449/449，handler 77/77，replay fixtures 7 组，audit helper 9/9，audit 11 项 0 问题，TSAN 无 race 报告。未发现需要用户裁决的协议、并发或兼容性疑问。
 
 - [ ] 12. P12 删除过渡层并固化架构门禁
-  - [ ] 12.1 删除生命周期重复 handler 逻辑
+  - [x] 12.1 删除生命周期重复 handler 逻辑
     - 清理 direct/wrapped 中已被 planner/executor/registry 替代的分支和 helper。
     - 依赖：任务 2、任务 6 和任务 9。
+    - 实现：将 7070、8052、8053 注册为 `DirectAndWrapped` 的 `LobbyLifecycle` typed registry entry，通过单一 `GBE_HandleDotaCustomGameLifecycleRequest(context)` 解析请求并调用共享 lifecycle executor。删除三个 direct handler、一个 wrapped 多分支入口，以及 post-login 中六条 direct/wrapped 手工 fallback；统一实现文件改名为 `gbe_dota_custom_game_lifecycle_handlers.cpp`。
+    - 兼容性：direct 7070 继续直接返回 7170，wrapped 7070 继续保留 outer session；8052/8053 保持 direct/wrapped reason、runtime update note、lobby ID 过滤、load-failure 分支和 action sequence。现有 direct/wrapped equivalence、session forwarding、inactive/mismatched lobby 和 duplicate determinism smoke tests继续通过。
+    - 门禁：Audit 4 动态验证 27 项 typed registry 与 16 项高风险 fixture。Audit 9 新增退役层审计，拒绝四个旧 handler 符号或 7070/8052/8053 post-login 手工 fallback 回流；审计 helper 增至 11/11。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 774/774，callsystem guard 8/8，registry assertions 339/339，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit helper 11/11，audit 11 项 0 问题。
   - [ ] 12.2 删除 reconnect 重复 mapping 与旧状态 API
     - 清理旧 context builder、全局连接状态、lobby ID 代际兼容路径和未使用声明。
     - 依赖：任务 3、任务 4、任务 5 和任务 7。

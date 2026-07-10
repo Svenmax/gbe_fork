@@ -350,10 +350,7 @@ public ISteamGameCoordinator
     bool GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaDestroyLobbyRequest(uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaAddSocketRequest(const uint8 *body, size_t body_size, bool has_request_job, uint64 request_job_id);
-    bool GBE_HandleDotaCustomGameReadyUpRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
-    bool GBE_HandleDotaCustomGameStartedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
-    bool GBE_HandleDotaCustomGameFinishedLoadingRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
-    bool GBE_HandleDotaWrappedCustomGameLifecycleRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
+    bool GBE_HandleDotaCustomGameLifecycleRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
     gbe::dota_lifecycle::ExecutionResult GBE_ExecuteDotaLifecycleActions(
         const GBE_DotaActionList &actions,
         const gbe::dota_lifecycle::ExecutionOptions &options = {});
