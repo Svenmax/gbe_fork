@@ -16,6 +16,13 @@ int source_priority(SourceKind kind)
         case SourceKind::Recent: return 1;
         case SourceKind::Local: return 2;
         case SourceKind::GenericRecovery: return 3;
+        case SourceKind::Unknown:
+        case SourceKind::Direct:
+        case SourceKind::Wrapped:
+        case SourceKind::DelayedTask:
+        case SourceKind::SerializedState:
+        case SourceKind::CallbackQueue:
+            return 4;
     }
     return 4;
 }

@@ -347,10 +347,18 @@
     - 并发层：保留独立 Ubuntu Clang TSAN job，执行 reconnect network 与 shared-store/reconnect stress 最小目标，`halt_on_error=1:exitcode=66` 在首个 race 阻断。
     - 门禁：新增 Audit 15 和可注入正反 fixtures，拒绝 fast job 回退到 `--full` 或缺少 base SHA、Windows/Linux release matrix 漂移、production failure 非阻断、TSAN 编译器/脚本漂移，以及 fast verification 缺失 offline/audit/diff 或关键 unit/property/replay target；审计 helper 增至 23/23。
     - 验证：`bash tools/run_gc_verification.sh --fast --base-sha origin/dev`、`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 通过；reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 546/546，handler smoke 77/77，full replay fixtures 7 组，audit helper 23/23，audit 15 项 0 问题，TSAN 无 race。
-  - [ ] 12.6 执行全仓回归验证
+  - [x] 12.6 执行全仓回归验证
     - 运行 full GC verification、生产构建、Clang/GCC 编译、replay fixtures 和 TSAN。
     - 对比任务 1 基线，确认 message mapping、payload summary 和 action sequence 保持稳定。
-  - [ ] 12.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - 双编译器：GCC 12.2 与 Clang 14 分别执行 `bash tools/run_gc_verification.sh --full --base-sha origin/dev`，均通过 header compile、offline suites、7 组 replay、23/23 audit helper、15 项 production audit 和 base diff check。Clang 发现的 shared diagnostic `SourceKind` 非 reconnect 枚举 warning 已通过显式 fallback priority 收敛，选择语义保持默认优先级 4。
+    - 并发：`CXX=clang++ bash tools/run_gc_tsan_tests.sh` 通过 reconnect network 与 shared-state/reconnect stress，TSAN 无 race。
+    - P0 mapping：基线 commit `f9d7bc484bf0f57d24a01d5b94e1fbdd7a3a35be` 的 24 项 post-login registry 映射全部按原序保留；当前新增 7070、8052、8053 三项，将原 registry 外 direct/wrapped lifecycle 特判统一到 canonical typed registry。Audit 4 验证当前 27 项均解析到唯一 adapter。
+    - P0 payload/replay：`tools/gc_replay_test/fixtures` 相对 P0 无 diff，7 组 replay summary 全部匹配；payload helper 546/546，wire payload 与 unknown-message fallback 由完整 offline/replay gate 保持。
+    - P0 action sequence：P0 的 64 个 handler smoke 测试函数全部保留，当前 77/77 通过；新增 direct/wrapped lifecycle event-order equivalence、duplicate determinism、generation 和 stale-work assertions，原有 action-order 断言继续通过。
+    - 生产构建：Windows/Linux `api_experimental` x64 release 继续由独立 blocking CI jobs 承担。本地 Debian glibc 2.36 无法运行仓库中要求 GLIBC 2.38 的 bundled Linux Premake，且当前环境无 Windows runner；第三方二进制权限已恢复，所有 submodule 保持干净。
+    - 最终计数：reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 546/546，handler smoke 77/77，replay fixtures 7 组，audit helper 23/23，audit 15 项 0 问题，`git diff --check` 通过。
+  - [x] 12.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - P12 回归、行为基线、架构审计和并发门禁均已关闭，无待确认的协议、payload、action-order 或并发语义问题。production integration 由已配置的 blocking Windows/Linux release jobs 最终执行。
 
 - [ ] 13. P13 建立 GC Composition Root
   - [ ] 13.1 定义应用级依赖容器
