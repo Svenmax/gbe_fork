@@ -57,6 +57,7 @@
 #include "steam_billing.h"
 #include "steam_user_items.h"
 #include "gbe_dota_lobby_state_store.h"
+#include "gbe_dota_runtime_state.h"
 
 #include "steam_gameserver.h"
 #include "steam_masterserver_updater.h"
@@ -130,6 +131,7 @@ private:
 public:
     GBE_SharedDotaLobbyState dota_lobby_state{};
     gbe::dota_lobby_state::Store dota_lobby_store;
+    gbe::dota::RuntimeState dota_runtime_state{};
     Networking *network{};
     SteamCallResults *callback_results_server{}, *callback_results_client{};
     SteamCallBacks *callbacks_server{}, *callbacks_client{};

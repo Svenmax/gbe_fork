@@ -33,9 +33,14 @@ struct GBE_SharedDotaLobbyState;
 namespace gbe::dota_lobby_state {
 class Store;
 }
+namespace gbe::dota {
+struct RuntimeState;
+}
 gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore();
 void GBE_BindSharedDotaLobbyStateStore(gbe::dota_lobby_state::Store &store);
 void GBE_UnbindSharedDotaLobbyStateStore(gbe::dota_lobby_state::Store &store);
+void GBE_BindDotaRuntimeState(gbe::dota::RuntimeState &state);
+void GBE_UnbindDotaRuntimeState(gbe::dota::RuntimeState &state);
 
 
 #include <array>

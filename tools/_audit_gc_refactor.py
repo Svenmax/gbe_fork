@@ -928,6 +928,8 @@ def audit_composition_root_lifecycle(steam_client_text=None, steam_client_header
 
     if "GBE_SharedDotaLobbyState dota_lobby_state" not in steam_client_header_text or "dota_lobby_state::Store dota_lobby_store" not in steam_client_header_text:
         issues.append("steam_client.h: Steam_Client must own the shared Dota lobby backing state and Store")
+    if "gbe::dota::RuntimeState dota_runtime_state" not in steam_client_header_text:
+        issues.append("steam_client.h: Steam_Client must own the Dota runtime state")
     store_accessor_start = coordinator_text.find("gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore()")
     store_accessor_end = coordinator_text.find("const GBE_DotaLootListData &GBE_GetDotaVpkLootData", store_accessor_start)
     store_accessor = coordinator_text[store_accessor_start:store_accessor_end if store_accessor_end >= 0 else len(coordinator_text)]
@@ -935,6 +937,17 @@ def audit_composition_root_lifecycle(steam_client_text=None, steam_client_header
         issues.append("steam_game_coordinator.cpp: shared lobby accessor owns hidden singleton backing state")
     if "GBE_BindSharedDotaLobbyStateStore(dota_lobby_store);" not in constructor_text or "GBE_UnbindSharedDotaLobbyStateStore(dota_lobby_store);" not in destructor_text:
         issues.append("steam_client.cpp: Steam_Client must bind and unbind its owned shared lobby Store")
+    if "GBE_BindDotaRuntimeState(dota_runtime_state);" not in constructor_text or "GBE_UnbindDotaRuntimeState(dota_runtime_state);" not in destructor_text:
+        issues.append("steam_client.cpp: Steam_Client must bind and unbind its owned Dota runtime state")
+    retired_runtime_state = (
+        "GBE_recent_dota_reconnect_context_valid",
+        "GBE_recent_dota_reconnect_context",
+        "GBE_dota_reconnect_eligible",
+        "GBE_last_dota_server_hello_context",
+    )
+    for symbol in retired_runtime_state:
+        if re.search(r"^(?:static\s+)?[^\n;=]*\b" + re.escape(symbol) + r"\b\s*(?:\{|=|;)", coordinator_text, re.MULTILINE):
+            issues.append(f"steam_game_coordinator.cpp: retired file-level Dota runtime state {symbol} returned")
     return issues
 
 

@@ -28,6 +28,7 @@
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lobby_state_store.h"
+#include "gbe_dota_runtime_state.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -63,10 +64,9 @@ namespace registry = gbe::dota_handler_registry;
 
 constexpr int GC_MIN_VERSION = 20091217;
 
-bool GBE_recent_dota_reconnect_context_valid = false;
-GBE_DotaReconnectContext GBE_recent_dota_reconnect_context{};
 static GBE_DotaLootListData GBE_vpk_loot_data;
 static gbe::dota_lobby_state::Store *GBE_shared_dota_lobby_store{};
+static gbe::dota::RuntimeState *GBE_dota_runtime_state{};
 
 gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore()
 {
@@ -98,44 +98,64 @@ void GBE_SetDotaVpkLootData(GBE_DotaLootListData &&loot_data)
     GBE_vpk_loot_data = std::move(loot_data);
 }
 
-// --- Dota reconnect shared state ---
-std::atomic<bool> GBE_dota_reconnect_eligible{true};
+void GBE_BindDotaRuntimeState(gbe::dota::RuntimeState &state)
+{
+    if (GBE_dota_runtime_state && GBE_dota_runtime_state != &state)
+        throw std::logic_error("Dota runtime state is already bound");
+    GBE_dota_runtime_state = &state;
+}
+
+void GBE_UnbindDotaRuntimeState(gbe::dota::RuntimeState &state)
+{
+    if (GBE_dota_runtime_state == &state)
+        GBE_dota_runtime_state = nullptr;
+}
+
+static gbe::dota::RuntimeState &GBE_DotaRuntimeState()
+{
+    if (!GBE_dota_runtime_state)
+        throw std::logic_error("Dota runtime state is not bound");
+    return *GBE_dota_runtime_state;
+}
 
 bool GBE_GetRecentDotaReconnectContext(GBE_DotaReconnectContext *out)
 {
-    if (!out || !GBE_recent_dota_reconnect_context_valid)
+    const auto &state = GBE_DotaRuntimeState();
+    if (!out || !state.recent_reconnect_context_valid)
         return false;
 
-    *out = GBE_recent_dota_reconnect_context;
+    *out = state.recent_reconnect_context;
     return true;
 }
 
 void GBE_SetRecentDotaReconnectContext(const GBE_DotaReconnectContext &ctx)
 {
-    GBE_recent_dota_reconnect_context = ctx;
-    GBE_recent_dota_reconnect_context_valid = true;
+    auto &state = GBE_DotaRuntimeState();
+    state.recent_reconnect_context = ctx;
+    state.recent_reconnect_context_valid = true;
 }
 
 void GBE_ClearRecentDotaReconnectContext()
 {
-    GBE_recent_dota_reconnect_context_valid = false;
-    GBE_recent_dota_reconnect_context = GBE_DotaReconnectContext{};
+    auto &state = GBE_DotaRuntimeState();
+    state.recent_reconnect_context_valid = false;
+    state.recent_reconnect_context = GBE_DotaReconnectContext{};
 }
 
 bool GBE_IsDotaReconnectEligible()
 {
-    return GBE_dota_reconnect_eligible.load();
+    return GBE_DotaRuntimeState().reconnect_eligible.load();
 }
 
 void GBE_SetDotaReconnectEligible(bool eligible)
 {
-    GBE_dota_reconnect_eligible.store(eligible);
+    GBE_DotaRuntimeState().reconnect_eligible.store(eligible);
 }
 
 bool GBE_ConsumeDotaReconnectEligibility()
 {
     bool expected = true;
-    return GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false);
+    return GBE_DotaRuntimeState().reconnect_eligible.compare_exchange_strong(expected, false);
 }
 
 #pragma pack( push, 1 )
@@ -150,26 +170,24 @@ struct GCMsgHdr_t
 
 #pragma pack(pop)
 
-static GBE_DotaServerHelloContext GBE_last_dota_server_hello_context;
-
 bool GBE_HasLastDotaServerHelloContext()
 {
-    return GBE_last_dota_server_hello_context.valid;
+    return GBE_DotaRuntimeState().last_server_hello_context.valid;
 }
 
 const GBE_DotaServerHelloContext &GBE_GetLastDotaServerHelloContext()
 {
-    return GBE_last_dota_server_hello_context;
+    return GBE_DotaRuntimeState().last_server_hello_context;
 }
 
 void GBE_SetLastDotaServerHelloContext(const GBE_DotaServerHelloContext &context)
 {
-    GBE_last_dota_server_hello_context = context;
+    GBE_DotaRuntimeState().last_server_hello_context = context;
 }
 
 void GBE_ClearLastDotaServerHelloContext()
 {
-    GBE_last_dota_server_hello_context = GBE_DotaServerHelloContext{};
+    GBE_DotaRuntimeState().last_server_hello_context = GBE_DotaServerHelloContext{};
 }
 
 using GBE_DotaPracticeLobbyDetailsRequest = gbe::proto_wire::DotaPracticeLobbyDetailsRequest;

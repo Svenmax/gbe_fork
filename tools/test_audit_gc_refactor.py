@@ -103,6 +103,7 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
     STEAM_CLIENT_HEADER = """
         GBE_SharedDotaLobbyState dota_lobby_state{};
         gbe::dota_lobby_state::Store dota_lobby_store;
+        gbe::dota::RuntimeState dota_runtime_state{};
     """
     COORDINATOR = """
         gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore() {
@@ -114,6 +115,7 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
     Steam_Client::Steam_Client()
     {
         GBE_BindSharedDotaLobbyStateStore(dota_lobby_store);
+        GBE_BindDotaRuntimeState(dota_runtime_state);
         steam_networking_sockets = new Steam_Networking_Sockets();
         dota_reconnect_adapter_client = new GBE_DotaReconnectNetworkAdapter();
         steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized();
@@ -138,6 +140,7 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
         DEL_INST(dota_reconnect_adapter_client);
         DEL_INST(steam_networking_sockets);
         GBE_UnbindSharedDotaLobbyStateStore(dota_lobby_store);
+        GBE_UnbindDotaRuntimeState(dota_runtime_state);
     }
     """
 
@@ -189,6 +192,13 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
         """
         self.assertIn(
             "steam_game_coordinator.cpp: shared lobby accessor owns hidden singleton backing state",
+            audit.audit_composition_root_lifecycle(self.STEAM_CLIENT, self.STEAM_CLIENT_HEADER, coordinator),
+        )
+
+    def test_rejects_retired_file_level_runtime_state(self):
+        coordinator = self.COORDINATOR + "\nstatic GBE_DotaServerHelloContext GBE_last_dota_server_hello_context;"
+        self.assertIn(
+            "steam_game_coordinator.cpp: retired file-level Dota runtime state GBE_last_dota_server_hello_context returned",
             audit.audit_composition_root_lifecycle(self.STEAM_CLIENT, self.STEAM_CLIENT_HEADER, coordinator),
         )
 
