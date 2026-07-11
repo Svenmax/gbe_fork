@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace gbe::proto_wire {
@@ -312,6 +313,23 @@ bool read_field_uint64(const std::uint8_t *data, std::size_t size, const Field &
 bool read_field_uint32(const std::uint8_t *data, std::size_t size, const Field &field, std::uint32_t &value);
 bool read_field_bytes(const std::uint8_t *data, std::size_t size, const Field &field, std::string &value);
 bool read_uint64_field(const std::uint8_t *data, std::size_t size, std::uint32_t field_number, std::uint64_t &value);
+
+template <typename UInt64,
+          std::enable_if_t<
+              std::is_integral_v<UInt64> &&
+              std::is_unsigned_v<UInt64> &&
+              sizeof(UInt64) == sizeof(std::uint64_t) &&
+              !std::is_same_v<UInt64, std::uint64_t>,
+              int> = 0>
+bool read_uint64_field(const std::uint8_t *data, std::size_t size, std::uint32_t field_number, UInt64 &value)
+{
+    std::uint64_t parsed_value = static_cast<std::uint64_t>(value);
+    if (!read_uint64_field(data, size, field_number, parsed_value))
+        return false;
+    value = static_cast<UInt64>(parsed_value);
+    return true;
+}
+
 bool read_uint32_field(const std::uint8_t *data, std::size_t size, std::uint32_t field_number, std::uint32_t &value);
 bool read_bytes_field(const std::uint8_t *data, std::size_t size, std::uint32_t field_number, std::string &value);
 bool extract_packed_uint32_field(const std::uint8_t *data, std::size_t size, const Field &field, std::vector<std::uint32_t> &values);
