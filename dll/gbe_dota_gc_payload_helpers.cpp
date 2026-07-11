@@ -743,7 +743,7 @@ bool GBE_RefreshDotaHostEquippedItemsCache(
     return refreshed;
 }
 
-bool GBE_PushDotaPlayerEquippedItemsUpdateToGC(
+bool GBE_RebuildDotaPlayerItemsCacheToGC(
     Steam_Game_Coordinator *target_gc,
     const CSteamID &player_steam_id,
     const std::vector<Econ_Item> &source_items,
@@ -752,23 +752,13 @@ bool GBE_PushDotaPlayerEquippedItemsUpdateToGC(
     if (!target_gc || !player_steam_id.IsValid())
         return false;
 
-    CMsgSOMultipleObjects update_msg;
-    auto *owner = update_msg.mutable_owner_soid();
-    owner->set_type(1u);
-    owner->set_id(player_steam_id.ConvertToUint64());
-
     std::size_t equipped_count = 0;
     for (const Econ_Item &item : source_items) {
-        if (item.equip_states.empty())
-            continue;
-
-        auto *object = update_msg.add_objects();
-        object->set_type_id(1u);
-        object->set_object_data(target_gc->serialize_item_to_gcprotobuf(item, player_steam_id));
-        ++equipped_count;
+        if (!item.equip_states.empty())
+            ++equipped_count;
     }
 
-    if (equipped_count == 0)
+    if (source_items.empty() || equipped_count == 0)
         return false;
 
     const std::uint64_t clock_version = static_cast<std::uint64_t>(
@@ -777,23 +767,47 @@ bool GBE_PushDotaPlayerEquippedItemsUpdateToGC(
     auto &runtime_state = GBE_DotaRuntimeState();
     const std::uint64_t version = std::max(clock_version, runtime_state.equip_cache_version) + 1ull;
     runtime_state.equip_cache_version = version;
-    update_msg.set_version(version);
-    update_msg.set_service_id(1u);
 
-    std::string update_message;
-    gbe::gc_message::build_dota_zero_header_payload(26u, update_msg.SerializeAsString(), update_message);
-    target_gc->push_incoming_message(26u | GBE_kProtoMask, update_message);
+    const std::uint64_t player_steam64 = player_steam_id.ConvertToUint64();
+    std::string unsub_message;
+    gbe::gc_message::build_dota_so_owner_cache_unsubscribed_payload(1u, player_steam64, unsub_message);
+    target_gc->push_incoming_message(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, unsub_message);
+
+    std::string owner_soid;
+    gbe::proto_wire::append_varint_field(owner_soid, 1u, 1u);
+    gbe::proto_wire::append_varint_field(owner_soid, 2u, player_steam64);
+
+    std::string subscribed_type;
+    gbe::proto_wire::append_varint_field(subscribed_type, 1u, 1u);
+    for (const Econ_Item &item : source_items) {
+        gbe::proto_wire::append_bytes_field(
+            subscribed_type,
+            2u,
+            target_gc->serialize_item_to_gcprotobuf(item, player_steam_id));
+    }
+
+    std::string cache_body;
+    gbe::proto_wire::append_bytes_field(cache_body, 2u, subscribed_type);
+    gbe::proto_wire::append_fixed64_field(cache_body, 3u, version);
+    gbe::proto_wire::append_bytes_field(cache_body, 4u, owner_soid);
+    gbe::proto_wire::append_varint_field(cache_body, 5u, 1u);
+
+    std::string cache_message;
+    gbe::gc_message::build_dota_zero_header_payload(GBE_kDotaCacheSubscribed, cache_body, cache_message);
+    target_gc->push_incoming_message(GBE_kDotaCacheSubscribed | GBE_kProtoMask, cache_message);
 
     GBE_GC_DebugLog(
         "GC_DOTA_EQUIP_REFRESH",
-        "pushed equipped item SO update role=%s target_gc=%p steam64=%llu equipped_items=%zu version=%llu reason=%s message_size=%zu",
+        "rebuilt player item cache role=%s target_gc=%p steam64=%llu total_items=%zu equipped_items=%zu version=%llu reason=%s unsub_size=%zu cache_size=%zu",
         target_gc->GBE_IsServerGC() ? "server" : "client",
         static_cast<void *>(target_gc),
-        static_cast<unsigned long long>(player_steam_id.ConvertToUint64()),
+        static_cast<unsigned long long>(player_steam64),
+        source_items.size(),
         equipped_count,
         static_cast<unsigned long long>(version),
         reason ? reason : "unknown",
-        update_message.size()
+        unsub_message.size(),
+        cache_message.size()
     );
     return true;
 }

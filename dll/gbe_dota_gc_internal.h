@@ -92,7 +92,7 @@ bool GBE_RefreshDotaHostEquippedItemsCache(
     const std::vector<Econ_Item> &source_items,
     const char *reason);
 
-bool GBE_PushDotaPlayerEquippedItemsUpdateToGC(
+bool GBE_RebuildDotaPlayerItemsCacheToGC(
     Steam_Game_Coordinator *target_gc,
     const CSteamID &player_steam_id,
     const std::vector<Econ_Item> &source_items,

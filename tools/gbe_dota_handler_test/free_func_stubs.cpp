@@ -143,7 +143,7 @@ bool GBE_RefreshDotaHostEquippedItemsCache(
     return GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, player_steam_id, source_items, true, reason);
 }
 
-bool GBE_PushDotaPlayerEquippedItemsUpdateToGC(
+bool GBE_RebuildDotaPlayerItemsCacheToGC(
     Steam_Game_Coordinator *target_gc,
     const CSteamID &player_steam_id,
     const std::vector<Econ_Item> &source_items,
@@ -152,7 +152,8 @@ bool GBE_PushDotaPlayerEquippedItemsUpdateToGC(
     (void)player_steam_id;
     (void)source_items;
     (void)reason;
-    target_gc->push_incoming_message(26u | GBE_kProtoMask, std::string());
+    target_gc->push_incoming_message(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, std::string());
+    target_gc->push_incoming_message(GBE_kDotaCacheSubscribed | GBE_kProtoMask, std::string());
     return true;
 }
 

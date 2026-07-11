@@ -214,7 +214,7 @@ TEST_CASE(test_csteamid_stub_behavior)
     EXPECT_TRUE(lobby_id.GetAccountID() == 42u);
 }
 
-TEST_CASE(test_equipped_item_update_advances_cache_version)
+TEST_CASE(test_player_item_cache_rebuild_advances_cache_version)
 {
     auto &runtime_state = GBE_DotaRuntimeState();
     runtime_state.equip_cache_version = 29799760112000884ull;
@@ -224,13 +224,13 @@ TEST_CASE(test_equipped_item_update_advances_cache_version)
     item.id = 42ull;
     item.equip_states[1u] = 2u;
 
-    EXPECT_TRUE(GBE_PushDotaPlayerEquippedItemsUpdateToGC(
+    EXPECT_TRUE(GBE_RebuildDotaPlayerItemsCacheToGC(
         &gc,
         CSteamID(76561198035005698ull),
         std::vector<Econ_Item>{item},
         "test"));
     EXPECT_EQ(runtime_state.equip_cache_version, 29799760112000885ull);
-    EXPECT_EQ(gc.pushed_msg_type, 26u | GBE_kProtoMask);
+    EXPECT_EQ(gc.pushed_msg_type, GBE_kDotaCacheSubscribed | GBE_kProtoMask);
 }
 
 // =====================================================================
@@ -1262,8 +1262,8 @@ int main()
     std::printf("[1/27] CSteamID stub behavior...\n");
     test_csteamid_stub_behavior();
 
-    std::printf("[2/27] Equipped item update cache version...\n");
-    test_equipped_item_update_advances_cache_version();
+    std::printf("[2/27] Player item cache rebuild version...\n");
+    test_player_item_cache_rebuild_advances_cache_version();
 
     std::printf("[3/27] GBE_DescribeDotaLaunchPhase...\n");
     test_describe_dota_launch_phase();
