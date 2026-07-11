@@ -135,6 +135,32 @@ RETIRED_LIFECYCLE_HANDLER_SYMBOLS = (
     "GBE_HandleDotaWrappedCustomGameLifecycleRequest",
 )
 RETIRED_LIFECYCLE_FALLBACK_EMSGS = ("7070u", "8052u", "8053u")
+LIFECYCLE_TRANSITION_GATES = {
+    "gbe_dota_custom_game_lifecycle_handlers.cpp": (
+        "transition_custom_game_request(",
+        "EffectKind::LegacyLifecycleActionsRequested",
+    ),
+    "gbe_dota_match_handlers.cpp": (
+        "transition_runtime_member(",
+        "EffectKind::RuntimeMemberUpdateRequested",
+        "transition_runtime_game_state(",
+        "EffectKind::RuntimeGameStateUpdateRequested",
+        "transition_runtime_poll(",
+        "EffectKind::PracticeLobbyDetailsRequested",
+    ),
+    "gbe_dota_lobby_handlers.cpp": (
+        "transition_teardown(",
+        "EffectKind::LegacyTeardownActionsRequested",
+    ),
+    "gbe_dota_lobby_flow_coordinator.cpp": (
+        "transition_teardown(",
+        "EffectKind::LegacyTeardownActionsRequested",
+    ),
+    "gbe_dota_lobby_state_coordinator.cpp": (
+        "transition_teardown(",
+        "EffectKind::LegacyTeardownActionsRequested",
+    ),
+}
 RETIRED_RECONNECT_TRANSITION_SYMBOLS = (
     "GBE_DotaReconnectSharedStateSnapshot",
     "GBE_GetSharedDotaReconnectStateSnapshot",
@@ -519,6 +545,23 @@ def audit_lifecycle_side_effect_ownership():
             if re.search(r"\b" + re.escape(api) + r"\s*\(", handler_text):
                 issues.append(f"{base}: migrated lifecycle handler directly calls {api}; route through {LIFECYCLE_EXECUTOR_OWNER}")
 
+    return issues
+
+
+def audit_lifecycle_transition_gates(source_texts=None):
+    """Keep migrated lifecycle paths behind typed transition effects."""
+    if source_texts is None:
+        source_texts = {
+            base: read(os.path.join(ROOT_DIR, "dll", base))
+            for base in LIFECYCLE_TRANSITION_GATES
+        }
+
+    issues = []
+    for base, required_tokens in LIFECYCLE_TRANSITION_GATES.items():
+        source = strip_comments(source_texts.get(base, ""))
+        for token in required_tokens:
+            if token not in source:
+                issues.append(f"{base}: lifecycle path is missing transition gate token {token}")
     return issues
 
 
@@ -1343,6 +1386,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 18: Lifecycle transition gates")
+    print("=" * 70)
+    print("  Action: keep core lifecycle handlers and coordinators behind typed transition effects.")
+    lifecycle_transition_gate_issues = audit_lifecycle_transition_gates()
+    if not lifecycle_transition_gate_issues:
+        print(f"  All {len(LIFECYCLE_TRANSITION_GATES)} migrated lifecycle owners retain their transition and effect gates")
+    else:
+        for issue in lifecycle_transition_gate_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -1365,8 +1420,9 @@ def main():
     print(f"  Composition root lifecycle issues:   {len(composition_root_lifecycle_issues)}")
     print(f"  Mutable GC global state issues:       {len(mutable_gc_global_issues)}")
     print(f"  Layered CI gate issues:               {len(layered_ci_issues)}")
+    print(f"  Lifecycle transition gate issues:    {len(lifecycle_transition_gate_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues:
         sys.exit(1)
 
 

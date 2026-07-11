@@ -493,9 +493,13 @@
     - 比较契约：逐步比较 lifecycle、generation、reconnect key/queued、decision status、reason，以及每个 effect 的 kind/from/to/generation。
     - 可复现输出：mismatch 会输出 seed、step、event 和 input generation 后终止；开发期间 seed `1`、step `36` 曾定位 reference model 对 RuntimePoll 分类错误，修复后全部固定序列一致。
     - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
-  - [ ] 14.9 更新架构审计
+  - [x] 14.9 更新架构审计
     - 禁止核心 lifecycle handler、executor 和 store 绕过 transition 函数直接决定状态转移。
-  - [ ] 14.10 检查点：确保所有测试通过，如有疑问请询问用户
+    - Audit 18 固化 5 个 migrated lifecycle owner 的 transition/effect gates：custom-game handler、match handler、lobby handler、lobby flow coordinator 和 lobby state coordinator。
+    - 审计单元测试覆盖完整 gate、缺失 transition call 和缺失 typed effect 三类场景；audit helper 由 35 项增至 38 项。
+  - [x] 14.10 检查点：确保所有测试通过，如有疑问请询问用户
+    - GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 38/38，18 项 production audit 零问题。
+    - P14 显式纯状态机阶段完成：typed vocabulary、纯 transition、generation/reconnect、production effect gates、完整 transition table、示例/属性/differential 测试和架构审计均已关闭。
 
 - [ ] 15. 设置 P14、P16、P17 条件决策门禁
   - [ ] 15.1 建立 P14 Actor 触发条件检查

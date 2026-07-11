@@ -44,6 +44,7 @@ class DiagnosticReasonInventoryAuditTest(unittest.TestCase):
             self.audit(header=header),
         )
 
+
     def test_rejects_serializer_mapping_without_enum(self):
         header = HEADER.replace(
             '        case Reason::Beta: return "beta";',
@@ -73,6 +74,39 @@ class DiagnosticReasonInventoryAuditTest(unittest.TestCase):
         self.assertIn(
             "diagnostic Reason::Beta: focused value 'changed' does not match 'beta'",
             self.audit(focused=focused),
+        )
+
+
+class LifecycleTransitionGateAuditTest(unittest.TestCase):
+    def valid_sources(self):
+        return {
+            base: "\n".join(required_tokens)
+            for base, required_tokens in audit.LIFECYCLE_TRANSITION_GATES.items()
+        }
+
+    def test_accepts_all_migrated_transition_and_effect_gates(self):
+        self.assertEqual([], audit.audit_lifecycle_transition_gates(self.valid_sources()))
+
+    def test_rejects_missing_transition_gate(self):
+        sources = self.valid_sources()
+        sources["gbe_dota_match_handlers.cpp"] = sources["gbe_dota_match_handlers.cpp"].replace(
+            "transition_runtime_poll(",
+            "",
+        )
+        self.assertIn(
+            "gbe_dota_match_handlers.cpp: lifecycle path is missing transition gate token transition_runtime_poll(",
+            audit.audit_lifecycle_transition_gates(sources),
+        )
+
+    def test_rejects_missing_typed_effect_gate(self):
+        sources = self.valid_sources()
+        sources["gbe_dota_lobby_handlers.cpp"] = sources["gbe_dota_lobby_handlers.cpp"].replace(
+            "EffectKind::LegacyTeardownActionsRequested",
+            "",
+        )
+        self.assertIn(
+            "gbe_dota_lobby_handlers.cpp: lifecycle path is missing transition gate token EffectKind::LegacyTeardownActionsRequested",
+            audit.audit_lifecycle_transition_gates(sources),
         )
 
 
