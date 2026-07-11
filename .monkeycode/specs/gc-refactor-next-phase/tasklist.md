@@ -472,12 +472,19 @@
     - Teardown：postgame 保持 generation，leave 进入 PostGame 并推进 generation，abandon 进入 PostGame 并复用 generation，符合当前 generation boundary contract。
     - Reconnect：首次 generation/server/endpoint key 产生 `ReconnectQueued`，重复 key 返回 `ReconnectAlreadyQueued`，lifecycle 与 generation 保持稳定。
     - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
-  - [ ] 14.7 增加状态机属性测试
+  - [x] 14.7 增加状态机属性测试
     - 属性 P15-A：任意事件序列都不能绕过合法 launch progression 进入 loaded/run。
     - 属性 P15-B：旧 generation 事件不能改变当前状态或产生当前代际 effects。
     - 属性 P15-C：重复事件保持幂等，或返回稳定的明确拒绝结果。
     - 属性 P15-D：load failure 永远不产生 connected/loaded effects。
     - 属性 P15-E：teardown 最终进入可重复清理的稳定状态。
+    - P15-A：从 Idle 对十类 lifecycle event 穷举长度 5 的 100,000 条确定性序列；任何进入 Loaded 的 transition 必须来自 Loading，任何进入 Running 的 transition 必须来自 Loaded。
+    - P15-B：遍历全部 8 state x 13 event 的 stale-generation 输入，断言 lifecycle、generation、reconnect key/queued 状态保持不变且 effects 为空。
+    - P15-C：遍历全部 state 与十类 transport lifecycle event，重复执行后必须返回稳定 `AlreadyInState` 或 `InvalidTransition`；reconnect 重复 key 必须返回 `ReconnectAlreadyQueued`。
+    - P15-D：对全部 lifecycle state 执行 failed `8053` custom-game transition，断言 state/generation 保持且不产生 `StateChanged` loaded effect。
+    - P15-E：从每个 active state 分别执行 leave 和 abandon，再 reset 到 Idle；重复 reset 稳定返回 `AlreadyInState`，状态保持 Idle 且 effects 为空。
+    - 可复现性：属性输入使用固定 canonical event/state 集合与确定性枚举，不依赖随机数或时间，失败序列可由循环索引直接复现。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
   - [ ] 14.8 增加 model-based differential test
     - 使用简化 reference transition table 生成事件序列，与 C++ transition 比较状态、effects 和 reason。
     - 保存失败随机种子，保证回归可重复。

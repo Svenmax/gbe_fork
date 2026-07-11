@@ -161,6 +161,153 @@ void run_reconnect_example()
     assert(duplicate.reason == lifecycle::DecisionReason::ReconnectAlreadyQueued);
 }
 
+void verify_progression_property(
+    lifecycle::MachineState state,
+    std::size_t remaining_depth)
+{
+    if (remaining_depth == 0u)
+        return;
+
+    constexpr std::array<lifecycle::EventKind, 10> lifecycle_events{{
+        lifecycle::EventKind::Create,
+        lifecycle::EventKind::Join,
+        lifecycle::EventKind::Setup,
+        lifecycle::EventKind::Loading,
+        lifecycle::EventKind::Loaded,
+        lifecycle::EventKind::Run,
+        lifecycle::EventKind::PostGame,
+        lifecycle::EventKind::Leave,
+        lifecycle::EventKind::Abandon,
+        lifecycle::EventKind::Reset,
+    }};
+
+    for (const lifecycle::EventKind kind : lifecycle_events) {
+        const lifecycle::State previous = state.lifecycle;
+        const auto result = lifecycle::transition(state, event(kind));
+        if (result.accepted()) {
+            if (result.state.lifecycle == lifecycle::State::Loaded)
+                assert(previous == lifecycle::State::Loading);
+            if (result.state.lifecycle == lifecycle::State::Running)
+                assert(previous == lifecycle::State::Loaded);
+            verify_progression_property(result.state, remaining_depth - 1u);
+        } else {
+            verify_progression_property(state, remaining_depth - 1u);
+        }
+    }
+}
+
+void run_state_machine_properties()
+{
+    // P15-A: event sequences cannot bypass Loading or Loaded progression.
+    lifecycle::MachineState initial{};
+    initial.generation = 80u;
+    verify_progression_property(initial, 5u);
+
+    // P15-B: stale generation input preserves current state and emits no effects.
+    for (const lifecycle::State state : lifecycle::all_states) {
+        for (const lifecycle::EventKind kind : lifecycle::all_event_kinds) {
+            lifecycle::MachineState current{};
+            current.lifecycle = state;
+            current.generation = 91u;
+            current.reconnect_key = { 91u, 9001u, 27015u };
+            current.reconnect_queued = true;
+            lifecycle::Event stale = event(kind);
+            stale.generation = 90u;
+            stale.server_id = 9002u;
+            stale.endpoint_key = 27016u;
+            const auto result = lifecycle::transition(current, stale);
+            assert(!result.accepted());
+            assert(result.reason == lifecycle::DecisionReason::StaleGeneration);
+            assert(result.state.lifecycle == current.lifecycle);
+            assert(result.state.generation == current.generation);
+            assert(result.state.reconnect_key == current.reconnect_key);
+            assert(result.state.reconnect_queued == current.reconnect_queued);
+            assert(result.effects.empty());
+        }
+    }
+
+    // P15-C: repeated transport lifecycle events are idempotent or stably rejected.
+    constexpr std::array<lifecycle::EventKind, 10> repeatable_events{{
+        lifecycle::EventKind::Create,
+        lifecycle::EventKind::Join,
+        lifecycle::EventKind::Setup,
+        lifecycle::EventKind::Loading,
+        lifecycle::EventKind::Loaded,
+        lifecycle::EventKind::Run,
+        lifecycle::EventKind::PostGame,
+        lifecycle::EventKind::Leave,
+        lifecycle::EventKind::Abandon,
+        lifecycle::EventKind::Reset,
+    }};
+    for (const lifecycle::State state : lifecycle::all_states) {
+        for (const lifecycle::EventKind kind : repeatable_events) {
+            lifecycle::MachineState current{};
+            current.lifecycle = state;
+            current.generation = 101u;
+            const auto first = lifecycle::transition(current, event(kind));
+            const lifecycle::MachineState repeated_input = first.accepted() ? first.state : current;
+            const auto repeated = lifecycle::transition(repeated_input, event(kind));
+            assert(!repeated.accepted());
+            assert(repeated.reason == lifecycle::DecisionReason::AlreadyInState ||
+                repeated.reason == lifecycle::DecisionReason::InvalidTransition);
+            assert(repeated.state.lifecycle == repeated_input.lifecycle);
+            assert(repeated.state.generation == repeated_input.generation);
+            assert(repeated.effects.empty());
+        }
+    }
+    lifecycle::MachineState reconnect_state{};
+    reconnect_state.lifecycle = lifecycle::State::Running;
+    reconnect_state.generation = 102u;
+    const auto first_reconnect = lifecycle::transition(
+        reconnect_state,
+        lifecycle::reconnect_event(102u, 9001u, 27015u));
+    const auto repeated_reconnect = lifecycle::transition(
+        first_reconnect.state,
+        lifecycle::reconnect_event(102u, 9001u, 27015u));
+    assert(!repeated_reconnect.accepted());
+    assert(repeated_reconnect.reason == lifecycle::DecisionReason::ReconnectAlreadyQueued);
+    assert(repeated_reconnect.effects.empty());
+
+    // P15-D: load failure never emits a loaded state change.
+    for (const lifecycle::State state : lifecycle::all_states) {
+        lifecycle::CustomGameRequestState request_state{};
+        request_state.machine.lifecycle = state;
+        request_state.machine.generation = 111u;
+        request_state.has_custom_game = true;
+        lifecycle::CustomGameRequest request{};
+        request.event = { lifecycle::EventKind::Loaded, lifecycle::EventSource::Direct, 8053u, 111u, 0u, 0u };
+        request.load_failed = true;
+        const auto result = lifecycle::transition_custom_game_request(request_state, request, 2u, 3u);
+        assert(result.accepted());
+        assert(result.state.lifecycle == state);
+        assert(!result.effects.contains(lifecycle::EffectKind::StateChanged));
+    }
+
+    // P15-E: every active state reaches a stable, repeatable cleanup state.
+    for (const lifecycle::State state : lifecycle::all_states) {
+        if (state == lifecycle::State::Idle || state == lifecycle::State::PostGame)
+            continue;
+        lifecycle::MachineState active{};
+        active.lifecycle = state;
+        active.generation = 121u;
+        for (const lifecycle::EventKind teardown_kind : {
+                 lifecycle::EventKind::Leave,
+                 lifecycle::EventKind::Abandon }) {
+            const auto teardown = lifecycle::transition(active, event(teardown_kind));
+            assert(teardown.accepted());
+            assert(teardown.state.lifecycle == lifecycle::State::PostGame);
+            const auto reset = lifecycle::transition(teardown.state, lifecycle::reset_event());
+            assert(reset.accepted());
+            assert(reset.state.lifecycle == lifecycle::State::Idle);
+            const auto repeated_reset = lifecycle::transition(reset.state, lifecycle::reset_event());
+            assert(!repeated_reset.accepted());
+            assert(repeated_reset.reason == lifecycle::DecisionReason::AlreadyInState);
+            assert(repeated_reset.state.lifecycle == lifecycle::State::Idle);
+            assert(repeated_reset.effects.empty());
+        }
+    }
+}
+
 int main()
 {
     constexpr std::array<ExpectedMapping, 9> mappings{{
@@ -231,6 +378,7 @@ int main()
     run_duplicate_and_out_of_order_example();
     run_teardown_examples();
     run_reconnect_example();
+    run_state_machine_properties();
 
     assert_accepted(lifecycle::State::Idle, lifecycle::EventKind::Create, lifecycle::State::Created);
     assert_accepted(lifecycle::State::Idle, lifecycle::EventKind::Join, lifecycle::State::Joined);
