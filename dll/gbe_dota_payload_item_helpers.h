@@ -29,4 +29,6 @@ bool GBE_BuildSOSingleObjectFromItem(const Econ_Item &item, const CSteamID &stea
 
 std::string GBE_SerializeEconItemToGcprotobuf(const Econ_Item &item, CSteamID steam_id, uint32 gc_version, bool is_portal2);
 
+uint64_t GBE_HashDotaPayloadBytes(const std::string &payload);
+
 #endif // __INCLUDED_GBE_DOTA_PAYLOAD_ITEM_HELPERS_H__

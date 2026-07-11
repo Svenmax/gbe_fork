@@ -1143,6 +1143,13 @@ TEST_CASE(test_build_so_single_object_from_item)
     EXPECT_TRUE(output.find(std::string(reinterpret_cast<const char *>(&attr_value), 4)) != std::string::npos);
 }
 
+TEST_CASE(test_hash_dota_payload_bytes)
+{
+    EXPECT_TRUE(GBE_HashDotaPayloadBytes("") == 1469598103934665603ull);
+    EXPECT_TRUE(GBE_HashDotaPayloadBytes("abc") == 0xe16801510db89efdull);
+    EXPECT_TRUE(GBE_HashDotaPayloadBytes("abc") != GBE_HashDotaPayloadBytes("abd"));
+}
+
 TEST_CASE(test_parse_dota7034_runtime_request)
 {
     const auto empty_request = gbe::proto_wire::parse_dota7034_runtime_request(nullptr, 0);

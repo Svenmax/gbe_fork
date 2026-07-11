@@ -988,6 +988,7 @@ public:
     std::vector<GC_Message> pending_messages;
     bool items_loaded{};
     bool gc_initialized{true};
+    uint32 gc_version{};
     bool GBE_dota_login_sync_sent{};
     bool GBE_pending_dota_abandon_finalize_after_7014{};
     uint64 GBE_pending_dota_abandon_finalize_lobby_id{};
@@ -997,6 +998,7 @@ public:
     GBE_DotaDeferredTaskSlot GBE_pending_reset_after_cache_unsubscribed_slot;
 
     uint64 GBE_CurrentDotaLobbyGeneration() const { return GBE_dota_lobby_generation_counter.current().value; }
+    uint32 GBE_GetGCVersion() const { return gc_version; }
     GBE_DotaGenerationAdvanceResult GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary boundary, const char *)
     {
         return GBE_dota_lobby_generation_counter.advance(boundary).advanced ? GBE_DotaGenerationAdvanceResult::Advanced : GBE_DotaGenerationAdvanceResult::Exhausted;

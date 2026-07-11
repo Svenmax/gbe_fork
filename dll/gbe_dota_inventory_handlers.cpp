@@ -700,9 +700,30 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         for (uint64_t mid : plan.modified_item_ids) {
             for (const Econ_Item &item : items) {
                 if (item.id != mid) continue;
+                const std::string item_payload = item_to_gcprotobuf(item, settings->get_local_steam_id());
                 auto *obj = update_msg.add_objects();
                 obj->set_type_id(1);
-                obj->set_object_data(item_to_gcprotobuf(item, settings->get_local_steam_id()));
+                obj->set_object_data(item_payload);
+                GBE_GC_DebugLog(
+                    "GC_DOTA_EQUIP_PAYLOAD",
+                    "source=2569 item_id=%llu account_id=%u def=%u inventory=%u quantity=%u level=%u quality=%u flags=%u origin=%u style=%u original_id=%llu equip_states=%zu attributes=%zu payload_size=%zu payload_hash=%016llx gc_version=%u",
+                    static_cast<unsigned long long>(item.id),
+                    settings->get_local_steam_id().GetAccountID(),
+                    item.def,
+                    item.inv_pos,
+                    item.quantity,
+                    item.level,
+                    static_cast<unsigned int>(item.quality),
+                    item.flags,
+                    item.origin,
+                    item.style,
+                    static_cast<unsigned long long>(item.original_id),
+                    item.equip_states.size(),
+                    item.attributes.size(),
+                    item_payload.size(),
+                    static_cast<unsigned long long>(GBE_HashDotaPayloadBytes(item_payload)),
+                    GBE_GetGCVersion()
+                );
                 break;
             }
         }
@@ -710,12 +731,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         update_msg.set_version(plan.cache_version);
         update_msg.set_service_id(1u);
 
+        const std::string update_payload = update_msg.SerializeAsString();
+        GBE_GC_DebugLog(
+            "GC_DOTA_EQUIP_PAYLOAD",
+            "source=2569 owner_type=1 owner_id=%llu objects=%d version=%llu service_id=1 payload_size=%zu payload_hash=%016llx gc_version=%u",
+            static_cast<unsigned long long>(settings->get_local_steam_id().ConvertToUint64()),
+            update_msg.objects_size(),
+            static_cast<unsigned long long>(plan.cache_version),
+            update_payload.size(),
+            static_cast<unsigned long long>(GBE_HashDotaPayloadBytes(update_payload)),
+            GBE_GetGCVersion()
+        );
+
         uint32_t flagged_emsg = 26u | GBE_kProtoMask;
         uint32_t hdr_len = 0;
         update_message.resize(sizeof(flagged_emsg) + sizeof(hdr_len));
         memcpy(&update_message[0], &flagged_emsg, sizeof(flagged_emsg));
         memcpy(&update_message[sizeof(flagged_emsg)], &hdr_len, sizeof(hdr_len));
-        update_msg.AppendToString(&update_message);
+        update_message.append(update_payload);
     }
 
     GBE_GC_DebugLog(

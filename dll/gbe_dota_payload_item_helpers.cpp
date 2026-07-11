@@ -215,6 +215,16 @@ std::string GBE_SerializeEconItemToGcprotobuf(const Econ_Item &item, CSteamID st
     return proto_item.SerializeAsString();
 }
 
+uint64_t GBE_HashDotaPayloadBytes(const std::string &payload)
+{
+    uint64_t hash = 1469598103934665603ull;
+    for (const unsigned char byte : payload) {
+        hash ^= byte;
+        hash *= 1099511628211ull;
+    }
+    return hash;
+}
+
 // --- GBE_BuildSOSingleObjectFromItem ---
 // Builds a CMsgSOSingleObject serialized string from an Econ_Item.
 // type_id is set to 1 (econ item), object_data is the item's protobuf

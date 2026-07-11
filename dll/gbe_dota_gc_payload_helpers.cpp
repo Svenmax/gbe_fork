@@ -793,9 +793,31 @@ bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
         if (!hero_equipped)
             continue;
 
+        const uint32 gc_version = client_gc->GBE_GetGCVersion();
+        const std::string item_payload = GBE_SerializeEconItemToGcprotobuf(item, player_steam_id, gc_version, false);
         auto *object = update_msg.add_objects();
         object->set_type_id(1u);
-        object->set_object_data(GBE_SerializeEconItemToGcprotobuf(item, player_steam_id, 0u, false));
+        object->set_object_data(item_payload);
+        GBE_GC_DebugLog(
+            "GC_DOTA_EQUIP_PAYLOAD",
+            "source=hero_replay item_id=%llu account_id=%u def=%u inventory=%u quantity=%u level=%u quality=%u flags=%u origin=%u style=%u original_id=%llu equip_states=%zu attributes=%zu payload_size=%zu payload_hash=%016llx gc_version=%u",
+            static_cast<unsigned long long>(item.id),
+            player_steam_id.GetAccountID(),
+            item.def,
+            item.inv_pos,
+            item.quantity,
+            item.level,
+            static_cast<unsigned int>(item.quality),
+            item.flags,
+            item.origin,
+            item.style,
+            static_cast<unsigned long long>(item.original_id),
+            item.equip_states.size(),
+            item.attributes.size(),
+            item_payload.size(),
+            static_cast<unsigned long long>(GBE_HashDotaPayloadBytes(item_payload)),
+            gc_version
+        );
         ++updated_items;
     }
 
@@ -812,8 +834,20 @@ bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
     update_msg.set_version(cache_version);
     update_msg.set_service_id(1u);
 
+    const std::string update_payload = update_msg.SerializeAsString();
+    GBE_GC_DebugLog(
+        "GC_DOTA_EQUIP_PAYLOAD",
+        "source=hero_replay owner_type=1 owner_id=%llu objects=%d version=%llu service_id=1 payload_size=%zu payload_hash=%016llx gc_version=%u",
+        static_cast<unsigned long long>(player_steam_id.ConvertToUint64()),
+        update_msg.objects_size(),
+        static_cast<unsigned long long>(cache_version),
+        update_payload.size(),
+        static_cast<unsigned long long>(GBE_HashDotaPayloadBytes(update_payload)),
+        client_gc->GBE_GetGCVersion()
+    );
+
     std::string update_message;
-    gbe::gc_message::build_dota_zero_header_payload(26u, update_msg.SerializeAsString(), update_message);
+    gbe::gc_message::build_dota_zero_header_payload(26u, update_payload, update_message);
     client_gc->push_incoming_message(26u | GBE_kProtoMask, update_message);
 
     GBE_GC_DebugLog(

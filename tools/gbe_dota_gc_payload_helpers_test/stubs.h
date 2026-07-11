@@ -234,6 +234,7 @@ public:
         { pushed_msg_type = msg_type; pushed_message = msg; }
     bool GBE_IsServerGC() const { return is_server; }
     uint64_t GBE_GetDotaLobbyGeneration() const { return lobby_generation; }
+    uint32_t GBE_GetGCVersion() const { return gc_version; }
     void GBE_MirrorDotaEquippedItemsForUser(const CSteamID &, const std::vector<Econ_Item> &, const char *) {}
     std::string serialize_item_to_gcprotobuf(const Econ_Item &item, const CSteamID &steam_id)
         { (void)steam_id; return std::to_string(item.id); }
@@ -242,6 +243,7 @@ public:
 
     bool is_server{true};
     uint64_t lobby_generation{};
+    uint32_t gc_version{};
     uint32_t pushed_msg_type{};
     std::string pushed_message;
 };
