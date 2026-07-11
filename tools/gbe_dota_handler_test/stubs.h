@@ -1611,12 +1611,12 @@ public:
     const std::vector<Econ_Item> &get_items() { return items; }
     void GBE_MirrorDotaEquippedItemsForUser(CSteamID steam_id, const std::vector<Econ_Item> &source_items, const char *)
     {
-        std::vector<Econ_Item> &mirrored_items = all_user_items[steam_id];
-        mirrored_items.clear();
+        std::vector<Econ_Item> mirrored_items;
         for (const Econ_Item &item : source_items) {
             if (!item.equip_states.empty())
                 mirrored_items.push_back(item);
         }
+        all_user_items[steam_id] = mirrored_items;
     }
     std::string serialize_item_to_gcprotobuf(const Econ_Item &item, CSteamID steam_id) { return item_to_gcprotobuf(item, steam_id); }
 

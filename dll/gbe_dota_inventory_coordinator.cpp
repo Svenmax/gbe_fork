@@ -431,9 +431,6 @@ void Steam_Game_Coordinator::GBE_MirrorDotaEquippedItemsForUser(
     if (!is_server || gc_profile != GC_PROFILE_DOTA2 || !steam_id.BIndividualAccount())
         return;
 
-    std::vector<Econ_Item> &mirrored_items = all_user_items[steam_id];
-    mirrored_items.clear();
-
     std::uint32_t hero_id = 0u;
     const std::uint64_t steam64 = steam_id.ConvertToUint64();
     if (steam64 == GBE_local_lobby.owner_steam_id) {
@@ -447,6 +444,8 @@ void Steam_Game_Coordinator::GBE_MirrorDotaEquippedItemsForUser(
         }
     }
 
+    std::vector<Econ_Item> mirrored_items;
+    mirrored_items.reserve(source_items.size());
     std::size_t equip_state_count = 0u;
     std::size_t hero_match_count = 0u;
     for (const Econ_Item &item : source_items) {
@@ -461,6 +460,8 @@ void Steam_Game_Coordinator::GBE_MirrorDotaEquippedItemsForUser(
                 ++hero_match_count;
         }
     }
+
+    all_user_items[steam_id] = mirrored_items;
 
     GBE_GC_DebugLog(
         "GC_DOTA_INVENTORY_MIRROR",

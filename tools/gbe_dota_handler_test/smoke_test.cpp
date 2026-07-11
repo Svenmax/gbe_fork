@@ -65,6 +65,13 @@ TestEquipPlannerSummary test_plan_equip_items_request(
     bool server_gc_has_active_lobby,
     bool lobby_snapshot_refresh_available);
 
+bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
+    Steam_Game_Coordinator *target_gc,
+    const CSteamID &player_steam_id,
+    const std::vector<Econ_Item> &source_items,
+    bool unsubscribe_first,
+    const char *reason);
+
 // =====================================================================
 // Test infrastructure
 // =====================================================================
@@ -649,6 +656,35 @@ static void test_inventory_equip_full_forward()
 
     TEST_ASSERT_EQ(tf.recorder.actions[7].type, GBE_DotaActionType::LobbySnapshotRefresh, "8: LobbySnapshotRefresh");
     TEST_ASSERT(tf.recorder.actions[7].reason == "equip_items_refresh", "8: snapshot refresh reason should identify equip replay");
+
+    ++g_tests_passed;
+}
+
+static void test_inventory_remote_cache_forward_preserves_aliased_items()
+{
+    TestFixture tf;
+    tf.reset();
+
+    const CSteamID remote_steam_id(0x110000100222222u);
+    Steam_Game_Coordinator server_gc;
+    server_gc.is_server = true;
+    server_gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
+
+    Econ_Item equipped_item{};
+    equipped_item.id = 0xBEEFu;
+    equipped_item.def = 123u;
+    equipped_item.equip_states[86u] = 2u;
+    server_gc.all_user_items[remote_steam_id].push_back(equipped_item);
+
+    const std::vector<Econ_Item> &remote_items = server_gc.all_user_items.at(remote_steam_id);
+    TEST_ASSERT(GBE_PushDotaPlayerEquippedItemsCacheToGC(
+        &server_gc,
+        remote_steam_id,
+        remote_items,
+        false,
+        "test_remote_alias"), "remote cache forward should succeed");
+    TEST_ASSERT_EQ(server_gc.all_user_items.at(remote_steam_id).size(), 1u, "remote mirrored inventory should survive aliased source input");
+    TEST_ASSERT_EQ(server_gc.all_user_items.at(remote_steam_id)[0].id, equipped_item.id, "remote mirrored inventory should preserve item identity");
 
     ++g_tests_passed;
 }
@@ -3100,6 +3136,9 @@ int main()
 
     std::printf("[run] test_inventory_equip_full_forward\n");
     RUN_TEST(test_inventory_equip_full_forward);
+
+    std::printf("[run] test_inventory_remote_cache_forward_preserves_aliased_items\n");
+    RUN_TEST(test_inventory_remote_cache_forward_preserves_aliased_items);
 
     std::printf("[run] test_inventory_equip_planner_empty_body\n");
     RUN_TEST(test_inventory_equip_planner_empty_body);
