@@ -635,9 +635,23 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
         return false;
 
     std::vector<const Econ_Item *> equipped_items;
+    std::size_t equip_state_count = 0;
+    std::uint64_t snapshot_hash = 1469598103934665603ull;
     for (const Econ_Item &item : source_items) {
-        if (!item.equip_states.empty())
+        if (!item.equip_states.empty()) {
             equipped_items.push_back(&item);
+            equip_state_count += item.equip_states.size();
+            snapshot_hash ^= item.id;
+            snapshot_hash *= 1099511628211ull;
+            snapshot_hash ^= item.def;
+            snapshot_hash *= 1099511628211ull;
+            snapshot_hash ^= item.style;
+            snapshot_hash *= 1099511628211ull;
+            for (const auto &[class_id, slot_id] : item.equip_states) {
+                snapshot_hash ^= (static_cast<std::uint64_t>(class_id) << 16u) | slot_id;
+                snapshot_hash *= 1099511628211ull;
+            }
+        }
     }
 
     if (equipped_items.empty())
@@ -680,9 +694,13 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
 
     GBE_GC_DebugLog(
         "GC_DOTA_DIRECT",
-        "pushed player item CacheSubscribed to target GC: steam64=%llu equipped_items=%zu reason=%s message_size=%zu unsub_first=%u",
+        "pushed player item CacheSubscribed role=%s target_gc=%p steam64=%llu equipped_items=%zu equip_states=%zu snapshot=%016llx reason=%s message_size=%zu unsub_first=%u",
+        target_gc->GBE_IsServerGC() ? "server" : "client",
+        static_cast<void *>(target_gc),
         static_cast<unsigned long long>(player_steam64),
         equipped_items.size(),
+        equip_state_count,
+        static_cast<unsigned long long>(snapshot_hash),
         reason ? reason : "unknown",
         cache_message.size(),
         unsubscribe_first ? 1u : 0u
@@ -690,19 +708,38 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
     return true;
 }
 
-bool GBE_RefreshDotaHostEquippedItemsCaches(
+bool GBE_RefreshDotaHostEquippedItemsCache(
     Steam_Game_Coordinator *server_gc,
-    Steam_Game_Coordinator *client_gc,
     const CSteamID &player_steam_id,
     const std::vector<Econ_Item> &source_items,
-    const char *server_reason,
-    const char *client_reason)
+    const char *reason)
 {
-    if (!GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, player_steam_id, source_items, true, server_reason))
-        return false;
+    static std::atomic<std::uint64_t> next_refresh_id{1ull};
+    const std::uint64_t refresh_id = next_refresh_id.fetch_add(1ull, std::memory_order_relaxed);
+    const char *safe_reason = reason ? reason : "unknown";
 
-    GBE_PushDotaPlayerEquippedItemsCacheToGC(client_gc, player_steam_id, source_items, false, client_reason);
-    return true;
+    GBE_GC_DebugLog(
+        "GC_DOTA_EQUIP_REFRESH",
+        "begin refresh_id=%llu role=server target_gc=%p steam64=%llu source_items=%zu reason=%s",
+        static_cast<unsigned long long>(refresh_id),
+        static_cast<void *>(server_gc),
+        static_cast<unsigned long long>(player_steam_id.ConvertToUint64()),
+        source_items.size(),
+        safe_reason
+    );
+
+    const bool refreshed = GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, player_steam_id, source_items, true, safe_reason);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_EQUIP_REFRESH",
+        "complete refresh_id=%llu role=server target_gc=%p steam64=%llu result=%s reason=%s",
+        static_cast<unsigned long long>(refresh_id),
+        static_cast<void *>(server_gc),
+        static_cast<unsigned long long>(player_steam_id.ConvertToUint64()),
+        refreshed ? "pushed" : "skipped",
+        safe_reason
+    );
+    return refreshed;
 }
 
 // =====================================================================

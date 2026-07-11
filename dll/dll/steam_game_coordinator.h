@@ -438,6 +438,7 @@ public:
     }
 
     const std::vector<Econ_Item> &get_items() { return items; }
+    bool GBE_IsServerGC() const { return is_server; }
     const std::map<CSteamID, std::vector<Econ_Item>> &get_all_user_items() { return all_user_items; }
     const bool has_items_for_user(CSteamID steam_id) { return (all_user_items.count(steam_id) != 0); }
     const std::vector<Econ_Item> &get_items_for_user(CSteamID steam_id) { return all_user_items.at(steam_id); }

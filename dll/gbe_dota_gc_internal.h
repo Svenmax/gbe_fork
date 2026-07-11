@@ -86,13 +86,11 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
     bool unsubscribe_first,
     const char *reason);
 
-bool GBE_RefreshDotaHostEquippedItemsCaches(
+bool GBE_RefreshDotaHostEquippedItemsCache(
     Steam_Game_Coordinator *server_gc,
-    Steam_Game_Coordinator *client_gc,
     const CSteamID &player_steam_id,
     const std::vector<Econ_Item> &source_items,
-    const char *server_reason,
-    const char *client_reason);
+    const char *reason);
 
 bool GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage(
     const char *template_hex,
