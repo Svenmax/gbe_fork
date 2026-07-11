@@ -742,6 +742,71 @@ bool GBE_RefreshDotaHostEquippedItemsCache(
     return refreshed;
 }
 
+bool GBE_PushDotaPlayerEquippedItemsUpdateToGC(
+    Steam_Game_Coordinator *target_gc,
+    const CSteamID &player_steam_id,
+    const std::vector<Econ_Item> &source_items,
+    const char *reason)
+{
+    if (!target_gc || !player_steam_id.IsValid())
+        return false;
+
+    static std::atomic<std::uint64_t> last_update_version{0ull};
+    CMsgSOMultipleObjects update_msg;
+    auto *owner = update_msg.mutable_owner_soid();
+    owner->set_type(1u);
+    owner->set_id(player_steam_id.ConvertToUint64());
+
+    std::size_t equipped_count = 0;
+    for (const Econ_Item &item : source_items) {
+        if (item.equip_states.empty())
+            continue;
+
+        auto *object = update_msg.add_objects();
+        object->set_type_id(1u);
+        object->set_object_data(target_gc->serialize_item_to_gcprotobuf(item, player_steam_id));
+        ++equipped_count;
+    }
+
+    if (equipped_count == 0)
+        return false;
+
+    std::uint64_t version = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+    std::uint64_t previous_version = last_update_version.load(std::memory_order_relaxed);
+    for (;;) {
+        const std::uint64_t candidate = std::max<std::uint64_t>(version, previous_version + std::uint64_t{1});
+        if (last_update_version.compare_exchange_weak(
+                previous_version,
+                candidate,
+                std::memory_order_relaxed,
+                std::memory_order_relaxed)) {
+            version = candidate;
+            break;
+        }
+    }
+    update_msg.set_version(version);
+    update_msg.set_service_id(1u);
+
+    std::string update_message;
+    gbe::gc_message::build_dota_zero_header_payload(26u, update_msg.SerializeAsString(), update_message);
+    target_gc->push_incoming_message(26u | GBE_kProtoMask, update_message);
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_EQUIP_REFRESH",
+        "pushed equipped item SO update role=%s target_gc=%p steam64=%llu equipped_items=%zu version=%llu reason=%s message_size=%zu",
+        target_gc->GBE_IsServerGC() ? "server" : "client",
+        static_cast<void *>(target_gc),
+        static_cast<unsigned long long>(player_steam_id.ConvertToUint64()),
+        equipped_count,
+        static_cast<unsigned long long>(version),
+        reason ? reason : "unknown",
+        update_message.size()
+    );
+    return true;
+}
+
 // =====================================================================
 // Phase 2.13 pure item helpers (GBE_ParseDotaEquipOps,
 // GBE_ApplyDotaUnlockStyleBitmask, GBE_SerializeEconItemToGcprotobuf,

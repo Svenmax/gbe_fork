@@ -498,6 +498,12 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(
             static_cast<unsigned long long>(source_job)
         );
     }
+
+    GBE_PushDotaPlayerEquippedItemsUpdateToGC(
+        client_gc,
+        owner_id,
+        client_items,
+        "7034_owner_hero_known_client_update");
 }
 
 

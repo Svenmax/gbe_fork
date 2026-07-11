@@ -230,12 +230,17 @@ public:
 class Steam_Game_Coordinator
 {
 public:
-    void push_incoming_message(uint32_t msg_type, const std::string &msg) { (void)msg_type; (void)msg; }
-    bool GBE_IsServerGC() const { return true; }
+    void push_incoming_message(uint32_t msg_type, const std::string &msg)
+        { pushed_msg_type = msg_type; pushed_message = msg; }
+    bool GBE_IsServerGC() const { return is_server; }
     std::string serialize_item_to_gcprotobuf(const Econ_Item &item, const CSteamID &steam_id)
-        { (void)item; (void)steam_id; return {}; }
+        { (void)steam_id; return std::to_string(item.id); }
     bool GBE_TryRecoverDotaReconnectContextFromGenericLobbies(uint64_t local_steam_id, GBE_DotaReconnectContext *out)
         { (void)local_steam_id; (void)out; return false; }
+
+    bool is_server{true};
+    uint32_t pushed_msg_type{};
+    std::string pushed_message;
 };
 
 // =====================================================================

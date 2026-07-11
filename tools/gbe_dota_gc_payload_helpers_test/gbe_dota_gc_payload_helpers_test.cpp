@@ -18,13 +18,11 @@
 // Unit tests for gbe_dota_gc_payload_helpers.cpp
 //
 // This TU was externalized from steam_game_coordinator.cpp and contains
-// ~44 free functions that perform protobuf wire-level payload patching,
+// Free functions that perform protobuf wire-level payload patching,
 // template replay, Hello/Welcome context extraction, and message construction.
 //
-// These tests verify the pure-logic functions that do NOT depend on
-// Steam_Game_Coordinator runtime state. Functions requiring runtime
-// state (e.g. GBE_PushDotaPlayerEquippedItemsCacheToGC which needs a
-// target_gc pointer) are tested via integration in gc_replay_test.
+// Most tests cover pure logic. Small coordinator stubs also verify focused
+// message-construction helpers without loading the production runtime.
 //
 // Compilation: this file is compiled together with test_wrapper.cpp which
 // includes the actual payload_helpers.cpp TU with stubbed SDK types.
