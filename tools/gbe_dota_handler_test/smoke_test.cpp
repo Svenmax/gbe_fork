@@ -2925,9 +2925,11 @@ static void test_match_7034_connected_player_updates_runtime_before_response()
     TEST_ASSERT_EQ(tf.recorder.actions[3].msg_type, 1029u, "fourth action should request host local wearable refresh");
     TEST_ASSERT_EQ(tf.recorder.actions[3].steam_id, owner_steam_id, "wearable refresh should target the lobby owner");
     TEST_ASSERT_EQ(tf.recorder.actions[3].delay, 0.1, "first wearable refresh should use the default hot-cache delay");
+    TEST_ASSERT(tf.recorder.actions[3].server_gc, "first wearable refresh should be delivered by the server GC");
     TEST_ASSERT_EQ(tf.recorder.actions[4].msg_type, 1029u, "fifth action should request delayed cold-start wearable refresh");
     TEST_ASSERT_EQ(tf.recorder.actions[4].steam_id, owner_steam_id, "delayed wearable refresh should target the lobby owner");
     TEST_ASSERT_EQ(tf.recorder.actions[4].delay, 1.5, "second wearable refresh should cover cold-start entity initialization");
+    TEST_ASSERT(tf.recorder.actions[4].server_gc, "delayed wearable refresh should be delivered by the server GC");
     expect_push_action(tf.recorder.actions[5], 26u, "sixth action should queue runtime update");
     expect_push_payload(tf.recorder.actions[6], 7034u, "seventh action should push 7034 response with payload");
 

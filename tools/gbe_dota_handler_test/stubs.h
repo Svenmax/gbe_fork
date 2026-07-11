@@ -302,6 +302,7 @@ struct RecordedAction
     std::string reason;          // Dota response / LobbySnapshotRefresh / ServerGcForward
     int callback_id{};           // CallbackResult
     uint64 source_id{};          // NetworkBroadcast
+    bool server_gc{};            // PushIncoming
     bool wrapped{};              // Dota response wrapper flag
     std::string session_raw;     // Dota response outer session field
     std::string status;          // RichPresenceUpdate
@@ -456,7 +457,7 @@ public:
         actions.push_back(std::move(a));
     }
 
-    void record_respawn_request(uint64 steam_id, double delay)
+    void record_respawn_request(uint64 steam_id, double delay, bool server_gc)
     {
         RecordedAction a;
         a.type = GBE_DotaActionType::PushIncoming;
@@ -464,6 +465,7 @@ public:
         a.steam_id = steam_id;
         a.reason = "host_local_wearable_refresh";
         a.delay = delay;
+        a.server_gc = server_gc;
         actions.push_back(std::move(a));
     }
 
@@ -1337,7 +1339,7 @@ public:
     void callback_respawn_request(CSteamID steam_id, double delay = 0.1)
     {
         if (g_action_recorder)
-            g_action_recorder->record_respawn_request(steam_id.ConvertToUint64(), delay);
+            g_action_recorder->record_respawn_request(steam_id.ConvertToUint64(), delay, is_server);
     }
     void callback_client_welcome() {}
     void callback_server_welcome() {}
