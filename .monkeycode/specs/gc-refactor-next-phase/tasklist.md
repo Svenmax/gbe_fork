@@ -513,9 +513,11 @@
     - 条件触发时仅对 Lobby lifecycle、generation 和 reconnect dedup 建立 TLA+/Alloy 模型。
     - 触发阈值：状态机超过 16 states、24 event kinds 或 384 reachable pairs；单阶段两个 duplicate/stale/out-of-order escaped defects；不可逆持久化数据、隔离边界或远端协议损坏；同一 release cycle 至少三名 active maintainer 持续修改 transition contract。前两类与多人维护条件至少命中两项，critical failure 可单独触发。
     - 当前判定：8 states、13 events、104 pairs 全部具备 compile-time completeness；100,000 条长度 5 序列、全 stale-generation 矩阵和 4,096 步 differential model 已覆盖重复/乱序核心不变量；拒绝 transition 保持 state 且无 effects，generation guard 丢弃 stale work；未记录 post-P14 escaped defect 或三人并行维护压力。形式化模型门禁关闭。
-  - [ ] 15.3 建立 P17 模型一致性门禁触发条件检查
+  - [x] 15.3 建立 P17 模型一致性门禁触发条件检查
     - P16 模型进入长期维护后，再增加模型生成测试向量、C++ differential test 和 CI model checker。
     - 模型未成为受维护交付物时，不建立双轨 CI。
+    - 启用条件：P16 门禁已开启且模型已提交；具名 owner/reviewer；版本化 machine-readable vector schema；C++ test 消费 generated vectors 并保留独立 reference model；pinned checker 与确定性本地命令在 CI 10 分钟内完成且失败可定位。
+    - 当前判定：P16 门禁关闭，仓库中无 maintained TLA+/Alloy deliverable、owner、vector schema、pinned checker 或 runtime baseline。P17 门禁关闭，继续使用现有 offline/property/differential/audit、Windows/Linux production build 和 Clang TSAN 分层 CI。
   - [ ] 15.4 将决策依据固化为可重复检查
     - 使用 TSAN 报告、缺陷记录、状态机覆盖率和 CI 时间作为输入。
     - 每次重大并发或状态机扩展后重新执行该决策检查。

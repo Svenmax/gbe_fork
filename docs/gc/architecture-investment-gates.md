@@ -55,3 +55,25 @@ Decision date: 2026-07-11.
 | Maintenance pressure | The transition contract is centralized in one dependency-light header with one test owner and one production effect-gate audit. No three-maintainer concurrent-change record exists. | Clear |
 
 The formal model gate is closed. The current constexpr transition table, compile-time completeness checks, deterministic properties, and differential reference model remain the selected verification strategy.
+
+## Model Consistency CI Gate
+
+Model-generated vectors and a CI model checker are triggered only after all conditions below are present:
+
+1. The Formal Model Gate is open and a TLA+ or Alloy model is committed as a maintained deliverable.
+2. A named owner and reviewer are responsible for updating the model with every lifecycle vocabulary or invariant change.
+3. The model exposes a versioned machine-readable vector format for state, event, generation, reconnect key, decision, and effects.
+4. The C++ differential test consumes generated vectors without replacing the independent deterministic reference model.
+5. A pinned model-checker version and deterministic local command complete within 10 minutes on the CI runner, with failures identifying the invariant or vector mismatch.
+
+When triggered, CI uses separate checks for model invariants and C++ vector conformance. Generated files must carry the model version and generation command. Pull requests that change lifecycle vocabulary, transition rules, generation semantics, reconnect deduplication, or modeled invariants must update both checks.
+
+When the formal model has no maintained owner or machine-readable contract, CI retains the existing compile-time transition completeness, C++ properties, differential reference model, production-path tests, and architecture audits.
+
+## Current Model Consistency Decision
+
+Decision date: 2026-07-11.
+
+The Formal Model Gate is closed and the repository has no maintained TLA+ or Alloy deliverable, model owner, generated-vector schema, pinned checker, or measured checker runtime. The Model Consistency CI Gate is therefore closed. Adding model-generated vectors or a model-checker job now would create an unowned second source of truth.
+
+The existing blocking layers remain selected: fast offline/property/differential tests and architecture audit, Windows and Linux production builds, and Clang ThreadSanitizer.
