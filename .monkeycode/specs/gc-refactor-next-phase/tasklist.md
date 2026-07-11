@@ -559,6 +559,8 @@
     - offline、audit、Windows/Linux production build 和 TSAN 均为明确且可定位失败的检查项。
     - 验收结果：PR workflow 保持 Windows release、Linux release、GC verification 和 GC ThreadSanitizer 四个独立 blocking job；fast job 运行 offline/audit/diff，production reusable workflows 构建 `api_experimental` x64 release，TSAN 使用 Clang dedicated script。
     - Audit 26 固化四个稳定 job/step 名称、reusable workflow 与 blocking token，并要求 verification/TSAN scripts 使用 `set -euo pipefail`；Audit 17 继续保证分层内容完整。审计 helper 增至 69 项。
-  - [ ] 16.8 验收投资边界
+  - [x] 16.8 验收投资边界
     - P14、P16、P17 依据任务 15 的客观触发条件决定，避免默认扩大重构范围。
+    - 验收结果：当前证据重新推导 Actor、formal model 和 model consistency CI 三项门禁均关闭；维持 Store/generation/显式锁、constexpr transition/properties/differential，以及现有分层 CI。
+    - Audit 27 按 TSAN race、锁深度、乱序缺陷、跨线程 writer、状态空间、escaped defects、critical scope、maintainer 与 model readiness 重新计算三项门禁，并校验 JSON、门禁文档和任务清单结论一致。审计 helper 增至 73 项。
   - [ ] 16.9 最终检查点：确保所有测试通过，如有疑问请询问用户

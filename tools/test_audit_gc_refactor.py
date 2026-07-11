@@ -319,6 +319,51 @@ class ArchitectureInvestmentInputsAuditTest(unittest.TestCase):
         )
 
 
+class ArchitectureInvestmentBoundaryAuditTest(unittest.TestCase):
+    def closed_records(self):
+        value = json.loads(json.dumps(ArchitectureInvestmentInputsAuditTest.VALID))
+        gates = """
+The Actor gate is closed.
+The formal model gate is closed.
+The Model Consistency CI Gate is therefore closed.
+"""
+        tasklist = "Actor 门禁关闭\n形式化模型门禁关闭\nP17 门禁关闭"
+        return value, gates, tasklist
+
+    def test_accepts_evidence_derived_closed_gates(self):
+        value, gates, tasklist = self.closed_records()
+        self.assertEqual(
+            [],
+            audit.audit_architecture_investment_boundaries(json.dumps(value), gates, tasklist),
+        )
+
+    def test_rejects_actor_decision_inconsistent_with_race_evidence(self):
+        value, gates, tasklist = self.closed_records()
+        value["concurrency"]["tsan_race_reports"] = 1
+        self.assertIn(
+            "architecture-investment-inputs.json: actor_gate must be open for the recorded evidence",
+            audit.audit_architecture_investment_boundaries(json.dumps(value), gates, tasklist),
+        )
+
+    def test_rejects_formal_model_decision_inconsistent_with_thresholds(self):
+        value, gates, tasklist = self.closed_records()
+        value["state_machine"]["state_count"] = 17
+        value["state_machine"]["state_event_pairs"] = 221
+        value["state_machine"]["active_transition_maintainers_in_release"] = 3
+        self.assertIn(
+            "architecture-investment-inputs.json: formal_model_gate must be open for the recorded evidence",
+            audit.audit_architecture_investment_boundaries(json.dumps(value), gates, tasklist),
+        )
+
+    def test_rejects_documented_decision_drift(self):
+        value, gates, tasklist = self.closed_records()
+        gates = gates.replace("The formal model gate is closed.\n", "")
+        self.assertIn(
+            "architecture-investment-gates.md: missing derived decision 'The formal model gate is closed.'",
+            audit.audit_architecture_investment_boundaries(json.dumps(value), gates, tasklist),
+        )
+
+
 class HandlerResponsibilityBoundaryAuditTest(unittest.TestCase):
     def test_accepts_existing_or_reduced_compatibility_operations(self):
         sources = {

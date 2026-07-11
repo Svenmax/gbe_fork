@@ -281,6 +281,11 @@ CI_LOCALIZATION_GATES = {
     "gc-verification": ('name: "gc verification"', 'name: "Run fast GC verification"', "run_gc_verification.sh --fast --base-sha"),
     "gc-tsan": ('name: "gc thread sanitizer"', 'name: "Run GC ThreadSanitizer tests"', "bash tools/run_gc_tsan_tests.sh"),
 }
+INVESTMENT_GATE_DECISION_TOKENS = {
+    "actor_gate": "The Actor gate is {decision}.",
+    "formal_model_gate": "The formal model gate is {decision}.",
+    "model_ci_gate": "The Model Consistency CI Gate is therefore {decision}.",
+}
 RETIRED_SHARED_LOBBY_COMPATIBILITY_SYMBOLS = (
     "GBE_DotaSharedLobbyScalarSnapshot",
     "GBE_GetSharedDotaLobbyScalarSnapshot",
@@ -923,6 +928,69 @@ def audit_architecture_investment_inputs(input_text=None):
         value = ci_seconds.get(field)
         if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
             issues.append(f"architecture-investment-inputs.json: ci_seconds.{field} must be positive")
+    return issues
+
+
+def audit_architecture_investment_boundaries(input_text=None, gates_text=None, tasklist_text=None):
+    """Derive optional architecture decisions from evidence and keep records aligned."""
+    if input_text is None:
+        input_text = read(ARCHITECTURE_INVESTMENT_INPUTS_JSON)
+    if gates_text is None:
+        gates_text = read(os.path.join(ROOT_DIR, "docs", "gc", "architecture-investment-gates.md"))
+    if tasklist_text is None:
+        tasklist_text = read(os.path.join(ROOT_DIR, ".monkeycode", "specs", "gc-refactor-next-phase", "tasklist.md"))
+    try:
+        inputs = json.loads(input_text)
+    except (TypeError, json.JSONDecodeError) as exc:
+        return [f"architecture-investment-inputs.json: invalid JSON for gate derivation: {exc}"]
+
+    concurrency = inputs.get("concurrency", {})
+    state_machine = inputs.get("state_machine", {})
+    model = inputs.get("model_consistency", {})
+    actor_open = (
+        concurrency.get("tsan_race_reports", 0) > 0
+        or concurrency.get("lock_order_depth", 0) > 2
+        or concurrency.get("out_of_order_mutation_defects_in_phase", 0) >= 2
+        or concurrency.get("unowned_cross_thread_business_writers", 0) > 0
+    )
+    formal_conditions = sum((
+        state_machine.get("state_count", 0) > 16
+        or state_machine.get("event_count", 0) > 24
+        or state_machine.get("state_event_pairs", 0) > 384,
+        state_machine.get("escaped_ordering_defects_in_phase", 0) >= 2,
+        state_machine.get("active_transition_maintainers_in_release", 0) >= 3,
+    ))
+    formal_open = bool(state_machine.get("critical_irreversible_failure_scope", False)) or formal_conditions >= 2
+    model_open = formal_open and all(
+        model.get(field) is True
+        for field in ("maintained_formal_model", "named_owner_and_reviewer", "versioned_vector_schema", "pinned_checker")
+    )
+    expected = {
+        "actor_gate": "open" if actor_open else "closed",
+        "formal_model_gate": "open" if formal_open else "closed",
+        "model_ci_gate": "open" if model_open else "closed",
+    }
+    recorded = {
+        "actor_gate": concurrency.get("actor_gate"),
+        "formal_model_gate": state_machine.get("formal_model_gate"),
+        "model_ci_gate": model.get("model_ci_gate"),
+    }
+
+    issues = []
+    for gate, decision in expected.items():
+        if recorded[gate] != decision:
+            issues.append(f"architecture-investment-inputs.json: {gate} must be {decision} for the recorded evidence")
+        document_token = INVESTMENT_GATE_DECISION_TOKENS[gate].format(decision=decision)
+        if document_token not in gates_text:
+            issues.append(f"architecture-investment-gates.md: missing derived decision '{document_token}'")
+    task_tokens = (
+        f"Actor 门禁{'关闭' if expected['actor_gate'] == 'closed' else '开启'}",
+        f"形式化模型门禁{'关闭' if expected['formal_model_gate'] == 'closed' else '开启'}",
+        f"P17 门禁{'关闭' if expected['model_ci_gate'] == 'closed' else '开启'}",
+    )
+    for token in task_tokens:
+        if token not in tasklist_text:
+            issues.append(f"tasklist.md: missing derived investment decision {token}")
     return issues
 
 
@@ -1955,6 +2023,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 27: Architecture investment boundaries")
+    print("=" * 70)
+    print("  Action: derive Actor, formal-model, and model-CI decisions from versioned evidence.")
+    architecture_investment_boundary_issues = audit_architecture_investment_boundaries()
+    if not architecture_investment_boundary_issues:
+        print("  JSON evidence, gate documentation, and task decisions remain aligned with objective thresholds")
+    else:
+        for issue in architecture_investment_boundary_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -1986,8 +2066,9 @@ def main():
     print(f"  Async generation safety issues:       {len(async_generation_issues)}")
     print(f"  High-risk test credibility issues:    {len(test_credibility_issues)}")
     print(f"  CI failure localization issues:       {len(ci_failure_localization_issues)}")
+    print(f"  Architecture investment boundary issues: {len(architecture_investment_boundary_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
         sys.exit(1)
 
 
