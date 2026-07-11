@@ -33,7 +33,7 @@ gbe::dota_diagnostic::Event lifecycle_action_event(
     if (action.emsg != 0u)
         diagnostic = gbe::dota_diagnostic::with_message_id(
             diagnostic,
-            action.emsg & ~Steam_Game_Coordinator::protobuf_mask);
+            action.emsg & ~GBE_kProtoMask);
     if (action.job_id != 0u)
         diagnostic = gbe::dota_diagnostic::with_job_id(diagnostic, action.job_id);
     return diagnostic;

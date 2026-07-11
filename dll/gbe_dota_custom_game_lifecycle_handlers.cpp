@@ -4,6 +4,7 @@
 #include "dll/dll.h"
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_custom_game_lifecycle.h"
+#include "gbe_dota_gc_internal.h"
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lifecycle_state_machine.h"

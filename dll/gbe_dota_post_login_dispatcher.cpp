@@ -1,6 +1,8 @@
 #include "dll/steam_game_coordinator.h"
 
 #include "gbe_dota_gc_internal.h"
+#include "gbe_dota_protocol_constants.h"
+#include "gbe_proto_wire.h"
 
 namespace registry = gbe::dota_handler_registry;
 
