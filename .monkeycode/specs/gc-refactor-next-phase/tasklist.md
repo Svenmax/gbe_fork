@@ -530,8 +530,10 @@
     - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 42/42，19 项 production audit 零问题，TSAN 无 race。
 
 - [ ] 16. 完成后续重构架构验收
-  - [ ] 16.1 验收 handler 职责边界
+  - [x] 16.1 验收 handler 职责边界
     - handler 只执行 registry dispatch、parse、context mapping、planner/executor 调用和结构化日志。
+    - 验收解释：handler 继续保留历史 wire response adaptation/push 与 5 个 local-lobby commit compatibility seam，避免为物理纯化改写稳定协议顺序；新增业务状态或副作用 ownership 必须进入 coordinator/executor。
+    - Audit 20 去注释后统计 direct `push_incoming_now`、inventory network broadcast、`GBE_local_lobby` assignment 和 Store accessor；当前 34 个已知 compatibility operations 只能保持或收缩，任何新增 direct operation 阻断。审计 helper 增至 46 项。
   - [ ] 16.2 验收状态与副作用边界
     - domain planner 保持纯决策；executor 拥有副作用；store 拥有共享状态；network adapter 拥有 Steam 网络调用。
   - [ ] 16.3 验收依赖与对象生命周期

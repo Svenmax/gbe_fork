@@ -110,6 +110,19 @@ HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE = {
     ("gbe_dota_post_login_handlers.cpp", "save_items_to_file"): 1,
     ("gbe_dota_template_replay_handlers.cpp", "save_items_to_file"): 4,
 }
+HANDLER_RESPONSIBILITY_BASELINE = {
+    ("gbe_dota_chat_handlers.cpp", "GBE_local_lobby assignment"): 1,
+    ("gbe_dota_chat_handlers.cpp", "push_incoming_now"): 1,
+    ("gbe_dota_custom_game_lifecycle_handlers.cpp", "push_incoming_now"): 1,
+    ("gbe_dota_inventory_handlers.cpp", "network sendToAllGameservers"): 1,
+    ("gbe_dota_inventory_handlers.cpp", "push_incoming_now"): 6,
+    ("gbe_dota_lobby_handlers.cpp", "GBE_local_lobby assignment"): 4,
+    ("gbe_dota_lobby_handlers.cpp", "push_incoming_now"): 7,
+    ("gbe_dota_match_handlers.cpp", "push_incoming_now"): 1,
+    ("gbe_dota_misc_handlers.cpp", "push_incoming_now"): 1,
+    ("gbe_dota_post_login_handlers.cpp", "push_incoming_now"): 1,
+    ("gbe_dota_template_replay_handlers.cpp", "push_incoming_now"): 10,
+}
 LIFECYCLE_EXECUTOR_OWNER = "gbe_dota_custom_game_lifecycle_coordinator.cpp"
 LIFECYCLE_PLANNER = "gbe_dota_lifecycle_actions.cpp"
 LIFECYCLE_SIDE_EFFECT_APIS = [
@@ -524,6 +537,43 @@ def audit_handler_side_effect_seams(tu_paths=None, source_texts=None, baseline=N
             issues.append(f"{key[0]}: {key[1]} baseline expected {expected_count}, found 0; remove stale baseline entry or confirm the seam migration")
 
     return issues, sum(actual.values()), len(baseline)
+
+
+def audit_handler_responsibility_boundaries(source_texts=None, baseline=None):
+    """Prevent ordinary handlers from expanding direct state and effect ownership."""
+    if source_texts is None:
+        source_texts = {
+            os.path.basename(path): read(path)
+            for path in GC_TUS
+        }
+    if baseline is None:
+        baseline = HANDLER_RESPONSIBILITY_BASELINE
+
+    patterns = {
+        "push_incoming_now": re.compile(r"\bpush_incoming_now\s*\("),
+        "network sendToAllGameservers": re.compile(r"\bnetwork\s*->\s*sendToAllGameservers\s*\("),
+        "GBE_local_lobby assignment": re.compile(r"\bGBE_local_lobby\s*=(?!=)"),
+        "shared Store accessor": re.compile(r"\bGBE_GetSharedDotaLobbyStateStore\s*\("),
+    }
+    actual = {}
+    for source_name, source_text in source_texts.items():
+        base = os.path.basename(source_name)
+        if not base.startswith("gbe_dota_") or not base.endswith("_handlers.cpp"):
+            continue
+        uncommented = strip_comments(source_text)
+        for responsibility, pattern in patterns.items():
+            count = len(pattern.findall(uncommented))
+            if count:
+                actual[(base, responsibility)] = count
+
+    issues = []
+    for key, count in sorted(actual.items()):
+        allowed = baseline.get(key, 0)
+        if count > allowed:
+            issues.append(
+                f"{key[0]}: direct {key[1]} count {count} exceeds accepted handler boundary {allowed}; route new work through a coordinator or executor"
+            )
+    return issues, actual
 
 
 def audit_lifecycle_side_effect_ownership():
@@ -1481,6 +1531,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 20: Handler responsibility boundaries")
+    print("=" * 70)
+    print("  Action: keep handlers on dispatch, parse, mapping, orchestration, response adaptation, and logging.")
+    handler_responsibility_issues, handler_responsibilities = audit_handler_responsibility_boundaries()
+    if not handler_responsibility_issues:
+        print(f"  All {sum(handler_responsibilities.values())} accepted direct handler compatibility operations remain at or below baseline")
+    else:
+        for issue in handler_responsibility_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -1505,8 +1567,9 @@ def main():
     print(f"  Layered CI gate issues:               {len(layered_ci_issues)}")
     print(f"  Lifecycle transition gate issues:    {len(lifecycle_transition_gate_issues)}")
     print(f"  Architecture investment issues:      {len(architecture_investment_input_issues)}")
+    print(f"  Handler responsibility issues:       {len(handler_responsibility_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues:
         sys.exit(1)
 
 

@@ -179,6 +179,39 @@ class ArchitectureInvestmentInputsAuditTest(unittest.TestCase):
         )
 
 
+class HandlerResponsibilityBoundaryAuditTest(unittest.TestCase):
+    def test_accepts_existing_or_reduced_compatibility_operations(self):
+        sources = {
+            "gbe_dota_lobby_handlers.cpp": "push_incoming_now(24, payload); GBE_local_lobby = lobby;",
+            "gbe_dota_inventory_handlers.cpp": "network->sendToAllGameservers(&message, true);",
+        }
+        self.assertEqual([], audit.audit_handler_responsibility_boundaries(sources)[0])
+
+    def test_rejects_new_direct_response_push(self):
+        sources = {
+            "gbe_dota_match_handlers.cpp": "push_incoming_now(1, a); push_incoming_now(2, b);",
+        }
+        self.assertIn(
+            "gbe_dota_match_handlers.cpp: direct push_incoming_now count 2 exceeds accepted handler boundary 1; route new work through a coordinator or executor",
+            audit.audit_handler_responsibility_boundaries(sources)[0],
+        )
+
+    def test_rejects_handler_store_access(self):
+        sources = {
+            "gbe_dota_match_handlers.cpp": "auto snapshot = GBE_GetSharedDotaLobbyStateStore().snapshot();",
+        }
+        self.assertIn(
+            "gbe_dota_match_handlers.cpp: direct shared Store accessor count 1 exceeds accepted handler boundary 0; route new work through a coordinator or executor",
+            audit.audit_handler_responsibility_boundaries(sources)[0],
+        )
+
+    def test_ignores_mentions_inside_comments(self):
+        sources = {
+            "gbe_dota_match_handlers.cpp": "// push_incoming_now(1, payload);\n/* GBE_local_lobby = lobby; */",
+        }
+        self.assertEqual([], audit.audit_handler_responsibility_boundaries(sources)[0])
+
+
 class ConcurrencyOwnershipAuditTest(unittest.TestCase):
     def test_contract_terms_cover_p11_state_and_follow_up_boundaries(self):
         required = set(audit.CONCURRENCY_OWNERSHIP_TERMS)
