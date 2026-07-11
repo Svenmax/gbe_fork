@@ -501,7 +501,7 @@
     - GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 38/38，18 项 production audit 零问题。
     - P14 显式纯状态机阶段完成：typed vocabulary、纯 transition、generation/reconnect、production effect gates、完整 transition table、示例/属性/differential 测试和架构审计均已关闭。
 
-- [ ] 15. 设置 P14、P16、P17 条件决策门禁
+- [x] 15. 设置 P14、P16、P17 条件决策门禁
   - [x] 15.1 建立 P14 Actor 触发条件检查
     - 汇总 TSAN 结果、锁复杂度、乱序 callback 缺陷和跨线程状态访问数量。
     - 当存在持续竞态、锁顺序难以稳定或多线程直接写业务状态时，创建 P14 单一状态所有者实施清单。
@@ -524,7 +524,10 @@
     - 机器可读输入：`docs/gc/architecture-investment-inputs.json` 记录 schema/date、TSAN race、lock depth、乱序与跨线程 writer 缺陷、8 x 13 = 104 状态空间、100,000 序列、4,096 differential steps、maintainer/critical scope、model readiness 和 CI wall-clock。
     - 初始成本基线：本地 fast offline 135.14 秒，Clang TSAN 59.48 秒；model checker 上限 600 秒。数值用于投资判断，不作为性能 SLA。
     - Audit 19 校验完整字段、非负/正数约束、state/event pair 乘积、gate 枚举和 concurrency/state-machine 两类重大扩展复查 trigger；审计 helper 增至 42 项。
-  - [ ] 15.5 检查点：确保所有测试通过，如有疑问请询问用户
+  - [x] 15.5 检查点：确保所有测试通过，如有疑问请询问用户
+    - 决策结果：Actor、formal model 和 model consistency CI 三个可选投资门禁均关闭；当前证据支持继续使用 Store/generation/显式锁、constexpr transition/properties/differential model，以及现有分层 CI。
+    - 可重复性：门禁规则位于 `docs/gc/architecture-investment-gates.md`，版本化输入位于 `docs/gc/architecture-investment-inputs.json`，Audit 19 在重大 concurrency 或 lifecycle state-machine expansion 后要求刷新输入。
+    - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 42/42，19 项 production audit 零问题，TSAN 无 race。
 
 - [ ] 16. 完成后续重构架构验收
   - [ ] 16.1 验收 handler 职责边界
