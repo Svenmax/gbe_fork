@@ -529,7 +529,7 @@
     - 可重复性：门禁规则位于 `docs/gc/architecture-investment-gates.md`，版本化输入位于 `docs/gc/architecture-investment-inputs.json`，Audit 19 在重大 concurrency 或 lifecycle state-machine expansion 后要求刷新输入。
     - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 42/42，19 项 production audit 零问题，TSAN 无 race。
 
-- [ ] 16. 完成后续重构架构验收
+- [x] 16. 完成后续重构架构验收
   - [x] 16.1 验收 handler 职责边界
     - handler 只执行 registry dispatch、parse、context mapping、planner/executor 调用和结构化日志。
     - 验收解释：handler 继续保留历史 wire response adaptation/push 与 5 个 local-lobby commit compatibility seam，避免为物理纯化改写稳定协议顺序；新增业务状态或副作用 ownership 必须进入 coordinator/executor。
@@ -563,4 +563,8 @@
     - P14、P16、P17 依据任务 15 的客观触发条件决定，避免默认扩大重构范围。
     - 验收结果：当前证据重新推导 Actor、formal model 和 model consistency CI 三项门禁均关闭；维持 Store/generation/显式锁、constexpr transition/properties/differential，以及现有分层 CI。
     - Audit 27 按 TSAN race、锁深度、乱序缺陷、跨线程 writer、状态空间、escaped defects、critical scope、maintainer 与 model readiness 重新计算三项门禁，并校验 JSON、门禁文档和任务清单结论一致。审计 helper 增至 73 项。
-  - [ ] 16.9 最终检查点：确保所有测试通过，如有疑问请询问用户
+  - [x] 16.9 最终检查点：确保所有测试通过，如有疑问请询问用户
+    - 架构验收：handler responsibility、state/effect ownership、dependency/object lifecycle、core state machine、generation-scoped async work、test credibility、CI localization 和 investment boundaries 全部关闭；Audit 20-27 持续阻断边界回退。
+    - GCC full verification 通过：reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，composition-root/state-machine/concurrency tests 通过，audit helper 73/73，27 项 production audit 零问题。
+    - Clang TSAN 通过：reconnect 772/772 与 bounded concurrency stress 均通过，零 race report。
+    - 行为与协议保持：P0 replay baseline 无漂移，typed registry 仍为 post-login mapping 唯一来源，wire response ordering、unknown fallback、public Steam API 和 client/gameserver 初始化语义保持稳定。
