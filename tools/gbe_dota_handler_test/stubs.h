@@ -78,6 +78,9 @@ extern uint64_t GBE_pending_reset_after_cache_unsubscribed_lobby_id;
 extern bool GBE_pending_dota_normal_signout_finalize_after_25;
 extern uint64_t GBE_pending_dota_normal_signout_finalize_lobby_id;
 extern bool GBE_dota_host_showcase_equip_pushed;
+extern uint64_t GBE_dota_host_local_wearable_refresh_generation;
+extern uint64_t GBE_dota_host_local_wearable_refresh_steam_id;
+extern uint32_t GBE_dota_host_local_wearable_refresh_hero_id;
 
 // =====================================================================
 // Core type surface: Steam SDK aliases and constants
@@ -449,6 +452,16 @@ public:
         a.type = GBE_DotaActionType::PushIncoming;
         a.msg_type = msg_type;
         a.msg_body = msg_body;
+        actions.push_back(std::move(a));
+    }
+
+    void record_respawn_request(uint64 steam_id)
+    {
+        RecordedAction a;
+        a.type = GBE_DotaActionType::PushIncoming;
+        a.msg_type = 1029u;
+        a.steam_id = steam_id;
+        a.reason = "host_local_wearable_refresh";
         actions.push_back(std::move(a));
     }
 
@@ -1007,6 +1020,24 @@ public:
     bool GBE_HasPushedDotaHostShowcaseEquip() const { return GBE_dota_host_showcase_equip_pushed; }
     void GBE_MarkDotaHostShowcaseEquipPushed() { GBE_dota_host_showcase_equip_pushed = true; }
     void GBE_ClearDotaHostShowcaseEquipPushed() { GBE_dota_host_showcase_equip_pushed = false; }
+    bool GBE_HasRefreshedDotaHostLocalWearables(uint64 steam_id, uint32 hero_id) const
+    {
+        return GBE_dota_host_local_wearable_refresh_generation == GBE_CurrentDotaLobbyGeneration() &&
+            GBE_dota_host_local_wearable_refresh_steam_id == steam_id &&
+            GBE_dota_host_local_wearable_refresh_hero_id == hero_id;
+    }
+    void GBE_MarkDotaHostLocalWearablesRefreshed(uint64 steam_id, uint32 hero_id)
+    {
+        GBE_dota_host_local_wearable_refresh_generation = GBE_CurrentDotaLobbyGeneration();
+        GBE_dota_host_local_wearable_refresh_steam_id = steam_id;
+        GBE_dota_host_local_wearable_refresh_hero_id = hero_id;
+    }
+    void GBE_ClearDotaHostLocalWearablesRefreshed()
+    {
+        GBE_dota_host_local_wearable_refresh_generation = 0;
+        GBE_dota_host_local_wearable_refresh_steam_id = 0;
+        GBE_dota_host_local_wearable_refresh_hero_id = 0;
+    }
     bool GBE_HasReplayedDotaPrivateLobbySnapshot() const { return GBE_dota_private_lobby_snapshot_replayed; }
     void GBE_MarkDotaPrivateLobbySnapshotReplayed() { GBE_dota_private_lobby_snapshot_replayed = true; }
     void GBE_ClearDotaPrivateLobbySnapshotReplayed() { GBE_dota_private_lobby_snapshot_replayed = false; }
@@ -1301,7 +1332,11 @@ public:
     void callback_items_received(CSteamID, const std::vector<Econ_Item> &) {}
     void callback_items_removed(CSteamID) {}
     void callback_item_deleted(CSteamID, uint64) {}
-    void callback_respawn_request(CSteamID) {}
+    void callback_respawn_request(CSteamID steam_id)
+    {
+        if (g_action_recorder)
+            g_action_recorder->record_respawn_request(steam_id.ConvertToUint64());
+    }
     void callback_client_welcome() {}
     void callback_server_welcome() {}
 

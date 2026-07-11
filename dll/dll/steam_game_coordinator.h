@@ -144,6 +144,9 @@ public ISteamGameCoordinator
     std::chrono::high_resolution_clock::time_point welcome_time{};
     bool GBE_dota_login_sync_sent{};
     bool GBE_dota_host_showcase_equip_pushed{};
+    uint64 GBE_dota_host_local_wearable_refresh_generation{};
+    uint64 GBE_dota_host_local_wearable_refresh_steam_id{};
+    uint32 GBE_dota_host_local_wearable_refresh_hero_id{};
     bool GBE_dota_private_lobby_snapshot_replayed{};
     uint32 GBE_last_dota_launch_state_pushed_game_state{};
     bool GBE_pending_reset_after_cache_unsubscribed{};
@@ -200,6 +203,9 @@ public ISteamGameCoordinator
     bool GBE_HasPushedDotaHostShowcaseEquip() const;
     void GBE_MarkDotaHostShowcaseEquipPushed();
     void GBE_ClearDotaHostShowcaseEquipPushed();
+    bool GBE_HasRefreshedDotaHostLocalWearables(uint64 steam_id, uint32 hero_id) const;
+    void GBE_MarkDotaHostLocalWearablesRefreshed(uint64 steam_id, uint32 hero_id);
+    void GBE_ClearDotaHostLocalWearablesRefreshed();
     bool GBE_HasReplayedDotaPrivateLobbySnapshot() const;
     void GBE_MarkDotaPrivateLobbySnapshotReplayed();
     void GBE_ClearDotaPrivateLobbySnapshotReplayed();

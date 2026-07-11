@@ -570,6 +570,27 @@ void Steam_Game_Coordinator::GBE_ClearDotaHostShowcaseEquipPushed()
     GBE_dota_host_showcase_equip_pushed = false;
 }
 
+bool Steam_Game_Coordinator::GBE_HasRefreshedDotaHostLocalWearables(uint64 steam_id, uint32 hero_id) const
+{
+    return GBE_dota_host_local_wearable_refresh_generation == GBE_CurrentDotaLobbyGeneration() &&
+        GBE_dota_host_local_wearable_refresh_steam_id == steam_id &&
+        GBE_dota_host_local_wearable_refresh_hero_id == hero_id;
+}
+
+void Steam_Game_Coordinator::GBE_MarkDotaHostLocalWearablesRefreshed(uint64 steam_id, uint32 hero_id)
+{
+    GBE_dota_host_local_wearable_refresh_generation = GBE_CurrentDotaLobbyGeneration();
+    GBE_dota_host_local_wearable_refresh_steam_id = steam_id;
+    GBE_dota_host_local_wearable_refresh_hero_id = hero_id;
+}
+
+void Steam_Game_Coordinator::GBE_ClearDotaHostLocalWearablesRefreshed()
+{
+    GBE_dota_host_local_wearable_refresh_generation = 0;
+    GBE_dota_host_local_wearable_refresh_steam_id = 0;
+    GBE_dota_host_local_wearable_refresh_hero_id = 0;
+}
+
 bool Steam_Game_Coordinator::GBE_HasReplayedDotaPrivateLobbySnapshot() const
 {
     return GBE_dota_private_lobby_snapshot_replayed;
@@ -1062,6 +1083,7 @@ void Steam_Game_Coordinator::shutdown_gc()
     delay_init = false;
     GBE_ClearDotaLoginSyncSent();
     GBE_ClearDotaHostShowcaseEquipPushed();
+    GBE_ClearDotaHostLocalWearablesRefreshed();
     GBE_ClearDotaPrivateLobbySnapshotReplayed();
     GBE_ClearLastDotaLaunchStatePushedGameState();
     GBE_last_lobby_poll_time = {};

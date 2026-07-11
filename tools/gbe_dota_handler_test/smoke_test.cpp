@@ -3004,6 +3004,7 @@ static void test_match_7034_host_showcase_repush_guard_marks_once()
     tf.gc.GBE_local_lobby.match_id = 0x703451u;
     tf.gc.GBE_local_lobby.server_id = 0x703452u;
     tf.gc.GBE_local_lobby.owner_steam_id = owner_steam_id;
+    tf.gc.GBE_local_lobby.owner_hero_id = 131u;
     tf.gc.GBE_local_lobby.state = 2u;
     tf.gc.GBE_local_lobby.game_state = 3u;
 
@@ -3018,10 +3019,12 @@ static void test_match_7034_host_showcase_repush_guard_marks_once()
 
     TEST_ASSERT(first_result, "7034 showcase handler should return true on first request");
     TEST_ASSERT(tf.gc.GBE_HasPushedDotaHostShowcaseEquip(), "first showcase request should mark host equip repushed");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "first showcase request should repush server cache then respond");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "first showcase request should repush server cache, refresh local wearables, then respond");
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::ServerGcForward, "first showcase action should repush host equipped items");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7034_showcase_host_equip_repush", "showcase repush reason should be preserved");
-    expect_push_payload(tf.recorder.actions[1], 7034u, "second action should push 7034 response with payload");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].msg_type, 1029u, "second action should request host local wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].steam_id, owner_steam_id, "wearable refresh should target the lobby owner");
+    expect_push_payload(tf.recorder.actions[2], 7034u, "third action should push 7034 response with payload");
 
     tf.recorder.clear();
     bool second_result = tf.gc.GBE_HandleDotaDirect7034Request(

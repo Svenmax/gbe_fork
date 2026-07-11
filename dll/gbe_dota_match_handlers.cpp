@@ -735,6 +735,25 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
         }
     }
 
+    if (is_server && GBE_HasPushedDotaHostShowcaseEquip() &&
+        request_shape.has_game_state && request_shape.game_state >= 4u &&
+        GBE_local_lobby.active && GBE_local_lobby.state == 2u) {
+        const uint64 owner_steam64 = GBE_GetDotaLobbyOwnerSteamId();
+        const uint32 owner_hero_id = GBE_local_lobby.owner_hero_id;
+        if (owner_steam64 != 0ull && owner_hero_id != 0u &&
+            !GBE_HasRefreshedDotaHostLocalWearables(owner_steam64, owner_hero_id)) {
+            callback_respawn_request(CSteamID(owner_steam64));
+            GBE_MarkDotaHostLocalWearablesRefreshed(owner_steam64, owner_hero_id);
+            GBE_GC_DebugLog(
+                "GC_DOTA_EQUIP_REFRESH",
+                "requested host local wearable refresh after showcase cache repush: steam64=%llu hero_id=%u generation=%llu",
+                static_cast<unsigned long long>(owner_steam64),
+                owner_hero_id,
+                static_cast<unsigned long long>(GBE_CurrentDotaLobbyGeneration())
+            );
+        }
+    }
+
     std::string response_message;
     const bool built_response = GBE_AdaptDota7034ConnectedPlayersResponsePayload(
         GBE_GetDotaLobbyOwnerSteamId(),

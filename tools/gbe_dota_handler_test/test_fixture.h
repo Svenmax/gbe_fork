@@ -41,6 +41,7 @@ struct TestFixture
         gc.GBE_ClearDotaLoginSyncSent();
         gc.GBE_ClearDotaPrivateLobbySnapshotReplayed();
         gc.GBE_ClearDotaHostShowcaseEquipPushed();
+        gc.GBE_ClearDotaHostLocalWearablesRefreshed();
         gc.GBE_ClearLastDotaLaunchStatePushedGameState();
         gc.GBE_ClearLastDotaLaunchPersonaSignature();
         gc.GBE_ClearLastDotaDirectConnectCallbackKey();

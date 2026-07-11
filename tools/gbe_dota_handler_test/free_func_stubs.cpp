@@ -45,6 +45,9 @@ bool GBE_recent_dota_reconnect_context_valid = false;
 GBE_DotaReconnectContext GBE_recent_dota_reconnect_context{};
 std::atomic<bool> GBE_dota_reconnect_eligible{true};
 bool GBE_dota_host_showcase_equip_pushed = false;
+uint64 GBE_dota_host_local_wearable_refresh_generation = 0;
+uint64 GBE_dota_host_local_wearable_refresh_steam_id = 0;
+uint32 GBE_dota_host_local_wearable_refresh_hero_id = 0;
 const std::array<uint8, 8> GBE_kOldDotaLobbyIdVarint = { 0x83, 0xcf, 0xa2, 0xb4, 0xa2, 0xff, 0xf9, 0x34 };
 const std::array<uint8, 5> GBE_kOldDotaPracticeLobbyMatchIdVarint = { 0xae, 0xbb, 0xa3, 0xcf, 0x06 };
 
