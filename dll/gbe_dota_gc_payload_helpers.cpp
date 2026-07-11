@@ -635,6 +635,8 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
     if (!target_gc || !player_steam_id.BIndividualAccount())
         return false;
 
+    target_gc->GBE_MirrorDotaEquippedItemsForUser(player_steam_id, source_items, reason);
+
     std::vector<const Econ_Item *> equipped_items;
     std::size_t equip_state_count = 0;
     std::uint64_t snapshot_hash = 1469598103934665603ull;
@@ -659,6 +661,23 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
         return false;
 
     const uint64 player_steam64 = player_steam_id.ConvertToUint64();
+
+    for (const Econ_Item *item : equipped_items) {
+        for (const auto &[class_id, slot_id] : item->equip_states) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_EQUIP_ITEM",
+                "role=%s steam64=%llu item_id=%llu def=%u style=%u class=%u slot=%u reason=%s",
+                target_gc->GBE_IsServerGC() ? "server" : "client",
+                static_cast<unsigned long long>(player_steam64),
+                static_cast<unsigned long long>(item->id),
+                item->def,
+                item->style,
+                static_cast<unsigned int>(class_id),
+                static_cast<unsigned int>(slot_id),
+                reason ? reason : "unknown"
+            );
+        }
+    }
 
     if (unsubscribe_first) {
         std::string unsub_message;
@@ -741,75 +760,6 @@ bool GBE_RefreshDotaHostEquippedItemsCache(
         safe_reason
     );
     return refreshed;
-}
-
-bool GBE_RebuildDotaPlayerItemsCacheToGC(
-    Steam_Game_Coordinator *target_gc,
-    const CSteamID &player_steam_id,
-    const std::vector<Econ_Item> &source_items,
-    const char *reason)
-{
-    if (!target_gc || !player_steam_id.IsValid())
-        return false;
-
-    std::size_t equipped_count = 0;
-    for (const Econ_Item &item : source_items) {
-        if (!item.equip_states.empty())
-            ++equipped_count;
-    }
-
-    if (source_items.empty() || equipped_count == 0)
-        return false;
-
-    const std::uint64_t clock_version = static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count());
-    auto &runtime_state = GBE_DotaRuntimeState();
-    const std::uint64_t version = std::max(clock_version, runtime_state.equip_cache_version) + 1ull;
-    runtime_state.equip_cache_version = version;
-
-    const std::uint64_t player_steam64 = player_steam_id.ConvertToUint64();
-    std::string unsub_message;
-    gbe::gc_message::build_dota_so_owner_cache_unsubscribed_payload(1u, player_steam64, unsub_message);
-    target_gc->push_incoming_message(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, unsub_message);
-
-    std::string owner_soid;
-    gbe::proto_wire::append_varint_field(owner_soid, 1u, 1u);
-    gbe::proto_wire::append_varint_field(owner_soid, 2u, player_steam64);
-
-    std::string subscribed_type;
-    gbe::proto_wire::append_varint_field(subscribed_type, 1u, 1u);
-    for (const Econ_Item &item : source_items) {
-        gbe::proto_wire::append_bytes_field(
-            subscribed_type,
-            2u,
-            target_gc->serialize_item_to_gcprotobuf(item, player_steam_id));
-    }
-
-    std::string cache_body;
-    gbe::proto_wire::append_bytes_field(cache_body, 2u, subscribed_type);
-    gbe::proto_wire::append_fixed64_field(cache_body, 3u, version);
-    gbe::proto_wire::append_bytes_field(cache_body, 4u, owner_soid);
-    gbe::proto_wire::append_varint_field(cache_body, 5u, 1u);
-
-    std::string cache_message;
-    gbe::gc_message::build_dota_zero_header_payload(GBE_kDotaCacheSubscribed, cache_body, cache_message);
-    target_gc->push_incoming_message(GBE_kDotaCacheSubscribed | GBE_kProtoMask, cache_message);
-
-    GBE_GC_DebugLog(
-        "GC_DOTA_EQUIP_REFRESH",
-        "rebuilt player item cache role=%s target_gc=%p steam64=%llu total_items=%zu equipped_items=%zu version=%llu reason=%s unsub_size=%zu cache_size=%zu",
-        target_gc->GBE_IsServerGC() ? "server" : "client",
-        static_cast<void *>(target_gc),
-        static_cast<unsigned long long>(player_steam64),
-        source_items.size(),
-        equipped_count,
-        static_cast<unsigned long long>(version),
-        reason ? reason : "unknown",
-        unsub_message.size(),
-        cache_message.size()
-    );
-    return true;
 }
 
 // =====================================================================

@@ -123,6 +123,8 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
     bool unsubscribe_first,
     const char *reason)
 {
+    if (target_gc)
+        target_gc->GBE_MirrorDotaEquippedItemsForUser(player_steam_id, source_items, reason);
     if (g_action_recorder)
         g_action_recorder->record_server_gc_cache_forward(
             0,
@@ -141,20 +143,6 @@ bool GBE_RefreshDotaHostEquippedItemsCache(
     const char *reason)
 {
     return GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, player_steam_id, source_items, true, reason);
-}
-
-bool GBE_RebuildDotaPlayerItemsCacheToGC(
-    Steam_Game_Coordinator *target_gc,
-    const CSteamID &player_steam_id,
-    const std::vector<Econ_Item> &source_items,
-    const char *reason)
-{
-    (void)player_steam_id;
-    (void)source_items;
-    (void)reason;
-    target_gc->push_incoming_message(GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, std::string());
-    target_gc->push_incoming_message(GBE_kDotaCacheSubscribed | GBE_kProtoMask, std::string());
-    return true;
 }
 
 bool GBE_AdaptDotaJoinChatChannelResponsePayload(

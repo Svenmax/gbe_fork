@@ -636,6 +636,7 @@ static void test_inventory_equip_full_forward()
     TEST_ASSERT_EQ(tf.recorder.actions[3].server_gc_source_item_count, 1u, "4: cache push should include source items");
     TEST_ASSERT(tf.recorder.actions[3].server_gc_unsubscribe_first, "4: cache push should unsubscribe before subscribe");
     TEST_ASSERT(tf.recorder.actions[3].reason == "equip_forward_host_resubscribe_server", "4: cache push reason should identify equip forward");
+    TEST_ASSERT_EQ(server_gc.all_user_items[CSteamID(12345u)].size(), 1u, "server GC should mirror the equipped host item");
 
     TEST_ASSERT_EQ(tf.recorder.actions[4].type, GBE_DotaActionType::ServerGcForward, "5: ServerGcForward (SO Create)");
     TEST_ASSERT_EQ((tf.recorder.actions[4].msg_type & ~0x80000000u), 21u, "5: emsg=21");

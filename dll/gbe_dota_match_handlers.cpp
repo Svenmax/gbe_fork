@@ -499,11 +499,6 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(
         );
     }
 
-    GBE_RebuildDotaPlayerItemsCacheToGC(
-        client_gc,
-        owner_id,
-        client_items,
-        "7034_owner_hero_known_client_rebuild");
 }
 
 

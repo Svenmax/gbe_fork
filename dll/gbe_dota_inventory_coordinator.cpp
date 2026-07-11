@@ -423,6 +423,59 @@ void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const st
 }
 
 
+void Steam_Game_Coordinator::GBE_MirrorDotaEquippedItemsForUser(
+    CSteamID steam_id,
+    const std::vector<Econ_Item> &source_items,
+    const char *reason)
+{
+    if (!is_server || gc_profile != GC_PROFILE_DOTA2 || !steam_id.BIndividualAccount())
+        return;
+
+    std::vector<Econ_Item> &mirrored_items = all_user_items[steam_id];
+    mirrored_items.clear();
+
+    std::uint32_t hero_id = 0u;
+    const std::uint64_t steam64 = steam_id.ConvertToUint64();
+    if (steam64 == GBE_local_lobby.owner_steam_id) {
+        hero_id = GBE_local_lobby.owner_hero_id;
+    } else {
+        for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+            if (member.steam_id == steam64) {
+                hero_id = member.hero_id;
+                break;
+            }
+        }
+    }
+
+    std::size_t equip_state_count = 0u;
+    std::size_t hero_match_count = 0u;
+    for (const Econ_Item &item : source_items) {
+        if (item.equip_states.empty())
+            continue;
+
+        mirrored_items.push_back(item);
+        equip_state_count += item.equip_states.size();
+        for (const auto &[class_id, slot_id] : item.equip_states) {
+            (void)slot_id;
+            if (hero_id != 0u && class_id == hero_id)
+                ++hero_match_count;
+        }
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_INVENTORY_MIRROR",
+        "mirrored equipped inventory into server GC: steam64=%llu hero_id=%u source_items=%zu equipped_items=%zu equip_states=%zu hero_matches=%zu reason=%s",
+        static_cast<unsigned long long>(steam64),
+        hero_id,
+        source_items.size(),
+        mirrored_items.size(),
+        equip_state_count,
+        hero_match_count,
+        reason ? reason : "unknown"
+    );
+}
+
+
 void Steam_Game_Coordinator::callback_items_removed(CSteamID steam_id)
 {
     if (!gc_initialized)
