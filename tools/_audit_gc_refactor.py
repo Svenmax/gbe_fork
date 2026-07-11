@@ -245,6 +245,36 @@ ASYNC_GENERATION_REGRESSION_TESTS = (
     "test_lobby_stale_postgame_task_is_rejected",
     "test_lobby_stale_delayed_runtime_task_is_rejected",
 )
+TEST_CREDIBILITY_GATES = {
+    "tools/gbe_dota_lifecycle_state_machine_test/gbe_dota_lifecycle_state_machine_test.cpp": (
+        "run_normal_launch_example",
+        "run_reconnect_example",
+        "run_state_machine_properties",
+        "run_model_based_differential_test",
+    ),
+    "tools/gbe_dota_handler_test/smoke_test.cpp": (
+        "test_custom_game_lifecycle_direct_wrapped_action_sequence_equivalence",
+        "test_lifecycle_executor_empty_and_conditional_actions",
+        "test_lifecycle_executor_push_routes_and_failure_policy",
+    ),
+    "tools/gbe_dota_reconnect_network_test/gbe_dota_reconnect_network_test.cpp": (
+        "test_prepare_reserves_state_before_unlocked_effects",
+        "test_dedup_and_generation_changes",
+        "test_properties",
+        "test_concurrency_properties",
+    ),
+    "tools/gbe_dota_composition_root_test/gbe_dota_composition_root_test.cpp": (
+        "test_client_assembly_uses_client_dependencies_only",
+        "test_gameserver_assembly_uses_gameserver_dependencies_only",
+        "test_offline_fake_assemblies_are_isolated",
+    ),
+}
+TEST_CREDIBILITY_RUNNER_TARGETS = (
+    "gbe_dota_reconnect_network_test",
+    "gbe_dota_composition_root_test",
+    "gbe_dota_lifecycle_state_machine_test",
+    "gbe_dota_handler_test",
+)
 RETIRED_SHARED_LOBBY_COMPATIBILITY_SYMBOLS = (
     "GBE_DotaSharedLobbyScalarSnapshot",
     "GBE_GetSharedDotaLobbyScalarSnapshot",
@@ -796,6 +826,28 @@ def audit_async_generation_safety(source_texts=None, handler_test_text=None):
     for test_name in ASYNC_GENERATION_REGRESSION_TESTS:
         if handler_test_text.count(test_name) < 2:
             issues.append(f"gbe_dota_handler_test/smoke_test.cpp: missing executed async generation regression {test_name}")
+    return issues
+
+
+def audit_test_credibility(test_sources=None, runner_text=None):
+    """Keep high-risk logic, executor, fake integration, property, and model tests executed."""
+    if test_sources is None:
+        test_sources = {
+            path: read(os.path.join(ROOT_DIR, path))
+            for path in TEST_CREDIBILITY_GATES
+        }
+    if runner_text is None:
+        runner_text = read(os.path.join(ROOT_DIR, "tools", "run_gc_offline_tests.sh"))
+
+    issues = []
+    for path, test_names in TEST_CREDIBILITY_GATES.items():
+        source = strip_comments(test_sources.get(path, ""))
+        for test_name in test_names:
+            if source.count(test_name) < 2:
+                issues.append(f"{path}: high-risk test is not defined and executed: {test_name}")
+    for target in TEST_CREDIBILITY_RUNNER_TARGETS:
+        if runner_text.count(target) < 2:
+            issues.append(f"tools/run_gc_offline_tests.sh: high-risk test target is not built and run: {target}")
     return issues
 
 
@@ -1844,6 +1896,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 25: High-risk test credibility")
+    print("=" * 70)
+    print("  Action: retain pure logic, executor, production-path fake, property, and differential coverage.")
+    test_credibility_issues = audit_test_credibility()
+    if not test_credibility_issues:
+        print("  Lifecycle and reconnect high-risk tests remain defined, executed, and wired into the offline gate")
+    else:
+        for issue in test_credibility_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -1873,8 +1937,9 @@ def main():
     print(f"  Dependency/object lifecycle issues:   {len(dependency_object_lifecycle_issues)}")
     print(f"  Core state machine issues:            {len(core_state_machine_issues)}")
     print(f"  Async generation safety issues:       {len(async_generation_issues)}")
+    print(f"  High-risk test credibility issues:    {len(test_credibility_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues:
         sys.exit(1)
 
 

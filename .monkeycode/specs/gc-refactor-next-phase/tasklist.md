@@ -550,9 +550,11 @@
     - 所有延迟任务、reconnect callback 和 runtime update 都携带并校验 generation。
     - 验收结果：延迟 GC message 在入队时捕获 lobby ID/generation，并在 immediate、delay-expired 和 incoming-queue 边界校验；3 个 deferred lifecycle slot 在消费时校验 generation；reconnect callback 复制 generation guard 并在最终交付前读取当前 context；runtime member/game-state/poll transitions 携带当前 generation。
     - Audit 24 固化延迟消息、deferred slot、reconnect callback 和 runtime transition generation gates，并要求 fast leave/rejoin、stale postgame 和 stale delayed runtime 三项回归持续执行。审计 helper 增至 62 项。
-  - [ ] 16.6 验收测试可信度
+  - [x] 16.6 验收测试可信度
     - 每条高风险 lifecycle/reconnect 路径同时具备纯逻辑测试、executor 测试和 production-path fake 集成测试。
     - 核心状态机具备属性测试和 model-based differential test。
+    - 验收结果：lifecycle 由 state-machine examples/properties/differential、executor 行为测试和 direct/wrapped handler 集成覆盖；reconnect 由 prepare/dedup 状态断言、connector/callback fake executor 覆盖，以及 composition-root/serialized production-path fake 隔离与锁边界覆盖。
+    - Audit 25 固化 15 个高风险测试入口及 reconnect、composition-root、lifecycle-state-machine、handler 四个 offline runner targets，确保测试同时定义、执行并接入统一门禁。审计 helper 增至 66 项。
   - [ ] 16.7 验收 CI 门禁
     - offline、audit、Windows/Linux production build 和 TSAN 均为明确且可定位失败的检查项。
   - [ ] 16.8 验收投资边界

@@ -212,6 +212,45 @@ class AsyncGenerationSafetyAuditTest(unittest.TestCase):
         )
 
 
+class TestCredibilityAuditTest(unittest.TestCase):
+    def valid_sources(self):
+        return {
+            path: "\n".join(f"void {name}();\n{name}();" for name in names)
+            for path, names in audit.TEST_CREDIBILITY_GATES.items()
+        }
+
+    def valid_runner(self):
+        return "\n".join(f"build {target}\nrun {target}" for target in audit.TEST_CREDIBILITY_RUNNER_TARGETS)
+
+    def test_accepts_executed_layered_high_risk_tests(self):
+        self.assertEqual([], audit.audit_test_credibility(self.valid_sources(), self.valid_runner()))
+
+    def test_rejects_property_test_defined_without_execution(self):
+        sources = self.valid_sources()
+        path = "tools/gbe_dota_lifecycle_state_machine_test/gbe_dota_lifecycle_state_machine_test.cpp"
+        sources[path] = sources[path].replace("run_state_machine_properties();", "")
+        self.assertIn(
+            f"{path}: high-risk test is not defined and executed: run_state_machine_properties",
+            audit.audit_test_credibility(sources, self.valid_runner()),
+        )
+
+    def test_rejects_missing_executor_coverage(self):
+        sources = self.valid_sources()
+        path = "tools/gbe_dota_handler_test/smoke_test.cpp"
+        sources[path] = sources[path].replace("test_lifecycle_executor_push_routes_and_failure_policy();", "")
+        self.assertIn(
+            f"{path}: high-risk test is not defined and executed: test_lifecycle_executor_push_routes_and_failure_policy",
+            audit.audit_test_credibility(sources, self.valid_runner()),
+        )
+
+    def test_rejects_test_target_missing_from_runner(self):
+        runner = self.valid_runner().replace("run gbe_dota_reconnect_network_test", "")
+        self.assertIn(
+            "tools/run_gc_offline_tests.sh: high-risk test target is not built and run: gbe_dota_reconnect_network_test",
+            audit.audit_test_credibility(self.valid_sources(), runner),
+        )
+
+
 class ArchitectureInvestmentInputsAuditTest(unittest.TestCase):
     VALID = {
         "schema_version": 1,
