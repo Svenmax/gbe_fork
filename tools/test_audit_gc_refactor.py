@@ -111,6 +111,61 @@ class LifecycleTransitionGateAuditTest(unittest.TestCase):
         )
 
 
+class CoreStateMachineBoundaryAuditTest(unittest.TestCase):
+    LIFECYCLE_HEADER = "\n".join(audit.CORE_STATE_MACHINE_HEADER_TOKENS)
+    GENERATION_HEADER = "constexpr AdvanceResult advance(Boundary boundary)"
+
+    def valid_sources(self):
+        return {
+            audit.GENERATION_COUNTER_OWNER: "GBE_dota_lobby_generation_counter.advance(boundary);",
+            audit.GENERATION_COUNTER_SYNC_OWNER: "\n".join(
+                "GBE_dota_lobby_generation_counter = gbe::dota_lobby_generation::Counter(initial);"
+                for _ in range(audit.GENERATION_COUNTER_SYNC_BASELINE)
+            ),
+            audit.RECONNECT_TRANSITION_OWNER: """
+GBE_PrepareDotaReconnectPostConnectionState(
+GBE_ExecuteDotaReconnectPostEffects(
+connection_state.begin_generation(generation);
+connection_state.should_connect_direct(server_id, endpoint);
+connection_state.record_direct_connect(server_id, endpoint);
+connection_state.record_engine_callback(server_id, endpoint);
+""",
+        }
+
+    def audit(self, sources=None, lifecycle_header=None):
+        return audit.audit_core_state_machine_boundaries(
+            lifecycle_header or self.LIFECYCLE_HEADER,
+            self.GENERATION_HEADER,
+            sources or self.valid_sources(),
+        )
+
+    def test_accepts_canonical_core_transition_owners(self):
+        self.assertEqual([], self.audit())
+
+    def test_rejects_missing_pure_lifecycle_transition(self):
+        header = self.LIFECYCLE_HEADER.replace("constexpr MachineTransitionResult transition_teardown(", "")
+        self.assertIn(
+            "gbe_dota_lifecycle_state_machine.h: missing pure core transition constexpr MachineTransitionResult transition_teardown(",
+            self.audit(lifecycle_header=header),
+        )
+
+    def test_rejects_generation_advance_bypass(self):
+        sources = self.valid_sources()
+        sources["gbe_dota_lobby_handlers.cpp"] = "GBE_dota_lobby_generation_counter.advance(boundary);"
+        self.assertIn(
+            "generation counter advance owners changed: expected [steam_game_coordinator.cpp], got ['gbe_dota_lobby_handlers.cpp', 'steam_game_coordinator.cpp']",
+            self.audit(sources),
+        )
+
+    def test_rejects_reconnect_transition_bypass(self):
+        sources = self.valid_sources()
+        sources["steam_networking_socketsserialized.cpp"] = "connection_state.begin_generation(generation);"
+        self.assertIn(
+            "reconnect generation/dedup transition owners changed: expected [gbe_dota_reconnect_network.cpp], got ['gbe_dota_reconnect_network.cpp', 'steam_networking_socketsserialized.cpp']",
+            self.audit(sources),
+        )
+
+
 class ArchitectureInvestmentInputsAuditTest(unittest.TestCase):
     VALID = {
         "schema_version": 1,

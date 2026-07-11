@@ -542,8 +542,10 @@
     - composition root 拥有业务对象和可变状态，业务 service 使用显式依赖，实例之间保持隔离。
     - 验收结果：production `Steam_Client` 继续拥有 shared lobby backing state/Store、runtime state、client/gameserver reconnect adapters 与 lifecycle executors；offline `CompositionRoot` 自有 backing state、mutex、Store、executor、registry copy 和双角色 context。
     - Audit 22 固化 root ownership、`RoleContext`/`ReconnectService`/`Steam_Game_Coordinator` 显式构造依赖和 lifecycle executor 非空门禁；composition-root 集成测试持续覆盖双 root 隔离、client/gameserver 角色隔离、销毁后延迟工作失效和重建无状态泄漏。审计 helper 增至 54 项。
-  - [ ] 16.4 验收核心状态机
+  - [x] 16.4 验收核心状态机
     - Lobby lifecycle、generation 和 reconnect 的核心转移只由纯 transition 函数产生。
+    - 验收结果：lifecycle 使用 dependency-light `constexpr` typed transitions；generation 增量只通过 `Counter::advance` 和 coordinator canonical owner，恢复同步保留 2 个显式 counter reconstruction；reconnect generation/dedup mutation 只位于 prepare planner，网络与 callback effects 位于 execute boundary。
+    - Audit 23 固化 6 个核心 lifecycle transition API、generation advance/synchronization owner 和 reconnect planner/executor owner；正反 fixtures 覆盖纯 transition 丢失、generation advance bypass 和 reconnect state bypass。审计 helper 增至 58 项。
   - [ ] 16.5 验收代际与异步安全
     - 所有延迟任务、reconnect callback 和 runtime update 都携带并校验 generation。
   - [ ] 16.6 验收测试可信度

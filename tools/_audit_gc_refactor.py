@@ -203,6 +203,18 @@ RETIRED_RECONNECT_TRANSITION_SYMBOLS = (
     "describe_reject_reason",
     "GBE_DescribeDotaReconnectPostSkipReason",
 )
+GENERATION_COUNTER_OWNER = "steam_game_coordinator.cpp"
+GENERATION_COUNTER_SYNC_OWNER = "gbe_dota_lobby_state_coordinator.cpp"
+GENERATION_COUNTER_SYNC_BASELINE = 2
+RECONNECT_TRANSITION_OWNER = "gbe_dota_reconnect_network.cpp"
+CORE_STATE_MACHINE_HEADER_TOKENS = (
+    "constexpr MachineTransitionResult transition(MachineState state, const Event &event)",
+    "constexpr MachineTransitionResult transition_runtime_poll(",
+    "constexpr MachineTransitionResult transition_custom_game_request(",
+    "constexpr MachineTransitionResult transition_runtime_member(",
+    "constexpr MachineTransitionResult transition_runtime_game_state(",
+    "constexpr MachineTransitionResult transition_teardown(",
+)
 RETIRED_SHARED_LOBBY_COMPATIBILITY_SYMBOLS = (
     "GBE_DotaSharedLobbyScalarSnapshot",
     "GBE_GetSharedDotaLobbyScalarSnapshot",
@@ -673,6 +685,65 @@ def audit_lifecycle_transition_gates(source_texts=None):
         for token in required_tokens:
             if token not in source:
                 issues.append(f"{base}: lifecycle path is missing transition gate token {token}")
+    return issues
+
+
+def audit_core_state_machine_boundaries(
+    lifecycle_header_text=None,
+    generation_header_text=None,
+    production_sources=None,
+):
+    """Keep lifecycle, generation, and reconnect transitions on pure canonical owners."""
+    if lifecycle_header_text is None:
+        lifecycle_header_text = read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lifecycle_state_machine.h"))
+    if generation_header_text is None:
+        generation_header_text = read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_generation.h"))
+    if production_sources is None:
+        production_sources = {
+            os.path.basename(path): read(path)
+            for path in glob.glob(os.path.join(ROOT_DIR, "dll", "*.cpp"))
+        }
+
+    issues = []
+    for token in CORE_STATE_MACHINE_HEADER_TOKENS:
+        if token not in lifecycle_header_text:
+            issues.append(f"gbe_dota_lifecycle_state_machine.h: missing pure core transition {token}")
+    if "constexpr AdvanceResult advance(Boundary boundary)" not in generation_header_text:
+        issues.append("gbe_dota_lobby_generation.h: generation advance must remain a constexpr value transition")
+
+    generation_advance_owners = []
+    generation_sync_owners = []
+    reconnect_state_owners = []
+    for filename, source_text in production_sources.items():
+        source = strip_comments(source_text)
+        if ".advance(" in source and "GBE_dota_lobby_generation_counter" in source:
+            generation_advance_owners.append(filename)
+        sync_count = len(re.findall(r"GBE_dota_lobby_generation_counter\s*=\s*gbe::dota_lobby_generation::Counter\s*\(", source))
+        generation_sync_owners.extend([filename] * sync_count)
+        if any(token in source for token in (
+            "connection_state.begin_generation(",
+            "connection_state.should_connect_direct(",
+            "connection_state.record_direct_connect(",
+            "connection_state.record_engine_callback(",
+        )):
+            reconnect_state_owners.append(filename)
+
+    if generation_advance_owners != [GENERATION_COUNTER_OWNER]:
+        issues.append(
+            f"generation counter advance owners changed: expected [{GENERATION_COUNTER_OWNER}], got {sorted(generation_advance_owners)}"
+        )
+    if generation_sync_owners != [GENERATION_COUNTER_SYNC_OWNER] * GENERATION_COUNTER_SYNC_BASELINE:
+        issues.append(
+            f"generation counter synchronization changed: expected {GENERATION_COUNTER_SYNC_BASELINE} assignments in {GENERATION_COUNTER_SYNC_OWNER}, got {sorted(generation_sync_owners)}"
+        )
+    if sorted(set(reconnect_state_owners)) != [RECONNECT_TRANSITION_OWNER]:
+        issues.append(
+            f"reconnect generation/dedup transition owners changed: expected [{RECONNECT_TRANSITION_OWNER}], got {sorted(set(reconnect_state_owners))}"
+        )
+    reconnect_owner = strip_comments(production_sources.get(RECONNECT_TRANSITION_OWNER, ""))
+    for token in ("GBE_PrepareDotaReconnectPostConnectionState(", "GBE_ExecuteDotaReconnectPostEffects("):
+        if token not in reconnect_owner:
+            issues.append(f"{RECONNECT_TRANSITION_OWNER}: missing reconnect planner/executor boundary {token}")
     return issues
 
 
@@ -1697,6 +1768,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 23: Core state machine boundaries")
+    print("=" * 70)
+    print("  Action: keep lifecycle, generation, and reconnect transitions on pure canonical functions.")
+    core_state_machine_issues = audit_core_state_machine_boundaries()
+    if not core_state_machine_issues:
+        print("  Lifecycle transitions, generation advancement, and reconnect dedup remain on canonical owners")
+    else:
+        for issue in core_state_machine_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -1724,8 +1807,9 @@ def main():
     print(f"  Handler responsibility issues:       {len(handler_responsibility_issues)}")
     print(f"  State and effect ownership issues:    {len(state_effect_ownership_issues)}")
     print(f"  Dependency/object lifecycle issues:   {len(dependency_object_lifecycle_issues)}")
+    print(f"  Core state machine issues:            {len(core_state_machine_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues:
         sys.exit(1)
 
 
