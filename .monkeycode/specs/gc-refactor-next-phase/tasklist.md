@@ -546,8 +546,10 @@
     - Lobby lifecycle、generation 和 reconnect 的核心转移只由纯 transition 函数产生。
     - 验收结果：lifecycle 使用 dependency-light `constexpr` typed transitions；generation 增量只通过 `Counter::advance` 和 coordinator canonical owner，恢复同步保留 2 个显式 counter reconstruction；reconnect generation/dedup mutation 只位于 prepare planner，网络与 callback effects 位于 execute boundary。
     - Audit 23 固化 6 个核心 lifecycle transition API、generation advance/synchronization owner 和 reconnect planner/executor owner；正反 fixtures 覆盖纯 transition 丢失、generation advance bypass 和 reconnect state bypass。审计 helper 增至 58 项。
-  - [ ] 16.5 验收代际与异步安全
+  - [x] 16.5 验收代际与异步安全
     - 所有延迟任务、reconnect callback 和 runtime update 都携带并校验 generation。
+    - 验收结果：延迟 GC message 在入队时捕获 lobby ID/generation，并在 immediate、delay-expired 和 incoming-queue 边界校验；3 个 deferred lifecycle slot 在消费时校验 generation；reconnect callback 复制 generation guard 并在最终交付前读取当前 context；runtime member/game-state/poll transitions 携带当前 generation。
+    - Audit 24 固化延迟消息、deferred slot、reconnect callback 和 runtime transition generation gates，并要求 fast leave/rejoin、stale postgame 和 stale delayed runtime 三项回归持续执行。审计 helper 增至 62 项。
   - [ ] 16.6 验收测试可信度
     - 每条高风险 lifecycle/reconnect 路径同时具备纯逻辑测试、executor 测试和 production-path fake 集成测试。
     - 核心状态机具备属性测试和 model-based differential test。

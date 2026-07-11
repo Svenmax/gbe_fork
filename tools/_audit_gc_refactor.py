@@ -215,6 +215,36 @@ CORE_STATE_MACHINE_HEADER_TOKENS = (
     "constexpr MachineTransitionResult transition_runtime_game_state(",
     "constexpr MachineTransitionResult transition_teardown(",
 )
+ASYNC_GENERATION_GATES = {
+    "steam_game_coordinator.cpp": (
+        "new_item.lobby_id = GBE_local_lobby.lobby_id;",
+        "new_item.generation = GBE_CurrentDotaLobbyGeneration();",
+        'GBE_IsQueuedLobbyMessageCurrent(new_item, "enqueue_immediate")',
+        'GBE_IsQueuedLobbyMessageCurrent(*it, "delay_expired")',
+        'GBE_IsQueuedLobbyMessageCurrent(*it, "before_incoming_queue")',
+        "slot.generation == GBE_CurrentDotaLobbyGeneration()",
+    ),
+    "gbe_dota_reconnect_network.cpp": (
+        "callback_queue.queue_game_server_change(plan.server_change, 0.0, result.context.generation)",
+    ),
+    "gbe_dota_reconnect_network_adapter.cpp": (
+        "current_context.generation == expected_generation",
+        "SteamCallExecutionGuard(",
+        "&generation,",
+        "sizeof(generation)",
+    ),
+    "gbe_dota_match_handlers.cpp": (
+        "transition_runtime_member(",
+        "transition_runtime_game_state(",
+        "transition_runtime_poll(",
+        "machine_state.generation = GBE_CurrentDotaLobbyGeneration();",
+    ),
+}
+ASYNC_GENERATION_REGRESSION_TESTS = (
+    "test_lobby_fast_leave_rejoin_same_id_rejects_old_generation_work",
+    "test_lobby_stale_postgame_task_is_rejected",
+    "test_lobby_stale_delayed_runtime_task_is_rejected",
+)
 RETIRED_SHARED_LOBBY_COMPATIBILITY_SYMBOLS = (
     "GBE_DotaSharedLobbyScalarSnapshot",
     "GBE_GetSharedDotaLobbyScalarSnapshot",
@@ -744,6 +774,28 @@ def audit_core_state_machine_boundaries(
     for token in ("GBE_PrepareDotaReconnectPostConnectionState(", "GBE_ExecuteDotaReconnectPostEffects("):
         if token not in reconnect_owner:
             issues.append(f"{RECONNECT_TRANSITION_OWNER}: missing reconnect planner/executor boundary {token}")
+    return issues
+
+
+def audit_async_generation_safety(source_texts=None, handler_test_text=None):
+    """Keep every delayed GC boundary generation-scoped through final execution."""
+    if source_texts is None:
+        source_texts = {
+            filename: read(os.path.join(ROOT_DIR, "dll", filename))
+            for filename in ASYNC_GENERATION_GATES
+        }
+    if handler_test_text is None:
+        handler_test_text = read(os.path.join(ROOT_DIR, "tools", "gbe_dota_handler_test", "smoke_test.cpp"))
+
+    issues = []
+    for filename, required_tokens in ASYNC_GENERATION_GATES.items():
+        source = strip_comments(source_texts.get(filename, ""))
+        for token in required_tokens:
+            if token not in source:
+                issues.append(f"{filename}: async generation boundary is missing {token}")
+    for test_name in ASYNC_GENERATION_REGRESSION_TESTS:
+        if handler_test_text.count(test_name) < 2:
+            issues.append(f"gbe_dota_handler_test/smoke_test.cpp: missing executed async generation regression {test_name}")
     return issues
 
 
@@ -1780,6 +1832,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 24: Generation-scoped asynchronous work")
+    print("=" * 70)
+    print("  Action: capture generation when queueing work and validate it at the final execution boundary.")
+    async_generation_issues = audit_async_generation_safety()
+    if not async_generation_issues:
+        print("  Delayed messages, deferred slots, reconnect callbacks, and runtime updates retain generation gates")
+    else:
+        for issue in async_generation_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -1808,8 +1872,9 @@ def main():
     print(f"  State and effect ownership issues:    {len(state_effect_ownership_issues)}")
     print(f"  Dependency/object lifecycle issues:   {len(dependency_object_lifecycle_issues)}")
     print(f"  Core state machine issues:            {len(core_state_machine_issues)}")
+    print(f"  Async generation safety issues:       {len(async_generation_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues:
         sys.exit(1)
 
 

@@ -166,6 +166,52 @@ connection_state.record_engine_callback(server_id, endpoint);
         )
 
 
+class AsyncGenerationSafetyAuditTest(unittest.TestCase):
+    def valid_sources(self):
+        return {
+            filename: "\n".join(tokens)
+            for filename, tokens in audit.ASYNC_GENERATION_GATES.items()
+        }
+
+    def valid_tests(self):
+        return "\n".join(
+            f"void {name}();\n{name}();"
+            for name in audit.ASYNC_GENERATION_REGRESSION_TESTS
+        )
+
+    def test_accepts_all_async_generation_gates(self):
+        self.assertEqual([], audit.audit_async_generation_safety(self.valid_sources(), self.valid_tests()))
+
+    def test_rejects_delayed_message_without_final_validation(self):
+        sources = self.valid_sources()
+        sources["steam_game_coordinator.cpp"] = sources["steam_game_coordinator.cpp"].replace(
+            'GBE_IsQueuedLobbyMessageCurrent(*it, "before_incoming_queue")',
+            "",
+        )
+        self.assertIn(
+            'steam_game_coordinator.cpp: async generation boundary is missing GBE_IsQueuedLobbyMessageCurrent(*it, "before_incoming_queue")',
+            audit.audit_async_generation_safety(sources, self.valid_tests()),
+        )
+
+    def test_rejects_reconnect_callback_without_generation_guard(self):
+        sources = self.valid_sources()
+        sources["gbe_dota_reconnect_network_adapter.cpp"] = sources["gbe_dota_reconnect_network_adapter.cpp"].replace(
+            "current_context.generation == expected_generation",
+            "",
+        )
+        self.assertIn(
+            "gbe_dota_reconnect_network_adapter.cpp: async generation boundary is missing current_context.generation == expected_generation",
+            audit.audit_async_generation_safety(sources, self.valid_tests()),
+        )
+
+    def test_rejects_missing_executed_stale_work_regression(self):
+        tests = self.valid_tests().replace("test_lobby_stale_postgame_task_is_rejected();", "")
+        self.assertIn(
+            "gbe_dota_handler_test/smoke_test.cpp: missing executed async generation regression test_lobby_stale_postgame_task_is_rejected",
+            audit.audit_async_generation_safety(self.valid_sources(), tests),
+        )
+
+
 class ArchitectureInvestmentInputsAuditTest(unittest.TestCase):
     VALID = {
         "schema_version": 1,
