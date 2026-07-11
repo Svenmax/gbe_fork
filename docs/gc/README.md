@@ -2,6 +2,10 @@
 
 These documents preserve the long-term maintenance guidance extracted from the GC refactor work, without keeping agent-private process directories in the product repository.
 
+The current maintenance entry point is `.monkeycode/docs/INDEX.md`. It separates production architecture, active maintenance contracts, verification guidance, troubleshooting, and completed historical plans.
+
+Documents describing future work, follow-up work, next-agent work, or path-specific task lists are retained as historical design records after the P0-P16 refactor completion. Current architecture investment decisions are controlled by `architecture-investment-gates.md` and `architecture-investment-inputs.json`.
+
 - `coordinator-boundaries.md`: ownership boundaries for coordinator, handler, state, payload, and wire files.
 - `verification-and-build.md`: local/CI verification gates and build entrypoint rules.
 - `internal-header-shrink-plan.md`: plan for shrinking `gbe_dota_gc_internal.h` safely.
