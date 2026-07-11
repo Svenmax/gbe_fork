@@ -485,9 +485,14 @@
     - P15-E：从每个 active state 分别执行 leave 和 abandon，再 reset 到 Idle；重复 reset 稳定返回 `AlreadyInState`，状态保持 Idle 且 effects 为空。
     - 可复现性：属性输入使用固定 canonical event/state 集合与确定性枚举，不依赖随机数或时间，失败序列可由循环索引直接复现。
     - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
-  - [ ] 14.8 增加 model-based differential test
+  - [x] 14.8 增加 model-based differential test
     - 使用简化 reference transition table 生成事件序列，与 C++ transition 比较状态、effects 和 reason。
     - 保存失败随机种子，保证回归可重复。
+    - Reference model：测试侧独立实现 lifecycle target、合法前置状态、generation boundary、stale generation、recover 和 reconnect dedup，不调用 production `transition()` 或辅助分类函数。
+    - 输入生成：使用固定 xorshift64 与 8 个常量种子，每个种子执行 512 步，共比较 4,096 次 transition；event 来自 canonical 13 项集合，generation 覆盖 zero/current/stale/future，server/endpoint key 覆盖重复与变化。
+    - 比较契约：逐步比较 lifecycle、generation、reconnect key/queued、decision status、reason，以及每个 effect 的 kind/from/to/generation。
+    - 可复现输出：mismatch 会输出 seed、step、event 和 input generation 后终止；开发期间 seed `1`、step `36` 曾定位 reference model 对 RuntimePoll 分类错误，修复后全部固定序列一致。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
   - [ ] 14.9 更新架构审计
     - 禁止核心 lifecycle handler、executor 和 store 绕过 transition 函数直接决定状态转移。
   - [ ] 14.10 检查点：确保所有测试通过，如有疑问请询问用户

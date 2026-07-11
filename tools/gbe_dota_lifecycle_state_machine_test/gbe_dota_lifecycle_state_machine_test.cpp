@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cassert>
+#include <cstdlib>
 #include <cstdint>
 #include <iostream>
 #include <limits>
@@ -308,6 +309,214 @@ void run_state_machine_properties()
     }
 }
 
+struct ReferenceResult {
+    lifecycle::MachineState state{};
+    lifecycle::EffectList effects{};
+    lifecycle::DecisionReason reason{lifecycle::DecisionReason::InvalidTransition};
+    lifecycle::DecisionStatus status{lifecycle::DecisionStatus::Rejected};
+};
+
+ReferenceResult reference_transition(
+    lifecycle::MachineState state,
+    const lifecycle::Event &input)
+{
+    if (input.generation != 0u && input.generation != state.generation)
+        return { state, {}, lifecycle::DecisionReason::StaleGeneration, lifecycle::DecisionStatus::Rejected };
+
+    if (input.kind == lifecycle::EventKind::Reconnect) {
+        const lifecycle::ReconnectKey key{ state.generation, input.server_id, input.endpoint_key };
+        if (state.reconnect_queued && state.reconnect_key == key)
+            return { state, {}, lifecycle::DecisionReason::ReconnectAlreadyQueued, lifecycle::DecisionStatus::Rejected };
+        state.reconnect_key = key;
+        state.reconnect_queued = true;
+        lifecycle::EffectList effects{};
+        effects.values[effects.count++] = {
+            lifecycle::EffectKind::ReconnectQueued,
+            state.lifecycle,
+            state.lifecycle,
+            state.generation,
+        };
+        return { state, effects, lifecycle::DecisionReason::ReconnectQueued, lifecycle::DecisionStatus::Accepted };
+    }
+
+    const bool generation_boundary =
+        input.kind == lifecycle::EventKind::Create ||
+        input.kind == lifecycle::EventKind::Join ||
+        input.kind == lifecycle::EventKind::Leave ||
+        input.kind == lifecycle::EventKind::Reset ||
+        input.kind == lifecycle::EventKind::Recover;
+    if (generation_boundary && state.generation == std::numeric_limits<std::uint64_t>::max())
+        return { state, {}, lifecycle::DecisionReason::GenerationExhausted, lifecycle::DecisionStatus::Rejected };
+
+    if (input.kind == lifecycle::EventKind::Recover) {
+        ++state.generation;
+        state.reconnect_key = {};
+        state.reconnect_queued = false;
+        lifecycle::EffectList effects{};
+        effects.values[effects.count++] = {
+            lifecycle::EffectKind::GenerationAdvanced,
+            state.lifecycle,
+            state.lifecycle,
+            state.generation,
+        };
+        return { state, effects, lifecycle::DecisionReason::TransitionApplied, lifecycle::DecisionStatus::Accepted };
+    }
+
+    lifecycle::State target = state.lifecycle;
+    bool valid = false;
+    switch (input.kind) {
+        case lifecycle::EventKind::Create:
+            target = lifecycle::State::Created;
+            valid = state.lifecycle == lifecycle::State::Idle;
+            break;
+        case lifecycle::EventKind::Join:
+            target = lifecycle::State::Joined;
+            valid = state.lifecycle == lifecycle::State::Idle;
+            break;
+        case lifecycle::EventKind::Setup:
+            target = lifecycle::State::Setup;
+            valid = state.lifecycle == lifecycle::State::Created || state.lifecycle == lifecycle::State::Joined;
+            break;
+        case lifecycle::EventKind::Loading:
+            target = lifecycle::State::Loading;
+            valid = state.lifecycle == lifecycle::State::Setup;
+            break;
+        case lifecycle::EventKind::Loaded:
+            target = lifecycle::State::Loaded;
+            valid = state.lifecycle == lifecycle::State::Loading;
+            break;
+        case lifecycle::EventKind::Run:
+            target = lifecycle::State::Running;
+            valid = state.lifecycle == lifecycle::State::Loaded;
+            break;
+        case lifecycle::EventKind::PostGame:
+        case lifecycle::EventKind::Leave:
+        case lifecycle::EventKind::Abandon:
+            target = lifecycle::State::PostGame;
+            valid = state.lifecycle != lifecycle::State::Idle && state.lifecycle != lifecycle::State::PostGame;
+            break;
+        case lifecycle::EventKind::Reset:
+            target = lifecycle::State::Idle;
+            valid = state.lifecycle == lifecycle::State::PostGame;
+            break;
+        case lifecycle::EventKind::RuntimePoll:
+        case lifecycle::EventKind::Count:
+            return { state, {}, lifecycle::DecisionReason::InvalidTransition, lifecycle::DecisionStatus::Rejected };
+        case lifecycle::EventKind::Recover:
+        case lifecycle::EventKind::Reconnect:
+            std::abort();
+    }
+
+    if (!valid) {
+        const lifecycle::DecisionReason reason = state.lifecycle == target
+            ? lifecycle::DecisionReason::AlreadyInState
+            : lifecycle::DecisionReason::InvalidTransition;
+        return { state, {}, reason, lifecycle::DecisionStatus::Rejected };
+    }
+
+    const lifecycle::State previous = state.lifecycle;
+    state.lifecycle = target;
+    lifecycle::EffectList effects{};
+    effects.values[effects.count++] = {
+        lifecycle::EffectKind::StateChanged,
+        previous,
+        target,
+        state.generation,
+    };
+    if (generation_boundary) {
+        ++state.generation;
+        state.reconnect_key = {};
+        state.reconnect_queued = false;
+        effects.values[effects.count++] = {
+            lifecycle::EffectKind::GenerationAdvanced,
+            state.lifecycle,
+            state.lifecycle,
+            state.generation,
+        };
+    }
+    return { state, effects, lifecycle::DecisionReason::TransitionApplied, lifecycle::DecisionStatus::Accepted };
+}
+
+std::uint64_t next_random(std::uint64_t &state)
+{
+    state ^= state << 13u;
+    state ^= state >> 7u;
+    state ^= state << 17u;
+    return state;
+}
+
+bool effects_equal(const lifecycle::EffectList &lhs, const lifecycle::EffectList &rhs)
+{
+    if (lhs.count != rhs.count)
+        return false;
+    for (std::size_t index = 0u; index < lhs.count; ++index) {
+        if (lhs.values[index].kind != rhs.values[index].kind ||
+            lhs.values[index].from != rhs.values[index].from ||
+            lhs.values[index].to != rhs.values[index].to ||
+            lhs.values[index].generation != rhs.values[index].generation)
+            return false;
+    }
+    return true;
+}
+
+void run_model_based_differential_test()
+{
+    constexpr std::array<std::uint64_t, 8> seeds{{
+        0x0000000000000001ull,
+        0x9e3779b97f4a7c15ull,
+        0xd1b54a32d192ed03ull,
+        0x94d049bb133111ebull,
+        0x2545f4914f6cdd1dull,
+        0x123456789abcdef0ull,
+        0xfedcba9876543210ull,
+        0x7fffffffffffffffull,
+    }};
+
+    for (const std::uint64_t seed : seeds) {
+        std::uint64_t random_state = seed;
+        lifecycle::MachineState production{};
+        production.generation = next_random(random_state) % 32u;
+        lifecycle::MachineState reference = production;
+
+        for (std::size_t step = 0u; step < 512u; ++step) {
+            const std::uint64_t random_value = next_random(random_state);
+            lifecycle::Event input = event(lifecycle::all_event_kinds[
+                random_value % lifecycle::all_event_kinds.size()]);
+            const std::uint64_t generation_mode = (random_value >> 8u) % 4u;
+            if (generation_mode == 1u)
+                input.generation = production.generation;
+            else if (generation_mode == 2u)
+                input.generation = production.generation == 0u ? 1u : production.generation - 1u;
+            else if (generation_mode == 3u)
+                input.generation = production.generation == std::numeric_limits<std::uint64_t>::max()
+                    ? production.generation - 1u
+                    : production.generation + 1u;
+            input.server_id = (random_value >> 16u) % 4u;
+            input.endpoint_key = (random_value >> 24u) % 4u;
+
+            const auto actual = lifecycle::transition(production, input);
+            const ReferenceResult expected = reference_transition(reference, input);
+            const bool matches =
+                actual.state.lifecycle == expected.state.lifecycle &&
+                actual.state.generation == expected.state.generation &&
+                actual.state.reconnect_key == expected.state.reconnect_key &&
+                actual.state.reconnect_queued == expected.state.reconnect_queued &&
+                actual.reason == expected.reason &&
+                actual.status == expected.status &&
+                effects_equal(actual.effects, expected.effects);
+            if (!matches) {
+                std::cerr << "differential mismatch seed=" << seed
+                          << " step=" << step
+                          << " event=" << static_cast<unsigned>(input.kind)
+                          << " generation=" << input.generation << '\n';
+                std::abort();
+            }
+            production = actual.state;
+            reference = expected.state;
+        }
+    }
+}
+
 int main()
 {
     constexpr std::array<ExpectedMapping, 9> mappings{{
@@ -379,6 +588,7 @@ int main()
     run_teardown_examples();
     run_reconnect_example();
     run_state_machine_properties();
+    run_model_based_differential_test();
 
     assert_accepted(lifecycle::State::Idle, lifecycle::EventKind::Create, lifecycle::State::Created);
     assert_accepted(lifecycle::State::Idle, lifecycle::EventKind::Join, lifecycle::State::Joined);
