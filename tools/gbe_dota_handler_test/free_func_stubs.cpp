@@ -159,7 +159,7 @@ bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
         return false;
     if (g_action_recorder)
         g_action_recorder->record_server_gc_cache_forward(
-            22u,
+            26u,
             client_gc,
             player_steam_id.ConvertToUint64(),
             source_items.size(),

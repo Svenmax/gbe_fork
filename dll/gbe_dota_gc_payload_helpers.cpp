@@ -40,6 +40,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
 #include <cstdarg>
 #include <cstdlib>
 #include <cstdio>
@@ -773,7 +774,12 @@ bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
     if (!client_gc || client_gc->GBE_IsServerGC() || !player_steam_id.BIndividualAccount() || hero_id == 0u)
         return false;
 
-    std::size_t pushed_items = 0;
+    CMsgSOMultipleObjects update_msg;
+    auto *owner = update_msg.mutable_owner_soid();
+    owner->set_type(1u);
+    owner->set_id(player_steam_id.ConvertToUint64());
+
+    std::size_t updated_items = 0;
     for (const Econ_Item &item : source_items) {
         bool hero_equipped = false;
         for (const auto &[class_id, slot_id] : item.equip_states) {
@@ -786,26 +792,40 @@ bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
         if (!hero_equipped)
             continue;
 
-        std::string update_body;
-        if (!GBE_BuildSOSingleObjectFromItem(item, player_steam_id, update_body))
-            continue;
-
-        std::string update_message;
-        gbe::gc_message::build_dota_zero_header_payload(22u, update_body, update_message);
-        client_gc->push_incoming_message(22u | GBE_kProtoMask, update_message);
-        ++pushed_items;
+        auto *object = update_msg.add_objects();
+        object->set_type_id(1u);
+        object->set_object_data(GBE_SerializeEconItemToGcprotobuf(item, player_steam_id, 0u, false));
+        ++updated_items;
     }
+
+    if (updated_items == 0u)
+        return false;
+
+    auto &runtime_state = GBE_DotaRuntimeState();
+    if (runtime_state.equip_cache_version == 0u) {
+        runtime_state.equip_cache_version = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count());
+    }
+    const uint64_t cache_version = ++runtime_state.equip_cache_version;
+    update_msg.set_version(cache_version);
+    update_msg.set_service_id(1u);
+
+    std::string update_message;
+    gbe::gc_message::build_dota_zero_header_payload(26u, update_msg.SerializeAsString(), update_message);
+    client_gc->push_incoming_message(26u | GBE_kProtoMask, update_message);
 
     GBE_GC_DebugLog(
         "GC_DOTA_EQUIP_REFRESH",
-        "pushed host hero equipped SO updates to client GC: steam64=%llu hero_id=%u pushed_items=%zu source_items=%zu reason=%s",
+        "pushed host hero equipped cache update to client GC: steam64=%llu hero_id=%u updated_items=%zu source_items=%zu version=%llu service_id=1 reason=%s",
         static_cast<unsigned long long>(player_steam_id.ConvertToUint64()),
         hero_id,
-        pushed_items,
+        updated_items,
         source_items.size(),
+        static_cast<unsigned long long>(cache_version),
         reason ? reason : "unknown"
     );
-    return pushed_items != 0u;
+    return true;
 }
 
 // =====================================================================

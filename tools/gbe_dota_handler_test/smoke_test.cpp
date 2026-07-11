@@ -2920,7 +2920,7 @@ static void test_match_7034_connected_player_updates_runtime_before_response()
     TEST_ASSERT(tf.recorder.actions[0].reason == "7034_connected_player", "publish reason should identify connected player");
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::ServerGcForward, "second action should replay host equipped items after hero is known");
     TEST_ASSERT(tf.recorder.actions[1].reason == "7034_owner_hero_known_server", "cache replay reason should identify owner hero transition");
-    TEST_ASSERT_EQ(tf.recorder.actions[2].msg_type, 22u, "third action should push current hero item updates to client GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].msg_type, 26u, "third action should push current hero equipped cache update to client GC");
     TEST_ASSERT(tf.recorder.actions[2].reason == "7034_owner_hero_known_client", "client item update reason should identify owner hero transition");
     TEST_ASSERT_EQ(tf.recorder.actions[3].msg_type, 1029u, "fourth action should request host local wearable refresh");
     TEST_ASSERT_EQ(tf.recorder.actions[3].steam_id, owner_steam_id, "wearable refresh should target the lobby owner");
