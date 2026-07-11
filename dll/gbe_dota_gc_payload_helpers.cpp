@@ -690,6 +690,21 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
     return true;
 }
 
+bool GBE_RefreshDotaHostEquippedItemsCaches(
+    Steam_Game_Coordinator *server_gc,
+    Steam_Game_Coordinator *client_gc,
+    const CSteamID &player_steam_id,
+    const std::vector<Econ_Item> &source_items,
+    const char *server_reason,
+    const char *client_reason)
+{
+    if (!GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, player_steam_id, source_items, true, server_reason))
+        return false;
+
+    GBE_PushDotaPlayerEquippedItemsCacheToGC(client_gc, player_steam_id, source_items, false, client_reason);
+    return true;
+}
+
 // =====================================================================
 // Phase 2.13 pure item helpers (GBE_ParseDotaEquipOps,
 // GBE_ApplyDotaUnlockStyleBitmask, GBE_SerializeEconItemToGcprotobuf,

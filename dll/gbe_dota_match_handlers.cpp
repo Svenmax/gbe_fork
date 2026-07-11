@@ -489,10 +489,10 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(
 
     const CSteamID owner_id(owner_steam_id);
     const auto &client_items = client_gc->get_items();
-    if (GBE_PushDotaPlayerEquippedItemsCacheToGC(this, owner_id, client_items, true, "7034_owner_hero_known_server")) {
+    if (GBE_RefreshDotaHostEquippedItemsCaches(this, client_gc, owner_id, client_items, "7034_owner_hero_known_server", "7034_owner_hero_known_client_restore")) {
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
-            "replayed host equipped items to server GC after owner hero became known: steam64=%llu hero_id=%u source_job=%llu",
+            "replayed host equipped items to server GC and restored client GC after owner hero became known: steam64=%llu hero_id=%u source_job=%llu",
             static_cast<unsigned long long>(owner_steam_id),
             GBE_local_lobby.owner_hero_id,
             static_cast<unsigned long long>(source_job)
@@ -721,7 +721,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
         if (client_gc_ptr && owner_steam64 != 0ull) {
             const CSteamID owner_steam_id(owner_steam64);
             const auto &client_items = client_gc_ptr->get_items();
-            if (GBE_PushDotaPlayerEquippedItemsCacheToGC(this, owner_steam_id, client_items, true, "7034_showcase_host_equip_repush")) {
+            if (GBE_RefreshDotaHostEquippedItemsCaches(this, client_gc_ptr, owner_steam_id, client_items, "7034_showcase_host_equip_repush", "7034_showcase_host_equip_client_restore")) {
                 GBE_MarkDotaHostShowcaseEquipPushed();
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
