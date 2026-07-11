@@ -1498,6 +1498,11 @@ uint32 Steam_Friends::GetProfileItemPropertyUint( CSteamID steamID, ECommunityPr
 void Steam_Friends::RunCallbacks()
 {
 	// PRINT_DEBUG_ENTRY();
+    const auto now = std::chrono::high_resolution_clock::now();
+    if (std::chrono::duration<double>(now - last_sent_friends).count() >= SEND_FRIEND_RATE) {
+        resend_friend_data();
+    }
+
     if (settings->get_lobby() != lobby_id) {
         lobby_id = settings->get_lobby();
         resend_friend_data();
@@ -1515,7 +1520,7 @@ void Steam_Friends::RunCallbacks()
         msg.set_allocated_friend_(f);
         network->sendToAllIndividuals(&msg, true);
         modified = false;
-        last_sent_friends = std::chrono::high_resolution_clock::now();
+        last_sent_friends = now;
     }
 }
 

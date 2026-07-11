@@ -721,6 +721,24 @@ static void test_inventory_equip_planner_multi_item_order()
     ++g_tests_passed;
 }
 
+static void test_inventory_equip_planner_remote_client_broadcasts_without_server_gc()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.add_item(0xAAA1, 200);
+
+    std::string body;
+    encode_equip_op(body, 0xAAA1, 2u, 3u);
+
+    TestEquipPlannerSummary summary = test_plan_equip_items_request(
+        reinterpret_cast<const uint8 *>(body.data()), body.size(), tf.gc.items, 100u, true, false, false);
+
+    TEST_ASSERT(!summary.has_server_forward, "remote client should skip local server GC forwarding");
+    TEST_ASSERT(summary.broadcast_equipped_items, "remote client should broadcast equipped items to the host gameserver");
+
+    ++g_tests_passed;
+}
+
 static void test_inventory_equip_planner_missing_item()
 {
     TestFixture tf;
@@ -3090,6 +3108,9 @@ int main()
 
     std::printf("[run] test_inventory_equip_planner_multi_item_order\n");
     RUN_TEST(test_inventory_equip_planner_multi_item_order);
+
+    std::printf("[run] test_inventory_equip_planner_remote_client_broadcasts_without_server_gc\n");
+    RUN_TEST(test_inventory_equip_planner_remote_client_broadcasts_without_server_gc);
 
     std::printf("[run] test_inventory_equip_planner_missing_item\n");
     RUN_TEST(test_inventory_equip_planner_missing_item);

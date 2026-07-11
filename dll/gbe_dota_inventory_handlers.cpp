@@ -272,6 +272,9 @@ inline void execute_equip_items_plan(
 
     if (plan.server_forward.enabled) {
         forward_server_gc(context.server_gc);
+    }
+
+    if (plan.broadcast_equipped_items) {
         broadcast_network();
     }
 
