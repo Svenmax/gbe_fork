@@ -200,6 +200,24 @@ struct EquipItemsPlan {
     GBE_DotaActionList actions;
 };
 
+inline uint32 infer_equipped_hero_id(const EquipItemsPlan &plan, const std::vector<Econ_Item> &current_items)
+{
+    uint32 hero_id = 0u;
+    for (const GBE_DotaEquipOp &op : plan.equip_ops) {
+        if (!op.has_new_class || op.new_class == 0u || op.new_class >= 1000u)
+            continue;
+        const bool target_exists = std::any_of(current_items.begin(), current_items.end(), [&op](const Econ_Item &item) {
+            return op.item_id != UINT64_MAX && op.item_id != 0u && item.id == op.item_id;
+        });
+        if (!target_exists)
+            continue;
+        if (hero_id != 0u && hero_id != op.new_class)
+            return 0u;
+        hero_id = op.new_class;
+    }
+    return hero_id;
+}
+
 struct EquipItemsExecutionContext {
     bool has_source_job{};
     uint64 source_job{};
@@ -686,6 +704,32 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         return true;
     }
 
+    const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
+    const uint32 equipped_hero_id = infer_equipped_hero_id(plan, items);
+    bool owner_hero_changed = false;
+    if (is_dota_client && server_gc && equipped_hero_id != 0u &&
+        server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id) &&
+        server_gc->GBE_local_lobby.owner_steam_id == local_steam_id) {
+        const uint32 previous_owner_hero_id = server_gc->GBE_local_lobby.owner_hero_id;
+        const auto execution = server_gc->GBE_ExecuteDotaLifecycleActions(
+            gbe::dota_lifecycle::build_member_runtime_actions(
+                local_steam_id,
+                true,
+                equipped_hero_id,
+                true,
+                "2569_owner_hero_inferred"));
+        owner_hero_changed = execution.state_changed && previous_owner_hero_id != server_gc->GBE_local_lobby.owner_hero_id;
+        if (owner_hero_changed) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_EQUIP_REFRESH",
+                "inferred owner hero from 2569 steam64=%llu hero_id=%u source_job=%llu",
+                static_cast<unsigned long long>(local_steam_id),
+                equipped_hero_id,
+                static_cast<unsigned long long>(source_job)
+            );
+        }
+    }
+
     runtime_state.equip_cache_version = next_cache_version;
     items = plan.items_after_mutation;
 
@@ -794,6 +838,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         [this](const char *reason) {
             GBE_RefreshDotaEquipLobbySnapshot(reason);
         });
+
+    if (owner_hero_changed) {
+        server_gc->GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(execution_context.local_steam_id, source_job);
+    }
 
     return true;
 }
