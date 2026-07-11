@@ -305,6 +305,23 @@ struct DotaPracticeLobbyPeripheralTemplatePatchResult {
 
 bool read_varuint(const std::vector<std::uint8_t> &bytes, std::size_t &offset, std::uint64_t &value, std::size_t *raw_size = nullptr);
 bool read_varuint(const std::uint8_t *data, std::size_t size, std::size_t &offset, std::uint64_t &value, std::size_t *raw_begin = nullptr, std::size_t *raw_end = nullptr);
+
+template <typename UInt64,
+          std::enable_if_t<
+              std::is_integral_v<UInt64> &&
+              std::is_unsigned_v<UInt64> &&
+              sizeof(UInt64) == sizeof(std::uint64_t) &&
+              !std::is_same_v<UInt64, std::uint64_t>,
+              int> = 0>
+bool read_varuint(const std::uint8_t *data, std::size_t size, std::size_t &offset, UInt64 &value, std::size_t *raw_begin = nullptr, std::size_t *raw_end = nullptr)
+{
+    std::uint64_t parsed_value = static_cast<std::uint64_t>(value);
+    if (!read_varuint(data, size, offset, parsed_value, raw_begin, raw_end))
+        return false;
+    value = static_cast<UInt64>(parsed_value);
+    return true;
+}
+
 std::uint64_t read_little_endian(const std::vector<std::uint8_t> &bytes, std::size_t offset, std::size_t size);
 std::vector<Field> parse_fields(const std::vector<std::uint8_t> &bytes);
 bool read_next_field(const std::uint8_t *data, std::size_t size, std::size_t &offset, Field &field, std::size_t *field_offset = nullptr, std::size_t *field_end = nullptr);
