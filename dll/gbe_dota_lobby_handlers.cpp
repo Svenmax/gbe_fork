@@ -739,7 +739,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyListRequest(bool has_request_job
 bool Steam_Game_Coordinator::GBE_HandleDotaCustomLobbyListRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw)
 {
     const uint8 *request_data = reinterpret_cast<const uint8 *>(request_body.data());
-    uint64 request_list_job_id = 0ull;
+    std::uint64_t request_list_job_id = 0ull;
     std::string requested_pass_key;
     gbe::proto_wire::read_uint64_field(request_data, request_body.size(), 10u, request_list_job_id);
     gbe::proto_wire::read_bytes_field(request_data, request_body.size(), 2u, requested_pass_key);

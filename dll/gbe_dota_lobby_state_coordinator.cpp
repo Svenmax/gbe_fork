@@ -1296,8 +1296,8 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             }
 
             gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared_lobby, false, true, GBE_local_lobby);
-            const uint64 recovery_base_generation = std::max(
-                GBE_CurrentDotaLobbyGeneration(),
+            const std::uint64_t recovery_base_generation = std::max(
+                static_cast<std::uint64_t>(GBE_CurrentDotaLobbyGeneration()),
                 GBE_local_lobby.generation);
             GBE_dota_lobby_generation_counter = gbe::dota_lobby_generation::Counter(
                 gbe::dota_lobby_generation::Generation{recovery_base_generation});
@@ -1326,8 +1326,8 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         }
 
         bool changed = false;
-        const uint64 synchronized_generation = std::max(
-            GBE_CurrentDotaLobbyGeneration(),
+        const std::uint64_t synchronized_generation = std::max(
+            static_cast<std::uint64_t>(GBE_CurrentDotaLobbyGeneration()),
             shared_lobby.generation);
         if (synchronized_generation != GBE_CurrentDotaLobbyGeneration()) {
             GBE_dota_lobby_generation_counter = gbe::dota_lobby_generation::Counter(
