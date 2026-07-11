@@ -1194,6 +1194,77 @@ def audit_composition_root_lifecycle(
     return issues
 
 
+def audit_dependency_object_lifecycle(
+    composition_header_text=None,
+    composition_source_text=None,
+    composition_test_text=None,
+    coordinator_header_text=None,
+    steam_client_header_text=None,
+):
+    """Keep GC state application-owned, dependencies explicit, and roots isolated."""
+    if composition_header_text is None:
+        composition_header_text = read(os.path.join(ROOT_DIR, "dll", "gbe_dota_composition_root.h"))
+    if composition_source_text is None:
+        composition_source_text = read(os.path.join(ROOT_DIR, "dll", "gbe_dota_composition_root.cpp"))
+    if composition_test_text is None:
+        composition_test_text = read(os.path.join(ROOT_DIR, "tools", "gbe_dota_composition_root_test", "gbe_dota_composition_root_test.cpp"))
+    if coordinator_header_text is None:
+        coordinator_header_text = read(os.path.join(ROOT_DIR, "dll", "dll", "steam_game_coordinator.h"))
+    if steam_client_header_text is None:
+        steam_client_header_text = read(os.path.join(ROOT_DIR, "dll", "dll", "steam_client.h"))
+
+    issues = []
+    root_owners = (
+        "GBE_SharedDotaLobbyState lobby_state_",
+        "std::recursive_mutex lobby_mutex_",
+        "dota_lobby_state::Store lobby_store_",
+        "std::unique_ptr<LifecycleExecutor> lifecycle_executor_",
+        "std::vector<dota_handler_registry::Entry> handler_registry_entries_",
+        "RoleContext client_",
+        "RoleContext server_",
+    )
+    for token in root_owners:
+        if token not in composition_header_text:
+            issues.append(f"gbe_dota_composition_root.h: CompositionRoot lost owned dependency '{token}'")
+
+    explicit_dependencies = (
+        (composition_header_text, "gbe_dota_composition_root.h", "RoleContext(\n        dota_lobby_state::Store &lobby_store,\n        RoleDependencies dependencies)"),
+        (composition_header_text, "gbe_dota_composition_root.h", "ReconnectService(\n        GBE_DotaReconnectContextProvider &context_provider,\n        GBE_DotaReconnectDirectConnector &direct_connector,\n        GBE_DotaReconnectCallbackQueue &callback_queue)"),
+        (coordinator_header_text, "steam_game_coordinator.h", "Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, gbe::dota_handler_registry::View handler_registry, gbe::dota_lifecycle::Executor &lifecycle_executor, bool is_server)"),
+    )
+    for source, filename, token in explicit_dependencies:
+        if token not in source:
+            issues.append(f"{filename}: GC service lost explicit constructor dependencies")
+
+    if "require_dependency(lifecycle_executor_, \"lifecycle_executor\")" not in composition_source_text:
+        issues.append("gbe_dota_composition_root.cpp: CompositionRoot must reject a missing lifecycle executor")
+
+    production_owners = (
+        "GBE_SharedDotaLobbyState dota_lobby_state",
+        "dota_lobby_state::Store dota_lobby_store",
+        "gbe::dota::RuntimeState dota_runtime_state",
+        "GBE_DotaReconnectNetworkAdapter *dota_reconnect_adapter_client",
+        "GBE_DotaReconnectNetworkAdapter *dota_reconnect_adapter_server",
+        "gbe::dota_lifecycle::CoordinatorExecutor *dota_lifecycle_executor_client",
+        "gbe::dota_lifecycle::CoordinatorExecutor *dota_lifecycle_executor_server",
+    )
+    for token in production_owners:
+        if token not in steam_client_header_text:
+            issues.append(f"steam_client.h: Steam_Client lost application-owned GC dependency '{token}'")
+
+    lifecycle_tests = (
+        "test_roots_isolate_owned_state",
+        "test_client_assembly_uses_client_dependencies_only",
+        "test_gameserver_assembly_uses_gameserver_dependencies_only",
+        "test_delayed_work_expires_with_root_dependencies",
+        "test_recreated_root_starts_without_previous_state",
+    )
+    for test_name in lifecycle_tests:
+        if composition_test_text.count(test_name) < 2:
+            issues.append(f"gbe_dota_composition_root_test.cpp: missing executed lifecycle regression {test_name}")
+    return issues
+
+
 def audit_mutable_gc_global_state(sources=None):
     """Reject mutable GC namespace/file static state outside narrow locators."""
     if sources is None:
@@ -1614,6 +1685,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 22: Dependency and object lifecycle")
+    print("=" * 70)
+    print("  Action: keep mutable state application-owned, service dependencies explicit, and roots isolated.")
+    dependency_object_lifecycle_issues = audit_dependency_object_lifecycle()
+    if not dependency_object_lifecycle_issues:
+        print("  Production owners, explicit service dependencies, and lifecycle isolation regressions remain canonical")
+    else:
+        for issue in dependency_object_lifecycle_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -1640,8 +1723,9 @@ def main():
     print(f"  Architecture investment issues:      {len(architecture_investment_input_issues)}")
     print(f"  Handler responsibility issues:       {len(handler_responsibility_issues)}")
     print(f"  State and effect ownership issues:    {len(state_effect_ownership_issues)}")
+    print(f"  Dependency/object lifecycle issues:   {len(dependency_object_lifecycle_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues:
         sys.exit(1)
 
 

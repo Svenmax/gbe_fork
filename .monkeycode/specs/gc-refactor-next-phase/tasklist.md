@@ -538,8 +538,10 @@
     - domain planner 保持纯决策；executor 拥有副作用；store 拥有共享状态；network adapter 拥有 Steam 网络调用。
     - 验收结果：6 个 pure flow/action planner 不含 response push、callback、Steam network、Store accessor 或 shared publish/details side effect；lifecycle coordinator executor 保持六个 canonical effect API；Dota reconnect `ConnectByIPAddress` 仅由 network adapter 调用；Audit 10/13 继续保证共享状态只能通过 Store contract。
     - Audit 21 固化 planner purity、executor effect inventory 和 reconnect network owner，正反 fixtures 覆盖 pure planner side effect、executor API 缺失和 adapter bypass；审计 helper 增至 50 项。
-  - [ ] 16.3 验收依赖与对象生命周期
+  - [x] 16.3 验收依赖与对象生命周期
     - composition root 拥有业务对象和可变状态，业务 service 使用显式依赖，实例之间保持隔离。
+    - 验收结果：production `Steam_Client` 继续拥有 shared lobby backing state/Store、runtime state、client/gameserver reconnect adapters 与 lifecycle executors；offline `CompositionRoot` 自有 backing state、mutex、Store、executor、registry copy 和双角色 context。
+    - Audit 22 固化 root ownership、`RoleContext`/`ReconnectService`/`Steam_Game_Coordinator` 显式构造依赖和 lifecycle executor 非空门禁；composition-root 集成测试持续覆盖双 root 隔离、client/gameserver 角色隔离、销毁后延迟工作失效和重建无状态泄漏。审计 helper 增至 54 项。
   - [ ] 16.4 验收核心状态机
     - Lobby lifecycle、generation 和 reconnect 的核心转移只由纯 transition 函数产生。
   - [ ] 16.5 验收代际与异步安全

@@ -402,6 +402,84 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
         )
 
 
+class DependencyObjectLifecycleAuditTest(unittest.TestCase):
+    def valid_sources(self):
+        header = """
+class ReconnectService {
+    ReconnectService(
+        GBE_DotaReconnectContextProvider &context_provider,
+        GBE_DotaReconnectDirectConnector &direct_connector,
+        GBE_DotaReconnectCallbackQueue &callback_queue);
+};
+class RoleContext {
+    RoleContext(
+        dota_lobby_state::Store &lobby_store,
+        RoleDependencies dependencies);
+};
+class CompositionRoot {
+    GBE_SharedDotaLobbyState lobby_state_;
+    std::recursive_mutex lobby_mutex_;
+    dota_lobby_state::Store lobby_store_;
+    std::unique_ptr<LifecycleExecutor> lifecycle_executor_;
+    std::vector<dota_handler_registry::Entry> handler_registry_entries_;
+    RoleContext client_;
+    RoleContext server_;
+};
+"""
+        source = 'require_dependency(lifecycle_executor_, "lifecycle_executor");'
+        tests = "\n".join(
+            f"void {name}();\n{name}();"
+            for name in (
+                "test_roots_isolate_owned_state",
+                "test_client_assembly_uses_client_dependencies_only",
+                "test_gameserver_assembly_uses_gameserver_dependencies_only",
+                "test_delayed_work_expires_with_root_dependencies",
+                "test_recreated_root_starts_without_previous_state",
+            )
+        )
+        coordinator = "Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, gbe::dota_handler_registry::View handler_registry, gbe::dota_lifecycle::Executor &lifecycle_executor, bool is_server);"
+        client = """
+GBE_SharedDotaLobbyState dota_lobby_state{};
+dota_lobby_state::Store dota_lobby_store;
+gbe::dota::RuntimeState dota_runtime_state{};
+GBE_DotaReconnectNetworkAdapter *dota_reconnect_adapter_client{};
+GBE_DotaReconnectNetworkAdapter *dota_reconnect_adapter_server{};
+gbe::dota_lifecycle::CoordinatorExecutor *dota_lifecycle_executor_client{};
+gbe::dota_lifecycle::CoordinatorExecutor *dota_lifecycle_executor_server{};
+"""
+        return header, source, tests, coordinator, client
+
+    def audit(self, sources=None):
+        return audit.audit_dependency_object_lifecycle(*(sources or self.valid_sources()))
+
+    def test_accepts_owned_explicit_isolated_dependencies(self):
+        self.assertEqual([], self.audit())
+
+    def test_rejects_root_state_owner_removed(self):
+        sources = list(self.valid_sources())
+        sources[0] = sources[0].replace("    GBE_SharedDotaLobbyState lobby_state_;\n", "")
+        self.assertIn(
+            "gbe_dota_composition_root.h: CompositionRoot lost owned dependency 'GBE_SharedDotaLobbyState lobby_state_'",
+            self.audit(sources),
+        )
+
+    def test_rejects_implicit_service_dependency(self):
+        sources = list(self.valid_sources())
+        sources[3] = "Steam_Game_Coordinator(bool is_server);"
+        self.assertIn(
+            "steam_game_coordinator.h: GC service lost explicit constructor dependencies",
+            self.audit(sources),
+        )
+
+    def test_rejects_missing_executed_isolation_regression(self):
+        sources = list(self.valid_sources())
+        sources[2] = sources[2].replace("test_roots_isolate_owned_state();", "")
+        self.assertIn(
+            "gbe_dota_composition_root_test.cpp: missing executed lifecycle regression test_roots_isolate_owned_state",
+            self.audit(sources),
+        )
+
+
 class MutableGcGlobalStateAuditTest(unittest.TestCase):
     def test_accepts_immutable_data_functions_and_compatibility_locators(self):
         sources = {
