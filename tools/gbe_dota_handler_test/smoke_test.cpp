@@ -2888,6 +2888,7 @@ static void test_match_7034_connected_player_updates_runtime_before_response()
     const uint32_t hero_id = 86u;
     const JobID_t source_job = 0x7034ABCDu;
     tf.settings.m_local_steam_id = CSteamID(owner_steam_id);
+    tf.gc.is_server = true;
     tf.gc.GBE_local_lobby.active = true;
     tf.gc.GBE_local_lobby.lobby_id = 0x703400u;
     tf.gc.GBE_local_lobby.match_id = 0x703401u;
@@ -2896,6 +2897,10 @@ static void test_match_7034_connected_player_updates_runtime_before_response()
     tf.gc.GBE_local_lobby.owner_hero_id = 0u;
     tf.gc.GBE_local_lobby.state = 2u;
     tf.gc.GBE_local_lobby.game_state = 1u;
+
+    Steam_Game_Coordinator client_gc;
+    client_gc.items.push_back(Econ_Item{});
+    g_test_steam_client.steam_game_coordinator = &client_gc;
 
     const std::string body = make_dota7034_connected_player_body(owner_steam_id, hero_id);
     bool result = tf.gc.GBE_HandleDotaDirect7034Request(
@@ -2910,11 +2915,15 @@ static void test_match_7034_connected_player_updates_runtime_before_response()
     TEST_ASSERT_EQ(tf.recorder.runtime_states[0].hero_id, hero_id, "runtime state should preserve request hero id");
     TEST_ASSERT(tf.recorder.runtime_states[0].has_hero_id, "runtime state should preserve has_hero_id");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_hero_id, hero_id, "owner hero should update before response path completes");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "7034 should publish runtime state, queue runtime update, then respond");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "7034 should publish runtime state, replay host cache, refresh local wearables, queue runtime update, then respond");
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "first action should publish lobby state");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7034_connected_player", "publish reason should identify connected player");
-    expect_push_action(tf.recorder.actions[1], 26u, "second action should queue runtime update");
-    expect_push_payload(tf.recorder.actions[2], 7034u, "third action should push 7034 response with payload");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::ServerGcForward, "second action should replay host equipped items after hero is known");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7034_owner_hero_known_server", "cache replay reason should identify owner hero transition");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].msg_type, 1029u, "third action should request host local wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].steam_id, owner_steam_id, "wearable refresh should target the lobby owner");
+    expect_push_action(tf.recorder.actions[3], 26u, "fourth action should queue runtime update");
+    expect_push_payload(tf.recorder.actions[4], 7034u, "fifth action should push 7034 response with payload");
 
     ++g_tests_passed;
 }
@@ -3004,7 +3013,7 @@ static void test_match_7034_host_showcase_repush_guard_marks_once()
     tf.gc.GBE_local_lobby.match_id = 0x703451u;
     tf.gc.GBE_local_lobby.server_id = 0x703452u;
     tf.gc.GBE_local_lobby.owner_steam_id = owner_steam_id;
-    tf.gc.GBE_local_lobby.owner_hero_id = 131u;
+    tf.gc.GBE_local_lobby.owner_hero_id = 0u;
     tf.gc.GBE_local_lobby.state = 2u;
     tf.gc.GBE_local_lobby.game_state = 3u;
 
@@ -3019,12 +3028,10 @@ static void test_match_7034_host_showcase_repush_guard_marks_once()
 
     TEST_ASSERT(first_result, "7034 showcase handler should return true on first request");
     TEST_ASSERT(tf.gc.GBE_HasPushedDotaHostShowcaseEquip(), "first showcase request should mark host equip repushed");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 3u, "first showcase request should repush server cache, refresh local wearables, then respond");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "first showcase request should repush server cache then respond while owner hero is unknown");
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::ServerGcForward, "first showcase action should repush host equipped items");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7034_showcase_host_equip_repush", "showcase repush reason should be preserved");
-    TEST_ASSERT_EQ(tf.recorder.actions[1].msg_type, 1029u, "second action should request host local wearable refresh");
-    TEST_ASSERT_EQ(tf.recorder.actions[1].steam_id, owner_steam_id, "wearable refresh should target the lobby owner");
-    expect_push_payload(tf.recorder.actions[2], 7034u, "third action should push 7034 response with payload");
+    expect_push_payload(tf.recorder.actions[1], 7034u, "second action should push 7034 response with payload");
 
     tf.recorder.clear();
     bool second_result = tf.gc.GBE_HandleDotaDirect7034Request(

@@ -490,6 +490,19 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(
     const CSteamID owner_id(owner_steam_id);
     const auto &client_items = client_gc->get_items();
     if (GBE_RefreshDotaHostEquippedItemsCache(this, owner_id, client_items, "7034_owner_hero_known_server")) {
+        const uint32 owner_hero_id = GBE_local_lobby.owner_hero_id;
+        if (owner_hero_id != 0u && !GBE_HasRefreshedDotaHostLocalWearables(owner_steam_id, owner_hero_id)) {
+            callback_respawn_request(owner_id);
+            GBE_MarkDotaHostLocalWearablesRefreshed(owner_steam_id, owner_hero_id);
+            GBE_GC_DebugLog(
+                "GC_DOTA_EQUIP_REFRESH",
+                "requested host local wearable refresh after owner hero cache replay: steam64=%llu hero_id=%u generation=%llu source_job=%llu",
+                static_cast<unsigned long long>(owner_steam_id),
+                owner_hero_id,
+                static_cast<unsigned long long>(GBE_CurrentDotaLobbyGeneration()),
+                static_cast<unsigned long long>(source_job)
+            );
+        }
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "replayed host equipped items to server GC after owner hero became known: steam64=%llu hero_id=%u source_job=%llu",
@@ -732,25 +745,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
                     GBE_local_lobby.game_state
                 );
             }
-        }
-    }
-
-    if (is_server && GBE_HasPushedDotaHostShowcaseEquip() &&
-        request_shape.has_game_state && request_shape.game_state >= 4u &&
-        GBE_local_lobby.active && GBE_local_lobby.state == 2u) {
-        const uint64 owner_steam64 = GBE_GetDotaLobbyOwnerSteamId();
-        const uint32 owner_hero_id = GBE_local_lobby.owner_hero_id;
-        if (owner_steam64 != 0ull && owner_hero_id != 0u &&
-            !GBE_HasRefreshedDotaHostLocalWearables(owner_steam64, owner_hero_id)) {
-            callback_respawn_request(CSteamID(owner_steam64));
-            GBE_MarkDotaHostLocalWearablesRefreshed(owner_steam64, owner_hero_id);
-            GBE_GC_DebugLog(
-                "GC_DOTA_EQUIP_REFRESH",
-                "requested host local wearable refresh after showcase cache repush: steam64=%llu hero_id=%u generation=%llu",
-                static_cast<unsigned long long>(owner_steam64),
-                owner_hero_id,
-                static_cast<unsigned long long>(GBE_CurrentDotaLobbyGeneration())
-            );
         }
     }
 
