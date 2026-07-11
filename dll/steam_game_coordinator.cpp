@@ -1210,6 +1210,40 @@ bool Steam_Game_Coordinator::ResetGCMemory(
     clear_dota_runtime_state(reset_decision.preserve_reconnect_context);
     GBE_local_lobby.generation = next_generation;
 
+    std::size_t equipped_item_count = 0;
+    std::size_t equip_state_count = 0;
+    std::uint64_t equipped_snapshot_hash = 1469598103934665603ull;
+    for (const Econ_Item &item : items) {
+        if (item.equip_states.empty())
+            continue;
+
+        ++equipped_item_count;
+        equip_state_count += item.equip_states.size();
+        equipped_snapshot_hash ^= item.id;
+        equipped_snapshot_hash *= 1099511628211ull;
+        equipped_snapshot_hash ^= item.def;
+        equipped_snapshot_hash *= 1099511628211ull;
+        equipped_snapshot_hash ^= item.style;
+        equipped_snapshot_hash *= 1099511628211ull;
+        for (const auto &[class_id, slot_id] : item.equip_states) {
+            equipped_snapshot_hash ^= (static_cast<std::uint64_t>(class_id) << 16u) | slot_id;
+            equipped_snapshot_hash *= 1099511628211ull;
+        }
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_EQUIP_BASELINE",
+        "reset generation=%llu previous_lobby_id=%llu total_items=%zu equipped_items=%zu equip_states=%zu snapshot=%016llx cache_version=%llu reason=%s",
+        static_cast<unsigned long long>(next_generation),
+        static_cast<unsigned long long>(previous_lobby_id),
+        items.size(),
+        equipped_item_count,
+        equip_state_count,
+        static_cast<unsigned long long>(equipped_snapshot_hash),
+        static_cast<unsigned long long>(GBE_DotaRuntimeState().equip_cache_version),
+        reason ? reason : "unknown"
+    );
+
     GBE_ClearPendingResetAfterCacheUnsubscribed();
     if (previous_lobby_id != 0 && GBE_suppressed_dota_abandon_lobby_id != previous_lobby_id)
         GBE_ClearDotaAbandonedLobbySuppression(previous_lobby_id, reason ? reason : "reset_gc_memory");

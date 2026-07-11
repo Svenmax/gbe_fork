@@ -716,9 +716,10 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
 
     GBE_GC_DebugLog(
         "GC_DOTA_DIRECT",
-        "pushed player item CacheSubscribed role=%s target_gc=%p steam64=%llu equipped_items=%zu equip_states=%zu snapshot=%016llx reason=%s message_size=%zu unsub_first=%u",
+        "pushed player item CacheSubscribed role=%s target_gc=%p generation=%llu steam64=%llu equipped_items=%zu equip_states=%zu snapshot=%016llx reason=%s message_size=%zu unsub_first=%u",
         target_gc->GBE_IsServerGC() ? "server" : "client",
         static_cast<void *>(target_gc),
+        static_cast<unsigned long long>(target_gc->GBE_CurrentDotaLobbyGeneration()),
         static_cast<unsigned long long>(player_steam64),
         equipped_items.size(),
         equip_state_count,

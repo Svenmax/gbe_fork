@@ -233,6 +233,7 @@ public:
     void push_incoming_message(uint32_t msg_type, const std::string &msg)
         { pushed_msg_type = msg_type; pushed_message = msg; }
     bool GBE_IsServerGC() const { return is_server; }
+    uint64_t GBE_CurrentDotaLobbyGeneration() const { return lobby_generation; }
     void GBE_MirrorDotaEquippedItemsForUser(const CSteamID &, const std::vector<Econ_Item> &, const char *) {}
     std::string serialize_item_to_gcprotobuf(const Econ_Item &item, const CSteamID &steam_id)
         { (void)steam_id; return std::to_string(item.id); }
@@ -240,6 +241,7 @@ public:
         { (void)local_steam_id; (void)out; return false; }
 
     bool is_server{true};
+    uint64_t lobby_generation{};
     uint32_t pushed_msg_type{};
     std::string pushed_message;
 };
