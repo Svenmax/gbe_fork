@@ -212,6 +212,50 @@ class HandlerResponsibilityBoundaryAuditTest(unittest.TestCase):
         self.assertEqual([], audit.audit_handler_responsibility_boundaries(sources)[0])
 
 
+class StateEffectOwnershipAuditTest(unittest.TestCase):
+    def valid_sources(self):
+        sources = {base: "return plan;" for base in audit.PURE_DOTA_PLANNER_FILES}
+        sources[audit.LIFECYCLE_EXECUTOR_OWNER] = "\n".join(
+            f"{api}();" for api in audit.LIFECYCLE_SIDE_EFFECT_APIS
+        )
+        sources["gbe_dota_reconnect_network_adapter.cpp"] = "direct_sockets->ConnectByIPAddress(address);"
+        return sources
+
+    def test_accepts_canonical_planner_executor_and_network_owners(self):
+        self.assertEqual([], audit.audit_state_effect_ownership(self.valid_sources()))
+
+    def test_rejects_side_effect_inside_pure_planner(self):
+        sources = self.valid_sources()
+        sources["gbe_dota_lobby_flow.cpp"] = "push_incoming_now(24, payload);"
+        self.assertIn(
+            "gbe_dota_lobby_flow.cpp: pure planner directly uses side-effect or shared-state token push_incoming_now(",
+            audit.audit_state_effect_ownership(sources),
+        )
+
+    def test_rejects_missing_executor_owned_effect(self):
+        sources = self.valid_sources()
+        sources[audit.LIFECYCLE_EXECUTOR_OWNER] = sources[audit.LIFECYCLE_EXECUTOR_OWNER].replace(
+            "GBE_SendDotaPracticeLobbyDetailsUpdate();",
+            "",
+        )
+        self.assertIn(
+            f"{audit.LIFECYCLE_EXECUTOR_OWNER}: lifecycle executor no longer owns GBE_SendDotaPracticeLobbyDetailsUpdate",
+            audit.audit_state_effect_ownership(sources),
+        )
+
+    def test_rejects_reconnect_network_call_outside_adapter(self):
+        sources = self.valid_sources()
+        sources["gbe_dota_lobby_flow.cpp"] = "socket.ConnectByIPAddress(address);"
+        self.assertIn(
+            "gbe_dota_lobby_flow.cpp: pure planner directly uses side-effect or shared-state token ConnectByIPAddress(",
+            audit.audit_state_effect_ownership(sources),
+        )
+        self.assertIn(
+            "gbe_dota_lobby_flow.cpp: Dota reconnect network call bypasses gbe_dota_reconnect_network_adapter.cpp",
+            audit.audit_state_effect_ownership(sources),
+        )
+
+
 class ConcurrencyOwnershipAuditTest(unittest.TestCase):
     def test_contract_terms_cover_p11_state_and_follow_up_boundaries(self):
         required = set(audit.CONCURRENCY_OWNERSHIP_TERMS)

@@ -123,6 +123,24 @@ HANDLER_RESPONSIBILITY_BASELINE = {
     ("gbe_dota_post_login_handlers.cpp", "push_incoming_now"): 1,
     ("gbe_dota_template_replay_handlers.cpp", "push_incoming_now"): 10,
 }
+PURE_DOTA_PLANNER_FILES = (
+    "gbe_dota_lifecycle_actions.cpp",
+    "gbe_dota_lobby_flow.cpp",
+    "gbe_dota_lobby_launch_flow.cpp",
+    "gbe_dota_lobby_member_flow.cpp",
+    "gbe_dota_lobby_payload_flow.cpp",
+    "gbe_dota_chat_flow.cpp",
+)
+PURE_DOTA_PLANNER_FORBIDDEN_TOKENS = (
+    "push_incoming_now(",
+    "sendToAllGameservers(",
+    "ConnectByIPAddress(",
+    "addCBResult(",
+    "GBE_GetSharedDotaLobbyStateStore(",
+    "GBE_SharedLobbyStore(",
+    "GBE_PublishSharedDotaLobbyState(",
+    "GBE_SendDotaPracticeLobbyDetailsUpdate(",
+)
 LIFECYCLE_EXECUTOR_OWNER = "gbe_dota_custom_game_lifecycle_coordinator.cpp"
 LIFECYCLE_PLANNER = "gbe_dota_lifecycle_actions.cpp"
 LIFECYCLE_SIDE_EFFECT_APIS = [
@@ -574,6 +592,47 @@ def audit_handler_responsibility_boundaries(source_texts=None, baseline=None):
                 f"{key[0]}: direct {key[1]} count {count} exceeds accepted handler boundary {allowed}; route new work through a coordinator or executor"
             )
     return issues, actual
+
+
+def audit_state_effect_ownership(source_texts=None):
+    """Keep pure planning, shared state, lifecycle effects, and reconnect network calls on canonical owners."""
+    if source_texts is None:
+        source_texts = {
+            base: read(os.path.join(ROOT_DIR, "dll", base))
+            for base in PURE_DOTA_PLANNER_FILES
+        }
+        source_texts[LIFECYCLE_EXECUTOR_OWNER] = read(os.path.join(ROOT_DIR, "dll", LIFECYCLE_EXECUTOR_OWNER))
+        source_texts["gbe_dota_reconnect_network_adapter.cpp"] = read(
+            os.path.join(ROOT_DIR, "dll", "gbe_dota_reconnect_network_adapter.cpp")
+        )
+        for path in glob.glob(os.path.join(ROOT_DIR, "dll", "gbe_dota_*.cpp")):
+            source_texts.setdefault(os.path.basename(path), read(path))
+
+    issues = []
+    for base in PURE_DOTA_PLANNER_FILES:
+        source = strip_comments(source_texts.get(base, ""))
+        for token in PURE_DOTA_PLANNER_FORBIDDEN_TOKENS:
+            if token in source:
+                issues.append(f"{base}: pure planner directly uses side-effect or shared-state token {token}")
+
+    executor = strip_comments(source_texts.get(LIFECYCLE_EXECUTOR_OWNER, ""))
+    for api in LIFECYCLE_SIDE_EFFECT_APIS:
+        if not re.search(r"\b" + re.escape(api) + r"\s*\(", executor):
+            issues.append(f"{LIFECYCLE_EXECUTOR_OWNER}: lifecycle executor no longer owns {api}")
+
+    for source_name, source_text in source_texts.items():
+        base = os.path.basename(source_name)
+        if not base.startswith("gbe_dota_") or not base.endswith(".cpp"):
+            continue
+        if base == "gbe_dota_reconnect_network_adapter.cpp":
+            continue
+        if re.search(r"\bConnectByIPAddress\s*\(", strip_comments(source_text)):
+            issues.append(f"{base}: Dota reconnect network call bypasses gbe_dota_reconnect_network_adapter.cpp")
+
+    adapter = strip_comments(source_texts.get("gbe_dota_reconnect_network_adapter.cpp", ""))
+    if not re.search(r"\bConnectByIPAddress\s*\(", adapter):
+        issues.append("gbe_dota_reconnect_network_adapter.cpp: canonical direct-connect call is missing")
+    return issues
 
 
 def audit_lifecycle_side_effect_ownership():
@@ -1543,6 +1602,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 21: State and effect ownership")
+    print("=" * 70)
+    print("  Action: keep planners pure, lifecycle effects coordinated, shared state stored, and reconnect network calls adapted.")
+    state_effect_ownership_issues = audit_state_effect_ownership()
+    if not state_effect_ownership_issues:
+        print(f"  All {len(PURE_DOTA_PLANNER_FILES)} pure planners and canonical lifecycle/network owners retain their boundaries")
+    else:
+        for issue in state_effect_ownership_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -1568,8 +1639,9 @@ def main():
     print(f"  Lifecycle transition gate issues:    {len(lifecycle_transition_gate_issues)}")
     print(f"  Architecture investment issues:      {len(architecture_investment_input_issues)}")
     print(f"  Handler responsibility issues:       {len(handler_responsibility_issues)}")
+    print(f"  State and effect ownership issues:    {len(state_effect_ownership_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues:
         sys.exit(1)
 
 
