@@ -92,6 +92,13 @@ bool GBE_RefreshDotaHostEquippedItemsCache(
     const std::vector<Econ_Item> &source_items,
     const char *reason);
 
+bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
+    Steam_Game_Coordinator *client_gc,
+    const CSteamID &player_steam_id,
+    uint32 hero_id,
+    const std::vector<Econ_Item> &source_items,
+    const char *reason);
+
 bool GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage(
     const char *template_hex,
     uint64 steam_id,

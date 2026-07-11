@@ -762,6 +762,51 @@ bool GBE_RefreshDotaHostEquippedItemsCache(
     return refreshed;
 }
 
+bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
+    Steam_Game_Coordinator *client_gc,
+    const CSteamID &player_steam_id,
+    uint32 hero_id,
+    const std::vector<Econ_Item> &source_items,
+    const char *reason)
+{
+    if (!client_gc || client_gc->GBE_IsServerGC() || !player_steam_id.BIndividualAccount() || hero_id == 0u)
+        return false;
+
+    std::size_t pushed_items = 0;
+    for (const Econ_Item &item : source_items) {
+        bool hero_equipped = false;
+        for (const auto &[class_id, slot_id] : item.equip_states) {
+            (void)slot_id;
+            if (class_id == hero_id) {
+                hero_equipped = true;
+                break;
+            }
+        }
+        if (!hero_equipped)
+            continue;
+
+        std::string update_body;
+        if (!GBE_BuildSOSingleObjectFromItem(item, player_steam_id, update_body))
+            continue;
+
+        std::string update_message;
+        gbe::gc_message::build_dota_zero_header_payload(22u, update_body, update_message);
+        client_gc->push_incoming_message(22u | GBE_kProtoMask, update_message);
+        ++pushed_items;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_DOTA_EQUIP_REFRESH",
+        "pushed host hero equipped SO updates to client GC: steam64=%llu hero_id=%u pushed_items=%zu source_items=%zu reason=%s",
+        static_cast<unsigned long long>(player_steam_id.ConvertToUint64()),
+        hero_id,
+        pushed_items,
+        source_items.size(),
+        reason ? reason : "unknown"
+    );
+    return pushed_items != 0u;
+}
+
 // =====================================================================
 // Phase 2.13 pure item helpers (GBE_ParseDotaEquipOps,
 // GBE_ApplyDotaUnlockStyleBitmask, GBE_SerializeEconItemToGcprotobuf,

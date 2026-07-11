@@ -148,6 +148,26 @@ bool GBE_RefreshDotaHostEquippedItemsCache(
     return GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, player_steam_id, source_items, true, reason);
 }
 
+bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
+    Steam_Game_Coordinator *client_gc,
+    const CSteamID &player_steam_id,
+    uint32 hero_id,
+    const std::vector<Econ_Item> &source_items,
+    const char *reason)
+{
+    if (!client_gc || hero_id == 0u)
+        return false;
+    if (g_action_recorder)
+        g_action_recorder->record_server_gc_cache_forward(
+            22u,
+            client_gc,
+            player_steam_id.ConvertToUint64(),
+            source_items.size(),
+            false,
+            reason);
+    return true;
+}
+
 bool GBE_AdaptDotaJoinChatChannelResponsePayload(
     uint64 steam_id,
     uint64 generic_lobby_id,

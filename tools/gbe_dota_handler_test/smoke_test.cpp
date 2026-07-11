@@ -2915,15 +2915,17 @@ static void test_match_7034_connected_player_updates_runtime_before_response()
     TEST_ASSERT_EQ(tf.recorder.runtime_states[0].hero_id, hero_id, "runtime state should preserve request hero id");
     TEST_ASSERT(tf.recorder.runtime_states[0].has_hero_id, "runtime state should preserve has_hero_id");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_hero_id, hero_id, "owner hero should update before response path completes");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 5u, "7034 should publish runtime state, replay host cache, refresh local wearables, queue runtime update, then respond");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 6u, "7034 should publish runtime state, replay host cache, update client items, refresh local wearables, queue runtime update, then respond");
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "first action should publish lobby state");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7034_connected_player", "publish reason should identify connected player");
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::ServerGcForward, "second action should replay host equipped items after hero is known");
     TEST_ASSERT(tf.recorder.actions[1].reason == "7034_owner_hero_known_server", "cache replay reason should identify owner hero transition");
-    TEST_ASSERT_EQ(tf.recorder.actions[2].msg_type, 1029u, "third action should request host local wearable refresh");
-    TEST_ASSERT_EQ(tf.recorder.actions[2].steam_id, owner_steam_id, "wearable refresh should target the lobby owner");
-    expect_push_action(tf.recorder.actions[3], 26u, "fourth action should queue runtime update");
-    expect_push_payload(tf.recorder.actions[4], 7034u, "fifth action should push 7034 response with payload");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].msg_type, 22u, "third action should push current hero item updates to client GC");
+    TEST_ASSERT(tf.recorder.actions[2].reason == "7034_owner_hero_known_client", "client item update reason should identify owner hero transition");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].msg_type, 1029u, "fourth action should request host local wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].steam_id, owner_steam_id, "wearable refresh should target the lobby owner");
+    expect_push_action(tf.recorder.actions[4], 26u, "fifth action should queue runtime update");
+    expect_push_payload(tf.recorder.actions[5], 7034u, "sixth action should push 7034 response with payload");
 
     ++g_tests_passed;
 }
