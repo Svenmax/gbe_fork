@@ -315,6 +315,7 @@ struct RecordedAction
     uint32 applied_lobby_state{};      // PushIncomingNow
     uint32 applied_lobby_game_state{}; // PushIncomingNow
     size_t server_gc_source_item_count{};
+    double delay{};              // PushIncoming
 
     const char *type_name() const
     {
@@ -455,13 +456,14 @@ public:
         actions.push_back(std::move(a));
     }
 
-    void record_respawn_request(uint64 steam_id)
+    void record_respawn_request(uint64 steam_id, double delay)
     {
         RecordedAction a;
         a.type = GBE_DotaActionType::PushIncoming;
         a.msg_type = 1029u;
         a.steam_id = steam_id;
         a.reason = "host_local_wearable_refresh";
+        a.delay = delay;
         actions.push_back(std::move(a));
     }
 
@@ -1332,10 +1334,10 @@ public:
     void callback_items_received(CSteamID, const std::vector<Econ_Item> &) {}
     void callback_items_removed(CSteamID) {}
     void callback_item_deleted(CSteamID, uint64) {}
-    void callback_respawn_request(CSteamID steam_id)
+    void callback_respawn_request(CSteamID steam_id, double delay = 0.1)
     {
         if (g_action_recorder)
-            g_action_recorder->record_respawn_request(steam_id.ConvertToUint64());
+            g_action_recorder->record_respawn_request(steam_id.ConvertToUint64(), delay);
     }
     void callback_client_welcome() {}
     void callback_server_welcome() {}

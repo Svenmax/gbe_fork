@@ -408,7 +408,7 @@ public ISteamGameCoordinator
     void callback_items_removed(CSteamID steam_id);
     void callback_item_updated(CSteamID steam_id, const Econ_Item &item);
     void callback_item_deleted(CSteamID steam_id, uint64 item_id);
-    void callback_respawn_request(CSteamID steam_id);
+    void callback_respawn_request(CSteamID steam_id, double delay = 0.1);
 
     void network_callback_inventory_request(Common_Message *msg);
     void network_callback_inventory_response(Common_Message *msg);

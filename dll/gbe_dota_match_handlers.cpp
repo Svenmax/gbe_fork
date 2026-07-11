@@ -494,10 +494,11 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(
         if (owner_hero_id != 0u && !GBE_HasRefreshedDotaHostLocalWearables(owner_steam_id, owner_hero_id) &&
             GBE_PushDotaHeroEquippedItemUpdatesToClientGC(client_gc, owner_id, owner_hero_id, client_items, "7034_owner_hero_known_client")) {
             client_gc->callback_respawn_request(owner_id);
+            client_gc->callback_respawn_request(owner_id, 1.5);
             GBE_MarkDotaHostLocalWearablesRefreshed(owner_steam_id, owner_hero_id);
             GBE_GC_DebugLog(
                 "GC_DOTA_EQUIP_REFRESH",
-                "requested host local wearable refresh after owner hero cache replay: steam64=%llu hero_id=%u generation=%llu source_job=%llu",
+                "requested host local wearable refresh after owner hero cache replay: steam64=%llu hero_id=%u generation=%llu source_job=%llu delays_ms=100,1500",
                 static_cast<unsigned long long>(owner_steam_id),
                 owner_hero_id,
                 static_cast<unsigned long long>(GBE_CurrentDotaLobbyGeneration()),

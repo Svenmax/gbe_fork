@@ -899,7 +899,7 @@ void Steam_Game_Coordinator::handle_respawn(const void *input, uint32 input_size
     network->sendToAllGameservers(&msg, true);
 }
 
-void Steam_Game_Coordinator::callback_respawn_request(CSteamID steam_id)
+void Steam_Game_Coordinator::callback_respawn_request(CSteamID steam_id, double delay)
 {
     if (!gc_initialized)
         return;
@@ -908,7 +908,7 @@ void Steam_Game_Coordinator::callback_respawn_request(CSteamID steam_id)
     std::string message = build_msg_header();
     ser_var<uint64>(message, steam_id.ConvertToUint64());
 
-    push_incoming(msg_type, message);
+    push_incoming(msg_type, message, delay);
 }
 
 void Steam_Game_Coordinator::steam_network_callback(void *object, Common_Message *msg)
