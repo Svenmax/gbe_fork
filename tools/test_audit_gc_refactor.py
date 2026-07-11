@@ -2,6 +2,7 @@
 """Focused regression tests for GC refactor audit helpers."""
 
 import unittest
+import json
 
 import _audit_gc_refactor as audit
 
@@ -107,6 +108,74 @@ class LifecycleTransitionGateAuditTest(unittest.TestCase):
         self.assertIn(
             "gbe_dota_lobby_handlers.cpp: lifecycle path is missing transition gate token EffectKind::LegacyTeardownActionsRequested",
             audit.audit_lifecycle_transition_gates(sources),
+        )
+
+
+class ArchitectureInvestmentInputsAuditTest(unittest.TestCase):
+    VALID = {
+        "schema_version": 1,
+        "decision_date": "2026-07-11",
+        "recheck_triggers": ["major_concurrency_expansion", "major_lifecycle_state_machine_expansion"],
+        "concurrency": {
+            "tsan_race_reports": 0,
+            "lock_order_depth": 2,
+            "out_of_order_mutation_defects_in_phase": 0,
+            "unowned_cross_thread_business_writers": 0,
+            "actor_gate": "closed",
+        },
+        "state_machine": {
+            "state_count": 8,
+            "event_count": 13,
+            "state_event_pairs": 104,
+            "length_five_sequences_checked": 100000,
+            "differential_steps_checked": 4096,
+            "escaped_ordering_defects_in_phase": 0,
+            "active_transition_maintainers_in_release": 1,
+            "critical_irreversible_failure_scope": False,
+            "formal_model_gate": "closed",
+        },
+        "model_consistency": {
+            "maintained_formal_model": False,
+            "named_owner_and_reviewer": False,
+            "versioned_vector_schema": False,
+            "pinned_checker": False,
+            "model_ci_gate": "closed",
+        },
+        "ci_seconds": {
+            "local_fast_offline": 135.14,
+            "local_clang_tsan": 59.48,
+            "model_checker_limit": 600,
+        },
+    }
+
+    def audit(self, value):
+        return audit.audit_architecture_investment_inputs(json.dumps(value))
+
+    def test_accepts_complete_repeatable_inputs(self):
+        self.assertEqual([], self.audit(self.VALID))
+
+    def test_rejects_missing_recheck_trigger(self):
+        value = json.loads(json.dumps(self.VALID))
+        value["recheck_triggers"].remove("major_concurrency_expansion")
+        self.assertIn(
+            "architecture-investment-inputs.json: both major expansion recheck triggers are required",
+            self.audit(value),
+        )
+
+    def test_rejects_state_space_count_drift(self):
+        value = json.loads(json.dumps(self.VALID))
+        value["state_machine"]["state_event_pairs"] = 103
+        self.assertIn(
+            "architecture-investment-inputs.json: state_event_pairs must equal state_count * event_count",
+            self.audit(value),
+        )
+
+    def test_rejects_missing_ci_runtime(self):
+        value = json.loads(json.dumps(self.VALID))
+        value["ci_seconds"]["local_clang_tsan"] = 0
+        self.assertIn(
+            "architecture-investment-inputs.json: ci_seconds.local_clang_tsan must be positive",
+            self.audit(value),
         )
 
 

@@ -518,9 +518,12 @@
     - 模型未成为受维护交付物时，不建立双轨 CI。
     - 启用条件：P16 门禁已开启且模型已提交；具名 owner/reviewer；版本化 machine-readable vector schema；C++ test 消费 generated vectors 并保留独立 reference model；pinned checker 与确定性本地命令在 CI 10 分钟内完成且失败可定位。
     - 当前判定：P16 门禁关闭，仓库中无 maintained TLA+/Alloy deliverable、owner、vector schema、pinned checker 或 runtime baseline。P17 门禁关闭，继续使用现有 offline/property/differential/audit、Windows/Linux production build 和 Clang TSAN 分层 CI。
-  - [ ] 15.4 将决策依据固化为可重复检查
+  - [x] 15.4 将决策依据固化为可重复检查
     - 使用 TSAN 报告、缺陷记录、状态机覆盖率和 CI 时间作为输入。
     - 每次重大并发或状态机扩展后重新执行该决策检查。
+    - 机器可读输入：`docs/gc/architecture-investment-inputs.json` 记录 schema/date、TSAN race、lock depth、乱序与跨线程 writer 缺陷、8 x 13 = 104 状态空间、100,000 序列、4,096 differential steps、maintainer/critical scope、model readiness 和 CI wall-clock。
+    - 初始成本基线：本地 fast offline 135.14 秒，Clang TSAN 59.48 秒；model checker 上限 600 秒。数值用于投资判断，不作为性能 SLA。
+    - Audit 19 校验完整字段、非负/正数约束、state/event pair 乘积、gate 枚举和 concurrency/state-machine 两类重大扩展复查 trigger；审计 helper 增至 42 项。
   - [ ] 15.5 检查点：确保所有测试通过，如有疑问请询问用户
 
 - [ ] 16. 完成后续重构架构验收

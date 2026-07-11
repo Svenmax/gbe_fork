@@ -77,3 +77,17 @@ Decision date: 2026-07-11.
 The Formal Model Gate is closed and the repository has no maintained TLA+ or Alloy deliverable, model owner, generated-vector schema, pinned checker, or measured checker runtime. The Model Consistency CI Gate is therefore closed. Adding model-generated vectors or a model-checker job now would create an unowned second source of truth.
 
 The existing blocking layers remain selected: fast offline/property/differential tests and architecture audit, Windows and Linux production builds, and Clang ThreadSanitizer.
+
+## Repeatable Decision Inputs
+
+The versioned input record is `docs/gc/architecture-investment-inputs.json`. Audit 19 requires the record to contain:
+
+- TSAN race count, lock-order depth, out-of-order mutation defects, and unowned cross-thread business writers.
+- Lifecycle state/event counts, complete pair count, deterministic property and differential coverage, escaped ordering defects, maintainer count, and critical failure scope.
+- Formal-model ownership, vector-schema, checker, and model-CI readiness.
+- Measured local offline and Clang TSAN wall-clock time plus the model-checker CI limit.
+- Recheck triggers for every major concurrency expansion and every major lifecycle state-machine expansion.
+
+The initial local timing baseline on 2026-07-11 is 135.14 seconds for `tools/run_gc_offline_tests.sh` and 59.48 seconds for Clang `tools/run_gc_tsan_tests.sh`. These values describe the current environment and serve as cost inputs rather than performance requirements.
+
+After a recheck trigger, update the JSON evidence in the same change as the architecture decision. Audit 19 rejects incomplete fields, invalid counts, state-space multiplication drift, missing trigger categories, and absent CI-time values.

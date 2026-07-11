@@ -12,6 +12,7 @@ Checks:
 import os
 import re
 import glob
+import json
 import sys
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -30,6 +31,7 @@ RUN_GC_OFFLINE_TESTS_SH = os.path.join(ROOT_DIR, "tools", "run_gc_offline_tests.
 PREMAKE5_LUA = os.path.join(ROOT_DIR, "premake5.lua")
 REASON_TRACE_GOVERNANCE_MD = os.path.join(ROOT_DIR, "docs", "gc", "reason-trace-governance.md")
 CONCURRENCY_OWNERSHIP_MD = os.path.join(ROOT_DIR, "docs", "gc", "concurrency-ownership.md")
+ARCHITECTURE_INVESTMENT_INPUTS_JSON = os.path.join(ROOT_DIR, "docs", "gc", "architecture-investment-inputs.json")
 PR_WORKFLOW_YML = os.path.join(ROOT_DIR, ".github", "workflows", "emu-pull-request.yml")
 DIAGNOSTIC_EVENT_H = os.path.join(ROOT_DIR, "dll", "gbe_dota_diagnostic_event.h")
 DIAGNOSTIC_EVENT_TEST_CPP = os.path.join(
@@ -562,6 +564,75 @@ def audit_lifecycle_transition_gates(source_texts=None):
         for token in required_tokens:
             if token not in source:
                 issues.append(f"{base}: lifecycle path is missing transition gate token {token}")
+    return issues
+
+
+def audit_architecture_investment_inputs(input_text=None):
+    """Keep optional architecture decisions tied to complete repeatable inputs."""
+    if input_text is None:
+        input_text = read(ARCHITECTURE_INVESTMENT_INPUTS_JSON)
+    try:
+        inputs = json.loads(input_text)
+    except (TypeError, json.JSONDecodeError) as exc:
+        return [f"architecture-investment-inputs.json: invalid JSON: {exc}"]
+
+    issues = []
+    required_triggers = {
+        "major_concurrency_expansion",
+        "major_lifecycle_state_machine_expansion",
+    }
+    if inputs.get("schema_version") != 1:
+        issues.append("architecture-investment-inputs.json: schema_version must be 1")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(inputs.get("decision_date", ""))):
+        issues.append("architecture-investment-inputs.json: decision_date must use YYYY-MM-DD")
+    if not required_triggers.issubset(set(inputs.get("recheck_triggers", []))):
+        issues.append("architecture-investment-inputs.json: both major expansion recheck triggers are required")
+
+    concurrency = inputs.get("concurrency", {})
+    for field in (
+        "tsan_race_reports",
+        "lock_order_depth",
+        "out_of_order_mutation_defects_in_phase",
+        "unowned_cross_thread_business_writers",
+    ):
+        if not isinstance(concurrency.get(field), int) or concurrency[field] < 0:
+            issues.append(f"architecture-investment-inputs.json: concurrency.{field} must be a nonnegative integer")
+    if concurrency.get("actor_gate") not in {"open", "closed"}:
+        issues.append("architecture-investment-inputs.json: concurrency.actor_gate must be open or closed")
+
+    state_machine = inputs.get("state_machine", {})
+    for field in (
+        "state_count",
+        "event_count",
+        "state_event_pairs",
+        "length_five_sequences_checked",
+        "differential_steps_checked",
+        "escaped_ordering_defects_in_phase",
+        "active_transition_maintainers_in_release",
+    ):
+        if not isinstance(state_machine.get(field), int) or state_machine[field] < 0:
+            issues.append(f"architecture-investment-inputs.json: state_machine.{field} must be a nonnegative integer")
+    if all(isinstance(state_machine.get(field), int) for field in ("state_count", "event_count", "state_event_pairs")):
+        expected_pairs = state_machine["state_count"] * state_machine["event_count"]
+        if state_machine["state_event_pairs"] != expected_pairs:
+            issues.append("architecture-investment-inputs.json: state_event_pairs must equal state_count * event_count")
+    if not isinstance(state_machine.get("critical_irreversible_failure_scope"), bool):
+        issues.append("architecture-investment-inputs.json: critical_irreversible_failure_scope must be boolean")
+    if state_machine.get("formal_model_gate") not in {"open", "closed"}:
+        issues.append("architecture-investment-inputs.json: state_machine.formal_model_gate must be open or closed")
+
+    model = inputs.get("model_consistency", {})
+    for field in ("maintained_formal_model", "named_owner_and_reviewer", "versioned_vector_schema", "pinned_checker"):
+        if not isinstance(model.get(field), bool):
+            issues.append(f"architecture-investment-inputs.json: model_consistency.{field} must be boolean")
+    if model.get("model_ci_gate") not in {"open", "closed"}:
+        issues.append("architecture-investment-inputs.json: model_consistency.model_ci_gate must be open or closed")
+
+    ci_seconds = inputs.get("ci_seconds", {})
+    for field in ("local_fast_offline", "local_clang_tsan", "model_checker_limit"):
+        value = ci_seconds.get(field)
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+            issues.append(f"architecture-investment-inputs.json: ci_seconds.{field} must be positive")
     return issues
 
 
@@ -1398,6 +1469,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 19: Architecture investment inputs")
+    print("=" * 70)
+    print("  Action: keep Actor, formal-model, and model-CI decisions tied to repeatable evidence.")
+    architecture_investment_input_issues = audit_architecture_investment_inputs()
+    if not architecture_investment_input_issues:
+        print("  Versioned concurrency, state-machine coverage, defect, and CI-time inputs are complete")
+    else:
+        for issue in architecture_investment_input_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -1421,8 +1504,9 @@ def main():
     print(f"  Mutable GC global state issues:       {len(mutable_gc_global_issues)}")
     print(f"  Layered CI gate issues:               {len(layered_ci_issues)}")
     print(f"  Lifecycle transition gate issues:    {len(lifecycle_transition_gate_issues)}")
+    print(f"  Architecture investment issues:      {len(architecture_investment_input_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues:
         sys.exit(1)
 
 
