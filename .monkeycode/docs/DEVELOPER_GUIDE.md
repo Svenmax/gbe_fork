@@ -90,6 +90,8 @@ For a production bug:
 6. Add a high-risk fixture when the entry mutates lobby or lifecycle state.
 7. Run `gbe_dota_handler_registry_test`, the handler suite, replay where applicable, and Audit 4.
 
+The canonical table, adapters, and dispatcher are in `dll/gbe_dota_post_login_dispatcher.cpp`. The handler harness compiles this production TU through `tools/gbe_dota_handler_test/test_wrapper.cpp`.
+
 Avoid a parallel message switch or a second table. Audit 4 and Audit 14 treat the typed registry as the canonical mapping source.
 
 ## Adding A Lifecycle Transition
@@ -119,10 +121,19 @@ Every asynchronous operation that can observe or mutate lobby state must:
 
 - Capture one complete immutable snapshot per business operation.
 - Use generation-aware publish or compare/update for lifecycle-sensitive writes.
+- Use `compare_clear(expected_generation)` for production cleanup and keep the tombstone generation monotonic.
+- Keep `clear()` for test or process-level forced reset.
 - Keep Store mutators free from external side effects.
 - Publish reconnect context only after the shared-state commit succeeds.
 - Preserve client participant checks during shared-state adoption.
 - Add focused Store tests and bounded concurrency coverage.
+
+## Locator Lifetime Changes
+
+- Keep Store and runtime-state publication owned by `gbe::dota::LocatorBindingGuard`.
+- Create the guard after base dependencies and before coordinator construction.
+- Reset the guard after both coordinators are destroyed.
+- Run `gbe_dota_locator_test`, full verification, and TSAN for lifetime changes.
 
 ## Reconnect Changes
 

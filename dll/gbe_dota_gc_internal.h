@@ -16,6 +16,7 @@
 #include "gbe_dota_types.h"
 #include "gbe_dota_payload_lobby_helpers.h"
 #include "gbe_dota_payload_wire_helpers.h"
+#include "gbe_dota_locator.h"
 #include "dll/gbe_dota_reconnect_shared.h"
 
 // Shared internal GC helpers used across steam_game_coordinator.cpp
@@ -29,21 +30,6 @@ const char *GBE_DescribeDotaLaunchPhase(uint32 phase);
 void GBE_LogDotaSOCacheSubscribedSummary(const char *tag, const char *label, const std::string &message);
 
 // Shared lobby state cache (defined in steam_game_coordinator.cpp)
-struct GBE_SharedDotaLobbyState;
-namespace gbe::dota_lobby_state {
-class Store;
-}
-namespace gbe::dota {
-struct RuntimeState;
-}
-gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore();
-void GBE_BindSharedDotaLobbyStateStore(gbe::dota_lobby_state::Store &store);
-void GBE_UnbindSharedDotaLobbyStateStore(gbe::dota_lobby_state::Store &store);
-void GBE_BindDotaRuntimeState(gbe::dota::RuntimeState &state);
-void GBE_UnbindDotaRuntimeState(gbe::dota::RuntimeState &state);
-gbe::dota::RuntimeState &GBE_DotaRuntimeState();
-
-
 #include <array>
 #include <cstring>
 

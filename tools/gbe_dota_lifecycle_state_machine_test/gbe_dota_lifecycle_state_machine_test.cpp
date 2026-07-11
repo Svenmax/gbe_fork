@@ -1,13 +1,25 @@
 #include "../../dll/gbe_dota_lifecycle_state_machine.h"
 
 #include <array>
-#include <cassert>
 #include <cstdlib>
 #include <cstdint>
 #include <iostream>
 #include <limits>
 
 namespace lifecycle = gbe::dota_lifecycle_state_machine;
+
+namespace {
+
+[[noreturn]] void fail_check(const char *expression, int line)
+{
+    std::cerr << "lifecycle state machine check failed at line " << line
+              << ": " << expression << '\n';
+    std::abort();
+}
+
+} // namespace
+
+#define assert(expression) ((expression) ? static_cast<void>(0) : fail_check(#expression, __LINE__))
 
 struct ExpectedMapping {
     std::uint32_t message_id;

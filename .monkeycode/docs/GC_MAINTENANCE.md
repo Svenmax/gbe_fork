@@ -139,6 +139,8 @@ The architecture phase is complete while all conditions remain true:
 
 Under these conditions, production testing and regression capture provide more value than preventive architecture expansion.
 
+The GC maintenance hardening cycle completed with GCC full verification, Clang full verification, Clang TSAN, architecture audits, production dispatcher integration coverage, behavior replay, locator lifecycle coverage, and generation-aware Store cleanup passing. Work now follows demand-driven maintenance. Composition Root production takeover, a single authoritative lifecycle state machine, and deeper coordinator decomposition require concrete feature pressure or reproducible maintenance friction.
+
 ## Required Verification By Change Type
 
 | Change type | Required gate |

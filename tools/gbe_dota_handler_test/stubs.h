@@ -47,6 +47,7 @@
 #include "dll/gbe_dota_custom_game_lifecycle.h"
 #include "dll/gbe_dota_connection_dedup_key.h"
 #include "dll/gbe_dota_gc_router.h"
+#include "dll/gbe_dota_handler_registry.h"
 #include "dll/gbe_dota_lobby_generation.h"
 #include "dll/gbe_dota_types.h"
 #include "dll/gbe_proto_wire.h"
@@ -958,6 +959,10 @@ public:
     gbe::dota_lifecycle::CoordinatorExecutor production_lifecycle_executor{};
     gbe::dota_lifecycle::Executor *lifecycle_executor{&production_lifecycle_executor};
     bool is_server{};
+    gbe::dota_handler_registry::View handler_registry{};
+
+    static gbe::dota_handler_registry::View GBE_ProductionDotaHandlerRegistry();
+    bool GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
 
     GBE_LocalLobby GBE_local_lobby{};
     std::vector<Econ_Item> items;
@@ -1010,8 +1015,9 @@ public:
     void GBE_ClearLastDotaLaunchStatePushedGameState() { GBE_last_dota_launch_state_pushed_game_state = 0; }
     void GBE_ClearDotaLobbyRuntimeState()
     {
+        const uint64 generation = GBE_local_lobby.generation;
         GBE_local_lobby = GBE_LocalLobby{};
-        GBE_GetSharedDotaLobbyStateStore().clear();
+        GBE_GetSharedDotaLobbyStateStore().compare_clear(generation);
         GBE_ClearLastDotaLaunchStatePushedGameState();
     }
     void GBE_ClearSettingsLobbyForDotaSignout()
@@ -1671,7 +1677,7 @@ public:
     bool GBE_HandleDotaLobbyListRequest(bool has_request_job, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaCustomLobbyListRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaFriendPracticeLobbyListRequest(bool wrapped, const std::string *outer_session_field_raw);
-    bool GBE_HandleDotaPracticeLobbyJoinRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw, bool send_join_response);
+    bool GBE_HandleDotaPracticeLobbyJoinRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw, bool send_join_response = true);
     bool GBE_HandleDotaInviteToLobbyRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaLobbyInviteResponseRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaFriendLobbyInviteMessage(Common_Message *msg);

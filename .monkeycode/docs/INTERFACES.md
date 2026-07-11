@@ -22,7 +22,7 @@ Location:
 
 ## Handler Registry
 
-Location: `dll/gbe_dota_handler_registry.h` and the production table owner in `dll/steam_game_coordinator.cpp`.
+Location: `dll/gbe_dota_handler_registry.h` and the production table/dispatcher owner in `dll/gbe_dota_post_login_dispatcher.cpp`.
 
 Each registry entry binds:
 
@@ -81,7 +81,16 @@ Extension rules:
 - Keep mutators deterministic and local to the candidate value.
 - Add semantic Store methods only when a repeated state boundary exists.
 - Preserve stale-generation rejection.
+- Use `compare_clear(expected_generation)` for production lifecycle cleanup.
+- Preserve tombstone generation so stale clear and same-generation republish cannot replace newer lifecycle history.
+- Reserve `clear()` for test or process-level forced reset.
 - Execute external effects after the Store operation returns.
+
+## Locator Binding
+
+Location: `dll/gbe_dota_locator.h` and `dll/gbe_dota_locator.cpp`.
+
+`gbe::dota::LocatorBindingGuard` binds the application-owned lobby Store and runtime state as one lifetime unit. `Steam_Client` creates the guard before coordinator construction and resets it after coordinator destruction. The guard rolls back the Store binding when runtime-state binding fails and unbinds both locators in reverse order.
 
 ## Lifecycle State Machine
 

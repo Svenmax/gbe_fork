@@ -42,8 +42,8 @@ DIAGNOSTIC_EVENT_TEST_CPP = os.path.join(
 )
 GC_TUS = sorted(glob.glob(os.path.join(ROOT_DIR, "dll", "gbe_dota_*.cpp"))) + [MAIN_CPP]
 MUTABLE_GC_GLOBAL_ALLOWLIST = {
-    ("steam_game_coordinator.cpp", "GBE_shared_dota_lobby_store"): "non-owning compatibility locator",
-    ("steam_game_coordinator.cpp", "GBE_dota_runtime_state"): "non-owning compatibility locator",
+    ("gbe_dota_locator.cpp", "shared_dota_lobby_store"): "non-owning compatibility locator",
+    ("gbe_dota_locator.cpp", "dota_runtime_state"): "non-owning compatibility locator",
 }
 TEMPLATE_BLOB_OWNER_FILES = {
     "gbe_dota_template_replay_handlers.cpp",
@@ -69,6 +69,7 @@ SOURCE_LIST_AUDIT_EXEMPTIONS = {
     "gbe_dota_payload_wire_helpers.cpp": "compiled through payload helper test wrapper",
     "gbe_dota_reconnect_network_adapter.cpp": "production Steam networking adapter, covered through the reconnect network boundary",
     "gbe_dota_post_login_handlers.cpp": "production dispatcher TU, covered by registry audit",
+    "gbe_dota_post_login_dispatcher.cpp": "compiled through handler test wrapper",
     "gbe_dota_template_replay_handlers.cpp": "production template replay TU with canned payload ownership",
     "gbe_dota_welcome_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
     "gbe_dota_custom_game_lifecycle_handlers.cpp": "compiled through handler test wrapper",
@@ -278,7 +279,7 @@ TEST_CREDIBILITY_RUNNER_TARGETS = (
 CI_LOCALIZATION_GATES = {
     "emu-win-release": ('name: "win"', "emu-build-all-win.yml", "continue_on_error: false"),
     "emu-linux-release": ('name: "linux"', "emu-build-all-linux.yml", "continue_on_error: false"),
-    "gc-verification": ('name: "gc verification"', 'name: "Run fast GC verification"', "run_gc_verification.sh --fast --base-sha"),
+    "gc-verification": ('name: "gc verification"', 'name: "Run full GC verification"', "run_gc_verification.sh --full --base-sha"),
     "gc-tsan": ('name: "gc thread sanitizer"', 'name: "Run GC ThreadSanitizer tests"', "bash tools/run_gc_tsan_tests.sh"),
 }
 INVESTMENT_GATE_DECISION_TOKENS = {
@@ -299,7 +300,8 @@ RETIRED_SHARED_LOBBY_COMPATIBILITY_SYMBOLS = (
     "GBE_ClearSharedDotaLobbyForRuntimeReset",
     "GBE_shared_dota_lobby_state",
 )
-POST_LOGIN_REGISTRY_OWNER = "steam_game_coordinator.cpp"
+POST_LOGIN_REGISTRY_OWNER = "gbe_dota_post_login_dispatcher.cpp"
+POST_LOGIN_REGISTRY_CPP = os.path.join(ROOT_DIR, "dll", POST_LOGIN_REGISTRY_OWNER)
 RECONNECT_MAPPING_OWNER = "gbe_dota_reconnect_context.cpp"
 RECONNECT_SOURCE_FIELDS = (
     "kind",
@@ -449,14 +451,14 @@ def extract_defined_symbols(tu_paths):
 def audit_post_login_dispatch(main_text):
     start = main_text.find("registry::View Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry")
     if start < 0:
-        return ["GBE_ProductionDotaHandlerRegistry definition not found"], 0
+        return ["GBE_ProductionDotaHandlerRegistry definition not found"], 0, 0
     end = main_text.find("bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest", start)
     factory_text = main_text[start:end if end >= 0 else len(main_text)]
 
     table_start = factory_text.find("static const registry::Entry kTable[]")
     table_end = factory_text.find("};", table_start)
     if table_start < 0 or table_end < 0:
-        return ["typed post-login registry table not found"], 0
+        return ["typed post-login registry table not found"], 0, 0
     table_text = factory_text[table_start:table_end]
 
     entry_pattern = re.compile(
@@ -471,7 +473,7 @@ def audit_post_login_dispatch(main_text):
     entries = entry_pattern.findall(table_text)
 
     adapter_pattern = re.compile(
-        r"auto\s+(adapt_[A-Za-z0-9_]+)\s*=\s*\+\[\]\(.*?\)\s*->\s*bool\s*\{(.*?)\n\s*\};",
+        r"auto\s+(adapt_[A-Za-z0-9_]+)\s*=\s*\+\[\]\(.*?\)\s*->\s*bool\s*\{(.*?)\}\s*;",
         re.DOTALL,
     )
     adapters = dict(adapter_pattern.findall(factory_text[:table_start]))
@@ -1174,13 +1176,13 @@ def audit_layered_ci_gates(workflow_text=None, verification_text=None, offline_t
         tsan_text = read(os.path.join(ROOT_DIR, "tools", "run_gc_tsan_tests.sh"))
 
     issues = []
-    fast_job = extract_yaml_job(workflow_text, "gc-verification")
+    full_job = extract_yaml_job(workflow_text, "gc-verification")
     if (
-        "run_gc_verification.sh --fast --base-sha" not in fast_job
-        or "github.event.pull_request.base.sha" not in fast_job
-        or "continue-on-error: true" in fast_job
+        "run_gc_verification.sh --full --base-sha" not in full_job
+        or "github.event.pull_request.base.sha" not in full_job
+        or "continue-on-error: true" in full_job
     ):
-        issues.append("emu-pull-request.yml: fast GC layer must run run_gc_verification.sh --fast with the PR base SHA")
+        issues.append("emu-pull-request.yml: full GC layer must run run_gc_verification.sh --full with the PR base SHA")
 
     production_jobs = (
         ("emu-win-release", "emu-build-all-win.yml", "Windows"),
@@ -1215,7 +1217,7 @@ def audit_layered_ci_gates(workflow_text=None, verification_text=None, offline_t
     )
     for required, description in verification_requirements:
         if required not in verification_text:
-            issues.append(f"run_gc_verification.sh: fast layer is missing {description}")
+            issues.append(f"run_gc_verification.sh: full layer is missing {description}")
 
     offline_requirements = (
         "python3 tools/test_audit_gc_refactor.py",
@@ -1450,10 +1452,16 @@ def audit_composition_root_lifecycle(
     store_accessor = coordinator_text[store_accessor_start:store_accessor_end if store_accessor_end >= 0 else len(coordinator_text)]
     if "static GBE_SharedDotaLobbyState state" in store_accessor or "static gbe::dota_lobby_state::Store store" in store_accessor:
         issues.append("steam_game_coordinator.cpp: shared lobby accessor owns hidden singleton backing state")
-    if "GBE_BindSharedDotaLobbyStateStore(dota_lobby_store);" not in constructor_text or "GBE_UnbindSharedDotaLobbyStateStore(dota_lobby_store);" not in destructor_text:
-        issues.append("steam_client.cpp: Steam_Client must bind and unbind its owned shared lobby Store")
-    if "GBE_BindDotaRuntimeState(dota_runtime_state);" not in constructor_text or "GBE_UnbindDotaRuntimeState(dota_runtime_state);" not in destructor_text:
-        issues.append("steam_client.cpp: Steam_Client must bind and unbind its owned Dota runtime state")
+    guard_member = "std::unique_ptr<gbe::dota::LocatorBindingGuard> dota_locator_binding"
+    guard_create = "dota_locator_binding = std::make_unique<gbe::dota::LocatorBindingGuard>(dota_lobby_store, dota_runtime_state);"
+    if guard_member not in steam_client_header_text:
+        issues.append("steam_client.h: Steam_Client must own the Dota locator binding guard")
+    guard_position = constructor_text.find(guard_create)
+    first_coordinator_position = constructor_text.find("steam_game_coordinator = new Steam_Game_Coordinator(")
+    if guard_position < 0 or first_coordinator_position < 0 or guard_position > first_coordinator_position:
+        issues.append("steam_client.cpp: Steam_Client must bind Dota locators before coordinator construction")
+    if "dota_locator_binding.reset();" not in destructor_text:
+        issues.append("steam_client.cpp: Steam_Client must release the Dota locator binding guard during destruction")
     retired_runtime_state = (
         ("steam_game_coordinator.cpp", coordinator_text, "GBE_recent_dota_reconnect_context_valid"),
         ("steam_game_coordinator.cpp", coordinator_text, "GBE_recent_dota_reconnect_context"),
@@ -1746,7 +1754,7 @@ def main():
     print("AUDIT 4: Post-login dispatch table mapping")
     print("=" * 70)
     print("  Action: keep the dispatch table aligned with the original post-login switch mapping.")
-    dispatch_issues, total_entries, high_risk_entries = audit_post_login_dispatch(main_text)
+    dispatch_issues, total_entries, high_risk_entries = audit_post_login_dispatch(read(POST_LOGIN_REGISTRY_CPP))
     if not dispatch_issues:
         print(f"  All {total_entries} typed registry entries resolve to one handler adapter; {high_risk_entries} high-risk entries reference live fixtures")
     else:

@@ -120,6 +120,12 @@ build_and_run \
     dll/gbe_dota_lobby_state_store.cpp
 
 build_and_run \
+    gbe_dota_locator_test \
+    tools/gbe_dota_locator_test/gbe_dota_locator_test.cpp \
+    dll/gbe_dota_locator.cpp \
+    dll/gbe_dota_lobby_state_store.cpp
+
+build_and_run \
     gbe_dota_composition_root_test \
     -pthread \
     tools/gbe_dota_composition_root_test/gbe_dota_composition_root_test.cpp \
@@ -308,6 +314,35 @@ printf '[build] %s\n' gbe_dota_handler_test
 
 printf '[run] %s\n' gbe_dota_handler_test
 "$BUILD_DIR/gbe_dota_handler_test"
+
+printf '[build] %s\n' gbe_dota_behavior_replay
+"$CXX_BIN" "${COMMON_FLAGS[@]}" \
+    -Itools/gbe_dota_handler_test \
+    -Itools/gbe_dota_gc_payload_helpers_test/pb_stubs \
+    tools/gbe_dota_handler_test/test_wrapper.cpp \
+    tools/gbe_dota_handler_test/free_func_stubs.cpp \
+    tools/gbe_dota_handler_test/behavior_replay.cpp \
+    dll/gbe_proto_wire.cpp \
+    dll/gbe_gc_message_utils.cpp \
+    dll/gbe_dota_chat_flow.cpp \
+    dll/gbe_dota_lobby_launch_flow.cpp \
+    dll/gbe_dota_lobby_member_flow.cpp \
+    dll/gbe_dota_lobby_payload_flow.cpp \
+    dll/gbe_dota_lobby_flow.cpp \
+    dll/gbe_dota_lobby_state.cpp \
+    dll/gbe_dota_lobby_state_store.cpp \
+    dll/gbe_dota_reconnect_context.cpp \
+    dll/gbe_dota_lobby_publish.cpp \
+    dll/gbe_dota_lobby_snapshot.cpp \
+    dll/gbe_dota_custom_game.cpp \
+    dll/gbe_dota_custom_lobby_http.cpp \
+    dll/gbe_dota_gc_wire.cpp \
+    dll/gbe_dota_gc_router.cpp \
+    -o "$BUILD_DIR/gbe_dota_behavior_replay"
+
+printf '[run] %s\n' gbe_dota_behavior_replay
+"$BUILD_DIR/gbe_dota_behavior_replay" \
+    tools/gbe_dota_handler_test/fixtures/lobby_behavior.expected.txt
 
 if [[ "$FULL" -eq 1 ]]; then
     printf 'all GC offline tests passed (--full)\n'

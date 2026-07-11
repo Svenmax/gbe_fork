@@ -1,0 +1,12 @@
+handler=PracticeLobbyCreate handled=1
+before active=0 lobby=none generation=0 state=0 game_state=0
+after active=1 lobby=lobby-1 generation=1 state=0 game_state=0
+effects LobbyLocalMemberData[reason=7038_create] -> SettingsLobbySync[reason=7038_create] -> LobbySnapshotRefresh[reason=7038_create] -> LobbyMetadataPublish[reason=7038_create] -> LobbyCacheSubscriptionRecord[reason=7038_create_direct] -> PushIncomingNow(emsg=24)[reason=7038_24] -> PushIncomingNow(emsg=7055)[reason=7038_7055]
+handler=PracticeLobbyLaunch handled=1
+before active=1 lobby=lobby-1 generation=1 state=0 game_state=0
+after active=1 lobby=lobby-1 generation=1 state=0 game_state=0
+effects LaunchPeripheralReset[reason=launch_peripheral_reset] -> LobbySnapshotRefresh[reason=7041_launch_init] -> PushIncomingNow(emsg=26)[reason=7041_initial_26] -> RichPresenceUpdate -> LaunchPersonaState[reason=7041_launch_init]
+handler=PracticeLobbyLeave handled=1
+before active=1 lobby=lobby-1 generation=1 state=0 game_state=0
+after active=0 lobby=none generation=2 state=0 game_state=0
+effects AbandonedLobbySuppressed[reason=7040_leave] -> PushIncomingNow(emsg=25)[reason=7040_leave_25]

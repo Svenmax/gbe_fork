@@ -28,6 +28,11 @@ build_and_run \
     dll/gbe_proto_wire.cpp
 
 build_and_run \
+    gbe_dota_lobby_state_store_test \
+    tools/gbe_dota_lobby_state_store_test/gbe_dota_lobby_state_store_test.cpp \
+    dll/gbe_dota_lobby_state_store.cpp
+
+build_and_run \
     gbe_dota_concurrency_stress_test \
     tools/gbe_dota_concurrency_stress_test/gbe_dota_concurrency_stress_test.cpp \
     dll/gbe_dota_lobby_state_store.cpp \

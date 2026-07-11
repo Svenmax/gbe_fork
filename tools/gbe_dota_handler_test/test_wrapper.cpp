@@ -136,3 +136,7 @@ TestEquipPlannerSummary test_plan_equip_items_request(
 
 // Include match handlers for minimal smoke coverage of launch/match order paths.
 #include "dll/gbe_dota_match_handlers.cpp"
+
+// Compile the canonical production registry, dispatcher, and adapters against
+// the same recording coordinator used by the handler smoke tests.
+#include "dll/gbe_dota_post_login_dispatcher.cpp"

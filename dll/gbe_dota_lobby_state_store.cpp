@@ -26,6 +26,8 @@ StoreUpdateResult Store::publish_if_generation_current_or_newer(Snapshot state)
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (state.generation < state_.generation)
         return StoreUpdateResult::StaleGeneration;
+    if (state.generation == state_.generation && !state_.valid && state.valid)
+        return StoreUpdateResult::StaleGeneration;
 
     state_ = std::move(state);
     return StoreUpdateResult::Applied;
@@ -34,6 +36,18 @@ StoreUpdateResult Store::publish_if_generation_current_or_newer(Snapshot state)
 void Store::clear()
 {
     publish(Snapshot{});
+}
+
+StoreUpdateResult Store::compare_clear(std::uint64_t expected_generation)
+{
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    if (state_.generation != expected_generation)
+        return StoreUpdateResult::StaleGeneration;
+
+    Snapshot tombstone{};
+    tombstone.generation = expected_generation;
+    state_ = std::move(tombstone);
+    return StoreUpdateResult::Applied;
 }
 
 StoreUpdateResult Store::update(const Mutator &mutator)

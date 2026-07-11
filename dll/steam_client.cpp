@@ -64,8 +64,6 @@ void Steam_Client::background_thread_proc()
 Steam_Client::Steam_Client()
     : dota_lobby_store(dota_lobby_state, global_mutex)
 {
-    GBE_BindSharedDotaLobbyStateStore(dota_lobby_store);
-    GBE_BindDotaRuntimeState(dota_runtime_state);
     PRINT_DEBUG("start ----------");
     uint32 appid = create_localstorage_settings(&settings_client, &settings_server, &local_storage);
     local_storage->update_save_filenames(Local_Storage::remote_storage_folder);
@@ -149,6 +147,7 @@ Steam_Client::Steam_Client()
     dota_reconnect_adapter_client = new GBE_DotaReconnectNetworkAdapter(callbacks_client, steam_networking_sockets);
     steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_client, network, callback_results_client, callbacks_client, run_every_runcb, dota_reconnect_adapter_client, dota_reconnect_adapter_client, dota_reconnect_adapter_client);
     steam_networking_messages = new Steam_Networking_Messages(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
+    dota_locator_binding = std::make_unique<gbe::dota::LocatorBindingGuard>(dota_lobby_store, dota_runtime_state);
     const auto dota_handler_registry = Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry();
     dota_lifecycle_executor_client = new gbe::dota_lifecycle::CoordinatorExecutor();
     steam_game_coordinator = new Steam_Game_Coordinator(settings_client, network, local_storage, callbacks_client, run_every_runcb, GBE_GetSharedDotaLobbyStateStore(), dota_handler_registry, *dota_lifecycle_executor_client, false);
@@ -283,8 +282,7 @@ Steam_Client::~Steam_Client()
     DEL_INST(run_every_runcb);
     DEL_INST(network);
 
-    GBE_UnbindSharedDotaLobbyStateStore(dota_lobby_store);
-    GBE_UnbindDotaRuntimeState(dota_runtime_state);
+    dota_locator_binding.reset();
 
     #undef DEL_INST
 }

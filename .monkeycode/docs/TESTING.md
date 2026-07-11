@@ -62,6 +62,7 @@ Fast verification includes:
 - Message utilities and GC config.
 - Reconnect network/state and callback execution guard.
 - Shared lobby Store.
+- Locator binding lifecycle and rollback.
 - Composition-root ownership tests.
 - Lifecycle state-machine examples, properties, and differential model.
 - Bounded concurrency stress.
@@ -70,6 +71,7 @@ Fast verification includes:
 - Four high-signal replay fixtures.
 - Payload helper tests.
 - Handler smoke and executor tests.
+- Production registry/dispatcher integration and the Create/Launch/Leave behavior golden replay.
 - Production architecture audit.
 - `git diff --check`.
 
@@ -90,12 +92,14 @@ Full verification adds:
 | Reconnect source, generation, dedup, effects | `gbe_dota_reconnect_network_test` |
 | Callback lock boundary | `callsystem_execution_guard_test` |
 | Shared lobby Store | `gbe_dota_lobby_state_store_test` |
+| Store/runtime locator lifetime | `gbe_dota_locator_test` |
 | Ownership and role isolation | `gbe_dota_composition_root_test` |
 | Lifecycle transitions | `gbe_dota_lifecycle_state_machine_test` |
 | Cross-thread Store and reconnect history | `gbe_dota_concurrency_stress_test` and TSAN |
 | Typed post-login mapping | `gbe_dota_handler_registry_test` |
 | Payload transformations | `gbe_dota_gc_payload_helpers_test` |
 | Handler orchestration and effect ordering | `gbe_dota_handler_test` |
+| Production dispatcher plus continuous lobby lifecycle | `gbe_dota_handler_test` and `gbe_dota_behavior_replay` |
 | Chat behavior | `chat_channel` replay |
 | Lobby teardown and signout | `lobby_lifecycle` replay |
 | Custom-game metadata | `gbe_dota_custom_game_test` and `practice_lobby` replay |
@@ -137,6 +141,7 @@ When changing lifecycle vocabulary or semantics, update examples, properties, th
 `tools/run_gc_tsan_tests.sh` builds:
 
 - `gbe_dota_reconnect_network_test`.
+- `gbe_dota_lobby_state_store_test`.
 - `gbe_dota_concurrency_stress_test`.
 
 It uses Clang, `-fsanitize=thread`, frame pointers, debug information, and `TSAN_OPTIONS=halt_on_error=1:exitcode=66`. The first race report fails the gate.
@@ -167,7 +172,7 @@ The PR workflow exposes four independent blocking jobs:
 | --- | --- | --- |
 | `emu-win-release` | `win` | Windows `api_experimental` x64 release |
 | `emu-linux-release` | `linux` | Linux `api_experimental` x64 release |
-| `gc-verification` | `gc verification` | Fast offline, audit, and PR-base diff check |
+| `gc-verification` | `gc verification` | Full offline suite, audit, and PR-base diff check |
 | `gc-tsan` | `gc thread sanitizer` | Clang TSAN focused suite |
 
 Pure Markdown changes are ignored by this workflow. Documentation-only changes require local review and `git diff --check`.
@@ -176,15 +181,17 @@ Pure Markdown changes are ignored by this workflow. Documentation-only changes r
 
 The completed P16 acceptance record reports:
 
-- Audit helper: 73 of 73.
+- Audit helper: 74 of 74.
 - Production audits: 27 groups with zero issues.
 - Reconnect assertions: 772 of 772.
 - Callsystem guard assertions: 8 of 8.
 - Registry assertions: 339 of 339.
 - Payload assertions: 546 of 546.
-- Handler tests: 78 of 78.
+- Handler tests: 82 of 82.
 - Replay fixtures: 7 of 7.
+- Behavior replay: Create, Launch, and Leave golden trace passed.
 - GCC full verification: passed.
+- Clang full verification: passed.
 - Clang ThreadSanitizer: passed with zero race reports.
 
 Treat these counts as a recorded acceptance baseline. Update them when tests are intentionally added or removed; use pass/fail behavior and protected invariants as the primary maintenance signal.

@@ -64,29 +64,6 @@ namespace registry = gbe::dota_handler_registry;
 
 constexpr int GC_MIN_VERSION = 20091217;
 
-static gbe::dota_lobby_state::Store *GBE_shared_dota_lobby_store{};
-static gbe::dota::RuntimeState *GBE_dota_runtime_state{};
-
-gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore()
-{
-    if (!GBE_shared_dota_lobby_store)
-        throw std::logic_error("Shared Dota lobby Store is not bound");
-    return *GBE_shared_dota_lobby_store;
-}
-
-void GBE_BindSharedDotaLobbyStateStore(gbe::dota_lobby_state::Store &store)
-{
-    if (GBE_shared_dota_lobby_store && GBE_shared_dota_lobby_store != &store)
-        throw std::logic_error("Shared Dota lobby Store is already bound");
-    GBE_shared_dota_lobby_store = &store;
-}
-
-void GBE_UnbindSharedDotaLobbyStateStore(gbe::dota_lobby_state::Store &store)
-{
-    if (GBE_shared_dota_lobby_store == &store)
-        GBE_shared_dota_lobby_store = nullptr;
-}
-
 const GBE_DotaLootListData &GBE_GetDotaVpkLootData()
 {
     return GBE_DotaRuntimeState().vpk_loot_data;
@@ -95,26 +72,6 @@ const GBE_DotaLootListData &GBE_GetDotaVpkLootData()
 void GBE_SetDotaVpkLootData(GBE_DotaLootListData &&loot_data)
 {
     GBE_DotaRuntimeState().vpk_loot_data = std::move(loot_data);
-}
-
-void GBE_BindDotaRuntimeState(gbe::dota::RuntimeState &state)
-{
-    if (GBE_dota_runtime_state && GBE_dota_runtime_state != &state)
-        throw std::logic_error("Dota runtime state is already bound");
-    GBE_dota_runtime_state = &state;
-}
-
-void GBE_UnbindDotaRuntimeState(gbe::dota::RuntimeState &state)
-{
-    if (GBE_dota_runtime_state == &state)
-        GBE_dota_runtime_state = nullptr;
-}
-
-gbe::dota::RuntimeState &GBE_DotaRuntimeState()
-{
-    if (!GBE_dota_runtime_state)
-        throw std::logic_error("Dota runtime state is not bound");
-    return *GBE_dota_runtime_state;
 }
 
 bool GBE_GetRecentDotaReconnectContext(GBE_DotaReconnectContext *out)
@@ -220,197 +177,6 @@ using GBE_Dota7034RequestShape = gbe::proto_wire::Dota7034RequestShape;
 // handler meant editing the switch and re-deriving the call site by hand.
 //
 // The table inside GBE_DispatchDotaPostLoginRequest replaces that switch. Each
-// entry maps an `emsg` to a tiny adapter lambda that translates the canonical
-// `DotaGcRequestContext` into the handler's existing signature. Handler
-// signatures are intentionally NOT normalized: the 16 handlers have
-// heterogeneous parameter lists (some take `request_job_id` / `has_request_job`,
-// some don't; `Launch` reorders them). Forcing a common signature would require
-// semantic edits across chat/lobby handlers that have no per-domain offline
-// test coverage (Tier B deferred per Phase 3.1 tiering). The adapter
-// indirection keeps the table scannable without touching handler bodies.
-//
-// The adapters are defined as local lambdas inside the member function (not as
-// free functions in an anonymous namespace) because the handlers are private
-// members of Steam_Game_Coordinator. A lambda defined inside a member function
-// can access that class's private members; a free function cannot. Each
-// adapter is a captureless lambda so it converts to a plain function pointer
-// for cheap table storage.
-//
-// Adding a new simple post-login handler now requires only:
-//   1. implement `GBE_HandleDotaXxxRequest` in its domain .cpp
-//   2. declare it in `dll/dll/steam_game_coordinator.h`
-//   3. add one `adapt_xxx` lambda and one table entry below
-// No switch arm edits, no `log_lobby_request` duplication.
-//
-// Special-case handlers that need custom context shaping (e.g. direct-path
-// inventory / match / misc handlers in `GBE_HandleDotaDirectPostLoginRequest`,
-// wrapped-path abandon / signout / custom-game in `GBE_HandleDotaWrappedPostLoginRequest`)
-// stay as explicit `if` branches in their own functions — they were never part
-// of this switch and do not belong in the table.
-
-registry::View Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry()
-{
-    auto adapt_join_chat_channel = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaJoinChatChannelRequest(c.body, c.wrapped, sess);
-    };
-    auto adapt_practice_lobby_create = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaPracticeLobbyCreateRequest(c.body, c.request_job_id, c.has_request_job, c.wrapped, sess);
-    };
-    auto adapt_lobby_list = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaLobbyListRequest(c.has_request_job, c.request_job_id, c.wrapped, sess);
-    };
-    auto adapt_custom_lobby_list = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaCustomLobbyListRequest(c.body, c.wrapped, sess);
-    };
-    auto adapt_friend_practice_lobby_list = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaFriendPracticeLobbyListRequest(c.wrapped, sess);
-    };
-    auto adapt_invite_to_lobby = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaInviteToLobbyRequest(c.body, c.wrapped, sess);
-    };
-    auto adapt_lobby_invite_response = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaLobbyInviteResponseRequest(c.body, c.wrapped, sess);
-    };
-    auto adapt_practice_lobby_join = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaPracticeLobbyJoinRequest(c.body, c.request_job_id, c.has_request_job, c.wrapped, sess);
-    };
-    auto adapt_practice_lobby_leave = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaPracticeLobbyLeaveRequest(c.wrapped, sess);
-    };
-    auto adapt_practice_lobby_launch = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaPracticeLobbyLaunchRequest(c.body, c.wrapped, sess, c.has_request_job, c.request_job_id);
-    };
-    auto adapt_practice_lobby_set_details = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaPracticeLobbySetDetailsRequest(c.body, c.wrapped, sess);
-    };
-    auto adapt_practice_lobby_set_team_slot = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaPracticeLobbySetTeamSlotRequest(c.body, c.request_job_id, c.has_request_job, c.wrapped, sess);
-    };
-    auto adapt_practice_lobby_kick = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaPracticeLobbyKickRequest(c.body, c.wrapped, sess);
-    };
-    auto adapt_practice_lobby_join_broadcast = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest(c.body, c.request_job_id, c.has_request_job, c.wrapped, sess);
-    };
-    auto adapt_lobby_update_broadcast_info = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest(c.body, c.wrapped, sess);
-    };
-    auto adapt_practice_lobby_close_broadcast = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool {
-        return self->GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest(c.body, c.wrapped, sess);
-    };
-    auto adapt_custom_game_lifecycle = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
-        return self->GBE_HandleDotaCustomGameLifecycleRequest(c);
-    };
-    auto adapt_direct_7427_notifications = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
-        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
-            return false;
-        return self->GBE_HandleDota7427NotificationsRequest(c.has_request_job, c.request_job_id);
-    };
-    auto adapt_direct_upload_rate = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
-        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
-            return false;
-        return self->GBE_HandleDotaUploadRateRequest(c.has_request_job, c.request_job_id);
-    };
-    auto adapt_direct_rank = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
-        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
-            return false;
-        return self->GBE_HandleDotaRankRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id);
-    };
-    auto adapt_direct_profile_card = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
-        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
-            return false;
-        return self->GBE_HandleDotaProfileCardRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id);
-    };
-    auto adapt_direct_lookup_account_name = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
-        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
-            return false;
-        return self->GBE_HandleDotaLookupAccountNameRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id);
-    };
-    auto adapt_direct_emoticon_data = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
-        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
-            return false;
-        return self->GBE_HandleDotaEmoticonDataRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id);
-    };
-    auto adapt_direct_conduct_scorecard = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
-        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
-            return false;
-        return self->GBE_HandleDotaConductScorecardRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id);
-    };
-    auto adapt_direct_coaching_summary = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool {
-        if (c.path != gbe::dota_gc_router::DotaGcRequestPath::Direct)
-            return false;
-        return self->GBE_HandleDotaCoachingSummaryRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id);
-    };
-
-    // Order follows the original switch arm order (chat -> lobby lifecycle ->
-    // broadcast) to preserve the historical scan sequence. Linear lookup is
-    // fine: the table has 27 entries and runs at most once per inbound GC
-    // message. `static const` avoids re-initializing on every call.
-    static const registry::Entry kTable[] = {
-        { GBE_kDotaJoinChatChannel, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_join_chat_channel, registry::HandlerId::JoinChatChannel, "smoke:test_chat_join_channel" },
-        { GBE_kDotaPracticeLobbyCreate, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_practice_lobby_create, registry::HandlerId::PracticeLobbyCreate, "replay:lobby_lifecycle:lobby_create_with_passkey" },
-        { GBE_kDotaLobbyList, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyRead, adapt_lobby_list, registry::HandlerId::LobbyList, nullptr },
-        { GBE_kDotaCustomLobbyListRequest, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyRead, adapt_custom_lobby_list, registry::HandlerId::CustomLobbyList, nullptr },
-        { GBE_kDotaFriendPracticeLobbyListRequest, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyRead, adapt_friend_practice_lobby_list, registry::HandlerId::FriendPracticeLobbyList, nullptr },
-        { GBE_kGCInviteToLobby, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_invite_to_lobby, registry::HandlerId::InviteToLobby, "smoke:test_lobby_invite_to_lobby_preserves_wrapped_response" },
-        { GBE_kGCLobbyInviteResponse, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_lobby_invite_response, registry::HandlerId::LobbyInviteResponse, "smoke:test_lobby_invite_response_decline_pushes_remove_then_unsubscribe" },
-        { GBE_kDotaPracticeLobbyJoin, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_practice_lobby_join, registry::HandlerId::PracticeLobbyJoin, "replay:lobby_lifecycle:lobby_join_by_id" },
-        { GBE_kDotaPracticeLobbyLeave, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_practice_lobby_leave, registry::HandlerId::PracticeLobbyLeave, "replay:game_flow:lobby_leave_teardown" },
-        { GBE_kDotaPracticeLobbyLaunch, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_practice_lobby_launch, registry::HandlerId::PracticeLobbyLaunch, "replay:game_flow:lobby_launch_allpick" },
-        { GBE_kDotaPracticeLobbySetDetails, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_practice_lobby_set_details, registry::HandlerId::PracticeLobbySetDetails, "smoke:test_lobby_set_details_mutates_before_publish_and_details_update" },
-        { GBE_kDotaPracticeLobbySetTeamSlot, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_practice_lobby_set_team_slot, registry::HandlerId::PracticeLobbySetTeamSlot, "smoke:test_lobby_set_team_slot_publishes_before_details_and_ack" },
-        { GBE_kDotaPracticeLobbyKick, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_practice_lobby_kick, registry::HandlerId::PracticeLobbyKick, "replay:lobby_lifecycle:lobby_kick_player" },
-        { GBE_kDotaPracticeLobbyJoinBroadcastChannel, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_practice_lobby_join_broadcast, registry::HandlerId::PracticeLobbyJoinBroadcastChannel, "smoke:test_lobby_join_broadcast_publishes_before_details_and_ack" },
-        { GBE_kDotaLobbyUpdateBroadcastChannelInfo, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_lobby_update_broadcast_info, registry::HandlerId::LobbyUpdateBroadcastChannelInfo, "smoke:test_lobby_update_broadcast_publishes_before_details" },
-        { GBE_kDotaPracticeLobbyCloseBroadcastChannel, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_practice_lobby_close_broadcast, registry::HandlerId::PracticeLobbyCloseBroadcastChannel, "smoke:test_lobby_close_broadcast_publishes_before_details" },
-        { 7070u, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_custom_game_lifecycle, registry::HandlerId::CustomGameReadyUp, "smoke:test_custom_game_lifecycle_direct_wrapped_action_sequence_equivalence" },
-        { 8052u, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_custom_game_lifecycle, registry::HandlerId::CustomGameStartedLoading, "smoke:test_custom_game_lifecycle_8052_direct_wrapped_action_sequence_equivalence" },
-        { 8053u, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyLifecycle, adapt_custom_game_lifecycle, registry::HandlerId::CustomGameFinishedLoading, "smoke:test_custom_game_lifecycle_direct_wrapped_action_sequence_equivalence" },
-        { 7427u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_7427_notifications, registry::HandlerId::Notifications7427, nullptr },
-        { 4523u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_upload_rate, registry::HandlerId::UploadRate, nullptr },
-        { 8879u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_rank, registry::HandlerId::Rank, nullptr },
-        { 7534u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_profile_card, registry::HandlerId::ProfileCard, nullptr },
-        { 2581u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_lookup_account_name, registry::HandlerId::LookupAccountName, nullptr },
-        { 7503u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_emoticon_data, registry::HandlerId::EmoticonData, nullptr },
-        { 8095u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_conduct_scorecard, registry::HandlerId::ConductScorecard, nullptr },
-        { 8800u, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_direct_coaching_summary, registry::HandlerId::CoachingSummary, nullptr },
-    };
-
-    return {kTable, sizeof(kTable) / sizeof(kTable[0])};
-}
-
-bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc_router::DotaGcRequestContext &context)
-{
-    if (!context.valid)
-        return false;
-
-    const registry::Entry *entry = registry::find_entry(
-        handler_registry.entries,
-        handler_registry.size,
-        context.inner_emsg,
-        context.path);
-    if (!entry)
-        return false;
-
-    const std::string *outer_session_field_raw = registry::forwards_wrapped_session(entry->session_policy)
-        ? gbe::dota_gc_router::outer_session_field_or_null(context)
-        : nullptr;
-    const char *path = context.wrapped ? "wrapped" : "direct";
-    GBE_GC_DebugLog(
-        "GC_DOTA_LOBBY",
-        "[LOBBY] Received %s %u has_job=%u request_job=%llu session_raw_size=%zu body_size=%zu body_prefix=%s",
-        path,
-        context.inner_emsg,
-        context.has_request_job ? 1u : 0u,
-        static_cast<unsigned long long>(context.request_job_id),
-        context.outer_session_field_raw.size(),
-        context.body.size(),
-        gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(context.body.data()), context.body.size(), 48).c_str()
-    );
-
-    return entry->adapter(this, context, outer_session_field_raw);
-}
-
 bool Steam_Game_Coordinator::gc_enabled()
 {
     if (gc_profile == GC_PROFILE_DOTA2)
@@ -1238,8 +1004,15 @@ void Steam_Game_Coordinator::initialize_gc()
 
 void Steam_Game_Coordinator::GBE_ClearDotaLobbyRuntimeState()
 {
+    const uint64 generation = GBE_local_lobby.generation;
     GBE_local_lobby = GBE_LocalLobby{};
-    GBE_SharedLobbyStore().clear();
+    const auto clear_result = GBE_SharedLobbyStore().compare_clear(generation);
+    if (clear_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
+        GBE_GC_DebugLog(
+            "DOTA_LOBBY_STORE",
+            "skip stale runtime clear generation=%llu",
+            static_cast<unsigned long long>(generation));
+    }
     GBE_ClearLastDotaLaunchStatePushedGameState();
 }
 

@@ -243,6 +243,72 @@ void test_clear_resets_complete_state()
     expect_true(snapshot.cache_service_list.empty(), "clear resets cache services");
 }
 
+void test_compare_clear_preserves_generation_tombstone()
+{
+    Fixture fixture;
+    fixture.store.publish(populated_state(12u));
+
+    const auto result = fixture.store.compare_clear(12u);
+    const auto snapshot = fixture.store.snapshot();
+
+    expect_true(result == gbe::dota_lobby_state::StoreUpdateResult::Applied, "matching generation clear reports applied");
+    expect_true(!snapshot.valid, "matching generation clear stores an invalid tombstone");
+    expect_true(!snapshot.active, "matching generation clear resets active state");
+    expect_eq_u64(snapshot.generation, 12u, "matching generation clear preserves tombstone generation");
+    expect_eq_u64(snapshot.lobby_id, 0u, "matching generation clear resets lobby ID");
+    expect_true(snapshot.members.empty(), "matching generation clear resets members");
+}
+
+void test_compare_clear_rejects_stale_generation()
+{
+    Fixture fixture;
+    auto current = populated_state(13u);
+    current.lobby_id = 808u;
+    fixture.store.publish(current);
+
+    const auto result = fixture.store.compare_clear(12u);
+    const auto snapshot = fixture.store.snapshot();
+
+    expect_true(result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration, "stale clear reports stale generation");
+    expect_true(snapshot.valid, "stale clear preserves valid state");
+    expect_eq_u64(snapshot.generation, 13u, "stale clear preserves newer generation");
+    expect_eq_u64(snapshot.lobby_id, 808u, "stale clear preserves newer lobby ID");
+}
+
+void test_tombstone_rejects_same_generation_republish()
+{
+    Fixture fixture;
+    fixture.store.publish(populated_state(14u));
+    fixture.store.compare_clear(14u);
+
+    auto stale = populated_state(14u);
+    stale.lobby_id = 909u;
+    const auto result = fixture.store.publish_if_generation_current_or_newer(stale);
+    const auto snapshot = fixture.store.snapshot();
+
+    expect_true(result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration, "tombstone rejects same-generation republish");
+    expect_true(!snapshot.valid, "same-generation republish preserves tombstone");
+    expect_eq_u64(snapshot.generation, 14u, "same-generation republish preserves tombstone generation");
+    expect_eq_u64(snapshot.lobby_id, 0u, "same-generation republish cannot revive lobby ID");
+}
+
+void test_tombstone_accepts_newer_generation_publish()
+{
+    Fixture fixture;
+    fixture.store.publish(populated_state(15u));
+    fixture.store.compare_clear(15u);
+
+    auto replacement = populated_state(16u);
+    replacement.lobby_id = 1001u;
+    const auto result = fixture.store.publish_if_generation_current_or_newer(replacement);
+    const auto snapshot = fixture.store.snapshot();
+
+    expect_true(result == gbe::dota_lobby_state::StoreUpdateResult::Applied, "tombstone accepts newer generation publish");
+    expect_true(snapshot.valid, "newer generation publish replaces tombstone");
+    expect_eq_u64(snapshot.generation, 16u, "newer generation publish advances generation");
+    expect_eq_u64(snapshot.lobby_id, 1001u, "newer generation publish installs replacement lobby");
+}
+
 void test_concurrent_readers_observe_complete_versions()
 {
     Fixture fixture;
@@ -596,6 +662,10 @@ int main()
     test_compare_update_rejects_stale_generation_without_mutation();
     test_delayed_writer_cannot_overwrite_new_generation();
     test_clear_resets_complete_state();
+    test_compare_clear_preserves_generation_tombstone();
+    test_compare_clear_rejects_stale_generation();
+    test_tombstone_rejects_same_generation_republish();
+    test_tombstone_accepts_newer_generation_publish();
     test_concurrent_readers_observe_complete_versions();
     test_concurrent_compare_updates_commit_matching_generation_only();
     test_concurrent_clear_and_publish_expose_complete_states();

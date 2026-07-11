@@ -76,7 +76,7 @@ The logical lifecycle order is:
 Settings -> Network -> Callbacks -> Store -> Services -> Coordinator
 ```
 
-Destruction follows the reverse dependency order. A coordinator is destroyed before its executor, serialized sockets, reconnect adapter, sockets, callbacks, Store binding, and runtime-state binding.
+`gbe::dota::LocatorBindingGuard` publishes the application-owned Store and runtime state after base services exist and before either coordinator is constructed. Partial binding and constructor failure roll back automatically. Destruction follows the reverse dependency order, with both coordinators destroyed before the guard is reset.
 
 The standalone `gbe::dota::CompositionRoot` in `dll/gbe_dota_composition_root.*` is a focused ownership model used by offline tests. Production currently performs equivalent assembly directly in `Steam_Client`; maintainers should treat `Steam_Client` as the runtime authority.
 
@@ -117,7 +117,7 @@ sequenceDiagram
     GC-->>Game: GC message availability and retrieval
 ```
 
-The production typed registry is the canonical post-login mapping source. Each entry defines:
+The production typed registry and dispatcher live in `dll/gbe_dota_post_login_dispatcher.cpp`. Production builds and the offline handler harness compile this same implementation. Each entry defines:
 
 - Message ID.
 - Direct, wrapped, or dual request mode.
@@ -152,7 +152,9 @@ Typical side effects include:
 - `publish()` commits a complete value.
 - Monotonic publish rejects older generations.
 - `compare_update()` accepts only the expected generation.
-- `clear()` commits a complete empty state.
+- `compare_clear()` clears only the expected generation and preserves that generation as a tombstone.
+- A tombstone rejects same-generation republish and permits a newer generation to replace it.
+- `clear()` remains available for test and process-level forced reset.
 
 Every business operation captures one complete snapshot and derives all decisions from that version. Store mutators transform a copied candidate and perform no network, callback, logging, filesystem, or coordinator effects.
 

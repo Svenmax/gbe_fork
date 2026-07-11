@@ -25,6 +25,7 @@ public:
     void publish(Snapshot state);
     StoreUpdateResult publish_if_generation_current_or_newer(Snapshot state);
     void clear();
+    StoreUpdateResult compare_clear(std::uint64_t expected_generation);
     StoreUpdateResult update(const Mutator &mutator);
     StoreUpdateResult compare_update(std::uint64_t expected_generation, const Mutator &mutator);
 

@@ -31,6 +31,7 @@
 
 // Provide stub types
 #include "stubs.h"
+#include "test_fixture.h"
 
 // Include GBE headers for function declarations and constants
 #include "dll/gbe_dota_protocol_constants.h"
@@ -257,75 +258,29 @@ static void expect_push_payload(const RecordedAction &action, uint32_t expected_
     TEST_ASSERT(!action.msg_body.empty(), context);
 }
 
-// =====================================================================
-// Test fixture: create a coordinator with test items
-// =====================================================================
-
-struct TestFixture
+static gbe::dota_gc_router::DotaGcRequestContext make_dispatch_context(
+    uint32 inner_emsg,
+    gbe::dota_gc_router::DotaGcRequestPath path,
+    std::string body = {},
+    JobID_t request_job_id = 0,
+    std::string outer_session_field_raw = {})
 {
-    Steam_Game_Coordinator gc;
-    Settings settings;
-    Networking network;
-    SteamCallBacks callbacks;
-    ActionRecorder recorder;
+    gbe::dota_gc_router::DotaGcRequestContext context{};
+    context.valid = true;
+    context.inner_emsg = inner_emsg;
+    context.body = std::move(body);
+    context.request_job_id = request_job_id;
+    context.has_request_job = request_job_id != 0;
+    context.path = path;
+    context.wrapped = path == gbe::dota_gc_router::DotaGcRequestPath::Wrapped;
+    context.outer_session_field_raw = std::move(outer_session_field_raw);
+    return context;
+}
 
-    TestFixture()
-    {
-        gc.settings = &settings;
-        gc.network = &network;
-        gc.callbacks = &callbacks;
-        gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
-        gc.is_server = false;
-        g_action_recorder = &recorder;
-    }
-
-    ~TestFixture()
-    {
-        g_action_recorder = nullptr;
-    }
-
-    void reset()
-    {
-        recorder.clear();
-        gc.items.clear();
-        gc.pending_messages.clear();
-        while (!gc.incoming_messages.empty())
-            gc.incoming_messages.pop();
-        gc.GBE_local_lobby = GBE_LocalLobby{};
-        gc.GBE_dota_lobby_generation_counter = gbe::dota_lobby_generation::Counter{};
-        gc.GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel();
-        gc.GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed();
-        gc.GBE_ClearPendingResetAfterCacheUnsubscribed();
-        gc.GBE_ClearDotaLoginSyncSent();
-        gc.GBE_ClearDotaPrivateLobbySnapshotReplayed();
-        gc.GBE_ClearDotaHostShowcaseEquipPushed();
-        gc.GBE_ClearLastDotaLaunchStatePushedGameState();
-        gc.GBE_ClearLastDotaLaunchPersonaSignature();
-        gc.GBE_ClearLastDotaDirectConnectCallbackKey();
-        gc.test_set_active_server_lobby(false);
-        gc.test_clear_next_lobby_capture();
-        gc.test_set_dota_response_result(true);
-        gc.test_set_member_runtime_result(true);
-        gc.test_set_runtime_update_result(true);
-        GBE_GetSharedDotaLobbyStateStore().clear();
-        // Clear the global server-GC hook so each test starts from a clean slate.
-        g_test_steam_client.steam_matchmaking = nullptr;
-        g_test_steam_client.steam_game_coordinator = nullptr;
-        g_test_steam_client.steam_gameserver_game_coordinator = nullptr;
-    }
-
-    Econ_Item &add_item(uint64_t id, uint32_t def_index = 100)
-    {
-        Econ_Item item;
-        item.id = id;
-        item.def = def_index;
-        item.level = 1;
-        item.quantity = 1;
-        item.style = 0;
-        gc.items.push_back(std::move(item));
-        return gc.items.back();
-    }
-};
+static void install_production_dispatcher(TestFixture &tf)
+{
+    tf.gc.handler_registry = Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry();
+}
 
 // =====================================================================
 // Inventory domain smoke tests
@@ -810,6 +765,76 @@ static void test_inventory_equip_planner_style_bitmask_input()
 // =====================================================================
 // Chat domain smoke test
 // =====================================================================
+
+static void test_production_dispatcher_registry_contract()
+{
+    const auto view = Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry();
+    TEST_ASSERT(view.entries != nullptr, "production registry should expose entries");
+    TEST_ASSERT_EQ(view.size, 27u, "production registry should retain all canonical entries");
+    TEST_ASSERT(gbe::dota_handler_registry::has_unique_message_ids_per_mode(view.entries, view.size), "production registry modes should be unique");
+    TEST_ASSERT(gbe::dota_handler_registry::all_high_risk_entries_have_fixture(view.entries, view.size), "high-risk production entries should retain fixtures");
+    for (std::size_t index = 0; index < view.size; ++index) {
+        TEST_ASSERT(view.entries[index].adapter != nullptr, "production registry adapter should be present");
+        TEST_ASSERT(view.entries[index].handler != gbe::dota_handler_registry::HandlerId::Unknown, "production registry handler identity should be present");
+    }
+    ++g_tests_passed;
+}
+
+static void test_production_dispatcher_join_chat_modes_and_session()
+{
+    const std::string body = WireBodyBuilder().bytes(2u, "dota_lobby_chat").varint(4u, 3u).take();
+    const std::string session_raw = "production-session-token";
+
+    for (const auto path : {gbe::dota_gc_router::DotaGcRequestPath::Direct, gbe::dota_gc_router::DotaGcRequestPath::Wrapped}) {
+        TestFixture tf;
+        tf.reset();
+        install_production_dispatcher(tf);
+        tf.gc.GBE_local_lobby.active = true;
+        tf.gc.GBE_local_lobby.lobby_id = 0xCAFEu;
+        tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.get_local_steam_id().ConvertToUint64();
+        tf.gc.GBE_local_lobby.owner_name = "tester";
+
+        const auto context = make_dispatch_context(GBE_kDotaJoinChatChannel, path, body, 0u, session_raw);
+        const auto *entry = gbe::dota_handler_registry::find_entry(
+            tf.gc.handler_registry.entries, tf.gc.handler_registry.size, context.inner_emsg, context.path);
+        TEST_ASSERT(entry != nullptr, "production registry should select join-chat entry");
+        TEST_ASSERT_EQ(entry->handler, gbe::dota_handler_registry::HandlerId::JoinChatChannel, "join-chat identity should match production mapping");
+        TEST_ASSERT(tf.gc.GBE_DispatchDotaPostLoginRequest(context), "production dispatcher should execute join-chat handler");
+        TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "join-chat dispatch should publish and respond");
+        TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[1]), GBE_kDotaJoinChatChannelResponse, "join-chat dispatch should push 7010");
+        TEST_ASSERT(tf.recorder.actions[1].wrapped == context.wrapped, "join-chat response should preserve request path");
+        TEST_ASSERT(tf.recorder.actions[1].session_raw == (context.wrapped ? session_raw : std::string{}), "only wrapped join-chat should forward session");
+    }
+    ++g_tests_passed;
+}
+
+static void test_production_dispatcher_direct_only_and_fallbacks()
+{
+    TestFixture tf;
+    tf.reset();
+    install_production_dispatcher(tf);
+
+    auto direct = make_dispatch_context(4523u, gbe::dota_gc_router::DotaGcRequestPath::Direct, {}, 9003u);
+    const auto *entry = gbe::dota_handler_registry::find_entry(
+        tf.gc.handler_registry.entries, tf.gc.handler_registry.size, direct.inner_emsg, direct.path);
+    TEST_ASSERT(entry != nullptr, "production registry should select upload-rate entry");
+    TEST_ASSERT_EQ(entry->handler, gbe::dota_handler_registry::HandlerId::UploadRate, "upload-rate identity should match production mapping");
+    TEST_ASSERT(tf.gc.GBE_DispatchDotaPostLoginRequest(direct), "direct upload-rate request should dispatch");
+    TEST_ASSERT(has_single_push(tf.recorder, 4524u), "direct upload-rate dispatch should push 4524");
+
+    tf.recorder.clear();
+    auto wrapped = make_dispatch_context(4523u, gbe::dota_gc_router::DotaGcRequestPath::Wrapped, {}, 9003u, "ignored-session");
+    TEST_ASSERT(!tf.gc.GBE_DispatchDotaPostLoginRequest(wrapped), "wrapped upload-rate request should be rejected");
+    TEST_ASSERT(tf.recorder.actions.empty(), "rejected wrapped request should have no effects");
+
+    auto unknown = make_dispatch_context(0x00FFFFFFu, gbe::dota_gc_router::DotaGcRequestPath::Direct);
+    TEST_ASSERT(!tf.gc.GBE_DispatchDotaPostLoginRequest(unknown), "unknown request should be rejected");
+    unknown.valid = false;
+    unknown.inner_emsg = GBE_kDotaJoinChatChannel;
+    TEST_ASSERT(!tf.gc.GBE_DispatchDotaPostLoginRequest(unknown), "invalid context should be rejected");
+    TEST_ASSERT(tf.recorder.actions.empty(), "fallback paths should have no effects");
+    ++g_tests_passed;
+}
 
 static void test_chat_join_channel()
 {
@@ -1807,6 +1832,34 @@ static void test_lobby_runtime_reset_clears_local_shared_and_last_launch_state()
     TEST_ASSERT(!shared_after_reset.valid, "runtime reset should clear shared lobby validity");
     TEST_ASSERT_EQ(shared_after_reset.lobby_id, 0u, "runtime reset should clear shared lobby id");
     TEST_ASSERT_EQ(tf.gc.GBE_GetLastDotaLaunchStatePushedGameState(), 0u, "runtime reset should clear last pushed launch game state");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_runtime_reset_preserves_newer_shared_generation()
+{
+    TestFixture tf;
+    tf.reset();
+
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x5200u;
+    tf.gc.GBE_local_lobby.generation = 20u;
+
+    GBE_SharedDotaLobbyState replacement;
+    replacement.valid = true;
+    replacement.active = true;
+    replacement.generation = 21u;
+    replacement.lobby_id = 0x5201u;
+    replacement.owner_name = "replacement";
+    GBE_GetSharedDotaLobbyStateStore().publish(replacement);
+
+    tf.gc.GBE_ClearDotaLobbyRuntimeState();
+
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.active, "runtime reset should clear stale local lobby state");
+    const auto shared_after_reset = GBE_GetSharedDotaLobbyStateStore().snapshot();
+    TEST_ASSERT(shared_after_reset.valid, "stale runtime clear should preserve newer shared state");
+    TEST_ASSERT_EQ(shared_after_reset.generation, 21u, "stale runtime clear should preserve newer generation");
+    TEST_ASSERT_EQ(shared_after_reset.lobby_id, 0x5201u, "stale runtime clear should preserve replacement lobby");
 
     ++g_tests_passed;
 }
@@ -3044,6 +3097,12 @@ int main()
     std::printf("[run] test_inventory_equip_planner_style_bitmask_input\n");
     RUN_TEST(test_inventory_equip_planner_style_bitmask_input);
 
+    std::printf("[run] test_production_dispatcher_registry_contract\n");
+    RUN_TEST(test_production_dispatcher_registry_contract);
+    std::printf("[run] test_production_dispatcher_join_chat_modes_and_session\n");
+    RUN_TEST(test_production_dispatcher_join_chat_modes_and_session);
+    std::printf("[run] test_production_dispatcher_direct_only_and_fallbacks\n");
+    RUN_TEST(test_production_dispatcher_direct_only_and_fallbacks);
     std::printf("[run] test_chat_join_channel\n");
     RUN_TEST(test_chat_join_channel);
 
@@ -3130,6 +3189,9 @@ int main()
 
     std::printf("[run] test_lobby_runtime_reset_clears_local_shared_and_last_launch_state\n");
     RUN_TEST(test_lobby_runtime_reset_clears_local_shared_and_last_launch_state);
+
+    std::printf("[run] test_lobby_runtime_reset_preserves_newer_shared_generation\n");
+    RUN_TEST(test_lobby_runtime_reset_preserves_newer_shared_generation);
 
     std::printf("[run] test_lobby_launch_state_push_smoke_action_sequence\n");
     RUN_TEST(test_lobby_launch_state_push_smoke_action_sequence);

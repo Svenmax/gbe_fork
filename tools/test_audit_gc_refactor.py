@@ -469,6 +469,7 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
         GBE_SharedDotaLobbyState dota_lobby_state{};
         gbe::dota_lobby_state::Store dota_lobby_store;
         gbe::dota::RuntimeState dota_runtime_state{};
+        std::unique_ptr<gbe::dota::LocatorBindingGuard> dota_locator_binding;
     """
     COORDINATOR = """
         gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore() {
@@ -479,12 +480,11 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
     STEAM_CLIENT = """
     Steam_Client::Steam_Client()
     {
-        GBE_BindSharedDotaLobbyStateStore(dota_lobby_store);
-        GBE_BindDotaRuntimeState(dota_runtime_state);
         steam_networking_sockets = new Steam_Networking_Sockets();
         dota_reconnect_adapter_client = new GBE_DotaReconnectNetworkAdapter();
         steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized();
         dota_lifecycle_executor_client = new gbe::dota_lifecycle::CoordinatorExecutor();
+        dota_locator_binding = std::make_unique<gbe::dota::LocatorBindingGuard>(dota_lobby_store, dota_runtime_state);
         steam_game_coordinator = new Steam_Game_Coordinator();
         steam_gameserver_networking_sockets = new Steam_Networking_Sockets();
         dota_reconnect_adapter_server = new GBE_DotaReconnectNetworkAdapter();
@@ -504,8 +504,7 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
         DEL_INST(steam_networking_sockets_serialized);
         DEL_INST(dota_reconnect_adapter_client);
         DEL_INST(steam_networking_sockets);
-        GBE_UnbindSharedDotaLobbyStateStore(dota_lobby_store);
-        GBE_UnbindDotaRuntimeState(dota_runtime_state);
+        dota_locator_binding.reset();
     }
     """
 
@@ -518,12 +517,14 @@ class CompositionRootLifecycleAuditTest(unittest.TestCase):
             "        dota_reconnect_adapter_client = new GBE_DotaReconnectNetworkAdapter();\n"
             "        steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized();\n"
             "        dota_lifecycle_executor_client = new gbe::dota_lifecycle::CoordinatorExecutor();\n"
+            "        dota_locator_binding = std::make_unique<gbe::dota::LocatorBindingGuard>(dota_lobby_store, dota_runtime_state);\n"
             "        steam_game_coordinator = new Steam_Game_Coordinator();",
             "        steam_game_coordinator = new Steam_Game_Coordinator();\n"
             "        steam_networking_sockets = new Steam_Networking_Sockets();\n"
             "        dota_reconnect_adapter_client = new GBE_DotaReconnectNetworkAdapter();\n"
             "        steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized();\n"
-            "        dota_lifecycle_executor_client = new gbe::dota_lifecycle::CoordinatorExecutor();",
+            "        dota_lifecycle_executor_client = new gbe::dota_lifecycle::CoordinatorExecutor();\n"
+            "        dota_locator_binding = std::make_unique<gbe::dota::LocatorBindingGuard>(dota_lobby_store, dota_runtime_state);",
         )
         self.assertIn(
             "steam_client.cpp: client GC construction must order direct sockets, reconnect adapter, serialized services, lifecycle executor, then coordinator",
@@ -668,9 +669,9 @@ gbe::dota_lifecycle::CoordinatorExecutor *dota_lifecycle_executor_server{};
 class MutableGcGlobalStateAuditTest(unittest.TestCase):
     def test_accepts_immutable_data_functions_and_compatibility_locators(self):
         sources = {
-            "steam_game_coordinator.cpp": """
-static gbe::dota_lobby_state::Store *GBE_shared_dota_lobby_store{};
-static gbe::dota::RuntimeState *GBE_dota_runtime_state{};
+            "gbe_dota_locator.cpp": """
+static gbe::dota_lobby_state::Store *shared_dota_lobby_store{};
+static gbe::dota::RuntimeState *dota_runtime_state{};
 static const registry::Entry kTable[] = {};
 static constexpr uint32 GBE_kMessage = 1u;
 static bool helper() { return true; }
@@ -697,6 +698,14 @@ static bool helper() { return true; }
         self.assertIn(
             "steam_game_coordinator.cpp:1: mutable GC static state GBE_hidden_service is not allowlisted",
             audit.audit_mutable_gc_global_state(sources),
+        )
+
+
+class PostLoginDispatchAuditTest(unittest.TestCase):
+    def test_missing_registry_returns_complete_summary(self):
+        self.assertEqual(
+            (["GBE_ProductionDotaHandlerRegistry definition not found"], 0, 0),
+            audit.audit_post_login_dispatch(""),
         )
 
 
@@ -823,7 +832,7 @@ class HandlerSideEffectSeamAuditTest(unittest.TestCase):
 class ArchitectureBoundaryAuditTest(unittest.TestCase):
     def test_accepts_canonical_architecture_owners(self):
         sources = {
-            "steam_game_coordinator.cpp": """
+            "gbe_dota_post_login_dispatcher.cpp": """
                 registry::View Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry() {
                     static const registry::Entry kTable[] = {};
                     return {kTable, 0};
@@ -849,7 +858,7 @@ class ArchitectureBoundaryAuditTest(unittest.TestCase):
 
     def test_rejects_registry_table_owned_by_dispatcher(self):
         sources = {
-            "steam_game_coordinator.cpp": """
+            "gbe_dota_post_login_dispatcher.cpp": """
                 bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const Context &context) {
                     static const registry::Entry kTable[] = {};
                     return registry::find_entry(kTable, 0, context.inner_emsg, context.path);
@@ -858,7 +867,7 @@ class ArchitectureBoundaryAuditTest(unittest.TestCase):
         }
         issues = audit.audit_architecture_boundaries(sources)
         self.assertIn(
-            "steam_game_coordinator.cpp: post-login dispatcher owns a registry table instead of consuming the injected view",
+            "gbe_dota_post_login_dispatcher.cpp: post-login dispatcher owns a registry table instead of consuming the injected view",
             issues,
         )
 
@@ -873,7 +882,7 @@ class ArchitectureBoundaryAuditTest(unittest.TestCase):
 
     def test_rejects_parallel_post_login_registry_and_switch(self):
         sources = {
-            "steam_game_coordinator.cpp": """
+            "gbe_dota_post_login_dispatcher.cpp": """
                 bool Steam_Game_Coordinator::GBE_DispatchDotaPostLoginRequest(const Context &context) {
                     static const registry::Entry kTable[] = {};
                     return registry::find_entry(kTable, 0, context.inner_emsg, context.path);
@@ -886,7 +895,7 @@ class ArchitectureBoundaryAuditTest(unittest.TestCase):
         }
         issues = audit.audit_architecture_boundaries(sources)
         self.assertIn(
-            "gbe_dota_post_login_handlers.cpp: parallel typed post-login registry returned outside steam_game_coordinator.cpp",
+            "gbe_dota_post_login_handlers.cpp: parallel typed post-login registry returned outside gbe_dota_post_login_dispatcher.cpp",
             issues,
         )
         self.assertIn(
@@ -945,7 +954,7 @@ class LayeredCiGateAuditTest(unittest.TestCase):
             - uses: actions/checkout@v6
               with:
                 fetch-depth: 0
-            - run: bash tools/run_gc_verification.sh --fast --base-sha "${{ github.event.pull_request.base.sha }}"
+            - run: bash tools/run_gc_verification.sh --full --base-sha "${{ github.event.pull_request.base.sha }}"
         gc-tsan:
           runs-on: "ubuntu-24.04"
           env:
@@ -972,7 +981,7 @@ class LayeredCiGateAuditTest(unittest.TestCase):
         gbe_dota_concurrency_stress_test
     """
 
-    def test_accepts_blocking_fast_production_and_tsan_layers(self):
+    def test_accepts_blocking_full_production_and_tsan_layers(self):
         self.assertEqual(
             [],
             audit.audit_layered_ci_gates(
@@ -983,8 +992,8 @@ class LayeredCiGateAuditTest(unittest.TestCase):
             ),
         )
 
-    def test_rejects_full_fast_job_and_missing_production_or_tsan_boundaries(self):
-        workflow = self.WORKFLOW.replace("--fast", "--full")
+    def test_rejects_fast_job_and_missing_production_or_tsan_boundaries(self):
+        workflow = self.WORKFLOW.replace("--full", "--fast")
         workflow = workflow.replace("matrix_cfg: '[\"release\"]'", "matrix_cfg: '[\"debug\"]'", 1)
         workflow = workflow.replace("CXX: clang++", "CXX: c++")
         issues = audit.audit_layered_ci_gates(
@@ -994,7 +1003,7 @@ class LayeredCiGateAuditTest(unittest.TestCase):
             self.TSAN,
         )
         self.assertIn(
-            "emu-pull-request.yml: fast GC layer must run run_gc_verification.sh --fast with the PR base SHA",
+            "emu-pull-request.yml: full GC layer must run run_gc_verification.sh --full with the PR base SHA",
             issues,
         )
         self.assertIn(
@@ -1006,7 +1015,7 @@ class LayeredCiGateAuditTest(unittest.TestCase):
             issues,
         )
         self.assertIn(
-            "run_gc_verification.sh: fast layer is missing architecture audit execution",
+            "run_gc_verification.sh: full layer is missing architecture audit execution",
             issues,
         )
 
@@ -1026,8 +1035,8 @@ class CiFailureLocalizationAuditTest(unittest.TestCase):
   gc-verification:
     name: "gc verification"
     steps:
-      - name: "Run fast GC verification"
-        run: bash tools/run_gc_verification.sh --fast --base-sha base
+      - name: "Run full GC verification"
+        run: bash tools/run_gc_verification.sh --full --base-sha base
   gc-tsan:
     name: "gc thread sanitizer"
     steps:
