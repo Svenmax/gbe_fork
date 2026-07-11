@@ -502,10 +502,12 @@
     - P14 显式纯状态机阶段完成：typed vocabulary、纯 transition、generation/reconnect、production effect gates、完整 transition table、示例/属性/differential 测试和架构审计均已关闭。
 
 - [ ] 15. 设置 P14、P16、P17 条件决策门禁
-  - [ ] 15.1 建立 P14 Actor 触发条件检查
+  - [x] 15.1 建立 P14 Actor 触发条件检查
     - 汇总 TSAN 结果、锁复杂度、乱序 callback 缺陷和跨线程状态访问数量。
     - 当存在持续竞态、锁顺序难以稳定或多线程直接写业务状态时，创建 P14 单一状态所有者实施清单。
     - 当前条件未触发时维持 store、generation 和显式锁模型。
+    - 门禁记录：`docs/gc/architecture-investment-gates.md` 定义四个客观触发条件：现有 ownership/lock contract 下可复现 TSAN race、超过两层或循环/逆序锁需求、单阶段两个 generation guard 后仍发生的乱序 callback mutation 缺陷、以及 Store/queue/generation-guarded slot 之外的跨线程业务状态 writer。
+    - 当前判定：Clang TSAN reconnect 772/772 与 concurrency stress 通过且零 race；锁序维持 `global_mutex -> serialized instance mutex` 并在 external effects 前释放；未发现单阶段两个确认的乱序 mutation 缺陷；共享与延迟状态均位于既有 owner 边界。Actor 门禁关闭，继续使用 Store、generation、queue 和显式锁模型。
   - [ ] 15.2 建立 P16 形式化验证触发条件检查
     - 评估状态组合规模、重复/乱序缺陷数量、故障代价和多人长期维护需求。
     - 条件触发时仅对 Lobby lifecycle、generation 和 reconnect dedup 建立 TLA+/Alloy 模型。
