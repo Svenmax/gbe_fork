@@ -230,7 +230,7 @@
     - 检查点：复核 P9.1 至 P9.6 的六个连续提交、24 项 production typed registry、13 项高风险真实 fixture 关联、339 条 focused/property assertions 和唯一 registry 审计来源；未发现 dispatch 行为、session policy、unknown fallback、fixture 真实性或顺序无关性疑点。
     - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 阶段级复跑通过；registry assertions 339/339，reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
 
-- [ ] 10. P10 标准化 GC 观测与诊断事件
+- [x] 10. P10 标准化 GC 观测与诊断事件
   - [x] 10.1 定义结构化事件模型
     - 统一 event、reason、source、lobby ID、generation、server ID、endpoint、decision、message ID 和 job ID 字段。
     - 依赖：任务 4、任务 7 和任务 9。
@@ -307,7 +307,7 @@
     - 并发门禁：有界 1 writer/4 reader 压力历史通过；P11-A generation 线性化、P11-B 锁外 network/callback effect、P11-C 跨实例隔离属性各运行 64 个确定性 seed；PR workflow 具备独立阻断式 Clang TSAN job。
     - 终验：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 均通过；reconnect network 774/774，callsystem guard 8/8，registry 339/339，payload 449/449，handler 77/77，replay fixtures 7 组，audit helper 9/9，audit 11 项 0 问题，TSAN 无 race 报告。未发现需要用户裁决的协议、并发或兼容性疑问。
 
-- [ ] 12. P12 删除过渡层并固化架构门禁
+- [x] 12. P12 删除过渡层并固化架构门禁
   - [x] 12.1 删除生命周期重复 handler 逻辑
     - 清理 direct/wrapped 中已被 planner/executor/registry 替代的分支和 helper。
     - 依赖：任务 2、任务 6 和任务 9。
@@ -420,7 +420,7 @@
     - 最终门禁：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题，TSAN 无 race。
     - 本地 production generation 继续受 bundled Premake GLIBC 2.38 要求和缺少 Windows runner 限制；blocking Windows/Linux release jobs 保持最终 production integration gate。无待确认的 ABI、协议、payload、action-order、ownership 或并发语义问题。
 
-- [ ] 14. 核心 P15 建立显式纯状态机
+- [x] 14. 核心 P15 建立显式纯状态机
   - [x] 14.1 定义 Lobby lifecycle 状态与事件
     - 将 create、join、setup、loading、loaded、run、postgame、leave、abandon 和 reset 表达为强类型 state/event。
     - 依赖：任务 6、任务 7 和任务 13。
