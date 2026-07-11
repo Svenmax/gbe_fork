@@ -555,8 +555,10 @@
     - 核心状态机具备属性测试和 model-based differential test。
     - 验收结果：lifecycle 由 state-machine examples/properties/differential、executor 行为测试和 direct/wrapped handler 集成覆盖；reconnect 由 prepare/dedup 状态断言、connector/callback fake executor 覆盖，以及 composition-root/serialized production-path fake 隔离与锁边界覆盖。
     - Audit 25 固化 15 个高风险测试入口及 reconnect、composition-root、lifecycle-state-machine、handler 四个 offline runner targets，确保测试同时定义、执行并接入统一门禁。审计 helper 增至 66 项。
-  - [ ] 16.7 验收 CI 门禁
+  - [x] 16.7 验收 CI 门禁
     - offline、audit、Windows/Linux production build 和 TSAN 均为明确且可定位失败的检查项。
+    - 验收结果：PR workflow 保持 Windows release、Linux release、GC verification 和 GC ThreadSanitizer 四个独立 blocking job；fast job 运行 offline/audit/diff，production reusable workflows 构建 `api_experimental` x64 release，TSAN 使用 Clang dedicated script。
+    - Audit 26 固化四个稳定 job/step 名称、reusable workflow 与 blocking token，并要求 verification/TSAN scripts 使用 `set -euo pipefail`；Audit 17 继续保证分层内容完整。审计 helper 增至 69 项。
   - [ ] 16.8 验收投资边界
     - P14、P16、P17 依据任务 15 的客观触发条件决定，避免默认扩大重构范围。
   - [ ] 16.9 最终检查点：确保所有测试通过，如有疑问请询问用户

@@ -275,6 +275,12 @@ TEST_CREDIBILITY_RUNNER_TARGETS = (
     "gbe_dota_lifecycle_state_machine_test",
     "gbe_dota_handler_test",
 )
+CI_LOCALIZATION_GATES = {
+    "emu-win-release": ('name: "win"', "emu-build-all-win.yml", "continue_on_error: false"),
+    "emu-linux-release": ('name: "linux"', "emu-build-all-linux.yml", "continue_on_error: false"),
+    "gc-verification": ('name: "gc verification"', 'name: "Run fast GC verification"', "run_gc_verification.sh --fast --base-sha"),
+    "gc-tsan": ('name: "gc thread sanitizer"', 'name: "Run GC ThreadSanitizer tests"', "bash tools/run_gc_tsan_tests.sh"),
+}
 RETIRED_SHARED_LOBBY_COMPATIBILITY_SYMBOLS = (
     "GBE_DotaSharedLobbyScalarSnapshot",
     "GBE_GetSharedDotaLobbyScalarSnapshot",
@@ -1166,6 +1172,35 @@ def audit_layered_ci_gates(workflow_text=None, verification_text=None, offline_t
     return issues
 
 
+def audit_ci_failure_localization(workflow_text=None, verification_text=None, tsan_text=None):
+    """Keep blocking GC layers independently named and fail-fast for diagnosis."""
+    if workflow_text is None:
+        workflow_text = read(PR_WORKFLOW_YML)
+    if verification_text is None:
+        verification_text = read(os.path.join(ROOT_DIR, "tools", "run_gc_verification.sh"))
+    if tsan_text is None:
+        tsan_text = read(os.path.join(ROOT_DIR, "tools", "run_gc_tsan_tests.sh"))
+
+    issues = []
+    for job_name, required_tokens in CI_LOCALIZATION_GATES.items():
+        job = extract_yaml_job(workflow_text, job_name)
+        if not job:
+            issues.append(f"emu-pull-request.yml: missing independently reportable CI job {job_name}")
+            continue
+        for token in required_tokens:
+            if token not in job:
+                issues.append(f"emu-pull-request.yml: {job_name} is missing failure localization token {token}")
+    for script_name, script_text in (
+        ("run_gc_verification.sh", verification_text),
+        ("run_gc_tsan_tests.sh", tsan_text),
+    ):
+        if "set -euo pipefail" not in script_text:
+            issues.append(f"{script_name}: CI gate must fail fast with set -euo pipefail")
+    if "GC verification passed" not in verification_text:
+        issues.append("run_gc_verification.sh: fast gate is missing an explicit success marker")
+    return issues
+
+
 def extract_diagnostic_reason_inventory(header_text):
     """Derive typed diagnostic reason names and stable serialized values."""
     enum_match = re.search(r"enum\s+class\s+Reason\s*:[^{]+\{(?P<body>.*?)\};", header_text, re.S)
@@ -1908,6 +1943,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 26: CI failure localization")
+    print("=" * 70)
+    print("  Action: keep offline, production, and TSAN failures independently named, blocking, and fail-fast.")
+    ci_failure_localization_issues = audit_ci_failure_localization()
+    if not ci_failure_localization_issues:
+        print("  Four blocking PR jobs and their fail-fast scripts retain stable diagnostic boundaries")
+    else:
+        for issue in ci_failure_localization_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("SUMMARY")
     print("=" * 70)
     print(f"  Header extern/function declarations: {len(real_decls)}")
@@ -1938,8 +1985,9 @@ def main():
     print(f"  Core state machine issues:            {len(core_state_machine_issues)}")
     print(f"  Async generation safety issues:       {len(async_generation_issues)}")
     print(f"  High-risk test credibility issues:    {len(test_credibility_issues)}")
+    print(f"  CI failure localization issues:       {len(ci_failure_localization_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues:
         sys.exit(1)
 
 

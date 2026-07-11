@@ -966,5 +966,54 @@ class LayeredCiGateAuditTest(unittest.TestCase):
         )
 
 
+class CiFailureLocalizationAuditTest(unittest.TestCase):
+    WORKFLOW = """
+  emu-win-release:
+    name: "win"
+    uses: "./.github/workflows/emu-build-all-win.yml"
+    with:
+      continue_on_error: false
+  emu-linux-release:
+    name: "linux"
+    uses: "./.github/workflows/emu-build-all-linux.yml"
+    with:
+      continue_on_error: false
+  gc-verification:
+    name: "gc verification"
+    steps:
+      - name: "Run fast GC verification"
+        run: bash tools/run_gc_verification.sh --fast --base-sha base
+  gc-tsan:
+    name: "gc thread sanitizer"
+    steps:
+      - name: "Run GC ThreadSanitizer tests"
+        run: bash tools/run_gc_tsan_tests.sh
+"""
+    VERIFICATION = "set -euo pipefail\nGC verification passed"
+    TSAN = "set -euo pipefail"
+
+    def test_accepts_named_fail_fast_ci_boundaries(self):
+        self.assertEqual(
+            [],
+            audit.audit_ci_failure_localization(self.WORKFLOW, self.VERIFICATION, self.TSAN),
+        )
+
+    def test_rejects_unnamed_tsan_execution_step(self):
+        workflow = self.WORKFLOW.replace('      - name: "Run GC ThreadSanitizer tests"\n', "")
+        self.assertIn(
+            'emu-pull-request.yml: gc-tsan is missing failure localization token name: "Run GC ThreadSanitizer tests"',
+            audit.audit_ci_failure_localization(workflow, self.VERIFICATION, self.TSAN),
+        )
+
+    def test_rejects_non_fail_fast_gate_script(self):
+        issues = audit.audit_ci_failure_localization(self.WORKFLOW, "GC verification passed", self.TSAN)
+        self.assertIn(
+            "run_gc_verification.sh: CI gate must fail fast with set -euo pipefail",
+            issues,
+        )
+
+
+
+
 if __name__ == "__main__":
     unittest.main()
