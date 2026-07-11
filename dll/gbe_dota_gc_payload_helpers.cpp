@@ -28,6 +28,7 @@
 #include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lobby_state_store.h"
 #include "gbe_dota_locator.h"
+#include "gbe_dota_payload_item_helpers.h"
 #include "gbe_dota_reconnect_context.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
