@@ -573,6 +573,9 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
     if (gc_profile == GC_PROFILE_DOTA2) {
         auto &runtime_state = GBE_DotaRuntimeState();
 
+        if (protomsg.has_version())
+            runtime_state.equip_cache_version = std::max<uint64_t>(runtime_state.equip_cache_version, protomsg.version());
+
         if (!runtime_state.vpk_items_loaded) {
             runtime_state.vpk_items_loaded = true;
             const char *env_disable = std::getenv("GBE_DOTA_UNLOCK_ITEMS");

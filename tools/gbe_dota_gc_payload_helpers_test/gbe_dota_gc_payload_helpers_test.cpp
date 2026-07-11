@@ -55,6 +55,7 @@
 #include "dll/gbe_dota_protocol_constants.h"
 #include "dll/gbe_dota_reconnect_context.h"
 #include "dll/gbe_dota_request_router.h"
+#include "dll/gbe_dota_runtime_state.h"
 #include "dll/gbe_proto_buf_header.h"
 #include "dll/gbe_dota_custom_game.h"
 #include "dll/gbe_dota_custom_lobby_http.h"
@@ -211,6 +212,25 @@ TEST_CASE(test_csteamid_stub_behavior)
     EXPECT_TRUE(console_user_id.BIndividualAccount());
     EXPECT_FALSE(game_server_id.BIndividualAccount());
     EXPECT_TRUE(lobby_id.GetAccountID() == 42u);
+}
+
+TEST_CASE(test_equipped_item_update_advances_cache_version)
+{
+    auto &runtime_state = GBE_DotaRuntimeState();
+    runtime_state.equip_cache_version = 29799760112000884ull;
+
+    Steam_Game_Coordinator gc;
+    Econ_Item item;
+    item.id = 42ull;
+    item.equip_states[1u] = 2u;
+
+    EXPECT_TRUE(GBE_PushDotaPlayerEquippedItemsUpdateToGC(
+        &gc,
+        CSteamID(76561198035005698ull),
+        std::vector<Econ_Item>{item},
+        "test"));
+    EXPECT_EQ(runtime_state.equip_cache_version, 29799760112000885ull);
+    EXPECT_EQ(gc.pushed_msg_type, 26u | GBE_kProtoMask);
 }
 
 // =====================================================================
@@ -1239,10 +1259,13 @@ int main()
 {
     std::printf("=== gbe_dota_gc_payload_helpers_test ===\n\n");
 
-    std::printf("[1/26] CSteamID stub behavior...\n");
+    std::printf("[1/27] CSteamID stub behavior...\n");
     test_csteamid_stub_behavior();
 
-    std::printf("[2/26] GBE_DescribeDotaLaunchPhase...\n");
+    std::printf("[2/27] Equipped item update cache version...\n");
+    test_equipped_item_update_advances_cache_version();
+
+    std::printf("[3/27] GBE_DescribeDotaLaunchPhase...\n");
     test_describe_dota_launch_phase();
 
     std::printf("[3/26] GBE_GetDotaReconnectContext...\n");

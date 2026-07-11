@@ -27,6 +27,7 @@
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lobby_state_store.h"
+#include "gbe_dota_locator.h"
 #include "gbe_dota_reconnect_context.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
@@ -751,7 +752,6 @@ bool GBE_PushDotaPlayerEquippedItemsUpdateToGC(
     if (!target_gc || !player_steam_id.IsValid())
         return false;
 
-    static std::atomic<std::uint64_t> last_update_version{0ull};
     CMsgSOMultipleObjects update_msg;
     auto *owner = update_msg.mutable_owner_soid();
     owner->set_type(1u);
@@ -771,21 +771,12 @@ bool GBE_PushDotaPlayerEquippedItemsUpdateToGC(
     if (equipped_count == 0)
         return false;
 
-    std::uint64_t version = static_cast<std::uint64_t>(
+    const std::uint64_t clock_version = static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count());
-    std::uint64_t previous_version = last_update_version.load(std::memory_order_relaxed);
-    for (;;) {
-        const std::uint64_t candidate = std::max<std::uint64_t>(version, previous_version + std::uint64_t{1});
-        if (last_update_version.compare_exchange_weak(
-                previous_version,
-                candidate,
-                std::memory_order_relaxed,
-                std::memory_order_relaxed)) {
-            version = candidate;
-            break;
-        }
-    }
+    auto &runtime_state = GBE_DotaRuntimeState();
+    const std::uint64_t version = std::max(clock_version, runtime_state.equip_cache_version) + 1ull;
+    runtime_state.equip_cache_version = version;
     update_msg.set_version(version);
     update_msg.set_service_id(1u);
 
