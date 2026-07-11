@@ -406,12 +406,12 @@ void GBE_LogDotaSOCacheSubscribedSummary(const char *tag, const char *label, con
             if (object.type_id() == 2004) {
                 const uint8 *object_bytes = reinterpret_cast<const uint8 *>(object_data.data());
                 const size_t object_size = object_data.size();
-                uint64 lobby_id = 0;
+                std::uint64_t lobby_id = 0;
                 uint32 lobby_state = 0;
                 std::string connect;
-                uint64 server_id = 0;
+                std::uint64_t server_id = 0;
                 uint32 game_state = 0;
-                uint64 match_id = 0;
+                std::uint64_t match_id = 0;
                 uint32 game_start_time = 0;
                 const uint32 team_details_count = gbe::proto_wire::count_repeated_bytes_field(object_data, 17u);
                 std::string owner_state;

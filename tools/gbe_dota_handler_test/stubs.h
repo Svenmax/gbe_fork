@@ -1235,7 +1235,7 @@ public:
     void GBE_SaveDotaItemsFromExecutor(const char *reason);
     void GBE_ForwardDotaEquipItemsToServerGC(
         Steam_Game_Coordinator *server_gc,
-        const std::unordered_set<uint64> &modified_item_ids,
+        const std::unordered_set<std::uint64_t> &modified_item_ids,
         const std::string &update_message,
         uint64 cache_version,
         bool unsubscribe_first,

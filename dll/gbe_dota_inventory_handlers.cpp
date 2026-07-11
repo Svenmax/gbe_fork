@@ -104,9 +104,9 @@ namespace {
 // --- Pure request parsers ---
 
 struct UnlockStyleRequest {
-    uint64 item_id{};
+    std::uint64_t item_id{};
     uint32 style_index{255u};
-    uint64 consumable_id{};
+    std::uint64_t consumable_id{};
 };
 
 inline UnlockStyleRequest parse_unlock_style_request(const uint8 *body, size_t body_size)
@@ -119,7 +119,7 @@ inline UnlockStyleRequest parse_unlock_style_request(const uint8 *body, size_t b
 }
 
 struct SetStyleRequest {
-    uint64 item_id{};
+    std::uint64_t item_id{};
     uint32 style_index{255u};
 };
 
@@ -368,7 +368,7 @@ void Steam_Game_Coordinator::GBE_SaveDotaItemsFromExecutor(const char *reason)
 
 void Steam_Game_Coordinator::GBE_ForwardDotaEquipItemsToServerGC(
     Steam_Game_Coordinator *server_gc,
-    const std::unordered_set<uint64> &modified_item_ids,
+    const std::unordered_set<std::uint64_t> &modified_item_ids,
     const std::string &update_message,
     uint64 cache_version,
     bool unsubscribe_first,
