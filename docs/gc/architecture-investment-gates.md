@@ -29,3 +29,29 @@ Decision date: 2026-07-11.
 | Cross-thread business-state writers | Shared lobby writes use `Store`; callback and delayed work use copied queue entries with final generation validation; serialized reconnect state remains instance-local. Audit 16 reports no unapproved mutable GC business globals. | Clear |
 
 The Actor gate is closed. The current Store, generation, queue, and explicit lock model remains the selected architecture.
+
+## Formal Model Gate
+
+A maintained TLA+ or Alloy model is triggered when at least two conditions below are present, or when the critical-failure condition is present:
+
+1. The canonical lifecycle model exceeds 16 states, 24 event kinds, or 384 state/event pairs after unreachable combinations are removed.
+2. Two confirmed defects within one delivery phase are caused by duplicate, stale, or out-of-order lifecycle events and escape the existing example, property, differential, and production-path tests.
+3. A lifecycle failure can irreversibly corrupt persisted user data, cross account or process isolation boundaries, or produce an unrecoverable remote protocol state. This critical-failure condition opens the gate independently.
+4. Three or more active maintainers must change the lifecycle transition contract during the same release cycle, creating sustained coordination pressure around invariants.
+
+When triggered, the formal model scope is limited to lobby lifecycle state, generation advancement and validation, and reconnect deduplication. Side-effect payloads, Steam transport details, inventory, chat, and unrelated GC messages remain outside the model.
+
+The model deliverable must define its maintained owner, checked invariants, bounded assumptions, tool version, local command, CI cost, and correspondence with the C++ transition vocabulary before implementation starts.
+
+## Current Formal Model Decision
+
+Decision date: 2026-07-11.
+
+| Input | Current evidence | Result |
+| --- | --- | --- |
+| State-space size | The canonical model has 8 states, 13 event kinds, and 104 state/event pairs. Compile-time completeness classifies every pair. | Below threshold |
+| Duplicate and ordering defects | Example tests cover duplicate and out-of-order loading; properties exhaust 100,000 length-five lifecycle sequences and every stale-generation state/event pair; no post-P14 escaped defect is recorded. | Clear |
+| Failure cost | Rejected transitions preserve state and emit no effects. Generation guards discard stale asynchronous work. The modeled lifecycle does not own persisted inventory or account authorization. | Recoverable scope |
+| Maintenance pressure | The transition contract is centralized in one dependency-light header with one test owner and one production effect-gate audit. No three-maintainer concurrent-change record exists. | Clear |
+
+The formal model gate is closed. The current constexpr transition table, compile-time completeness checks, deterministic properties, and differential reference model remain the selected verification strategy.

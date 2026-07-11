@@ -508,9 +508,11 @@
     - 当前条件未触发时维持 store、generation 和显式锁模型。
     - 门禁记录：`docs/gc/architecture-investment-gates.md` 定义四个客观触发条件：现有 ownership/lock contract 下可复现 TSAN race、超过两层或循环/逆序锁需求、单阶段两个 generation guard 后仍发生的乱序 callback mutation 缺陷、以及 Store/queue/generation-guarded slot 之外的跨线程业务状态 writer。
     - 当前判定：Clang TSAN reconnect 772/772 与 concurrency stress 通过且零 race；锁序维持 `global_mutex -> serialized instance mutex` 并在 external effects 前释放；未发现单阶段两个确认的乱序 mutation 缺陷；共享与延迟状态均位于既有 owner 边界。Actor 门禁关闭，继续使用 Store、generation、queue 和显式锁模型。
-  - [ ] 15.2 建立 P16 形式化验证触发条件检查
+  - [x] 15.2 建立 P16 形式化验证触发条件检查
     - 评估状态组合规模、重复/乱序缺陷数量、故障代价和多人长期维护需求。
     - 条件触发时仅对 Lobby lifecycle、generation 和 reconnect dedup 建立 TLA+/Alloy 模型。
+    - 触发阈值：状态机超过 16 states、24 event kinds 或 384 reachable pairs；单阶段两个 duplicate/stale/out-of-order escaped defects；不可逆持久化数据、隔离边界或远端协议损坏；同一 release cycle 至少三名 active maintainer 持续修改 transition contract。前两类与多人维护条件至少命中两项，critical failure 可单独触发。
+    - 当前判定：8 states、13 events、104 pairs 全部具备 compile-time completeness；100,000 条长度 5 序列、全 stale-generation 矩阵和 4,096 步 differential model 已覆盖重复/乱序核心不变量；拒绝 transition 保持 state 且无 effects，generation guard 丢弃 stale work；未记录 post-P14 escaped defect 或三人并行维护压力。形式化模型门禁关闭。
   - [ ] 15.3 建立 P17 模型一致性门禁触发条件检查
     - P16 模型进入长期维护后，再增加模型生成测试向量、C++ differential test 和 CI model checker。
     - 模型未成为受维护交付物时，不建立双轨 CI。
