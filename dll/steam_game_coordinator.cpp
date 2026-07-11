@@ -1111,7 +1111,7 @@ std::string Steam_Game_Coordinator::GBE_GetDotaJoinableCustomLobbiesHTTPJSON(uin
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0ull)
         lobbies.push_back(GBE_local_lobby);
 
-    std::vector<uint64> seen_lobby_ids;
+    std::vector<std::uint64_t> seen_lobby_ids;
     for (const GBE_LocalLobby &lobby : lobbies) {
         if (!gbe::dota_custom_game::should_include_joinable_custom_lobby(
                 lobby.active,
