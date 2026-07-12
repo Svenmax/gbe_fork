@@ -73,10 +73,6 @@ GBE_DotaActionList abandon_finalize_action_list(
 }
 
 gbe::dota_lobby_state::Store &GBE_GetSharedDotaLobbyStateStore();
-extern bool GBE_pending_reset_after_cache_unsubscribed;
-extern uint64_t GBE_pending_reset_after_cache_unsubscribed_lobby_id;
-extern bool GBE_pending_dota_normal_signout_finalize_after_25;
-extern uint64_t GBE_pending_dota_normal_signout_finalize_lobby_id;
 extern uint64_t GBE_dota_host_showcase_equip_generation;
 extern uint64_t GBE_dota_host_showcase_equip_lobby_id;
 extern uint64_t GBE_dota_host_showcase_equip_steam_id;
@@ -993,8 +989,6 @@ public:
     bool gc_initialized{true};
     uint32 gc_version{};
     bool GBE_dota_login_sync_sent{};
-    bool GBE_pending_dota_abandon_finalize_after_7014{};
-    uint64 GBE_pending_dota_abandon_finalize_lobby_id{};
     gbe::dota_lobby_generation::Counter GBE_dota_lobby_generation_counter;
     GBE_DotaDeferredTaskSlot GBE_pending_dota_abandon_finalize_slot;
     GBE_DotaDeferredTaskSlot GBE_pending_dota_normal_signout_finalize_slot;
@@ -1019,9 +1013,9 @@ public:
         return result;
     }
 
-    bool GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel() const { return GBE_pending_dota_abandon_finalize_after_7014; }
-    bool GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed() const { return GBE_pending_dota_normal_signout_finalize_after_25; }
-    bool GBE_HasPendingResetAfterCacheUnsubscribed() const { return GBE_pending_reset_after_cache_unsubscribed; }
+    bool GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel() const { return GBE_pending_dota_abandon_finalize_slot.pending; }
+    bool GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed() const { return GBE_pending_dota_normal_signout_finalize_slot.pending; }
+    bool GBE_HasPendingResetAfterCacheUnsubscribed() const { return GBE_pending_reset_after_cache_unsubscribed_slot.pending; }
     gbe::dota_lobby_state::Store &GBE_SharedLobbyStore() const { return GBE_GetSharedDotaLobbyStateStore(); }
     bool GBE_HasSentDotaLoginSync() const { return GBE_dota_login_sync_sent; }
     void GBE_MarkDotaLoginSyncSent() { GBE_dota_login_sync_sent = true; }
@@ -1096,21 +1090,14 @@ public:
     void GBE_ClearLastDotaDirectConnectCallbackKey() { GBE_last_dota_direct_connect_callback_key = {}; }
     void GBE_SetPendingDotaAbandonFinalizeAfterOtherLeftChannel(uint64 lobby_id)
     {
-        GBE_pending_dota_abandon_finalize_after_7014 = true;
-        GBE_pending_dota_abandon_finalize_lobby_id = lobby_id;
         GBE_pending_dota_abandon_finalize_slot = {lobby_id, GBE_CurrentDotaLobbyGeneration(), true};
     }
     GBE_DotaDeferredTaskConsumeResult GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel()
     {
-        const auto result = GBE_ConsumeDotaDeferredTask(GBE_pending_dota_abandon_finalize_slot);
-        GBE_pending_dota_abandon_finalize_after_7014 = false;
-        GBE_pending_dota_abandon_finalize_lobby_id = 0;
-        return result;
+        return GBE_ConsumeDotaDeferredTask(GBE_pending_dota_abandon_finalize_slot);
     }
     void GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel()
     {
-        GBE_pending_dota_abandon_finalize_after_7014 = false;
-        GBE_pending_dota_abandon_finalize_lobby_id = 0;
         GBE_pending_dota_abandon_finalize_slot = {};
     }
     void GBE_FinalizeDotaAbandonAfterOtherLeftChannel(uint64 consumed_lobby_id, const char *reason)
@@ -1133,16 +1120,11 @@ public:
     }
     void GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(uint64 lobby_id)
     {
-        GBE_pending_dota_normal_signout_finalize_after_25 = true;
-        GBE_pending_dota_normal_signout_finalize_lobby_id = lobby_id;
         GBE_pending_dota_normal_signout_finalize_slot = {lobby_id, GBE_CurrentDotaLobbyGeneration(), true};
     }
     GBE_DotaDeferredTaskConsumeResult GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed()
     {
-        const auto result = GBE_ConsumeDotaDeferredTask(GBE_pending_dota_normal_signout_finalize_slot);
-        GBE_pending_dota_normal_signout_finalize_after_25 = false;
-        GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
-        return result;
+        return GBE_ConsumeDotaDeferredTask(GBE_pending_dota_normal_signout_finalize_slot);
     }
     void GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed(uint64 consumed_lobby_id, const char *reason)
     {
@@ -1177,28 +1159,20 @@ public:
     }
     void GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed()
     {
-        GBE_pending_dota_normal_signout_finalize_after_25 = false;
-        GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
         GBE_pending_dota_normal_signout_finalize_slot = {};
     }
     void GBE_SetPendingResetAfterCacheUnsubscribed(uint64 lobby_id)
     {
-        GBE_pending_reset_after_cache_unsubscribed = true;
-        GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
         GBE_pending_reset_after_cache_unsubscribed_slot = {lobby_id, GBE_CurrentDotaLobbyGeneration(), true};
     }
     void GBE_ClearPendingResetAfterCacheUnsubscribed(uint64 retained_lobby_id = 0)
     {
-        GBE_pending_reset_after_cache_unsubscribed = false;
-        GBE_pending_reset_after_cache_unsubscribed_lobby_id = retained_lobby_id;
+        (void)retained_lobby_id;
         GBE_pending_reset_after_cache_unsubscribed_slot = {};
     }
     GBE_DotaDeferredTaskConsumeResult GBE_ConsumePendingResetAfterCacheUnsubscribed()
     {
-        const auto result = GBE_ConsumeDotaDeferredTask(GBE_pending_reset_after_cache_unsubscribed_slot);
-        GBE_pending_reset_after_cache_unsubscribed = false;
-        GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
-        return result;
+        return GBE_ConsumeDotaDeferredTask(GBE_pending_reset_after_cache_unsubscribed_slot);
     }
 
     GC_Profile gc_profile{};

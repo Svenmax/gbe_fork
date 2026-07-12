@@ -1154,7 +1154,7 @@ static void test_lobby_abandon_current_game_disconnect_queues_25()
     TEST_ASSERT(tf.recorder.actions[0].reason == "7035_current_game_disconnect", "current-game disconnect suppress reason should be preserved");
     expect_push_payload(tf.recorder.actions[1], GBE_kDotaCacheUnsubscribed, "25 response should be queued after suppression with payload");
     TEST_ASSERT(tf.gc.GBE_HasPendingResetAfterCacheUnsubscribed(), "25 should mark reset pending");
-    TEST_ASSERT_EQ(GBE_pending_reset_after_cache_unsubscribed_lobby_id, 0x7035u, "pending reset should record lobby id");
+    TEST_ASSERT_EQ(tf.gc.GBE_pending_reset_after_cache_unsubscribed_slot.lobby_id, 0x7035u, "pending reset should record lobby id");
 
     ++g_tests_passed;
 }
@@ -1184,7 +1184,7 @@ static void test_lobby_abandon_arcade_launch_failure_discards_before_25()
     TEST_ASSERT(tf.recorder.actions[1].reason == "7035_arcade_launch_failed_before_connect", "arcade launch failure suppression reason should be preserved");
     expect_push_payload(tf.recorder.actions[2], GBE_kDotaCacheUnsubscribed, "arcade launch failure should queue 25 after suppression");
     TEST_ASSERT(tf.gc.GBE_HasPendingResetAfterCacheUnsubscribed(), "arcade launch failure should mark reset pending");
-    TEST_ASSERT_EQ(GBE_pending_reset_after_cache_unsubscribed_lobby_id, 0x703500u, "arcade launch failure pending reset should record lobby id");
+    TEST_ASSERT_EQ(tf.gc.GBE_pending_reset_after_cache_unsubscribed_slot.lobby_id, 0x703500u, "arcade launch failure pending reset should record lobby id");
 
     ++g_tests_passed;
 }

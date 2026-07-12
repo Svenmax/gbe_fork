@@ -188,7 +188,7 @@ bool Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbySetDetailsUpdate(bool w
 //   4. If arcade_launch_failed_before_connect (past grace):
 //      a. Build 25 (pure)
 //      b. GBE_DiscardQueuedDotaLaunchMessagesForAbandon [coordinator]
-//      c. Set GBE_pending_reset_after_cache_unsubscribed flags [coordinator mutation]
+//      c. Set GBE_pending_reset_after_cache_unsubscribed_slot [coordinator mutation]
 //      d. GBE_MarkDotaAbandonedLobbySuppressed [coordinator]
 //      e. push_incoming_now(25) [coordinator]
 //      f. return (skip postgame)

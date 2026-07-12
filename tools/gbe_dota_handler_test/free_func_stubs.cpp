@@ -37,10 +37,6 @@ const char *GBE_DescribeDotaLaunchPhase(uint32 phase)
 }
 
 const char * const GBE_kDotaAbandonPersonaStateInitHex = "";
-bool GBE_pending_reset_after_cache_unsubscribed = false;
-uint64 GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
-bool GBE_pending_dota_normal_signout_finalize_after_25 = false;
-uint64 GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
 bool GBE_recent_dota_reconnect_context_valid = false;
 GBE_DotaReconnectContext GBE_recent_dota_reconnect_context{};
 std::atomic<bool> GBE_dota_reconnect_eligible{true};

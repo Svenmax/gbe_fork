@@ -537,7 +537,7 @@ void Steam_Game_Coordinator::GBE_ClearDotaAbandonedLobbySuppression(uint64 lobby
 
 bool Steam_Game_Coordinator::GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel() const
 {
-    return GBE_pending_dota_abandon_finalize_after_7014;
+    return GBE_pending_dota_abandon_finalize_slot.pending;
 }
 
 bool Steam_Game_Coordinator::GBE_HasSentDotaLoginSync() const
@@ -663,78 +663,58 @@ void Steam_Game_Coordinator::GBE_ClearLastDotaDirectConnectCallbackKey()
 
 bool Steam_Game_Coordinator::GBE_HasPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed() const
 {
-    return GBE_pending_dota_normal_signout_finalize_after_25;
+    return GBE_pending_dota_normal_signout_finalize_slot.pending;
 }
 
 bool Steam_Game_Coordinator::GBE_HasPendingResetAfterCacheUnsubscribed() const
 {
-    return GBE_pending_reset_after_cache_unsubscribed;
+    return GBE_pending_reset_after_cache_unsubscribed_slot.pending;
 }
 
 void Steam_Game_Coordinator::GBE_SetPendingDotaAbandonFinalizeAfterOtherLeftChannel(uint64 lobby_id)
 {
-    GBE_pending_dota_abandon_finalize_after_7014 = true;
-    GBE_pending_dota_abandon_finalize_lobby_id = lobby_id;
     GBE_pending_dota_abandon_finalize_slot = {lobby_id, GBE_CurrentDotaLobbyGeneration(), true};
 }
 
 Steam_Game_Coordinator::GBE_DotaDeferredTaskConsumeResult Steam_Game_Coordinator::GBE_ConsumePendingDotaAbandonFinalizeAfterOtherLeftChannel()
 {
-    const auto result = GBE_ConsumeDotaDeferredTask(GBE_pending_dota_abandon_finalize_slot, "abandon_finalize_after_7014");
-    GBE_pending_dota_abandon_finalize_after_7014 = false;
-    GBE_pending_dota_abandon_finalize_lobby_id = 0;
-    return result;
+    return GBE_ConsumeDotaDeferredTask(GBE_pending_dota_abandon_finalize_slot, "abandon_finalize_after_7014");
 }
 
 void Steam_Game_Coordinator::GBE_ClearPendingDotaAbandonFinalizeAfterOtherLeftChannel()
 {
-    GBE_pending_dota_abandon_finalize_after_7014 = false;
-    GBE_pending_dota_abandon_finalize_lobby_id = 0;
     GBE_pending_dota_abandon_finalize_slot = {};
 }
 
 void Steam_Game_Coordinator::GBE_SetPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed(uint64 lobby_id)
 {
-    GBE_pending_dota_normal_signout_finalize_after_25 = true;
-    GBE_pending_dota_normal_signout_finalize_lobby_id = lobby_id;
     GBE_pending_dota_normal_signout_finalize_slot = {lobby_id, GBE_CurrentDotaLobbyGeneration(), true};
 }
 
 Steam_Game_Coordinator::GBE_DotaDeferredTaskConsumeResult Steam_Game_Coordinator::GBE_ConsumePendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed()
 {
-    const auto result = GBE_ConsumeDotaDeferredTask(GBE_pending_dota_normal_signout_finalize_slot, "normal_signout_finalize_after_25");
-    GBE_pending_dota_normal_signout_finalize_after_25 = false;
-    GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
-    return result;
+    return GBE_ConsumeDotaDeferredTask(GBE_pending_dota_normal_signout_finalize_slot, "normal_signout_finalize_after_25");
 }
 
 void Steam_Game_Coordinator::GBE_ClearPendingDotaNormalSignoutFinalizeAfterCacheUnsubscribed()
 {
-    GBE_pending_dota_normal_signout_finalize_after_25 = false;
-    GBE_pending_dota_normal_signout_finalize_lobby_id = 0;
     GBE_pending_dota_normal_signout_finalize_slot = {};
 }
 
 void Steam_Game_Coordinator::GBE_SetPendingResetAfterCacheUnsubscribed(uint64 lobby_id)
 {
-    GBE_pending_reset_after_cache_unsubscribed = true;
-    GBE_pending_reset_after_cache_unsubscribed_lobby_id = lobby_id;
     GBE_pending_reset_after_cache_unsubscribed_slot = {lobby_id, GBE_CurrentDotaLobbyGeneration(), true};
 }
 
 void Steam_Game_Coordinator::GBE_ClearPendingResetAfterCacheUnsubscribed(uint64 retained_lobby_id)
 {
-    GBE_pending_reset_after_cache_unsubscribed = false;
-    GBE_pending_reset_after_cache_unsubscribed_lobby_id = retained_lobby_id;
+    (void)retained_lobby_id;
     GBE_pending_reset_after_cache_unsubscribed_slot = {};
 }
 
 Steam_Game_Coordinator::GBE_DotaDeferredTaskConsumeResult Steam_Game_Coordinator::GBE_ConsumePendingResetAfterCacheUnsubscribed()
 {
-    const auto result = GBE_ConsumeDotaDeferredTask(GBE_pending_reset_after_cache_unsubscribed_slot, "reset_after_25");
-    GBE_pending_reset_after_cache_unsubscribed = false;
-    GBE_pending_reset_after_cache_unsubscribed_lobby_id = 0;
-    return result;
+    return GBE_ConsumeDotaDeferredTask(GBE_pending_reset_after_cache_unsubscribed_slot, "reset_after_25");
 }
 
 Steam_Game_Coordinator::GBE_DotaDeferredTaskConsumeResult Steam_Game_Coordinator::GBE_ConsumeDotaDeferredTask(

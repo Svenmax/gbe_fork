@@ -152,13 +152,8 @@ public ISteamGameCoordinator
     uint32 GBE_dota_host_local_wearable_refresh_hero_id{};
     bool GBE_dota_private_lobby_snapshot_replayed{};
     uint32 GBE_last_dota_launch_state_pushed_game_state{};
-    bool GBE_pending_reset_after_cache_unsubscribed{};
-    uint64 GBE_pending_reset_after_cache_unsubscribed_lobby_id{};
     uint64 GBE_suppressed_dota_abandon_lobby_id{};
-    bool GBE_pending_dota_abandon_finalize_after_7014{};
-    uint64 GBE_pending_dota_abandon_finalize_lobby_id{};
-    bool GBE_pending_dota_normal_signout_finalize_after_25{};
-    uint64 GBE_pending_dota_normal_signout_finalize_lobby_id{};
+    // Deferred tasks are single-track: only GBE_DotaDeferredTaskSlot (lobby_id + generation + pending).
     GBE_DotaDeferredTaskSlot GBE_pending_dota_abandon_finalize_slot;
     GBE_DotaDeferredTaskSlot GBE_pending_dota_normal_signout_finalize_slot;
     GBE_DotaDeferredTaskSlot GBE_pending_reset_after_cache_unsubscribed_slot;
