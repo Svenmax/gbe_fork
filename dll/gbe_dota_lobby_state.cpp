@@ -521,6 +521,16 @@ CustomGameLaunchSetupEventPlan compose_custom_game_launch_setup_event_plan(std::
 
 void publish_local_lobby_to_shared(const GBE_LocalLobby &local, bool is_server, GBE_SharedDotaLobbyState &shared)
 {
+    const bool preserve_known_owner_hero =
+        local.owner_hero_id == 0u &&
+        shared.valid &&
+        shared.active &&
+        local.active &&
+        local.lobby_id != 0ull &&
+        shared.lobby_id == local.lobby_id &&
+        local.owner_steam_id != 0ull &&
+        shared.owner_steam_id == local.owner_steam_id &&
+        shared.owner_hero_id != 0u;
     shared.valid = true;
     shared.active = local.active;
     shared.generation = local.generation;
@@ -564,7 +574,8 @@ void publish_local_lobby_to_shared(const GBE_LocalLobby &local, bool is_server, 
     shared.game_start_time = local.game_start_time;
     shared.owner_team = local.owner_team;
     shared.owner_slot = local.owner_slot;
-    shared.owner_hero_id = local.owner_hero_id;
+    if (!preserve_known_owner_hero)
+        shared.owner_hero_id = local.owner_hero_id;
     shared.owner_connected = local.owner_connected;
     shared.members = local.members;
     shared.launch_phase = local.launch_phase;

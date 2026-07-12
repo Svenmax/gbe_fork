@@ -1633,6 +1633,22 @@ bool test_dota_lobby_state_helpers()
     ok &= expect_eq_u64(shared.server_id, local.server_id, "lobby state client accepts nonzero server id");
     ok &= expect_eq_size(shared.cache_service_list.size(), 2u, "lobby state publish cache service list");
 
+    shared.owner_hero_id = 57u;
+    local.owner_hero_id = 0u;
+    gbe::dota_lobby_state::publish_local_lobby_to_shared(local, false, shared);
+    ok &= expect_eq_u64(shared.owner_hero_id, 57u, "lobby state client preserves known owner hero for the same active lobby owner");
+
+    local.lobby_id = 0x0b0cull;
+    gbe::dota_lobby_state::publish_local_lobby_to_shared(local, false, shared);
+    ok &= expect_eq_u64(shared.owner_hero_id, 0u, "lobby state client clears owner hero when switching lobbies");
+
+    local.lobby_id = 0x0102ull;
+    shared.lobby_id = local.lobby_id;
+    shared.owner_steam_id = local.owner_steam_id;
+    local.owner_hero_id = 71u;
+    gbe::dota_lobby_state::publish_local_lobby_to_shared(local, false, shared);
+    ok &= expect_eq_u64(shared.owner_hero_id, 71u, "lobby state client publishes a confirmed owner hero");
+
     local.state = 2u;
     local.game_state = 2u;
     local.server_id = 0x2222ull;
