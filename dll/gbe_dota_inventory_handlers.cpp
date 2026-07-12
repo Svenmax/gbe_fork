@@ -218,20 +218,6 @@ inline uint32 infer_equipped_hero_id(const EquipItemsPlan &plan, const std::vect
     return hero_id;
 }
 
-inline bool host_server_lobby_matches(
-    const Steam_Game_Coordinator &client_gc,
-    const Steam_Game_Coordinator *server_gc,
-    uint64 local_steam_id)
-{
-    return server_gc &&
-        client_gc.GBE_local_lobby.active &&
-        client_gc.GBE_local_lobby.lobby_id != 0u &&
-        client_gc.GBE_local_lobby.owner_steam_id == local_steam_id &&
-        server_gc->GBE_local_lobby.active &&
-        server_gc->GBE_local_lobby.lobby_id == client_gc.GBE_local_lobby.lobby_id &&
-        server_gc->GBE_local_lobby.owner_steam_id == local_steam_id;
-}
-
 struct EquipItemsExecutionContext {
     bool has_source_job{};
     uint64 source_job{};
@@ -694,7 +680,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
     }
 
     const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
-    const bool has_host_server_lobby = is_dota_client && host_server_lobby_matches(*this, server_gc, local_steam_id);
+    const bool has_host_server_lobby = is_dota_client && server_gc &&
+        GBE_local_lobby.active &&
+        GBE_local_lobby.lobby_id != 0u &&
+        GBE_local_lobby.owner_steam_id == local_steam_id &&
+        server_gc->GBE_local_lobby.active &&
+        server_gc->GBE_local_lobby.lobby_id == GBE_local_lobby.lobby_id &&
+        server_gc->GBE_local_lobby.owner_steam_id == local_steam_id;
 
     EquipItemsPlanningContext planning_context{};
     planning_context.is_dota_client = is_dota_client;
