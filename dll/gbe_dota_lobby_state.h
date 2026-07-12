@@ -295,6 +295,24 @@ bool apply_owner_hero_id(GBE_LocalLobby &local, std::uint32_t hero_id);
 // Adopt shared hero when known (non-zero) and different; never clears a known local with 0.
 bool apply_owner_hero_from_shared(GBE_LocalLobby &local, const GBE_SharedDotaLobbyState &shared);
 
+// Host one-shot keys: generation + identity only (no generation-less bypass).
+bool host_showcase_equip_key_matches(
+    std::uint64_t key_generation,
+    std::uint64_t key_lobby_id,
+    std::uint64_t key_owner_steam_id,
+    std::uint32_t key_owner_hero_id,
+    std::uint64_t current_generation,
+    std::uint64_t lobby_id,
+    std::uint64_t owner_steam_id,
+    std::uint32_t owner_hero_id);
+bool host_wearable_refresh_key_matches(
+    std::uint64_t key_generation,
+    std::uint64_t key_steam_id,
+    std::uint32_t key_hero_id,
+    std::uint64_t current_generation,
+    std::uint64_t steam_id,
+    std::uint32_t hero_id);
+
 void publish_local_lobby_to_shared(const GBE_LocalLobby &local, bool is_server, GBE_SharedDotaLobbyState &shared);
 void adopt_shared_lobby_to_local(
     const GBE_SharedDotaLobbyState &shared,

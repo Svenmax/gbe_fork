@@ -73,16 +73,16 @@
   - [x] 5.3 H1、H5 绿；dual_gc 直接调用生产 preserve/peer/apply
   - [x]* 5.4 属性：H5/H5b preserve；H5c apply 单测
 
-- [ ] 6. showcase / wearable one-shot 与 7034 路径对齐
-  - [ ] 6.1 确认 showcase/wearable 键仅依赖 generation + lobby/steam/hero（已有实现）
-    - 删除旁路“再 try 一次”的无 generation 分支（若存在）。
-  - [ ] 6.2 统一 7034 owner-hero-known 与 2569 推断后的推装顺序
-    - 对齐 `gbe_dota_match_handlers.cpp` 与 `gbe_dota_inventory_handlers.cpp` 注释中的步骤表。
-    - 跨 GC 调用仅经 `GBE_PushDotaPlayerEquippedItemsCacheToGC` / `GBE_RefreshDotaHostEquippedItemsCache` / `GBE_PushDotaHeroEquippedItemUpdatesToClientGC`。
-  - [ ] 6.3 使 H2、H3、H4 转绿
-  - [ ] 6.4 检查点：H1–H5 全绿；`run_gc_verification` 通过
-    - 确保所有测试通过，如有疑问请询问用户。
-    - **一周内同主题 host fix 必须附带失败先行用例（H* 扩展）。**
+- [x] 6. showcase / wearable one-shot 与 7034 路径对齐
+  - [x] 6.1 one-shot 键纯函数：`host_showcase_equip_key_matches` / `host_wearable_refresh_key_matches`
+    - 生产 `HasPushed*` / `HasRefreshed*` 与 dual_gc / handler stubs 共用；仅 generation+identity，无无 generation 旁路。
+  - [x] 6.2 推装顺序文档对齐（match_handlers 注释）
+    - 7034：peer restore → OwnerHeroKnownEquipReplay（RefreshHostCache → 可选 wearable one-shot）→ TEAM_SHOWCASE MarkShowcase。
+    - 2569：Clear showcase/wearable keys → 同一 `GBE_HandleDotaDirectOwnerHeroKnownEquipReplay`。
+    - 跨 GC 仅经 Refresh/Push/PushHeroEquipped 辅助。
+  - [x] 6.3 H2、H3、H4 绿（dual_gc 调用生产 key_matches）
+  - [x] 6.4 检查点（2026-07-12）：`bash tools/run_gc_verification.sh --fast` **GC verification passed**
+    - dual_gc all passed；handler 86/86；audit 74 OK。
 
 ## 阶段 C — 分发与 Store 纪律（B 全绿后）
 

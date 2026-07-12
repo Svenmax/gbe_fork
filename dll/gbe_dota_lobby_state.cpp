@@ -585,6 +585,36 @@ bool apply_owner_hero_from_shared(GBE_LocalLobby &local, const GBE_SharedDotaLob
     return apply_owner_hero_id(local, shared.owner_hero_id);
 }
 
+bool host_showcase_equip_key_matches(
+    std::uint64_t key_generation,
+    std::uint64_t key_lobby_id,
+    std::uint64_t key_owner_steam_id,
+    std::uint32_t key_owner_hero_id,
+    std::uint64_t current_generation,
+    std::uint64_t lobby_id,
+    std::uint64_t owner_steam_id,
+    std::uint32_t owner_hero_id)
+{
+    return key_generation == current_generation &&
+        key_lobby_id == lobby_id &&
+        key_owner_steam_id == owner_steam_id &&
+        key_owner_hero_id == owner_hero_id &&
+        owner_hero_id != 0u;
+}
+
+bool host_wearable_refresh_key_matches(
+    std::uint64_t key_generation,
+    std::uint64_t key_steam_id,
+    std::uint32_t key_hero_id,
+    std::uint64_t current_generation,
+    std::uint64_t steam_id,
+    std::uint32_t hero_id)
+{
+    return key_generation == current_generation &&
+        key_steam_id == steam_id &&
+        key_hero_id == hero_id;
+}
+
 void publish_local_lobby_to_shared(const GBE_LocalLobby &local, bool is_server, GBE_SharedDotaLobbyState &shared)
 {
     const bool preserve_known_owner_hero = should_preserve_known_owner_hero_on_publish(local, shared);

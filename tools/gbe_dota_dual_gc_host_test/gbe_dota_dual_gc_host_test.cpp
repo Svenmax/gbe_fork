@@ -58,7 +58,7 @@ void expect_eq_u64(std::uint64_t actual, std::uint64_t expected, const char *mes
     ++g_failures;
 }
 
-// Mirrors Steam_Game_Coordinator showcase / wearable one-shot keys.
+// Production one-shot keys via gbe::dota_lobby_state::host_*_key_matches.
 struct HostShowcaseKey {
     std::uint64_t generation{};
     std::uint64_t lobby_id{};
@@ -71,11 +71,15 @@ struct HostShowcaseKey {
         std::uint64_t owner_steam_id,
         std::uint32_t owner_hero_id) const
     {
-        return generation == current_generation &&
-            this->lobby_id == lobby_id &&
-            this->owner_steam_id == owner_steam_id &&
-            this->owner_hero_id == owner_hero_id &&
-            owner_hero_id != 0u;
+        return gbe::dota_lobby_state::host_showcase_equip_key_matches(
+            generation,
+            this->lobby_id,
+            this->owner_steam_id,
+            this->owner_hero_id,
+            current_generation,
+            lobby_id,
+            owner_steam_id,
+            owner_hero_id);
     }
 
     void mark(
@@ -106,9 +110,13 @@ struct HostWearableKey {
         std::uint64_t steam_id,
         std::uint32_t hero_id) const
     {
-        return generation == current_generation &&
-            this->steam_id == steam_id &&
-            this->hero_id == hero_id;
+        return gbe::dota_lobby_state::host_wearable_refresh_key_matches(
+            generation,
+            this->steam_id,
+            this->hero_id,
+            current_generation,
+            steam_id,
+            hero_id);
     }
 
     void mark(std::uint64_t current_generation, std::uint64_t steam_id, std::uint32_t hero_id)

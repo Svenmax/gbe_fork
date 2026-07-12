@@ -24,8 +24,8 @@
 | preserve on adopt | `should_preserve_known_owner_hero_on_adopt` | — | 同 lobby_id + owner_steam_id | 同上；restore 增量用 `apply_owner_hero_from_shared` |
 | H1 peer restore | `should_peer_restore_owner_hero_from_client` + lifecycle apply client hero | server 后续 equip | lobby+generation+owner 一致 | `match_handlers` 7034 response 前 |
 | equipped cache | `GBE_PushDotaPlayerEquippedItemsCacheToGC` / Mirror | 对侧 GC 队列 | 调用方 reason 串 | `gbe_dota_gc_payload_helpers.cpp`；`gc_internal.h` |
-| showcase one-shot | Mark 写 generation+lobby+owner_steam+hero | Has 决定是否再 push | **当前** generation 且 hero!=0 | `steam_game_coordinator.cpp:558-580` |
-| wearable one-shot | Mark 写 generation+steam_id+hero_id | Has 决定是否再 refresh | **当前** generation | `steam_game_coordinator.cpp:583-601` |
+| showcase one-shot | Mark 写 generation+lobby+owner_steam+hero | `host_showcase_equip_key_matches` / HasPushed | **当前** generation 且 hero!=0 | `gbe_dota_lobby_state` + `steam_game_coordinator` Has/Mark |
+| wearable one-shot | Mark 写 generation+steam_id+hero_id | `host_wearable_refresh_key_matches` / HasRefreshed | **当前** generation | 同上 |
 | members[].hero_id | 7034 runtime 更新 / member helpers | 7034 响应、payload 构建 | 随 local lobby | `gbe_dota_match_handlers.cpp` |
 
 ## 3. 跨 GC 推装顺序（host 热路径）

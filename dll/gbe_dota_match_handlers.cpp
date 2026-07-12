@@ -108,10 +108,12 @@ using GBE_Dota7034DisconnectedPlayer = gbe::proto_wire::Dota7034DisconnectedPlay
 //
 // GBE_HandleDotaDirectOwnerHeroKnownEquipReplay (helper, server-GC only):
 //   1. Read client_gc->get_items() [coordinator read]
-//   2. GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, owner, items)
-//      [coordinator]
-//   Invariant: no lobby mutation; only re-pushes host equipped items to server
-//   GC cache after owner hero becomes known.
+//   2. GBE_RefreshDotaHostEquippedItemsCache(server, owner, items) ->
+//      GBE_PushDotaPlayerEquippedItemsCacheToGC
+//   3. If owner_hero known && !HasRefreshedWearables:
+//      GBE_PushDotaHeroEquippedItemUpdatesToClientGC + MarkLocalWearablesRefreshed
+//   Invariant: no lobby mutation; cache refresh then optional wearable one-shot.
+//   2569 path: Clear showcase/wearable keys then call this helper.
 //
 // GBE_HandleDotaDirect7034DisconnectedPlayers (helper):
 //   1. For each disconnected_player: GBE_SetDotaLobbyMemberRuntimeState(steam_id,
@@ -150,12 +152,12 @@ using GBE_Dota7034DisconnectedPlayer = gbe::proto_wire::Dota7034DisconnectedPlay
 //   Invariant: no state mutation; only suppresses official 032 follow-up.
 //
 // GBE_HandleDotaDirect7034Response (emsg 7034 response builder):
-//   1. If is_server && !host_showcase_equip_pushed && request_game_state>=4 &&
-//      state==2: GBE_PushDotaPlayerEquippedItemsCacheToGC [coordinator]; set
-//      host_showcase_equip_pushed=true
-//   2. GBE_AdaptDota7034ConnectedPlayersResponsePayload (pure)
-//   3. push_incoming_now(7034 | kProtoMask, response_message) [coordinator]
-//   Invariant: showcase equip repush precedes response. Single response push.
+//   1. Peer restore owner hero (should_peer_restore + lifecycle) if needed
+//   2. If restored: OwnerHeroKnownEquipReplay
+//   3. If TEAM_SHOWCASE && !HasPushedShowcase: OwnerHeroKnownEquipReplay + MarkShowcase
+//   4. GBE_AdaptDota7034ConnectedPlayersResponsePayload (pure)
+//   5. push_incoming_now(7034 | kProtoMask, response_message)
+//   Invariant: restore/equip one-shots precede response. Showcase key is generation-bound.
 //
 // GBE_HandleDotaDirect7034LaunchPoll (helper):
 //   1. If state==2 && game_state==10: return (no poll)
