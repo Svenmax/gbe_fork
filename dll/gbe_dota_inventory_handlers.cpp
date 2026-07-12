@@ -218,6 +218,20 @@ inline uint32 infer_equipped_hero_id(const EquipItemsPlan &plan, const std::vect
     return hero_id;
 }
 
+inline bool host_server_lobby_matches(
+    const Steam_Game_Coordinator &client_gc,
+    const Steam_Game_Coordinator *server_gc,
+    uint64 local_steam_id)
+{
+    return server_gc &&
+        client_gc.GBE_local_lobby.active &&
+        client_gc.GBE_local_lobby.lobby_id != 0u &&
+        client_gc.GBE_local_lobby.owner_steam_id == local_steam_id &&
+        server_gc->GBE_local_lobby.active &&
+        server_gc->GBE_local_lobby.lobby_id == client_gc.GBE_local_lobby.lobby_id &&
+        server_gc->GBE_local_lobby.owner_steam_id == local_steam_id;
+}
+
 struct EquipItemsExecutionContext {
     bool has_source_job{};
     uint64 source_job{};
@@ -679,9 +693,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
     }
 
+    const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
+    const bool has_host_server_lobby = is_dota_client && host_server_lobby_matches(*this, server_gc, local_steam_id);
+
     EquipItemsPlanningContext planning_context{};
     planning_context.is_dota_client = is_dota_client;
-    planning_context.server_gc_has_active_lobby = server_gc && server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id);
+    planning_context.server_gc_has_active_lobby = has_host_server_lobby;
     planning_context.lobby_snapshot_refresh_available = is_dota_client &&
         GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
         GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 2u &&
@@ -704,12 +721,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         return true;
     }
 
-    const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
     const uint32 equipped_hero_id = infer_equipped_hero_id(plan, items);
     bool owner_hero_changed = false;
-    if (is_dota_client && server_gc && equipped_hero_id != 0u &&
-        server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id) &&
-        server_gc->GBE_local_lobby.owner_steam_id == local_steam_id) {
+    if (has_host_server_lobby && equipped_hero_id != 0u) {
         const uint32 previous_owner_hero_id = server_gc->GBE_local_lobby.owner_hero_id;
         const auto execution = server_gc->GBE_ExecuteDotaLifecycleActions(
             gbe::dota_lifecycle::build_member_runtime_actions(

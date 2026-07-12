@@ -609,6 +609,9 @@ static void test_inventory_equip_full_forward()
     Steam_Game_Coordinator server_gc;
     server_gc.is_server = true;
     server_gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
+    Settings server_settings;
+    server_settings.m_local_steam_id = CSteamID(90071995434351617ull);
+    server_gc.settings = &server_settings;
     server_gc.test_set_active_server_lobby(true);
     server_gc.GBE_local_lobby.active = true;
     server_gc.GBE_local_lobby.lobby_id = 1u;
@@ -690,10 +693,14 @@ static void test_inventory_equip_inferred_hero_requires_valid_single_hero_items(
     tf.gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
     tf.gc.GBE_local_lobby.active = true;
     tf.gc.GBE_local_lobby.lobby_id = 1u;
+    tf.gc.GBE_local_lobby.owner_steam_id = 12345u;
 
     Steam_Game_Coordinator server_gc;
     server_gc.is_server = true;
     server_gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
+    Settings server_settings;
+    server_settings.m_local_steam_id = CSteamID(90071995434351617ull);
+    server_gc.settings = &server_settings;
     server_gc.test_set_active_server_lobby_id(1u);
     server_gc.GBE_local_lobby.active = true;
     server_gc.GBE_local_lobby.lobby_id = 1u;
@@ -731,10 +738,14 @@ static void test_inventory_equip_same_hero_does_not_repeat_known_hero_replay()
     tf.gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
     tf.gc.GBE_local_lobby.active = true;
     tf.gc.GBE_local_lobby.lobby_id = 1u;
+    tf.gc.GBE_local_lobby.owner_steam_id = 12345u;
 
     Steam_Game_Coordinator server_gc;
     server_gc.is_server = true;
     server_gc.gc_profile = Steam_Game_Coordinator::GC_PROFILE_DOTA2;
+    Settings server_settings;
+    server_settings.m_local_steam_id = CSteamID(90071995434351617ull);
+    server_gc.settings = &server_settings;
     server_gc.test_set_active_server_lobby_id(1u);
     server_gc.GBE_local_lobby.active = true;
     server_gc.GBE_local_lobby.lobby_id = 1u;
