@@ -139,6 +139,12 @@ bool Steam_Game_Coordinator::GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bo
 }
 
 
+bool Steam_Game_Coordinator::GBE_ApplyOwnerHeroId(uint32 hero_id, const char *reason)
+{
+    (void)reason;
+    return gbe::dota_lobby_state::apply_owner_hero_id(GBE_local_lobby, hero_id);
+}
+
 bool Steam_Game_Coordinator::GBE_SetDotaLobbyMemberRuntimeState(uint64 steam_id, bool connected, uint32 hero_id, bool has_hero_id)
 {
     if (steam_id == 0ull)
@@ -146,10 +152,8 @@ bool Steam_Game_Coordinator::GBE_SetDotaLobbyMemberRuntimeState(uint64 steam_id,
 
     bool changed = GBE_SetDotaLobbyMemberConnected(steam_id, connected);
     if (has_hero_id && hero_id != 0u) {
-        if (steam_id == GBE_local_lobby.owner_steam_id && GBE_local_lobby.owner_hero_id != hero_id) {
-            GBE_local_lobby.owner_hero_id = hero_id;
-            changed = true;
-        }
+        if (steam_id == GBE_local_lobby.owner_steam_id)
+            changed = GBE_ApplyOwnerHeroId(hero_id, "member_runtime_owner_hero") || changed;
         changed = gbe::dota_lobby_flow::set_lobby_member_hero(GBE_local_lobby.members, steam_id, hero_id) || changed;
     }
 

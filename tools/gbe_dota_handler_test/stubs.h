@@ -1602,6 +1602,14 @@ public:
         GBE_local_lobby = GBE_LocalLobby{};
     }
     bool GBE_MaybeHandleDotaPracticeLobbyKicked(const char *) { return false; }
+    bool GBE_ApplyOwnerHeroId(uint32 hero_id, const char *reason)
+    {
+        (void)reason;
+        if (hero_id == 0u || GBE_local_lobby.owner_hero_id == hero_id)
+            return false;
+        GBE_local_lobby.owner_hero_id = hero_id;
+        return true;
+    }
     bool GBE_SetDotaLobbyMemberRuntimeState(uint64 steam_id, bool connected, uint32 hero_id, bool has_hero_id)
     {
         if (g_action_recorder)
@@ -1611,7 +1619,7 @@ public:
         if (steam_id == GBE_local_lobby.owner_steam_id) {
             GBE_local_lobby.owner_connected = connected;
             if (has_hero_id)
-                GBE_local_lobby.owner_hero_id = hero_id;
+                GBE_ApplyOwnerHeroId(hero_id, "member_runtime_owner_hero");
         }
         return true;
     }

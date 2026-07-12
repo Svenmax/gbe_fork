@@ -61,16 +61,17 @@
     - `gbe_dota_handler_test`: 86 passed, 0 failed
     - API 仍保留 `ClearPendingResetAfterCacheUnsubscribed(retained_lobby_id)` 形参以兼容调用方，实现仅清空 Slot（`retained` 忽略）。
 
-- [ ] 5. host hero 读写收口（对齐权威表，消灭第三套 preserve）
-  - [ ] 5.1 梳理并标记所有直接写 `owner_hero_id` 的点
-    - 至少：`match_handlers`、`inventory_handlers`、`lobby_state_coordinator`、`lobby_state` publish/restore。
-    - 验收：每个写点有 reason 字符串或统一 API。
-  - [ ] 5.2 抽出单一“应用 owner hero”入口（薄封装即可）
-    - 例如 `GBE_ApplyOwnerHeroId(uint32 hero_id, const char *reason, bool publish_shared)` 或 lifecycle action；禁止 handler 内再复制 preserve 条件。
-    - 文件优先：`gbe_dota_lobby_state_coordinator.cpp` / `match_handlers` / `inventory_handlers`。
-  - [ ] 5.3 使 H1、H5 转绿
-    - 只改权威表允许的路径；禁止扩大 showcase/wearable 副作用。
-  - [ ]* 5.4 属性：publish 后 shared.owner_hero_id 与权威 writer 一致；restore 不覆盖 known local hero
+- [x] 5. host hero 读写收口（对齐权威表，消灭第三套 preserve）
+  - [x] 5.1 梳理写点 → 统一到 helpers / `GBE_ApplyOwnerHeroId`
+    - 纯函数：`should_preserve_*_on_publish/adopt`、`should_peer_restore_owner_hero_from_client`、`apply_owner_hero_id`、`apply_owner_hero_from_shared`（`gbe_dota_lobby_state.*`）。
+    - GC API：`GBE_ApplyOwnerHeroId`；`GBE_SetDotaLobbyMemberRuntimeState` 经此写 owner。
+    - restore 增量：`GBE_RestoreSharedDotaLobbyState` 用 `apply_owner_hero_from_shared`。
+    - 7034 peer restore 条件改调 `should_peer_restore_owner_hero_from_client`。
+    - generic snapshot owner：非 0 时走 `GBE_ApplyOwnerHeroId`。
+  - [x] 5.2 单一 apply 入口
+    - `GBE_ApplyOwnerHeroId` / `apply_owner_hero_id`（仅非 0）；publish 仍由调用方 lifecycle/SharedLobbyPublish。
+  - [x] 5.3 H1、H5 绿；dual_gc 直接调用生产 preserve/peer/apply
+  - [x]* 5.4 属性：H5/H5b preserve；H5c apply 单测
 
 - [ ] 6. showcase / wearable one-shot 与 7034 路径对齐
   - [ ] 6.1 确认 showcase/wearable 键仅依赖 generation + lobby/steam/hero（已有实现）

@@ -283,6 +283,18 @@ struct CustomGameLaunchSetupEventPlan {
     LaunchSteamAuthAckEvent steam_auth_ack;
 };
 
+// owner_hero_id authority helpers (single preserve / apply rules for host path).
+bool should_preserve_known_owner_hero_on_publish(const GBE_LocalLobby &local, const GBE_SharedDotaLobbyState &shared);
+bool should_preserve_known_owner_hero_on_adopt(const GBE_LocalLobby &local, const GBE_SharedDotaLobbyState &shared);
+bool should_peer_restore_owner_hero_from_client(
+    bool server_role,
+    const GBE_LocalLobby &server_local,
+    const GBE_LocalLobby &client_local);
+// Apply non-zero hero to local owner. Returns true when owner_hero_id changed.
+bool apply_owner_hero_id(GBE_LocalLobby &local, std::uint32_t hero_id);
+// Adopt shared hero when known (non-zero) and different; never clears a known local with 0.
+bool apply_owner_hero_from_shared(GBE_LocalLobby &local, const GBE_SharedDotaLobbyState &shared);
+
 void publish_local_lobby_to_shared(const GBE_LocalLobby &local, bool is_server, GBE_SharedDotaLobbyState &shared);
 void adopt_shared_lobby_to_local(
     const GBE_SharedDotaLobbyState &shared,

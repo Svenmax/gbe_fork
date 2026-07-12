@@ -521,10 +521,9 @@ CustomGameLaunchSetupEventPlan compose_custom_game_launch_setup_event_plan(std::
     return plan;
 }
 
-void publish_local_lobby_to_shared(const GBE_LocalLobby &local, bool is_server, GBE_SharedDotaLobbyState &shared)
+bool should_preserve_known_owner_hero_on_publish(const GBE_LocalLobby &local, const GBE_SharedDotaLobbyState &shared)
 {
-    const bool preserve_known_owner_hero =
-        local.owner_hero_id == 0u &&
+    return local.owner_hero_id == 0u &&
         shared.valid &&
         shared.active &&
         local.active &&
@@ -533,6 +532,62 @@ void publish_local_lobby_to_shared(const GBE_LocalLobby &local, bool is_server, 
         local.owner_steam_id != 0ull &&
         shared.owner_steam_id == local.owner_steam_id &&
         shared.owner_hero_id != 0u;
+}
+
+bool should_preserve_known_owner_hero_on_adopt(const GBE_LocalLobby &local, const GBE_SharedDotaLobbyState &shared)
+{
+    return local.active &&
+        shared.active &&
+        local.lobby_id != 0ull &&
+        local.lobby_id == shared.lobby_id &&
+        local.owner_steam_id != 0ull &&
+        local.owner_steam_id == shared.owner_steam_id &&
+        local.owner_hero_id != 0u &&
+        shared.owner_hero_id == 0u;
+}
+
+bool should_peer_restore_owner_hero_from_client(
+    bool server_role,
+    const GBE_LocalLobby &server_local,
+    const GBE_LocalLobby &client_local)
+{
+    if (!server_role)
+        return false;
+    if (server_local.owner_hero_id != 0u)
+        return false;
+    if (client_local.owner_hero_id == 0u)
+        return false;
+    if (!server_local.active || !client_local.active)
+        return false;
+    if (server_local.lobby_id == 0ull || client_local.lobby_id != server_local.lobby_id)
+        return false;
+    if (client_local.generation != server_local.generation)
+        return false;
+    if (server_local.owner_steam_id == 0ull || client_local.owner_steam_id != server_local.owner_steam_id)
+        return false;
+    return true;
+}
+
+bool apply_owner_hero_id(GBE_LocalLobby &local, std::uint32_t hero_id)
+{
+    if (hero_id == 0u || local.owner_hero_id == hero_id)
+        return false;
+    local.owner_hero_id = hero_id;
+    return true;
+}
+
+bool apply_owner_hero_from_shared(GBE_LocalLobby &local, const GBE_SharedDotaLobbyState &shared)
+{
+    if (should_preserve_known_owner_hero_on_adopt(local, shared))
+        return false;
+    if (shared.owner_hero_id == 0u)
+        return false;
+    return apply_owner_hero_id(local, shared.owner_hero_id);
+}
+
+void publish_local_lobby_to_shared(const GBE_LocalLobby &local, bool is_server, GBE_SharedDotaLobbyState &shared)
+{
+    const bool preserve_known_owner_hero = should_preserve_known_owner_hero_on_publish(local, shared);
     shared.valid = true;
     shared.active = local.active;
     shared.generation = local.generation;
@@ -603,15 +658,7 @@ void adopt_shared_lobby_to_local(
     bool normalize_custom_readyup_run_state,
     GBE_LocalLobby &local)
 {
-    const bool preserve_known_owner_hero =
-        local.active &&
-        shared.active &&
-        local.lobby_id != 0ull &&
-        local.lobby_id == shared.lobby_id &&
-        local.owner_steam_id != 0ull &&
-        local.owner_steam_id == shared.owner_steam_id &&
-        local.owner_hero_id != 0u &&
-        shared.owner_hero_id == 0u;
+    const bool preserve_known_owner_hero = should_preserve_known_owner_hero_on_adopt(local, shared);
     local.active = shared.active;
     local.generation = shared.generation;
     local.lobby_id = shared.lobby_id;

@@ -179,27 +179,13 @@ struct DualGcFixture {
         gbe::dota_lobby_state::adopt_shared_lobby_to_local(snap, false, false, local);
     }
 
-    // Mirrors match_handlers 7034 peer restore gate (client_lobby_matches_server + hero copy).
+    // Production peer restore gate + apply_owner_hero_id (match_handlers 7034).
     bool try_peer_restore_owner_hero_to_server()
     {
-        const bool client_lobby_matches_server =
-            server_local.active &&
-            client_local.active &&
-            server_local.lobby_id != 0ull &&
-            client_local.lobby_id == server_local.lobby_id &&
-            client_local.generation == server_local.generation &&
-            client_local.owner_steam_id == owner_steam_id &&
-            server_local.owner_steam_id == owner_steam_id;
-
-        if (!client_lobby_matches_server)
+        if (!gbe::dota_lobby_state::should_peer_restore_owner_hero_from_client(
+                true, server_local, client_local))
             return false;
-        if (server_local.owner_hero_id != 0u)
-            return false;
-        if (client_local.owner_hero_id == 0u)
-            return false;
-
-        server_local.owner_hero_id = client_local.owner_hero_id;
-        return true;
+        return gbe::dota_lobby_state::apply_owner_hero_id(server_local, client_local.owner_hero_id);
     }
 
     std::uint64_t server_gen() const
@@ -267,11 +253,28 @@ void test_h5_publish_preserves_known_shared_hero()
     expect_eq_u32(fx.store.snapshot().owner_hero_id, fx.owner_hero_id, "H5b pre: shared has hero");
 
     fx.server_local.owner_hero_id = 0u;
+    const auto shared_pre = fx.store.snapshot();
+    expect_true(
+        gbe::dota_lobby_state::should_preserve_known_owner_hero_on_publish(fx.server_local, shared_pre),
+        "H5b: preserve rule true for local hero0 + known shared");
     fx.publish_from(true);
     expect_eq_u32(
         fx.store.snapshot().owner_hero_id,
         fx.owner_hero_id,
         "H5b: publish local hero0 preserves shared hero");
+}
+
+// H5c: apply_owner_hero_id is single write path (non-zero only).
+void test_h5c_apply_owner_hero_api()
+{
+    DualGcFixture fx;
+    fx.seed_active_pair(0u, 0u);
+    expect_true(!gbe::dota_lobby_state::apply_owner_hero_id(fx.server_local, 0u), "H5c: zero rejected");
+    expect_true(gbe::dota_lobby_state::apply_owner_hero_id(fx.server_local, 7u), "H5c: first apply");
+    expect_eq_u32(fx.server_local.owner_hero_id, 7u, "H5c: hero set");
+    expect_true(!gbe::dota_lobby_state::apply_owner_hero_id(fx.server_local, 7u), "H5c: same hero no-op");
+    expect_true(gbe::dota_lobby_state::apply_owner_hero_id(fx.server_local, 9u), "H5c: change hero");
+    expect_eq_u32(fx.server_local.owner_hero_id, 9u, "H5c: hero updated");
 }
 
 // H2: showcase one-shot same generation only once.
@@ -379,6 +382,7 @@ int main()
     test_h1_peer_restore_owner_hero();
     test_h5_adopt_preserves_known_local_hero();
     test_h5_publish_preserves_known_shared_hero();
+    test_h5c_apply_owner_hero_api();
     test_h2_showcase_once_per_generation();
     test_h3_wearable_once_per_generation();
     test_h4_generation_invalidates_oneshot();

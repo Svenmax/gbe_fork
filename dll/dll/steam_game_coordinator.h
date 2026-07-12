@@ -230,6 +230,8 @@ public ISteamGameCoordinator
     void GBE_ClearPendingResetAfterCacheUnsubscribed(uint64 retained_lobby_id = 0);
     GBE_DotaDeferredTaskConsumeResult GBE_ConsumePendingResetAfterCacheUnsubscribed();
     bool GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bool connected);
+    // Single entry for local owner_hero_id mutation (non-zero only). Publish is caller's duty.
+    bool GBE_ApplyOwnerHeroId(uint32 hero_id, const char *reason);
     bool GBE_SetDotaLobbyMemberRuntimeState(uint64 steam_id, bool connected, uint32 hero_id, bool has_hero_id);
     bool GBE_ShouldHoldDotaLanLaunchForRemoteMembers(uint32 next_game_state, uint32 *remote_count_out, uint32 *connected_remote_count_out) const;
     void GBE_DiscardQueuedDotaLaunchMessagesForAbandon(const char *reason);

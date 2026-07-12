@@ -271,7 +271,8 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                     if (owner_member && read_member_raw_state) {
                         GBE_local_lobby.owner_team = member_snapshot.owner_team;
                         GBE_local_lobby.owner_slot = member_snapshot.owner_slot;
-                        GBE_local_lobby.owner_hero_id = member_snapshot.owner_hero_id;
+                        if (member_snapshot.owner_hero_id != 0u)
+                            GBE_ApplyOwnerHeroId(member_snapshot.owner_hero_id, "generic_member_snapshot_owner");
                         GBE_local_lobby.owner_connected = member_snapshot.owner_connected;
                     }
                     gbe::dota_lobby_flow::update_generic_lobby_member_snapshot_state(
@@ -1496,10 +1497,8 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             changed = true;
         }
 
-        if (shared_lobby.owner_hero_id != 0 && GBE_local_lobby.owner_hero_id != shared_lobby.owner_hero_id) {
-            GBE_local_lobby.owner_hero_id = shared_lobby.owner_hero_id;
+        if (gbe::dota_lobby_state::apply_owner_hero_from_shared(GBE_local_lobby, shared_lobby))
             changed = true;
-        }
 
         if (!gbe::dota_lobby_flow::lobby_members_equal(GBE_local_lobby.members, shared_lobby.members)) {
             GBE_local_lobby.members = shared_lobby.members;
