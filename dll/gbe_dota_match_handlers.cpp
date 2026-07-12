@@ -232,7 +232,8 @@ static bool GBE_AdaptDota7034ConnectedPlayersResponsePayload(
             uint32 slot = owner_slot;
             for (const GBE_DotaLobbyMemberState &member : members) {
                 if (member.steam_id == connected_player.steam_id) {
-                    hero_id = member.hero_id;
+                    if (member.hero_id != 0u)
+                        hero_id = member.hero_id;
                     team = member.team;
                     slot = member.slot;
                     break;
@@ -722,6 +723,32 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
     bool has_source_job,
     uint64 source_job)
 {
+    Steam_Client *steam_client_ptr = get_steam_client();
+    Steam_Game_Coordinator *client_gc_ptr = steam_client_ptr ? steam_client_ptr->steam_game_coordinator : nullptr;
+    const uint64 owner_steam64 = GBE_GetDotaLobbyOwnerSteamId();
+    const bool client_lobby_matches_server =
+        client_gc_ptr &&
+        GBE_local_lobby.active &&
+        client_gc_ptr->GBE_local_lobby.active &&
+        GBE_local_lobby.lobby_id != 0ull &&
+        client_gc_ptr->GBE_local_lobby.lobby_id == GBE_local_lobby.lobby_id &&
+        owner_steam64 != 0ull &&
+        client_gc_ptr->GBE_local_lobby.owner_steam_id == owner_steam64;
+    if (is_server && GBE_local_lobby.owner_hero_id == 0u && client_lobby_matches_server &&
+        client_gc_ptr->GBE_local_lobby.owner_hero_id != 0u) {
+        GBE_SetDotaLobbyMemberRuntimeState(
+            owner_steam64,
+            true,
+            client_gc_ptr->GBE_local_lobby.owner_hero_id,
+            true);
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "restored server owner hero from matching client lobby before 7034 response: steam64=%llu hero_id=%u lobby_id=%llu",
+            static_cast<unsigned long long>(owner_steam64),
+            GBE_local_lobby.owner_hero_id,
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+    }
+
     // [FIX] Re-push host equipped items when game_state reaches TEAM_SHOWCASE (4).
     // On a listen server the login CacheSubscribed establishes the host's SO cache
     // with 27k items (no equipped_state) in the shared cache. The equip-forward
@@ -732,9 +759,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
     if (is_server && !GBE_HasPushedDotaHostShowcaseEquip() &&
         request_shape.has_game_state && request_shape.game_state >= 4u &&
         GBE_local_lobby.active && GBE_local_lobby.state == 2u) {
-        Steam_Client *steam_client_ptr = get_steam_client();
-        Steam_Game_Coordinator *client_gc_ptr = steam_client_ptr ? steam_client_ptr->steam_game_coordinator : nullptr;
-        const uint64 owner_steam64 = GBE_GetDotaLobbyOwnerSteamId();
         if (client_gc_ptr && owner_steam64 != 0ull) {
             const CSteamID owner_steam_id(owner_steam64);
             const auto &client_items = client_gc_ptr->get_items();

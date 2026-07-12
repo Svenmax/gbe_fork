@@ -3151,11 +3151,15 @@ static void test_match_7034_host_showcase_repush_guard_marks_once()
     tf.gc.GBE_local_lobby.match_id = 0x703451u;
     tf.gc.GBE_local_lobby.server_id = 0x703452u;
     tf.gc.GBE_local_lobby.owner_steam_id = owner_steam_id;
-    tf.gc.GBE_local_lobby.owner_hero_id = 59u;
+    tf.gc.GBE_local_lobby.owner_hero_id = 0u;
     tf.gc.GBE_local_lobby.state = 2u;
     tf.gc.GBE_local_lobby.game_state = 3u;
 
     Steam_Game_Coordinator client_gc;
+    client_gc.GBE_local_lobby.active = true;
+    client_gc.GBE_local_lobby.lobby_id = tf.gc.GBE_local_lobby.lobby_id;
+    client_gc.GBE_local_lobby.owner_steam_id = owner_steam_id;
+    client_gc.GBE_local_lobby.owner_hero_id = 59u;
     client_gc.items.push_back(Econ_Item{});
     g_test_steam_client.steam_game_coordinator = &client_gc;
 
@@ -3165,6 +3169,7 @@ static void test_match_7034_host_showcase_repush_guard_marks_once()
         reinterpret_cast<const uint8 *>(body.data()), body.size(), true, source_job);
 
     TEST_ASSERT(first_result, "7034 showcase handler should return true on first request");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_hero_id, 59u, "showcase should restore the server owner hero from the matching client lobby");
     TEST_ASSERT(tf.gc.GBE_HasPushedDotaHostShowcaseEquip(), "first showcase request should mark host equip repushed");
     TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "first showcase request should repush server cache then respond");
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::ServerGcForward, "first showcase action should repush host equipped items");
