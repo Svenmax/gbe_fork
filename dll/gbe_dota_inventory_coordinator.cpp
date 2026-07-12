@@ -318,7 +318,7 @@ void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const st
             // Skip the full generic CacheSubscribed (too large, e.g. 27k items / 706KB)
             // but still push equipped-only items so the server engine creates wearables.
             // Push to server GC for remote players
-            if (GBE_PushDotaPlayerEquippedItemsCacheToGC(this, steam_id, items, false, "callback_items_received_owner_skip_server")) {
+            if (GBE_PushDotaPlayerEquippedItemsCacheToGC(this, steam_id, items, true, "callback_items_received_owner_skip_server")) {
                 size_t equipped_count = 0;
                 for (const Econ_Item &item : items) {
                     if (!item.equip_states.empty())

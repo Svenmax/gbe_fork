@@ -77,7 +77,10 @@ extern bool GBE_pending_reset_after_cache_unsubscribed;
 extern uint64_t GBE_pending_reset_after_cache_unsubscribed_lobby_id;
 extern bool GBE_pending_dota_normal_signout_finalize_after_25;
 extern uint64_t GBE_pending_dota_normal_signout_finalize_lobby_id;
-extern bool GBE_dota_host_showcase_equip_pushed;
+extern uint64_t GBE_dota_host_showcase_equip_generation;
+extern uint64_t GBE_dota_host_showcase_equip_lobby_id;
+extern uint64_t GBE_dota_host_showcase_equip_steam_id;
+extern uint32_t GBE_dota_host_showcase_equip_hero_id;
 extern uint64_t GBE_dota_host_local_wearable_refresh_generation;
 extern uint64_t GBE_dota_host_local_wearable_refresh_steam_id;
 extern uint32_t GBE_dota_host_local_wearable_refresh_hero_id;
@@ -1023,9 +1026,28 @@ public:
     bool GBE_HasSentDotaLoginSync() const { return GBE_dota_login_sync_sent; }
     void GBE_MarkDotaLoginSyncSent() { GBE_dota_login_sync_sent = true; }
     void GBE_ClearDotaLoginSyncSent() { GBE_dota_login_sync_sent = false; }
-    bool GBE_HasPushedDotaHostShowcaseEquip() const { return GBE_dota_host_showcase_equip_pushed; }
-    void GBE_MarkDotaHostShowcaseEquipPushed() { GBE_dota_host_showcase_equip_pushed = true; }
-    void GBE_ClearDotaHostShowcaseEquipPushed() { GBE_dota_host_showcase_equip_pushed = false; }
+    bool GBE_HasPushedDotaHostShowcaseEquip() const
+    {
+        return GBE_dota_host_showcase_equip_generation == GBE_CurrentDotaLobbyGeneration() &&
+            GBE_dota_host_showcase_equip_lobby_id == GBE_local_lobby.lobby_id &&
+            GBE_dota_host_showcase_equip_steam_id == GBE_local_lobby.owner_steam_id &&
+            GBE_dota_host_showcase_equip_hero_id == GBE_local_lobby.owner_hero_id &&
+            GBE_local_lobby.owner_hero_id != 0u;
+    }
+    void GBE_MarkDotaHostShowcaseEquipPushed()
+    {
+        GBE_dota_host_showcase_equip_generation = GBE_CurrentDotaLobbyGeneration();
+        GBE_dota_host_showcase_equip_lobby_id = GBE_local_lobby.lobby_id;
+        GBE_dota_host_showcase_equip_steam_id = GBE_local_lobby.owner_steam_id;
+        GBE_dota_host_showcase_equip_hero_id = GBE_local_lobby.owner_hero_id;
+    }
+    void GBE_ClearDotaHostShowcaseEquipPushed()
+    {
+        GBE_dota_host_showcase_equip_generation = 0;
+        GBE_dota_host_showcase_equip_lobby_id = 0;
+        GBE_dota_host_showcase_equip_steam_id = 0;
+        GBE_dota_host_showcase_equip_hero_id = 0;
+    }
     bool GBE_HasRefreshedDotaHostLocalWearables(uint64 steam_id, uint32 hero_id) const
     {
         return GBE_dota_host_local_wearable_refresh_generation == GBE_CurrentDotaLobbyGeneration() &&
@@ -1743,7 +1765,7 @@ public:
 
     // Match domain
     bool GBE_HandleDotaDirect7034Request(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
-    void GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(uint64 owner_steam_id, uint64 source_job);
+    bool GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(uint64 owner_steam_id, uint64 source_job);
     void GBE_HandleDotaDirect7034DisconnectedPlayers(const std::vector<gbe::proto_wire::Dota7034DisconnectedPlayer> &disconnected_players, uint64 source_job);
     void GBE_HandleDotaDirect7034RuntimeUpdates(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RuntimeRequest &request, bool has_source_job, uint64 source_job, bool &queued_runtime_lobby_update);
     void GBE_HandleDotaDirect7034StrategyTime(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RuntimeRequest &request, bool has_source_job, uint64 source_job, bool &queued_runtime_lobby_update);

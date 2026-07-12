@@ -706,9 +706,17 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
     }
 
     std::string cache_body;
+    auto &runtime_state = GBE_DotaRuntimeState();
+    if (runtime_state.equip_cache_version == 0u) {
+        runtime_state.equip_cache_version = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count());
+    }
+    const std::uint64_t cache_version = ++runtime_state.equip_cache_version;
     gbe::proto_wire::append_bytes_field(cache_body, 2u, subscribed_type);
-    gbe::proto_wire::append_fixed64_field(cache_body, 3u, 1ull);
+    gbe::proto_wire::append_fixed64_field(cache_body, 3u, cache_version);
     gbe::proto_wire::append_bytes_field(cache_body, 4u, owner_soid);
+    gbe::proto_wire::append_varint_field(cache_body, 5u, 1u);
 
     std::string cache_message;
     gbe::gc_message::build_dota_zero_header_payload(GBE_kDotaCacheSubscribed, cache_body, cache_message);
@@ -716,7 +724,7 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
 
     GBE_GC_DebugLog(
         "GC_DOTA_DIRECT",
-        "pushed player item CacheSubscribed role=%s target_gc=%p generation=%llu steam64=%llu equipped_items=%zu equip_states=%zu snapshot=%016llx reason=%s message_size=%zu unsub_first=%u",
+        "pushed player item CacheSubscribed role=%s target_gc=%p generation=%llu steam64=%llu equipped_items=%zu equip_states=%zu snapshot=%016llx version=%llu service_id=1 reason=%s message_size=%zu unsub_first=%u",
         target_gc->GBE_IsServerGC() ? "server" : "client",
         static_cast<void *>(target_gc),
         static_cast<unsigned long long>(target_gc->GBE_GetDotaLobbyGeneration()),
@@ -724,6 +732,7 @@ bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
         equipped_items.size(),
         equip_state_count,
         static_cast<unsigned long long>(snapshot_hash),
+        static_cast<unsigned long long>(cache_version),
         reason ? reason : "unknown",
         cache_message.size(),
         unsubscribe_first ? 1u : 0u

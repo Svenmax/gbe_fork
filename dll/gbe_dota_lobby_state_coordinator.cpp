@@ -244,6 +244,13 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                         : nullptr;
                     const bool has_member_team = !std::string(member_team_raw ? member_team_raw : "").empty();
                     const bool has_member_slot = !std::string(member_slot_raw ? member_slot_raw : "").empty();
+                    const char *member_hero_raw = read_member_raw_state
+                        ? steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby_id, member_id, GBE_kDotaGenericLobbyMemberHeroKey)
+                        : nullptr;
+                    const bool has_member_hero = member_hero_raw && member_hero_raw[0] != '\0';
+                    const uint32 member_hero_id = has_member_hero
+                        ? gbe::proto_wire::parse_uint32_or_zero(member_hero_raw)
+                        : (owner_member ? GBE_local_lobby.owner_hero_id : 0u);
                     const GBE_DotaLobbyMemberSnapshotData member_snapshot = gbe::dota_lobby_flow::compose_lobby_member_snapshot_data(
                         member_steam_id,
                         member_id.GetAccountID(),
@@ -257,7 +264,7 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                         gbe::proto_wire::parse_uint32_or_zero(member_team_raw),
                         has_member_slot,
                         gbe::proto_wire::parse_uint32_or_zero(member_slot_raw),
-                        read_member_raw_state ? gbe::proto_wire::parse_uint32_or_zero(steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby_id, member_id, GBE_kDotaGenericLobbyMemberHeroKey)) : GBE_local_lobby.owner_hero_id,
+                        member_hero_id,
                         read_member_raw_state ? gbe::proto_wire::parse_uint32_or_zero(steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby_id, member_id, GBE_kDotaGenericLobbyMemberConnectedKey)) != 0u : (GBE_local_lobby.owner_connected || GBE_local_lobby.state == 3u),
                         GBE_kDotaTeamPlayerPool);
                     GBE_DotaLobbyMemberState member = member_snapshot.member;

@@ -207,6 +207,8 @@ JoinLobbyMergePlan compose_join_lobby_merge_plan(
             plan.lobby.owner_steam_id = matched_lobby.owner_steam_id;
         plan.lobby.owner_team = matched_lobby.owner_team;
         plan.lobby.owner_slot = matched_lobby.owner_slot;
+        plan.lobby.owner_hero_id = matched_lobby.owner_hero_id;
+        plan.lobby.owner_connected = matched_lobby.owner_connected;
         plan.lobby.members = matched_lobby.members;
 
         GBE_DotaLobbyMemberState owner_member{};

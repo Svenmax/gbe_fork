@@ -225,8 +225,39 @@ void Steam_Game_Coordinator::network_callback_inventory_response(Common_Message 
             // force the engine to re-evaluate equipped items and spawn
             // wearables for an already-spawned hero.
             const bool is_owner = (user_steamid == GBE_GetDotaLobbyOwnerSteamId());
-            // Push to server GC so remote players see cosmetics
-            GBE_PushDotaPlayerEquippedItemsCacheToGC(this, player_steam_id, items, is_owner, is_owner ? "inventory_response_owner_resubscribe_server" : "inventory_response_remote_subscribe");
+            uint32 equipped_hero_id = 0u;
+            bool mixed_hero_classes = false;
+            for (const Econ_Item *item : equipped_items) {
+                for (const auto &[class_id, slot_id] : item->equip_states) {
+                    (void)slot_id;
+                    if (class_id == 0u || class_id >= 1000u)
+                        continue;
+                    if (equipped_hero_id == 0u)
+                        equipped_hero_id = class_id;
+                    else if (equipped_hero_id != class_id)
+                        mixed_hero_classes = true;
+                }
+            }
+
+            if (!is_owner && !mixed_hero_classes && equipped_hero_id != 0u) {
+                GBE_ExecuteDotaLifecycleActions(
+                    gbe::dota_lifecycle::build_member_runtime_actions(
+                        user_steamid,
+                        true,
+                        equipped_hero_id,
+                        true,
+                        "inventory_response_remote_hero_inferred"));
+            }
+
+            // Replace the existing player cache so already-spawned heroes re-evaluate wearables.
+            GBE_PushDotaPlayerEquippedItemsCacheToGC(
+                this,
+                player_steam_id,
+                items,
+                true,
+                is_owner ? "inventory_response_owner_resubscribe_server" : "inventory_response_remote_resubscribe");
+            callback_respawn_request(player_steam_id);
+            callback_respawn_request(player_steam_id, 1.5);
 
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
@@ -235,7 +266,7 @@ void Steam_Game_Coordinator::network_callback_inventory_response(Common_Message 
                 static_cast<unsigned long long>(user_steamid),
                 equipped_items.size(),
                 items.size(),
-                is_owner ? 1 : 0
+                1
             );
         }
     }

@@ -1857,7 +1857,9 @@ bool test_dota_lobby_state_helpers()
     matched_lobby.owner_name = "matched-owner";
     matched_lobby.owner_team = 0u;
     matched_lobby.owner_slot = 1u;
-    matched_lobby.members.push_back(GBE_DotaLobbyMemberState{700ull, 70u, 0u, 1u, 0u, true, 0u});
+    matched_lobby.owner_hero_id = 54u;
+    matched_lobby.owner_connected = true;
+    matched_lobby.members.push_back(GBE_DotaLobbyMemberState{700ull, 70u, 0u, 1u, 54u, true, 0u});
     matched_lobby.members.push_back(GBE_DotaLobbyMemberState{800ull, 80u, 4u, 2u, 0u, true, 0u});
     const gbe::dota_lobby_state::JoinLobbyMergePlan join_plan = gbe::dota_lobby_state::compose_join_lobby_merge_plan(
         GBE_LocalLobby{},
@@ -1877,6 +1879,8 @@ bool test_dota_lobby_state_helpers()
     ok &= expect_eq_string(join_plan.lobby.room_name, matched_lobby.room_name, "join merge room name");
     ok &= expect_eq_u64(join_plan.lobby.custom_game.game_id, matched_lobby.custom_game.game_id, "join merge custom game id");
     ok &= expect_eq_u64(join_plan.lobby.owner_steam_id, matched_lobby.owner_steam_id, "join merge owner steam id");
+    ok &= expect_eq_u64(join_plan.lobby.owner_hero_id, matched_lobby.owner_hero_id, "join merge owner hero id");
+    ok &= expect_true(join_plan.lobby.owner_connected, "join merge owner connected state");
     ok &= expect_true(join_plan.seen_local_in_generic_lobby, "join merge sees local member");
     ok &= expect_eq_u64(join_plan.local_member.steam_id, 800ull, "join merge local member steam id");
     ok &= expect_eq_u64(join_plan.local_member.account_id, 80u, "join merge local member account id");

@@ -477,21 +477,22 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Request(
 }
 
 
-void Steam_Game_Coordinator::GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(
+bool Steam_Game_Coordinator::GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(
     uint64 owner_steam_id,
     uint64 source_job)
 {
     if (!is_server || gc_profile != GC_PROFILE_DOTA2)
-        return;
+        return false;
 
     Steam_Client *steam_client = get_steam_client();
     Steam_Game_Coordinator *client_gc = steam_client ? steam_client->steam_game_coordinator : nullptr;
     if (!client_gc || owner_steam_id == 0ull)
-        return;
+        return false;
 
     const CSteamID owner_id(owner_steam_id);
     const auto &client_items = client_gc->get_items();
-    if (GBE_RefreshDotaHostEquippedItemsCache(this, owner_id, client_items, "7034_owner_hero_known_server")) {
+    const bool refreshed = GBE_RefreshDotaHostEquippedItemsCache(this, owner_id, client_items, "7034_owner_hero_known_server");
+    if (refreshed) {
         const uint32 owner_hero_id = GBE_local_lobby.owner_hero_id;
         if (owner_hero_id != 0u && !GBE_HasRefreshedDotaHostLocalWearables(owner_steam_id, owner_hero_id) &&
             GBE_PushDotaHeroEquippedItemUpdatesToClientGC(client_gc, owner_id, owner_hero_id, client_items, "7034_owner_hero_known_client")) {
@@ -516,6 +517,7 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(
         );
     }
 
+    return refreshed;
 }
 
 
@@ -732,8 +734,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
         client_gc_ptr->GBE_local_lobby.active &&
         GBE_local_lobby.lobby_id != 0ull &&
         client_gc_ptr->GBE_local_lobby.lobby_id == GBE_local_lobby.lobby_id &&
+        client_gc_ptr->GBE_local_lobby.generation == GBE_local_lobby.generation &&
         owner_steam64 != 0ull &&
         client_gc_ptr->GBE_local_lobby.owner_steam_id == owner_steam64;
+    bool restored_owner_hero = false;
     if (is_server && GBE_local_lobby.owner_hero_id == 0u && client_lobby_matches_server &&
         client_gc_ptr->GBE_local_lobby.owner_hero_id != 0u) {
         GBE_ExecuteDotaLifecycleActions(
@@ -749,7 +753,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
             static_cast<unsigned long long>(owner_steam64),
             GBE_local_lobby.owner_hero_id,
             static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        restored_owner_hero = GBE_local_lobby.owner_hero_id != 0u;
     }
+
+    const bool restored_owner_equip_replayed = restored_owner_hero &&
+        GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(owner_steam64, source_job);
 
     // [FIX] Re-push host equipped items when game_state reaches TEAM_SHOWCASE (4).
     // On a listen server the login CacheSubscribed establishes the host's SO cache
@@ -762,9 +770,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
         request_shape.has_game_state && request_shape.game_state >= 4u &&
         GBE_local_lobby.active && GBE_local_lobby.state == 2u) {
         if (client_gc_ptr && owner_steam64 != 0ull) {
-            const CSteamID owner_steam_id(owner_steam64);
-            const auto &client_items = client_gc_ptr->get_items();
-            if (GBE_RefreshDotaHostEquippedItemsCache(this, owner_steam_id, client_items, "7034_showcase_host_equip_repush")) {
+            const bool refreshed = restored_owner_equip_replayed ||
+                GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(owner_steam64, source_job);
+            if (refreshed) {
                 GBE_MarkDotaHostShowcaseEquipPushed();
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",

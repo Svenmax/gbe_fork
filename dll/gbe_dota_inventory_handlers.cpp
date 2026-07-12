@@ -686,6 +686,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
         GBE_local_lobby.owner_steam_id == local_steam_id &&
         server_gc->GBE_local_lobby.active &&
         server_gc->GBE_local_lobby.lobby_id == GBE_local_lobby.lobby_id &&
+        server_gc->GBE_local_lobby.generation == GBE_local_lobby.generation &&
         server_gc->GBE_local_lobby.owner_steam_id == local_steam_id;
 
     EquipItemsPlanningContext planning_context{};
@@ -714,7 +715,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
     }
 
     const uint32 equipped_hero_id = infer_equipped_hero_id(plan, items);
-    bool owner_hero_changed = false;
     if (has_host_server_lobby && equipped_hero_id != 0u) {
         const uint32 previous_owner_hero_id = server_gc->GBE_local_lobby.owner_hero_id;
         GBE_ExecuteDotaLifecycleActions(
@@ -731,7 +731,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
                 equipped_hero_id,
                 true,
                 "2569_owner_hero_inferred"));
-        owner_hero_changed = execution.state_changed && previous_owner_hero_id != server_gc->GBE_local_lobby.owner_hero_id;
+        const bool owner_hero_changed = execution.state_changed && previous_owner_hero_id != server_gc->GBE_local_lobby.owner_hero_id;
         if (owner_hero_changed) {
             GBE_GC_DebugLog(
                 "GC_DOTA_EQUIP_REFRESH",
@@ -852,7 +852,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
             GBE_RefreshDotaEquipLobbySnapshot(reason);
         });
 
-    if (owner_hero_changed) {
+    if (has_host_server_lobby && equipped_hero_id != 0u && !plan.modified_item_ids.empty()) {
+        server_gc->GBE_ClearDotaHostShowcaseEquipPushed();
+        server_gc->GBE_ClearDotaHostLocalWearablesRefreshed();
         server_gc->GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(execution_context.local_steam_id, source_job);
     }
 

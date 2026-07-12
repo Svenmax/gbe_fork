@@ -143,7 +143,10 @@ public ISteamGameCoordinator
     bool welcome_received{};
     std::chrono::high_resolution_clock::time_point welcome_time{};
     bool GBE_dota_login_sync_sent{};
-    bool GBE_dota_host_showcase_equip_pushed{};
+    uint64 GBE_dota_host_showcase_equip_generation{};
+    uint64 GBE_dota_host_showcase_equip_lobby_id{};
+    uint64 GBE_dota_host_showcase_equip_steam_id{};
+    uint32 GBE_dota_host_showcase_equip_hero_id{};
     uint64 GBE_dota_host_local_wearable_refresh_generation{};
     uint64 GBE_dota_host_local_wearable_refresh_steam_id{};
     uint32 GBE_dota_host_local_wearable_refresh_hero_id{};
@@ -294,7 +297,7 @@ public ISteamGameCoordinator
     void GBE_PushDotaLaunchStateToClientPeer(const char *reason);
     bool GBE_TryQueueDotaPrelaunch021(const char *note, uint32 trigger_emsg, uint64 source_job);
     bool GBE_TryQueueDotaRuntimeLobbyDetailsUpdate(const char *note, uint32 trigger_emsg, uint64 source_job, uint32 next_state, uint32 next_game_state, double delay = 0.0);
-    void GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(uint64 owner_steam_id, uint64 source_job);
+    bool GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(uint64 owner_steam_id, uint64 source_job);
     void GBE_HandleDotaDirect7034DisconnectedPlayers(const std::vector<gbe::proto_wire::Dota7034DisconnectedPlayer> &disconnected_players, uint64 source_job);
     void GBE_HandleDotaDirect7034RuntimeUpdates(uint32 request_emsg, const uint8 *body, size_t body_size, const gbe::proto_wire::Dota7034RuntimeRequest &request, bool custom_game_launch, uint64 source_job, bool &queued_runtime_lobby_update);
     bool GBE_HandleDotaDirect7034Response(uint32 request_emsg, const gbe::proto_wire::Dota7034RequestShape &request_shape, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
