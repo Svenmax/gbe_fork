@@ -177,6 +177,7 @@ using GBE_Dota7034DisconnectedPlayer = gbe::proto_wire::Dota7034DisconnectedPlay
 
 static bool GBE_AdaptDota7034ConnectedPlayersResponsePayload(
     uint64 steam_id,
+    uint32 owner_hero_id,
     uint32 lobby_state,
     uint32 game_state,
     uint32 owner_team,
@@ -226,7 +227,7 @@ static bool GBE_AdaptDota7034ConnectedPlayersResponsePayload(
         for (const GBE_Dota7034ConnectedPlayer &connected_player : request_shape.connected_players) {
             if (!connected_player.has_steam_id || connected_player.steam_id == 0ull)
                 continue;
-            uint32 hero_id = 0u;
+            uint32 hero_id = connected_player.steam_id == steam_id ? owner_hero_id : 0u;
             uint32 team = owner_team;
             uint32 slot = owner_slot;
             for (const GBE_DotaLobbyMemberState &member : members) {
@@ -250,7 +251,7 @@ static bool GBE_AdaptDota7034ConnectedPlayersResponsePayload(
             append_disconnected_player(disconnected_player.steam_id, disconnected_lobby_state, disconnected_game_state);
         }
     } else {
-        append_connected_player(steam_id, 0u, owner_team, owner_slot);
+        append_connected_player(steam_id, owner_hero_id, owner_team, owner_slot);
         for (const GBE_DotaLobbyMemberState &member : members) {
             if (member.steam_id == 0ull || member.steam_id == steam_id)
                 continue;
@@ -753,6 +754,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
     std::string response_message;
     const bool built_response = GBE_AdaptDota7034ConnectedPlayersResponsePayload(
         GBE_GetDotaLobbyOwnerSteamId(),
+        GBE_local_lobby.owner_hero_id,
         GBE_local_lobby.state,
         GBE_local_lobby.game_state,
         GBE_local_lobby.owner_team,

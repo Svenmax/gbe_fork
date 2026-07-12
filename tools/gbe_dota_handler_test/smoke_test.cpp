@@ -265,6 +265,21 @@ static void expect_push_payload(const RecordedAction &action, uint32_t expected_
     TEST_ASSERT(!action.msg_body.empty(), context);
 }
 
+static std::string dota7034_response_summary(const RecordedAction &action)
+{
+    size_t response_body_offset = 8u;
+    if (action.msg_body.size() >= response_body_offset) {
+        uint32_t response_header_length = 0u;
+        std::memcpy(&response_header_length, action.msg_body.data() + 4u, sizeof(response_header_length));
+        response_body_offset += response_header_length;
+    }
+    if (response_body_offset > action.msg_body.size())
+        return {};
+    return gbe::proto_wire::format_dota7034_summary(
+        reinterpret_cast<const uint8_t *>(action.msg_body.data() + response_body_offset),
+        action.msg_body.size() - response_body_offset);
+}
+
 static gbe::dota_gc_router::DotaGcRequestContext make_dispatch_context(
     uint32 inner_emsg,
     gbe::dota_gc_router::DotaGcRequestPath path,
@@ -3136,7 +3151,7 @@ static void test_match_7034_host_showcase_repush_guard_marks_once()
     tf.gc.GBE_local_lobby.match_id = 0x703451u;
     tf.gc.GBE_local_lobby.server_id = 0x703452u;
     tf.gc.GBE_local_lobby.owner_steam_id = owner_steam_id;
-    tf.gc.GBE_local_lobby.owner_hero_id = 0u;
+    tf.gc.GBE_local_lobby.owner_hero_id = 59u;
     tf.gc.GBE_local_lobby.state = 2u;
     tf.gc.GBE_local_lobby.game_state = 3u;
 
@@ -3151,10 +3166,15 @@ static void test_match_7034_host_showcase_repush_guard_marks_once()
 
     TEST_ASSERT(first_result, "7034 showcase handler should return true on first request");
     TEST_ASSERT(tf.gc.GBE_HasPushedDotaHostShowcaseEquip(), "first showcase request should mark host equip repushed");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "first showcase request should repush server cache then respond while owner hero is unknown");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 2u, "first showcase request should repush server cache then respond");
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::ServerGcForward, "first showcase action should repush host equipped items");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7034_showcase_host_equip_repush", "showcase repush reason should be preserved");
     expect_push_payload(tf.recorder.actions[1], 7034u, "second action should push 7034 response with payload");
+    const std::string first_showcase_summary = dota7034_response_summary(tf.recorder.actions[1]);
+    TEST_ASSERT(
+        first_showcase_summary.find("connected0{steam_id=") != std::string::npos &&
+        first_showcase_summary.find("hero_id=59") != std::string::npos,
+        "showcase response should include the confirmed owner hero when the request omits connected players");
 
     tf.recorder.clear();
     bool second_result = tf.gc.GBE_HandleDotaDirect7034Request(
