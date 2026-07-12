@@ -1677,6 +1677,25 @@ bool test_dota_lobby_state_helpers()
     ok &= expect_eq_u64(restored.cache_version, local.cache_version, "lobby state restore cache version");
     ok &= expect_eq_size(restored.cache_service_list.size(), 2u, "lobby state restore cache service list");
 
+    restored.active = true;
+    restored.lobby_id = shared.lobby_id;
+    restored.owner_steam_id = shared.owner_steam_id;
+    restored.owner_hero_id = 95u;
+    shared.active = true;
+    shared.owner_hero_id = 0u;
+    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, true, restored);
+    ok &= expect_eq_u64(restored.owner_hero_id, 95u, "lobby state restore preserves known owner hero when the same lobby shared state is unknown");
+
+    shared.lobby_id = 0x0b0cull;
+    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, true, restored);
+    ok &= expect_eq_u64(restored.owner_hero_id, 0u, "lobby state restore clears owner hero when adopting another lobby");
+
+    shared.lobby_id = local.lobby_id;
+    shared.owner_steam_id = local.owner_steam_id;
+    shared.owner_hero_id = 71u;
+    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, true, restored);
+    ok &= expect_eq_u64(restored.owner_hero_id, 71u, "lobby state restore accepts a confirmed shared owner hero");
+
     shared.match_id = 0ull;
     shared.server_id = 0x3333ull;
     gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, true, false, restored);

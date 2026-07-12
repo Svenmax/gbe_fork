@@ -601,6 +601,15 @@ void adopt_shared_lobby_to_local(
     bool normalize_custom_readyup_run_state,
     GBE_LocalLobby &local)
 {
+    const bool preserve_known_owner_hero =
+        local.active &&
+        shared.active &&
+        local.lobby_id != 0ull &&
+        local.lobby_id == shared.lobby_id &&
+        local.owner_steam_id != 0ull &&
+        local.owner_steam_id == shared.owner_steam_id &&
+        local.owner_hero_id != 0u &&
+        shared.owner_hero_id == 0u;
     local.active = shared.active;
     local.generation = shared.generation;
     local.lobby_id = shared.lobby_id;
@@ -639,7 +648,8 @@ void adopt_shared_lobby_to_local(
     local.game_start_time = shared.game_start_time;
     local.owner_team = shared.owner_team;
     local.owner_slot = shared.owner_slot;
-    local.owner_hero_id = shared.owner_hero_id;
+    if (!preserve_known_owner_hero)
+        local.owner_hero_id = shared.owner_hero_id;
     local.owner_connected = shared.owner_connected;
     local.members = shared.members;
     local.launch_phase = shared.launch_phase;
