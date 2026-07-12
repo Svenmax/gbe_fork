@@ -736,11 +736,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
         client_gc_ptr->GBE_local_lobby.owner_steam_id == owner_steam64;
     if (is_server && GBE_local_lobby.owner_hero_id == 0u && client_lobby_matches_server &&
         client_gc_ptr->GBE_local_lobby.owner_hero_id != 0u) {
-        GBE_SetDotaLobbyMemberRuntimeState(
-            owner_steam64,
-            true,
-            client_gc_ptr->GBE_local_lobby.owner_hero_id,
-            true);
+        GBE_ExecuteDotaLifecycleActions(
+            gbe::dota_lifecycle::build_member_runtime_actions(
+                owner_steam64,
+                true,
+                client_gc_ptr->GBE_local_lobby.owner_hero_id,
+                true,
+                "7034_restore_owner_hero_from_client"));
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "restored server owner hero from matching client lobby before 7034 response: steam64=%llu hero_id=%u lobby_id=%llu",
