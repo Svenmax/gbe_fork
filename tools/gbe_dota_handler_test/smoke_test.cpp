@@ -636,49 +636,54 @@ static void test_inventory_equip_full_forward()
     TEST_ASSERT(result, "handler should return true");
 
     // Verify the full documented action sequence
-    TEST_ASSERT_EQ(tf.recorder.runtime_states.size(), 1u, "2569 should update owner runtime state once");
-    TEST_ASSERT_EQ(tf.recorder.runtime_states[0].action_sequence_index, 0u, "owner hero should become known before equip responses and cache propagation");
-    TEST_ASSERT_EQ(tf.recorder.runtime_states[0].hero_id, 2u, "runtime state should carry inferred hero id");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 13u, "should publish inferred hero before forward actions and early replay");
+    TEST_ASSERT_EQ(tf.recorder.runtime_states.size(), 2u, "2569 should synchronize inferred owner hero to both client and server GC state");
+    TEST_ASSERT_EQ(tf.recorder.runtime_states[0].action_sequence_index, 0u, "client owner hero should become known before equip responses and cache propagation");
+    TEST_ASSERT_EQ(tf.recorder.runtime_states[0].hero_id, 2u, "client runtime state should carry inferred hero id");
+    TEST_ASSERT_EQ(tf.recorder.runtime_states[1].hero_id, 2u, "server runtime state should carry inferred hero id");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_hero_id, 2u, "client lobby snapshot should retain the inferred owner hero");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 14u, "should publish inferred hero to both GCs before forward actions and early replay");
 
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "1: publish inferred owner hero");
     TEST_ASSERT(tf.recorder.actions[0].reason == "2569_owner_hero_inferred", "1: publish reason should identify inferred hero");
 
-    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::PushIncomingNow, "2: PushIncomingNow (SO UpdateMultiple)");
-    TEST_ASSERT_EQ((tf.recorder.actions[1].msg_type & ~0x80000000u), 26u, "2: emsg=26");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::LobbySnapshotRefresh, "2: publish inferred server hero");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "2569_owner_hero_inferred", "2: server publish reason should identify inferred hero");
 
-    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::PushIncomingNow, "3: PushIncomingNow (response)");
-    TEST_ASSERT_EQ((tf.recorder.actions[2].msg_type & ~0x80000000u), 2570u, "3: emsg=2570");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::PushIncomingNow, "3: PushIncomingNow (SO UpdateMultiple)");
+    TEST_ASSERT_EQ((tf.recorder.actions[2].msg_type & ~0x80000000u), 26u, "3: emsg=26");
 
-    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::SaveItemsToFile, "4: SaveItemsToFile");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].type, GBE_DotaActionType::PushIncomingNow, "4: PushIncomingNow (response)");
+    TEST_ASSERT_EQ((tf.recorder.actions[3].msg_type & ~0x80000000u), 2570u, "4: emsg=2570");
 
-    TEST_ASSERT_EQ(tf.recorder.actions[4].type, GBE_DotaActionType::ServerGcForward, "5: ServerGcForward (cache push)");
-    TEST_ASSERT_EQ((tf.recorder.actions[4].msg_type & ~0x80000000u), 0u, "5: emsg=0 (CacheSubscribed)");
-    TEST_ASSERT_EQ(tf.recorder.actions[4].item_id, 1u, "5: cache push should target a server GC");
-    TEST_ASSERT_EQ(tf.recorder.actions[4].steam_id, 12345u, "5: cache push should use local steam id");
-    TEST_ASSERT_EQ(tf.recorder.actions[4].server_gc_source_item_count, 1u, "5: cache push should include source items");
-    TEST_ASSERT(tf.recorder.actions[4].server_gc_unsubscribe_first, "5: cache push should unsubscribe before subscribe");
-    TEST_ASSERT(tf.recorder.actions[4].reason == "equip_forward_host_resubscribe_server", "5: cache push reason should identify equip forward");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].type, GBE_DotaActionType::SaveItemsToFile, "5: SaveItemsToFile");
+
+    TEST_ASSERT_EQ(tf.recorder.actions[5].type, GBE_DotaActionType::ServerGcForward, "6: ServerGcForward (cache push)");
+    TEST_ASSERT_EQ((tf.recorder.actions[5].msg_type & ~0x80000000u), 0u, "6: emsg=0 (CacheSubscribed)");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].item_id, 1u, "6: cache push should target a server GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].steam_id, 12345u, "6: cache push should use local steam id");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].server_gc_source_item_count, 1u, "6: cache push should include source items");
+    TEST_ASSERT(tf.recorder.actions[5].server_gc_unsubscribe_first, "6: cache push should unsubscribe before subscribe");
+    TEST_ASSERT(tf.recorder.actions[5].reason == "equip_forward_host_resubscribe_server", "6: cache push reason should identify equip forward");
     TEST_ASSERT_EQ(server_gc.all_user_items[CSteamID(12345u)].size(), 1u, "server GC should mirror the equipped host item");
 
-    TEST_ASSERT_EQ(tf.recorder.actions[5].type, GBE_DotaActionType::ServerGcForward, "6: ServerGcForward (SO Create)");
-    TEST_ASSERT_EQ((tf.recorder.actions[5].msg_type & ~0x80000000u), 21u, "6: emsg=21");
+    TEST_ASSERT_EQ(tf.recorder.actions[6].type, GBE_DotaActionType::ServerGcForward, "7: ServerGcForward (SO Create)");
+    TEST_ASSERT_EQ((tf.recorder.actions[6].msg_type & ~0x80000000u), 21u, "7: emsg=21");
 
-    TEST_ASSERT_EQ(tf.recorder.actions[6].type, GBE_DotaActionType::ServerGcForward, "7: ServerGcForward (SO UpdateMultiple forward)");
-    TEST_ASSERT_EQ((tf.recorder.actions[6].msg_type & ~0x80000000u), 26u, "7: emsg=26");
+    TEST_ASSERT_EQ(tf.recorder.actions[7].type, GBE_DotaActionType::ServerGcForward, "8: ServerGcForward (SO UpdateMultiple forward)");
+    TEST_ASSERT_EQ((tf.recorder.actions[7].msg_type & ~0x80000000u), 26u, "8: emsg=26");
 
-    TEST_ASSERT_EQ(tf.recorder.actions[7].type, GBE_DotaActionType::NetworkBroadcast, "8: NetworkBroadcast");
-    TEST_ASSERT_EQ(tf.recorder.actions[7].source_id, 12345u, "8: network broadcast should use local steam id as source");
+    TEST_ASSERT_EQ(tf.recorder.actions[8].type, GBE_DotaActionType::NetworkBroadcast, "9: NetworkBroadcast");
+    TEST_ASSERT_EQ(tf.recorder.actions[8].source_id, 12345u, "9: network broadcast should use local steam id as source");
 
-    TEST_ASSERT_EQ(tf.recorder.actions[8].type, GBE_DotaActionType::LobbySnapshotRefresh, "9: LobbySnapshotRefresh");
-    TEST_ASSERT(tf.recorder.actions[8].reason == "equip_items_refresh", "9: snapshot refresh reason should identify equip replay");
+    TEST_ASSERT_EQ(tf.recorder.actions[9].type, GBE_DotaActionType::LobbySnapshotRefresh, "10: LobbySnapshotRefresh");
+    TEST_ASSERT(tf.recorder.actions[9].reason == "equip_items_refresh", "10: snapshot refresh reason should identify equip replay");
     TEST_ASSERT_EQ(server_gc.GBE_local_lobby.owner_hero_id, 2u, "2569 should establish the host hero before 7034");
-    TEST_ASSERT_EQ(tf.recorder.actions[9].type, GBE_DotaActionType::ServerGcForward, "10: early owner hero cache replay");
-    TEST_ASSERT(tf.recorder.actions[9].reason == "7034_owner_hero_known_server", "early replay should reuse the owner hero server seam");
-    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[10]), 26u, "11: early owner hero client update");
-    TEST_ASSERT(tf.recorder.actions[10].reason == "7034_owner_hero_known_client", "early replay should reuse the owner hero client seam");
-    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[11]), 1029u, "12: first wearable refresh");
-    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[12]), 1029u, "13: delayed wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[10].type, GBE_DotaActionType::ServerGcForward, "11: early owner hero cache replay");
+    TEST_ASSERT(tf.recorder.actions[10].reason == "7034_owner_hero_known_server", "early replay should reuse the owner hero server seam");
+    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[11]), 26u, "12: early owner hero client update");
+    TEST_ASSERT(tf.recorder.actions[11].reason == "7034_owner_hero_known_client", "early replay should reuse the owner hero client seam");
+    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[12]), 1029u, "13: first wearable refresh");
+    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[13]), 1029u, "14: delayed wearable refresh");
 
     ++g_tests_passed;
 }
@@ -760,7 +765,8 @@ static void test_inventory_equip_same_hero_does_not_repeat_known_hero_replay()
         reinterpret_cast<const uint8 *>(body.data()), body.size(), false, 0),
         "same hero request should be consumed");
     TEST_ASSERT_EQ(server_gc.GBE_local_lobby.owner_hero_id, 76u, "same hero request should preserve owner hero");
-    TEST_ASSERT_EQ(tf.recorder.runtime_states.size(), 1u, "same hero request should still synchronize member runtime state");
+    TEST_ASSERT_EQ(tf.recorder.runtime_states.size(), 2u, "same hero request should synchronize member runtime state to both client and server GC state");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_hero_id, 76u, "client lobby snapshot should preserve the known owner hero");
     for (const RecordedAction &action : tf.recorder.actions) {
         TEST_ASSERT(action.reason != "7034_owner_hero_known_server", "same hero request should not repeat known-hero cache replay");
         TEST_ASSERT(action.reason != "7034_owner_hero_known_client", "same hero request should not repeat local wearable replay");
