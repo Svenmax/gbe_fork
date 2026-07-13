@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| C4 | Teardown 门闩：flow/list/member 改 TeardownActionsRequested | flow + list + member_coordinator + audit | 三文件不再检查 LegacyTeardown | verification --full | 不改消息序 |
+| C5 | Custom game：具名 effect 替代 LegacyLifecycle 门闩 | SM + custom_game_lifecycle_* | 7070/8052/8053 不再 contains(LegacyLifecycle*) | verification --full | 保持 direct/wrapped 等价 |
 
 ## 本周不做
 
@@ -20,6 +20,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | C4：teardown 全 call site 迁具名门闩；删 LegacyTeardown | flow/list/member + SM |
 | 2026-07-13 | C3：具名 TeardownActionsRequested + lifecycle_handlers 迁门闩 | SM + lifecycle_handlers |
 | 2026-07-13 | C2：Legacy lifecycle effect 调用面 + 迁移序 | `LEGACY_LIFECYCLE_EFFECTS.md` |
 | 2026-07-13 | C1：Store 写门控复核 + local 全量赋值清单 | `LOCAL_LOBBY_USAGE.md` |

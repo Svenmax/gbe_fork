@@ -214,15 +214,15 @@ LIFECYCLE_TRANSITION_GATES = {
     ),
     "gbe_dota_lobby_list_handlers.cpp": (
         "transition_teardown(",
-        "EffectKind::LegacyTeardownActionsRequested",
+        "EffectKind::TeardownActionsRequested",
     ),
     "gbe_dota_lobby_flow_coordinator.cpp": (
         "transition_teardown(",
-        "EffectKind::LegacyTeardownActionsRequested",
+        "EffectKind::TeardownActionsRequested",
     ),
     "gbe_dota_lobby_state_member_coordinator.cpp": (
         "transition_teardown(",
-        "EffectKind::LegacyTeardownActionsRequested",
+        "EffectKind::TeardownActionsRequested",
     ),
 }
 RETIRED_RECONNECT_TRANSITION_SYMBOLS = (

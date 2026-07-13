@@ -121,7 +121,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyListRequest(bool has_request_job
               true,
               true });
         if (!teardown.accepted() || !teardown.effects.contains(
-                gbe::dota_lifecycle_state_machine::EffectKind::LegacyTeardownActionsRequested))
+                gbe::dota_lifecycle_state_machine::EffectKind::TeardownActionsRequested))
             return true;
         GBE_PushDotaCacheUnsubscribedResponse(response_25, wrapped, outer_session_field_raw, "7040_leave_after_lobby_list_25");
         ResetGCMemory("7040_leave_after_lobby_list", true, false, gbe::dota_lobby_generation::Boundary::Leave);

@@ -652,7 +652,7 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaAbandonAfterOtherLeftChannel(uint64
           true,
           GBE_local_lobby.abandon_postgame_active });
     if (!teardown.accepted() || !teardown.effects.contains(
-            gbe::dota_lifecycle_state_machine::EffectKind::LegacyTeardownActionsRequested))
+            gbe::dota_lifecycle_state_machine::EffectKind::TeardownActionsRequested))
         return;
 
     const uint64 lobby_id = GBE_local_lobby.lobby_id;
@@ -686,7 +686,7 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
           true,
           true });
     if (!teardown.accepted() || !teardown.effects.contains(
-            gbe::dota_lifecycle_state_machine::EffectKind::LegacyTeardownActionsRequested))
+            gbe::dota_lifecycle_state_machine::EffectKind::TeardownActionsRequested))
         return;
 
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();

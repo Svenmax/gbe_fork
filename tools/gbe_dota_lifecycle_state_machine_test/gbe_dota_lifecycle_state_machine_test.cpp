@@ -874,8 +874,7 @@ int main()
     assert(leave_teardown.state.lifecycle == teardown_state.lifecycle);
     assert(leave_teardown.state.generation == teardown_state.generation);
     assert(leave_teardown.effects.contains(lifecycle::EffectKind::TeardownActionsRequested));
-    assert(leave_teardown.effects.contains(lifecycle::EffectKind::LegacyTeardownActionsRequested));
-    assert(leave_teardown.effects.count == 2u);
+    assert(leave_teardown.effects.count == 1u);
 
     leave_request.pending = true;
     const auto duplicate_leave = lifecycle::transition_teardown(teardown_state, leave_request);
