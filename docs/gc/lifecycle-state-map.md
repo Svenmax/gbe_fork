@@ -201,11 +201,11 @@ When changing a lifecycle path, first classify the path:
 - Full launch-state client-peer push harness remains deferred until the remaining restore/capture/settings/logging boundary can be represented by a small explicit context.
 - Production-linked reset test re-check remains conditional on `GBE_ClearDotaLobbyRuntimeState()` gaining branching, extra side effects, or semantic reset ownership.
 
-## Lifecycle SM vs Legacy effects (C2)
+## Lifecycle SM vs named gate effects (C-exit)
 
-The pure state machine in `gbe_dota_lifecycle_state_machine.h` is only partially wired. Named gate effects (`RuntimeMemberUpdateRequested`, `RuntimeGameStateUpdateRequested`, `PracticeLobbyDetailsRequested`, path-specific `Teardown*Requested`, `CustomGameLifecycleActionsRequested`) already gate production paths. Custom-game handler uses `decide_*` (SM gate + `compute_*` in one entry), then Execute.
+The pure state machine in `gbe_dota_lifecycle_state_machine.h` emits **named gate** effects only (no `Legacy*` EffectKind). Production shape: named token → `decide_*` / `*_action_list` → `GBE_ExecuteDotaLifecycleActions`. Custom-game uses `decide_*` (SM gate + `compute_*`), then Execute. QueuePostGame mutations live in `postgame_teardown_action_list` (C9).
 
-Authoritative call-site tables and migration order: [LEGACY_LIFECYCLE_EFFECTS.md](./LEGACY_LIFECYCLE_EFFECTS.md).
+Authoritative call-site tables: [LEGACY_LIFECYCLE_EFFECTS.md](./LEGACY_LIFECYCLE_EFFECTS.md).
 
 ## Verification
 

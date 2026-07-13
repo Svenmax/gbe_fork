@@ -7,11 +7,11 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| C-exit | Phase C 收口复核：Legacy 路径归零 + CURRENT 风险 #4 再评估 | docs + audit | LEGACY 表无 P4 残留；verification --full | verification --full | 不改运行时语义 |
+| （空） | 默认下一刀：评估 Phase D 边界（handler 脱离上帝类 / 真 DI） | 评估文档优先 | 书面边界 + 不停手清单 | verification --full 若动代码 | 不为美观大拆 |
 
 ## 本周不做
 
-- 真 DI / 拆 `Steam_Game_Coordinator` 上帝类（Phase D）
+- 真 DI / 拆 `Steam_Game_Coordinator` 上帝类（Phase D 实施）
 - CompositionRoot 进生产
 - 为美观再横向大拆文件
 - 新增长篇 delivery / next-agent 清单
@@ -20,11 +20,11 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | C-exit：Legacy 路径归零复核；CURRENT 风险 #4 改为门闩形态说明 | LEGACY + CURRENT + ACTIVE |
 | 2026-07-13 | C9：QueuePostGame 状态突变 action 化（PostGameLobbyStateApply + publish/RP） | launch_coordinator + flow + executor |
 | 2026-07-13 | C8：member runtime 统一 decide_member_runtime_actions（match/inventory/network） | lifecycle_actions + handlers |
 | 2026-07-13 | C7：custom_game decide_* 单一入口（SM+compute 出 handler） | custom_game_lifecycle_* |
 | 2026-07-13 | C6：teardown 路径门闩 + preflight/list leave action_list；删 TeardownActionsRequested | SM + flow + lifecycle/list |
-| 2026-07-13 | C5：custom_game 具名 CustomGameLifecycleActionsRequested；删 LegacyLifecycle | SM + custom_game_lifecycle |
 | 2026-07-13 | A3：host hero 审计；adopt 非 0 走 apply_owner_hero_id | lobby_state + HOST_AUTHORITY |
 | 2026-07-13 | A2：if-chain 主体迁 registry（37→50），direct 仅留条件/8744/template | dispatcher + post_login_handlers |
 | 2026-07-13 | 文档入口：CURRENT + 五份真相表 + MEMORY 指向 | `docs/gc/CURRENT.md` 等 |
