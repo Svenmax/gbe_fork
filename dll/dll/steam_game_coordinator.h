@@ -404,6 +404,8 @@ public ISteamGameCoordinator
     bool GBE_DispatchDotaPostLoginRequest(const gbe::dota_gc_router::DotaGcRequestContext &context);
     bool GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgType, const void *pubData, uint32 cubData);
     bool GBE_HandleDotaWrappedPostLoginRequest(const void *pubData, uint32 cubData);
+    bool GBE_HandleDotaServerHelloRequest(uint32 unMsgType, const void *pubData, uint32 cubData);
+    bool GBE_HandleDotaClientHelloRequest(uint32 unMsgType, const void *pubData, uint32 cubData, bool direct_message);
     bool handle_dota_client_message(uint32 unMsgType, const void *pubData, uint32 cubData);
 
     void callback_client_welcome();

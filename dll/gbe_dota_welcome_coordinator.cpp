@@ -32,6 +32,7 @@
 #include "dll/gbe_dota_unlock_items.h"
 #include "gbe_dota_gc_internal.h"
 #include "gbe_dota_runtime_state.h"
+#include "gbe_dota_payload_lobby_helpers.h"
 #include "gbe_dota_payload_wire_helpers.h"
 #include <atomic>
 #include <algorithm>
@@ -45,6 +46,7 @@
 #include <sstream>
 #include <iomanip>
 #include <random>
+#include <queue>
 #include <string>
 #include <vector>
 #include <unordered_set>
@@ -812,6 +814,183 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
 
     return true;
 }
+bool Steam_Game_Coordinator::GBE_HandleDotaServerHelloRequest(uint32 unMsgType, const void *pubData, uint32 cubData)
+{
+    GBE_RestoreSharedDotaLobbyState("server_hello");
+
+    GBE_DotaServerHelloContext server_hello_context{};
+    if (!GBE_ExtractDirectDotaServerHelloContext(unMsgType, pubData, cubData, server_hello_context)) {
+        GBE_GC_DebugLog("GC_SEND_DOTA", "ignored direct ServerHello payload because parsing failed");
+        return false;
+    }
+
+    GBE_SetLastDotaServerHelloContext(server_hello_context);
+
+    if (is_server && welcome_received) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SERVER_HELLO",
+            "skipping ServerWelcome replay because server GC is already connected active_version=%u",
+            server_hello_context.active_version);
+        return true;
+    }
+
+    if (is_server) {
+        std::queue<GC_Message> queued_messages = incoming_messages;
+        while (!queued_messages.empty()) {
+            if (GBE_GC_MaskedEMsg(queued_messages.front().msg_type) == EGCBaseClientMsg::k_EMsgGCServerWelcome) {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SERVER_HELLO",
+                    "skipping ServerWelcome replay because one is already queued active_version=%u",
+                    server_hello_context.active_version);
+                return true;
+            }
+            queued_messages.pop();
+        }
+    }
+
+    std::string welcome_message;
+    const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
+    const uint32 app_id = settings->get_local_game_id().AppID();
+    if (!GBE_BuildDirectDotaServerWelcome(steam_id, app_id, server_hello_context, welcome_message)) {
+        GBE_GC_DebugLog(
+            "GC_SEND_DOTA",
+            "failed to build ServerWelcome active_version=%u min_allowed=%u steamid=%llu",
+            server_hello_context.active_version,
+            server_hello_context.min_allowed_version,
+            static_cast<unsigned long long>(steam_id));
+        return true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_SEND_DOTA",
+        "replaying ServerWelcome active_version=%u min_allowed=%u target_job=%llu direct=1",
+        server_hello_context.active_version,
+        server_hello_context.min_allowed_version,
+        static_cast<unsigned long long>(server_hello_context.has_source_job ? server_hello_context.source_job_id : 0ull));
+
+    push_incoming_now(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, welcome_message);
+    if (is_server && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+        GBE_GC_DebugLog(
+            "GC_DOTA_SERVER_HELLO",
+            "queued immediate ServerWelcome for active lobby this=%p lobby_id=%llu size=%zu",
+            static_cast<void *>(this),
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            welcome_message.size());
+    }
+
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && is_server) {
+        std::string runtime_cache_message;
+        const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
+        const uint32 owner_account_id = GBE_GetDotaLobbyOwnerAccountId();
+        const bool launch_started = GBE_local_lobby.match_id != 0;
+        const bool built_runtime_cache = GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(
+            GBE_local_lobby,
+            GBE_local_lobby.owner_name,
+            runtime_cache_message,
+            true);
+
+        if (built_runtime_cache) {
+            GBE_RecordDotaLobbyCacheSubscriptionState(runtime_cache_message, "server_welcome_current_cache_subscribed");
+            push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, runtime_cache_message);
+            GBE_GC_DebugLog(
+                "GC_DOTA_SERVER_HELLO",
+                "queued synthetic CacheSubscribed after ServerWelcome lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu launch_started=%u owner_steam_id=%llu owner_account_id=%u size=%zu",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state,
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                launch_started ? 1u : 0u,
+                static_cast<unsigned long long>(owner_steam_id),
+                owner_account_id,
+                runtime_cache_message.size());
+        } else {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SERVER_HELLO",
+                "failed building synthetic CacheSubscribed after ServerWelcome lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                GBE_local_lobby.state,
+                GBE_local_lobby.game_state,
+                static_cast<unsigned long long>(GBE_local_lobby.match_id),
+                static_cast<unsigned long long>(GBE_local_lobby.server_id));
+        }
+
+        GBE_GC_DebugLog(
+            "GC_DOTA_SERVER_HELLO",
+            "skipping synthetic direct 7034 after ServerWelcome to match official launch timing lobby_id=%llu state=%u game_state=%u team=%u slot=%u",
+            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            GBE_local_lobby.state,
+            GBE_local_lobby.game_state,
+            GBE_local_lobby.owner_team,
+            GBE_local_lobby.owner_slot);
+    }
+
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaClientHelloRequest(
+    uint32 unMsgType,
+    const void *pubData,
+    uint32 cubData,
+    bool direct_message)
+{
+    GBE_DotaHelloContext hello_context{};
+    if (direct_message) {
+        if (!GBE_ExtractDirectDotaHelloContext(unMsgType, pubData, cubData, hello_context)) {
+            GBE_GC_DebugLog("GC_SEND_DOTA", "ignored direct ClientHello payload because parsing failed");
+            return false;
+        }
+    } else if (!GBE_ExtractDotaHelloContext(pubData, cubData, hello_context)) {
+        GBE_GC_DebugLog("GC_SEND_DOTA", "ignored ClientToGC ClientHello payload because parsing failed");
+        return false;
+    }
+
+    std::string welcome_message;
+    const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
+    const uint32 account_id = settings->get_local_steam_id().GetAccountID();
+    const uint32 app_id = settings->get_local_game_id().AppID();
+
+    const bool built = direct_message
+        ? GBE_BuildDirectDotaClientWelcome(steam_id, app_id, account_id, hello_context, welcome_message)
+        : GBE_ComposeDotaClientWelcome(steam_id, app_id, account_id, hello_context, welcome_message);
+
+    if (!built) {
+        GBE_GC_DebugLog(
+            "GC_SEND_DOTA",
+            "failed to build ClientWelcome version=%u steamid=%llu accountid=%u",
+            hello_context.version,
+            static_cast<unsigned long long>(steam_id),
+            account_id);
+        return true;
+    }
+
+    GBE_GC_DebugLog(
+        "GC_SEND_DOTA",
+        "replaying ClientWelcome version=%u steamid=%llu accountid=%u target_job=%llu direct=%d",
+        hello_context.version,
+        static_cast<unsigned long long>(steam_id),
+        account_id,
+        static_cast<unsigned long long>(hello_context.has_source_job ? hello_context.source_job_id : 0ull),
+        direct_message ? 1 : 0);
+
+    push_incoming_now((direct_message ? GBE_kEMsgGCClientWelcome : GBE_kEMsgClientFromGC) | GBE_kProtoMask, welcome_message);
+
+    std::string top_custom_games_message;
+    size_t top_custom_games_count = 0;
+    if (GBE_AdaptDotaTopCustomGamesListPayload(settings, top_custom_games_message, top_custom_games_count)) {
+        GBE_PushDotaResponse(GBE_kDotaTopCustomGamesList, top_custom_games_message, false, nullptr, "top_custom_games_after_welcome");
+        GBE_GC_DebugLog(
+            "GC_DOTA_CUSTOM_GAMES",
+            "queued top custom games list count=%zu direct=%d",
+            top_custom_games_count,
+            direct_message ? 1 : 0);
+    }
+
+    if (direct_message)
+        GBE_PushDotaLoginSyncMessages();
+    return true;
+}
+
 void Steam_Game_Coordinator::callback_client_welcome()
 {
     if (!gc_initialized)

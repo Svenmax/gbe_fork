@@ -1,16 +1,17 @@
 # 消息路由清单（四轨真相表）
 
-> 源码扫描日期：2026-07-13（B1：8009/7091 已进 registry）。改入口必须同步更新本表。
+> 源码扫描日期：2026-07-13（B2：Hello 已迁 welcome_coordinator 显式 handler）。改入口必须同步更新本表。
 > 分发顺序（post-login）：**registry → 条件/观察 fallback → template_replay**。
-> Hello / ServerHello 在 `handle_dota_client_message` 内联，不进 registry。
+> Hello / ServerHello 经 `handle_dota_client_message` 转调 welcome handlers（不进 post-login registry）。
 
 ## 0. 分发骨架
 
 | 阶段 | 位置 | 说明 |
 |------|------|------|
 | 入口 | `Steam_Game_Coordinator::SendMessage_` → `handle_dota_client_message` | `dll/steam_game_coordinator.cpp` |
-| ServerHello | 内联 | masked `GBE_kEMsgGCServerHello` (4007) |
-| ClientHello | 内联 welcome | masked `GBE_kEMsgGCClientHello` (4006) |
+| ServerHello | `GBE_HandleDotaServerHelloRequest` | masked `GBE_kEMsgGCServerHello` (4007) → welcome_coordinator |
+| ClientHello | `GBE_HandleDotaClientHelloRequest(direct=true)` | masked `GBE_kEMsgGCClientHello` (4006) |
+| ClientToGC Hello | `GBE_HandleDotaClientHelloRequest(direct=false)` | 先 `GBE_ExtractDotaHelloContext` |
 | ClientToGC 非 Hello | `GBE_HandleDotaWrappedPostLoginRequest` | registry → dead 7047 fallback |
 | 其它 direct | `GBE_HandleDotaDirectPostLoginRequest` | registry → 条件路径 → template |
 | Registry 表 | `GBE_ProductionDotaHandlerRegistry` | `dll/gbe_dota_post_login_dispatcher.cpp`（**52** 条） |
@@ -100,15 +101,15 @@ Adapter 形态：`self->GBE_Handle…`（仍是 GC 成员，非独立服务）�
 
 ---
 
-## 3. Hello 内联（非 registry）
+## 3. Hello / Welcome pipeline（显式 handler，非 post-login registry）
 
 | emsg | 名 | 行为 | 锚点 |
 |------|-----|------|------|
-| 4007 | ServerHello | 解析 context → ServerWelcome + 可选 CacheSubscribed | `steam_game_coordinator.cpp` handle_dota ~1288+ |
-| 4006 | ClientHello | ClientWelcome 合成 | 同文件 ~1416+ |
-| 5452 | ClientToGC | Hello 或 wrapped post-login | ~1422+ |
+| 4007 | ServerHello | `GBE_HandleDotaServerHelloRequest`：解析 → ServerWelcome + 可选 CacheSubscribed | `gbe_dota_welcome_coordinator.cpp` |
+| 4006 | ClientHello | `GBE_HandleDotaClientHelloRequest(direct)`：ClientWelcome + top custom + login sync | 同上 |
+| 5452 | ClientToGC | 先尝试 Hello extract → ClientHello handler；否则 wrapped post-login | `handle_dota_client_message` 路由薄壳 |
 
-目标（Phase B）：迁 welcome pipeline / 显式注册。
+说明：Hello 不进 kTable（envelope/语义与 post-login 不同）；完成定义是入口可点名、实现可单测路径清晰。
 
 ---
 
