@@ -131,8 +131,14 @@ TestEquipPlannerSummary test_plan_equip_items_request(
 // Include chat handlers for minimal smoke coverage of chat-channel side effects.
 #include "dll/gbe_dota_chat_handlers.cpp"
 
-// Include lobby handlers for minimal smoke coverage of lobby teardown/order paths.
-#include "dll/gbe_dota_lobby_handlers.cpp"
+// Include split lobby handlers for minimal smoke coverage of lobby teardown/order paths.
+#include "dll/gbe_dota_lobby_handler_helpers.cpp"
+#include "dll/gbe_dota_lobby_create_handlers.cpp"
+#include "dll/gbe_dota_lobby_list_handlers.cpp"
+#include "dll/gbe_dota_lobby_join_handlers.cpp"
+#include "dll/gbe_dota_lobby_invite_handlers.cpp"
+#include "dll/gbe_dota_lobby_lifecycle_handlers.cpp"
+#include "dll/gbe_dota_lobby_slot_handlers.cpp"
 
 // Include match handlers for minimal smoke coverage of launch/match order paths.
 #include "dll/gbe_dota_match_handlers.cpp"

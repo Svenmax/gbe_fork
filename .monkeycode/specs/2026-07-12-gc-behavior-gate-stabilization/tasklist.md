@@ -122,8 +122,9 @@
 ## 阶段 D — 结构拆分与验真升级（C 之后）
 
 - [ ] 10. 拆超大 TU（只搬家，不改行为）
-  - [ ] 10.1 拆 `gbe_dota_lobby_handlers.cpp` 为 create/join/leave/kick/list 等
-    - 保持成员函数签名；更新 premake/源列表。
+  - [x] 10.1 拆 `gbe_dota_lobby_handlers.cpp` 为 create/join/leave/kick/list 等
+    - 新 TU：`lobby_handler_helpers` + create/list/join/invite/lifecycle/slot；原文件为空壳。
+    - offline：`test_wrapper.cpp` 改为 include 拆分单元；audit baseline/exemptions/teardown 门同步。
   - [ ] 10.2 拆 `gbe_dota_lobby_state_coordinator.cpp` 为 publish/restore/recover/stale 策略
   - [ ] 10.3 行为等价：dual_gc + handler smoke + verification 全绿
 

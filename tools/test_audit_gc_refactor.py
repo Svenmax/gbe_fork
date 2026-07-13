@@ -101,12 +101,12 @@ class LifecycleTransitionGateAuditTest(unittest.TestCase):
 
     def test_rejects_missing_typed_effect_gate(self):
         sources = self.valid_sources()
-        sources["gbe_dota_lobby_handlers.cpp"] = sources["gbe_dota_lobby_handlers.cpp"].replace(
+        sources["gbe_dota_lobby_lifecycle_handlers.cpp"] = sources["gbe_dota_lobby_lifecycle_handlers.cpp"].replace(
             "EffectKind::LegacyTeardownActionsRequested",
             "",
         )
         self.assertIn(
-            "gbe_dota_lobby_handlers.cpp: lifecycle path is missing transition gate token EffectKind::LegacyTeardownActionsRequested",
+            "gbe_dota_lobby_lifecycle_handlers.cpp: lifecycle path is missing transition gate token EffectKind::LegacyTeardownActionsRequested",
             audit.audit_lifecycle_transition_gates(sources),
         )
 
@@ -151,9 +151,9 @@ connection_state.record_engine_callback(server_id, endpoint);
 
     def test_rejects_generation_advance_bypass(self):
         sources = self.valid_sources()
-        sources["gbe_dota_lobby_handlers.cpp"] = "GBE_dota_lobby_generation_counter.advance(boundary);"
+        sources["gbe_dota_lobby_lifecycle_handlers.cpp"] = "GBE_dota_lobby_generation_counter.advance(boundary);"
         self.assertIn(
-            "generation counter advance owners changed: expected [steam_game_coordinator.cpp], got ['gbe_dota_lobby_handlers.cpp', 'steam_game_coordinator.cpp']",
+            "generation counter advance owners changed: expected [steam_game_coordinator.cpp], got ['gbe_dota_lobby_lifecycle_handlers.cpp', 'steam_game_coordinator.cpp']",
             self.audit(sources),
         )
 
@@ -367,7 +367,7 @@ The Model Consistency CI Gate is therefore closed.
 class HandlerResponsibilityBoundaryAuditTest(unittest.TestCase):
     def test_accepts_existing_or_reduced_compatibility_operations(self):
         sources = {
-            "gbe_dota_lobby_handlers.cpp": "push_incoming_now(24, payload); GBE_local_lobby = lobby;",
+            "gbe_dota_lobby_create_handlers.cpp": "push_incoming_now(24, payload); GBE_local_lobby = lobby;",
             "gbe_dota_inventory_handlers.cpp": "network->sendToAllGameservers(&message, true);",
         }
         self.assertEqual([], audit.audit_handler_responsibility_boundaries(sources)[0])
