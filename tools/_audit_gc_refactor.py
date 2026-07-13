@@ -209,12 +209,22 @@ LIFECYCLE_TRANSITION_GATES = {
         "compute_custom_game_finished_loading_transition(",
     ),
     "gbe_dota_match_handlers.cpp": (
-        "transition_runtime_member(",
-        "EffectKind::RuntimeMemberUpdateRequested",
+        "decide_member_runtime_actions(",
         "transition_runtime_game_state(",
         "EffectKind::RuntimeGameStateUpdateRequested",
         "transition_runtime_poll(",
         "EffectKind::PracticeLobbyDetailsRequested",
+    ),
+    "gbe_dota_inventory_handlers.cpp": (
+        "decide_member_runtime_actions(",
+    ),
+    "gbe_dota_network_callbacks.cpp": (
+        "decide_member_runtime_actions(",
+    ),
+    "gbe_dota_lifecycle_actions.cpp": (
+        "transition_runtime_member(",
+        "EffectKind::RuntimeMemberUpdateRequested",
+        "build_member_runtime_actions(",
     ),
     "gbe_dota_lobby_lifecycle_handlers.cpp": (
         "transition_teardown(",
@@ -278,10 +288,11 @@ ASYNC_GENERATION_GATES = {
         "sizeof(generation)",
     ),
     "gbe_dota_match_handlers.cpp": (
-        "transition_runtime_member(",
+        "decide_member_runtime_actions(",
         "transition_runtime_game_state(",
         "transition_runtime_poll(",
         "machine_state.generation = GBE_CurrentDotaLobbyGeneration();",
+        "GBE_CurrentDotaLobbyGeneration()",
     ),
 }
 ASYNC_GENERATION_REGRESSION_TESTS = (

@@ -22,7 +22,7 @@
 1. 路由仍多轨（registry / 条件 fallback / 白名单 template / Hello welcome），但每轨已有归属标签。
 2. `GBE_local_lobby` 与 shared Store 双轨；restore/publish 字段级 merge 重（写入口清单见 `LOCAL_LOBBY_USAGE.md`）。
 3. `Steam_Game_Coordinator` 仍是上帝类（成员 handler 面过大）。
-4. lifecycle SM 半接入：teardown 路径门闩 + action_list；custom_game 已 `decide_*` 单一入口（SM+compute 在 coordinator）；QueuePostGame 状态突变仍在 coordinator。
+4. lifecycle SM 半接入：teardown 路径门闩 + action_list；custom_game / member runtime 已 `decide_*` 单一入口；QueuePostGame 状态突变仍在 coordinator。
 5. 测试护栏强、真协议 L3/L4 弱；`verification passed` ≠ 协议正确。
 
 ## 进行中工作

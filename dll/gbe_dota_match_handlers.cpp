@@ -360,23 +360,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Request(
         for (const GBE_Dota7034ConnectedPlayer &connected_player : request.connected_players) {
             if (!connected_player.has_steam_id || connected_player.steam_id == 0ull)
                 continue;
-            gbe::dota_lifecycle_state_machine::MachineState machine_state{};
-            machine_state.generation = GBE_CurrentDotaLobbyGeneration();
-            const auto transition = gbe::dota_lifecycle_state_machine::transition_runtime_member(
-                machine_state,
-                {
-                    machine_state.generation,
-                    connected_player.steam_id,
-                    true,
-                    connected_player.hero_id,
-                    connected_player.has_hero_id,
-                });
-            if (!transition.accepted() || !transition.effects.contains(
-                    gbe::dota_lifecycle_state_machine::EffectKind::RuntimeMemberUpdateRequested))
-                continue;
             const uint32 previous_owner_hero_id = GBE_local_lobby.owner_hero_id;
             const auto execution = GBE_ExecuteDotaLifecycleActions(
-                gbe::dota_lifecycle::build_member_runtime_actions(
+                gbe::dota_lifecycle::decide_member_runtime_actions(
+                    GBE_CurrentDotaLobbyGeneration(),
                     connected_player.steam_id,
                     true,
                     connected_player.hero_id,
@@ -531,16 +518,9 @@ void Steam_Game_Coordinator::GBE_HandleDotaDirect7034DisconnectedPlayers(
     for (const GBE_Dota7034DisconnectedPlayer &disconnected_player : disconnected_players) {
         if (!disconnected_player.has_steam_id || disconnected_player.steam_id == 0ull)
             continue;
-        gbe::dota_lifecycle_state_machine::MachineState machine_state{};
-        machine_state.generation = GBE_CurrentDotaLobbyGeneration();
-        const auto transition = gbe::dota_lifecycle_state_machine::transition_runtime_member(
-            machine_state,
-            { machine_state.generation, disconnected_player.steam_id, false, 0u, false });
-        if (!transition.accepted() || !transition.effects.contains(
-                gbe::dota_lifecycle_state_machine::EffectKind::RuntimeMemberUpdateRequested))
-            continue;
         const auto execution = GBE_ExecuteDotaLifecycleActions(
-            gbe::dota_lifecycle::build_member_runtime_actions(
+            gbe::dota_lifecycle::decide_member_runtime_actions(
+                GBE_CurrentDotaLobbyGeneration(),
                 disconnected_player.steam_id,
                 false,
                 0u,
@@ -738,7 +718,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
             GBE_local_lobby,
             client_gc_ptr->GBE_local_lobby)) {
         GBE_ExecuteDotaLifecycleActions(
-            gbe::dota_lifecycle::build_member_runtime_actions(
+            gbe::dota_lifecycle::decide_member_runtime_actions(
+                GBE_CurrentDotaLobbyGeneration(),
                 owner_steam64,
                 true,
                 client_gc_ptr->GBE_local_lobby.owner_hero_id,

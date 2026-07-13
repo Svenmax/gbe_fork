@@ -718,15 +718,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
     const uint32 equipped_hero_id = infer_equipped_hero_id(plan, items);
     if (has_host_server_lobby && equipped_hero_id != 0u) {
         const uint32 previous_owner_hero_id = server_gc->GBE_local_lobby.owner_hero_id;
+        const std::uint64_t member_generation = GBE_CurrentDotaLobbyGeneration();
         GBE_ExecuteDotaLifecycleActions(
-            gbe::dota_lifecycle::build_member_runtime_actions(
+            gbe::dota_lifecycle::decide_member_runtime_actions(
+                member_generation,
                 local_steam_id,
                 true,
                 equipped_hero_id,
                 true,
                 "2569_owner_hero_inferred"));
         const auto execution = server_gc->GBE_ExecuteDotaLifecycleActions(
-            gbe::dota_lifecycle::build_member_runtime_actions(
+            gbe::dota_lifecycle::decide_member_runtime_actions(
+                member_generation,
                 local_steam_id,
                 true,
                 equipped_hero_id,

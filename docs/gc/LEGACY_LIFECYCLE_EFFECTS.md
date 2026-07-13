@@ -56,14 +56,15 @@ C6：accept 时按 kind+stage 发路径门闩（`teardown_effect_for`）。
 
 ## 5. 已具名（对照，非 Legacy）
 
-| 路径 | SM API | Effect | 执行 |
-|------|--------|--------|------|
-| 7034 runtime member / hero | `transition_runtime_member` | `RuntimeMemberUpdateRequested` | `build_member_runtime_actions` |
+| 路径 | 决策入口 | Effect | 执行 |
+|------|----------|--------|------|
+| 7034 connected/disconnected / restore hero | `decide_member_runtime_actions` | `RuntimeMemberUpdateRequested`（内部） | Execute |
+| inventory 2569 equip → server hero | `decide_member_runtime_actions` | 同上 | Execute |
+| network inventory_response remote hero | `decide_member_runtime_actions` | 同上 | Execute |
 | 7034 game_state 推进 | `transition_runtime_game_state` | `RuntimeGameStateUpdateRequested` | `build_transition_actions` |
 | 7034 poll details | `transition_runtime_poll` | `PracticeLobbyDetailsRequested` | `build_transition_actions` |
-| inventory equip → server hero | （直接）`build_member_runtime_actions` | 常不经 SM | Execute（与 SM 并行入口） |
 
-注意：inventory / network_callbacks 可 **绕过 SM** 直接 `build_member_runtime_actions`；迁移时要统一 “是否必须先 SM”。
+C8：生产路径禁止直接 `build_member_runtime_actions`；测试/纯 builder 仍可直调。
 
 ## 6. 建议迁移顺序（只排序，本轮不实施）
 
@@ -72,7 +73,7 @@ C6：accept 时按 kind+stage 发路径门闩（`teardown_effect_for`）。
 | P0 | ~~Teardown 门闩具名化~~ | **C3+C4 完成** | — |
 | P1 | ~~Teardown 路径门闩 + action builder~~ | **C6 完成**：event+stage 分发；7035 preflight / list leave 进 action_list | — |
 | P2 | ~~Custom game 单一 decide_*~~ | **C7 完成**：handler 只 parse→decide→Execute | — |
-| P3 | 统一 inventory/network 的 member runtime 必须经 SM | 消除旁路 | 不改 hero 权威 API |
+| P3 | ~~member runtime 经 SM~~ | **C8 完成**：`decide_member_runtime_actions` 覆盖 match/inventory/network | — |
 | P4 | QueuePostGame 状态突变 action 化 | chat/publish 仍在 coordinator | 不改消息序 |
 
 每步完成定义：对应 Legacy effect **在该路径不再出现**（或仅 debug 别名），`verification --full` 绿，相关 smoke/replay 仍绿。

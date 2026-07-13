@@ -72,6 +72,15 @@ GBE_DotaActionList build_member_runtime_actions(
     bool has_hero_id,
     const char *reason);
 
+// C8: single entry for member runtime — SM gate + action list (empty when rejected).
+GBE_DotaActionList decide_member_runtime_actions(
+    std::uint64_t generation,
+    std::uint64_t steam_id,
+    bool connected,
+    std::uint32_t hero_id,
+    bool has_hero_id,
+    const char *reason);
+
 } // namespace gbe::dota_lifecycle
 
 #endif // __INCLUDED_GBE_DOTA_LIFECYCLE_ACTIONS_H__

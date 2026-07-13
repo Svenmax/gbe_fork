@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| C8 | inventory/network member runtime 是否必须经 SM | match/inventory/network + SM | 旁路清单 + 必要路径补 gate | verification --full | 不改 hero 权威 API |
+| C9 | QueuePostGame 状态突变 action 化 | launch_coordinator + action model | chat/publish 进 action_list | verification --full | 不改消息序 |
 
 ## 本周不做
 
@@ -20,11 +20,11 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | C8：member runtime 统一 decide_member_runtime_actions（match/inventory/network） | lifecycle_actions + handlers |
 | 2026-07-13 | C7：custom_game decide_* 单一入口（SM+compute 出 handler） | custom_game_lifecycle_* |
 | 2026-07-13 | C6：teardown 路径门闩 + preflight/list leave action_list；删 TeardownActionsRequested | SM + flow + lifecycle/list |
 | 2026-07-13 | C5：custom_game 具名 CustomGameLifecycleActionsRequested；删 LegacyLifecycle | SM + custom_game_lifecycle |
 | 2026-07-13 | C4：teardown 全 call site 迁具名门闩；删 LegacyTeardown | flow/list/member + SM |
-| 2026-07-13 | C3：具名 TeardownActionsRequested + lifecycle_handlers 迁门闩 | SM + lifecycle_handlers |
 | 2026-07-13 | A3：host hero 审计；adopt 非 0 走 apply_owner_hero_id | lobby_state + HOST_AUTHORITY |
 | 2026-07-13 | A2：if-chain 主体迁 registry（37→50），direct 仅留条件/8744/template | dispatcher + post_login_handlers |
 | 2026-07-13 | 文档入口：CURRENT + 五份真相表 + MEMORY 指向 | `docs/gc/CURRENT.md` 等 |

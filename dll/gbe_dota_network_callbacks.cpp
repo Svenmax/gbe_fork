@@ -242,7 +242,8 @@ void Steam_Game_Coordinator::network_callback_inventory_response(Common_Message 
 
             if (!is_owner && !mixed_hero_classes && equipped_hero_id != 0u) {
                 GBE_ExecuteDotaLifecycleActions(
-                    gbe::dota_lifecycle::build_member_runtime_actions(
+                    gbe::dota_lifecycle::decide_member_runtime_actions(
+                        GBE_CurrentDotaLobbyGeneration(),
                         user_steamid,
                         true,
                         equipped_hero_id,

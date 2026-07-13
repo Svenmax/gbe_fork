@@ -1,4 +1,5 @@
 #include "gbe_dota_lifecycle_actions.h"
+#include "gbe_dota_lifecycle_state_machine.h"
 
 #include <utility>
 
@@ -98,6 +99,25 @@ GBE_DotaActionList build_member_runtime_actions(
     actions.push_back(std::move(publish));
 
     return actions;
+}
+
+GBE_DotaActionList decide_member_runtime_actions(
+    std::uint64_t generation,
+    std::uint64_t steam_id,
+    bool connected,
+    std::uint32_t hero_id,
+    bool has_hero_id,
+    const char *reason)
+{
+    gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+    machine_state.generation = generation;
+    const auto transition = gbe::dota_lifecycle_state_machine::transition_runtime_member(
+        machine_state,
+        { generation, steam_id, connected, hero_id, has_hero_id });
+    if (!transition.accepted() || !transition.effects.contains(
+            gbe::dota_lifecycle_state_machine::EffectKind::RuntimeMemberUpdateRequested))
+        return {};
+    return build_member_runtime_actions(steam_id, connected, hero_id, has_hero_id, reason);
 }
 
 } // namespace gbe::dota_lifecycle
