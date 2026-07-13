@@ -7,7 +7,7 @@
 
 ## 状态一句话
 
-过渡态：Phase B 路由收敛已落地。Phase C lifecycle 侧已收口（无 `Legacy*` EffectKind；C3–C9 全勾，见 `LEGACY_LIFECYCLE_EFFECTS.md`）。Store 写门控 + local 写清单仍在；local/shared 双轨与上帝类属后续阶段。
+过渡态：Phase B 路由收敛已落地。Phase C lifecycle 侧已收口（无 `Legacy*` EffectKind；C3–C9 全勾）。Phase D **仅评估边界**（见 `PHASE_D_BOUNDARY.md`），默认不实施真 DI / 拆上帝类。Store 门控 + local/shared 双轨仍在。
 
 ## 硬规则（违反即停手）
 
@@ -27,7 +27,7 @@
 
 ## 进行中工作
 
-见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)（WIP ≤5）。默认下一刀：评估 Phase D 边界 / 真协议测补强（Phase E 预备）。
+见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)（WIP ≤5）。Phase D 边界已书面化；默认下一刀：按 `PHASE_D_BOUNDARY` 准入挑单一切片，或 Phase E 测补强。
 
 ## 必跑验证
 
@@ -47,10 +47,11 @@ bash tools/run_gc_verification.sh --full
 1. [MESSAGE_ROUTING_INVENTORY.md](./MESSAGE_ROUTING_INVENTORY.md) — 四轨入口表
 2. [HOST_AUTHORITY.md](./HOST_AUTHORITY.md) — hero / wearable / showcase
 3. [LOCAL_LOBBY_USAGE.md](./LOCAL_LOBBY_USAGE.md) — local/shared 写入口清单
-4. [LEGACY_LIFECYCLE_EFFECTS.md](./LEGACY_LIFECYCLE_EFFECTS.md) — SM Legacy effect 与迁移序
-5. [GOLDEN_PATHS.md](./GOLDEN_PATHS.md) — 行为黄金路径
-6. [AGENT_PLAYBOOK.md](./AGENT_PLAYBOOK.md) — 多 Agent 协作
-7. [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md) — 当前任务
+4. [LEGACY_LIFECYCLE_EFFECTS.md](./LEGACY_LIFECYCLE_EFFECTS.md) — lifecycle 具名门闩盘点
+5. [PHASE_D_BOUNDARY.md](./PHASE_D_BOUNDARY.md) — Phase D 边界与停手
+6. [GOLDEN_PATHS.md](./GOLDEN_PATHS.md) — 行为黄金路径
+7. [AGENT_PLAYBOOK.md](./AGENT_PLAYBOOK.md) — 多 Agent 协作
+8. [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md) — 当前任务
 
 ## 历史文档（勿作权威入口）
 

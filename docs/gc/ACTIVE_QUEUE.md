@@ -7,11 +7,11 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| （空） | 默认下一刀：评估 Phase D 边界（handler 脱离上帝类 / 真 DI） | 评估文档优先 | 书面边界 + 不停手清单 | verification --full 若动代码 | 不为美观大拆 |
+| （空） | 默认下一刀：D0 纪律下修 bug，或认领 D1/E 单一切片 | 见 PHASE_D_BOUNDARY | 准入全满足再动生产 | verification --full | 混边界 / 生产 DI |
 
 ## 本周不做
 
-- 真 DI / 拆 `Steam_Game_Coordinator` 上帝类（Phase D 实施）
+- 真 DI / 拆 `Steam_Game_Coordinator` 上帝类（Phase D 大实施）
 - CompositionRoot 进生产
 - 为美观再横向大拆文件
 - 新增长篇 delivery / next-agent 清单
@@ -20,6 +20,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | Phase D 边界书面化（准入/切片/停手；默认不实施） | `PHASE_D_BOUNDARY.md` |
 | 2026-07-13 | C-exit：Legacy 路径归零复核；CURRENT 风险 #4 改为门闩形态说明 | LEGACY + CURRENT + ACTIVE |
 | 2026-07-13 | C9：QueuePostGame 状态突变 action 化（PostGameLobbyStateApply + publish/RP） | launch_coordinator + flow + executor |
 | 2026-07-13 | C8：member runtime 统一 decide_member_runtime_actions（match/inventory/network） | lifecycle_actions + handlers |
