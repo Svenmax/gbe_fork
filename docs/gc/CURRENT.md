@@ -7,7 +7,7 @@
 
 ## 状态一句话
 
-过渡态：Phase B 路由收敛已落地。Phase C：Store 写已门控 + local 写清单；lifecycle SM 半接入（Legacy 门闩盘点见 `LEGACY_LIFECYCLE_EFFECTS.md`）。
+过渡态：Phase B 路由收敛已落地。Phase C：Store 写已门控 + local 写清单；lifecycle SM 门闩均已具名（见 `LEGACY_LIFECYCLE_EFFECTS.md`），载荷仍在 handler。
 
 ## 硬规则（违反即停手）
 
@@ -22,7 +22,7 @@
 1. 路由仍多轨（registry / 条件 fallback / 白名单 template / Hello welcome），但每轨已有归属标签。
 2. `GBE_local_lobby` 与 shared Store 双轨；restore/publish 字段级 merge 重（写入口清单见 `LOCAL_LOBBY_USAGE.md`）。
 3. `Steam_Game_Coordinator` 仍是上帝类（成员 handler 面过大）。
-4. lifecycle SM 半接入：teardown 门闩已具名 `TeardownActionsRequested`；custom_game 仍 `LegacyLifecycle*` 门闩 + compute_* 双决策。
+4. lifecycle SM 半接入：门闩均已具名（`TeardownActionsRequested` / `CustomGameLifecycleActionsRequested`）；custom_game 仍 SM + `compute_*` 双决策，载荷未拆入 effect。
 5. 测试护栏强、真协议 L3/L4 弱；`verification passed` ≠ 协议正确。
 
 ## 进行中工作

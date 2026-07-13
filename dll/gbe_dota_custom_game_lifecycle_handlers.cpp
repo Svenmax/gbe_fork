@@ -64,7 +64,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameLifecycleRequest(const gbe:
             GBE_kDotaLaunchPhaseSetupSynced,
             GBE_kDotaLaunchPhaseRunQueued);
         if (!transition.accepted() || !transition.effects.contains(
-                gbe::dota_lifecycle_state_machine::EffectKind::LegacyLifecycleActionsRequested))
+                gbe::dota_lifecycle_state_machine::EffectKind::CustomGameLifecycleActionsRequested))
             return true;
 
         const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision ready_up =
@@ -105,7 +105,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameLifecycleRequest(const gbe:
             GBE_kDotaLaunchPhaseSetupSynced,
             GBE_kDotaLaunchPhaseRunQueued);
         if (!transition.accepted() || !transition.effects.contains(
-                gbe::dota_lifecycle_state_machine::EffectKind::LegacyLifecycleActionsRequested))
+                gbe::dota_lifecycle_state_machine::EffectKind::CustomGameLifecycleActionsRequested))
             return true;
 
         const gbe::dota_lobby_state::LaunchLifecycleTransitionDecision started_loading =
@@ -139,7 +139,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameLifecycleRequest(const gbe:
         GBE_kDotaLaunchPhaseSetupSynced,
         GBE_kDotaLaunchPhaseRunQueued);
     if (!transition.accepted() || !transition.effects.contains(
-            gbe::dota_lifecycle_state_machine::EffectKind::LegacyLifecycleActionsRequested))
+            gbe::dota_lifecycle_state_machine::EffectKind::CustomGameLifecycleActionsRequested))
         return true;
 
     const char *reason = context.wrapped

@@ -114,11 +114,12 @@ enum class EffectKind : std::uint8_t {
     GenerationAdvanced,
     ReconnectQueued,
     PracticeLobbyDetailsRequested,
-    LegacyLifecycleActionsRequested,
     RuntimeMemberUpdateRequested,
     RuntimeGameStateUpdateRequested,
     // Named teardown gate (C3/C4). All production call sites check this token.
     TeardownActionsRequested,
+    // Named custom-game gate (C5). 7070/8052/8053 check this token; compute_* + Execute stay in handler.
+    CustomGameLifecycleActionsRequested,
 };
 
 struct Effect {
@@ -495,7 +496,7 @@ constexpr MachineTransitionResult accepted_custom_game_request(
         };
     }
     effects.values[effects.count++] = {
-        EffectKind::LegacyLifecycleActionsRequested,
+        EffectKind::CustomGameLifecycleActionsRequested,
         lifecycle,
         lifecycle,
         state.generation,

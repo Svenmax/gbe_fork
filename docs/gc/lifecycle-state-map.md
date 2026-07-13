@@ -203,7 +203,7 @@ When changing a lifecycle path, first classify the path:
 
 ## Lifecycle SM vs Legacy effects (C2)
 
-The pure state machine in `gbe_dota_lifecycle_state_machine.h` is only partially wired. Named effects (`RuntimeMemberUpdateRequested`, `RuntimeGameStateUpdateRequested`, `PracticeLobbyDetailsRequested`, `TeardownActionsRequested`) already gate production paths. Custom-game still gates on `LegacyLifecycleActionsRequested`, then runs imperative `compute_*` + Execute.
+The pure state machine in `gbe_dota_lifecycle_state_machine.h` is only partially wired. Named gate effects (`RuntimeMemberUpdateRequested`, `RuntimeGameStateUpdateRequested`, `PracticeLobbyDetailsRequested`, `TeardownActionsRequested`, `CustomGameLifecycleActionsRequested`) already gate production paths. Custom-game still runs imperative `compute_*` + Execute after the named gate.
 
 Authoritative call-site tables and migration order: [LEGACY_LIFECYCLE_EFFECTS.md](./LEGACY_LIFECYCLE_EFFECTS.md).
 

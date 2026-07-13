@@ -198,7 +198,7 @@ RETIRED_LIFECYCLE_FALLBACK_EMSGS = ("7070u", "8052u", "8053u")
 LIFECYCLE_TRANSITION_GATES = {
     "gbe_dota_custom_game_lifecycle_handlers.cpp": (
         "transition_custom_game_request(",
-        "EffectKind::LegacyLifecycleActionsRequested",
+        "EffectKind::CustomGameLifecycleActionsRequested",
     ),
     "gbe_dota_match_handlers.cpp": (
         "transition_runtime_member(",

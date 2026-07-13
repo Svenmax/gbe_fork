@@ -105,7 +105,7 @@ void run_load_failure_example()
     assert(result.state.lifecycle == lifecycle::State::Loading);
     assert(result.state.generation == state.machine.generation);
     assert(!result.effects.contains(lifecycle::EffectKind::StateChanged));
-    assert(result.effects.contains(lifecycle::EffectKind::LegacyLifecycleActionsRequested));
+    assert(result.effects.contains(lifecycle::EffectKind::CustomGameLifecycleActionsRequested));
 }
 
 void run_duplicate_and_out_of_order_example()
@@ -766,8 +766,8 @@ int main()
     assert(ready_up_result.accepted());
     assert(ready_up_result.state.lifecycle == lifecycle::State::Running);
     assert(ready_up_result.effects.count == 2u);
-    assert(ready_up_result.effects.values[1].kind == lifecycle::EffectKind::LegacyLifecycleActionsRequested);
-    assert(ready_up_result.effects.contains(lifecycle::EffectKind::LegacyLifecycleActionsRequested));
+    assert(ready_up_result.effects.values[1].kind == lifecycle::EffectKind::CustomGameLifecycleActionsRequested);
+    assert(ready_up_result.effects.contains(lifecycle::EffectKind::CustomGameLifecycleActionsRequested));
     assert(!ready_up_result.effects.contains(lifecycle::EffectKind::ReconnectQueued));
 
     custom_game.game_state = 1u;

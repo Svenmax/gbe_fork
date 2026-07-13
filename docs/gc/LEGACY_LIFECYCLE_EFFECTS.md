@@ -18,12 +18,12 @@ Lifecycle SM 已能 **分类事件 / generation / 部分 State**，但多数生�
 | `PracticeLobbyDetailsRequested` | **具名** runtime effect | match 7034 poll → `build_transition_actions` → `GBE_ExecuteDotaLifecycleActions` |
 | `RuntimeMemberUpdateRequested` | **具名** | match / inventory → `build_member_runtime_actions` → Execute |
 | `RuntimeGameStateUpdateRequested` | **具名** | match → `build_transition_actions` → Execute |
-| `LegacyLifecycleActionsRequested` | **Legacy 门闩** | custom_game 7070/8052/8053：accept 后跑 `compute_custom_game_*` + `GBE_ExecuteDotaCustomGameLifecycleTransition` |
+| `CustomGameLifecycleActionsRequested` | **具名 custom-game 门闩（C5）** | 7070/8052/8053 已迁；`LegacyLifecycleActionsRequested` 已删除；副作用仍为 handler 内 `compute_*` + Execute |
 | `TeardownActionsRequested` | **具名 teardown 门闩（C3/C4）** | 全部 teardown call site 已迁；`LegacyTeardownActionsRequested` 已删除 |
 
 目标（Phase C）：把 `Legacy*` 逐步换成 **具名 Effect + 统一 action builder**，handler 只做 parse → SM → Execute。
 
-## 3. LegacyLifecycleActionsRequested 调用面
+## 3. CustomGameLifecycleActionsRequested 调用面（原 LegacyLifecycle）
 
 入口 API：`transition_custom_game_request` → `accepted_custom_game_request` **总是**追加该 effect。
 
