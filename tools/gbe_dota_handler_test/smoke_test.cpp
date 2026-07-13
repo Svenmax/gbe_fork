@@ -958,7 +958,7 @@ static void test_production_dispatcher_registry_contract()
 {
     const auto view = Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry();
     TEST_ASSERT(view.entries != nullptr, "production registry should expose entries");
-    TEST_ASSERT_EQ(view.size, 37u, "production registry should retain all canonical entries");
+    TEST_ASSERT_EQ(view.size, 50u, "production registry should retain all canonical entries");
     TEST_ASSERT(gbe::dota_handler_registry::has_unique_message_ids_per_mode(view.entries, view.size), "production registry modes should be unique");
     TEST_ASSERT(gbe::dota_handler_registry::all_high_risk_entries_have_fixture(view.entries, view.size), "high-risk production entries should retain fixtures");
     for (std::size_t index = 0; index < view.size; ++index) {

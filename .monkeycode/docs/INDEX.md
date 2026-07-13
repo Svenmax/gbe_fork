@@ -8,6 +8,7 @@ The root `README.md` remains the user-facing source for emulator setup and gener
 
 ## Recommended Reading
 
+0. **`docs/gc/CURRENT.md`** - **GC 重构/任务唯一状态入口**（硬规则、风险、ACTIVE_QUEUE、真相表阅读顺序）。
 1. `ARCHITECTURE.md` - current production structure and critical runtime flows.
 2. `GC_MAINTENANCE.md` - invariants and boundaries that changes must preserve.
 3. `DEVELOPER_GUIDE.md` - local workflow and change-specific guidance.
@@ -32,6 +33,12 @@ The following documents under `docs/gc/` remain active references:
 
 | Document | Subject |
 | --- | --- |
+| **`docs/gc/CURRENT.md`** | **唯一状态入口**；任务见 ACTIVE_QUEUE |
+| `docs/gc/MESSAGE_ROUTING_INVENTORY.md` | 四轨路由真相表 |
+| `docs/gc/HOST_AUTHORITY.md` | host hero / wearable / showcase |
+| `docs/gc/GOLDEN_PATHS.md` | 行为黄金路径 |
+| `docs/gc/AGENT_PLAYBOOK.md` | 多 Agent 协作 |
+| `docs/gc/ACTIVE_QUEUE.md` | 进行中 WIP≤5 |
 | `docs/gc/concurrency-ownership.md` | Thread ownership, lock order, and asynchronous boundaries |
 | `docs/gc/architecture-investment-gates.md` | Actor, formal-model, and model-CI decision gates |
 | `docs/gc/architecture-investment-inputs.json` | Versioned machine-readable gate evidence |

@@ -69,6 +69,19 @@ enum class HandlerId : std::uint8_t {
     LaunchMarker8870,
     LanServerAvailable,
     ServerAssignment,
+    ChatMessage,
+    LeaveChatChannel,
+    AddSocket,
+    UnlockItemStyle,
+    SetItemStyle,
+    MinimalVarint8727,
+    MinimalVarint8886,
+    MinimalVarint8793,
+    BatchPlayerResources,
+    CacheSubscriptionRefresh,
+    LeaverDetected,
+    SignOutPermission,
+    SubmitPlayerReportV2,
 };
 
 using Adapter = bool (*)(

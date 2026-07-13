@@ -259,73 +259,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     if (GBE_DispatchDotaPostLoginRequest(request_context))
         return true;
 
-    if (request_emsg == GBE_kDotaChatMessage) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Received direct 7273 source_job=%llu body_size=%zu body_prefix=%s",
-            static_cast<unsigned long long>(source_job),
-            proto_context.body_size,
-            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(proto_context.body), proto_context.body_size, 48).c_str()
-        );
-
-        return GBE_HandleDotaChatMessageRequest(
-            std::string(reinterpret_cast<const char *>(proto_context.body), proto_context.body_size),
-            false,
-            nullptr
-        );
-    }
-
-    if (request_emsg == GBE_kDotaLeaveChatChannel) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Received direct 7272 source_job=%llu body_size=%zu body_prefix=%s",
-            static_cast<unsigned long long>(source_job),
-            body_size,
-            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 48).c_str()
-        );
-
-        return GBE_HandleDotaLeaveChatChannelRequest(
-            std::string(reinterpret_cast<const char *>(body), body_size),
-            false,
-            nullptr
-        );
-    }
-
-    if (request_emsg == GBE_kDotaAddSocket) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "received direct 1087 AddSocket source_job=%llu body_size=%zu body_prefix=%s",
-            static_cast<unsigned long long>(source_job),
-            body_size,
-            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 48).c_str()
-        );
-
-        return GBE_HandleDotaAddSocketRequest(body, body_size, has_source_job, source_job);
-    }
-
-    if (request_emsg == GBE_kDotaUnlockItemStyle) {
-        return GBE_HandleDotaUnlockItemStyleRequest(body, body_size, has_source_job, source_job);
-    }
-
-    if (request_emsg == GBE_kDotaSetItemStyle) {
-        return GBE_HandleDotaSetItemStyleRequest(body, body_size, has_source_job, source_job);
-    }
-
-    if (request_emsg == 8727) {
-        return GBE_HandleDotaMinimalVarintSuccessRequest(request_emsg, 8728u, "8727->8728 minimal success", "8727_8728", has_source_job, source_job);
-    }
-
-    if (request_emsg == 8886) {
-        return GBE_HandleDotaMinimalVarintSuccessRequest(request_emsg, 8887u, "8886->8887 minimal success", "8886_8887", has_source_job, source_job);
-    }
-
-    if (request_emsg == 8793) {
-        return GBE_HandleDotaMinimalVarintSuccessRequest(request_emsg, 8794u, "8793->8794 minimal success", "8793_8794", has_source_job, source_job);
-    }
-
-    if (request_emsg == 7450) {
-        return GBE_HandleDotaBatchPlayerResourcesRequest(body, body_size, has_source_job, source_job);
-    }
+    // Remaining direct fallbacks (not yet registry-owned):
+    // - 8744 observe-only log then template
+    // - late steam chain consume (GamesPlayedWithDataBlob / AuthList) when tracking
+    // - template_replay catch-all
 
     if (request_emsg == 8744u) {
         GBE_GC_DebugLog(
@@ -337,27 +274,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             gbe::proto_wire::format_top_level_field_summary(body, body_size).c_str(),
             gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 32).c_str()
         );
-    }
-
-    if (request_emsg == GBE_kDotaCacheSubscriptionRefresh) {
-        return GBE_HandleDotaCacheSubscriptionRefreshRequest(body, body_size, has_source_job, source_job);
-    }
-
-    // Handle CMsgLeaverDetected (7072) from game server
-    // When a player disconnects and later abandons (or the abandon timer expires),
-    // the game server sends this message. We update the member's leaver_status
-    // and push a lobby update so the Dota client sees the transition from
-    // DISCONNECTED to ABANDONED (with left_member_indices updated).
-    if (request_emsg == GBE_kDotaLeaverDetected) {
-        return GBE_HandleDotaLeaverDetectedRequest(body, body_size, source_job);
-    }
-
-    if (request_emsg == GBE_kDotaGameMatchSignOutPermissionRequest) {
-        return GBE_HandleDotaSignOutPermissionRequest(has_source_job, source_job);
-    }
-
-    if (request_emsg == GBE_kDotaSubmitPlayerReportV2) {
-        return GBE_HandleDotaSubmitPlayerReportV2Request(body, body_size, has_source_job, source_job);
     }
 
     if (request_emsg == GBE_kSteamGamesPlayedWithDataBlob && GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()) {
@@ -541,6 +457,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
     if (GBE_DispatchDotaPostLoginRequest(route_context))
         return true;
 
+    // Remaining wrapped fallbacks (not yet registry-owned):
+    // - FindTopSourceTVGames (8009)
+    // - WatchGame (7091)
+    // - dead fallback to SetTeamSlot (7047 already in registry; should not reach here)
+
     GBE_DotaWrappedDirectContext context{};
     context.valid = route_context.valid;
     context.inner_emsg = route_context.inner_emsg;
@@ -550,23 +471,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
     context.has_request_job = route_context.has_request_job;
     context.target_job_id = route_context.target_job_id;
     context.has_target_job = route_context.has_target_job;
-
-    if (context.inner_emsg == GBE_kDotaLeaveChatChannel) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Received wrapped 7272 has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
-            context.has_request_job ? 1 : 0,
-            static_cast<unsigned long long>(context.request_job_id),
-            context.outer_session_field_raw.size(),
-            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
-        );
-
-        return GBE_HandleDotaLeaveChatChannelRequest(
-            context.inner_body_raw,
-            true,
-            &context.outer_session_field_raw
-        );
-    }
 
     if (context.inner_emsg == GBE_kDotaFindTopSourceTVGames) {
         GBE_GC_DebugLog(

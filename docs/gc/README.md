@@ -1,25 +1,49 @@
-# Dota GC Maintenance Docs
+# Dota GC 文档
 
-These documents preserve the long-term maintenance guidance extracted from the GC refactor work, without keeping agent-private process directories in the product repository.
+## 当前入口（先读）
 
-The current maintenance entry point is `.monkeycode/docs/INDEX.md`. It separates production architecture, active maintenance contracts, verification guidance, troubleshooting, and completed historical plans.
+| 文档 | 用途 |
+|------|------|
+| **[CURRENT.md](./CURRENT.md)** | **唯一状态入口**：硬规则、风险、验证、阅读顺序 |
+| [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md) | 进行中任务（WIP≤5） |
+| [MESSAGE_ROUTING_INVENTORY.md](./MESSAGE_ROUTING_INVENTORY.md) | 四轨路由真相表 |
+| [HOST_AUTHORITY.md](./HOST_AUTHORITY.md) | host hero / wearable / showcase 契约 |
+| [GOLDEN_PATHS.md](./GOLDEN_PATHS.md) | 行为黄金路径与测试映射 |
+| [AGENT_PLAYBOOK.md](./AGENT_PLAYBOOK.md) | 多 Agent 协作与停手信号 |
 
-Documents describing future work, follow-up work, next-agent work, or path-specific task lists are retained as historical design records after the P0-P16 refactor completion. Current architecture investment decisions are controlled by `architecture-investment-gates.md` and `architecture-investment-inputs.json`.
+维护入口也可从 `.monkeycode/docs/INDEX.md` 进入架构/测试长文；**任务与路由权威以本目录 CURRENT + 真相表为准**。
 
-- `coordinator-boundaries.md`: ownership boundaries for coordinator, handler, state, payload, and wire files.
-- `verification-and-build.md`: local/CI verification gates and build entrypoint rules.
-- `internal-header-shrink-plan.md`: plan for shrinking `gbe_dota_gc_internal.h` safely.
-- `dependency-seams.md`: side-effect seams, dependency touchpoints, and error-boundary rules.
-- `future-refactor-plan.md`: follow-up refactor sequence, risk gates, and stop conditions.
-- `follow-up-task-list.md`: executable checklist for follow-up tests, seams, facades, and verification.
-- `next-agent-task-list.md`: detailed next-agent handoff checklist with task scope, steps, done criteria, stop conditions, and verification gates.
-- `launch-state-push-planner-tasklist.md`: launch-state planner checklist and focused harness defer criteria.
-- `launch-state-side-effect-executor-tasklist.md`: launch-state payload/action seam checklist and mechanical-helper stop checkpoint.
-- `shared-lobby-state-contract.md`: current contract and safe facade direction for `GBE_shared_dota_lobby_state`.
-- `shared-lobby-state-clear-plan.md`: guardrails for future behavior-equivalent clear wrappers and lifecycle-specific clear helpers.
-- `lifecycle-state-map.md`: lobby lifecycle paths mapped to state, side effects, risks, and tests.
-- `test-coverage-map.md`: offline GC tests mapped to the behavior they protect.
-- `reason-trace-governance.md`: high-risk reason string inventory used by `tools/_audit_gc_refactor.py`.
-- `response-seam-status.md`: response helper matrix covering replaced call sites, recorder contracts, and direct-call stop conditions.
-- `dependency-ownership-map.md`: dependency ownership map for future facade extraction and Dota sub-object readiness checks.
-- `concurrency-ownership.md`: P11 state ownership, synchronization domains, asynchronous generation guards, and lock-boundary follow-ups.
+## 验证
+
+```bash
+bash tools/run_gc_verification.sh --full
+```
+
+## 支撑契约（仍有效，非入口）
+
+- `coordinator-boundaries.md` — coordinator / handler / state / payload 边界
+- `shared-lobby-state-contract.md` — shared lobby 契约
+- `concurrency-ownership.md` — 锁与 generation 域
+- `lifecycle-state-map.md` — 生命周期路径
+- `test-coverage-map.md` — offline 测覆盖
+- `verification-and-build.md` — 构建与闸口
+- `dependency-ownership-map.md` / `dependency-seams.md` — 依赖与副作用缝
+- `response-seam-status.md` / `reason-trace-governance.md` — 响应与 reason 串
+- `architecture-investment-gates.md` + `architecture-investment-inputs.json` — 投资门禁
+- `internal-header-shrink-plan.md` — gc_internal 瘦身
+
+## 历史档案（勿作权威入口）
+
+下列文档保留设计/勾选历史；与 CURRENT 冲突时以 **CURRENT + 代码** 为准：
+
+- `follow-up-task-list.md`、`next-agent-task-list.md`、`future-refactor-plan.md`
+- `refactor-next-tasklist.md`、`launch-state-push-planner-tasklist.md`、`launch-state-side-effect-executor-tasklist.md`
+- `shared-lobby-state-clear-plan.md`
+- `.monkeycode/docs/GC_DELIVERY_SUMMARY.md`、阶段 specs tasklist
+
+## 规则摘要
+
+1. 新 Agent：CURRENT → 认领 ACTIVE_QUEUE → 改表再改码。
+2. 新 emsg：只进 registry，并更新 MESSAGE_ROUTING。
+3. host 字段：只经 HOST_AUTHORITY 允许的 API。
+4. 文档不计入“重构完成”；完成看 Phase A–E 代码 KPI。

@@ -1,0 +1,34 @@
+# 活跃队列（WIP ≤5）
+
+> 只保留进行中与本周明确不做。历史勾选见 archive 长文，不在此膨胀。
+> **最后更新：** 2026-07-13
+
+## WIP
+
+| ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
+|----|------|------------------|----------|------|------|
+| A3 | host 写入收敛审计 | inventory/match/restore 中 hero 赋值 | 旁路赋值清零或经 Apply API | dual_gc H1–H5 + GP-02/03 smoke | 不改协议语义“顺便优化” |
+| B1 | wrapped 8009/7091 → handler+registry | post_login_handlers / dispatcher | wrapped fallback 仅剩 dead 路径清理 | verification --full | 不扩 template |
+
+## 本周不做
+
+- 真 DI / 拆 `Steam_Game_Coordinator` 上帝类（Phase D）
+- CompositionRoot 进生产
+- 为美观再横向大拆文件
+- 新增长篇 delivery / next-agent 清单
+
+## 最近完成（最多 5，旧项删或链 archive）
+
+| 日期 | 摘要 | 链接 |
+|------|------|------|
+| 2026-07-13 | A2：if-chain 主体迁 registry（37→50），direct 仅留条件/8744/template | dispatcher + post_login_handlers |
+| 2026-07-13 | 文档入口：CURRENT + 五份真相表 + MEMORY 指向 | `docs/gc/CURRENT.md` 等 |
+| 2026-07-13 | D.12 template 资产分离 + gc_internal slim | 提交 `a0b88593` 一带 |
+| 2026-07-13 | launch 链 / 高风险 post-login 迁 registry | `d7a78f98` / `ec4cdc56` |
+| 2026-07-13 | Store generation 写纪律 | `293f2af0` |
+
+## 队列规则
+
+1. 认领：把一行标 `in_progress`（或备注 Agent 名），同时 WIP 不超过 5。
+2. 完成：写完成定义勾选结果 → 移入“最近完成” → 更新 CURRENT 风险若变化。
+3. 冲突：HOST 字段相关任务与路由大迁移不要并行改同一热路径。

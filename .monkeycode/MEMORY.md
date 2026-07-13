@@ -50,5 +50,16 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Context: Agent 在执行 Dota GC 架构收口和测试护栏补强时发现
 - Category: 测试方法
 - Instructions:
-  - Dota GC 相关改动完成后运行 `tools/run_gc_verification.sh` 作为完整验证闸口。
-  - 该命令覆盖 GC offline tests、replay fixtures、header declaration 审计、source-list inclusion 审计和 handler side-effect seam 审计。
+  - Dota GC 相关改动完成后运行 `tools/run_gc_verification.sh --full` 作为完整验证闸口。
+  - 该命令覆盖 GC offline tests、审计与 diff --check；通过不等于真协议验收。
+
+[Dota GC 文档入口与真相表]
+- Date: 2026-07-13
+- Context: 用户要求生成防多 Agent 遗忘的重构记忆文档
+- Category: 工作流协作
+- Instructions:
+  - 唯一状态入口：`docs/gc/CURRENT.md`；任务队列：`docs/gc/ACTIVE_QUEUE.md`。
+  - 改 emsg 路由必须同步 `docs/gc/MESSAGE_ROUTING_INVENTORY.md`；新消息只进 production registry。
+  - 改 hero/wearable/showcase 必须同步 `docs/gc/HOST_AUTHORITY.md`，并跑 dual_gc H1–H5 与相关 GOLDEN_PATHS。
+  - 行为改动在 PR/说明中点名 `docs/gc/GOLDEN_PATHS.md` 的 PathID；协作流程见 `docs/gc/AGENT_PLAYBOOK.md`。
+  - `follow-up-task-list.md` / `next-agent-task-list.md` / 长篇 delivery 仅作历史档案，不作权威入口。
