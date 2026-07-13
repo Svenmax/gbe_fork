@@ -7,7 +7,7 @@
 
 ## 状态一句话
 
-过渡态：Phase B/C 主路径已收口。Phase D/E **边界已书面化**；GP-09 **E1/E2 pure plan（L1.5）已落地**，handler L2 与 GP-10 L4 仍缺。默认不真 DI、不为测大拆。Store 门控 + local/shared 双轨仍在。
+过渡态：Phase B/C 主路径已收口。Phase D/E 边界已书面化；GP-09 E1/E2 plan（L1.5）已落地；**GP-10 E4 设计已完成**（`GP10_L4_HARNESS.md`），L4 **实现仍缺**。默认不真 DI、不为测大拆。Store 门控 + local/shared 双轨仍在。
 
 ## 硬规则（违反即停手）
 
@@ -23,11 +23,11 @@
 2. `GBE_local_lobby` 与 shared Store 双轨；restore/publish 字段级 merge 重（写入口清单见 `LOCAL_LOBBY_USAGE.md`）。
 3. `Steam_Game_Coordinator` 仍是上帝类（成员 handler 面过大；Phase D）。
 4. lifecycle 门闩是具名 gate token，载荷在 planner/action_list；不回退 `Legacy*` EffectKind。
-5. 测试护栏强、真协议 L3/L4 弱；GP-09 有 L1+L1.5（plan），**L2 仍缺**；`verification passed` ≠ 协议正确。
+5. 测试护栏强、真协议 L4 实现缺；GP-09 有 L1+L1.5（plan），**L2 仍缺**；`verification passed` ≠ 协议正确。
 
 ## 进行中工作
 
-见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)（WIP ≤5）。默认下一刀：Phase E **E4**（GP-10 设计）或 D0 纪律下修 bug。
+见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)（WIP ≤5）。默认下一刀：D0 修 bug，或认领 **E5**（GP-10 S0 spike，见 `GP10_L4_HARNESS.md`）。
 
 ## 必跑验证
 
@@ -50,9 +50,10 @@ bash tools/run_gc_verification.sh --full
 4. [LEGACY_LIFECYCLE_EFFECTS.md](./LEGACY_LIFECYCLE_EFFECTS.md) — lifecycle 具名门闩盘点
 5. [PHASE_D_BOUNDARY.md](./PHASE_D_BOUNDARY.md) — Phase D 边界与停手
 6. [PHASE_E_BOUNDARY.md](./PHASE_E_BOUNDARY.md) — Phase E 测补强边界
-7. [GOLDEN_PATHS.md](./GOLDEN_PATHS.md) — 行为黄金路径
-8. [AGENT_PLAYBOOK.md](./AGENT_PLAYBOOK.md) — 多 Agent 协作
-9. [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md) — 当前任务
+7. [GP10_L4_HARNESS.md](./GP10_L4_HARNESS.md) — GP-10 L4 设计（E4）
+8. [GOLDEN_PATHS.md](./GOLDEN_PATHS.md) — 行为黄金路径
+9. [AGENT_PLAYBOOK.md](./AGENT_PLAYBOOK.md) — 多 Agent 协作
+10. [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md) — 当前任务
 
 ## 历史文档（勿作权威入口）
 

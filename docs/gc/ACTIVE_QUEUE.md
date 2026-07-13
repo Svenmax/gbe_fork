@@ -7,20 +7,21 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| E4 | GP-10 L4 harness 书面设计 | PHASE_E / GOLDEN 或独立短文 | client/server 构造、消息泵、完成定义、延期理由 | 文档 review | **无设计不写 L4 代码** |
+| （空） | 默认 D0 修 bug 或认领 E5 | — | — | verification --full | 见 PHASE_D / GP10 |
 
 ## 本周不做
 
 - 真 DI / 拆 `Steam_Game_Coordinator` 上帝类（Phase D 大实施）
 - CompositionRoot 进生产
 - 为美观再横向大拆文件
-- GP-10 L4 无设计直接编码
+- GP-10 L4 **无 S0 spike** 直接铺全协议
 - 新增长篇 delivery / next-agent 清单
 
 ## 最近完成（最多 5，旧项删或链 archive）
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | E4：GP-10 L4 harness 书面设计（档 A/B、泵、S0–S4、延期） | `GP10_L4_HARNESS.md` |
 | 2026-07-13 | E2：`plan_server_hello` skip/push/cache + 生产消费 + flow 测 | welcome_flow + welcome_coordinator |
 | 2026-07-13 | E1：`plan_client_hello` + 生产消费 + flow 测（GP-09 L1.5） | welcome_flow + welcome_coordinator |
 | 2026-07-13 | Phase E 边界 + GP-09 分档（L1 有 / L2 缺） | `PHASE_E_BOUNDARY.md` + GOLDEN |
