@@ -18,7 +18,7 @@ Lifecycle SM 已能 **分类事件 / generation / 部分 State**，但多数生�
 | `PracticeLobbyDetailsRequested` | **具名** runtime effect | match 7034 poll → `build_transition_actions` → `GBE_ExecuteDotaLifecycleActions` |
 | `RuntimeMemberUpdateRequested` | **具名** | match / inventory → `build_member_runtime_actions` → Execute |
 | `RuntimeGameStateUpdateRequested` | **具名** | match → `build_transition_actions` → Execute |
-| `CustomGameLifecycleActionsRequested` | **具名 custom-game 门闩（C5）** | 7070/8052/8053 已迁；`LegacyLifecycleActionsRequested` 已删除；副作用仍为 handler 内 `compute_*` + Execute |
+| `CustomGameLifecycleActionsRequested` | **具名 custom-game 门闩（C5/C7）** | SM 门闩仍发此 token；C7 起由 `decide_*` 统一 SM+compute_*，handler 只 Execute |
 | `TeardownLeave* / Abandon* / PostGame* / Reset*` | **具名 teardown 路径门闩（C6）** | 按 event+stage 分发；`TeardownActionsRequested` 已删除；副作用经 action_list / QueuePostGame |
 
 目标（Phase C）：把 `Legacy*` 逐步换成 **具名 Effect + 统一 action builder**，handler 只做 parse → SM → Execute。
@@ -26,16 +26,16 @@ Lifecycle SM 已能 **分类事件 / generation / 部分 State**，但多数生�
 ## 3. CustomGameLifecycleActionsRequested 调用面（原 LegacyLifecycle）
 
 入口 API：`transition_custom_game_request` → `accepted_custom_game_request` **总是**追加该 effect。
+C7：handler 只调 `decide_*`；SM 门闩 + `compute_*` 在 coordinator 侧统一。
 
-| 文件 | emsg / 事件 | SM 后真实副作用 |
-|------|-------------|-----------------|
-| `gbe_dota_custom_game_lifecycle_handlers.cpp` | 7070 ReadyUp (`EventKind::Run`) | `compute_custom_game_ready_up_transition` → `GBE_ExecuteDotaCustomGameLifecycleTransition` |
-| 同上 | 8052 StartedLoading (`Loading`) | `compute_custom_game_started_loading_transition` → Execute |
-| 同上 | 8053 FinishedLoading (`Loaded`) | `compute_custom_game_finished_loading_transition` → Execute（含 member runtime 标志） |
+| 文件 | emsg / 事件 | 决策入口 | SM 后真实副作用 |
+|------|-------------|---------|-----------------|
+| `custom_game_lifecycle_handlers.cpp` | 7070 ReadyUp | `decide_ready_up` | Execute（仅当 apply_lobby_state） |
+| 同上 | 8052 StartedLoading | `decide_started_loading` | Execute |
+| 同上 | 8053 FinishedLoading | `decide_finished_loading` | Execute（含 member runtime 标志） |
+| `custom_game_lifecycle_coordinator.cpp` | （decide 内部） | SM gate + `compute_custom_game_*` | `build_transition_actions` + Execute |
 
-协调器：`GBE_ExecuteDotaCustomGameLifecycleTransition`（`custom_game_lifecycle_coordinator.cpp`）内部再 `build_transition_actions` + `GBE_ExecuteDotaLifecycleActions`。
-
-**收敛含义：** 将 `LaunchLifecycleTransitionDecision` 的 apply/publish/runtime 语义编码进 SM EffectList（或 `TransitionEffects`），删除 “Legacy 门闩 + 第二套 compute_*” 双决策。
+**收敛含义：** C7 已去掉 handler 内双决策；后续可将 `LaunchLifecycleTransitionDecision` 语义进一步编码进 SM EffectList。
 
 ## 4. Teardown 门闩调用面
 
@@ -52,7 +52,7 @@ C6：accept 时按 kind+stage 发路径门闩（`teardown_effect_for`）。
 | `lobby_list_handlers.cpp` | list leave teardown | Finalize | TeardownLeaveFinalizeRequested | `leave_lobby_finalize_action_list` |
 | `lobby_state_member_coordinator.cpp` | player postgame | Initiate | TeardownPostGameInitiateRequested | `player_postgame_cleanup_action_list` |
 
-**下一步：** QueuePostGame 状态突变（chat channel / publish）进一步 action 化；custom_game 拆双决策。
+**下一步：** QueuePostGame 状态突变（chat channel / publish）进一步 action 化。
 
 ## 5. 已具名（对照，非 Legacy）
 
@@ -71,7 +71,7 @@ C6：accept 时按 kind+stage 发路径门闩（`teardown_effect_for`）。
 |--------|----|------|------|
 | P0 | ~~Teardown 门闩具名化~~ | **C3+C4 完成** | — |
 | P1 | ~~Teardown 路径门闩 + action builder~~ | **C6 完成**：event+stage 分发；7035 preflight / list leave 进 action_list | — |
-| P2 | Custom game 7070/8052/8053 | 双决策（SM + compute_*）最重 | 保持 direct/wrapped 等价测 |
+| P2 | ~~Custom game 单一 decide_*~~ | **C7 完成**：handler 只 parse→decide→Execute | — |
 | P3 | 统一 inventory/network 的 member runtime 必须经 SM | 消除旁路 | 不改 hero 权威 API |
 | P4 | QueuePostGame 状态突变 action 化 | chat/publish 仍在 coordinator | 不改消息序 |
 

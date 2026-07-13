@@ -197,8 +197,16 @@ RETIRED_LIFECYCLE_HANDLER_SYMBOLS = (
 RETIRED_LIFECYCLE_FALLBACK_EMSGS = ("7070u", "8052u", "8053u")
 LIFECYCLE_TRANSITION_GATES = {
     "gbe_dota_custom_game_lifecycle_handlers.cpp": (
+        "decide_ready_up(",
+        "decide_started_loading(",
+        "decide_finished_loading(",
+    ),
+    "gbe_dota_custom_game_lifecycle_coordinator.cpp": (
         "transition_custom_game_request(",
         "EffectKind::CustomGameLifecycleActionsRequested",
+        "compute_custom_game_ready_up_transition(",
+        "compute_custom_game_started_loading_transition(",
+        "compute_custom_game_finished_loading_transition(",
     ),
     "gbe_dota_match_handlers.cpp": (
         "transition_runtime_member(",

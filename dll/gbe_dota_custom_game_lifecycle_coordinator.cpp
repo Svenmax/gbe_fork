@@ -283,3 +283,88 @@ bool Steam_Game_Coordinator::GBE_ExecuteDotaCustomGameLifecycleTransition(
         actions,
         options).runtime_update_queued;
 }
+
+namespace gbe::dota_custom_game_lifecycle {
+namespace {
+
+bool sm_accepts_custom_game_gate(
+    const gbe::dota_lifecycle_state_machine::CustomGameRequestState &request_state,
+    const gbe::dota_lifecycle_state_machine::CustomGameRequest &machine_request,
+    std::uint32_t setup_synced_launch_phase,
+    std::uint32_t run_queued_launch_phase)
+{
+    const auto transition = gbe::dota_lifecycle_state_machine::transition_custom_game_request(
+        request_state,
+        machine_request,
+        setup_synced_launch_phase,
+        run_queued_launch_phase);
+    return transition.accepted() &&
+        transition.effects.contains(
+            gbe::dota_lifecycle_state_machine::EffectKind::CustomGameLifecycleActionsRequested);
+}
+
+} // namespace
+
+LifecycleDecision decide_ready_up(
+    const gbe::dota_lifecycle_state_machine::CustomGameRequestState &request_state,
+    const gbe::dota_lifecycle_state_machine::CustomGameRequest &machine_request,
+    const GBE_LocalLobby &lobby,
+    std::uint32_t setup_synced_launch_phase,
+    std::uint32_t run_queued_launch_phase,
+    const std::string &reason)
+{
+    LifecycleDecision decision{};
+    if (!sm_accepts_custom_game_gate(
+            request_state, machine_request, setup_synced_launch_phase, run_queued_launch_phase))
+        return decision;
+    decision.transition = gbe::dota_lobby_state::compute_custom_game_ready_up_transition(
+        lobby, machine_request.ready_state, run_queued_launch_phase, reason);
+    decision.accepted = decision.transition.apply_lobby_state;
+    return decision;
+}
+
+LifecycleDecision decide_started_loading(
+    const gbe::dota_lifecycle_state_machine::CustomGameRequestState &request_state,
+    const gbe::dota_lifecycle_state_machine::CustomGameRequest &machine_request,
+    const GBE_LocalLobby &lobby,
+    bool matching_lobby,
+    std::uint32_t setup_synced_launch_phase,
+    std::uint32_t run_queued_launch_phase,
+    const std::string &reason,
+    const char *runtime_update_note)
+{
+    LifecycleDecision decision{};
+    if (!sm_accepts_custom_game_gate(
+            request_state, machine_request, setup_synced_launch_phase, run_queued_launch_phase))
+        return decision;
+    decision.transition = gbe::dota_lobby_state::compute_custom_game_started_loading_transition(
+        lobby, matching_lobby, setup_synced_launch_phase, run_queued_launch_phase, reason);
+    decision.accepted = true;
+    decision.runtime_update_note = runtime_update_note;
+    return decision;
+}
+
+LifecycleDecision decide_finished_loading(
+    const gbe::dota_lifecycle_state_machine::CustomGameRequestState &request_state,
+    const gbe::dota_lifecycle_state_machine::CustomGameRequest &machine_request,
+    const GBE_LocalLobby &lobby,
+    bool matching_lobby,
+    bool load_failed,
+    std::uint32_t setup_synced_launch_phase,
+    std::uint32_t run_queued_launch_phase,
+    std::uint32_t loaded_launch_phase,
+    const std::string &reason)
+{
+    LifecycleDecision decision{};
+    if (!sm_accepts_custom_game_gate(
+            request_state, machine_request, setup_synced_launch_phase, run_queued_launch_phase))
+        return decision;
+    decision.transition = gbe::dota_lobby_state::compute_custom_game_finished_loading_transition(
+        lobby, matching_lobby, load_failed, run_queued_launch_phase, loaded_launch_phase, reason);
+    decision.accepted = true;
+    decision.update_local_member_runtime = !load_failed;
+    decision.publish_local_member_data = !load_failed;
+    return decision;
+}
+
+} // namespace gbe::dota_custom_game_lifecycle
