@@ -59,6 +59,11 @@ enum class HandlerId : std::uint8_t {
     EmoticonData,
     ConductScorecard,
     CoachingSummary,
+    Direct7034,
+    EquipItems,
+    AbandonCurrentGame,
+    GameMatchSignOut,
+    DestroyLobby,
 };
 
 using Adapter = bool (*)(

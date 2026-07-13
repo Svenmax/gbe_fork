@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
+#include <ctime>
 #include <string>
 #include <vector>
 
@@ -957,7 +958,7 @@ static void test_production_dispatcher_registry_contract()
 {
     const auto view = Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry();
     TEST_ASSERT(view.entries != nullptr, "production registry should expose entries");
-    TEST_ASSERT_EQ(view.size, 27u, "production registry should retain all canonical entries");
+    TEST_ASSERT_EQ(view.size, 32u, "production registry should retain all canonical entries");
     TEST_ASSERT(gbe::dota_handler_registry::has_unique_message_ids_per_mode(view.entries, view.size), "production registry modes should be unique");
     TEST_ASSERT(gbe::dota_handler_registry::all_high_risk_entries_have_fixture(view.entries, view.size), "high-risk production entries should retain fixtures");
     for (std::size_t index = 0; index < view.size; ++index) {
@@ -1250,6 +1251,45 @@ static void test_lobby_destroy_queues_25_then_8247_and_clears_lobby()
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0u, "destroy lobby should clear lobby id before returning");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.generic_lobby_id, 0u, "destroy lobby should clear generic lobby id before returning");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.has_chat_channel, "destroy lobby should clear chat channel state before returning");
+
+    ++g_tests_passed;
+}
+
+static void test_lobby_game_match_signout_queues_7005_and_postgame()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x7004u;
+    tf.gc.GBE_local_lobby.match_id = 0x700401u;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 5u;
+    tf.gc.GBE_local_lobby.game_start_time = static_cast<uint32_t>(std::time(nullptr) - 120);
+    tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.get_local_steam_id().ConvertToUint64();
+    tf.gc.GBE_local_lobby.owner_name = "tester";
+
+    const JobID_t request_job = 0x7004ABCDu;
+    const std::string session_raw = "signout-session-token";
+    bool result = tf.gc.GBE_HandleDotaGameMatchSignOutRequest(true, &session_raw, true, request_job);
+
+    TEST_ASSERT(result, "game match signout handler should return true");
+    TEST_ASSERT(tf.recorder.actions.size() >= 2u, "signout should publish post-game state and push 7005");
+    bool saw_7005 = false;
+    for (const auto &action : tf.recorder.actions) {
+        if (action.type == GBE_DotaActionType::PushIncomingNow &&
+            action_emsg(action) == GBE_kDotaGameMatchSignOutResponse) {
+            saw_7005 = true;
+            TEST_ASSERT(action.wrapped, "signout 7005 should preserve wrapped flag");
+            TEST_ASSERT(action.session_raw == session_raw, "signout 7005 should preserve session field");
+            break;
+        }
+        if (action.reason.find("7004_signout_response") != std::string::npos) {
+            saw_7005 = true;
+            break;
+        }
+    }
+    TEST_ASSERT(saw_7005, "signout should queue 7005 response");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.game_state, 6u, "signout should advance local game_state to post-game");
 
     ++g_tests_passed;
 }
@@ -3356,6 +3396,9 @@ int main()
 
     std::printf("[run] test_lobby_destroy_queues_25_then_8247_and_clears_lobby\n");
     RUN_TEST(test_lobby_destroy_queues_25_then_8247_and_clears_lobby);
+
+    std::printf("[run] test_lobby_game_match_signout_queues_7005_and_postgame\n");
+    RUN_TEST(test_lobby_game_match_signout_queues_7005_and_postgame);
 
     std::printf("[run] test_lobby_kick_removes_member_then_publishes_details\n");
     RUN_TEST(test_lobby_kick_removes_member_then_publishes_details);

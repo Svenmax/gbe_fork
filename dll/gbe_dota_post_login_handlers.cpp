@@ -291,18 +291,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         );
     }
 
-    if (request_emsg == GBE_kDotaDestroyLobbyRequest) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Received direct 8246 source_job=%llu body_size=%zu body_prefix=%s",
-            static_cast<unsigned long long>(source_job),
-            body_size,
-            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 48).c_str()
-        );
-
-        return GBE_HandleDotaDestroyLobbyRequest(source_job, has_source_job, false, nullptr);
-    }
-
     if (request_emsg == GBE_kDotaAddSocket) {
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
@@ -339,9 +327,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return GBE_HandleDotaBatchPlayerResourcesRequest(body, body_size, has_source_job, source_job);
     }
 
-    if (request_emsg == 7034)
-        return GBE_HandleDotaDirect7034Request(request_emsg, body, body_size, has_source_job, source_job);
-
     if (request_emsg == 8744u) {
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
@@ -358,23 +343,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return GBE_HandleDotaCacheSubscriptionRefreshRequest(body, body_size, has_source_job, source_job);
     }
 
-    if (request_emsg == GBE_kDotaAbandonCurrentGame) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "handling req=%u source_job=%llu note=AbandonCurrentGame body_size=%zu active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
-            request_emsg,
-            static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_local_lobby.active ? 1u : 0u,
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            static_cast<unsigned long long>(GBE_local_lobby.match_id),
-            static_cast<unsigned long long>(GBE_local_lobby.server_id)
-        );
-        return GBE_HandleDotaAbandonCurrentGameRequest(false, nullptr);
-    }
-
     // Handle CMsgLeaverDetected (7072) from game server
     // When a player disconnects and later abandons (or the abandon timer expires),
     // the game server sends this message. We update the member's leaver_status
@@ -386,23 +354,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
 
     if (request_emsg == GBE_kDotaGameMatchSignOutPermissionRequest) {
         return GBE_HandleDotaSignOutPermissionRequest(has_source_job, source_job);
-    }
-
-    if (request_emsg == GBE_kDotaGameMatchSignOut) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "handling req=%u source_job=%llu note=GameMatchSignOut body_size=%zu active=%u lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
-            request_emsg,
-            static_cast<unsigned long long>(source_job),
-            body_size,
-            GBE_local_lobby.active ? 1u : 0u,
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            static_cast<unsigned long long>(GBE_local_lobby.match_id),
-            static_cast<unsigned long long>(GBE_local_lobby.server_id)
-        );
-        return GBE_HandleDotaGameMatchSignOutRequest(false, nullptr, has_source_job, source_job);
     }
 
     if (request_emsg == GBE_kDotaSubmitPlayerReportV2) {
@@ -459,10 +410,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 48).c_str()
         );
         return true;
-    }
-
-    if (request_emsg == 2569u) {
-        return GBE_HandleDotaEquipItemsRequest(body, body_size, has_source_job, source_job);
     }
 
     return GBE_HandleDotaTemplateReplayRequest(request_emsg, body, body_size, has_source_job, source_job);
@@ -624,32 +571,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
     context.target_job_id = route_context.target_job_id;
     context.has_target_job = route_context.has_target_job;
 
-    if (context.inner_emsg == GBE_kDotaAbandonCurrentGame) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Received wrapped 7035 has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
-            context.has_request_job ? 1 : 0,
-            static_cast<unsigned long long>(context.request_job_id),
-            context.outer_session_field_raw.size(),
-            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
-        );
-
-        return GBE_HandleDotaAbandonCurrentGameRequest(true, &context.outer_session_field_raw);
-    }
-
-    if (context.inner_emsg == GBE_kDotaGameMatchSignOut) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Received wrapped 7004 has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
-            context.has_request_job ? 1 : 0,
-            static_cast<unsigned long long>(context.request_job_id),
-            context.outer_session_field_raw.size(),
-            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
-        );
-
-        return GBE_HandleDotaGameMatchSignOutRequest(true, &context.outer_session_field_raw, context.has_request_job, context.request_job_id);
-    }
-
     if (context.inner_emsg == GBE_kDotaLeaveChatChannel) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
@@ -662,24 +583,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
 
         return GBE_HandleDotaLeaveChatChannelRequest(
             context.inner_body_raw,
-            true,
-            &context.outer_session_field_raw
-        );
-    }
-
-    if (context.inner_emsg == GBE_kDotaDestroyLobbyRequest) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_LOBBY",
-            "[LOBBY] Received wrapped 8246 has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
-            context.has_request_job ? 1 : 0,
-            static_cast<unsigned long long>(context.request_job_id),
-            context.outer_session_field_raw.size(),
-            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(context.inner_body_raw.data()), context.inner_body_raw.size(), 48).c_str()
-        );
-
-        return GBE_HandleDotaDestroyLobbyRequest(
-            context.request_job_id,
-            context.has_request_job,
             true,
             &context.outer_session_field_raw
         );

@@ -1,6 +1,6 @@
 # Post-login 入口清单（registry vs if 兜底）
 
-> 源：`dll/gbe_dota_post_login_dispatcher.cpp`、`dll/gbe_dota_post_login_handlers.cpp`  
+> 源：`dll/gbe_dota_post_login_dispatcher.cpp`、`dll/gbe_dota_post_login_handlers.cpp`
 > 分发：`GBE_DispatchDotaPostLoginRequest` 命中 registry 则返回；否则走 if 链。
 
 ## 1. Registry 已表化（`kTable`）
@@ -34,8 +34,13 @@
 | 7503 | EmoticonData | Direct | None | — |
 | 8095 | ConductScorecard | Direct | None | — |
 | 8800 | CoachingSummary | Direct | None | — |
+| 7034 | Direct7034 | Direct | LobbyLifecycle | smoke:test_match_7034_host_showcase_repush_guard_marks_once |
+| 2569 | EquipItems | Direct | LobbyMutation | smoke:test_inventory_equip_full_forward |
+| AbandonCurrentGame (7035) | AbandonCurrentGame | D+W | LobbyLifecycle | smoke:test_lobby_abandon_current_game_disconnect_queues_25 |
+| GameMatchSignOut (7004) | GameMatchSignOut | D+W | LobbyLifecycle | smoke:test_lobby_game_match_signout_queues_7005_and_postgame |
+| DestroyLobby (8246) | DestroyLobby | D+W | LobbyLifecycle | smoke:test_lobby_destroy_queues_25_then_8247_and_clears_lobby |
 
-约 27 条。High-risk 在 registry 内多数带 fixture 标签（文档链接，非自动 dual-GC）。
+约 32 条。High-risk 在 registry 内均带 fixture 标签。
 
 ## 2. if 兜底（`gbe_dota_post_login_handlers.cpp` direct 路径）
 
@@ -43,28 +48,23 @@
 |-------------|---------|-----------|------|
 | ChatMessage | GBE_HandleDotaChatMessageRequest | 中 | 未进 registry |
 | LeaveChatChannel | GBE_HandleDotaLeaveChatChannelRequest | 中 | 未进 registry |
-| DestroyLobby | GBE_HandleDotaDestroyLobbyRequest | **高** | 阶段 C 优先迁入 |
 | AddSocket | GBE_HandleDotaAddSocketRequest | 中 | |
 | UnlockItemStyle / SetItemStyle | style handlers | 中 | |
 | 8727 / 8886 / 8793 / 7450 | template / misc | 中 | |
-| **7034** | GBE_HandleDotaDirect7034Request | **高** | host 热路径 |
 | 8744 | launch/misc | 中 | |
 | CacheSubscriptionRefresh | … | 中 | |
-| **AbandonCurrentGame** | GBE_HandleDotaAbandonCurrentGameRequest | **高** | |
 | LeaverDetected | … | 中 | |
 | SignOutPermission | … | 中 | |
-| **GameMatchSignOut** | GBE_HandleDotaGameMatchSignOutRequest | **高** | |
 | SubmitPlayerReportV2 | … | 低 | |
-| 4506 / SteamTicketAuth / 8870 / 4511 / 4508 | launch 标记链 | **高** | |
+| 4506 / SteamTicketAuth / 8870 / 4511 / 4508 | launch 标记链 | **高** | 阶段 C.7.4 |
 | GamesPlayedWithDataBlob / AuthList | late steam chain | 中 | 条件触发 |
-| **2569** | GBE_HandleDotaEquipItemsRequest | **高** | host equip |
 
-Wrapped 路径另有 abandon / signout / destroy 等平行 if（约 614 行后）。
+Wrapped 路径仍有 LeaveChat / FindTopSourceTV 等 if。
 
 ## 3. 阶段 C 迁移优先级
 
-1. 7034  
-2. 2569  
-3. Abandon / SignOut / Destroy  
-4. 8870 / 4511 / 4508 等 launch 标记  
-5. 其余 chat/style/template  
+1. ~~7034~~ 已迁
+2. ~~2569~~ 已迁
+3. ~~Abandon / SignOut / Destroy~~ 已迁
+4. 8870 / 4511 / 4508 等 launch 标记
+5. 其余 chat/style/template

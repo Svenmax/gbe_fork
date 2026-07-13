@@ -1,7 +1,7 @@
 # GC 行为闸与状态收口实施计划
 
-> 依据：独立代码摸底（`Steam_Game_Coordinator` 双实例 + 共享 Store、post-login 分发双轨、deferred 双轨、host hero/wearable/7034/2569 热路径）。  
-> 原则：先测后改；一次只收一条真相源；无失败用例不改 host 业务逻辑；禁止仅以 docs 关闸作为完成标准。  
+> 依据：独立代码摸底（`Steam_Game_Coordinator` 双实例 + 共享 Store、post-login 分发双轨、deferred 双轨、host hero/wearable/7034/2569 热路径）。
+> 原则：先测后改；一次只收一条真相源；无失败用例不改 host 业务逻辑；禁止仅以 docs 关闸作为完成标准。
 > 验证入口：`bash tools/run_gc_verification.sh`（阶段 A/B 可先加子集目标，最终仍需全量绿）。
 
 ## 阶段 A — 地图与闸门（不改生产 host 行为）
@@ -87,13 +87,13 @@
 ## 阶段 C — 分发与 Store 纪律（B 全绿后）
 
 - [ ] 7. 高风险 post-login if 迁入 registry
-  - [ ] 7.1 迁移 `7034` → registry Entry + adapter
-    - `HandlerId` 新增；`fixture` 指向 dual_gc H1/H2 或 smoke 名。
+  - [x] 7.1 迁移 `7034` → registry Entry + adapter
+    - `HandlerId::Direct7034`；Direct-only；fixture `smoke:test_match_7034_host_showcase_repush_guard_marks_once`。
     - 从 `gbe_dota_post_login_handlers.cpp` 删除对应 if。
-  - [ ] 7.2 迁移 `2569` equip → registry
-    - fixture 覆盖 host 推断与 forward server。
-  - [ ] 7.3 迁移 abandon / signout / destroy lobby → registry
-    - 保持 wrapped session 策略与现有行为一致。
+  - [x] 7.2 迁移 `2569` equip → registry
+    - `HandlerId::EquipItems`；Direct-only；fixture `smoke:test_inventory_equip_full_forward`。
+  - [x] 7.3 迁移 abandon / signout / destroy lobby → registry
+    - DirectAndWrapped + ForwardWrappedSession；fixture 指向 abandon/signout/destroy smoke。
   - [ ] 7.4 迁移 launch 标记链（8870 / 4511 / 4508 等）→ registry 或明确子表
     - 若体量大，可先 registry 壳 + 原 handler 函数，禁止残留平行 if。
   - [ ] 7.5 更新 `all_high_risk_entries_have_fixture` 与 audit 基线
