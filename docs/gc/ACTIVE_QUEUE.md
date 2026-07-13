@@ -7,23 +7,24 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| （空） | 默认 D0 修 bug 或认领 E5 | — | — | verification --full | 见 PHASE_D / GP10 |
+| （空） | 重构收敛出口已关；默认 D0 修 bug | — | — | verification --full | PHASE_D / PHASE_E_EXIT |
 
 ## 本周不做
 
 - 真 DI / 拆 `Steam_Game_Coordinator` 上帝类（Phase D 大实施）
 - CompositionRoot 进生产
 - 为美观再横向大拆文件
-- GP-10 L4 **无 S0 spike** 直接铺全协议
+- 重启 GP-10 L4 / GP-09 L2（无新链接策略）
 - 新增长篇 delivery / next-agent 清单
 
 ## 最近完成（最多 5，旧项删或链 archive）
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
-| 2026-07-13 | E4：GP-10 L4 harness 书面设计（档 A/B、泵、S0–S4、延期） | `GP10_L4_HARNESS.md` |
-| 2026-07-13 | E2：`plan_server_hello` skip/push/cache + 生产消费 + flow 测 | welcome_flow + welcome_coordinator |
-| 2026-07-13 | E1：`plan_client_hello` + 生产消费 + flow 测（GP-09 L1.5） | welcome_flow + welcome_coordinator |
+| 2026-07-13 | Phase E 出口：S0 失败 → GP-10/GP-09 L2 延期；主线关闭 | `PHASE_E_EXIT.md` |
+| 2026-07-13 | E4：GP-10 L4 harness 书面设计 | `GP10_L4_HARNESS.md` |
+| 2026-07-13 | E2：`plan_server_hello` + 生产 + flow 测 | welcome_flow |
+| 2026-07-13 | E1：`plan_client_hello` + 生产 + flow 测 | welcome_flow |
 | 2026-07-13 | Phase E 边界 + GP-09 分档（L1 有 / L2 缺） | `PHASE_E_BOUNDARY.md` + GOLDEN |
 | 2026-07-13 | Phase D 边界书面化（准入/切片/停手；默认不实施） | `PHASE_D_BOUNDARY.md` |
 | 2026-07-13 | C-exit：Legacy 路径归零复核；CURRENT 风险 #4 改为门闩形态说明 | LEGACY + CURRENT + ACTIVE |

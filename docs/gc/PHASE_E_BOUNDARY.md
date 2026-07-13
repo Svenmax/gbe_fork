@@ -22,8 +22,8 @@
 |--------|------|------------|
 | GP-01…07 | L2 为主，闸口内 | 维持；改路径时点名 PathID |
 | GP-08 | L1 决策单测 + 部分 smoke | 新 reset reason 时扩展 L1 |
-| **GP-09** Hello/Welcome | **L1** payload extract/build；**L1.5** `plan_client_hello` + `plan_server_hello`（`gbe_dota_welcome_flow.h` + lobby_flow_test）；**L2 无** | L2 仍中高；E1/E2 plan 已完成 |
-| **GP-10** 双 GC 往返 | **缺实现**；**E4 设计已完成**（`GP10_L4_HARNESS.md`） | 高：先 S0 链接 spike，再 S1/S2 |
+| **GP-09** Hello/Welcome | **L1** + **L1.5** plan；**L2 延期**（welcome 不可 offline 链，见 PHASE_E_EXIT） | 重启需可测 seam |
+| **GP-10** 双 GC 往返 | **缺实现**；E4 设计有；**E5 S0 失败已延期** | 见 GP10 §13 |
 
 ## 3. 推荐切片顺序
 
@@ -34,9 +34,9 @@
 | E2 | GP-09 ServerHello plan（L1.5） | **已完成：** `plan_server_hello` skip/push/cache；生产消费；lobby_flow_test | 不合成 7034；不改 cache 字节 |
 | E3 | GP-02/03 少 stub | 仅当 HOST/equip 回归痛时 | 不扩 dual_gc 到全 GC |
 | E4 | GP-10 设计 | **已完成：** `GP10_L4_HARNESS.md`（档 A/B、泵契约、S0–S4、延期理由） | **无设计不写 L4 代码**；实现另开 E5 |
-| E5 | GP-10 实现（可选） | S0 spike + S1 或 S2 进闸门；见 GP10 §7 | 链接失败则书面延期（§8） |
+| E5 | GP-10 实现 | **延期：** S0 失败（GP10 §13 / PHASE_E_EXIT） | 无新链接策略不重启 |
 
-**默认本周：** E0–E4 文档/plan 已收口；实现 L4 仅在 E5 准入（S0）满足时动手。
+**Phase E 主线：** 见 [PHASE_E_EXIT.md](./PHASE_E_EXIT.md)（2026-07-13 关闭）。
 
 ## 4. E1 准入（ClientHello L2）
 

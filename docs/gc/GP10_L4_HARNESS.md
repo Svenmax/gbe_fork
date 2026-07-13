@@ -1,7 +1,7 @@
 # GP-10 L4 Harness 设计（E4）
 
-> 对照代码日期：2026-07-13。**仅设计；无本文件完成定义不写 L4 实现代码。**
-> 主入口：`GOLDEN_PATHS.md` GP-10、`PHASE_E_BOUNDARY.md` E4。
+> 对照代码日期：2026-07-13。**设计已完成；S0 spike 失败 → L4 实现书面延期（见 §13）。**
+> 主入口：`GOLDEN_PATHS.md` GP-10、`PHASE_E_BOUNDARY.md` E4/E5、`PHASE_E_EXIT.md`。
 > 相关：`MESSAGE_ROUTING_INVENTORY.md`、`HOST_AUTHORITY.md`、`dual_gc_host_test`、`composition_root`。
 
 ## 1. 目标与非目标
@@ -138,5 +138,15 @@ assert ordered emsg list + Store snapshot fields
 
 ## 12. 维护
 
-- 实现或延期后更新本节日期与 §7/§8。
+- 实现或延期后更新本节日期与 §7/§8/§13。
 - 冲突时：`CURRENT` 硬规则 > 本设计 > 历史 delivery 长文。
+
+## 13. S0 spike 结果与延期（2026-07-13）
+
+| 项 | 内容 |
+|----|------|
+| 尝试 | handler_test stub 包装编译 `gbe_dota_welcome_coordinator.cpp` |
+| 结果 | **失败**（缺 Hello/login-sync/prime 成员声明；callback welcome 重定义；VPK/login 依赖面） |
+| 命中 §8 | 第 1 条：可维护源列表内无法构造生产双 GC 真队列 |
+| 处置 | **E5 延期**；GP-10 保持「缺」；不写伪 L4；复盘见 `PHASE_E_EXIT.md` |
+| 重启条件 | 可维护链接策略（窄 seam / 专用 fake 生产装配）且 S0 绿后再写 S1+ |

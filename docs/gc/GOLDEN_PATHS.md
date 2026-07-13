@@ -15,8 +15,8 @@
 | GP-06 | chat join/leave | 频道与 postgame 不 stale republish | smoke: `test_chat_*` | L2 | 有 |
 | GP-07 | custom game 7070/8052/8053 | direct/wrapped 动作序列等价 | smoke: custom_game_lifecycle* | L2 | 有 |
 | GP-08 | reconnect preserve vs clear | reset 原因决定是否清 reconnect | lobby_state / payload 决策单测；见历史 P0 | L1 | 部分 |
-| GP-09 | Hello / ServerHello welcome | welcome 合成与 CacheSubscribed 时序 | L1：payload extract/build；L1.5：`plan_client_hello` + `plan_server_hello`（lobby_flow_test）；**L2 缺** | L1+L1.5 / L2 **缺** | 部分（E1/E2 plan 已落地） |
-| GP-10 | SendMessage 双实例往返 | client/server 真队列闭环 | 设计：`GP10_L4_HARNESS.md`；**实现缺** | L4 | **缺**（E4 设计已落地） |
+| GP-09 | Hello / ServerHello welcome | welcome 合成与 CacheSubscribed 时序 | L1 + L1.5 plan（lobby_flow_test）；L2 延期（PHASE_E_EXIT） | L1+L1.5 | 部分（plan 落地；L2 延期） |
+| GP-10 | SendMessage 双实例往返 | client/server 真队列闭环 | 设计：`GP10_L4_HARNESS.md`；S0 失败延期 | L4 | **缺**（设计有；实现延期） |
 
 ## 改动 → 路径
 
@@ -43,6 +43,6 @@ bash tools/run_gc_verification.sh --full
 
 ## 缺口优先级
 
-1. GP-09 L2：ClientHello/ServerHello handler smoke（仍缺；plan L1.5 已 E1/E2）
-2. GP-10 实现（**E5**）：S0 链接 spike → S1/S2；设计见 `GP10_L4_HARNESS.md`
-3. GP-02/03 在更少 stub 下的稳定性（**E3**，回归痛时）
+1. GP-09 L2 / GP-10 L4：仅在可维护链接策略或新 seam 就绪后重启（见 PHASE_E_EXIT）
+2. GP-02/03 少 stub（**E3**，回归痛时）
+3. Phase D 单一切片（仅准入满足时）
