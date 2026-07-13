@@ -396,6 +396,8 @@ public ISteamGameCoordinator
     bool GBE_HandleDotaSubmitPlayerReportV2Request(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaServerAssignmentRequest(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaEquipItemsRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
+    bool GBE_HandleDotaFindTopSourceTVGamesRequest(const std::string &request_body, bool has_request_job, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaWatchGameRequest(const std::string &request_body, bool has_request_job, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaTemplateReplayRequest(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaUnlockItemStyleRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaSetItemStyleRequest(const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);

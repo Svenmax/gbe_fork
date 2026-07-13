@@ -56,6 +56,8 @@ registry::View Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry()
     auto adapt_leaver_detected = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool { return c.path == gbe::dota_gc_router::DotaGcRequestPath::Direct && self->GBE_HandleDotaLeaverDetectedRequest(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.request_job_id); };
     auto adapt_sign_out_permission = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool { return c.path == gbe::dota_gc_router::DotaGcRequestPath::Direct && self->GBE_HandleDotaSignOutPermissionRequest(c.has_request_job, c.request_job_id); };
     auto adapt_submit_player_report_v2 = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *) -> bool { return c.path == gbe::dota_gc_router::DotaGcRequestPath::Direct && self->GBE_HandleDotaSubmitPlayerReportV2Request(reinterpret_cast<const uint8 *>(c.body.data()), c.body.size(), c.has_request_job, c.request_job_id); };
+    auto adapt_find_top_source_tv_games = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool { return self->GBE_HandleDotaFindTopSourceTVGamesRequest(c.body, c.has_request_job, c.request_job_id, c.wrapped, sess); };
+    auto adapt_watch_game = +[](Steam_Game_Coordinator *self, const gbe::dota_gc_router::DotaGcRequestContext &c, const std::string *sess) -> bool { return self->GBE_HandleDotaWatchGameRequest(c.body, c.has_request_job, c.request_job_id, c.wrapped, sess); };
 
     static const registry::Entry kTable[] = {
         { GBE_kDotaJoinChatChannel, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyMutation, adapt_join_chat_channel, registry::HandlerId::JoinChatChannel, "smoke:test_chat_join_channel" },
@@ -108,6 +110,8 @@ registry::View Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry()
         { GBE_kDotaLeaverDetected, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::LobbyLifecycle, adapt_leaver_detected, registry::HandlerId::LeaverDetected, "smoke:test_misc_leaver_detected_publishes_before_details" },
         { GBE_kDotaGameMatchSignOutPermissionRequest, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_sign_out_permission, registry::HandlerId::SignOutPermission, nullptr },
         { GBE_kDotaSubmitPlayerReportV2, registry::RequestMode::Direct, registry::SessionPolicy::Ignore, registry::LifecycleClass::None, adapt_submit_player_report_v2, registry::HandlerId::SubmitPlayerReportV2, nullptr },
+        { GBE_kDotaFindTopSourceTVGames, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyRead, adapt_find_top_source_tv_games, registry::HandlerId::FindTopSourceTVGames, nullptr },
+        { 7091u, registry::RequestMode::DirectAndWrapped, registry::SessionPolicy::ForwardWrappedSession, registry::LifecycleClass::LobbyRead, adapt_watch_game, registry::HandlerId::WatchGame, nullptr },
     };
     return {kTable, sizeof(kTable) / sizeof(kTable[0])};
 }

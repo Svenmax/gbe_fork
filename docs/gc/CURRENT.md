@@ -7,7 +7,7 @@
 
 ## 状态一句话
 
-过渡态：post-login **registry 主干**（**50** 条）+ **Hello 内联** + **少量条件/观察 fallback**（8744、late steam chain）+ **wrapped 8009/7091 旁路** + **template_replay 兜底**。
+过渡态：post-login **registry 主干**（**52** 条，含 8009/7091）+ **Hello 内联** + **少量条件/观察 fallback**（8744、late steam chain）+ **template_replay 兜底** + wrapped dead 7047 fallback。
 
 ## 硬规则（违反即停手）
 

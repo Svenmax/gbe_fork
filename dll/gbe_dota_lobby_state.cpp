@@ -727,8 +727,14 @@ void adopt_shared_lobby_to_local(
     local.game_start_time = shared.game_start_time;
     local.owner_team = shared.owner_team;
     local.owner_slot = shared.owner_slot;
-    if (!preserve_known_owner_hero)
-        local.owner_hero_id = shared.owner_hero_id;
+    // Full adopt may clear hero (shared==0). Runtime paths must use apply_owner_hero_id
+    // (rejects 0). Incremental restore uses apply_owner_hero_from_shared instead.
+    if (!preserve_known_owner_hero) {
+        if (shared.owner_hero_id != 0u)
+            apply_owner_hero_id(local, shared.owner_hero_id);
+        else if (local.owner_hero_id != 0u)
+            local.owner_hero_id = 0u;
+    }
     local.owner_connected = shared.owner_connected;
     local.members = shared.members;
     local.launch_phase = shared.launch_phase;

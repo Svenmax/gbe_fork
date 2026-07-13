@@ -7,8 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| A3 | host 写入收敛审计 | inventory/match/restore 中 hero 赋值 | 旁路赋值清零或经 Apply API | dual_gc H1–H5 + GP-02/03 smoke | 不改协议语义“顺便优化” |
-| B1 | wrapped 8009/7091 → handler+registry | post_login_handlers / dispatcher | wrapped fallback 仅剩 dead 路径清理 | verification --full | 不扩 template |
+| B2 | Hello 迁出 / welcome pipeline 显式注册 | steam_game_coordinator / dispatcher | Hello 不依赖内联分支即可测 | verification --full | 不改 welcome 协议字节 |
 
 ## 本周不做
 
@@ -21,6 +20,8 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | B1：8009/7091 抽 handler 进 registry（50→52）；template 转调 | post_login + dispatcher + template |
+| 2026-07-13 | A3：host hero 审计；adopt 非 0 走 apply_owner_hero_id | lobby_state + HOST_AUTHORITY |
 | 2026-07-13 | A2：if-chain 主体迁 registry（37→50），direct 仅留条件/8744/template | dispatcher + post_login_handlers |
 | 2026-07-13 | 文档入口：CURRENT + 五份真相表 + MEMORY 指向 | `docs/gc/CURRENT.md` 等 |
 | 2026-07-13 | D.12 template 资产分离 + gc_internal slim | 提交 `a0b88593` 一带 |

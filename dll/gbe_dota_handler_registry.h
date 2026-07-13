@@ -82,6 +82,8 @@ enum class HandlerId : std::uint8_t {
     LeaverDetected,
     SignOutPermission,
     SubmitPlayerReportV2,
+    FindTopSourceTVGames,
+    WatchGame,
 };
 
 using Adapter = bool (*)(

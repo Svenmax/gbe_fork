@@ -33,14 +33,17 @@
 
 | 意图 | 只允许 |
 |------|--------|
-| 设置 local owner_hero | `GBE_ApplyOwnerHeroId` / 约定的 `apply_owner_hero_id` |
+| 设置 local owner_hero（运行时） | `GBE_ApplyOwnerHeroId` / `apply_owner_hero_id`（**拒绝 hero==0**） |
 | 从 shared 增量 hero | `apply_owner_hero_from_shared`（经 restore 路径） |
+| 全量 adopt 覆盖/清空 hero | 仅 `adopt_shared_lobby_to_local`：非 0 走 `apply_owner_hero_id`，shared==0 才允许清 0 |
+| publish 到 shared DTO | `publish_local_lobby_to_shared` 在 `!preserve` 时 `shared.owner_hero_id = local.owner_hero_id` |
 | 推装备缓存到对侧 GC | `GBE_PushDotaPlayerEquippedItemsCacheToGC` / `GBE_RefreshDotaHostEquippedItemsCache` |
 | 客户端 wearable 更新 | `GBE_PushDotaHeroEquippedItemUpdatesToClientGC` |
 | showcase / wearable 一次性标记 | 现有 Mark* API（禁止手写成员键绕过） |
-| 发布到 shared | generation 门控 publish / compare_*（禁止裸 publish） |
+| 发布到 shared Store | generation 门控 publish / compare_*（禁止裸 publish） |
 
-**禁止：** 在 match / inventory / restore / payload 中直接 `owner_hero_id = …`（除非经上表 API）。
+**禁止：** 在 match / inventory / payload 中直接 `GBE_local_lobby.owner_hero_id = …`。
+**审计（2026-07-13）：** match 7034 / inventory 2569 经 lifecycle → `GBE_ApplyOwnerHeroId`；无旁路赋值。
 
 ## 4. 跨 GC 推装顺序（host 热路径）
 

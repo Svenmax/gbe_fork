@@ -146,7 +146,8 @@ HANDLER_RESPONSIBILITY_BASELINE = {
     ("gbe_dota_lobby_slot_handlers.cpp", "GBE_local_lobby assignment"): 1,
     ("gbe_dota_match_handlers.cpp", "push_incoming_now"): 1,
     ("gbe_dota_misc_handlers.cpp", "push_incoming_now"): 1,
-    ("gbe_dota_post_login_handlers.cpp", "push_incoming_now"): 1,
+    # 1x AddSocket + 2x WatchGame direct (pending/ready; moved from template in B1)
+    ("gbe_dota_post_login_handlers.cpp", "push_incoming_now"): 3,
     ("gbe_dota_template_replay_handlers.cpp", "push_incoming_now"): 10,
 }
 PURE_DOTA_PLANNER_FILES = (

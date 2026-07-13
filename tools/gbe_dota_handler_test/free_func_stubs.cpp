@@ -208,7 +208,7 @@ bool GBE_AdaptDotaJoinChatChannelResponsePayload(
 // minimal include list (econ_item.h, gbe_dota_gc_internal.h, gbe_proto_wire.h,
 // steamclientpublic.h, tf2 protobuf headers).
 
-// 4508 / AddSocket live in gbe_dota_post_login_handlers.cpp (not linked offline).
+// 4508 / AddSocket / SourceTV live in gbe_dota_post_login_handlers.cpp (not linked offline).
 // Minimal member stubs so registry adapters and smoke can resolve the symbols.
 bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(
     uint32 request_emsg,
@@ -235,6 +235,36 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAddSocketRequest(
     (void)body_size;
     (void)has_request_job;
     (void)request_job_id;
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaFindTopSourceTVGamesRequest(
+    const std::string &request_body,
+    bool has_request_job,
+    uint64 request_job_id,
+    bool wrapped,
+    const std::string *outer_session_field_raw)
+{
+    (void)request_body;
+    (void)has_request_job;
+    (void)request_job_id;
+    (void)wrapped;
+    (void)outer_session_field_raw;
+    return true;
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaWatchGameRequest(
+    const std::string &request_body,
+    bool has_request_job,
+    uint64 request_job_id,
+    bool wrapped,
+    const std::string *outer_session_field_raw)
+{
+    (void)request_body;
+    (void)has_request_job;
+    (void)request_job_id;
+    (void)wrapped;
+    (void)outer_session_field_raw;
     return true;
 }
 

@@ -1757,6 +1757,10 @@ public:
     bool GBE_HandleDotaPracticeLobbyKickRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw);
     bool GBE_HandleDotaDestroyLobbyRequest(uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw);
 
+    // Spectate / SourceTV domain
+    bool GBE_HandleDotaFindTopSourceTVGamesRequest(const std::string &request_body, bool has_request_job, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
+    bool GBE_HandleDotaWatchGameRequest(const std::string &request_body, bool has_request_job, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw);
+
     // Match domain
     bool GBE_HandleDotaDirect7034Request(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job);
     bool GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(uint64 owner_steam_id, uint64 source_job);
