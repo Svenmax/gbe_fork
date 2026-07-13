@@ -7,7 +7,7 @@
 
 ## 状态一句话
 
-过渡态：Phase B 路由收敛已落地。Phase C lifecycle 侧已收口（无 `Legacy*` EffectKind；C3–C9 全勾）。Phase D **仅评估边界**（见 `PHASE_D_BOUNDARY.md`），默认不实施真 DI / 拆上帝类。Store 门控 + local/shared 双轨仍在。
+过渡态：Phase B/C 主路径已收口。Phase D/E **边界已书面化**（`PHASE_D_BOUNDARY.md` / `PHASE_E_BOUNDARY.md`）：默认不真 DI、不为测大拆；测缺口优先 GP-09 L2。Store 门控 + local/shared 双轨仍在。
 
 ## 硬规则（违反即停手）
 
@@ -23,11 +23,11 @@
 2. `GBE_local_lobby` 与 shared Store 双轨；restore/publish 字段级 merge 重（写入口清单见 `LOCAL_LOBBY_USAGE.md`）。
 3. `Steam_Game_Coordinator` 仍是上帝类（成员 handler 面过大；Phase D）。
 4. lifecycle 门闩是具名 gate token，载荷在 planner/action_list；不回退 `Legacy*` EffectKind。
-5. 测试护栏强、真协议 L3/L4 弱；`verification passed` ≠ 协议正确。
+5. 测试护栏强、真协议 L3/L4 弱；GP-09 仅 L1；`verification passed` ≠ 协议正确。
 
 ## 进行中工作
 
-见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)（WIP ≤5）。Phase D 边界已书面化；默认下一刀：按 `PHASE_D_BOUNDARY` 准入挑单一切片，或 Phase E 测补强。
+见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)（WIP ≤5）。默认下一刀：Phase E **E1**（GP-09 ClientHello L2 最小）或 D0 纪律下修 bug。
 
 ## 必跑验证
 
@@ -49,9 +49,10 @@ bash tools/run_gc_verification.sh --full
 3. [LOCAL_LOBBY_USAGE.md](./LOCAL_LOBBY_USAGE.md) — local/shared 写入口清单
 4. [LEGACY_LIFECYCLE_EFFECTS.md](./LEGACY_LIFECYCLE_EFFECTS.md) — lifecycle 具名门闩盘点
 5. [PHASE_D_BOUNDARY.md](./PHASE_D_BOUNDARY.md) — Phase D 边界与停手
-6. [GOLDEN_PATHS.md](./GOLDEN_PATHS.md) — 行为黄金路径
-7. [AGENT_PLAYBOOK.md](./AGENT_PLAYBOOK.md) — 多 Agent 协作
-8. [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md) — 当前任务
+6. [PHASE_E_BOUNDARY.md](./PHASE_E_BOUNDARY.md) — Phase E 测补强边界
+7. [GOLDEN_PATHS.md](./GOLDEN_PATHS.md) — 行为黄金路径
+8. [AGENT_PLAYBOOK.md](./AGENT_PLAYBOOK.md) — 多 Agent 协作
+9. [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md) — 当前任务
 
 ## 历史文档（勿作权威入口）
 

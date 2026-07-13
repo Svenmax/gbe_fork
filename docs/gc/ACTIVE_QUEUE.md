@@ -7,19 +7,21 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| （空） | 默认下一刀：D0 纪律下修 bug，或认领 D1/E 单一切片 | 见 PHASE_D_BOUNDARY | 准入全满足再动生产 | verification --full | 混边界 / 生产 DI |
+| E1 | GP-09 ClientHello direct L2 最小（或 pure plan） | handler_test 或 payload plan | GOLDEN GP-09 L2 有用例；verification --full | verification --full | 不改 welcome 生产语义 |
 
 ## 本周不做
 
 - 真 DI / 拆 `Steam_Game_Coordinator` 上帝类（Phase D 大实施）
 - CompositionRoot 进生产
 - 为美观再横向大拆文件
+- GP-10 L4 无设计直接编码
 - 新增长篇 delivery / next-agent 清单
 
 ## 最近完成（最多 5，旧项删或链 archive）
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | Phase E 边界 + GP-09 分档（L1 有 / L2 缺） | `PHASE_E_BOUNDARY.md` + GOLDEN |
 | 2026-07-13 | Phase D 边界书面化（准入/切片/停手；默认不实施） | `PHASE_D_BOUNDARY.md` |
 | 2026-07-13 | C-exit：Legacy 路径归零复核；CURRENT 风险 #4 改为门闩形态说明 | LEGACY + CURRENT + ACTIVE |
 | 2026-07-13 | C9：QueuePostGame 状态突变 action 化（PostGameLobbyStateApply + publish/RP） | launch_coordinator + flow + executor |
