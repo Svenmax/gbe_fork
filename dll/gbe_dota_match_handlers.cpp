@@ -155,10 +155,15 @@ using GBE_Dota7034DisconnectedPlayer = gbe::proto_wire::Dota7034DisconnectedPlay
 // GBE_HandleDotaDirect7034Response (emsg 7034 response builder):
 //   1. Peer restore owner hero (should_peer_restore + lifecycle) if needed
 //   2. If restored: OwnerHeroKnownEquipReplay
-//   3. If TEAM_SHOWCASE && !HasPushedShowcase: OwnerHeroKnownEquipReplay + MarkShowcase
+//   3. If TEAM_SHOWCASE && !HasPushedShowcase:
+//      if restore already replayed equip in this response: MarkShowcase only
+//      else ClearLocalWearables + OwnerHeroKnownEquipReplay + MarkShowcase
 //   4. GBE_AdaptDota7034ConnectedPlayersResponsePayload (pure)
 //   5. push_incoming_now(7034 | kProtoMask, response_message)
 //   Invariant: restore/equip one-shots precede response. Showcase key is generation-bound.
+//   When strategy-time 2569 already marked wearable one-shot and owner hero is known,
+//   TEAM_SHOWCASE clears that key before the late OwnerHeroKnownEquipReplay so host-local
+//   emsg 26 + 1029 still fire at hero spawn.
 //
 // GBE_HandleDotaDirect7034LaunchPoll (helper):
 //   1. If state==2 && game_state==10: return (no poll)
@@ -744,20 +749,32 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
     // engine sees [in cache] and does not create wearables. By re-pushing at
     // TEAM_SHOWCASE (when the server engine is about to spawn heroes), we give it
     // a fresh CacheSubscribed with only equipped items so wearables are created.
+    //
+    // Strategy-time 2569 / owner-known replay may already have marked the wearable
+    // one-shot before hero spawn. If this response did not just restore+replay equip
+    // (owner hero was already known), clear the wearable key and re-run the helper so
+    // the host-local client still receives emsg 26 and delayed 1029 at TEAM_SHOWCASE.
+    // Peers observe the host via the server SO cache path either way.
     if (is_server && !GBE_HasPushedDotaHostShowcaseEquip() &&
         request_shape.has_game_state && request_shape.game_state >= 4u &&
         GBE_local_lobby.active && GBE_local_lobby.state == 2u) {
         if (client_gc_ptr && owner_steam64 != 0ull) {
-            const bool refreshed = restored_owner_equip_replayed ||
-                GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(owner_steam64, source_job);
+            bool refreshed = restored_owner_equip_replayed;
+            bool wearable_cleared = false;
+            if (!refreshed) {
+                GBE_ClearDotaHostLocalWearablesRefreshed();
+                wearable_cleared = true;
+                refreshed = GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(owner_steam64, source_job);
+            }
             if (refreshed) {
                 GBE_MarkDotaHostShowcaseEquipPushed();
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
-                    "re-pushed host equipped items at TEAM_SHOWCASE: steam64=%llu request_game_state=%u lobby_game_state=%u",
+                    "re-pushed host equipped items at TEAM_SHOWCASE: steam64=%llu request_game_state=%u lobby_game_state=%u wearable_cleared=%u",
                     static_cast<unsigned long long>(owner_steam64),
                     request_shape.game_state,
-                    GBE_local_lobby.game_state
+                    GBE_local_lobby.game_state,
+                    wearable_cleared ? 1u : 0u
                 );
             }
         }

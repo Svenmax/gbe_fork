@@ -3271,6 +3271,68 @@ static void test_match_7034_host_showcase_repush_guard_marks_once()
     ++g_tests_passed;
 }
 
+// Regression: strategy-time 2569 / owner-known replay marks wearable one-shot early.
+// TEAM_SHOWCASE must clear that key and still emit host-local emsg 26 + 1029 so the
+// listen-server host can see their own wearables after hero spawn.
+static void test_match_7034_host_showcase_replays_wearables_after_strategy_mark()
+{
+    TestFixture tf;
+    tf.reset();
+
+    const uint64_t owner_steam_id = 0x110000100666666u;
+    const uint32_t hero_id = 111u;
+    const JobID_t source_job = 0x703466u;
+    tf.settings.m_local_steam_id = CSteamID(owner_steam_id);
+    tf.gc.is_server = true;
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x703460u;
+    tf.gc.GBE_local_lobby.match_id = 0x703461u;
+    tf.gc.GBE_local_lobby.server_id = 0x703462u;
+    tf.gc.GBE_local_lobby.owner_steam_id = owner_steam_id;
+    tf.gc.GBE_local_lobby.owner_hero_id = hero_id;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 3u;
+    tf.gc.GBE_MarkDotaHostLocalWearablesRefreshed(owner_steam_id, hero_id);
+
+    Steam_Game_Coordinator client_gc;
+    client_gc.GBE_local_lobby.active = true;
+    client_gc.GBE_local_lobby.lobby_id = tf.gc.GBE_local_lobby.lobby_id;
+    client_gc.GBE_local_lobby.owner_steam_id = owner_steam_id;
+    client_gc.GBE_local_lobby.owner_hero_id = hero_id;
+    client_gc.items.push_back(Econ_Item{});
+    g_test_steam_client.steam_game_coordinator = &client_gc;
+
+    TEST_ASSERT(
+        tf.gc.GBE_HasRefreshedDotaHostLocalWearables(owner_steam_id, hero_id),
+        "precondition: strategy-time wearable one-shot should already be marked");
+
+    const std::string body = make_dota7034_game_state_body(4u, 2u);
+    bool result = tf.gc.GBE_HandleDotaDirect7034Request(
+        7034u,
+        reinterpret_cast<const uint8 *>(body.data()), body.size(), true, source_job);
+
+    TEST_ASSERT(result, "7034 showcase handler should return true after strategy wearable mark");
+    TEST_ASSERT(tf.gc.GBE_HasPushedDotaHostShowcaseEquip(), "showcase should mark host equip repushed");
+    TEST_ASSERT(
+        tf.gc.GBE_HasRefreshedDotaHostLocalWearables(owner_steam_id, hero_id),
+        "showcase should re-mark wearable one-shot after the late host-local push");
+    TEST_ASSERT_EQ(
+        tf.recorder.actions.size(),
+        5u,
+        "showcase after strategy mark should replay server cache, client SO, dual 1029, then respond");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::ServerGcForward, "first action should repush host equipped items to server GC");
+    TEST_ASSERT(tf.recorder.actions[0].reason == "7034_owner_hero_known_server", "server cache reason should identify owner-known replay");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].msg_type, 26u, "second action should push hero equipped SO updates to client GC");
+    TEST_ASSERT(tf.recorder.actions[1].reason == "7034_owner_hero_known_client", "client SO reason should identify owner-known replay");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].msg_type, 1029u, "third action should request first wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].delay, 0.1, "first wearable refresh should use hot-cache delay");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].msg_type, 1029u, "fourth action should request delayed wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].delay, 1.5, "second wearable refresh should cover cold-start spawn");
+    expect_push_payload(tf.recorder.actions[4], 7034u, "fifth action should push 7034 response");
+
+    ++g_tests_passed;
+}
+
 static void test_match_7034_launch_poll_records_details_update_before_response()
 {
     TestFixture tf;
@@ -3596,6 +3658,9 @@ int main()
 
     std::printf("[run] test_match_7034_host_showcase_repush_guard_marks_once\n");
     RUN_TEST(test_match_7034_host_showcase_repush_guard_marks_once);
+
+    std::printf("[run] test_match_7034_host_showcase_replays_wearables_after_strategy_mark\n");
+    RUN_TEST(test_match_7034_host_showcase_replays_wearables_after_strategy_mark);
 
     std::printf("[run] test_match_7034_launch_poll_records_details_update_before_response\n");
     RUN_TEST(test_match_7034_launch_poll_records_details_update_before_response);
