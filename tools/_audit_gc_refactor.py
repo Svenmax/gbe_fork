@@ -68,7 +68,11 @@ SOURCE_LIST_AUDIT_EXEMPTIONS = {
     "gbe_dota_lobby_flow_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
     "gbe_dota_lobby_launch_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
     "gbe_dota_lobby_snapshot_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
-    "gbe_dota_lobby_state_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
+    "gbe_dota_lobby_state_coordinator.cpp": "empty shell after D.10.2 split; real coordinators in publish/member/restore/recover TUs",
+    "gbe_dota_lobby_state_publish_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
+    "gbe_dota_lobby_state_member_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
+    "gbe_dota_lobby_state_restore_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
+    "gbe_dota_lobby_state_recover_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
     "gbe_dota_match_handlers.cpp": "compiled through handler test wrapper",
     "gbe_dota_misc_handlers.cpp": "compiled through handler test wrapper",
     "gbe_dota_network_callbacks.cpp": "production callback TU, not directly offline-buildable",
@@ -214,7 +218,7 @@ LIFECYCLE_TRANSITION_GATES = {
         "transition_teardown(",
         "EffectKind::LegacyTeardownActionsRequested",
     ),
-    "gbe_dota_lobby_state_coordinator.cpp": (
+    "gbe_dota_lobby_state_member_coordinator.cpp": (
         "transition_teardown(",
         "EffectKind::LegacyTeardownActionsRequested",
     ),
@@ -229,7 +233,7 @@ RETIRED_RECONNECT_TRANSITION_SYMBOLS = (
     "GBE_DescribeDotaReconnectPostSkipReason",
 )
 GENERATION_COUNTER_OWNER = "steam_game_coordinator.cpp"
-GENERATION_COUNTER_SYNC_OWNER = "gbe_dota_lobby_state_coordinator.cpp"
+GENERATION_COUNTER_SYNC_OWNER = "gbe_dota_lobby_state_restore_coordinator.cpp"
 GENERATION_COUNTER_SYNC_BASELINE = 2
 RECONNECT_TRANSITION_OWNER = "gbe_dota_reconnect_network.cpp"
 CORE_STATE_MACHINE_HEADER_TOKENS = (

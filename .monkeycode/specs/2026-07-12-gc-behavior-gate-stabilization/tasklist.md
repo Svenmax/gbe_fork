@@ -125,8 +125,11 @@
   - [x] 10.1 拆 `gbe_dota_lobby_handlers.cpp` 为 create/join/leave/kick/list 等
     - 新 TU：`lobby_handler_helpers` + create/list/join/invite/lifecycle/slot；原文件为空壳。
     - offline：`test_wrapper.cpp` 改为 include 拆分单元；audit baseline/exemptions/teardown 门同步。
-  - [ ] 10.2 拆 `gbe_dota_lobby_state_coordinator.cpp` 为 publish/restore/recover/stale 策略
-  - [ ] 10.3 行为等价：dual_gc + handler smoke + verification 全绿
+  - [x] 10.2 拆 `gbe_dota_lobby_state_coordinator.cpp` 为 publish/restore/recover/stale 策略
+    - 新 TU：publish / member / restore / recover；原文件为空壳。
+    - generation counter sync 归属 restore；teardown 门归属 member；audit 同步。
+  - [x] 10.3 行为等价：dual_gc + handler smoke + verification 全绿
+    - 2026-07-13：`bash tools/run_gc_verification.sh --fast` **GC verification passed**（D.10.1+10.2 后）。
 
 - [ ] 11. 测试验真升级
   - [ ] 11.1 扩展 `gc_replay_test` 或 dual_gc：input 序列 → 期望 outbound emsg 序列 golden
