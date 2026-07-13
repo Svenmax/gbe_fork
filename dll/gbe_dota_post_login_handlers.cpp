@@ -259,12 +259,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     if (GBE_DispatchDotaPostLoginRequest(request_context))
         return true;
 
-    // Remaining direct fallbacks (not yet registry-owned):
-    // - 8744 observe-only log then template
-    // - late steam chain consume (GamesPlayedWithDataBlob / AuthList) when tracking
-    // - template_replay catch-all
+    // Direct fallback ladder (documented in MESSAGE_ROUTING §2):
+    // CONDITIONAL_PROBE 8744 -> log then fall through to template
+    // CONDITIONAL_CONSUME 5410/5432 when late-steam tracking is on
+    // else TEMPLATE_ONLY catch-all
 
     if (request_emsg == 8744u) {
+        // CONDITIONAL_PROBE: observe only; production reply is TEMPLATE_ONLY 8744.
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "observed req=%u source_job=%llu body_size=%zu fields=%s body_prefix=%s",
@@ -277,6 +278,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == GBE_kSteamGamesPlayedWithDataBlob && GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()) {
+        // CONDITIONAL_CONSUME: swallow without synthetic followup while tracking.
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "consumed req=%u source_job=%llu note=late steam chain games played observed without synthetic followup active=%u lobby_id=%llu state=%u game_state=%u body_size=%zu body_prefix=%s",
@@ -293,6 +295,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     }
 
     if (request_emsg == GBE_kSteamAuthList && GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()) {
+        // CONDITIONAL_CONSUME: swallow without synthetic followup while tracking.
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "consumed req=%u source_job=%llu note=late steam chain auth list observed without synthetic followup active=%u lobby_id=%llu state=%u game_state=%u body_size=%zu body_prefix=%s",
@@ -457,24 +460,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
     if (GBE_DispatchDotaPostLoginRequest(route_context))
         return true;
 
-    // Dead fallback: 7047 SetTeamSlot is registry-owned; should not reach here.
+    // B4: unregistered wrapped miss is a hard stop. Former dead path misrouted to
+    // SetTeamSlot (7047); registry owns 7047, so do not invent a mutation here.
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
-        "[LOBBY] Received unregistered wrapped %u has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
+        "[LOBBY] unregistered wrapped miss emsg=%u has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
         route_context.inner_emsg,
         route_context.has_request_job ? 1 : 0,
         static_cast<unsigned long long>(route_context.request_job_id),
         route_context.outer_session_field_raw.size(),
         gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(route_context.body.data()), route_context.body.size(), 48).c_str()
     );
-
-    return GBE_HandleDotaPracticeLobbySetTeamSlotRequest(
-        route_context.body,
-        route_context.request_job_id,
-        route_context.has_request_job,
-        true,
-        &route_context.outer_session_field_raw
-    );
+    return false;
 }
 
 bool Steam_Game_Coordinator::GBE_HandleDotaFindTopSourceTVGamesRequest(

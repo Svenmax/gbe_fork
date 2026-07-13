@@ -93,7 +93,9 @@ struct GBE_DotaWrappedDirectContext
     bool has_target_job{};
 };
 
-// Extracts the inner direct message from a wrapped ClientToGC envelope.
+// LEGACY_UNUSED (B4): production wrapped post-login uses
+// gbe::dota_gc_router::extract_wrapped_post_login_request. Kept for historical
+// parity / potential offline helpers; do not add new production call sites.
 inline bool GBE_ExtractWrappedDotaDirectContext(const void *pubData, std::uint32_t cubData, GBE_DotaWrappedDirectContext &context);
 
 // --- Wrapped ClientFromGC payload extraction -------------------------------

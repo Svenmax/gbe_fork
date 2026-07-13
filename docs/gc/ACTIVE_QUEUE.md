@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| B4 | 解析层合并评估 / 条件 fallback 收敛 | gc_router + request_router 或 direct fallback | 重复解析职责文档化或合并入口；8744 归属清晰 | verification --full | 不改协议字节 |
+| C1 | local lobby 短期化 / Store 写路径审计 | lobby_state + CURRENT 风险 | 生产写 shared 仅 Store 门控；local 使用点清单 | verification --full | 不改 host 权威字段语义 |
 
 ## 本周不做
 
@@ -20,6 +20,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | B4：删 wrapped dead SetTeamSlot fallback；解析层分责文档 | post_login_handlers + MESSAGE_ROUTING §5 |
 | 2026-07-13 | B3：template 白名单；8879/8095 改 REGISTRY_DEFENSIVE 转调 | template_replay + MESSAGE_ROUTING |
 | 2026-07-13 | B2：Hello 迁 welcome_coordinator 显式 handler；入口薄路由 | steam_game_coordinator + welcome_coordinator |
 | 2026-07-13 | B1：8009/7091 抽 handler 进 registry（50→52）；template 转调 | post_login + dispatcher + template |

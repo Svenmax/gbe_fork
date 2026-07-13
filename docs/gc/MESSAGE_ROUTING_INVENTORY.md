@@ -1,6 +1,6 @@
 # 消息路由清单（四轨真相表）
 
-> 源码扫描日期：2026-07-13（B3：template 白名单 + 8879/8095 改 REGISTRY_DEFENSIVE）。改入口必须同步更新本表。
+> 源码扫描日期：2026-07-13（B4：wrapped dead fallback 删除；解析层职责文档化）。改入口必须同步更新本表。
 > 分发顺序（post-login）：**registry → 条件/观察 fallback → template_replay**。
 > Hello / ServerHello 经 `handle_dota_client_message` 转调 welcome handlers（不进 post-login registry）。
 
@@ -86,18 +86,19 @@ Adapter 形态：`self->GBE_Handle…`（仍是 GC 成员，非独立服务）�
 
 ### Direct（`GBE_HandleDotaDirectPostLoginRequest`）
 
-| emsg | 行为 | 原因 |
-|------|------|------|
-| 8744 | 仅 debug log，再落 template | 观察探针，非 handler |
-| GamesPlayedWithDataBlob (5410) | 条件 consume + return true | 依赖 `GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()` |
-| AuthList (5432) | 同上 | 同上 |
-| （其余 miss） | `GBE_HandleDotaTemplateReplayRequest` | template catch-all |
+| emsg | 归属 | 行为 | 原因 |
+|------|------|------|------|
+| 8744 | CONDITIONAL_PROBE | 仅 debug log，再落 template | 观察探针；生产回复归 TEMPLATE_ONLY |
+| GamesPlayedWithDataBlob (5410) | CONDITIONAL_CONSUME | 条件 consume + return true | 依赖 `GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()` |
+| AuthList (5432) | CONDITIONAL_CONSUME | 同上 | 同上 |
+| （其余 miss） | TEMPLATE_ONLY ladder | `GBE_HandleDotaTemplateReplayRequest` | 白名单 catch-all |
 
 ### Wrapped（`GBE_HandleDotaWrappedPostLoginRequest`）
 
-| emsg | 行为 | 目标 |
-|------|------|------|
-| （末尾） | 误落到 SetTeamSlot 的 dead fallback | 7047 已在 registry；正常不应到达 |
+| emsg | 归属 | 行为 | 原因 |
+|------|------|------|------|
+| registry hit | REGISTRY | `GBE_DispatchDotaPostLoginRequest` | 主路径 |
+| （未注册 miss） | HARD_MISS | log + return false | B4：删除误落到 SetTeamSlot 的 dead fallback |
 
 ---
 
@@ -143,12 +144,18 @@ Adapter 形态：`self->GBE_Handle…`（仍是 GC 成员，非独立服务）�
 
 ---
 
-## 5. 解析层重复（Phase B 合并）
+## 5. 解析层职责（B4 评估结论：分责保留，禁止再叠第三套）
 
-| 组件 | 文件 | 职责 |
-|------|------|------|
-| gc_router | `gbe_dota_gc_router.*` | envelope 解析 / 出站封装 |
-| request_router | `gbe_dota_request_router.h` | 另一套 direct/wrapped 解析（inline） |
+| 组件 | 文件 | 生产职责 | 状态 |
+|------|------|----------|------|
+| gc_router | `gbe_dota_gc_router.*` | **wrapped post-login 入站**（`extract_wrapped_post_login_request`）+ 出站 `build_outbound_message`；产出 `DotaGcRequestContext` 供 registry | 权威入口 |
+| request_router | `gbe_dota_request_router.h` | **direct 帧解析**（`GBE_ParseDirectProtoContext`）+ 模板内层抽取 `GBE_ExtractWrappedClientFromGCPayload` | 权威入口 |
+| request_router | `GBE_ExtractWrappedDotaDirectContext` | 与 gc_router wrapped 抽取语义重叠 | **LEGACY_UNUSED**（无生产 call site） |
+
+决策（B4）：
+1. 不合并实现：direct 需要 protobuf header 对象；wrapped 需要 session field 字符串；合并收益低、回归面大。
+2. 生产路径禁止新增对 `GBE_ExtractWrappedDotaDirectContext` 的调用；wrapped 一律走 gc_router。
+3. 若未来合并，先加 golden parse fixture，再删 LEGACY_UNUSED。
 
 ---
 
