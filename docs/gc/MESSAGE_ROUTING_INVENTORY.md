@@ -1,6 +1,6 @@
 # 消息路由清单（四轨真相表）
 
-> 源码扫描日期：2026-07-13（B2：Hello 已迁 welcome_coordinator 显式 handler）。改入口必须同步更新本表。
+> 源码扫描日期：2026-07-13（B3：template 白名单 + 8879/8095 改 REGISTRY_DEFENSIVE）。改入口必须同步更新本表。
 > 分发顺序（post-login）：**registry → 条件/观察 fallback → template_replay**。
 > Hello / ServerHello 经 `handle_dota_client_message` 转调 welcome handlers（不进 post-login registry）。
 
@@ -46,11 +46,11 @@
 | 8053 | CustomGameFinishedLoading | CustomGameFinishedLoading | D+W | LobbyLifecycle | smoke:… |
 | 7427 | Notifications | Notifications7427 | Direct | None | — |
 | 4523 | UploadRate | UploadRate | Direct | None | — |
-| 8879 | Rank | Rank | Direct | None | —（template 亦有 case） |
+| 8879 | Rank | Rank | Direct | None | smoke:…rank…；template 仅 REGISTRY_DEFENSIVE 转调 |
 | 7534 | ProfileCard | ProfileCard | Direct | None | — |
 | 2581 | LookupAccountName | LookupAccountName | Direct | None | — |
 | 7503 | EmoticonData | EmoticonData | Direct | None | — |
-| 8095 | ConductScorecard | ConductScorecard | Direct | None | —（template 亦有 case） |
+| 8095 | ConductScorecard | ConductScorecard | Direct | None | —；template 仅 REGISTRY_DEFENSIVE 转调 |
 | 8800 | CoachingSummary | CoachingSummary | Direct | None | — |
 | 7034 | Match runtime | Direct7034 | Direct | LobbyLifecycle | smoke:test_match_7034_host_showcase_repush_guard_marks_once |
 | 2569 | EquipItems | EquipItems | Direct | LobbyMutation | smoke:test_inventory_equip_full_forward |
@@ -117,20 +117,29 @@ Adapter 形态：`self->GBE_Handle…`（仍是 GC 成员，非独立服务）�
 
 源：`dll/gbe_dota_template_replay_handlers.cpp` switch。
 **语义：** registry 与条件 fallback 皆未处理时的兜底。
+**归属标签：** `TEMPLATE_ONLY`（本轨生产 owner）| `REGISTRY_DEFENSIVE`（registry 已有，仅转调，防 dispatch 顺序漂移）。
 
-| emsg | 备注 |
-|------|------|
-| 2536, 2617, 8137, 8673, 7197, 8729 | 模板回放 |
-| 8744 | 与 direct 观察 log 叠加后进入 |
-| 8330, 8676, 7387, 8078, 8853, 9023, 8218 | 模板回放 |
-| 8879, 8095 | **registry 已有**；确认是否 dead template 分支 |
-| 8020 | CustomGameInfoRequest |
-| 7466 | JoinableCustomGameModesRequest |
-| 7468 | JoinableCustomLobbiesRequest |
-| 8009, 7091 | **registry 已有**；template 仅 defensive 转调 handler |
-| 7073, 8209, 2510, 1092, 1025, 2574, 2576, 8260 | 模板回放 |
+| emsg | 归属 | 备注 |
+|------|------|------|
+| 2536, 2617, 8137, 8673, 7197 | TEMPLATE_ONLY | canned 字节模板 |
+| 8729, 8744, 8330 | TEMPLATE_ONLY | canned hex；8744 与 direct 观察 log 叠加后进入 |
+| 8676 | TEMPLATE_ONLY | canned + unsolicited 8678 followup |
+| 7387 | TEMPLATE_ONLY | synthetic minimal 7388 |
+| 8078, 8853, 9023 | TEMPLATE_ONLY | canned 字节模板 |
+| 8218 | TEMPLATE_ONLY | synthetic tip success |
+| 8879 | REGISTRY_DEFENSIVE | → `GBE_HandleDotaRankRequest`（已删 divergent canned） |
+| 8095 | REGISTRY_DEFENSIVE | → `GBE_HandleDotaConductScorecardRequest`（已删 suppress 分支） |
+| 8020 | TEMPLATE_ONLY | CustomGameInfoRequest synthetic |
+| 7466 | TEMPLATE_ONLY | JoinableCustomGameModesRequest synthetic |
+| 7468 | TEMPLATE_ONLY | JoinableCustomLobbiesRequest synthetic |
+| 8009 | REGISTRY_DEFENSIVE | → FindTopSourceTVGames handler |
+| 7091 | REGISTRY_DEFENSIVE | → WatchGame handler |
+| 7073 | TEMPLATE_ONLY | SpectateFriendGame synthetic |
+| 8209, 8260 | TEMPLATE_ONLY | claim event action synthetic |
+| 2510 | TEMPLATE_ONLY | StorePurchaseInit + inventory grant |
+| 1092, 1025, 2574, 2576 | TEMPLATE_ONLY | crate/use/unlock/unpack synthetic |
 
-目标：每条标 `template-only` 或迁实现/registry；禁止无标注新增 case。
+硬规则：禁止无标注新增 case；新增默认 template-only 须先改本表。
 
 ---
 

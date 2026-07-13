@@ -7,7 +7,7 @@
 
 ## 状态一句话
 
-过渡态：post-login **registry 主干**（**52** 条，含 8009/7091）+ **Hello 显式 welcome handler** + **少量条件/观察 fallback**（8744、late steam chain）+ **template_replay 兜底** + wrapped dead 7047 fallback。
+过渡态：post-login **registry 主干**（**52** 条）+ **Hello 显式 welcome handler** + **template 白名单**（TEMPLATE_ONLY / REGISTRY_DEFENSIVE）+ **少量条件/观察 fallback**（8744、late steam chain）+ wrapped dead 7047 fallback。
 
 ## 硬规则（违反即停手）
 
@@ -19,7 +19,7 @@
 
 ## 当前主风险（最多 5）
 
-1. 路由仍多轨（registry / 条件 fallback / template / Hello welcome 轨分离）。
+1. 路由仍多轨（registry / 条件 fallback / 白名单 template / Hello welcome 轨分离）。
 2. `GBE_local_lobby` 与 shared Store 双轨；restore/publish 字段级 merge 重。
 3. `Steam_Game_Coordinator` 仍是上帝类（成员 handler 面过大）。
 4. lifecycle SM 半接入（大量 Legacy effect）。

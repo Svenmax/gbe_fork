@@ -23,6 +23,11 @@
 // Canned template byte arrays / hex strings live in
 // gbe_dota_template_replay_templates.{h,cpp} (D.12.1). Side-effect ownership
 // and ordering are unchanged; only protocol asset ownership moved.
+//
+// Case ownership tags (B3 whitelist; keep in sync with MESSAGE_ROUTING §4):
+//   TEMPLATE_ONLY       — production catch-all owner (canned or synthetic)
+//   REGISTRY_DEFENSIVE  — registry owns production path; case only redirects
+// New default cases require MESSAGE_ROUTING update first.
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
@@ -70,57 +75,67 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
     const char *response_note = "";
 
     switch (request_emsg) {
+        // TEMPLATE_ONLY (canned)
         case 2536:
             template_bytes = GBE_kDota2538Template;
             template_size = sizeof(GBE_kDota2538Template);
             response_emsg = 2538;
             response_note = "2536->2538";
             break;
+        // TEMPLATE_ONLY (canned)
         case 2617:
             template_bytes = GBE_kDota2618Template;
             template_size = sizeof(GBE_kDota2618Template);
             response_emsg = 2618;
             response_note = "2617->2618";
             break;
+        // TEMPLATE_ONLY (canned)
         case 8137:
             template_bytes = GBE_kDota8136Template;
             template_size = sizeof(GBE_kDota8136Template);
             response_emsg = 8136;
             response_note = "8137->8136";
             break;
+        // TEMPLATE_ONLY (canned)
         case 8673:
             template_bytes = GBE_kDota8674Template;
             template_size = sizeof(GBE_kDota8674Template);
             response_emsg = 8674;
             response_note = "8673->8674";
             break;
+        // TEMPLATE_ONLY (canned)
         case 7197:
             template_bytes = GBE_kDota7198Template;
             template_size = sizeof(GBE_kDota7198Template);
             response_emsg = 7198;
             response_note = "7197->7198";
             break;
+        // TEMPLATE_ONLY (canned hex)
         case 8729:
             template_hex = GBE_kDota8730TemplateHex;
             response_emsg = 8730;
             response_note = "8729->8730";
             break;
+        // TEMPLATE_ONLY (canned hex; direct 8744 only logs then falls here)
         case 8744:
             template_hex = GBE_kDotaOfficial8745TemplateHex;
             response_emsg = 8745;
             response_note = "8744->8745";
             break;
+        // TEMPLATE_ONLY (canned hex)
         case 8330:
             template_hex = GBE_kDota8331TemplateHex;
             response_emsg = 8331;
             response_note = "8330->8331";
             break;
+        // TEMPLATE_ONLY (canned + unsolicited 8678 followup)
         case 8676:
             template_bytes = GBE_kDota8677Template;
             template_size = sizeof(GBE_kDota8677Template);
             response_emsg = 8677;
             response_note = "8676->8677 + 8678 update";
             break;
+        // TEMPLATE_ONLY (synthetic minimal 7388)
         case 7387: {
             uint64 profile_selector = 0;
             if (!gbe::proto_wire::read_uint64_field(body, body_size, 1u, profile_selector)) {
@@ -160,24 +175,28 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 return true;
             }
         }
+        // TEMPLATE_ONLY (canned)
         case 8078:
             template_bytes = GBE_kDota8079Template;
             template_size = sizeof(GBE_kDota8079Template);
             response_emsg = 8079;
             response_note = "8078->8079";
             break;
+        // TEMPLATE_ONLY (canned)
         case 8853:
             template_bytes = GBE_kDota8854Template;
             template_size = sizeof(GBE_kDota8854Template);
             response_emsg = 8854;
             response_note = "8853->8854";
             break;
+        // TEMPLATE_ONLY (canned)
         case 9023:
             template_bytes = GBE_kDota9024Template;
             template_size = sizeof(GBE_kDota9024Template);
             response_emsg = 9024;
             response_note = "9023->9024";
             break;
+        // TEMPLATE_ONLY (synthetic tip success)
         case 8218: {
             // CMsgClientToGCGiveTip -> CMsgClientToGCGiveTipResponse
             // Return result=0 (success) so tipping works in-game.
@@ -188,22 +207,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             GBE_GC_DebugLog("GC_DOTA_DIRECT", "tip request -> success response source_job=%llu", static_cast<unsigned long long>(source_job));
             return true;
         }
-        case 8879: {
-            // CMsgClientToGCRankRequest -> CMsgGCToClientRankResponse
-            // Return empty first, then with rank data (field 2=10000, field 3=10000)
-            std::string rank_response;
-            gbe::gc_message::build_dota_rank_request_response_payload(has_source_job, source_job, rank_response);
-            GBE_PushDotaResponse(8880u, rank_response, false, nullptr, "8879_8880_switch");
-
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "rank request -> response source_job=%llu", static_cast<unsigned long long>(source_job));
-            return true;
-        }
-        case 8095: {
-            // CMsgPlayerConductScorecardRequest -> suppress (don't reply)
-            // Not replying prevents misleading conduct scorecard popup.
-            GBE_GC_DebugLog("GC_DOTA_DIRECT", "conduct scorecard request suppressed source_job=%llu", static_cast<unsigned long long>(source_job));
-            return true;
-        }
+        // REGISTRY_DEFENSIVE: production Rank is GBE_HandleDotaRankRequest (misc).
+        // Former template branch used a divergent canned builder and is removed.
+        case 8879:
+            return GBE_HandleDotaRankRequest(body, body_size, has_source_job, source_job);
+        // REGISTRY_DEFENSIVE: production Conduct is GBE_HandleDotaConductScorecardRequest.
+        // Former template branch suppressed the reply (divergent) and is removed.
+        case 8095:
+            return GBE_HandleDotaConductScorecardRequest(body, body_size, has_source_job, source_job);
+        // TEMPLATE_ONLY (synthetic custom game info)
         case GBE_kDotaCustomGameInfoRequest: {
             uint64 custom_game_id = 0ull;
             gbe::proto_wire::read_uint64_field(body, body_size, 1u, custom_game_id);
@@ -222,6 +234,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 static_cast<unsigned long long>(source_job));
             return true;
         }
+        // TEMPLATE_ONLY (synthetic joinable custom modes)
         case GBE_kDotaJoinableCustomGameModesRequest: {
             const std::vector<GBE_LocalLobby> snapshots = GBE_GetDotaGenericLobbySnapshots("7466_joinable_custom_modes");
             const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
@@ -255,6 +268,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 static_cast<unsigned long long>(source_job));
             return true;
         }
+        // TEMPLATE_ONLY (synthetic joinable custom lobbies)
         case GBE_kDotaJoinableCustomLobbiesRequest: {
             uint64 requested_custom_game_id = 0ull;
             gbe::proto_wire::read_uint64_field(body, body_size, 2u, requested_custom_game_id);
@@ -310,14 +324,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 static_cast<unsigned long long>(source_job));
             return true;
         }
+        // REGISTRY_DEFENSIVE: production owner is post_login FindTopSourceTVGames handler.
         case GBE_kDotaFindTopSourceTVGames:
-            // Registry-owned; retained as defensive fallback if dispatch order changes.
             return GBE_HandleDotaFindTopSourceTVGamesRequest(
                 std::string(reinterpret_cast<const char *>(body), body_size),
                 has_source_job,
                 source_job,
                 false,
                 nullptr);
+        // TEMPLATE_ONLY (synthetic spectate friend game)
         case 7073: {
             // CMsgSpectateFriendGame -> CMsgSpectateFriendGameResponse
             // Sent when a player clicks "Watch Game" on a friend's profile card.
@@ -383,14 +398,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 static_cast<unsigned long long>(source_job));
             return true;
         }
+        // REGISTRY_DEFENSIVE: production owner is post_login WatchGame handler.
         case 7091:
-            // Registry-owned; retained as defensive fallback if dispatch order changes.
             return GBE_HandleDotaWatchGameRequest(
                 std::string(reinterpret_cast<const char *>(body), body_size),
                 has_source_job,
                 source_job,
                 false,
                 nullptr);
+        // TEMPLATE_ONLY (synthetic claim event action)
         case 8209: {
             // CMsgDOTAClaimEventAction -> CMsgDOTAClaimEventActionResponse
             // Parse event_id (field 1) and action_id (field 2) from request.
@@ -433,6 +449,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 claim_event_id, claim_action_id, static_cast<unsigned long long>(source_job));
             return true;
         }
+        // TEMPLATE_ONLY (synthetic store purchase + inventory grant)
         case 2510: {
             // StorePurchaseInit - client wants to buy an item from the store.
             // Parse the request to get item_def_id, then respond with success
@@ -560,6 +577,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             );
             return true;
         }
+        // TEMPLATE_ONLY (synthetic crate items from loot list)
         case 1092: {
             // k_EMsgGCRequestCrateItems -> k_EMsgGCRequestCrateItemsResponse (1093)
             // Client asks what items are in a crate. Parse crate_item_def, look up
@@ -602,6 +620,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 crate_def, static_cast<unsigned long long>(source_job));
             return true;
         }
+        // TEMPLATE_ONLY (synthetic use item / open treasure)
         case 1025: {
             // k_EMsgGCUseItemRequest -> k_EMsgGCUseItemResponse (1026)
             // Client wants to "use" an item (open a treasure).
@@ -694,6 +713,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 static_cast<unsigned long long>(source_job));
             return true;
         }
+        // TEMPLATE_ONLY (synthetic unlock crate / treasure)
         case 2574: {
             // k_EMsgClientToGCUnlockCrate -> k_EMsgClientToGCUnlockCrateResponse (2575)
             // Open a treasure chest. Find crate in inventory, pick random from loot list, grant it.
@@ -775,6 +795,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 granted_defs.size(), static_cast<unsigned long long>(source_job));
             return true;
         }
+        // TEMPLATE_ONLY (synthetic unpack bundle)
         case 2576: {
             // k_EMsgClientToGCUnpackBundle -> k_EMsgClientToGCUnpackBundleResponse (2567)
             // Unpack a bundle: grant all contained items.
@@ -848,6 +869,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 granted_defs.size(), static_cast<unsigned long long>(source_job));
             return true;
         }
+        // TEMPLATE_ONLY (synthetic claim event action using item)
         case 8260: {
             // k_EMsgClientToGCClaimEventActionUsingItem -> k_EMsgClientToGCClaimEventActionUsingItemResponse (8261)
             // Similar to 8209 but uses an item. Parse event_id, action_id, item_id.

@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| B3 | template 白名单标注 / dead 分支清理 | template_replay_handlers + MESSAGE_ROUTING | 每条 template case 有归属；8879/8095 等 dead 标注 | verification --full | 不扩 template 语义 |
+| B4 | 解析层合并评估 / 条件 fallback 收敛 | gc_router + request_router 或 direct fallback | 重复解析职责文档化或合并入口；8744 归属清晰 | verification --full | 不改协议字节 |
 
 ## 本周不做
 
@@ -20,6 +20,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | B3：template 白名单；8879/8095 改 REGISTRY_DEFENSIVE 转调 | template_replay + MESSAGE_ROUTING |
 | 2026-07-13 | B2：Hello 迁 welcome_coordinator 显式 handler；入口薄路由 | steam_game_coordinator + welcome_coordinator |
 | 2026-07-13 | B1：8009/7091 抽 handler 进 registry（50→52）；template 转调 | post_login + dispatcher + template |
 | 2026-07-13 | A3：host hero 审计；adopt 非 0 走 apply_owner_hero_id | lobby_state + HOST_AUTHORITY |
