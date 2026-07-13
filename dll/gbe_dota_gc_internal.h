@@ -14,15 +14,20 @@
 #include <steam/steamtypes.h>
 
 #include "gbe_dota_types.h"
-#include "gbe_dota_payload_lobby_helpers.h"
+// D.12.2: keep this header free of payload-lobby / locator / reconnect re-exports.
+// Callers that need those APIs include the dedicated headers directly.
+// payload_wire_helpers is retained only for GBE_DotaServerHelloContext used below.
 #include "gbe_dota_payload_wire_helpers.h"
-#include "gbe_dota_locator.h"
-#include "dll/gbe_dota_reconnect_shared.h"
 
 // Shared internal GC helpers used across steam_game_coordinator.cpp
 // and its split companion translation units.
 // These were file-scope static helpers before the lobby-state split;
 // they now have external linkage so the split TUs can call them.
+//
+// D.12.2 slim rules:
+// - no free equip ports (see gbe_dota_inventory_ports.h)
+// - no networking / reconnect_shared re-export
+// - no payload_lobby_helpers or locator re-export
 
 // Logging helpers (defined in steam_game_coordinator.cpp)
 void GBE_GC_DebugLog(const char *scope, const char *fmt, ...);

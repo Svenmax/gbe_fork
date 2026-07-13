@@ -145,11 +145,17 @@
   - [x] 11.4 检查点：全量 verification + 新增 golden/压测通过
     - 2026-07-13：`bash tools/run_gc_verification.sh --fast` **GC verification passed**。
 
-- [ ] 12. 协议资产与内部头收尾
-  - [ ] 12.1 大模板 hex 移出逻辑 TU（`template_replay` / `payload_lobby_helpers`）到数据文件或独立 `*_templates.cpp`
-  - [ ] 12.2 `gbe_dota_gc_internal.h` 再瘦身：无 free equip、无 networking 泄漏
-  - [ ] 12.3 最终检查点：全量 verification；H1–H5 仍绿；无 deferred 双轨；7034/2569/abandon/signout/destroy 均在 registry
-    - 确保所有测试通过，如有疑问请询问用户。
+- [x] 12. 协议资产与内部头收尾
+  - [x] 12.1 大模板 hex 移出逻辑 TU 到独立 `gbe_dota_template_replay_templates.{h,cpp}`
+    - handlers 仅 include 模板头；数组显式 size 保证跨 TU `sizeof` 正确。
+    - audit：TEMPLATE_BLOB_OWNER + handlers 禁止持有 static blobs。
+  - [x] 12.2 `gbe_dota_gc_internal.h` 再瘦身
+    - 去掉 payload_lobby / locator / reconnect re-export；equip 仍仅在 `inventory_ports.h`。
+    - 调用方显式 include；audit 5b `audit_gc_internal_slim_boundary`。
+  - [x] 12.3 最终检查点（2026-07-13）
+    - `bash tools/run_gc_verification.sh --fast` **GC verification passed**
+    - dual_gc H1–H5 绿；handler 88/88；behavior_replay golden `24,7055,26,25`
+    - registry 37 条；Store 生产无裸 publish/update；deferred 单轨
 
 ## 明确不在本清单内（禁止顺带做）
 

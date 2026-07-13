@@ -48,6 +48,8 @@
 
 // Include GBE headers for function declarations
 #include "dll/gbe_dota_gc_internal.h"
+// D.12.2: Store locator is no longer re-exported by gc_internal.
+#include "dll/gbe_dota_locator.h"
 #include "dll/gbe_dota_lobby_state_store.h"
 #include "dll/gbe_dota_payload_item_helpers.h"
 #include "dll/gbe_dota_payload_lobby_helpers.h"

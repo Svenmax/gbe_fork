@@ -47,7 +47,7 @@ MUTABLE_GC_GLOBAL_ALLOWLIST = {
     ("gbe_dota_locator.cpp", "dota_runtime_state"): "non-owning compatibility locator",
 }
 TEMPLATE_BLOB_OWNER_FILES = {
-    "gbe_dota_template_replay_handlers.cpp",
+    "gbe_dota_template_replay_templates.cpp",
     "gbe_dota_gc_payload_helpers.cpp",
 }
 SOURCE_LIST_AUDIT_EXEMPTIONS = {
@@ -82,7 +82,8 @@ SOURCE_LIST_AUDIT_EXEMPTIONS = {
     "gbe_dota_reconnect_network_adapter.cpp": "production Steam networking adapter, covered through the reconnect network boundary",
     "gbe_dota_post_login_handlers.cpp": "production dispatcher TU, covered by registry audit",
     "gbe_dota_post_login_dispatcher.cpp": "compiled through handler test wrapper",
-    "gbe_dota_template_replay_handlers.cpp": "production template replay TU with canned payload ownership",
+    "gbe_dota_template_replay_handlers.cpp": "production template replay dispatch TU; canned payloads in templates TU",
+    "gbe_dota_template_replay_templates.cpp": "production template-replay protocol asset TU (D.12.1)",
     "gbe_dota_welcome_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
     "gbe_dota_custom_game_lifecycle_handlers.cpp": "compiled through handler test wrapper",
 }
@@ -582,6 +583,11 @@ def audit_template_blob_ownership(tu_paths):
     """Keep large canned template/replay blobs out of ordinary handlers."""
     issues = []
     long_hex_literal = re.compile(r'"[0-9a-fA-F]{80,}"')
+    template_owner = os.path.join(ROOT_DIR, "dll", "gbe_dota_template_replay_templates.cpp")
+    if not os.path.exists(template_owner):
+        issues.append(
+            ("gbe_dota_template_replay_templates.cpp", 0, "missing dedicated template asset TU")
+        )
     for path in tu_paths:
         base = os.path.basename(path)
         if base in TEMPLATE_BLOB_OWNER_FILES:
@@ -591,6 +597,61 @@ def audit_template_blob_ownership(tu_paths):
         for line_no, line in enumerate(read(path).splitlines(), 1):
             if long_hex_literal.search(line):
                 issues.append((base, line_no, "large hex literal"))
+    # D.12.1: handler logic TU must not own template static blobs.
+    handler_path = os.path.join(ROOT_DIR, "dll", "gbe_dota_template_replay_handlers.cpp")
+    if os.path.exists(handler_path):
+        handler_text = read(handler_path)
+        if "static const uint8 GBE_kDota" in handler_text or "static constexpr const char *GBE_kDota" in handler_text:
+            issues.append(
+                (
+                    "gbe_dota_template_replay_handlers.cpp",
+                    0,
+                    "template static blobs must live in gbe_dota_template_replay_templates.cpp",
+                )
+            )
+        if "gbe_dota_template_replay_templates.h" not in handler_text:
+            issues.append(
+                (
+                    "gbe_dota_template_replay_handlers.cpp",
+                    0,
+                    "must include gbe_dota_template_replay_templates.h",
+                )
+            )
+    return issues
+
+
+def audit_gc_internal_slim_boundary(internal_text=None):
+    """D.12.2: gbe_dota_gc_internal.h must not re-export equip/networking/lobby payload/locator."""
+    if internal_text is None:
+        internal_text = read(INTERNAL_H)
+    issues = []
+    forbidden_includes = (
+        "gbe_dota_payload_lobby_helpers.h",
+        "gbe_dota_locator.h",
+        "gbe_dota_reconnect_shared.h",
+        "gbe_dota_inventory_ports.h",
+        "steam_networking",
+    )
+    # Only flag real #include lines; comments may mention the dedicated headers.
+    for line in internal_text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("#include"):
+            continue
+        for token in forbidden_includes:
+            if token in stripped:
+                issues.append(f"gbe_dota_gc_internal.h: must not include or re-export '{token}'")
+    forbidden_symbols = (
+        "GBE_PushDotaPlayerEquippedItemsCacheToGC",
+        "GBE_RefreshDotaHostEquippedItemsCache",
+        "GBE_PushDotaHeroEquippedItemUpdatesToClientGC",
+    )
+    for symbol in forbidden_symbols:
+        if re.search(r"\b" + re.escape(symbol) + r"\b", internal_text):
+            issues.append(f"gbe_dota_gc_internal.h: free equip port '{symbol}' must stay in inventory_ports.h")
+    if "Cross-GC equip ports live in gbe_dota_inventory_ports.h" not in internal_text:
+        issues.append(
+            "gbe_dota_gc_internal.h: must document that free equip ports live in inventory_ports.h"
+        )
     return issues
 
 
@@ -1895,6 +1956,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 5b: gbe_dota_gc_internal.h slim boundary")
+    print("=" * 70)
+    print("  Action: keep free equip, networking/reconnect, payload-lobby, and locator out of gc_internal.")
+    gc_internal_slim_issues = audit_gc_internal_slim_boundary()
+    if not gc_internal_slim_issues:
+        print("  gc_internal remains free of equip/networking/payload-lobby/locator re-exports")
+    else:
+        for issue in gc_internal_slim_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("AUDIT 6: GC source-list inclusion")
     print("=" * 70)
     print("  Action: add testable split GC TUs to shell/Premake test source lists or record an explicit exemption.")
@@ -2185,6 +2258,7 @@ def main():
     print(f"  Doc line-number mismatches:          {len(mismatches)}")
     print(f"  Dispatch table mismatches:           {len(dispatch_issues)}")
     print(f"  Template blob ownership issues:      {len(template_blob_issues)}")
+    print(f"  GC internal slim boundary issues:    {len(gc_internal_slim_issues)}")
     print(f"  Source-list inclusion issues:        {len(source_list_issues)}")
     print(f"  Handler side-effect seam issues:     {len(side_effect_issues)}")
     print(f"  High-risk reason inventory issues:   {len(reason_issues)}")
@@ -2209,7 +2283,7 @@ def main():
     print(f"  CI failure localization issues:       {len(ci_failure_localization_issues)}")
     print(f"  Architecture investment boundary issues: {len(architecture_investment_boundary_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
         sys.exit(1)
 
 
