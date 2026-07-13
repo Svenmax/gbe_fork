@@ -116,8 +116,14 @@ enum class EffectKind : std::uint8_t {
     PracticeLobbyDetailsRequested,
     RuntimeMemberUpdateRequested,
     RuntimeGameStateUpdateRequested,
-    // Named teardown gate (C3/C4). All production call sites check this token.
-    TeardownActionsRequested,
+    // Named teardown path gates (C3–C6). Call sites check the path token for event+stage.
+    TeardownLeaveInitiateRequested,
+    TeardownLeaveFinalizeRequested,
+    TeardownAbandonInitiateRequested,
+    TeardownAbandonFinalizeRequested,
+    TeardownPostGameInitiateRequested,
+    TeardownPostGameFinalizeRequested,
+    TeardownResetRequested,
     // Named custom-game gate (C5). 7070/8052/8053 check this token; compute_* + Execute stay in handler.
     CustomGameLifecycleActionsRequested,
 };
@@ -584,6 +590,28 @@ struct TeardownRequest {
     bool pending{};
 };
 
+constexpr EffectKind teardown_effect_for(EventKind kind, TeardownStage stage)
+{
+    switch (kind) {
+    case EventKind::Leave:
+        return stage == TeardownStage::Finalize
+            ? EffectKind::TeardownLeaveFinalizeRequested
+            : EffectKind::TeardownLeaveInitiateRequested;
+    case EventKind::Abandon:
+        return stage == TeardownStage::Finalize
+            ? EffectKind::TeardownAbandonFinalizeRequested
+            : EffectKind::TeardownAbandonInitiateRequested;
+    case EventKind::PostGame:
+        return stage == TeardownStage::Finalize
+            ? EffectKind::TeardownPostGameFinalizeRequested
+            : EffectKind::TeardownPostGameInitiateRequested;
+    case EventKind::Reset:
+        return EffectKind::TeardownResetRequested;
+    default:
+        return EffectKind::TeardownResetRequested;
+    }
+}
+
 constexpr MachineTransitionResult transition_teardown(
     MachineState state,
     const TeardownRequest &request)
@@ -606,7 +634,7 @@ constexpr MachineTransitionResult transition_teardown(
     return {
         state,
         { { Effect{
-            EffectKind::TeardownActionsRequested,
+            teardown_effect_for(request.event.kind, request.stage),
             state.lifecycle,
             state.lifecycle,
             state.generation } }, 1u },

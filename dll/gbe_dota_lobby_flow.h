@@ -95,6 +95,11 @@ GBE_DotaActionList abandon_cache_unsubscribed_action_list(
     const std::string &response_25,
     const char *reason);
 
+// C6: discard/suppress preflight before QueuePostGame (7035 ready path).
+GBE_DotaActionList abandon_initiate_preflight_action_list(
+    const gbe::dota_lobby_state::AbandonDecision &decision,
+    const char *reason);
+
 GBE_DotaActionList normal_signout_cache_unsubscribed_action_list(
     std::uint64_t lobby_id,
     const std::string &response_25,
@@ -102,6 +107,11 @@ GBE_DotaActionList normal_signout_cache_unsubscribed_action_list(
 
 GBE_DotaActionList leave_lobby_cache_unsubscribed_action_list(
     std::uint64_t lobby_id,
+    const std::string &response_25,
+    const char *reason);
+
+// C6: list-path leave finalize (25 via CacheUnsubscribedResponse + Leave reset).
+GBE_DotaActionList leave_lobby_finalize_action_list(
     const std::string &response_25,
     const char *reason);
 

@@ -210,19 +210,24 @@ LIFECYCLE_TRANSITION_GATES = {
     ),
     "gbe_dota_lobby_lifecycle_handlers.cpp": (
         "transition_teardown(",
-        "EffectKind::TeardownActionsRequested",
+        "EffectKind::TeardownAbandonInitiateRequested",
+        "EffectKind::TeardownPostGameInitiateRequested",
+        "EffectKind::TeardownLeaveInitiateRequested",
+        "abandon_initiate_preflight_action_list(",
     ),
     "gbe_dota_lobby_list_handlers.cpp": (
         "transition_teardown(",
-        "EffectKind::TeardownActionsRequested",
+        "EffectKind::TeardownLeaveFinalizeRequested",
+        "leave_lobby_finalize_action_list(",
     ),
     "gbe_dota_lobby_flow_coordinator.cpp": (
         "transition_teardown(",
-        "EffectKind::TeardownActionsRequested",
+        "EffectKind::TeardownAbandonFinalizeRequested",
+        "EffectKind::TeardownPostGameFinalizeRequested",
     ),
     "gbe_dota_lobby_state_member_coordinator.cpp": (
         "transition_teardown(",
-        "EffectKind::TeardownActionsRequested",
+        "EffectKind::TeardownPostGameInitiateRequested",
     ),
 }
 RETIRED_RECONNECT_TRANSITION_SYMBOLS = (

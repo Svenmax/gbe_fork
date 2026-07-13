@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| C6 | Teardown 具名载荷（Queue/Clear/Unsub 进 effect 或 action builder） | SM + lifecycle/flow/list/member | handler 不再手写 teardown 副作用链 | verification --full | 不改消息序 |
+| C7 | Custom game：弱化 SM+compute_* 双决策（或统一 builder） | custom_game_lifecycle_* + SM | 7070/8052/8053 决策单一入口 | verification --full | 保持 direct/wrapped 等价 |
 
 ## 本周不做
 
@@ -20,11 +20,11 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | C6：teardown 路径门闩 + preflight/list leave action_list；删 TeardownActionsRequested | SM + flow + lifecycle/list |
 | 2026-07-13 | C5：custom_game 具名 CustomGameLifecycleActionsRequested；删 LegacyLifecycle | SM + custom_game_lifecycle |
 | 2026-07-13 | C4：teardown 全 call site 迁具名门闩；删 LegacyTeardown | flow/list/member + SM |
 | 2026-07-13 | C3：具名 TeardownActionsRequested + lifecycle_handlers 迁门闩 | SM + lifecycle_handlers |
 | 2026-07-13 | C2：Legacy lifecycle effect 调用面 + 迁移序 | `LEGACY_LIFECYCLE_EFFECTS.md` |
-| 2026-07-13 | C1：Store 写门控复核 + local 全量赋值清单 | `LOCAL_LOBBY_USAGE.md` |
 | 2026-07-13 | A3：host hero 审计；adopt 非 0 走 apply_owner_hero_id | lobby_state + HOST_AUTHORITY |
 | 2026-07-13 | A2：if-chain 主体迁 registry（37→50），direct 仅留条件/8744/template | dispatcher + post_login_handlers |
 | 2026-07-13 | 文档入口：CURRENT + 五份真相表 + MEMORY 指向 | `docs/gc/CURRENT.md` 等 |

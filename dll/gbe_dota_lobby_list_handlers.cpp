@@ -121,10 +121,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyListRequest(bool has_request_job
               true,
               true });
         if (!teardown.accepted() || !teardown.effects.contains(
-                gbe::dota_lifecycle_state_machine::EffectKind::TeardownActionsRequested))
+                gbe::dota_lifecycle_state_machine::EffectKind::TeardownLeaveFinalizeRequested))
             return true;
-        GBE_PushDotaCacheUnsubscribedResponse(response_25, wrapped, outer_session_field_raw, "7040_leave_after_lobby_list_25");
-        ResetGCMemory("7040_leave_after_lobby_list", true, false, gbe::dota_lobby_generation::Boundary::Leave);
+        gbe::dota_lifecycle::ExecutionOptions leave_finalize_options;
+        leave_finalize_options.wrapped = wrapped;
+        leave_finalize_options.outer_session_field_raw = outer_session_field_raw;
+        leave_finalize_options.push_route = gbe::dota_lifecycle::PushRoute::CacheUnsubscribedResponse;
+        leave_finalize_options.push_reason_override = "7040_leave_after_lobby_list_25";
+        leave_finalize_options.abort_on_push_failure = true;
+        if (!GBE_ExecuteDotaLifecycleActions(
+                gbe::dota_lobby_flow::leave_lobby_finalize_action_list(
+                    response_25,
+                    "7040_leave_after_lobby_list"),
+                leave_finalize_options).succeeded)
+            return true;
     }
 
     if (!GBE_PushDotaResponse(GBE_kDotaLobbyListResponse, response_8012, wrapped, outer_session_field_raw, "8012_lobby_list"))

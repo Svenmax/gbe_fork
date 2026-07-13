@@ -211,7 +211,7 @@ bool Steam_Game_Coordinator::GBE_MaybeNotifyDotaPracticeLobbyMembersChanged(cons
               true,
               false });
         if (!teardown.accepted() || !teardown.effects.contains(
-                gbe::dota_lifecycle_state_machine::EffectKind::TeardownActionsRequested))
+                gbe::dota_lifecycle_state_machine::EffectKind::TeardownPostGameInitiateRequested))
             return true;
         const uint64 cleaning_lobby_id = GBE_local_lobby.lobby_id;
         GBE_GC_DebugLog(

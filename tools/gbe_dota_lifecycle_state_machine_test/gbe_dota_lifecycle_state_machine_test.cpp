@@ -873,7 +873,7 @@ int main()
     assert(leave_teardown.accepted());
     assert(leave_teardown.state.lifecycle == teardown_state.lifecycle);
     assert(leave_teardown.state.generation == teardown_state.generation);
-    assert(leave_teardown.effects.contains(lifecycle::EffectKind::TeardownActionsRequested));
+    assert(leave_teardown.effects.contains(lifecycle::EffectKind::TeardownLeaveInitiateRequested));
     assert(leave_teardown.effects.count == 1u);
 
     leave_request.pending = true;
@@ -889,6 +889,7 @@ int main()
     const auto finalized_abandon = lifecycle::transition_teardown(teardown_state, abandon_finalize);
     assert(finalized_abandon.accepted());
     assert(finalized_abandon.state.generation == teardown_state.generation);
+    assert(finalized_abandon.effects.contains(lifecycle::EffectKind::TeardownAbandonFinalizeRequested));
 
     abandon_finalize.event.generation = 30u;
     const auto stale_finalize = lifecycle::transition_teardown(teardown_state, abandon_finalize);

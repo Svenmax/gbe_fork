@@ -146,6 +146,19 @@ GBE_DotaActionList abandon_cache_unsubscribed_action_list(
     return actions;
 }
 
+GBE_DotaActionList abandon_initiate_preflight_action_list(
+    const gbe::dota_lobby_state::AbandonDecision &decision,
+    const char *reason)
+{
+    GBE_DotaActionList actions;
+    const std::string action_reason = reason ? reason : std::string();
+    if (decision.discard_queued_launch_messages)
+        actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LaunchMessagesDiscardedForAbandon, 0u, std::string(), 0ull, 0ull, 0ull, action_reason });
+    if (decision.suppress_abandoned_lobby)
+        actions.push_back(GBE_DotaAction{ GBE_DotaActionType::AbandonedLobbySuppressed, 0u, std::string(), 0ull, decision.lobby_id, 0ull, action_reason });
+    return actions;
+}
+
 GBE_DotaActionList normal_signout_cache_unsubscribed_action_list(
     std::uint64_t lobby_id,
     const std::string &response_25,
@@ -166,6 +179,19 @@ GBE_DotaActionList leave_lobby_cache_unsubscribed_action_list(
     GBE_DotaActionList actions;
     const std::string action_reason = reason ? reason : std::string();
     actions.push_back(GBE_DotaAction{ GBE_DotaActionType::AbandonedLobbySuppressed, 0u, std::string(), 0ull, lobby_id, 0ull, action_reason });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25, 0ull, 0ull, 0ull, action_reason });
+    GBE_DotaAction reset_action{ GBE_DotaActionType::GcMemoryReset, 0u, std::string(), 0ull, 0ull, 0ull, action_reason, true, false };
+    reset_action.generation_boundary = gbe::dota_lobby_generation::Boundary::Leave;
+    actions.push_back(std::move(reset_action));
+    return actions;
+}
+
+GBE_DotaActionList leave_lobby_finalize_action_list(
+    const std::string &response_25,
+    const char *reason)
+{
+    GBE_DotaActionList actions;
+    const std::string action_reason = reason ? reason : std::string();
     actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25, 0ull, 0ull, 0ull, action_reason });
     GBE_DotaAction reset_action{ GBE_DotaActionType::GcMemoryReset, 0u, std::string(), 0ull, 0ull, 0ull, action_reason, true, false };
     reset_action.generation_boundary = gbe::dota_lobby_generation::Boundary::Leave;
