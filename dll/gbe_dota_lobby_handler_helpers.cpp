@@ -6,6 +6,7 @@
 #include "dll/dll.h"
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_gc_internal.h"
+#include "gbe_dota_request_router.h"
 #include "gbe_proto_wire.h"
 #include "gbe_gc_message_utils.h"
 
