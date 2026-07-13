@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| C2 | Legacy lifecycle effect 收敛盘点 | lifecycle SM + effect 调用面 | 列出仍走 Legacy effect 的路径与目标 SM 迁移顺序 | verification --full | 不改运行时语义 |
+| C3 | Teardown P0：7040/7035 具名 effect 设计或最小迁移 | lifecycle SM + lifecycle_handlers | Leave/Abandon Initiate 不再依赖 LegacyTeardown 门闩语义文档或代码一步 | verification --full | 不改消息序 / 协议字节 |
 
 ## 本周不做
 
@@ -20,6 +20,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | C2：Legacy lifecycle effect 调用面 + 迁移序 | `LEGACY_LIFECYCLE_EFFECTS.md` |
 | 2026-07-13 | C1：Store 写门控复核 + local 全量赋值清单 | `LOCAL_LOBBY_USAGE.md` |
 | 2026-07-13 | B4：删 wrapped dead SetTeamSlot fallback；解析层分责文档 | post_login_handlers + MESSAGE_ROUTING §5 |
 | 2026-07-13 | B3：template 白名单；8879/8095 改 REGISTRY_DEFENSIVE 转调 | template_replay + MESSAGE_ROUTING |

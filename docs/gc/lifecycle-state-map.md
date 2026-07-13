@@ -201,6 +201,12 @@ When changing a lifecycle path, first classify the path:
 - Full launch-state client-peer push harness remains deferred until the remaining restore/capture/settings/logging boundary can be represented by a small explicit context.
 - Production-linked reset test re-check remains conditional on `GBE_ClearDotaLobbyRuntimeState()` gaining branching, extra side effects, or semantic reset ownership.
 
+## Lifecycle SM vs Legacy effects (C2)
+
+The pure state machine in `gbe_dota_lifecycle_state_machine.h` is only partially wired. Named effects (`RuntimeMemberUpdateRequested`, `RuntimeGameStateUpdateRequested`, `PracticeLobbyDetailsRequested`) already flow through action builders. Custom-game and teardown paths still gate on `LegacyLifecycleActionsRequested` / `LegacyTeardownActionsRequested`, then run imperative handler logic.
+
+Authoritative call-site tables and migration order: [LEGACY_LIFECYCLE_EFFECTS.md](./LEGACY_LIFECYCLE_EFFECTS.md).
+
 ## Verification
 
 Before merging lifecycle changes, run:

@@ -7,7 +7,7 @@
 
 ## 状态一句话
 
-过渡态：Phase B 路由收敛已落地（registry 52 + Hello welcome + template 白名单 + 条件 fallback + wrapped HARD_MISS）。Phase C 起步：local/shared 双轨仍在，Store 写已门控。
+过渡态：Phase B 路由收敛已落地。Phase C：Store 写已门控 + local 写清单；lifecycle SM 半接入（Legacy 门闩盘点见 `LEGACY_LIFECYCLE_EFFECTS.md`）。
 
 ## 硬规则（违反即停手）
 
@@ -22,7 +22,7 @@
 1. 路由仍多轨（registry / 条件 fallback / 白名单 template / Hello welcome），但每轨已有归属标签。
 2. `GBE_local_lobby` 与 shared Store 双轨；restore/publish 字段级 merge 重（写入口清单见 `LOCAL_LOBBY_USAGE.md`）。
 3. `Steam_Game_Coordinator` 仍是上帝类（成员 handler 面过大）。
-4. lifecycle SM 半接入（大量 Legacy effect）。
+4. lifecycle SM 半接入：`LegacyLifecycle*` / `LegacyTeardown*` 作门闩，副作用仍在 handler（见 `LEGACY_LIFECYCLE_EFFECTS.md`）。
 5. 测试护栏强、真协议 L3/L4 弱；`verification passed` ≠ 协议正确。
 
 ## 进行中工作
@@ -47,9 +47,10 @@ bash tools/run_gc_verification.sh --full
 1. [MESSAGE_ROUTING_INVENTORY.md](./MESSAGE_ROUTING_INVENTORY.md) — 四轨入口表
 2. [HOST_AUTHORITY.md](./HOST_AUTHORITY.md) — hero / wearable / showcase
 3. [LOCAL_LOBBY_USAGE.md](./LOCAL_LOBBY_USAGE.md) — local/shared 写入口清单
-4. [GOLDEN_PATHS.md](./GOLDEN_PATHS.md) — 行为黄金路径
-5. [AGENT_PLAYBOOK.md](./AGENT_PLAYBOOK.md) — 多 Agent 协作
-6. [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md) — 当前任务
+4. [LEGACY_LIFECYCLE_EFFECTS.md](./LEGACY_LIFECYCLE_EFFECTS.md) — SM Legacy effect 与迁移序
+5. [GOLDEN_PATHS.md](./GOLDEN_PATHS.md) — 行为黄金路径
+6. [AGENT_PLAYBOOK.md](./AGENT_PLAYBOOK.md) — 多 Agent 协作
+7. [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md) — 当前任务
 
 ## 历史文档（勿作权威入口）
 
