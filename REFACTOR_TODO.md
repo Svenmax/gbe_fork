@@ -413,11 +413,15 @@ Phase 2.13 审查修复后,主文件为 1490 行(累计缩减 90.1%),已达成�
 
 ### P1 — 应该完成
 
-- [ ] **缩小 `gbe_dota_gc_internal.h` 的共享面**
+- [x] **缩小 `gbe_dota_gc_internal.h` 的共享面**
   - 优先处理 mutable state: `GBE_shared_dota_lobby_state`、`GBE_vpk_loot_data`、`GBE_last_dota_server_hello_context`。
   - 已将 `GBE_vpk_loot_data` 收敛为 `GBE_GetDotaVpkLootData()` / `GBE_SetDotaVpkLootData(...)`,外部 TU 不再直接写全局变量。
   - 已移除 `GBE_last_dota_server_hello_context` 的 extern 暴露,变量重新变为 `steam_game_coordinator.cpp` TU-local,外部只用 accessor。
-  - `GBE_shared_dota_lobby_state` 仍跨多个 coordinator/handler/payload TU 使用,不在本轮一刀切；需要单独设计 shared-state facade 或 state context。
+  - 共享大厅已收敛到 `gbe::dota_lobby_state::Store` + locator；生产路径禁止直读 `GBE_shared_dota_lobby_state`（audit 10 / 10b）。
+  - C.9：跨 GC 装备 free ports 迁出到 `gbe_dota_inventory_ports.h`。
+  - D.12.2：`gc_internal` 不再 re-export payload-lobby / locator / reconnect；audit 5b 锁定。
+  - D.12.1：template-replay canned blobs 迁到 `gbe_dota_template_replay_templates.{h,cpp}`。
+  - 仍保留于 internal（有意延后）：logging、旧 ID 替换常量表、`ser_var`/`deser_var`、少量 official practice-lobby hex 与 wire-facing hello accessors；细则见 `docs/gc/internal-header-shrink-plan.md`。
   - 目标:避免 internal header 变成跨文件全局垃圾桶。
 
 - [x] **清理 agent/过程文档入库噪音**

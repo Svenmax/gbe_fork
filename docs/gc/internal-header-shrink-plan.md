@@ -6,7 +6,10 @@ This document classifies the remaining declarations in `dll/gbe_dota_gc_internal
 
 - `dll/gbe_dota_payload_item_helpers.h` already owns item payload declarations for equip op parsing, style bitmask mutation, SO object construction, and item serialization.
 - `dll/gbe_dota_payload_lobby_helpers.h` and `dll/gbe_dota_payload_wire_helpers.h` already own many payload helper declarations.
-- `dll/gbe_dota_gc_internal.h` still carries mixed declarations for logging, const tables, templates, shared state, hello context accessors, and stateful orchestration helpers.
+- `dll/gbe_dota_inventory_ports.h` owns free equip ports (C.9); `gc_internal` must not re-declare them.
+- D.12.2: `gbe_dota_gc_internal.h` no longer re-exports payload-lobby, locator, or reconnect headers; callers include those headers directly. Audit 5b enforces this.
+- D.12.1: template-replay canned hex/byte arrays live in `gbe_dota_template_replay_templates.{h,cpp}`; the handler TU only dispatches.
+- `dll/gbe_dota_gc_internal.h` still carries logging, old-ID const tables, `ser_var`/`deser_var`, hello accessors, and a small set of practice-lobby official hex tables.
 
 ## Logging And Trace
 
@@ -26,27 +29,20 @@ Current state:
 
 - `GBE_vpk_loot_data` no longer has an `extern` declaration. Mutation goes through `GBE_SetDotaVpkLootData(...)`; reads go through `GBE_GetDotaVpkLootData()`.
 - `GBE_last_dota_server_hello_context` no longer has an `extern` declaration. It is TU-local to `steam_game_coordinator.cpp`; external users use server-hello accessors.
-- Shared lobby backing state is private to `GBE_GetSharedDotaLobbyStateStore()`; the internal header exposes only the store accessor, value snapshot facade, scalar/id helpers, and clear operations.
+- Shared lobby backing state is private to the Store implementation; production access is via `GBE_GetSharedDotaLobbyStateStore()` from `gbe_dota_locator.h` (not re-exported by `gc_internal` after D.12.2).
+- Generation-gated Store writes are required in production (audit 10b). Bare `publish`/`update` remain test/fixture-only.
 
-Next step for `GBE_shared_dota_lobby_state` should not be a mechanical getter/setter rename. Prefer a dedicated facade/context with named operations, for example:
-
-- `GBE_HasSharedDotaLobbyState()`
-- `GBE_GetSharedDotaLobbyStateSnapshot()`
-- `GBE_ClearSharedDotaLobbyState()`
-- `GBE_PublishLocalLobbyToShared(reason)`
-- `GBE_GetSharedDotaLobbyIdOrZero()`
-
-The facade should preserve existing side-effect ordering. Logging reasons belong in later lifecycle-specific helpers, not in the first behavior-equivalent raw clear helper.
+Further shrink of Store-facing helpers should only happen when a new lifecycle path needs a named operation; do not reopen mechanical getter/setter renames for appearance.
 
 ## Const Tables And Serialization Templates
 
 Keep temporarily:
 
-- Old account/SteamID/lobby ID replacement byte arrays.
-- `GBE_kDotaOfficial*` template byte arrays.
+- Old account/SteamID/lobby ID replacement byte arrays in `gc_internal`.
+- Practice-lobby official hex / cache-subscribed template tables still declared from the internal surface.
 - `ser_var` / `deser_var` inline templates.
 
-These are widely used by patching, replay, and inventory code. Moving them is lower priority than removing mutable `extern` state.
+Template-replay canned protocol assets (D.12.1) already left the handler logic TU. Further moves of remaining const tables are optional and must keep `sizeof`/include self-containment green under `tools/run_gc_verification.sh`.
 
 ## Hello And Welcome Context
 

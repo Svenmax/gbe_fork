@@ -472,9 +472,10 @@ The checklist above records the first follow-up pass and includes several "decid
   - Result: added `shared-lobby-state-clear-plan.md` and indexed it from `docs/gc/README.md`. The plan records the current raw clear surface, separates publish/update mutation paths from clear semantics, and defines safe wrapper names plus stop conditions. No clear behavior changed.
   - Stop condition: planning only unless a behavior-equivalent helper is trivial and already covered.
 
-- [ ] Production-linked reset test re-check.
+- [x] Production-linked reset test re-check.
   - Goal: revisit only if `GBE_ClearDotaLobbyRuntimeState()` gains branching, extra side effects, or a semantic wrapper changes reset ownership.
   - Stop condition: do not add heavy linkage while the production helper remains behavior-equivalent and trivial.
+  - Decision (2026-07-13): still deferred. Production helper remains a thin local/shared/last-launch clear with no branching; handler smoke `test_lobby_runtime_reset_*` already covers the contract. Re-open only when the helper gains branches or a semantic wrapper changes ownership.
 
 ## Always Run Before Handoff
 
@@ -485,8 +486,7 @@ git diff --check
 
 Latest handoff verification:
 
-- `bash tools/run_gc_offline_tests.sh --full` passed with payload helper tests `238/238` and handler smoke tests `56/56`.
-- `bash tools/run_gc_verification.sh --full` passed with payload helper tests `238/238`, handler smoke tests `56/56`, and audit issues `0`.
-- `git diff --check` passed.
+- `bash tools/run_gc_verification.sh --fast` passed (2026-07-13, post D.12): dual_gc host green, payload helpers `546/546`, handler smoke `88/88`, behavior_replay golden `24,7055,26,25`, registry `37` entries, audit groups including template ownership + `gc_internal` slim boundary all `0` issues.
+- Prefer `--full` before merge to `dev` or when changing production build source lists.
 
 For source-list, build-system, or new-file changes, also check the relevant `premake5.lua` source lists and `tools/run_gc_offline_tests.sh` entries.
