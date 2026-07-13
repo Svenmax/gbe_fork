@@ -22,12 +22,17 @@ public:
     Store(Snapshot &state, std::recursive_mutex &mutex);
 
     Snapshot snapshot() const;
-    void publish(Snapshot state);
+
+    // Generation-gated production write path. Cross-role publishes must enter here.
     StoreUpdateResult publish_if_generation_current_or_newer(Snapshot state);
-    void clear();
     StoreUpdateResult compare_clear(std::uint64_t expected_generation);
-    StoreUpdateResult update(const Mutator &mutator);
     StoreUpdateResult compare_update(std::uint64_t expected_generation, const Mutator &mutator);
+
+    // Ungated writes: test/fixture bootstrap only. Production dll code must not call these
+    // (enforced by tools/_audit_gc_refactor.py audit_store_write_discipline).
+    void publish(Snapshot state);
+    void clear();
+    StoreUpdateResult update(const Mutator &mutator);
 
 private:
     // Process-shared state. Every access is serialized by mutex_; mutators

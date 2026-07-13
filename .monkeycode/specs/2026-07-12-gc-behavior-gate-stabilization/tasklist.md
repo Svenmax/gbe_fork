@@ -101,15 +101,16 @@
   - [x]* 7.6 registry 查找属性：每个 high-risk message_id 在 Direct/Wrapped 下至多一条 Entry
     - 由 `has_unique_message_ids_per_mode` + production registry contract 覆盖。
 
-- [ ] 8. Store 写路径收紧
-  - [ ] 8.1 全库枚举 `Store::publish` / `update` / `publish_if_generation_*` / `compare_*` 调用点
-    - 生产路径跨 role 写必须 generation 门闩。
-  - [ ] 8.2 收紧或隔离裸 `update`/`publish`
-    - 方案 A：标记 deprecated，仅测试可用；方案 B：改为 private + friend 测试。
-    - 迁移所有生产调用到 `publish_if_generation_current_or_newer` 或 `compare_update`/`compare_clear`。
-  - [ ] 8.3 增加 audit 规则：禁止新增裸 `shared_lobby_store->update` / `->publish`（白名单测试目录）
-  - [ ] 8.4 检查点：Store 单测 + dual_gc + 全量 verification 通过
-    - 确保所有测试通过，如有疑问请询问用户。
+- [x] 8. Store 写路径收紧
+  - [x] 8.1 全库枚举 `Store::publish` / `update` / `publish_if_generation_*` / `compare_*` 调用点
+    - 生产 dll：仅 `publish_if_generation_current_or_newer` / `compare_update` / `compare_clear`（coordinator + post_login + steam_game_coordinator）。
+    - 裸 `publish`/`update`/`clear` 仅出现在 tools 测试与 Store 自身实现。
+  - [x] 8.2 收紧或隔离裸 `update`/`publish`
+    - 方案 A：头文件注释标注 test/fixture-only；生产已无调用点可迁移。
+  - [x] 8.3 增加 audit 规则：禁止生产 dll 裸 `Store::publish` / `Store::update`
+    - `tools/_audit_gc_refactor.py`：`audit_store_write_discipline`（AUDIT 10b）。
+  - [x] 8.4 检查点：Store 单测 + dual_gc + 全量 verification 通过
+    - 2026-07-13：`bash tools/run_gc_verification.sh --fast` **GC verification passed**；audit Store write discipline issues: 0。
 
 - [ ] 9. 跨 GC 装备端口收窄（薄重构，不改协议）
   - [ ] 9.1 将 `GBE_Push*` / `GBE_Refresh*` 声明迁出 `gbe_dota_gc_internal.h` 到 `gbe_dota_inventory_ports.h`（或等价）

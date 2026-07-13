@@ -1374,6 +1374,57 @@ def audit_shared_lobby_global_access():
     return issues
 
 
+def audit_store_write_discipline(source_texts=None):
+    """Ban bare Store::publish/update from production dll; tests may still bootstrap."""
+    if source_texts is None:
+        source_texts = {}
+        for path in glob.glob(os.path.join(ROOT_DIR, "dll", "**", "*.h"), recursive=True):
+            source_texts[os.path.relpath(path, ROOT_DIR)] = read(path)
+        for path in glob.glob(os.path.join(ROOT_DIR, "dll", "*.cpp")):
+            source_texts[os.path.relpath(path, ROOT_DIR)] = read(path)
+
+    # Match store-style receivers only (SharedLobbyStore / GetShared... / lobby_store / bare store).
+    bare_write = re.compile(
+        r"(?P<recv>"
+        r"GBE_SharedLobbyStore\s*\(\s*\)|"
+        r"GBE_GetSharedDotaLobbyStateStore\s*\(\s*\)|"
+        r"[A-Za-z_][A-Za-z0-9_]*(?:\s*\(\s*\))?"
+        r")"
+        r"\s*(?:\.|->)\s*"
+        r"(?P<method>publish|update)\s*\("
+    )
+    issues = []
+    store_impl = "gbe_dota_lobby_state_store.cpp"
+    store_header = "gbe_dota_lobby_state_store.h"
+
+    for source_name, source_text in source_texts.items():
+        base = os.path.basename(source_name)
+        if base in {store_impl, store_header}:
+            continue
+        uncommented = strip_comments(source_text)
+        for match in bare_write.finditer(uncommented):
+            method = match.group("method")
+            # Skip gated APIs that embed publish/update in longer names.
+            window_start = max(0, match.start() - 64)
+            window = uncommented[window_start:match.end()]
+            if method == "publish" and "publish_if_generation" in window:
+                continue
+            if method == "update" and "compare_update" in window:
+                continue
+            # Require receiver to look like a Store handle (avoid unrelated .update).
+            recv = match.group("recv")
+            if not re.search(
+                r"(?:SharedLobbyStore|GetSharedDotaLobbyStateStore|lobby_store|\bstore\b)",
+                recv,
+            ):
+                continue
+            line_no = uncommented.count("\n", 0, match.start()) + 1
+            issues.append(
+                f"{base}:{line_no}: bare Store::{method}() in production; use publish_if_generation_current_or_newer / compare_update / compare_clear"
+            )
+    return issues
+
+
 def audit_composition_root_lifecycle(
     steam_client_text=None,
     steam_client_header_text=None,
@@ -1838,6 +1889,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 10b: Store write discipline (no bare publish/update in production)")
+    print("=" * 70)
+    print("  Action: production dll must use generation-gated Store writes only.")
+    store_write_discipline_issues = audit_store_write_discipline()
+    if not store_write_discipline_issues:
+        print("  (none) - production paths avoid bare Store::publish / Store::update")
+    else:
+        for issue in store_write_discipline_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("AUDIT 11: Concurrency ownership contract")
     print("=" * 70)
     print("  Action: keep GC state owners, synchronization domains, and async boundaries explicit.")
@@ -2057,6 +2120,7 @@ def main():
     print(f"  High-risk reason inventory issues:   {len(reason_issues)}")
     print(f"  Lifecycle ownership issues:          {len(lifecycle_ownership_issues)}")
     print(f"  Shared lobby global access issues:   {len(shared_lobby_global_issues)}")
+    print(f"  Store write discipline issues:       {len(store_write_discipline_issues)}")
     print(f"  Concurrency ownership issues:        {len(concurrency_ownership_issues)}")
     print(f"  Reconnect transition-layer issues:   {len(reconnect_transition_issues)}")
     print(f"  Shared lobby compatibility issues:   {len(shared_lobby_compatibility_issues)}")
@@ -2075,7 +2139,7 @@ def main():
     print(f"  CI failure localization issues:       {len(ci_failure_localization_issues)}")
     print(f"  Architecture investment boundary issues: {len(architecture_investment_boundary_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
         sys.exit(1)
 
 
