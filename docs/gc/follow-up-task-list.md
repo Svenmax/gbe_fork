@@ -486,7 +486,7 @@ git diff --check
 
 Latest handoff verification:
 
-- `bash tools/run_gc_verification.sh --fast` passed (2026-07-13, post D.12): dual_gc host green, payload helpers `546/546`, handler smoke `88/88`, behavior_replay golden `24,7055,26,25`, registry `37` entries, audit groups including template ownership + `gc_internal` slim boundary all `0` issues.
-- Prefer `--full` before merge to `dev` or when changing production build source lists.
+- `bash tools/run_gc_verification.sh --full` passed (2026-07-13, post D.12 docs sync): offline full suite green; payload helpers `546/546`; handler smoke `88/88`; behavior_replay golden `24,7055,26,25`; registry `37` entries / `23` high-risk fixtures; audit groups including template ownership + `gc_internal` slim boundary all `0` issues; replay fixtures include chat/lobby_lifecycle/wire_edge_cases.
+- Fast gate remains the PR smoke; re-run full after production source-list or premake changes.
 
 For source-list, build-system, or new-file changes, also check the relevant `premake5.lua` source lists and `tools/run_gc_offline_tests.sh` entries.
