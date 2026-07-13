@@ -117,6 +117,9 @@ enum class EffectKind : std::uint8_t {
     LegacyLifecycleActionsRequested,
     RuntimeMemberUpdateRequested,
     RuntimeGameStateUpdateRequested,
+    // Named teardown gate (C3). transition_teardown dual-emits this with
+    // LegacyTeardownActionsRequested so call sites can migrate one file at a time.
+    TeardownActionsRequested,
     LegacyTeardownActionsRequested,
 };
 
@@ -601,13 +604,22 @@ constexpr MachineTransitionResult transition_teardown(
     if (state.generation == std::numeric_limits<std::uint64_t>::max())
         return rejected_machine_transition(state, DecisionReason::GenerationExhausted);
 
+    EffectList effects{};
+    effects.values[effects.count++] = {
+        EffectKind::TeardownActionsRequested,
+        state.lifecycle,
+        state.lifecycle,
+        state.generation,
+    };
+    effects.values[effects.count++] = {
+        EffectKind::LegacyTeardownActionsRequested,
+        state.lifecycle,
+        state.lifecycle,
+        state.generation,
+    };
     return {
         state,
-        { { Effect{
-            EffectKind::LegacyTeardownActionsRequested,
-            state.lifecycle,
-            state.lifecycle,
-            state.generation } }, 1u },
+        effects,
         DecisionReason::TransitionApplied,
         DecisionStatus::Accepted,
     };

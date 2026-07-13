@@ -168,7 +168,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaAbandonCurrentGameRequest(bool wrappe
           true,
           GBE_local_lobby.abandon_postgame_active });
     if (!teardown.accepted() || !teardown.effects.contains(
-            gbe::dota_lifecycle_state_machine::EffectKind::LegacyTeardownActionsRequested))
+            gbe::dota_lifecycle_state_machine::EffectKind::TeardownActionsRequested))
         return true;
 
     if (d.discard_queued_launch_messages)
@@ -234,7 +234,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaGameMatchSignOutRequest(bool wrapped,
               true,
               GBE_local_lobby.abandon_postgame_active });
         if (!teardown.accepted() || !teardown.effects.contains(
-                gbe::dota_lifecycle_state_machine::EffectKind::LegacyTeardownActionsRequested))
+                gbe::dota_lifecycle_state_machine::EffectKind::TeardownActionsRequested))
             return true;
         GBE_QueueDotaPostGameTeardown("7004_signout_postgame", wrapped, outer_session_field_raw, false, false, false);
         GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7004_signout_postgame_state");
@@ -303,7 +303,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
           true,
           GBE_local_lobby.pending_leave_after_7040 });
     if (!teardown.accepted() || !teardown.effects.contains(
-            gbe::dota_lifecycle_state_machine::EffectKind::LegacyTeardownActionsRequested))
+            gbe::dota_lifecycle_state_machine::EffectKind::TeardownActionsRequested))
         return true;
     uint64 fallback_generic_lobby_id = 0ull;
     if (GBE_local_lobby.generic_lobby_id == 0ull) {

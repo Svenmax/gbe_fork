@@ -19,7 +19,8 @@ Lifecycle SM 已能 **分类事件 / generation / 部分 State**，但多数生�
 | `RuntimeMemberUpdateRequested` | **具名** | match / inventory → `build_member_runtime_actions` → Execute |
 | `RuntimeGameStateUpdateRequested` | **具名** | match → `build_transition_actions` → Execute |
 | `LegacyLifecycleActionsRequested` | **Legacy 门闩** | custom_game 7070/8052/8053：accept 后跑 `compute_custom_game_*` + `GBE_ExecuteDotaCustomGameLifecycleTransition` |
-| `LegacyTeardownActionsRequested` | **Legacy 门闩** | leave / abandon / signout / postgame finalize：accept 后跑各自 Queue / action_list / cleanup |
+| `TeardownActionsRequested` | **具名 teardown 门闩（C3）** | `transition_teardown` 与 Legacy **双发**；`lobby_lifecycle_handlers` 已改用此门闩 |
+| `LegacyTeardownActionsRequested` | **Legacy 门闩（兼容）** | flow / list / member_coordinator 仍检查此 token；与具名 effect 同时存在 |
 
 目标（Phase C）：把 `Legacy*` 逐步换成 **具名 Effect + 统一 action builder**，handler 只做 parse → SM → Execute。
 
@@ -37,21 +38,22 @@ Lifecycle SM 已能 **分类事件 / generation / 部分 State**，但多数生�
 
 **收敛含义：** 将 `LaunchLifecycleTransitionDecision` 的 apply/publish/runtime 语义编码进 SM EffectList（或 `TransitionEffects`），删除 “Legacy 门闩 + 第二套 compute_*” 双决策。
 
-## 4. LegacyTeardownActionsRequested 调用面
+## 4. Teardown 门闩调用面
 
 入口 API：`transition_teardown`（Leave / Abandon / PostGame / Reset + Initiate|Finalize）。
+C3：accept 时 **双发** `TeardownActionsRequested` + `LegacyTeardownActionsRequested`（`EffectList` 容量 2）。
 
-| 文件 | 场景 | Stage | SM 后真实副作用 |
-|------|------|-------|-----------------|
-| `lobby_lifecycle_handlers.cpp` | 7035 Abandon | Initiate | discard launch / suppress / `GBE_QueueDotaPostGameTeardown` |
-| 同上 | 7004 SignOut | Initiate | `QueueDotaPostGameTeardown` + details + 25 via action_list |
-| 同上 | 7040 Leave | Initiate | leave action_list / cache unsub 等（handler 后续） |
-| `lobby_flow_coordinator.cpp` | abandon finalize | Finalize | `abandon_finalize_action_list` → Execute |
-| 同上 | normal signout finalize | Finalize | signout cleanup action_list → Execute |
-| `lobby_list_handlers.cpp` | list 路径 leave teardown | Finalize | leave 相关 teardown 门闩 |
-| `lobby_state_member_coordinator.cpp` | player postgame cleanup | Finalize | `player_postgame_cleanup_action_list` → Execute |
+| 文件 | 场景 | Stage | 门闩 token | SM 后真实副作用 |
+|------|------|-------|------------|-----------------|
+| `lobby_lifecycle_handlers.cpp` | 7035 Abandon | Initiate | **TeardownActionsRequested** | discard / suppress / QueuePostGame |
+| 同上 | 7004 SignOut | Initiate | **TeardownActionsRequested** | QueuePostGame + details + 25 |
+| 同上 | 7040 Leave | Initiate | **TeardownActionsRequested** | leave action_list / cache unsub |
+| `lobby_flow_coordinator.cpp` | abandon finalize | Finalize | LegacyTeardown… | `abandon_finalize_action_list` |
+| 同上 | normal signout finalize | Finalize | LegacyTeardown… | signout cleanup action_list |
+| `lobby_list_handlers.cpp` | list leave teardown | Finalize | LegacyTeardown… | leave teardown 门闩 |
+| `lobby_state_member_coordinator.cpp` | player postgame | Finalize | LegacyTeardown… | `player_postgame_cleanup_action_list` |
 
-**收敛含义：** 为 Initiate/Finalize × (Leave|Abandon|PostGame|Reset) 定义 **具名 teardown effect**（如 `PostGameTeardownQueued`、`CacheUnsubscribedRequested`、`RuntimeCleared`），由 action builder 展开；SM 应推进 lifecycle State（今日 `transition_teardown` **不改** `state.lifecycle`，只发 Legacy effect）。
+**下一步：** 将其余三文件门闩改为 `TeardownActionsRequested`，再删除 dual-emit 中的 Legacy；再拆分 Initiate/Finalize 具名载荷 effect。
 
 ## 5. 已具名（对照，非 Legacy）
 
@@ -68,10 +70,10 @@ Lifecycle SM 已能 **分类事件 / generation / 部分 State**，但多数生�
 
 | 优先级 | 项 | 理由 | 停手 |
 |--------|----|------|------|
-| P0 | Teardown：7040 Leave Initiate | 路径清晰、replay 有 `lobby_leave_teardown` | 不改消息序 |
-| P0 | Teardown：7035 Abandon Initiate | smoke 覆盖 abandon 队列 | 不改 suppress/discard 语义 |
-| P1 | Teardown：7004 SignOut Initiate | 与 25/7010 序强相关 | 需 recorder 序测 |
-| P1 | Teardown Finalize 三处（flow / member / list） | 对称 Initiate | 区分 host/player/arcade |
+| P0 | ~~Teardown：lifecycle_handlers 门闩~~ | **C3 完成**：具名 `TeardownActionsRequested` + dual-emit | — |
+| P0b | 迁移 flow / list / member 门闩到具名 token | 去掉 Legacy 检查 | 不改消息序 |
+| P0c | 去掉 dual-emit 中的 `LegacyTeardown*` | 全 call site 已迁 | audit 同步 |
+| P1 | Teardown 具名载荷（Queue/Clear/Unsub） | 真收敛副作用 | 需 recorder 序测 |
 | P2 | Custom game 7070/8052/8053 | 双决策（SM + compute_*）最重 | 保持 direct/wrapped 等价测 |
 | P3 | 统一 inventory/network 的 member runtime 必须经 SM | 消除旁路 | 不改 hero 权威 API |
 

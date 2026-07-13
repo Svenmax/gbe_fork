@@ -102,11 +102,11 @@ class LifecycleTransitionGateAuditTest(unittest.TestCase):
     def test_rejects_missing_typed_effect_gate(self):
         sources = self.valid_sources()
         sources["gbe_dota_lobby_lifecycle_handlers.cpp"] = sources["gbe_dota_lobby_lifecycle_handlers.cpp"].replace(
-            "EffectKind::LegacyTeardownActionsRequested",
+            "EffectKind::TeardownActionsRequested",
             "",
         )
         self.assertIn(
-            "gbe_dota_lobby_lifecycle_handlers.cpp: lifecycle path is missing transition gate token EffectKind::LegacyTeardownActionsRequested",
+            "gbe_dota_lobby_lifecycle_handlers.cpp: lifecycle path is missing transition gate token EffectKind::TeardownActionsRequested",
             audit.audit_lifecycle_transition_gates(sources),
         )
 

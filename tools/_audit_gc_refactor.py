@@ -210,7 +210,7 @@ LIFECYCLE_TRANSITION_GATES = {
     ),
     "gbe_dota_lobby_lifecycle_handlers.cpp": (
         "transition_teardown(",
-        "EffectKind::LegacyTeardownActionsRequested",
+        "EffectKind::TeardownActionsRequested",
     ),
     "gbe_dota_lobby_list_handlers.cpp": (
         "transition_teardown(",
