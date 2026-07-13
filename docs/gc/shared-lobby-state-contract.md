@@ -58,6 +58,8 @@ Preferred current patterns:
 
 Avoid adding new ad-hoc writes to shared fields from handlers. If a new behavior needs shared-state mutation, first decide whether it is a publish, a clear, or a read-only decision.
 
+C1（2026-07-13）复核：生产 dll 无裸 `Store::publish/update`；shared clear 走 `compare_clear`。local 全量赋值与 publish 门面清单见 [LOCAL_LOBBY_USAGE.md](./LOCAL_LOBBY_USAGE.md)。
+
 ## Behaviors That Must Be Protected
 
 ### Normal Signout Finalize

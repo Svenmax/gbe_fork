@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| C1 | local lobby 短期化 / Store 写路径审计 | lobby_state + CURRENT 风险 | 生产写 shared 仅 Store 门控；local 使用点清单 | verification --full | 不改 host 权威字段语义 |
+| C2 | Legacy lifecycle effect 收敛盘点 | lifecycle SM + effect 调用面 | 列出仍走 Legacy effect 的路径与目标 SM 迁移顺序 | verification --full | 不改运行时语义 |
 
 ## 本周不做
 
@@ -20,6 +20,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | C1：Store 写门控复核 + local 全量赋值清单 | `LOCAL_LOBBY_USAGE.md` |
 | 2026-07-13 | B4：删 wrapped dead SetTeamSlot fallback；解析层分责文档 | post_login_handlers + MESSAGE_ROUTING §5 |
 | 2026-07-13 | B3：template 白名单；8879/8095 改 REGISTRY_DEFENSIVE 转调 | template_replay + MESSAGE_ROUTING |
 | 2026-07-13 | B2：Hello 迁 welcome_coordinator 显式 handler；入口薄路由 | steam_game_coordinator + welcome_coordinator |
