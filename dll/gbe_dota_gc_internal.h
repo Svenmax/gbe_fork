@@ -78,26 +78,8 @@ extern const char * const GBE_kOldDotaPracticeLobbyLobbyIdTextAlt;
 extern const uint32 GBE_kSteamTicketAuthComplete;
 extern const char * const GBE_kDotaAbandonPersonaStateInitHex;
 
-// Shared helper functions (defined in steam_game_coordinator.cpp)
-bool GBE_PushDotaPlayerEquippedItemsCacheToGC(
-    Steam_Game_Coordinator *target_gc,
-    const CSteamID &player_steam_id,
-    const std::vector<Econ_Item> &source_items,
-    bool unsubscribe_first,
-    const char *reason);
-
-bool GBE_RefreshDotaHostEquippedItemsCache(
-    Steam_Game_Coordinator *server_gc,
-    const CSteamID &player_steam_id,
-    const std::vector<Econ_Item> &source_items,
-    const char *reason);
-
-bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
-    Steam_Game_Coordinator *client_gc,
-    const CSteamID &player_steam_id,
-    uint32 hero_id,
-    const std::vector<Econ_Item> &source_items,
-    const char *reason);
+// Cross-GC equip ports live in gbe_dota_inventory_ports.h (C.9).
+// Include that header from inventory/match/payload TUs that call them.
 
 bool GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage(
     const char *template_hex,

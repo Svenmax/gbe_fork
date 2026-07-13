@@ -112,11 +112,12 @@
   - [x] 8.4 检查点：Store 单测 + dual_gc + 全量 verification 通过
     - 2026-07-13：`bash tools/run_gc_verification.sh --fast` **GC verification passed**；audit Store write discipline issues: 0。
 
-- [ ] 9. 跨 GC 装备端口收窄（薄重构，不改协议）
-  - [ ] 9.1 将 `GBE_Push*` / `GBE_Refresh*` 声明迁出 `gbe_dota_gc_internal.h` 到 `gbe_dota_inventory_ports.h`（或等价）
-    - `gc_internal.h` 仅保留日志、const 表、hello cache 等真跨 TU 符号。
-  - [ ] 9.2 切断 `steam_networking_sockets.cpp` 对 `gbe_dota_gc_internal.h` 的依赖（若仅需 reconnect 相关，改 include 窄头）
-  - [ ]* 9.3 include 自包含编译：新 ports 头单独 TU 可编
+- [x] 9. 跨 GC 装备端口收窄（薄重构，不改协议）
+  - [x] 9.1 将 `GBE_Push*` / `GBE_Refresh*` 声明迁出 `gbe_dota_gc_internal.h` 到 `gbe_dota_inventory_ports.h`（或等价）
+    - 新头：`dll/gbe_dota_inventory_ports.h`；`gc_internal.h` 去掉三装备 free 声明。
+  - [x] 9.2 切断 `steam_networking_sockets.cpp` 对 `gbe_dota_gc_internal.h` 的依赖
+    - 改为 `gbe_dota_locator.h` + reconnect_shared + lobby_state_store。
+  - [x]* 9.3 include 自包含：ports 头仅 forward + steamtypes + vector；调用方显式 include。
 
 ## 阶段 D — 结构拆分与验真升级（C 之后）
 

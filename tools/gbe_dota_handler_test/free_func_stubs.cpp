@@ -12,6 +12,7 @@
 
 #include "stubs.h"
 #include "dll/gbe_dota_gc_internal.h"
+#include "dll/gbe_dota_inventory_ports.h"
 #include "dll/gbe_proto_wire.h"
 
 #include <array>

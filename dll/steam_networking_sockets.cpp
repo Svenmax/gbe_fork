@@ -17,7 +17,7 @@
 
 #include "dll/steam_networking_sockets.h"
 #include "dll/gbe_dota_reconnect_shared.h"
-#include "gbe_dota_gc_internal.h"
+#include "gbe_dota_locator.h"
 #include "gbe_dota_lobby_state_store.h"
 
 #include <cstdio>
