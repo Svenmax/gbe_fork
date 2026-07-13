@@ -22,7 +22,7 @@
 |--------|------|------------|
 | GP-01…07 | L2 为主，闸口内 | 维持；改路径时点名 PathID |
 | GP-08 | L1 决策单测 + 部分 smoke | 新 reset reason 时扩展 L1 |
-| **GP-09** Hello/Welcome | **L1 有**（extract/build/compose in payload_helpers_test）；**L2 无**（handler_test 未链 `welcome_coordinator`） | 中高：要 stub restore/login-sync/queue 或抽 pure plan |
+| **GP-09** Hello/Welcome | **L1** payload extract/build；**L1.5** `plan_client_hello`（`gbe_dota_welcome_flow.h` + lobby_flow_test）；**L2 无** | L2 仍中高；E1 plan 已完成 |
 | **GP-10** 双 GC 往返 | **缺** | 高：进程内双 GC + 真队列 |
 
 ## 3. 推荐切片顺序
@@ -30,7 +30,7 @@
 | 优先级 | 切片 | 完成定义 | 停手 |
 |--------|------|----------|------|
 | E0 | 文档对齐 | GOLDEN_PATHS 反映 L1/L2 分档；本文件为入口 | 不写长交付文 |
-| E1 | GP-09 L2 最小 | ClientHello **direct** 路径：parse 失败 → false；成功 → welcome push 序 +（可选）top_custom 标记；不要求 LoginSync 全真实现 | 不链全 `steam_game_coordinator`；不改 welcome 语义 |
+| E1 | GP-09 plan（L1.5） | **已完成：** `plan_client_hello` + 生产 ClientHello 消费 plan；lobby_flow_test 覆盖 parse/build/direct/wrapped | 不链 welcome_coordinator 进 smoke |
 | E2 | GP-09 ServerHello L2 | 无 active lobby：ServerWelcome push；已 welcome / 队列已有 welcome：skip 可断言 | 不合成 7034；不改 cache 字节 |
 | E3 | GP-02/03 少 stub | 仅当 HOST/equip 回归痛时 | 不扩 dual_gc 到全 GC |
 | E4 | GP-10 设计 | 书面 harness 边界（client/server GC 构造、消息泵） | **无设计不写 L4 代码** |

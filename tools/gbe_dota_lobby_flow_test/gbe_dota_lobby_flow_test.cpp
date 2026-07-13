@@ -1,5 +1,6 @@
 #include "dll/gbe_dota_lobby_flow.h"
 #include "dll/gbe_dota_types.h"
+#include "dll/gbe_dota_welcome_flow.h"
 
 #include <iostream>
 
@@ -1788,6 +1789,68 @@ bool test_teardown_action_lists()
     return ok;
 }
 
+bool test_client_hello_plan()
+{
+    using gbe::dota_welcome_flow::ClientHelloDisposition;
+    using gbe::dota_welcome_flow::ClientHelloPlanInput;
+    using gbe::dota_welcome_flow::plan_client_hello;
+
+    bool ok = true;
+
+    {
+        ClientHelloPlanInput input{};
+        input.parse_ok = false;
+        const auto plan = plan_client_hello(input);
+        ok &= expect_true(plan.disposition == ClientHelloDisposition::RejectParse, "parse fail rejects");
+        ok &= expect_true(!plan.push_welcome, "parse fail no welcome");
+        ok &= expect_true(!plan.push_top_custom_games, "parse fail no top custom");
+        ok &= expect_true(!plan.push_login_sync, "parse fail no login sync");
+    }
+
+    {
+        ClientHelloPlanInput input{};
+        input.parse_ok = true;
+        input.welcome_build_ok = false;
+        input.direct_message = true;
+        input.top_custom_games_available = true;
+        const auto plan = plan_client_hello(input);
+        ok &= expect_true(plan.disposition == ClientHelloDisposition::AcceptWithoutWelcome, "build fail accepts without welcome");
+        ok &= expect_true(!plan.push_welcome, "build fail no welcome push");
+        ok &= expect_true(!plan.push_top_custom_games, "build fail no top custom");
+        ok &= expect_true(!plan.push_login_sync, "build fail no login sync");
+    }
+
+    {
+        ClientHelloPlanInput input{};
+        input.parse_ok = true;
+        input.welcome_build_ok = true;
+        input.direct_message = true;
+        input.top_custom_games_available = true;
+        const auto plan = plan_client_hello(input);
+        ok &= expect_true(plan.disposition == ClientHelloDisposition::AcceptWithWelcome, "direct success disposition");
+        ok &= expect_true(plan.push_welcome, "direct success pushes welcome");
+        ok &= expect_eq_u64(plan.welcome_emsg_unmasked, GBE_kEMsgGCClientWelcome, "direct welcome emsg");
+        ok &= expect_true(plan.push_top_custom_games, "direct success pushes top custom when available");
+        ok &= expect_true(plan.push_login_sync, "direct success pushes login sync");
+    }
+
+    {
+        ClientHelloPlanInput input{};
+        input.parse_ok = true;
+        input.welcome_build_ok = true;
+        input.direct_message = false;
+        input.top_custom_games_available = false;
+        const auto plan = plan_client_hello(input);
+        ok &= expect_true(plan.disposition == ClientHelloDisposition::AcceptWithWelcome, "wrapped success disposition");
+        ok &= expect_true(plan.push_welcome, "wrapped success pushes welcome");
+        ok &= expect_eq_u64(plan.welcome_emsg_unmasked, GBE_kEMsgClientFromGC, "wrapped welcome emsg");
+        ok &= expect_true(!plan.push_top_custom_games, "wrapped without top custom");
+        ok &= expect_true(!plan.push_login_sync, "wrapped no login sync");
+    }
+
+    return ok;
+}
+
 } // namespace
 
 int main()
@@ -1826,6 +1889,7 @@ int main()
     ok &= test_normalize_and_owner_transfer();
     ok &= test_normalize_arcade_lobby_member_slots();
     ok &= test_teardown_action_lists();
+    ok &= test_client_hello_plan();
 
     if (!ok)
         return 1;

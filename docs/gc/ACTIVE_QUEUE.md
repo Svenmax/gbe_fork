@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| E1 | GP-09 ClientHello direct L2 最小（或 pure plan） | handler_test 或 payload plan | GOLDEN GP-09 L2 有用例；verification --full | verification --full | 不改 welcome 生产语义 |
+| E2 | GP-09 ServerHello pure plan 或 L2 最小 | welcome_flow / lobby_flow_test | skip/push 决策可测；verification --full | verification --full | 不改 ServerWelcome 字节 |
 
 ## 本周不做
 
@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | E1：`plan_client_hello` + 生产消费 + flow 测（GP-09 L1.5） | welcome_flow + welcome_coordinator |
 | 2026-07-13 | Phase E 边界 + GP-09 分档（L1 有 / L2 缺） | `PHASE_E_BOUNDARY.md` + GOLDEN |
 | 2026-07-13 | Phase D 边界书面化（准入/切片/停手；默认不实施） | `PHASE_D_BOUNDARY.md` |
 | 2026-07-13 | C-exit：Legacy 路径归零复核；CURRENT 风险 #4 改为门闩形态说明 | LEGACY + CURRENT + ACTIVE |

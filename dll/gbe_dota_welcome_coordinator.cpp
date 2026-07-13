@@ -34,6 +34,7 @@
 #include "gbe_dota_runtime_state.h"
 #include "gbe_dota_payload_lobby_helpers.h"
 #include "gbe_dota_payload_wire_helpers.h"
+#include "gbe_dota_welcome_flow.h"
 #include <atomic>
 #include <algorithm>
 #include <array>
@@ -935,13 +936,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaClientHelloRequest(
     bool direct_message)
 {
     GBE_DotaHelloContext hello_context{};
-    if (direct_message) {
-        if (!GBE_ExtractDirectDotaHelloContext(unMsgType, pubData, cubData, hello_context)) {
-            GBE_GC_DebugLog("GC_SEND_DOTA", "ignored direct ClientHello payload because parsing failed");
-            return false;
-        }
-    } else if (!GBE_ExtractDotaHelloContext(pubData, cubData, hello_context)) {
-        GBE_GC_DebugLog("GC_SEND_DOTA", "ignored ClientToGC ClientHello payload because parsing failed");
+    const bool parse_ok = direct_message
+        ? GBE_ExtractDirectDotaHelloContext(unMsgType, pubData, cubData, hello_context)
+        : GBE_ExtractDotaHelloContext(pubData, cubData, hello_context);
+    if (!parse_ok) {
+        GBE_GC_DebugLog(
+            "GC_SEND_DOTA",
+            direct_message
+                ? "ignored direct ClientHello payload because parsing failed"
+                : "ignored ClientToGC ClientHello payload because parsing failed");
         return false;
     }
 
@@ -950,34 +953,48 @@ bool Steam_Game_Coordinator::GBE_HandleDotaClientHelloRequest(
     const uint32 account_id = settings->get_local_steam_id().GetAccountID();
     const uint32 app_id = settings->get_local_game_id().AppID();
 
-    const bool built = direct_message
+    const bool welcome_build_ok = direct_message
         ? GBE_BuildDirectDotaClientWelcome(steam_id, app_id, account_id, hello_context, welcome_message)
         : GBE_ComposeDotaClientWelcome(steam_id, app_id, account_id, hello_context, welcome_message);
 
-    if (!built) {
+    if (!welcome_build_ok) {
         GBE_GC_DebugLog(
             "GC_SEND_DOTA",
             "failed to build ClientWelcome version=%u steamid=%llu accountid=%u",
             hello_context.version,
             static_cast<unsigned long long>(steam_id),
             account_id);
-        return true;
     }
-
-    GBE_GC_DebugLog(
-        "GC_SEND_DOTA",
-        "replaying ClientWelcome version=%u steamid=%llu accountid=%u target_job=%llu direct=%d",
-        hello_context.version,
-        static_cast<unsigned long long>(steam_id),
-        account_id,
-        static_cast<unsigned long long>(hello_context.has_source_job ? hello_context.source_job_id : 0ull),
-        direct_message ? 1 : 0);
-
-    push_incoming_now((direct_message ? GBE_kEMsgGCClientWelcome : GBE_kEMsgClientFromGC) | GBE_kProtoMask, welcome_message);
 
     std::string top_custom_games_message;
     size_t top_custom_games_count = 0;
-    if (GBE_AdaptDotaTopCustomGamesListPayload(settings, top_custom_games_message, top_custom_games_count)) {
+    const bool top_custom_games_available =
+        welcome_build_ok &&
+        GBE_AdaptDotaTopCustomGamesListPayload(settings, top_custom_games_message, top_custom_games_count);
+
+    gbe::dota_welcome_flow::ClientHelloPlanInput plan_input{};
+    plan_input.parse_ok = true;
+    plan_input.welcome_build_ok = welcome_build_ok;
+    plan_input.direct_message = direct_message;
+    plan_input.top_custom_games_available = top_custom_games_available;
+    const gbe::dota_welcome_flow::ClientHelloPlan plan = gbe::dota_welcome_flow::plan_client_hello(plan_input);
+
+    if (plan.disposition == gbe::dota_welcome_flow::ClientHelloDisposition::AcceptWithoutWelcome)
+        return true;
+
+    if (plan.push_welcome) {
+        GBE_GC_DebugLog(
+            "GC_SEND_DOTA",
+            "replaying ClientWelcome version=%u steamid=%llu accountid=%u target_job=%llu direct=%d",
+            hello_context.version,
+            static_cast<unsigned long long>(steam_id),
+            account_id,
+            static_cast<unsigned long long>(hello_context.has_source_job ? hello_context.source_job_id : 0ull),
+            direct_message ? 1 : 0);
+        push_incoming_now(plan.welcome_emsg_unmasked | GBE_kProtoMask, welcome_message);
+    }
+
+    if (plan.push_top_custom_games) {
         GBE_PushDotaResponse(GBE_kDotaTopCustomGamesList, top_custom_games_message, false, nullptr, "top_custom_games_after_welcome");
         GBE_GC_DebugLog(
             "GC_DOTA_CUSTOM_GAMES",
@@ -986,7 +1003,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaClientHelloRequest(
             direct_message ? 1 : 0);
     }
 
-    if (direct_message)
+    if (plan.push_login_sync)
         GBE_PushDotaLoginSyncMessages();
     return true;
 }
