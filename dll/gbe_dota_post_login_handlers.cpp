@@ -360,26 +360,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
         return GBE_HandleDotaSubmitPlayerReportV2Request(body, body_size, has_source_job, source_job);
     }
 
-    if (request_emsg == 4506) {
-        return GBE_HandleDotaLaunchAdvanceOrConsume(request_emsg, "runtime packet after 4506 stall recovery", "4506_launch_run", "server available acknowledgement", source_job, body_size);
-    }
-
-    if (request_emsg == GBE_kSteamTicketAuthComplete) {
-        return GBE_HandleDotaLaunchAdvanceOrConsume(request_emsg, "runtime packet after 5429", "5429_launch_run", "ticket auth complete", source_job, body_size);
-    }
-
-    if (request_emsg == 8870) {
-        return GBE_HandleDota8870LaunchMarkerRequest(request_emsg, source_job);
-    }
-
-    if (request_emsg == 4511) {
-        return GBE_HandleDotaLanServerAvailableRequest(request_emsg, body, body_size, source_job);
-    }
-
-    if (request_emsg == 4508) {
-        return GBE_HandleDotaServerAssignmentRequest(request_emsg, body, body_size, has_source_job, source_job);
-    }
-
     if (request_emsg == GBE_kSteamGamesPlayedWithDataBlob && GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()) {
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",

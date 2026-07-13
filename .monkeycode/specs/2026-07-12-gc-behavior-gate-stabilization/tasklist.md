@@ -86,7 +86,7 @@
 
 ## 阶段 C — 分发与 Store 纪律（B 全绿后）
 
-- [ ] 7. 高风险 post-login if 迁入 registry
+- [x] 7. 高风险 post-login if 迁入 registry
   - [x] 7.1 迁移 `7034` → registry Entry + adapter
     - `HandlerId::Direct7034`；Direct-only；fixture `smoke:test_match_7034_host_showcase_repush_guard_marks_once`。
     - 从 `gbe_dota_post_login_handlers.cpp` 删除对应 if。
@@ -94,11 +94,12 @@
     - `HandlerId::EquipItems`；Direct-only；fixture `smoke:test_inventory_equip_full_forward`。
   - [x] 7.3 迁移 abandon / signout / destroy lobby → registry
     - DirectAndWrapped + ForwardWrappedSession；fixture 指向 abandon/signout/destroy smoke。
-  - [ ] 7.4 迁移 launch 标记链（8870 / 4511 / 4508 等）→ registry 或明确子表
-    - 若体量大，可先 registry 壳 + 原 handler 函数，禁止残留平行 if。
-  - [ ] 7.5 更新 `all_high_risk_entries_have_fixture` 与 audit 基线
-    - 文件：`gbe_dota_handler_registry.h`、`tools/_audit_gc_refactor.py`（若有 registry 审计项）。
-  - [ ]* 7.6 registry 查找属性：每个 high-risk message_id 在 Direct/Wrapped 下至多一条 Entry
+  - [x] 7.4 迁移 launch 标记链（4506 / 5429 / 8870 / 4511 / 4508）→ registry
+    - Direct-only 壳 + 原 handler；4511/4508 为 LobbyLifecycle 并挂 smoke fixture。
+  - [x] 7.5 更新 `all_high_risk_entries_have_fixture` 与 audit 基线
+    - registry size 37；audit 自动解析 kTable；smoke contract 同步。
+  - [x]* 7.6 registry 查找属性：每个 high-risk message_id 在 Direct/Wrapped 下至多一条 Entry
+    - 由 `has_unique_message_ids_per_mode` + production registry contract 覆盖。
 
 - [ ] 8. Store 写路径收紧
   - [ ] 8.1 全库枚举 `Store::publish` / `update` / `publish_if_generation_*` / `compare_*` 调用点

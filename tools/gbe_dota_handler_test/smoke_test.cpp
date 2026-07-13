@@ -958,7 +958,7 @@ static void test_production_dispatcher_registry_contract()
 {
     const auto view = Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry();
     TEST_ASSERT(view.entries != nullptr, "production registry should expose entries");
-    TEST_ASSERT_EQ(view.size, 32u, "production registry should retain all canonical entries");
+    TEST_ASSERT_EQ(view.size, 37u, "production registry should retain all canonical entries");
     TEST_ASSERT(gbe::dota_handler_registry::has_unique_message_ids_per_mode(view.entries, view.size), "production registry modes should be unique");
     TEST_ASSERT(gbe::dota_handler_registry::all_high_risk_entries_have_fixture(view.entries, view.size), "high-risk production entries should retain fixtures");
     for (std::size_t index = 0; index < view.size; ++index) {
@@ -2526,6 +2526,35 @@ static void test_misc_lan_server_available_publishes_once_for_matching_lobby()
     ++g_tests_passed;
 }
 
+static void test_misc_server_assignment_4508_consume_smoke()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x4508u;
+    tf.gc.GBE_local_lobby.state = 0u;
+    tf.gc.GBE_local_lobby.game_state = 0u;
+
+    const std::string body = WireBodyBuilder()
+        .varint(1u, 0x0A000001u)
+        .varint(2u, 0xC0A80101u)
+        .varint(3u, 27015u)
+        .varint(4u, 27020u)
+        .take();
+    bool result = tf.gc.GBE_HandleDotaServerAssignmentRequest(
+        4508u,
+        reinterpret_cast<const uint8 *>(body.data()),
+        body.size(),
+        true,
+        0x4508ABCDu);
+
+    TEST_ASSERT(result, "4508 server assignment should return true");
+    TEST_ASSERT(tf.gc.GBE_local_lobby.active, "4508 consume should keep local lobby active");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.lobby_id, 0x4508u, "4508 consume should keep lobby id");
+
+    ++g_tests_passed;
+}
+
 static void test_misc_upload_rate()
 {
     TestFixture tf;
@@ -3507,6 +3536,9 @@ int main()
 
     std::printf("[run] test_misc_lan_server_available_publishes_once_for_matching_lobby\n");
     RUN_TEST(test_misc_lan_server_available_publishes_once_for_matching_lobby);
+
+    std::printf("[run] test_misc_server_assignment_4508_consume_smoke\n");
+    RUN_TEST(test_misc_server_assignment_4508_consume_smoke);
 
     std::printf("[run] test_misc_upload_rate\n");
     RUN_TEST(test_misc_upload_rate);

@@ -204,6 +204,23 @@ bool GBE_AdaptDotaJoinChatChannelResponsePayload(
 // minimal include list (econ_item.h, gbe_dota_gc_internal.h, gbe_proto_wire.h,
 // steamclientpublic.h, tf2 protobuf headers).
 
+// 4508 lives in gbe_dota_post_login_handlers.cpp (not linked offline). Provide a
+// minimal member stub so registry adapters and smoke can resolve the symbol.
+bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(
+    uint32 request_emsg,
+    const uint8 *body,
+    size_t body_size,
+    bool has_source_job,
+    uint64 source_job)
+{
+    (void)request_emsg;
+    (void)body;
+    (void)body_size;
+    (void)has_source_job;
+    (void)source_job;
+    return true;
+}
+
 // --- get_full_program_path stub ---
 // The real get_full_program_path() returns the directory of the running
 // executable. For tests, return a dummy path (no VPK file will be found).

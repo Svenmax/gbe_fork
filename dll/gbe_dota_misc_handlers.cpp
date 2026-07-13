@@ -421,6 +421,28 @@ bool Steam_Game_Coordinator::GBE_HandleDotaRankRequest(const uint8 *body, size_t
 }
 
 
+bool Steam_Game_Coordinator::GBE_HandleDotaLaunchAdvance4506Request(uint32 request_emsg, uint64 source_job, size_t body_size)
+{
+    return GBE_HandleDotaLaunchAdvanceOrConsume(
+        request_emsg,
+        "runtime packet after 4506 stall recovery",
+        "4506_launch_run",
+        "server available acknowledgement",
+        source_job,
+        body_size);
+}
+
+bool Steam_Game_Coordinator::GBE_HandleDotaLaunchAdvanceTicketAuthRequest(uint32 request_emsg, uint64 source_job, size_t body_size)
+{
+    return GBE_HandleDotaLaunchAdvanceOrConsume(
+        request_emsg,
+        "runtime packet after 5429",
+        "5429_launch_run",
+        "ticket auth complete",
+        source_job,
+        body_size);
+}
+
 bool Steam_Game_Coordinator::GBE_HandleDotaLaunchAdvanceOrConsume(
     uint32 request_emsg,
     const char *advance_reason,

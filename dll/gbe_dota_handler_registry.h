@@ -64,6 +64,11 @@ enum class HandlerId : std::uint8_t {
     AbandonCurrentGame,
     GameMatchSignOut,
     DestroyLobby,
+    LaunchAdvance4506,
+    LaunchAdvanceTicketAuth,
+    LaunchMarker8870,
+    LanServerAvailable,
+    ServerAssignment,
 };
 
 using Adapter = bool (*)(

@@ -39,8 +39,13 @@
 | AbandonCurrentGame (7035) | AbandonCurrentGame | D+W | LobbyLifecycle | smoke:test_lobby_abandon_current_game_disconnect_queues_25 |
 | GameMatchSignOut (7004) | GameMatchSignOut | D+W | LobbyLifecycle | smoke:test_lobby_game_match_signout_queues_7005_and_postgame |
 | DestroyLobby (8246) | DestroyLobby | D+W | LobbyLifecycle | smoke:test_lobby_destroy_queues_25_then_8247_and_clears_lobby |
+| 4506 | LaunchAdvance4506 | Direct | None | — |
+| 5429 SteamTicketAuth | LaunchAdvanceTicketAuth | Direct | None | — |
+| 8870 | LaunchMarker8870 | Direct | None | — |
+| 4511 | LanServerAvailable | Direct | LobbyLifecycle | smoke:test_misc_lan_server_available_publishes_once_for_matching_lobby |
+| 4508 | ServerAssignment | Direct | LobbyLifecycle | smoke:test_misc_server_assignment_4508_consume_smoke |
 
-约 32 条。High-risk 在 registry 内均带 fixture 标签。
+约 37 条。High-risk 在 registry 内均带 fixture 标签。
 
 ## 2. if 兜底（`gbe_dota_post_login_handlers.cpp` direct 路径）
 
@@ -56,7 +61,6 @@
 | LeaverDetected | … | 中 | |
 | SignOutPermission | … | 中 | |
 | SubmitPlayerReportV2 | … | 低 | |
-| 4506 / SteamTicketAuth / 8870 / 4511 / 4508 | launch 标记链 | **高** | 阶段 C.7.4 |
 | GamesPlayedWithDataBlob / AuthList | late steam chain | 中 | 条件触发 |
 
 Wrapped 路径仍有 LeaveChat / FindTopSourceTV 等 if。
@@ -66,5 +70,5 @@ Wrapped 路径仍有 LeaveChat / FindTopSourceTV 等 if。
 1. ~~7034~~ 已迁
 2. ~~2569~~ 已迁
 3. ~~Abandon / SignOut / Destroy~~ 已迁
-4. 8870 / 4511 / 4508 等 launch 标记
+4. ~~4506 / 5429 / 8870 / 4511 / 4508 launch 标记~~ 已迁
 5. 其余 chat/style/template
