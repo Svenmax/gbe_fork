@@ -230,5 +230,3 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyKickRequest(const std::s
     );
     return true;
 }
-
-

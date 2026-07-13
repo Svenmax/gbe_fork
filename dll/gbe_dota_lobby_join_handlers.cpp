@@ -271,5 +271,3 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
         wrapped ? 1 : 0);
     return true;
 }
-
-

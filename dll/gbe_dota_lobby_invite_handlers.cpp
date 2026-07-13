@@ -323,5 +323,3 @@ bool Steam_Game_Coordinator::GBE_HandleDotaNetworkLobbyInviteMessage(Common_Mess
     );
     return true;
 }
-
-

@@ -624,4 +624,3 @@ bool Steam_Game_Coordinator::GBE_AdoptDotaGenericLobbyOwnerIfNeeded(const char *
     );
     return true;
 }
-

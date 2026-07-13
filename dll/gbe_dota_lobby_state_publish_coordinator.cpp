@@ -615,4 +615,3 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
         publish_data.connect.c_str()
     );
 }
-

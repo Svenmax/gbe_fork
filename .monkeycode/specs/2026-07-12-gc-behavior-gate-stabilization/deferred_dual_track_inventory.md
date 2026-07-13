@@ -1,6 +1,6 @@
 # Deferred 单轨清单（B.4 完成后）
 
-> 源：`dll/dll/steam_game_coordinator.h` 成员；`dll/steam_game_coordinator.cpp` Set/Has/Clear/Consume。  
+> 源：`dll/dll/steam_game_coordinator.h` 成员；`dll/steam_game_coordinator.cpp` Set/Has/Clear/Consume。
 > 状态：**bool+lobby_id 平行字段已删除**；仅 `GBE_DotaDeferredTaskSlot`。
 
 ## 1. 三组 pending 任务（单轨）

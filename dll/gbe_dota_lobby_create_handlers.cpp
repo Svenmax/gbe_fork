@@ -592,5 +592,3 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
     );
     return true;
 }
-
-

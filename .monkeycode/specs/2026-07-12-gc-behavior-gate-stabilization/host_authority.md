@@ -1,6 +1,6 @@
 # Host 状态权威表（代码锚点）
 
-> 只描述当前代码读写纪律，不声明“已验收”。  
+> 只描述当前代码读写纪律，不声明“已验收”。
 > 测试：`tools/gbe_dota_dual_gc_host_test/` 中 H1–H5 必须与本表一致。
 
 ## 1. 拓扑
@@ -30,9 +30,9 @@
 
 ## 3. 跨 GC 推装顺序（host 热路径）
 
-1. 推断/恢复 `owner_hero_id`（2569 或 7034 peer restore）  
-2. `GBE_RefreshDotaHostEquippedItemsCache(server, …)` 或 `Push…ToGC`  
-3. 可选：`GBE_PushDotaHeroEquippedItemUpdatesToClientGC` + `MarkDotaHostLocalWearablesRefreshed`  
+1. 推断/恢复 `owner_hero_id`（2569 或 7034 peer restore）
+2. `GBE_RefreshDotaHostEquippedItemsCache(server, …)` 或 `Push…ToGC`
+3. 可选：`GBE_PushDotaHeroEquippedItemUpdatesToClientGC` + `MarkDotaHostLocalWearablesRefreshed`
 4. showcase：`!HasPushed…` 时 push 并 `MarkDotaHostShowcaseEquipPushed`
 
 Clear 时机：reset / clear runtime / 2569 相关 clear（`inventory_handlers` 对 server Clear showcase/wearable）。

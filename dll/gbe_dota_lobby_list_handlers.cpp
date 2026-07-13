@@ -233,5 +233,3 @@ bool Steam_Game_Coordinator::GBE_HandleDotaFriendPracticeLobbyListRequest(bool w
     GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Sent friend practice lobby list response 7112 entries=%zu wrapped=%d", entries.size(), wrapped ? 1 : 0);
     return true;
 }
-
-

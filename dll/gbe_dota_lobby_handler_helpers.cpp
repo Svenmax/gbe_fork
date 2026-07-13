@@ -153,5 +153,3 @@ bool GBE_IsDotaLobbyInviteCacheSubscribedPayload(const std::string &message)
 
     return false;
 }
-
-

@@ -421,4 +421,3 @@ uint32 Steam_Game_Coordinator::GBE_GetDotaLobbyOwnerAccountId() const
 
     return settings->get_local_steam_id().GetAccountID();
 }
-
