@@ -121,7 +121,7 @@
 
 ## 阶段 D — 结构拆分与验真升级（C 之后）
 
-- [ ] 10. 拆超大 TU（只搬家，不改行为）
+- [x] 10. 拆超大 TU（只搬家，不改行为）
   - [x] 10.1 拆 `gbe_dota_lobby_handlers.cpp` 为 create/join/leave/kick/list 等
     - 新 TU：`lobby_handler_helpers` + create/list/join/invite/lifecycle/slot；原文件为空壳。
     - offline：`test_wrapper.cpp` 改为 include 拆分单元；audit baseline/exemptions/teardown 门同步。
@@ -131,12 +131,19 @@
   - [x] 10.3 行为等价：dual_gc + handler smoke + verification 全绿
     - 2026-07-13：`bash tools/run_gc_verification.sh --fast` **GC verification passed**（D.10.1+10.2 后）。
 
-- [ ] 11. 测试验真升级
-  - [ ] 11.1 扩展 `gc_replay_test` 或 dual_gc：input 序列 → 期望 outbound emsg 序列 golden
-  - [ ] 11.2 队列 + deferred + generation 交错压测（可扩 `gbe_dota_concurrency_stress_test`）
-  - [ ] 11.3 audit：生产装配与 CompositionRoot 所有权图一致，或显式标记 CompositionRoot 为 offline-only 并禁止 docs 声称生产已注入
-  - [ ] 11.4 检查点：全量 verification + 新增 golden/压测通过
-    - 确保所有测试通过，如有疑问请询问用户。
+- [x] 11. 测试验真升级
+  - [x] 11.1 扩展 behavior_replay：input 序列 → 期望 outbound emsg 序列 golden
+    - `behavior_replay.cpp`：每步 `outbound_emsg=` + 全局 `sequence_outbound_emsg=`。
+    - 序列：create(7038) → launch(7041) → leave(7040) → destroy(8246)。
+    - golden：`tools/gbe_dota_handler_test/fixtures/lobby_behavior.expected.txt`（24,7055,26,25）。
+  - [x] 11.2 队列 + deferred + generation 交错压测
+    - `gbe_dota_concurrency_stress_test`：`test_queue_deferred_generation_interleave`。
+    - audit 要求 stress 含 deferred consume / stale / current 边界。
+  - [x] 11.3 CompositionRoot offline-only
+    - 头文件注释标记 Offline-only；audit 禁止 steam_client 引用 CompositionRoot。
+    - ARCHITECTURE.md 必须保留 offline-only + Steam_Client runtime authority；禁止 docs 声称生产注入。
+  - [x] 11.4 检查点：全量 verification + 新增 golden/压测通过
+    - 2026-07-13：`bash tools/run_gc_verification.sh --fast` **GC verification passed**。
 
 - [ ] 12. 协议资产与内部头收尾
   - [ ] 12.1 大模板 hex 移出逻辑 TU（`template_replay` / `payload_lobby_helpers`）到数据文件或独立 `*_templates.cpp`

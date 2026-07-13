@@ -602,6 +602,7 @@ class RoleContext {
         dota_lobby_state::Store &lobby_store,
         RoleDependencies dependencies);
 };
+// Offline-only ownership model for focused tests.
 class CompositionRoot {
     GBE_SharedDotaLobbyState lobby_state_;
     std::recursive_mutex lobby_mutex_;

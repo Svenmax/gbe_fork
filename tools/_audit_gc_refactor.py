@@ -1627,6 +1627,42 @@ def audit_dependency_object_lifecycle(
     for test_name in lifecycle_tests:
         if composition_test_text.count(test_name) < 2:
             issues.append(f"gbe_dota_composition_root_test.cpp: missing executed lifecycle regression {test_name}")
+
+    # D.11.3: CompositionRoot is offline-only; production authority stays on Steam_Client.
+    if "Offline-only" not in composition_header_text and "offline-only" not in composition_header_text:
+        issues.append(
+            "gbe_dota_composition_root.h: CompositionRoot must be explicitly marked offline-only"
+        )
+    steam_client_cpp = read(os.path.join(ROOT_DIR, "dll", "steam_client.cpp"))
+    if "CompositionRoot" in steam_client_cpp or "gbe_dota_composition_root.h" in steam_client_cpp:
+        issues.append(
+            "steam_client.cpp: production assembly must not construct or include CompositionRoot"
+        )
+    architecture_text = read(os.path.join(ROOT_DIR, ".monkeycode", "docs", "ARCHITECTURE.md"))
+    if "offline tests" not in architecture_text or "Steam_Client` as the runtime authority" not in architecture_text:
+        issues.append(
+            "ARCHITECTURE.md: must document CompositionRoot as offline-only and Steam_Client as runtime authority"
+        )
+    forbidden_doc_claims = (
+        "CompositionRoot is injected into production",
+        "production injects CompositionRoot",
+        "CompositionRoot owns production GC assembly",
+        "production CompositionRoot injection",
+    )
+    docs_root = os.path.join(ROOT_DIR, ".monkeycode", "docs")
+    if os.path.isdir(docs_root):
+        for root, _dirs, files in os.walk(docs_root):
+            for name in files:
+                if not name.endswith(".md"):
+                    continue
+                path = os.path.join(root, name)
+                text = read(path)
+                for claim in forbidden_doc_claims:
+                    if claim in text:
+                        rel = os.path.relpath(path, ROOT_DIR)
+                        issues.append(
+                            f"{rel}: docs must not claim CompositionRoot production injection ({claim})"
+                        )
     return issues
 
 
@@ -1711,6 +1747,11 @@ def audit_concurrency_ownership_contract():
         "gbe::dota_reconnect::build_context(",
         "torn_snapshots.load() == 0u",
         "stale_mutator_calls.load() == 0u",
+        # D.11.2: queue + deferred Slot + generation interleave
+        "test_queue_deferred_generation_interleave",
+        "consume_deferred(",
+        "deferred_stale",
+        "deferred_current",
     ):
         if required not in stress_text:
             issues.append(f"gbe_dota_concurrency_stress_test.cpp: missing P11.4 boundary {required}")

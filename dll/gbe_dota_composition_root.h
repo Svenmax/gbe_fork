@@ -111,6 +111,8 @@ private:
     ReconnectService reconnect_service_;
 };
 
+// Offline-only ownership model for focused tests. Production assembly remains
+// in Steam_Client; do not treat CompositionRoot as the production injector.
 class CompositionRoot {
 public:
     CompositionRoot(
