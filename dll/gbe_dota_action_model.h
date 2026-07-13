@@ -100,11 +100,14 @@
 //   PendingResetAfterCacheUnsubscribedClear lobby_id
 //   PendingNormalSignoutFinalizeAfterCacheUnsubscribed lobby_id
 //   LobbyStateApply       lobby_state, lobby_game_state
+//   PostGameLobbyStateApply lobby_state, lobby_game_state, item_id=pre_channel,
+//                           job_id=post_channel, payload=channel_name, reason
 //   LobbyMemberRuntimeUpdate target_steam_id, connected, hero_id, has_hero_id
 //   LaunchPhaseMark       launch_phase, reason
 //   SharedLobbyPublish    reason
 //   PracticeLobbyDetailsUpdate reason
 //   RuntimeLobbyDetailsUpdate emsg, job_id, lobby_state, lobby_game_state, delay, reason
+//   RichPresenceUpdate    status, presence_lobby_state, include_party, include_lobby
 
 #ifndef GBE_DOTA_ACTION_MODEL_H
 #define GBE_DOTA_ACTION_MODEL_H
@@ -144,11 +147,12 @@ enum class GBE_DotaActionType {
     PendingResetAfterCacheUnsubscribedClear, // clear deferred reset after postgame teardown is queued
     PendingNormalSignoutFinalizeAfterCacheUnsubscribed, // defer normal signout cleanup until 25 is retrieved
     LobbyStateApply,      // apply local lobby state and game state
+    PostGameLobbyStateApply, // apply postgame lobby chat/state/cache patch before publish
     LobbyMemberRuntimeUpdate, // apply connected/hero state to a lobby member
     LaunchPhaseMark,      // advance launch phase without an implicit publish
     SharedLobbyPublish,   // publish the current local lobby to shared state
     PracticeLobbyDetailsUpdate, // send direct or wrapped practice lobby details
-    RuntimeLobbyDetailsUpdate, // queue a runtime practice lobby details update
+    RuntimeLobbyDetailsUpdate, // queue delayed runtime lobby details update
 };
 
 constexpr const char *GBE_DescribeDotaActionType(GBE_DotaActionType type)
@@ -182,6 +186,7 @@ constexpr const char *GBE_DescribeDotaActionType(GBE_DotaActionType type)
         case GBE_DotaActionType::PendingResetAfterCacheUnsubscribedClear: return "pending_reset_after_cache_unsubscribed_clear";
         case GBE_DotaActionType::PendingNormalSignoutFinalizeAfterCacheUnsubscribed: return "pending_normal_signout_finalize_after_cache_unsubscribed";
         case GBE_DotaActionType::LobbyStateApply: return "lobby_state_apply";
+        case GBE_DotaActionType::PostGameLobbyStateApply: return "postgame_lobby_state_apply";
         case GBE_DotaActionType::LobbyMemberRuntimeUpdate: return "lobby_member_runtime_update";
         case GBE_DotaActionType::LaunchPhaseMark: return "launch_phase_mark";
         case GBE_DotaActionType::SharedLobbyPublish: return "shared_lobby_publish";
@@ -194,10 +199,10 @@ constexpr const char *GBE_DescribeDotaActionType(GBE_DotaActionType type)
 struct GBE_DotaAction {
     GBE_DotaActionType type{};
     uint32_t emsg{};              // PushIncomingNow / PushIncoming / ServerGcForward
-    std::string payload;          // PushIncomingNow / PushIncoming
+    std::string payload;          // PushIncomingNow / PushIncoming / PostGame channel name
     uint64_t target_steam_id{};   // CallbackItemUpdated / ServerGcForward
-    uint64_t item_id{};           // CallbackItemUpdated
-    uint64_t job_id{};            // when tied to a source/target job
+    uint64_t item_id{};           // CallbackItemUpdated / PostGame pre_channel
+    uint64_t job_id{};            // when tied to a source/target job / PostGame post_channel
     std::string reason;           // LobbySnapshotRefresh
     bool leave_generic_lobby{};   // GcMemoryReset
     bool clear_queued_messages{}; // GcMemoryReset
@@ -210,6 +215,10 @@ struct GBE_DotaAction {
     bool only_when_previous_action_succeeded{}; // conditional follow-up action
     bool only_when_runtime_update_not_queued{}; // runtime update fallback action
     double delay{};               // RuntimeLobbyDetailsUpdate
+    std::string status;           // RichPresenceUpdate / LaunchPersonaState
+    std::string presence_lobby_state; // RichPresenceUpdate lobby state label
+    bool include_party{};         // RichPresenceUpdate
+    bool include_lobby{true};     // RichPresenceUpdate
     gbe::dota_lobby_generation::Boundary generation_boundary{gbe::dota_lobby_generation::Boundary::Reset}; // GcMemoryReset / DotaLobbyRuntimeClear
 };
 

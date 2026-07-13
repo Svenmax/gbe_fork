@@ -51,8 +51,9 @@ C6：accept 时按 kind+stage 发路径门闩（`teardown_effect_for`）。
 | 同上 | normal signout finalize | Finalize | TeardownPostGameFinalizeRequested | `normal_signout_finalize_action_list` |
 | `lobby_list_handlers.cpp` | list leave teardown | Finalize | TeardownLeaveFinalizeRequested | `leave_lobby_finalize_action_list` |
 | `lobby_state_member_coordinator.cpp` | player postgame | Initiate | TeardownPostGameInitiateRequested | `player_postgame_cleanup_action_list` |
+| `lobby_launch_coordinator.cpp` | QueuePostGame | Initiate 载荷 | （payload builder） | C9：`postgame_teardown_action_list`（state/chat/publish/25/7010/RP）→ Execute |
 
-**下一步：** QueuePostGame 状态突变（chat channel / publish）进一步 action 化。
+**C9：** QueuePostGame 状态突变（chat channel / publish / rich presence）已进 `postgame_teardown_action_list`；coordinator 只 plan payload → Execute。
 
 ## 5. 已具名（对照，非 Legacy）
 
@@ -74,7 +75,7 @@ C8：生产路径禁止直接 `build_member_runtime_actions`；测试/纯 builde
 | P1 | ~~Teardown 路径门闩 + action builder~~ | **C6 完成**：event+stage 分发；7035 preflight / list leave 进 action_list | — |
 | P2 | ~~Custom game 单一 decide_*~~ | **C7 完成**：handler 只 parse→decide→Execute | — |
 | P3 | ~~member runtime 经 SM~~ | **C8 完成**：`decide_member_runtime_actions` 覆盖 match/inventory/network | — |
-| P4 | QueuePostGame 状态突变 action 化 | chat/publish 仍在 coordinator | 不改消息序 |
+| P4 | ~~QueuePostGame 状态突变 action 化~~ | **C9 完成**：`PostGameLobbyStateApply` + publish/RP 进 action_list | — |
 
 每步完成定义：对应 Legacy effect **在该路径不再出现**（或仅 debug 别名），`verification --full` 绿，相关 smoke/replay 仍绿。
 

@@ -348,6 +348,7 @@ struct RecordedAction
             case GBE_DotaActionType::PendingResetAfterCacheUnsubscribedClear: return "PendingResetAfterCacheUnsubscribedClear";
             case GBE_DotaActionType::PendingNormalSignoutFinalizeAfterCacheUnsubscribed: return "PendingNormalSignoutFinalizeAfterCacheUnsubscribed";
             case GBE_DotaActionType::LobbyStateApply: return "LobbyStateApply";
+            case GBE_DotaActionType::PostGameLobbyStateApply: return "PostGameLobbyStateApply";
             case GBE_DotaActionType::LobbyMemberRuntimeUpdate: return "LobbyMemberRuntimeUpdate";
             case GBE_DotaActionType::LaunchPhaseMark: return "LaunchPhaseMark";
             case GBE_DotaActionType::SharedLobbyPublish: return "SharedLobbyPublish";

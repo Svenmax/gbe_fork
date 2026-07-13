@@ -115,8 +115,12 @@ GBE_DotaActionList leave_lobby_finalize_action_list(
     const std::string &response_25,
     const char *reason);
 
+// C9: full QueuePostGame mutation + push list (state/chat/publish before 25/7010).
 GBE_DotaActionList postgame_teardown_action_list(
     std::uint64_t lobby_id,
+    std::uint64_t pre_postgame_chat_channel_id,
+    std::uint64_t postgame_chat_channel_id,
+    const std::string &postgame_chat_channel_name,
     const std::string &response_25,
     const std::string &response_7010_postgame,
     bool push_cache_unsubscribed,

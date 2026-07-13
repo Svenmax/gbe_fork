@@ -201,6 +201,9 @@ GBE_DotaActionList leave_lobby_finalize_action_list(
 
 GBE_DotaActionList postgame_teardown_action_list(
     std::uint64_t lobby_id,
+    std::uint64_t pre_postgame_chat_channel_id,
+    std::uint64_t postgame_chat_channel_id,
+    const std::string &postgame_chat_channel_name,
     const std::string &response_25,
     const std::string &response_7010_postgame,
     bool push_cache_unsubscribed,
@@ -209,11 +212,35 @@ GBE_DotaActionList postgame_teardown_action_list(
 {
     GBE_DotaActionList actions;
     const std::string action_reason = reason ? reason : std::string();
+
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LaunchPeripheralReset, 0u, std::string(), 0ull, 0ull, 0ull, action_reason });
+
+    GBE_DotaAction postgame_state;
+    postgame_state.type = GBE_DotaActionType::PostGameLobbyStateApply;
+    postgame_state.lobby_state = 3u;
+    postgame_state.lobby_game_state = 6u;
+    postgame_state.item_id = pre_postgame_chat_channel_id;
+    postgame_state.job_id = postgame_chat_channel_id;
+    postgame_state.payload = postgame_chat_channel_name;
+    postgame_state.reason = action_reason;
+    actions.push_back(std::move(postgame_state));
+
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::SharedLobbyPublish, 0u, std::string(), 0ull, 0ull, 0ull, action_reason });
+
     if (push_cache_unsubscribed)
         actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25, 0ull, 0ull, 0ull, "25" });
     if (push_postgame_join)
         actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaJoinChatChannelResponse | GBE_kProtoMask, response_7010_postgame, 0ull, 0ull, 0ull, "7010_postgame" });
     actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PendingResetAfterCacheUnsubscribedClear, 0u, std::string(), 0ull, lobby_id, 0ull, action_reason });
+
+    GBE_DotaAction rich_presence;
+    rich_presence.type = GBE_DotaActionType::RichPresenceUpdate;
+    rich_presence.status = "#DOTA_RP_PRIVATE_LOBBY";
+    rich_presence.presence_lobby_state = "RUN";
+    rich_presence.include_party = true;
+    rich_presence.include_lobby = false;
+    rich_presence.reason = action_reason;
+    actions.push_back(std::move(rich_presence));
     return actions;
 }
 

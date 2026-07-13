@@ -565,37 +565,21 @@ bool Steam_Game_Coordinator::GBE_QueueDotaPostGameTeardown(const char *reason, b
         return false;
     }
 
-    GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-
-    GBE_local_lobby.state = 3u;
-    GBE_local_lobby.game_state = 6u;
-    GBE_local_lobby.has_chat_channel = true;
-    GBE_local_lobby.chat_channel_id = GBE_GenerateDotaPostGameChatChannelId();
-    GBE_local_lobby.chat_channel_name = "PostGame_" + std::to_string(lobby_id);
-    GBE_local_lobby.chat_channel_type = 18u;
-    GBE_local_lobby.abandon_pre_postgame_chat_channel_id = pre_postgame_chat_channel_id;
-    GBE_local_lobby.has_cache_version = false;
-    GBE_local_lobby.cache_version = 0;
-    GBE_local_lobby.has_cache_service_id = false;
-    GBE_local_lobby.cache_service_id = 0;
-    GBE_local_lobby.cache_service_list.clear();
-    GBE_local_lobby.has_cache_sync_version = false;
-    GBE_local_lobby.cache_sync_version = 0;
-    GBE_local_lobby.abandon_postgame_active = true;
-    GBE_PublishSharedDotaLobbyState(reason ? reason : "postgame_teardown");
+    const uint64 postgame_chat_channel_id = GBE_GenerateDotaPostGameChatChannelId();
+    const std::string postgame_chat_channel_name = "PostGame_" + std::to_string(lobby_id);
 
     std::string response_7010_postgame;
     if (!gbe::gc_message::build_dota_post_game_join_chat_channel_response_payload(
             steam_id,
-            GBE_local_lobby.chat_channel_id,
-            GBE_local_lobby.chat_channel_name,
+            postgame_chat_channel_id,
+            postgame_chat_channel_name,
             std::string(settings->get_local_name()),
             response_7010_postgame)) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Failed building postgame 7010 payload LobbyID=%llu channel=%llu reason=%s",
             static_cast<unsigned long long>(lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
+            static_cast<unsigned long long>(postgame_chat_channel_id),
             reason ? reason : "unknown"
         );
         return false;
@@ -603,6 +587,9 @@ bool Steam_Game_Coordinator::GBE_QueueDotaPostGameTeardown(const char *reason, b
 
     const GBE_DotaActionList postgame_actions = gbe::dota_lobby_flow::postgame_teardown_action_list(
         lobby_id,
+        pre_postgame_chat_channel_id,
+        postgame_chat_channel_id,
+        postgame_chat_channel_name,
         response_25,
         response_7010_postgame,
         push_cache_unsubscribed,
@@ -625,8 +612,6 @@ bool Steam_Game_Coordinator::GBE_QueueDotaPostGameTeardown(const char *reason, b
         static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
         reason ? reason : "unknown"
     );
-
-    GBE_UpdateDotaPracticeLobbyLaunchRichPresence("#DOTA_RP_PRIVATE_LOBBY", "RUN", true, false);
 
     std::string no_lobby_persona;
     if (GBE_PrepareDotaPersonaStatePeripheralMessage(GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex, steam_id, lobby_id, no_lobby_persona)) {

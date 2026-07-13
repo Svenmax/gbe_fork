@@ -1725,16 +1725,38 @@ bool test_teardown_action_lists()
     ok &= expect_eq_action_type(actions[3].type, GBE_DotaActionType::PushIncomingNow, "abandon fourth action pushes 25");
     ok &= expect_eq_u64(actions[3].emsg, 25u | 0x80000000u, "abandon push emsg");
 
-    actions = gbe::dota_lobby_flow::postgame_teardown_action_list(0x9001u, "payload25", "payload7010", true, true, "postgame_reason");
-    ok &= expect_eq_u64(actions.size(), 3u, "postgame teardown action count");
-    ok &= expect_eq_action_type(actions[0].type, GBE_DotaActionType::PushIncomingNow, "postgame first action pushes 25");
-    ok &= expect_eq_u64(actions[0].emsg, 25u | 0x80000000u, "postgame first emsg");
-    ok &= expect_true(actions[0].reason == "25", "postgame 25 reason");
-    ok &= expect_eq_action_type(actions[1].type, GBE_DotaActionType::PushIncomingNow, "postgame second action pushes 7010");
-    ok &= expect_eq_u64(actions[1].emsg, 7010u | 0x80000000u, "postgame second emsg");
-    ok &= expect_true(actions[1].reason == "7010_postgame", "postgame 7010 reason");
-    ok &= expect_eq_action_type(actions[2].type, GBE_DotaActionType::PendingResetAfterCacheUnsubscribedClear, "postgame third action clears pending reset");
-    ok &= expect_eq_u64(actions[2].item_id, 0x9001u, "postgame clear pending lobby id");
+    actions = gbe::dota_lobby_flow::postgame_teardown_action_list(
+        0x9001u,
+        0x1111u,
+        0x2222u,
+        "PostGame_9001",
+        "payload25",
+        "payload7010",
+        true,
+        true,
+        "postgame_reason");
+    ok &= expect_eq_u64(actions.size(), 7u, "postgame teardown action count");
+    ok &= expect_eq_action_type(actions[0].type, GBE_DotaActionType::LaunchPeripheralReset, "postgame first resets launch peripheral");
+    ok &= expect_eq_action_type(actions[1].type, GBE_DotaActionType::PostGameLobbyStateApply, "postgame second applies lobby state");
+    ok &= expect_eq_u64(actions[1].lobby_state, 3u, "postgame lobby state");
+    ok &= expect_eq_u64(actions[1].lobby_game_state, 6u, "postgame lobby game state");
+    ok &= expect_eq_u64(actions[1].item_id, 0x1111u, "postgame pre chat channel");
+    ok &= expect_eq_u64(actions[1].job_id, 0x2222u, "postgame post chat channel");
+    ok &= expect_true(actions[1].payload == "PostGame_9001", "postgame chat channel name");
+    ok &= expect_eq_action_type(actions[2].type, GBE_DotaActionType::SharedLobbyPublish, "postgame third publishes shared lobby");
+    ok &= expect_eq_action_type(actions[3].type, GBE_DotaActionType::PushIncomingNow, "postgame fourth pushes 25");
+    ok &= expect_eq_u64(actions[3].emsg, 25u | 0x80000000u, "postgame 25 emsg");
+    ok &= expect_true(actions[3].reason == "25", "postgame 25 reason");
+    ok &= expect_eq_action_type(actions[4].type, GBE_DotaActionType::PushIncomingNow, "postgame fifth pushes 7010");
+    ok &= expect_eq_u64(actions[4].emsg, 7010u | 0x80000000u, "postgame 7010 emsg");
+    ok &= expect_true(actions[4].reason == "7010_postgame", "postgame 7010 reason");
+    ok &= expect_eq_action_type(actions[5].type, GBE_DotaActionType::PendingResetAfterCacheUnsubscribedClear, "postgame sixth clears pending reset");
+    ok &= expect_eq_u64(actions[5].item_id, 0x9001u, "postgame clear pending lobby id");
+    ok &= expect_eq_action_type(actions[6].type, GBE_DotaActionType::RichPresenceUpdate, "postgame seventh updates rich presence");
+    ok &= expect_true(actions[6].status == "#DOTA_RP_PRIVATE_LOBBY", "postgame rich presence status");
+    ok &= expect_true(actions[6].presence_lobby_state == "RUN", "postgame rich presence lobby state");
+    ok &= expect_true(actions[6].include_party, "postgame rich presence include party");
+    ok &= expect_true(!actions[6].include_lobby, "postgame rich presence exclude lobby");
 
     actions = gbe::dota_lobby_flow::player_postgame_cleanup_action_list(0x5102u, "payload25", true, "player_cleanup");
     ok &= expect_eq_u64(actions.size(), 5u, "player cleanup action count");

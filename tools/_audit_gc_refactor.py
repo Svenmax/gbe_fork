@@ -233,6 +233,15 @@ LIFECYCLE_TRANSITION_GATES = {
         "EffectKind::TeardownLeaveInitiateRequested",
         "abandon_initiate_preflight_action_list(",
     ),
+    "gbe_dota_lobby_launch_coordinator.cpp": (
+        "postgame_teardown_action_list(",
+        "GBE_ExecuteDotaLifecycleActions(",
+    ),
+    "gbe_dota_lobby_flow.cpp": (
+        "PostGameLobbyStateApply",
+        "SharedLobbyPublish",
+        "RichPresenceUpdate",
+    ),
     "gbe_dota_lobby_list_handlers.cpp": (
         "transition_teardown(",
         "EffectKind::TeardownLeaveFinalizeRequested",

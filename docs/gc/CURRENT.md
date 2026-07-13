@@ -7,7 +7,7 @@
 
 ## 状态一句话
 
-过渡态：Phase B 路由收敛已落地。Phase C：Store 写已门控 + local 写清单；lifecycle SM 门闩均已具名（见 `LEGACY_LIFECYCLE_EFFECTS.md`），载荷仍在 handler。
+过渡态：Phase B 路由收敛已落地。Phase C：Store 写已门控 + local 写清单；lifecycle SM 门闩均已具名，teardown/custom_game/member runtime/QueuePostGame 已 decide 或 action_list 化（见 `LEGACY_LIFECYCLE_EFFECTS.md`）。
 
 ## 硬规则（违反即停手）
 
@@ -22,12 +22,12 @@
 1. 路由仍多轨（registry / 条件 fallback / 白名单 template / Hello welcome），但每轨已有归属标签。
 2. `GBE_local_lobby` 与 shared Store 双轨；restore/publish 字段级 merge 重（写入口清单见 `LOCAL_LOBBY_USAGE.md`）。
 3. `Steam_Game_Coordinator` 仍是上帝类（成员 handler 面过大）。
-4. lifecycle SM 半接入：teardown 路径门闩 + action_list；custom_game / member runtime 已 `decide_*` 单一入口；QueuePostGame 状态突变仍在 coordinator。
+4. lifecycle SM 半接入收口中：teardown/custom_game/member runtime/QueuePostGame 已 action 化；Phase C 出口仍待全量 Legacy 归零复核。
 5. 测试护栏强、真协议 L3/L4 弱；`verification passed` ≠ 协议正确。
 
 ## 进行中工作
 
-见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)（WIP ≤5）。默认下一刀：Phase A 冻结行为面。
+见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)（WIP ≤5）。默认下一刀：Phase C 收口复核 / 评估 Phase D。
 
 ## 必跑验证
 
