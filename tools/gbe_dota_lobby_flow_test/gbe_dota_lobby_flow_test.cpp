@@ -1851,6 +1851,119 @@ bool test_client_hello_plan()
     return ok;
 }
 
+bool test_server_hello_plan()
+{
+    using gbe::dota_welcome_flow::ServerHelloDisposition;
+    using gbe::dota_welcome_flow::ServerHelloPlanInput;
+    using gbe::dota_welcome_flow::plan_server_hello;
+
+    bool ok = true;
+
+    {
+        ServerHelloPlanInput input{};
+        input.parse_ok = false;
+        const auto plan = plan_server_hello(input);
+        ok &= expect_true(plan.disposition == ServerHelloDisposition::RejectParse, "parse fail rejects");
+        ok &= expect_true(!plan.push_server_welcome, "parse fail no welcome");
+        ok &= expect_true(!plan.push_cache_subscribed, "parse fail no cache");
+    }
+
+    {
+        ServerHelloPlanInput input{};
+        input.parse_ok = true;
+        input.is_server = true;
+        input.welcome_received = true;
+        input.welcome_build_ok = true;
+        input.active_lobby_with_id = true;
+        input.cache_build_ok = true;
+        const auto plan = plan_server_hello(input);
+        ok &= expect_true(plan.disposition == ServerHelloDisposition::AcceptSkipAlreadyConnected, "already connected skips");
+        ok &= expect_true(!plan.push_server_welcome, "already connected no welcome");
+        ok &= expect_true(!plan.push_cache_subscribed, "already connected no cache");
+    }
+
+    {
+        ServerHelloPlanInput input{};
+        input.parse_ok = true;
+        input.is_server = true;
+        input.welcome_received = false;
+        input.server_welcome_already_queued = true;
+        input.welcome_build_ok = true;
+        input.active_lobby_with_id = true;
+        input.cache_build_ok = true;
+        const auto plan = plan_server_hello(input);
+        ok &= expect_true(plan.disposition == ServerHelloDisposition::AcceptSkipWelcomeQueued, "queued welcome skips");
+        ok &= expect_true(!plan.push_server_welcome, "queued welcome no push");
+        ok &= expect_true(!plan.push_cache_subscribed, "queued welcome no cache");
+    }
+
+    {
+        ServerHelloPlanInput input{};
+        input.parse_ok = true;
+        input.is_server = true;
+        input.welcome_build_ok = false;
+        const auto plan = plan_server_hello(input);
+        ok &= expect_true(plan.disposition == ServerHelloDisposition::AcceptWithoutWelcome, "build fail accepts without welcome");
+        ok &= expect_true(!plan.push_server_welcome, "build fail no welcome");
+        ok &= expect_true(!plan.push_cache_subscribed, "build fail no cache");
+    }
+
+    {
+        ServerHelloPlanInput input{};
+        input.parse_ok = true;
+        input.is_server = true;
+        input.welcome_build_ok = true;
+        input.active_lobby_with_id = false;
+        input.cache_build_ok = true;
+        const auto plan = plan_server_hello(input);
+        ok &= expect_true(plan.disposition == ServerHelloDisposition::AcceptWithWelcome, "no lobby still pushes welcome");
+        ok &= expect_true(plan.push_server_welcome, "no lobby pushes welcome");
+        ok &= expect_eq_u64(plan.welcome_emsg_unmasked, GBE_kEMsgGCServerWelcome, "server welcome emsg");
+        ok &= expect_true(!plan.push_cache_subscribed, "no lobby no cache");
+    }
+
+    {
+        ServerHelloPlanInput input{};
+        input.parse_ok = true;
+        input.is_server = true;
+        input.welcome_build_ok = true;
+        input.active_lobby_with_id = true;
+        input.cache_build_ok = true;
+        const auto plan = plan_server_hello(input);
+        ok &= expect_true(plan.disposition == ServerHelloDisposition::AcceptWithWelcome, "active lobby disposition");
+        ok &= expect_true(plan.push_server_welcome, "active lobby pushes welcome");
+        ok &= expect_true(plan.push_cache_subscribed, "active lobby + cache ok pushes cache");
+    }
+
+    {
+        ServerHelloPlanInput input{};
+        input.parse_ok = true;
+        input.is_server = true;
+        input.welcome_build_ok = true;
+        input.active_lobby_with_id = true;
+        input.cache_build_ok = false;
+        const auto plan = plan_server_hello(input);
+        ok &= expect_true(plan.disposition == ServerHelloDisposition::AcceptWithWelcome, "cache fail still welcome");
+        ok &= expect_true(plan.push_server_welcome, "cache fail still pushes welcome");
+        ok &= expect_true(!plan.push_cache_subscribed, "cache fail no cache push");
+    }
+
+    {
+        ServerHelloPlanInput input{};
+        input.parse_ok = true;
+        input.is_server = false;
+        input.welcome_build_ok = true;
+        input.active_lobby_with_id = true;
+        input.cache_build_ok = true;
+        const auto plan = plan_server_hello(input);
+        ok &= expect_true(plan.disposition == ServerHelloDisposition::AcceptWithWelcome, "client path disposition");
+        ok &= expect_true(plan.push_server_welcome, "client path pushes welcome");
+        ok &= expect_true(!plan.push_cache_subscribed, "client path no synthetic cache");
+    }
+
+    return ok;
+}
+
 } // namespace
 
 int main()
@@ -1890,6 +2003,7 @@ int main()
     ok &= test_normalize_arcade_lobby_member_slots();
     ok &= test_teardown_action_lists();
     ok &= test_client_hello_plan();
+    ok &= test_server_hello_plan();
 
     if (!ok)
         return 1;

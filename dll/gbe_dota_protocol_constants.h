@@ -37,6 +37,7 @@ inline constexpr std::uint32_t GBE_kEMsgClientFromGC = 5453u;
 inline constexpr std::uint32_t GBE_kEMsgGCClientHello = 4006u;
 inline constexpr std::uint32_t GBE_kEMsgGCServerHello = 4007u;
 inline constexpr std::uint32_t GBE_kEMsgGCClientWelcome = 4004u;
+inline constexpr std::uint32_t GBE_kEMsgGCServerWelcome = 4005u;
 inline constexpr std::uint32_t GBE_kGCInvitationCreated = 4502u;
 inline constexpr std::uint32_t GBE_kGCInviteToLobby = 4512u;
 inline constexpr std::uint32_t GBE_kGCLobbyInviteResponse = 4513u;

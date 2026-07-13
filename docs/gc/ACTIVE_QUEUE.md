@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| E2 | GP-09 ServerHello pure plan 或 L2 最小 | welcome_flow / lobby_flow_test | skip/push 决策可测；verification --full | verification --full | 不改 ServerWelcome 字节 |
+| E4 | GP-10 L4 harness 书面设计 | PHASE_E / GOLDEN 或独立短文 | client/server 构造、消息泵、完成定义、延期理由 | 文档 review | **无设计不写 L4 代码** |
 
 ## 本周不做
 
@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-13 | E2：`plan_server_hello` skip/push/cache + 生产消费 + flow 测 | welcome_flow + welcome_coordinator |
 | 2026-07-13 | E1：`plan_client_hello` + 生产消费 + flow 测（GP-09 L1.5） | welcome_flow + welcome_coordinator |
 | 2026-07-13 | Phase E 边界 + GP-09 分档（L1 有 / L2 缺） | `PHASE_E_BOUNDARY.md` + GOLDEN |
 | 2026-07-13 | Phase D 边界书面化（准入/切片/停手；默认不实施） | `PHASE_D_BOUNDARY.md` |

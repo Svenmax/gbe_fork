@@ -827,32 +827,73 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerHelloRequest(uint32 unMsgType, 
 
     GBE_SetLastDotaServerHelloContext(server_hello_context);
 
-    if (is_server && welcome_received) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SERVER_HELLO",
-            "skipping ServerWelcome replay because server GC is already connected active_version=%u",
-            server_hello_context.active_version);
-        return true;
-    }
-
+    bool server_welcome_already_queued = false;
     if (is_server) {
         std::queue<GC_Message> queued_messages = incoming_messages;
         while (!queued_messages.empty()) {
             if (GBE_GC_MaskedEMsg(queued_messages.front().msg_type) == EGCBaseClientMsg::k_EMsgGCServerWelcome) {
-                GBE_GC_DebugLog(
-                    "GC_DOTA_SERVER_HELLO",
-                    "skipping ServerWelcome replay because one is already queued active_version=%u",
-                    server_hello_context.active_version);
-                return true;
+                server_welcome_already_queued = true;
+                break;
             }
             queued_messages.pop();
+        }
+    }
+
+    // Early skip plan: same order as original (connected / already queued) before any build.
+    {
+        gbe::dota_welcome_flow::ServerHelloPlanInput skip_input{};
+        skip_input.parse_ok = true;
+        skip_input.is_server = is_server;
+        skip_input.welcome_received = welcome_received;
+        skip_input.server_welcome_already_queued = server_welcome_already_queued;
+        const gbe::dota_welcome_flow::ServerHelloPlan skip_plan =
+            gbe::dota_welcome_flow::plan_server_hello(skip_input);
+        if (skip_plan.disposition == gbe::dota_welcome_flow::ServerHelloDisposition::AcceptSkipAlreadyConnected) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SERVER_HELLO",
+                "skipping ServerWelcome replay because server GC is already connected active_version=%u",
+                server_hello_context.active_version);
+            return true;
+        }
+        if (skip_plan.disposition == gbe::dota_welcome_flow::ServerHelloDisposition::AcceptSkipWelcomeQueued) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SERVER_HELLO",
+                "skipping ServerWelcome replay because one is already queued active_version=%u",
+                server_hello_context.active_version);
+            return true;
         }
     }
 
     std::string welcome_message;
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
     const uint32 app_id = settings->get_local_game_id().AppID();
-    if (!GBE_BuildDirectDotaServerWelcome(steam_id, app_id, server_hello_context, welcome_message)) {
+    const bool welcome_build_ok =
+        GBE_BuildDirectDotaServerWelcome(steam_id, app_id, server_hello_context, welcome_message);
+
+    const bool active_lobby_with_id =
+        is_server && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0;
+
+    std::string runtime_cache_message;
+    bool cache_build_ok = false;
+    if (welcome_build_ok && active_lobby_with_id) {
+        cache_build_ok = GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(
+            GBE_local_lobby,
+            GBE_local_lobby.owner_name,
+            runtime_cache_message,
+            true);
+    }
+
+    gbe::dota_welcome_flow::ServerHelloPlanInput plan_input{};
+    plan_input.parse_ok = true;
+    plan_input.is_server = is_server;
+    plan_input.welcome_received = welcome_received;
+    plan_input.server_welcome_already_queued = server_welcome_already_queued;
+    plan_input.welcome_build_ok = welcome_build_ok;
+    plan_input.active_lobby_with_id = active_lobby_with_id;
+    plan_input.cache_build_ok = cache_build_ok;
+    const gbe::dota_welcome_flow::ServerHelloPlan plan = gbe::dota_welcome_flow::plan_server_hello(plan_input);
+
+    if (plan.disposition == gbe::dota_welcome_flow::ServerHelloDisposition::AcceptWithoutWelcome) {
         GBE_GC_DebugLog(
             "GC_SEND_DOTA",
             "failed to build ServerWelcome active_version=%u min_allowed=%u steamid=%llu",
@@ -862,35 +903,30 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerHelloRequest(uint32 unMsgType, 
         return true;
     }
 
-    GBE_GC_DebugLog(
-        "GC_SEND_DOTA",
-        "replaying ServerWelcome active_version=%u min_allowed=%u target_job=%llu direct=1",
-        server_hello_context.active_version,
-        server_hello_context.min_allowed_version,
-        static_cast<unsigned long long>(server_hello_context.has_source_job ? server_hello_context.source_job_id : 0ull));
-
-    push_incoming_now(EGCBaseClientMsg::k_EMsgGCServerWelcome | GBE_kProtoMask, welcome_message);
-    if (is_server && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+    if (plan.push_server_welcome) {
         GBE_GC_DebugLog(
-            "GC_DOTA_SERVER_HELLO",
-            "queued immediate ServerWelcome for active lobby this=%p lobby_id=%llu size=%zu",
-            static_cast<void *>(this),
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            welcome_message.size());
+            "GC_SEND_DOTA",
+            "replaying ServerWelcome active_version=%u min_allowed=%u target_job=%llu direct=1",
+            server_hello_context.active_version,
+            server_hello_context.min_allowed_version,
+            static_cast<unsigned long long>(server_hello_context.has_source_job ? server_hello_context.source_job_id : 0ull));
+
+        push_incoming_now(plan.welcome_emsg_unmasked | GBE_kProtoMask, welcome_message);
+        if (active_lobby_with_id) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SERVER_HELLO",
+                "queued immediate ServerWelcome for active lobby this=%p lobby_id=%llu size=%zu",
+                static_cast<void *>(this),
+                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                welcome_message.size());
+        }
     }
 
-    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && is_server) {
-        std::string runtime_cache_message;
-        const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
-        const uint32 owner_account_id = GBE_GetDotaLobbyOwnerAccountId();
-        const bool launch_started = GBE_local_lobby.match_id != 0;
-        const bool built_runtime_cache = GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(
-            GBE_local_lobby,
-            GBE_local_lobby.owner_name,
-            runtime_cache_message,
-            true);
-
-        if (built_runtime_cache) {
+    if (active_lobby_with_id && plan.push_server_welcome) {
+        if (plan.push_cache_subscribed) {
+            const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
+            const uint32 owner_account_id = GBE_GetDotaLobbyOwnerAccountId();
+            const bool launch_started = GBE_local_lobby.match_id != 0;
             GBE_RecordDotaLobbyCacheSubscriptionState(runtime_cache_message, "server_welcome_current_cache_subscribed");
             push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, runtime_cache_message);
             GBE_GC_DebugLog(

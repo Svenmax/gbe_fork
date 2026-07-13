@@ -15,7 +15,7 @@
 | GP-06 | chat join/leave | 频道与 postgame 不 stale republish | smoke: `test_chat_*` | L2 | 有 |
 | GP-07 | custom game 7070/8052/8053 | direct/wrapped 动作序列等价 | smoke: custom_game_lifecycle* | L2 | 有 |
 | GP-08 | reconnect preserve vs clear | reset 原因决定是否清 reconnect | lobby_state / payload 决策单测；见历史 P0 | L1 | 部分 |
-| GP-09 | Hello / ServerHello welcome | welcome 合成与 CacheSubscribed 时序 | L1：payload extract/build；L1.5：`plan_client_hello`（lobby_flow_test）；**L2 缺** | L1+L1.5 / L2 **缺** | 部分（E1 plan 已落地） |
+| GP-09 | Hello / ServerHello welcome | welcome 合成与 CacheSubscribed 时序 | L1：payload extract/build；L1.5：`plan_client_hello` + `plan_server_hello`（lobby_flow_test）；**L2 缺** | L1+L1.5 / L2 **缺** | 部分（E1/E2 plan 已落地） |
 | GP-10 | SendMessage 双实例往返 | client/server 真队列闭环 | **缺口** | L4 | **缺** |
 
 ## 改动 → 路径
@@ -43,7 +43,6 @@ bash tools/run_gc_verification.sh --full
 
 ## 缺口优先级
 
-1. GP-09 L2：ClientHello direct 最小 smoke 或 pure plan（**E1**，见 [PHASE_E_BOUNDARY.md](./PHASE_E_BOUNDARY.md)）
-2. GP-09 L2：ServerHello skip/push 序（**E2**）
-3. GP-02/03 在更少 stub 下的稳定性（**E3**）
-4. GP-10 in-process 双 GC `SendMessage_` 闭环（**E4**，先设计）
+1. GP-09 L2：ClientHello/ServerHello handler smoke（仍缺；plan L1.5 已 E1/E2）
+2. GP-02/03 在更少 stub 下的稳定性（**E3**）
+3. GP-10 in-process 双 GC `SendMessage_` 闭环（**E4**，先设计）
