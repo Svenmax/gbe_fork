@@ -189,10 +189,13 @@ std::string GBE_SerializeEconItemToGcprotobuf(const Econ_Item &item, CSteamID st
     proto_item.set_style(item.style);
     proto_item.set_original_id(item.original_id);
 
-    if (!item.equip_states.empty()) {
-        proto_item.set_contains_equipped_state(true);
-        proto_item.set_contains_equipped_state_v2(true);
-    }
+    // Always set contains_equipped_state(_v2), including when equip_states is empty.
+    // SOUpdate of an unequipped item must clear the client's previous equip slots;
+    // without these flags the client treats equipped_state as "not present" and keeps
+    // the old cosmetics (host self-view stale while peers see the new set via server
+    // CacheSubscribed replace).
+    proto_item.set_contains_equipped_state(true);
+    proto_item.set_contains_equipped_state_v2(true);
 
     for (const auto &[class_id, slot_id] : item.equip_states) {
         auto proto_equip = proto_item.add_equipped_state();

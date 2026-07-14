@@ -1098,6 +1098,40 @@ TEST_CASE(test_apply_dota_unlock_style_bitmask)
 // Test: GBE_BuildSOSingleObjectFromItem
 // =====================================================================
 
+// Regression: unequipped SOUpdate must still set contains_equipped_state(_v2)
+// so the client clears previous equip slots (host self-view stale cosmetics).
+TEST_CASE(test_serialize_econ_item_empty_equip_states_clears_slots)
+{
+    Econ_Item item{};
+    item.id = 0x5000000100000002ULL;
+    item.def = 9062;
+    item.level = 1;
+    item.quality = static_cast<EItemQuality>(4);
+    item.inv_pos = 5832;
+    item.quantity = 1;
+    item.flags = 0;
+    item.origin = 0;
+    item.in_use = false;
+    item.original_id = item.id;
+    item.style = 0;
+    // intentionally empty equip_states (item was just unequipped)
+
+    CSteamID steam_id(76561198000000000ULL);
+    const std::string payload = GBE_SerializeEconItemToGcprotobuf(item, steam_id, 0u, false);
+    EXPECT_TRUE(!payload.empty());
+
+    // Stub CSOEconItem layout: fixed fields then contains flags then equipped_count.
+    // id(8)+account(4)+def(4)+inv(4)+qty(4)+level(4)+quality(4)+flags(4)+origin(4)
+    // +in_use(1)+style(4)+original_id(8) = 53, then contains(1)+contains_v2(1)+count(4)
+    constexpr size_t kContainsOffset = 53u;
+    EXPECT_TRUE(payload.size() > kContainsOffset + 1u + 4u);
+    EXPECT_TRUE(payload[kContainsOffset] == 1);
+    EXPECT_TRUE(payload[kContainsOffset + 1u] == 1);
+    uint32_t equipped_count = 0;
+    memcpy(&equipped_count, payload.data() + kContainsOffset + 2u, sizeof(equipped_count));
+    EXPECT_TRUE(equipped_count == 0u);
+}
+
 TEST_CASE(test_build_so_single_object_from_item)
 {
     Econ_Item item{};
@@ -1329,10 +1363,16 @@ int main()
     std::printf("[24/26] GBE_ApplyDotaUnlockStyleBitmask...\n");
     test_apply_dota_unlock_style_bitmask();
 
-    std::printf("[25/26] GBE_BuildSOSingleObjectFromItem...\n");
+    std::printf("[25/28] GBE_SerializeEconItem empty equip_states clears slots...\n");
+    test_serialize_econ_item_empty_equip_states_clears_slots();
+
+    std::printf("[26/28] GBE_BuildSOSingleObjectFromItem...\n");
     test_build_so_single_object_from_item();
 
-    std::printf("[26/26] parse_dota7034_runtime_request...\n");
+    std::printf("[27/28] GBE_HashDotaPayloadBytes...\n");
+    test_hash_dota_payload_bytes();
+
+    std::printf("[28/28] parse_dota7034_runtime_request...\n");
     test_parse_dota7034_runtime_request();
 
     std::printf("All payload helper tests complete.\n\n");
