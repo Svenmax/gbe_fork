@@ -22,6 +22,11 @@ struct RuntimeState {
     GBE_DotaStyleUnlockInfo vpk_style_unlock{};
     bool vpk_items_disabled{};
     uint64_t equip_cache_version{};
+    // Last 2569-modified item ids for host self-view hero_replay. Client must
+    // not CacheUnsub+equipped-only CacheSub (wipes login full inventory SO).
+    // Re-push these ids (including empty equip_states) so old slots clear.
+    uint32_t last_equip_modified_hero_id{};
+    std::vector<uint64_t> last_equip_modified_item_ids{};
 };
 
 } // namespace gbe::dota

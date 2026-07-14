@@ -749,6 +749,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
 
     runtime_state.equip_cache_version = next_cache_version;
     items = plan.items_after_mutation;
+    // Remember modified ids so host-local hero_replay can re-push empty equip
+    // clears without CacheUnsub'ing the client full inventory SO.
+    runtime_state.last_equip_modified_hero_id = equipped_hero_id;
+    runtime_state.last_equip_modified_item_ids.assign(
+        plan.modified_item_ids.begin(), plan.modified_item_ids.end());
 
     std::string update_message;
     if (!plan.modified_item_ids.empty()) {

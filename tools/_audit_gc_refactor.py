@@ -123,10 +123,6 @@ HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE = {
     ("gbe_dota_lobby_slot_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 2,
     ("gbe_dota_lobby_slot_handlers.cpp", "GBE_SendDotaPracticeLobbyDetailsUpdate"): 2,
     ("gbe_dota_match_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 2,
-    # Host self-view: OwnerHeroKnownEquipReplay replaces client equipped SO via
-    # unsub+equipped CacheSubscribed (same seam as server equip_forward), then
-    # hero_replay SOUpdate + dual 1029. Count=1 free call in match helper.
-    ("gbe_dota_match_handlers.cpp", "GBE_PushDotaPlayerEquippedItemsCacheToGC"): 1,
     ("gbe_dota_misc_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 2,
     ("gbe_dota_misc_handlers.cpp", "GBE_SendDotaPracticeLobbyDetailsUpdate"): 1,
     ("gbe_dota_post_login_handlers.cpp", "GBE_MarkDotaLaunchPhase"): 1,

@@ -791,6 +791,15 @@ bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
     owner->set_type(1u);
     owner->set_id(player_steam_id.ConvertToUint64());
 
+    // Include last 2569-modified ids for this hero so empty equip_states clear
+    // old host-local slots. Current-only hero_equipped misses unequipped pieces.
+    auto &runtime_state = GBE_DotaRuntimeState();
+    std::unordered_set<uint64_t> include_ids;
+    if (runtime_state.last_equip_modified_hero_id == hero_id) {
+        for (const uint64_t mid : runtime_state.last_equip_modified_item_ids)
+            include_ids.insert(mid);
+    }
+
     std::size_t updated_items = 0;
     for (const Econ_Item &item : source_items) {
         bool hero_equipped = false;
@@ -801,7 +810,8 @@ bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
                 break;
             }
         }
-        if (!hero_equipped)
+        const bool force_include = include_ids.find(item.id) != include_ids.end();
+        if (!hero_equipped && !force_include)
             continue;
 
         const uint32 gc_version = client_gc->GBE_GetGCVersion();
@@ -811,7 +821,7 @@ bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
         object->set_object_data(item_payload);
         GBE_GC_DebugLog(
             "GC_DOTA_EQUIP_PAYLOAD",
-            "source=hero_replay item_id=%llu account_id=%u def=%u inventory=%u quantity=%u level=%u quality=%u flags=%u origin=%u style=%u original_id=%llu equip_states=%zu attributes=%zu payload_size=%zu payload_hash=%016llx gc_version=%u",
+            "source=hero_replay item_id=%llu account_id=%u def=%u inventory=%u quantity=%u level=%u quality=%u flags=%u origin=%u style=%u original_id=%llu equip_states=%zu attributes=%zu force_include=%u payload_size=%zu payload_hash=%016llx gc_version=%u",
             static_cast<unsigned long long>(item.id),
             player_steam_id.GetAccountID(),
             item.def,
@@ -825,6 +835,7 @@ bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
             static_cast<unsigned long long>(item.original_id),
             item.equip_states.size(),
             item.attributes.size(),
+            force_include ? 1u : 0u,
             item_payload.size(),
             static_cast<unsigned long long>(GBE_HashDotaPayloadBytes(item_payload)),
             gc_version
@@ -835,7 +846,6 @@ bool GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
     if (updated_items == 0u)
         return false;
 
-    auto &runtime_state = GBE_DotaRuntimeState();
     if (runtime_state.equip_cache_version == 0u) {
         runtime_state.equip_cache_version = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::microseconds>(
