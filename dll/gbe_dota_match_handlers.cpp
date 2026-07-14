@@ -110,14 +110,17 @@ using GBE_Dota7034DisconnectedPlayer = gbe::proto_wire::Dota7034DisconnectedPlay
 // GBE_HandleDotaDirectOwnerHeroKnownEquipReplay (helper, server-GC only):
 //   1. Read client_gc->get_items() [coordinator read]
 //   2. GBE_RefreshDotaHostEquippedItemsCache(server, owner, items) ->
-//      GBE_PushDotaPlayerEquippedItemsCacheToGC
+//      GBE_PushDotaPlayerEquippedItemsCacheToGC (server unsub+equipped sub)
 //   3. If owner_hero known && !HasRefreshedWearables:
+//      GBE_PushDotaPlayerEquippedItemsCacheToGC(client, unsub_first) then
 //      GBE_PushDotaHeroEquippedItemUpdatesToClientGC + dual 1029 (server+client) +
 //      MarkLocalWearablesRefreshed
 //   Invariant: no lobby mutation; cache refresh then optional wearable one-shot.
 //   2569 path: Clear showcase/wearable keys then call this helper.
 //   1029 must hit both GCs: server recreates networked wearables for peers; client
 //   GC is what the host process polls for local first-person wearable refresh.
+//   Client must also receive equipped-only CacheSubscribed replace (same as server);
+//   hero_replay SOUpdate alone does not clear previously equipped host-local slots.
 //
 // GBE_HandleDotaDirect7034DisconnectedPlayers (helper):
 //   1. For each disconnected_player: GBE_SetDotaLobbyMemberRuntimeState(steam_id,
@@ -493,25 +496,37 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(
     const bool refreshed = GBE_RefreshDotaHostEquippedItemsCache(this, owner_id, client_items, "7034_owner_hero_known_server");
     if (refreshed) {
         const uint32 owner_hero_id = GBE_local_lobby.owner_hero_id;
-        if (owner_hero_id != 0u && !GBE_HasRefreshedDotaHostLocalWearables(owner_steam_id, owner_hero_id) &&
-            GBE_PushDotaHeroEquippedItemUpdatesToClientGC(client_gc, owner_id, owner_hero_id, client_items, "7034_owner_hero_known_client")) {
-            // Server GC: peer / listen-server entity rebuild.
-            callback_respawn_request(owner_id);
-            callback_respawn_request(owner_id, 1.5);
-            // Client GC: host process polls this interface for local wearable refresh.
-            // Strategy/showcase previously only queued 1029 on server, so host self-view
-            // never received RespawnPostLoadoutChange while peers still saw the host.
-            client_gc->callback_respawn_request(owner_id);
-            client_gc->callback_respawn_request(owner_id, 1.5);
-            GBE_MarkDotaHostLocalWearablesRefreshed(owner_steam_id, owner_hero_id);
-            GBE_GC_DebugLog(
-                "GC_DOTA_EQUIP_REFRESH",
-                "requested host wearable refresh after owner hero cache replay: steam64=%llu hero_id=%u generation=%llu source_job=%llu delays_ms=100,1500 targets=server+client",
-                static_cast<unsigned long long>(owner_steam_id),
-                owner_hero_id,
-                static_cast<unsigned long long>(GBE_CurrentDotaLobbyGeneration()),
-                static_cast<unsigned long long>(source_job)
-            );
+        if (owner_hero_id != 0u && !GBE_HasRefreshedDotaHostLocalWearables(owner_steam_id, owner_hero_id)) {
+            // Host self-view previously only got SOUpdate (hero currently equipped) + 1029.
+            // Peers see the host via server CacheUnsub+equipped CacheSub replace; client
+            // login SO still holds the old set, and empty-equip SOUpdate is not enough to
+            // clear host-local slots. Mirror the server replace onto client GC first.
+            GBE_PushDotaPlayerEquippedItemsCacheToGC(
+                client_gc,
+                owner_id,
+                client_items,
+                true,
+                "7034_owner_hero_known_client_cache");
+            if (GBE_PushDotaHeroEquippedItemUpdatesToClientGC(
+                    client_gc, owner_id, owner_hero_id, client_items, "7034_owner_hero_known_client")) {
+                // Server GC: peer / listen-server entity rebuild.
+                callback_respawn_request(owner_id);
+                callback_respawn_request(owner_id, 1.5);
+                // Client GC: host process polls this interface for local wearable refresh.
+                // Strategy/showcase previously only queued 1029 on server, so host self-view
+                // never received RespawnPostLoadoutChange while peers still saw the host.
+                client_gc->callback_respawn_request(owner_id);
+                client_gc->callback_respawn_request(owner_id, 1.5);
+                GBE_MarkDotaHostLocalWearablesRefreshed(owner_steam_id, owner_hero_id);
+                GBE_GC_DebugLog(
+                    "GC_DOTA_EQUIP_REFRESH",
+                    "requested host wearable refresh after owner hero cache replay: steam64=%llu hero_id=%u generation=%llu source_job=%llu delays_ms=100,1500 targets=server+client client_cache_replace=1",
+                    static_cast<unsigned long long>(owner_steam_id),
+                    owner_hero_id,
+                    static_cast<unsigned long long>(GBE_CurrentDotaLobbyGeneration()),
+                    static_cast<unsigned long long>(source_job)
+                );
+            }
         }
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",

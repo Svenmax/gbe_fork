@@ -48,11 +48,14 @@
 ## 4. 跨 GC 推装顺序（host 热路径）
 
 1. 推断/恢复 `owner_hero_id`（2569 或 7034 peer restore）
-2. `GBE_RefreshDotaHostEquippedItemsCache(server, …)` 或 `Push…ToGC`
-3. 可选：`GBE_PushDotaHeroEquippedItemUpdatesToClientGC` + **server+client** `callback_respawn_request`(0.1/1.5) + `MarkDotaHostLocalWearablesRefreshed`
+2. `GBE_RefreshDotaHostEquippedItemsCache(server, …)` 或 `Push…ToGC`（server unsub+equipped CacheSub）
+3. 可选 host-local wearable one-shot：
+   - 先 `GBE_PushDotaPlayerEquippedItemsCacheToGC(client, unsub_first=true)`（与 server 同语义的 equipped replace）
+   - 再 `GBE_PushDotaHeroEquippedItemUpdatesToClientGC` + **server+client** `callback_respawn_request`(0.1/1.5) + `MarkDotaHostLocalWearablesRefreshed`
    - 1029 必须双 GC：server 给对端/实体重建；client 给房主进程本地自见
+   - 仅 hero_replay SOUpdate 不够：client login 全量 SO 仍保留旧装；empty-equip 增量无法保证清槽
 4. PRE_GAME（request `game_state==4`）showcase one-shot：`!HasPushed…` 时先 `ClearDotaHostLocalWearablesRefreshed`，再 `OwnerHeroKnownEquipReplay` 并 `MarkDotaHostShowcaseEquipPushed`
-   - 策略期 2569 可能已 mark wearable one-shot；PRE_GAME 必须清 key，否则房主本地 emsg 26/1029 被跳过（对端仍可见）
+   - 策略期 2569 可能已 mark wearable one-shot；PRE_GAME 必须清 key，否则房主本地 cache replace / emsg 26 / 1029 被跳过（对端仍可见）
    - 触发条件必须是 `==4`（PRE_GAME），不能用 `>=4`：`TEAM_SHOWCASE=8` 会先于 `PRE_GAME=4` 到达并耗尽 generation-bound one-shot
 
 Clear：reset / clear runtime / 2569 相关 clear（inventory 对 server Clear showcase/wearable）。
