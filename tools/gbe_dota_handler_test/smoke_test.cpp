@@ -657,7 +657,7 @@ static void test_inventory_equip_full_forward()
     TEST_ASSERT_EQ(tf.recorder.runtime_states[0].hero_id, 2u, "client runtime state should carry inferred hero id");
     TEST_ASSERT_EQ(tf.recorder.runtime_states[1].hero_id, 2u, "server runtime state should carry inferred hero id");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_hero_id, 2u, "client lobby snapshot should retain the inferred owner hero");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 14u, "should publish inferred hero to both GCs before forward actions and early replay");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 16u, "should publish inferred hero to both GCs before forward actions and early replay");
 
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "1: publish inferred owner hero");
     TEST_ASSERT(tf.recorder.actions[0].reason == "2569_owner_hero_inferred", "1: publish reason should identify inferred hero");
@@ -698,8 +698,14 @@ static void test_inventory_equip_full_forward()
     TEST_ASSERT(tf.recorder.actions[10].reason == "7034_owner_hero_known_server", "early replay should reuse the owner hero server seam");
     TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[11]), 26u, "12: early owner hero client update");
     TEST_ASSERT(tf.recorder.actions[11].reason == "7034_owner_hero_known_client", "early replay should reuse the owner hero client seam");
-    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[12]), 1029u, "13: first wearable refresh");
-    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[13]), 1029u, "14: delayed wearable refresh");
+    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[12]), 1029u, "13: first server wearable refresh");
+    TEST_ASSERT(tf.recorder.actions[12].server_gc, "13: first wearable refresh should target server GC");
+    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[13]), 1029u, "14: delayed server wearable refresh");
+    TEST_ASSERT(tf.recorder.actions[13].server_gc, "14: delayed wearable refresh should target server GC");
+    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[14]), 1029u, "15: first client wearable refresh");
+    TEST_ASSERT(!tf.recorder.actions[14].server_gc, "15: first client wearable refresh should target client GC");
+    TEST_ASSERT_EQ(action_emsg(tf.recorder.actions[15]), 1029u, "16: delayed client wearable refresh");
+    TEST_ASSERT(!tf.recorder.actions[15].server_gc, "16: delayed client wearable refresh should target client GC");
 
     ++g_tests_passed;
 }
@@ -3116,23 +3122,29 @@ static void test_match_7034_connected_player_updates_runtime_before_response()
     TEST_ASSERT_EQ(tf.recorder.runtime_states[0].hero_id, hero_id, "runtime state should preserve request hero id");
     TEST_ASSERT(tf.recorder.runtime_states[0].has_hero_id, "runtime state should preserve has_hero_id");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_hero_id, hero_id, "owner hero should update before response path completes");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 7u, "7034 should publish runtime state, replay host cache, update client items, refresh local wearables twice, queue runtime update, then respond");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 9u, "7034 should publish runtime state, replay host cache, update client items, dual-GC wearable refresh, queue runtime update, then respond");
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "first action should publish lobby state");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7034_connected_player", "publish reason should identify connected player");
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::ServerGcForward, "second action should replay host equipped items after hero is known");
     TEST_ASSERT(tf.recorder.actions[1].reason == "7034_owner_hero_known_server", "cache replay reason should identify owner hero transition");
     TEST_ASSERT_EQ(tf.recorder.actions[2].msg_type, 26u, "third action should push current hero equipped cache update to client GC");
     TEST_ASSERT(tf.recorder.actions[2].reason == "7034_owner_hero_known_client", "client item update reason should identify owner hero transition");
-    TEST_ASSERT_EQ(tf.recorder.actions[3].msg_type, 1029u, "fourth action should request host local wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].msg_type, 1029u, "fourth action should request server wearable refresh");
     TEST_ASSERT_EQ(tf.recorder.actions[3].steam_id, owner_steam_id, "wearable refresh should target the lobby owner");
     TEST_ASSERT_EQ(tf.recorder.actions[3].delay, 0.1, "first wearable refresh should use the default hot-cache delay");
     TEST_ASSERT(tf.recorder.actions[3].server_gc, "first wearable refresh should be delivered by the server GC");
-    TEST_ASSERT_EQ(tf.recorder.actions[4].msg_type, 1029u, "fifth action should request delayed cold-start wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].msg_type, 1029u, "fifth action should request delayed server wearable refresh");
     TEST_ASSERT_EQ(tf.recorder.actions[4].steam_id, owner_steam_id, "delayed wearable refresh should target the lobby owner");
     TEST_ASSERT_EQ(tf.recorder.actions[4].delay, 1.5, "second wearable refresh should cover cold-start entity initialization");
     TEST_ASSERT(tf.recorder.actions[4].server_gc, "delayed wearable refresh should be delivered by the server GC");
-    expect_push_action(tf.recorder.actions[5], 26u, "sixth action should queue runtime update");
-    expect_push_payload(tf.recorder.actions[6], 7034u, "seventh action should push 7034 response with payload");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].msg_type, 1029u, "sixth action should request client wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].delay, 0.1, "client wearable refresh should use the hot-cache delay");
+    TEST_ASSERT(!tf.recorder.actions[5].server_gc, "client wearable refresh should be delivered by the client GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[6].msg_type, 1029u, "seventh action should request delayed client wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[6].delay, 1.5, "delayed client wearable refresh should cover cold-start entity initialization");
+    TEST_ASSERT(!tf.recorder.actions[6].server_gc, "delayed client wearable refresh should be delivered by the client GC");
+    expect_push_action(tf.recorder.actions[7], 26u, "eighth action should queue runtime update");
+    expect_push_payload(tf.recorder.actions[8], 7034u, "ninth action should push 7034 response with payload");
 
     ++g_tests_passed;
 }
@@ -3242,17 +3254,23 @@ static void test_match_7034_host_showcase_repush_guard_marks_once()
     TEST_ASSERT(first_result, "7034 showcase handler should return true on first request");
     TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.owner_hero_id, 59u, "showcase should restore the server owner hero from the matching client lobby");
     TEST_ASSERT(tf.gc.GBE_HasPushedDotaHostShowcaseEquip(), "first showcase request should mark host equip repushed");
-    TEST_ASSERT_EQ(tf.recorder.actions.size(), 6u, "first showcase request should publish hero, replay cache and SO state, refresh wearables, then respond");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 8u, "first showcase request should publish hero, replay cache and SO state, dual-GC wearable refresh, then respond");
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::LobbySnapshotRefresh, "first showcase action should publish the restored owner hero");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7034_restore_owner_hero_from_client", "restored hero publish reason should be preserved");
     TEST_ASSERT_EQ(tf.recorder.actions[1].type, GBE_DotaActionType::ServerGcForward, "second showcase action should repush host equipped items");
     TEST_ASSERT(tf.recorder.actions[1].reason == "7034_owner_hero_known_server", "owner-known server replay reason should be preserved");
     TEST_ASSERT_EQ(tf.recorder.actions[2].msg_type, 26u, "third showcase action should replay hero item SO updates to the client GC");
     TEST_ASSERT(tf.recorder.actions[2].reason == "7034_owner_hero_known_client", "owner-known client replay reason should be preserved");
-    TEST_ASSERT_EQ(tf.recorder.actions[3].msg_type, 1029u, "fourth showcase action should request the first wearable refresh");
-    TEST_ASSERT_EQ(tf.recorder.actions[4].msg_type, 1029u, "fifth showcase action should request the delayed wearable refresh");
-    expect_push_payload(tf.recorder.actions[5], 7034u, "sixth action should push 7034 response with payload");
-    const std::string first_showcase_summary = dota7034_response_summary(tf.recorder.actions[5]);
+    TEST_ASSERT_EQ(tf.recorder.actions[3].msg_type, 1029u, "fourth showcase action should request the first server wearable refresh");
+    TEST_ASSERT(tf.recorder.actions[3].server_gc, "fourth showcase action should target server GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].msg_type, 1029u, "fifth showcase action should request the delayed server wearable refresh");
+    TEST_ASSERT(tf.recorder.actions[4].server_gc, "fifth showcase action should target server GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].msg_type, 1029u, "sixth showcase action should request the first client wearable refresh");
+    TEST_ASSERT(!tf.recorder.actions[5].server_gc, "sixth showcase action should target client GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[6].msg_type, 1029u, "seventh showcase action should request the delayed client wearable refresh");
+    TEST_ASSERT(!tf.recorder.actions[6].server_gc, "seventh showcase action should target client GC");
+    expect_push_payload(tf.recorder.actions[7], 7034u, "eighth action should push 7034 response with payload");
+    const std::string first_showcase_summary = dota7034_response_summary(tf.recorder.actions[7]);
     TEST_ASSERT(
         first_showcase_summary.find("connected0{steam_id=") != std::string::npos &&
         first_showcase_summary.find("hero_id=59") != std::string::npos,
@@ -3318,17 +3336,25 @@ static void test_match_7034_host_showcase_replays_wearables_after_strategy_mark(
         "showcase should re-mark wearable one-shot after the late host-local push");
     TEST_ASSERT_EQ(
         tf.recorder.actions.size(),
-        5u,
-        "showcase after strategy mark should replay server cache, client SO, dual 1029, then respond");
+        7u,
+        "showcase after strategy mark should replay server cache, client SO, dual-GC 1029, then respond");
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::ServerGcForward, "first action should repush host equipped items to server GC");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7034_owner_hero_known_server", "server cache reason should identify owner-known replay");
     TEST_ASSERT_EQ(tf.recorder.actions[1].msg_type, 26u, "second action should push hero equipped SO updates to client GC");
     TEST_ASSERT(tf.recorder.actions[1].reason == "7034_owner_hero_known_client", "client SO reason should identify owner-known replay");
-    TEST_ASSERT_EQ(tf.recorder.actions[2].msg_type, 1029u, "third action should request first wearable refresh");
-    TEST_ASSERT_EQ(tf.recorder.actions[2].delay, 0.1, "first wearable refresh should use hot-cache delay");
-    TEST_ASSERT_EQ(tf.recorder.actions[3].msg_type, 1029u, "fourth action should request delayed wearable refresh");
-    TEST_ASSERT_EQ(tf.recorder.actions[3].delay, 1.5, "second wearable refresh should cover cold-start spawn");
-    expect_push_payload(tf.recorder.actions[4], 7034u, "fifth action should push 7034 response");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].msg_type, 1029u, "third action should request first server wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].delay, 0.1, "first server wearable refresh should use hot-cache delay");
+    TEST_ASSERT(tf.recorder.actions[2].server_gc, "third action should target server GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].msg_type, 1029u, "fourth action should request delayed server wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[3].delay, 1.5, "second server wearable refresh should cover cold-start spawn");
+    TEST_ASSERT(tf.recorder.actions[3].server_gc, "fourth action should target server GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].msg_type, 1029u, "fifth action should request first client wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].delay, 0.1, "first client wearable refresh should use hot-cache delay");
+    TEST_ASSERT(!tf.recorder.actions[4].server_gc, "fifth action should target client GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].msg_type, 1029u, "sixth action should request delayed client wearable refresh");
+    TEST_ASSERT_EQ(tf.recorder.actions[5].delay, 1.5, "second client wearable refresh should cover cold-start spawn");
+    TEST_ASSERT(!tf.recorder.actions[5].server_gc, "sixth action should target client GC");
+    expect_push_payload(tf.recorder.actions[6], 7034u, "seventh action should push 7034 response");
 
     ++g_tests_passed;
 }

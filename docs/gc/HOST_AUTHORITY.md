@@ -49,7 +49,8 @@
 
 1. 推断/恢复 `owner_hero_id`（2569 或 7034 peer restore）
 2. `GBE_RefreshDotaHostEquippedItemsCache(server, …)` 或 `Push…ToGC`
-3. 可选：`GBE_PushDotaHeroEquippedItemUpdatesToClientGC` + `MarkDotaHostLocalWearablesRefreshed`
+3. 可选：`GBE_PushDotaHeroEquippedItemUpdatesToClientGC` + **server+client** `callback_respawn_request`(0.1/1.5) + `MarkDotaHostLocalWearablesRefreshed`
+   - 1029 必须双 GC：server 给对端/实体重建；client 给房主进程本地自见
 4. showcase：`!HasPushed…` 时先 `ClearDotaHostLocalWearablesRefreshed`，再 `OwnerHeroKnownEquipReplay` 并 `MarkDotaHostShowcaseEquipPushed`
    - 策略期 2569 可能已 mark wearable one-shot；TEAM_SHOWCASE 必须清 key，否则房主本地 emsg 26/1029 被跳过（对端仍可见）
 
