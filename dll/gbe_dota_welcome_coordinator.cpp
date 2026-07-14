@@ -669,8 +669,6 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                 proto_item.set_in_use(false);
                 proto_item.set_style(0);
                 proto_item.set_original_id(item_id);
-                proto_item.set_contains_equipped_state(false);
-                proto_item.set_contains_equipped_state_v2(false);
 
                 // Add attr=400 (unlocked styles bitmask) to ALL items unconditionally.
                 // Setting 0xFFFFFFFF ensures all styles are unlocked from the start,
@@ -737,8 +735,6 @@ bool Steam_Game_Coordinator::GBE_PatchDotaLoginCacheSubscribedInventory(std::str
                         variant_item.set_in_use(false);
                         variant_item.set_style(0);
                         variant_item.set_original_id(var_id);
-                        variant_item.set_contains_equipped_state(false);
-                        variant_item.set_contains_equipped_state_v2(false);
 
                         item_object->add_object_data(variant_item.SerializeAsString());
 

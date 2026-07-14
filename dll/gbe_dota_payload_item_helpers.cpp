@@ -189,14 +189,11 @@ std::string GBE_SerializeEconItemToGcprotobuf(const Econ_Item &item, CSteamID st
     proto_item.set_style(item.style);
     proto_item.set_original_id(item.original_id);
 
-    // Always set contains_equipped_state(_v2), including when equip_states is empty.
-    // SOUpdate of an unequipped item must clear the client's previous equip slots;
-    // without these flags the client treats equipped_state as "not present" and keeps
-    // the old cosmetics (host self-view stale while peers see the new set via server
-    // CacheSubscribed replace).
-    proto_item.set_contains_equipped_state(true);
-    proto_item.set_contains_equipped_state_v2(true);
-
+    // Dota CSOEconItem has no TF2 contains_equipped_state / _v2 (fields 17/19).
+    // Official Dota SOUpdate wire never emits those fields: equipped_state (18)
+    // present => equipped; omitted => unequipped/cleared. Emitting TF2 contains
+    // flags (even true with empty equip) diverges from Dota and can leave host
+    // self-view on stale cosmetics while peers apply server CacheSub replace.
     for (const auto &[class_id, slot_id] : item.equip_states) {
         auto proto_equip = proto_item.add_equipped_state();
         proto_equip->set_new_class(class_id);
@@ -206,7 +203,13 @@ std::string GBE_SerializeEconItemToGcprotobuf(const Econ_Item &item, CSteamID st
     for (const Econ_Item_Attribute &attr : item.attributes) {
         auto proto_attr = proto_item.add_attribute();
         proto_attr->set_def_index(attr.def);
-        if (gc_version < 20130319 || is_portal2) {
+        // Official Dota attributes use value_bytes (field 3). Style unlock (attr
+        // 400) and most inventory attrs live only in value_bytes; attr.value is
+        // often left 0. Dota fallback gc_version==0 must not force legacy field 2
+        // from that zero, or SOUpdate/hero_replay payloads drop unlock/style data.
+        if (!is_portal2 && !attr.value_bytes.empty()) {
+            proto_attr->set_value_bytes(attr.value_bytes);
+        } else if (gc_version < 20130319 || is_portal2) {
             uint32 value;
             memcpy(&value, &attr.value, sizeof(uint32));
             proto_attr->set_value(value);

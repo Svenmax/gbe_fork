@@ -1098,8 +1098,9 @@ TEST_CASE(test_apply_dota_unlock_style_bitmask)
 // Test: GBE_BuildSOSingleObjectFromItem
 // =====================================================================
 
-// Regression: unequipped SOUpdate must still set contains_equipped_state(_v2)
-// so the client clears previous equip slots (host self-view stale cosmetics).
+// Regression: Dota empty equip_states must NOT emit TF2 contains_equipped_state
+// (fields 17/19). Official Dota clears slots by omitting equipped_state (18).
+// Also: gc_version==0 must still serialize attr value_bytes (style unlock 400).
 TEST_CASE(test_serialize_econ_item_empty_equip_states_clears_slots)
 {
     Econ_Item item{};
@@ -1115,6 +1116,13 @@ TEST_CASE(test_serialize_econ_item_empty_equip_states_clears_slots)
     item.original_id = item.id;
     item.style = 0;
     // intentionally empty equip_states (item was just unequipped)
+    Econ_Item_Attribute unlock_attr;
+    unlock_attr.def = 400u;
+    uint32_t unlock_bits = 0xFFFFFFFFu;
+    unlock_attr.value_bytes.assign(reinterpret_cast<const char *>(&unlock_bits), 4);
+    unlock_attr.type = Econ_Item_Attribute::ATTR_TYPE_INT;
+    // leave attr.value at 0 (common for inventory-loaded attrs)
+    item.attributes.push_back(unlock_attr);
 
     CSteamID steam_id(76561198000000000ULL);
     const std::string payload = GBE_SerializeEconItemToGcprotobuf(item, steam_id, 0u, false);
@@ -1125,11 +1133,14 @@ TEST_CASE(test_serialize_econ_item_empty_equip_states_clears_slots)
     // +in_use(1)+style(4)+original_id(8) = 53, then contains(1)+contains_v2(1)+count(4)
     constexpr size_t kContainsOffset = 53u;
     EXPECT_TRUE(payload.size() > kContainsOffset + 1u + 4u);
-    EXPECT_TRUE(payload[kContainsOffset] == 1);
-    EXPECT_TRUE(payload[kContainsOffset + 1u] == 1);
+    EXPECT_TRUE(payload[kContainsOffset] == 0);
+    EXPECT_TRUE(payload[kContainsOffset + 1u] == 0);
     uint32_t equipped_count = 0;
     memcpy(&equipped_count, payload.data() + kContainsOffset + 2u, sizeof(equipped_count));
     EXPECT_TRUE(equipped_count == 0u);
+
+    // value_bytes path must be used even when gc_version==0 and attr.value==0
+    EXPECT_TRUE(payload.find(std::string(reinterpret_cast<const char *>(&unlock_bits), 4)) != std::string::npos);
 }
 
 TEST_CASE(test_build_so_single_object_from_item)
