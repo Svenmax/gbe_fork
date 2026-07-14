@@ -3290,8 +3290,8 @@ static void test_match_7034_host_showcase_repush_guard_marks_once()
 }
 
 // Regression: strategy-time 2569 / owner-known replay marks wearable one-shot early.
-// TEAM_SHOWCASE must clear that key and still emit host-local emsg 26 + 1029 so the
-// listen-server host can see their own wearables after hero spawn.
+// PRE_GAME (request game_state==4) must clear that key and still emit host-local emsg 26 + 1029
+// so the listen-server host can see their own wearables after hero spawn.
 static void test_match_7034_host_showcase_replays_wearables_after_strategy_mark()
 {
     TestFixture tf;
@@ -3329,15 +3329,15 @@ static void test_match_7034_host_showcase_replays_wearables_after_strategy_mark(
         7034u,
         reinterpret_cast<const uint8 *>(body.data()), body.size(), true, source_job);
 
-    TEST_ASSERT(result, "7034 showcase handler should return true after strategy wearable mark");
-    TEST_ASSERT(tf.gc.GBE_HasPushedDotaHostShowcaseEquip(), "showcase should mark host equip repushed");
+    TEST_ASSERT(result, "7034 PRE_GAME handler should return true after strategy wearable mark");
+    TEST_ASSERT(tf.gc.GBE_HasPushedDotaHostShowcaseEquip(), "PRE_GAME should mark host equip repushed");
     TEST_ASSERT(
         tf.gc.GBE_HasRefreshedDotaHostLocalWearables(owner_steam_id, hero_id),
-        "showcase should re-mark wearable one-shot after the late host-local push");
+        "PRE_GAME should re-mark wearable one-shot after the late host-local push");
     TEST_ASSERT_EQ(
         tf.recorder.actions.size(),
         7u,
-        "showcase after strategy mark should replay server cache, client SO, dual-GC 1029, then respond");
+        "PRE_GAME after strategy mark should replay server cache, client SO, dual-GC 1029, then respond");
     TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::ServerGcForward, "first action should repush host equipped items to server GC");
     TEST_ASSERT(tf.recorder.actions[0].reason == "7034_owner_hero_known_server", "server cache reason should identify owner-known replay");
     TEST_ASSERT_EQ(tf.recorder.actions[1].msg_type, 26u, "second action should push hero equipped SO updates to client GC");
@@ -3355,6 +3355,74 @@ static void test_match_7034_host_showcase_replays_wearables_after_strategy_mark(
     TEST_ASSERT_EQ(tf.recorder.actions[5].delay, 1.5, "second client wearable refresh should cover cold-start spawn");
     TEST_ASSERT(!tf.recorder.actions[5].server_gc, "sixth action should target client GC");
     expect_push_payload(tf.recorder.actions[6], 7034u, "seventh action should push 7034 response");
+
+    ++g_tests_passed;
+}
+
+// Live order is STRATEGY_TIME(3) -> TEAM_SHOWCASE(8) -> ... -> PRE_GAME(4).
+// Early TEAM_SHOWCASE must not consume the host equip one-shot before heroes spawn.
+static void test_match_7034_host_pre_game_equip_not_consumed_by_team_showcase()
+{
+    TestFixture tf;
+    tf.reset();
+
+    const uint64_t owner_steam_id = 0x110000100777777u;
+    const uint32_t hero_id = 104u;
+    const JobID_t source_job = 0x703477u;
+    tf.settings.m_local_steam_id = CSteamID(owner_steam_id);
+    tf.gc.is_server = true;
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0x703470u;
+    tf.gc.GBE_local_lobby.match_id = 0x703471u;
+    tf.gc.GBE_local_lobby.server_id = 0x703472u;
+    tf.gc.GBE_local_lobby.owner_steam_id = owner_steam_id;
+    tf.gc.GBE_local_lobby.owner_hero_id = hero_id;
+    tf.gc.GBE_local_lobby.state = 2u;
+    tf.gc.GBE_local_lobby.game_state = 3u;
+    tf.gc.GBE_MarkDotaHostLocalWearablesRefreshed(owner_steam_id, hero_id);
+
+    Steam_Game_Coordinator client_gc;
+    client_gc.GBE_local_lobby.active = true;
+    client_gc.GBE_local_lobby.lobby_id = tf.gc.GBE_local_lobby.lobby_id;
+    client_gc.GBE_local_lobby.owner_steam_id = owner_steam_id;
+    client_gc.GBE_local_lobby.owner_hero_id = hero_id;
+    client_gc.items.push_back(Econ_Item{});
+    g_test_steam_client.steam_game_coordinator = &client_gc;
+
+    const std::string showcase_body = make_dota7034_game_state_body(8u, 2u);
+    bool showcase_result = tf.gc.GBE_HandleDotaDirect7034Request(
+        7034u,
+        reinterpret_cast<const uint8 *>(showcase_body.data()), showcase_body.size(), true, source_job);
+
+    TEST_ASSERT(showcase_result, "7034 TEAM_SHOWCASE request should return true");
+    TEST_ASSERT(
+        !tf.gc.GBE_HasPushedDotaHostShowcaseEquip(),
+        "TEAM_SHOWCASE must not mark host equip one-shot before PRE_GAME");
+    TEST_ASSERT_EQ(
+        tf.recorder.actions.size(),
+        1u,
+        "TEAM_SHOWCASE should only respond without host equip replay");
+    expect_push_payload(tf.recorder.actions[0], 7034u, "TEAM_SHOWCASE should still push 7034 response");
+
+    tf.recorder.clear();
+    const std::string pre_game_body = make_dota7034_game_state_body(4u, 2u);
+    bool pre_game_result = tf.gc.GBE_HandleDotaDirect7034Request(
+        7034u,
+        reinterpret_cast<const uint8 *>(pre_game_body.data()), pre_game_body.size(), true, source_job);
+
+    TEST_ASSERT(pre_game_result, "7034 PRE_GAME request should return true after TEAM_SHOWCASE");
+    TEST_ASSERT(tf.gc.GBE_HasPushedDotaHostShowcaseEquip(), "PRE_GAME should mark host equip repushed");
+    TEST_ASSERT_EQ(
+        tf.recorder.actions.size(),
+        7u,
+        "PRE_GAME after TEAM_SHOWCASE should replay server cache, client SO, dual-GC 1029, then respond");
+    TEST_ASSERT_EQ(tf.recorder.actions[0].type, GBE_DotaActionType::ServerGcForward, "PRE_GAME first action should repush host equipped items");
+    TEST_ASSERT_EQ(tf.recorder.actions[1].msg_type, 26u, "PRE_GAME should push hero equipped SO updates to client GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[2].msg_type, 1029u, "PRE_GAME should request first server wearable refresh");
+    TEST_ASSERT(tf.recorder.actions[2].server_gc, "first PRE_GAME 1029 should target server GC");
+    TEST_ASSERT_EQ(tf.recorder.actions[4].msg_type, 1029u, "PRE_GAME should request first client wearable refresh");
+    TEST_ASSERT(!tf.recorder.actions[4].server_gc, "first client PRE_GAME 1029 should target client GC");
+    expect_push_payload(tf.recorder.actions[6], 7034u, "PRE_GAME should push 7034 response");
 
     ++g_tests_passed;
 }
@@ -3687,6 +3755,9 @@ int main()
 
     std::printf("[run] test_match_7034_host_showcase_replays_wearables_after_strategy_mark\n");
     RUN_TEST(test_match_7034_host_showcase_replays_wearables_after_strategy_mark);
+
+    std::printf("[run] test_match_7034_host_pre_game_equip_not_consumed_by_team_showcase\n");
+    RUN_TEST(test_match_7034_host_pre_game_equip_not_consumed_by_team_showcase);
 
     std::printf("[run] test_match_7034_launch_poll_records_details_update_before_response\n");
     RUN_TEST(test_match_7034_launch_poll_records_details_update_before_response);

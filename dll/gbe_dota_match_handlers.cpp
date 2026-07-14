@@ -158,15 +158,16 @@ using GBE_Dota7034DisconnectedPlayer = gbe::proto_wire::Dota7034DisconnectedPlay
 // GBE_HandleDotaDirect7034Response (emsg 7034 response builder):
 //   1. Peer restore owner hero (should_peer_restore + lifecycle) if needed
 //   2. If restored: OwnerHeroKnownEquipReplay
-//   3. If TEAM_SHOWCASE && !HasPushedShowcase:
+//   3. If PRE_GAME (request game_state==4) && !HasPushedShowcase:
 //      if restore already replayed equip in this response: MarkShowcase only
 //      else ClearLocalWearables + OwnerHeroKnownEquipReplay + MarkShowcase
 //   4. GBE_AdaptDota7034ConnectedPlayersResponsePayload (pure)
 //   5. push_incoming_now(7034 | kProtoMask, response_message)
 //   Invariant: restore/equip one-shots precede response. Showcase key is generation-bound.
 //   When strategy-time 2569 already marked wearable one-shot and owner hero is known,
-//   TEAM_SHOWCASE clears that key before the late OwnerHeroKnownEquipReplay so host-local
-//   emsg 26 + 1029 still fire at hero spawn.
+//   PRE_GAME clears that key before the late OwnerHeroKnownEquipReplay so host-local
+//   emsg 26 + 1029 still fire at hero spawn. Do not use >=4: TEAM_SHOWCASE is 8 and
+//   arrives before PRE_GAME=4, which would consume the one-shot too early.
 //
 // GBE_HandleDotaDirect7034LaunchPoll (helper):
 //   1. If state==2 && game_state==10: return (no poll)
@@ -751,21 +752,26 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
     const bool restored_owner_equip_replayed = restored_owner_hero &&
         GBE_HandleDotaDirectOwnerHeroKnownEquipReplay(owner_steam64, source_job);
 
-    // [FIX] Re-push host equipped items when game_state reaches TEAM_SHOWCASE (4).
+    // [FIX] Re-push host equipped items when request game_state is PRE_GAME (4).
     // On a listen server the login CacheSubscribed establishes the host's SO cache
     // with 27k items (no equipped_state) in the shared cache. The equip-forward
     // CacheSubscribed arrives during STRATEGY_TIME before hero spawn, so the server
     // engine sees [in cache] and does not create wearables. By re-pushing at
-    // TEAM_SHOWCASE (when the server engine is about to spawn heroes), we give it
-    // a fresh CacheSubscribed with only equipped items so wearables are created.
+    // PRE_GAME (when the server engine spawns heroes), we give it a fresh
+    // CacheSubscribed with only equipped items so wearables are created.
+    //
+    // DOTA_GameState is not monotonic by numeric value: STRATEGY_TIME=3,
+    // PRE_GAME=4, TEAM_SHOWCASE=8. Live logs show 3 -> 8 -> 10 -> 4, so a
+    // threshold of >=4 fires at TEAM_SHOWCASE and consumes the generation-bound
+    // one-shot before heroes exist. Match PRE_GAME exactly.
     //
     // Strategy-time 2569 / owner-known replay may already have marked the wearable
     // one-shot before hero spawn. If this response did not just restore+replay equip
     // (owner hero was already known), clear the wearable key and re-run the helper so
-    // the host-local client still receives emsg 26 and delayed 1029 at TEAM_SHOWCASE.
+    // the host-local client still receives emsg 26 and delayed 1029 at PRE_GAME.
     // Peers observe the host via the server SO cache path either way.
     if (is_server && !GBE_HasPushedDotaHostShowcaseEquip() &&
-        request_shape.has_game_state && request_shape.game_state >= 4u &&
+        request_shape.has_game_state && request_shape.game_state == 4u &&
         GBE_local_lobby.active && GBE_local_lobby.state == 2u) {
         if (client_gc_ptr && owner_steam64 != 0ull) {
             bool refreshed = restored_owner_equip_replayed;
@@ -779,7 +785,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
                 GBE_MarkDotaHostShowcaseEquipPushed();
                 GBE_GC_DebugLog(
                     "GC_DOTA_DIRECT",
-                    "re-pushed host equipped items at TEAM_SHOWCASE: steam64=%llu request_game_state=%u lobby_game_state=%u wearable_cleared=%u",
+                    "re-pushed host equipped items at PRE_GAME: steam64=%llu request_game_state=%u lobby_game_state=%u wearable_cleared=%u",
                     static_cast<unsigned long long>(owner_steam64),
                     request_shape.game_state,
                     GBE_local_lobby.game_state,
