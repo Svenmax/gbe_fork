@@ -15,6 +15,8 @@
 
 **routing inventory diff helper（2026-07-25）：** `gc-inventory-emsg-diff-helper` 已将 routing inventory emsg set mismatch diagnostics 统一到 `append_emsg_set_diff_issue(...)`，保持 numeric sort 与 issue 标签格式一致。
 
+**inventory section heading constants（2026-07-25）：** `gc-inventory-section-heading-constants` 已将 routing 与 Local/shared inventory audit 的 section heading lookup 收敛为命名常量，保持 section slicing 与缺失段落诊断不变。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。

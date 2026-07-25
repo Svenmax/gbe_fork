@@ -69,6 +69,11 @@ TEMPLATE_CASE_TOKEN_TO_EMSG = {
     "GBE_kDotaJoinableCustomLobbiesRequest": "7468",
 }
 DIRECT_CONDITIONAL_FALLBACK_EMSGS = {"8744", "5410", "5432"}
+MESSAGE_ROUTING_REGISTRY_HEADING = "## 1. Registry"
+MESSAGE_ROUTING_FALLBACK_HEADING = "## 2. 仍留在 if/fallback 的路径"
+MESSAGE_ROUTING_TEMPLATE_REPLAY_HEADING = "## 4. template_replay"
+MESSAGE_ROUTING_PARSER_HEADING = "## 5. 解析层职责"
+LOCAL_SHARED_MERGE_HEADING = "## 5. Local/shared merge inventory"
 SOURCE_LIST_AUDIT_EXEMPTIONS = {
     "gbe_dota_chat_handlers.cpp": "compiled through handler test wrapper",
     "gbe_dota_connection_lifecycle.cpp": "production lifecycle TU, not directly offline-buildable",
@@ -748,7 +753,7 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
             "lifecycle": entry.group("lifecycle"),
         }
 
-    registry_section = inventory_section(inventory_text, "## 1. Registry")
+    registry_section = inventory_section(inventory_text, MESSAGE_ROUTING_REGISTRY_HEADING)
     if registry_section is None:
         issues.append("MESSAGE_ROUTING registry inventory missing registry section")
         return issues
@@ -872,7 +877,7 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
         if re.search(rf'case\s+{re.escape(token)}\s*:', switch_body):
             issues.append(f"template replay: registry-defensive emsg {emsg} remains in template-only switch")
 
-    inventory_section_text = inventory_section(inventory_text, "## 4. template_replay")
+    inventory_section_text = inventory_section(inventory_text, MESSAGE_ROUTING_TEMPLATE_REPLAY_HEADING)
     if inventory_section_text is None:
         issues.append("MESSAGE_ROUTING registry-defensive inventory missing template_replay section")
         return issues
@@ -925,7 +930,7 @@ def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
             TEMPLATE_ONLY_TEMPLATE_EMSGS,
         )
 
-    inventory_section_text = inventory_section(inventory_text, "## 4. template_replay")
+    inventory_section_text = inventory_section(inventory_text, MESSAGE_ROUTING_TEMPLATE_REPLAY_HEADING)
     if inventory_section_text is None:
         issues.append("MESSAGE_ROUTING template-only inventory missing template_replay section")
         return issues
@@ -996,7 +1001,7 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
         if f"request_emsg == {token}" in direct_body:
             issues.append(f"direct post-login: inline conditional fallback check remains for {token}")
 
-    inventory_section_text = inventory_section(inventory_text, "## 2. 仍留在 if/fallback 的路径")
+    inventory_section_text = inventory_section(inventory_text, MESSAGE_ROUTING_FALLBACK_HEADING)
     if inventory_section_text is None:
         issues.append("MESSAGE_ROUTING direct conditional fallback inventory missing fallback section")
         return issues
@@ -1057,7 +1062,7 @@ def audit_wrapped_hard_miss_routing(handler_text=None, inventory_text=None):
     if "GBE_HandleDotaTemplateReplayRequest" in wrapped_body or "GBE_HandleDotaSetTeamSlot" in wrapped_body:
         issues.append("wrapped post-login: request path must not route miss to template replay or SetTeamSlot")
 
-    inventory_section_text = inventory_section(inventory_text, "## 2. 仍留在 if/fallback 的路径")
+    inventory_section_text = inventory_section(inventory_text, MESSAGE_ROUTING_FALLBACK_HEADING)
     if inventory_section_text is None:
         issues.append("MESSAGE_ROUTING wrapped hard miss inventory missing fallback section")
         return issues
@@ -1085,7 +1090,7 @@ def audit_legacy_wrapped_parser_guard(source_texts=None, inventory_text=None):
 
     issues = []
     legacy_symbol = "GBE_ExtractWrappedDotaDirectContext"
-    inventory_section_text = inventory_section(inventory_text, "## 5. 解析层职责")
+    inventory_section_text = inventory_section(inventory_text, MESSAGE_ROUTING_PARSER_HEADING)
     if inventory_section_text is None:
         issues.append("MESSAGE_ROUTING legacy wrapped parser inventory missing parser section")
         return issues
@@ -2018,7 +2023,7 @@ def audit_local_shared_merge_inventory(source_texts=None, inventory_text=None):
     if inventory_text is None:
         inventory_text = read(os.path.join(ROOT_DIR, "docs", "gc", "LOCAL_LOBBY_USAGE.md"))
 
-    section_text = inventory_section(inventory_text, "## 5. Local/shared merge inventory")
+    section_text = inventory_section(inventory_text, LOCAL_SHARED_MERGE_HEADING)
     if section_text is None:
         return ["LOCAL_LOBBY merge inventory section not found"]
 

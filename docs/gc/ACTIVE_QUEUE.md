@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | inventory section heading constants：routing 与 Local/shared inventory audit 的 section heading lookup 共用命名常量，避免 heading literal 漂移 | `.monkeycode/specs/gc-inventory-section-heading-constants/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory emsg diff helper：routing inventory emsg set mismatch diagnostics 共用输出 helper，保持 numeric sort 与标签格式一致 | `.monkeycode/specs/gc-inventory-emsg-diff-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory emsg list helper：routing inventory emsg 集合 diagnostics 与迭代统一使用 numeric sort helper，避免集合输出顺序漂移 | `.monkeycode/specs/gc-inventory-emsg-list-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory sorted numeric helper：routing inventory audit 共用 numeric emsg sort helper，避免排序语义漂移 | `.monkeycode/specs/gc-inventory-sorted-numeric-helper/`、`tools/_audit_gc_refactor.py` |
