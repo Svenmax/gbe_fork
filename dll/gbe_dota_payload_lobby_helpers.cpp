@@ -56,7 +56,9 @@
 // now live in gbe_dota_payload_wire_helpers.cpp; those calls resolve via the
 // extern declarations in gbe_dota_payload_wire_helpers.h at link time.
 
-#include "gbe_dota_gc_internal.h"
+#include "gbe_dota_binary_helpers.h"
+#include "gbe_dota_gc_diagnostics.h"
+#include "gbe_dota_protocol_assets.h"
 #include "gbe_dota_payload_lobby_helpers.h"
 #include "gbe_dota_payload_wire_helpers.h"
 #include "gbe_dota_protocol_constants.h"

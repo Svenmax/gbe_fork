@@ -84,6 +84,16 @@ GBE_DotaActionList join_lobby_action_list(
     const JoinLobbyActionPlan &plan,
     bool wrapped);
 
+GBE_DotaActionList launch_init_action_list();
+
+GBE_DotaActionList destroy_lobby_reset_action_list();
+
+GBE_DotaActionList abandon_disconnect_reset_action_list();
+
+GBE_DotaActionList signout_postgame_action_list(
+    std::uint32_t current_state,
+    std::uint32_t current_game_state);
+
 gbe::dota_lobby_state::JoinLobbyMergePlan join_lobby_merge_plan_from_context(
     const JoinLobbyContext &context);
 

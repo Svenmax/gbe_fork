@@ -152,6 +152,121 @@ void test_monotonic_publish_rejects_older_generation()
     expect_eq_string(snapshot.connect, "127.0.0.1:27015", "monotonic publish preserves current endpoint");
 }
 
+void test_monotonic_update_preserves_same_generation_fields()
+{
+    Fixture fixture;
+    auto initial = populated_state(10u);
+    initial.owner_name = "server-owner";
+    fixture.store.publish(initial);
+
+    const auto server_result = fixture.store.update_if_generation_current_or_newer(
+        10u,
+        [](auto &candidate) {
+            candidate.server_id = 505u;
+            candidate.connect = "10.0.0.5:27015";
+        });
+    const auto client_result = fixture.store.update_if_generation_current_or_newer(
+        10u,
+        [](auto &candidate) {
+            candidate.members.push_back(GBE_DotaLobbyMemberState{});
+            candidate.owner_name = "client-owner";
+        });
+    const auto snapshot = fixture.store.snapshot();
+
+    expect_true(server_result == gbe::dota_lobby_state::StoreUpdateResult::Applied, "same-generation server update reports applied");
+    expect_true(client_result == gbe::dota_lobby_state::StoreUpdateResult::Applied, "same-generation client update reports applied");
+    expect_eq_u64(snapshot.generation, 10u, "same-generation updates preserve generation");
+    expect_eq_u64(snapshot.server_id, 505u, "same-generation client update preserves server ID");
+    expect_eq_string(snapshot.connect, "10.0.0.5:27015", "same-generation client update preserves endpoint");
+    expect_eq_string(snapshot.owner_name, "client-owner", "same-generation client update commits owned field");
+    expect_eq_u64(snapshot.members.size(), 2u, "same-generation client update preserves and extends members");
+}
+
+void test_monotonic_update_replaces_older_generation_snapshot()
+{
+    Fixture fixture;
+    auto initial = populated_state(10u);
+    initial.owner_name = "old-owner";
+    fixture.store.publish(initial);
+
+    const auto result = fixture.store.update_if_generation_current_or_newer(
+        11u,
+        [](auto &candidate) {
+            candidate.valid = true;
+            candidate.active = true;
+            candidate.lobby_id = 202u;
+            candidate.owner_name = "new-owner";
+        });
+    const auto snapshot = fixture.store.snapshot();
+
+    expect_true(result == gbe::dota_lobby_state::StoreUpdateResult::Applied, "newer-generation update reports applied");
+    expect_eq_u64(snapshot.generation, 11u, "newer-generation update advances generation");
+    expect_eq_u64(snapshot.lobby_id, 202u, "newer-generation update commits new lobby ID");
+    expect_eq_string(snapshot.owner_name, "new-owner", "newer-generation update commits new owner");
+    expect_eq_u64(snapshot.server_id, 0u, "newer-generation update drops prior lifecycle server ID");
+    expect_true(snapshot.connect.empty(), "newer-generation update drops prior lifecycle endpoint");
+}
+
+void test_monotonic_update_rejects_stale_and_tombstone_generations()
+{
+    Fixture fixture;
+    fixture.store.publish(populated_state(12u));
+
+    const auto stale_result = fixture.store.update_if_generation_current_or_newer(
+        11u,
+        [](auto &candidate) { candidate.server_id = 1100u; });
+    fixture.store.compare_clear(12u);
+    const auto tombstone_result = fixture.store.update_if_generation_current_or_newer(
+        12u,
+        [](auto &candidate) {
+            candidate.valid = true;
+            candidate.lobby_id = 1200u;
+        });
+    const auto snapshot = fixture.store.snapshot();
+
+    expect_true(stale_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration, "monotonic update rejects stale generation");
+    expect_true(tombstone_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration, "monotonic update rejects same-generation tombstone revival");
+    expect_true(!snapshot.valid, "rejected monotonic update preserves tombstone validity");
+    expect_eq_u64(snapshot.generation, 12u, "rejected monotonic update preserves tombstone generation");
+    expect_eq_u64(snapshot.lobby_id, 0u, "rejected monotonic update preserves tombstone lobby ID");
+}
+
+void test_concurrent_same_generation_updates_preserve_disjoint_fields()
+{
+    Fixture fixture;
+    constexpr std::uint64_t generation = 17u;
+    fixture.store.publish(populated_state(generation));
+
+    std::atomic<bool> start{false};
+    std::thread network_writer([&] {
+        while (!start.load(std::memory_order_acquire)) {
+        }
+        fixture.store.update_if_generation_current_or_newer(generation, [](auto &candidate) {
+            candidate.server_id = 1701u;
+            candidate.connect = "10.17.0.1:27015";
+        });
+    });
+    std::thread members_writer([&] {
+        while (!start.load(std::memory_order_acquire)) {
+        }
+        fixture.store.update_if_generation_current_or_newer(generation, [](auto &candidate) {
+            candidate.members.push_back(GBE_DotaLobbyMemberState{});
+            candidate.cache_service_list.push_back(17u);
+        });
+    });
+
+    start.store(true, std::memory_order_release);
+    network_writer.join();
+    members_writer.join();
+
+    const auto snapshot = fixture.store.snapshot();
+    expect_eq_u64(snapshot.generation, generation, "concurrent updates preserve generation");
+    expect_eq_u64(snapshot.server_id, 1701u, "concurrent member update preserves network server ID");
+    expect_eq_string(snapshot.connect, "10.17.0.1:27015", "concurrent member update preserves network endpoint");
+    expect_eq_u64(snapshot.members.size(), 2u, "concurrent network update preserves member update");
+    expect_eq_u64(snapshot.cache_service_list.size(), 2u, "concurrent network update preserves cache metadata update");
+}
+
 void test_update_commits_complete_candidate()
 {
     Fixture fixture;
@@ -657,6 +772,10 @@ int main()
     test_snapshot_is_immutable_copy();
     test_monotonic_publish_accepts_current_and_newer_generations();
     test_monotonic_publish_rejects_older_generation();
+    test_monotonic_update_preserves_same_generation_fields();
+    test_monotonic_update_replaces_older_generation_snapshot();
+    test_monotonic_update_rejects_stale_and_tombstone_generations();
+    test_concurrent_same_generation_updates_preserve_disjoint_fields();
     test_update_commits_complete_candidate();
     test_compare_update_applies_matching_generation();
     test_compare_update_rejects_stale_generation_without_mutation();

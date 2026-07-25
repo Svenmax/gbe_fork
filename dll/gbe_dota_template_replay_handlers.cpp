@@ -42,10 +42,11 @@
 #include "gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
-#include "gbe_dota_gc_internal.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_template_replay_templates.h"
 #include "gbe_dota_payload_lobby_helpers.h"
 #include "gbe_dota_payload_wire_helpers.h"
+#include "gbe_dota_vpk_loot_cache.h"
 #include <algorithm>
 #include <cstdlib>
 #include <cstdio>

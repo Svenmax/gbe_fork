@@ -34,7 +34,7 @@
 #include "gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
-#include "gbe_dota_gc_internal.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_payload_lobby_helpers.h"
 #include "gbe_dota_payload_wire_helpers.h"
 #include <atomic>
@@ -925,53 +925,69 @@ void Steam_Game_Coordinator::steam_run_every_runcb(void *object)
     steam_gamecoordinator->RunCallbacks();
 }
 
-Steam_Game_Coordinator::Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, registry::View handler_registry, gbe::dota_lifecycle::Executor &lifecycle_executor, bool is_server)
+Steam_Game_Coordinator::Steam_Game_Coordinator(Dependencies dependencies, bool is_server)
 {
-    if (!handler_registry.entries || handler_registry.size == 0u)
+    if (!dependencies.handler_registry.entries || dependencies.handler_registry.size == 0u)
         throw std::invalid_argument("Dota handler registry is required");
+    if (!dependencies.settings || !dependencies.network || !dependencies.local_storage ||
+        !dependencies.callbacks || !dependencies.run_every_runcb ||
+        !dependencies.shared_lobby_store || !dependencies.lifecycle_executor)
+        throw std::invalid_argument("Dota coordinator dependencies are required");
 
-    this->settings = settings;
-    this->network = network;
-    this->local_storage = local_storage;
-    this->callbacks = callbacks;
-    this->run_every_runcb = run_every_runcb;
-    this->shared_lobby_store = &shared_lobby_store;
-    this->handler_registry = handler_registry;
-    this->lifecycle_executor = &lifecycle_executor;
+    this->settings = dependencies.settings;
+    this->network = dependencies.network;
+    this->local_storage = dependencies.local_storage;
+    this->callbacks = dependencies.callbacks;
+    this->run_every_runcb = dependencies.run_every_runcb;
+    this->shared_lobby_store = dependencies.shared_lobby_store;
+    this->handler_registry = dependencies.handler_registry;
+    this->lifecycle_executor = dependencies.lifecycle_executor;
     this->is_server = is_server;
+}
+
+void Steam_Game_Coordinator::start()
+{
+    if (runtime_started)
+        return;
 
     this->network->setCallback(CALLBACK_ID_GAMESERVER_ITEMS, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->network->setCallback(CALLBACK_ID_FRIEND_MESSAGES, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->network->setCallback(CALLBACK_ID_STEAM_MESSAGES, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->network->setCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->run_every_runcb->add(&Steam_Game_Coordinator::steam_run_every_runcb, this);
+    runtime_started = true;
 
-    parse_gc_config();
+    try {
+        parse_gc_config();
 
-    if (gc_profile == GC_PROFILE_DOTA2) {
+        if (gc_profile == GC_PROFILE_DOTA2) {
+            GBE_GC_DebugLog(
+                "GC_INIT",
+                "eagerly initializing Dota2 GC during startup this=%p is_server=%u",
+                static_cast<void *>(this),
+                this->is_server ? 1u : 0u
+            );
+            initialize_gc();
+        }
+
+        const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
         GBE_GC_DebugLog(
-            "GC_INIT",
-            "eagerly initializing Dota2 GC from constructor this=%p is_server=%u",
+            "GC_DOTA_SYNC",
+            "coordinator init this=%p is_server=%u shared_lobby=%p shared_valid=%u active=%u lobby_id=%llu match_id=%llu state=%u game_state=%u",
             static_cast<void *>(this),
-            this->is_server ? 1u : 0u
+            this->is_server ? 1u : 0u,
+            static_cast<void *>(&GBE_SharedLobbyStore()),
+            shared_lobby.valid ? 1u : 0u,
+            shared_lobby.active ? 1u : 0u,
+            static_cast<unsigned long long>(shared_lobby.lobby_id),
+            static_cast<unsigned long long>(shared_lobby.match_id),
+            shared_lobby.state,
+            shared_lobby.game_state
         );
-        initialize_gc();
+    } catch (...) {
+        stop();
+        throw;
     }
-
-    const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
-    GBE_GC_DebugLog(
-        "GC_DOTA_SYNC",
-        "coordinator init this=%p is_server=%u shared_lobby=%p shared_valid=%u active=%u lobby_id=%llu match_id=%llu state=%u game_state=%u",
-        static_cast<void *>(this),
-        this->is_server ? 1u : 0u,
-        static_cast<void *>(&GBE_SharedLobbyStore()),
-        shared_lobby.valid ? 1u : 0u,
-        shared_lobby.active ? 1u : 0u,
-        static_cast<unsigned long long>(shared_lobby.lobby_id),
-        static_cast<unsigned long long>(shared_lobby.match_id),
-        shared_lobby.state,
-        shared_lobby.game_state
-    );
 }
 
 gbe::dota_lobby_state::Store &Steam_Game_Coordinator::GBE_SharedLobbyStore() const
@@ -981,11 +997,20 @@ gbe::dota_lobby_state::Store &Steam_Game_Coordinator::GBE_SharedLobbyStore() con
 
 Steam_Game_Coordinator::~Steam_Game_Coordinator()
 {
+    stop();
+}
+
+void Steam_Game_Coordinator::stop()
+{
+    if (!runtime_started)
+        return;
+
     this->network->rmCallback(CALLBACK_ID_GAMESERVER_ITEMS, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->network->rmCallback(CALLBACK_ID_FRIEND_MESSAGES, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->network->rmCallback(CALLBACK_ID_STEAM_MESSAGES, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->network->rmCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Game_Coordinator::steam_network_callback, this);
     this->run_every_runcb->remove(&Steam_Game_Coordinator::steam_run_every_runcb, this);
+    runtime_started = false;
 }
 
 void Steam_Game_Coordinator::initialize_gc()
@@ -1534,7 +1559,7 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
             "[LOBBY] Consumed pending 25; applying deferred current-game reset for LobbyID=%llu",
             static_cast<unsigned long long>(pending_lobby_id)
         );
-        ResetGCMemory("7035_disconnect_current_game_after_25", true, true);
+        GBE_ExecuteDotaLifecycleActions(gbe::dota_lobby_flow::abandon_disconnect_reset_action_list());
     }
 
     GBE_GC_DebugLog(

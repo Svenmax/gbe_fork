@@ -487,6 +487,50 @@ bool test_create_lobby_action_list()
     return ok;
 }
 
+bool test_launch_init_action_list()
+{
+    const GBE_DotaActionList actions = gbe::dota_lobby_flow::launch_init_action_list();
+    return expect_eq_u64(actions.size(), 2u, "launch init action count") &&
+        expect_eq_action_type(actions[0].type, GBE_DotaActionType::LaunchPeripheralReset, "launch init reset action") &&
+        expect_eq_action_type(actions[1].type, GBE_DotaActionType::SharedLobbyPublish, "launch init publish action") &&
+        expect_true(actions[0].reason == "7041_launch_init", "launch init reset reason") &&
+        expect_true(actions[1].reason == "7041_launch_init", "launch init publish reason");
+}
+
+bool test_destroy_lobby_reset_action_list()
+{
+    const GBE_DotaActionList actions = gbe::dota_lobby_flow::destroy_lobby_reset_action_list();
+    return expect_eq_u64(actions.size(), 1u, "destroy reset action count") &&
+        expect_eq_action_type(actions[0].type, GBE_DotaActionType::GcMemoryReset, "destroy reset action") &&
+        expect_true(actions[0].reason == "8246_destroy", "destroy reset reason") &&
+        expect_true(actions[0].leave_generic_lobby, "destroy reset leaves generic lobby") &&
+        expect_true(actions[0].clear_queued_messages, "destroy reset clears queued messages") &&
+        expect_true(actions[0].generation_boundary == gbe::dota_lobby_generation::Boundary::Leave, "destroy reset advances leave generation");
+}
+
+bool test_abandon_disconnect_reset_action_list()
+{
+    const GBE_DotaActionList actions = gbe::dota_lobby_flow::abandon_disconnect_reset_action_list();
+    return expect_eq_u64(actions.size(), 1u, "abandon disconnect reset action count") &&
+        expect_eq_action_type(actions[0].type, GBE_DotaActionType::GcMemoryReset, "abandon disconnect reset action") &&
+        expect_true(actions[0].reason == "7035_disconnect_current_game_after_25", "abandon disconnect reset reason") &&
+        expect_true(actions[0].leave_generic_lobby, "abandon disconnect reset leaves generic lobby") &&
+        expect_true(actions[0].clear_queued_messages, "abandon disconnect reset clears queued messages") &&
+        expect_true(actions[0].generation_boundary == gbe::dota_lobby_generation::Boundary::Reset, "abandon disconnect reset advances reset generation");
+}
+
+bool test_signout_postgame_action_list()
+{
+    const GBE_DotaActionList actions = gbe::dota_lobby_flow::signout_postgame_action_list(1u, 4u);
+    return expect_eq_u64(actions.size(), 3u, "signout postgame action count") &&
+        expect_eq_action_type(actions[0].type, GBE_DotaActionType::LobbyStateApply, "signout applies state first") &&
+        expect_true(actions[0].lobby_state == 2u, "signout raises lobby state") &&
+        expect_true(actions[0].lobby_game_state == 6u, "signout raises game state") &&
+        expect_eq_action_type(actions[1].type, GBE_DotaActionType::SharedLobbyPublish, "signout publishes after state") &&
+        expect_eq_action_type(actions[2].type, GBE_DotaActionType::PracticeLobbyDetailsUpdate, "signout sends details after publish") &&
+        expect_true(actions[2].reason == "7004_signout_run_post_game", "signout details reason");
+}
+
 bool test_join_lobby_context_mapping()
 {
     bool ok = true;
@@ -1977,6 +2021,10 @@ int main()
     ok &= test_launch_state_push_context_mapping();
     ok &= test_create_lobby_context_mapping();
     ok &= test_create_lobby_action_list();
+    ok &= test_launch_init_action_list();
+    ok &= test_destroy_lobby_reset_action_list();
+    ok &= test_abandon_disconnect_reset_action_list();
+    ok &= test_signout_postgame_action_list();
     ok &= test_join_lobby_context_mapping();
     ok &= test_join_lobby_action_list();
     ok &= test_launch_state_plan_input_source_lobby_mapping();

@@ -44,6 +44,12 @@
 | D3 | 单一 publish/details 路径 | 双轨耦合重；需一条路径有完整序测 | 不并行改 HOST 字段 |
 | D4 | 自然子对象（远期） | 仅当依赖收敛且可直测 | 禁止「搬家式」成员迁移 |
 
+### 当前受控切片：R4.1
+
+- create/join 的 generation boundary 在生产推进前经过纯 lifecycle decision。
+- 该 decision 仅确认事件类别、generation 上限与边界 effect；它不以临时 `MachineState{}` 的 `Idle` 状态拒绝已有 lobby 上的 create/join。
+- `create_lobby_action_list()`、`join_lobby_action_list()` 及其协议动作顺序保持原样；本切片不提取对象、不引入生产 CompositionRoot。
+
 **明确延后：** 真 DI 替换生产装配；`DotaLobbyRuntime` 等大对象包；全量 getter 假封装。
 
 ## 5. 与 Phase C / E 的分界

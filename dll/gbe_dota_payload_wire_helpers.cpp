@@ -48,7 +48,9 @@
 // remains file-scope `static` because it is only called from
 // GBE_PrepareDotaWelcomeBody within this TU.
 
-#include "gbe_dota_gc_internal.h"
+#include "gbe_dota_binary_helpers.h"
+#include "gbe_dota_gc_diagnostics.h"
+#include "gbe_dota_protocol_assets.h"
 #include "gbe_dota_payload_lobby_helpers.h"
 #include "gbe_dota_payload_wire_helpers.h"
 #include "gbe_dota_protocol_constants.h"

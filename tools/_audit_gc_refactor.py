@@ -117,8 +117,8 @@ HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE = {
     ("gbe_dota_lobby_create_handlers.cpp", "GBE_SendDotaPracticeLobbyDetailsUpdate"): 1,
     ("gbe_dota_lobby_join_handlers.cpp", "GBE_PublishDotaPracticeLobbyLocalMemberData"): 1,
     ("gbe_dota_lobby_join_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 1,
-    ("gbe_dota_lobby_lifecycle_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 2,
-    ("gbe_dota_lobby_lifecycle_handlers.cpp", "GBE_SendDotaPracticeLobbyDetailsUpdate"): 2,
+    # R4.2/R4.4 route 7041 and 7004 publish/details actions through the lifecycle executor.
+    ("gbe_dota_lobby_lifecycle_handlers.cpp", "GBE_SendDotaPracticeLobbyDetailsUpdate"): 1,
     ("gbe_dota_lobby_slot_handlers.cpp", "GBE_PublishDotaPracticeLobbyLocalMemberData"): 1,
     ("gbe_dota_lobby_slot_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 2,
     ("gbe_dota_lobby_slot_handlers.cpp", "GBE_SendDotaPracticeLobbyDetailsUpdate"): 2,

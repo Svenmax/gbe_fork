@@ -30,7 +30,6 @@
 #include "gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
-#include "gbe_dota_gc_internal.h"
 #include "gbe_dota_lobby_handler_helpers.h"
 #include <algorithm>
 #include <cstdlib>
@@ -291,6 +290,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     create_context.owner_slot = 1u;
 
     const gbe::dota_lobby_state::CreateLobbyResetPlan reset_plan = gbe::dota_lobby_flow::create_lobby_reset_plan_from_context(create_context);
+    gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+    machine_state.generation = GBE_CurrentDotaLobbyGeneration();
+    const auto generation_boundary = gbe::dota_lifecycle_state_machine::transition_generation_boundary(
+        machine_state,
+        { gbe::dota_lifecycle_state_machine::EventKind::Create,
+          gbe::dota_lifecycle_state_machine::transport_source(wrapped),
+          GBE_kDotaPracticeLobbyCreate,
+          machine_state.generation });
+    if (!generation_boundary.accepted() || !generation_boundary.effects.contains(
+            gbe::dota_lifecycle_state_machine::EffectKind::GenerationAdvanced))
+        return true;
     if (GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Create, "7038_create") == GBE_DotaGenerationAdvanceResult::Exhausted)
         return true;
     const GBE_DotaActionList create_actions = gbe::dota_lobby_flow::create_lobby_action_list(

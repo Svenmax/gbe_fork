@@ -129,6 +129,41 @@ GBE_DotaActionList join_lobby_action_list(
     return actions;
 }
 
+GBE_DotaActionList launch_init_action_list()
+{
+    GBE_DotaActionList actions;
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::LaunchPeripheralReset, 0u, std::string(), 0ull, 0ull, 0ull, "7041_launch_init" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::SharedLobbyPublish, 0u, std::string(), 0ull, 0ull, 0ull, "7041_launch_init" });
+    return actions;
+}
+
+GBE_DotaActionList destroy_lobby_reset_action_list()
+{
+    GBE_DotaAction reset{ GBE_DotaActionType::GcMemoryReset, 0u, std::string(), 0ull, 0ull, 0ull, "8246_destroy", true, true };
+    reset.generation_boundary = gbe::dota_lobby_generation::Boundary::Leave;
+    return { std::move(reset) };
+}
+
+GBE_DotaActionList abandon_disconnect_reset_action_list()
+{
+    return { GBE_DotaAction{ GBE_DotaActionType::GcMemoryReset, 0u, std::string(), 0ull, 0ull, 0ull, "7035_disconnect_current_game_after_25", true, true } };
+}
+
+GBE_DotaActionList signout_postgame_action_list(
+    std::uint32_t current_state,
+    std::uint32_t current_game_state)
+{
+    GBE_DotaActionList actions;
+    GBE_DotaAction apply{ GBE_DotaActionType::LobbyStateApply };
+    apply.lobby_state = std::max(current_state, 2u);
+    apply.lobby_game_state = std::max(current_game_state, 6u);
+    apply.reason = "7004_signout_post_game";
+    actions.push_back(std::move(apply));
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::SharedLobbyPublish, 0u, std::string(), 0ull, 0ull, 0ull, "7004_signout_post_game" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PracticeLobbyDetailsUpdate, 0u, std::string(), 0ull, 0ull, 0ull, "7004_signout_run_post_game" });
+    return actions;
+}
+
 GBE_DotaActionList abandon_cache_unsubscribed_action_list(
     const gbe::dota_lobby_state::AbandonDecision &decision,
     const std::string &response_25,

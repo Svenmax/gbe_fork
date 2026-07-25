@@ -152,6 +152,78 @@ void run_teardown_examples()
     assert(abandon.state.generation == running.generation);
 }
 
+void run_generation_boundary_examples()
+{
+    lifecycle::MachineState existing_lobby{};
+    existing_lobby.lifecycle = lifecycle::State::Running;
+    existing_lobby.generation = 81u;
+    existing_lobby.reconnect_queued = true;
+
+    const auto create = lifecycle::transition_generation_boundary(
+        existing_lobby,
+        { lifecycle::EventKind::Create, lifecycle::EventSource::Direct, GBE_kDotaPracticeLobbyCreate, 81u, 0u, 0u });
+    assert(create.accepted());
+    assert(create.state.lifecycle == lifecycle::State::Running);
+    assert(create.state.generation == 82u);
+    assert(!create.state.reconnect_queued);
+    assert(create.effects.contains(lifecycle::EffectKind::GenerationAdvanced));
+
+    const auto join = lifecycle::transition_generation_boundary(
+        existing_lobby,
+        { lifecycle::EventKind::Join, lifecycle::EventSource::Wrapped, GBE_kDotaPracticeLobbyJoin, 0u, 0u, 0u });
+    assert(join.accepted());
+    assert(join.state.generation == 82u);
+
+    const auto stale = lifecycle::transition_generation_boundary(
+        existing_lobby,
+        { lifecycle::EventKind::Create, lifecycle::EventSource::Direct, GBE_kDotaPracticeLobbyCreate, 80u, 0u, 0u });
+    assert(!stale.accepted());
+    assert(stale.reason == lifecycle::DecisionReason::StaleGeneration);
+
+    lifecycle::MachineState exhausted{};
+    exhausted.generation = std::numeric_limits<std::uint64_t>::max();
+    const auto exhausted_create = lifecycle::transition_generation_boundary(
+        exhausted,
+        { lifecycle::EventKind::Create, lifecycle::EventSource::Direct, GBE_kDotaPracticeLobbyCreate, exhausted.generation, 0u, 0u });
+    assert(!exhausted_create.accepted());
+    assert(exhausted_create.reason == lifecycle::DecisionReason::GenerationExhausted);
+
+    const auto invalid = lifecycle::transition_generation_boundary(
+        existing_lobby,
+        { lifecycle::EventKind::PostGame, lifecycle::EventSource::Direct, GBE_kDotaGameMatchSignOut, existing_lobby.generation, 0u, 0u });
+    assert(!invalid.accepted());
+    assert(invalid.reason == lifecycle::DecisionReason::InvalidTransition);
+}
+
+void run_runtime_clear_boundary_examples()
+{
+    lifecycle::MachineState active{};
+    active.lifecycle = lifecycle::State::Running;
+    active.generation = 91u;
+    active.reconnect_queued = true;
+
+    const auto leave = lifecycle::transition_runtime_clear_boundary(
+        active,
+        { lifecycle::EventKind::Leave, lifecycle::EventSource::Direct, GBE_kDotaDestroyLobbyRequest, 91u, 0u, 0u });
+    assert(leave.accepted());
+    assert(leave.state.lifecycle == lifecycle::State::Running);
+    assert(leave.state.generation == 92u);
+    assert(!leave.state.reconnect_queued);
+    assert(leave.effects.contains(lifecycle::EffectKind::GenerationAdvanced));
+
+    const auto stale = lifecycle::transition_runtime_clear_boundary(
+        active,
+        { lifecycle::EventKind::Leave, lifecycle::EventSource::Direct, GBE_kDotaDestroyLobbyRequest, 90u, 0u, 0u });
+    assert(!stale.accepted());
+    assert(stale.reason == lifecycle::DecisionReason::StaleGeneration);
+
+    const auto invalid = lifecycle::transition_runtime_clear_boundary(
+        active,
+        { lifecycle::EventKind::PostGame, lifecycle::EventSource::Direct, GBE_kDotaGameMatchSignOut, 91u, 0u, 0u });
+    assert(!invalid.accepted());
+    assert(invalid.reason == lifecycle::DecisionReason::InvalidTransition);
+}
+
 void run_reconnect_example()
 {
     lifecycle::MachineState running{};
@@ -598,6 +670,8 @@ int main()
     run_load_failure_example();
     run_duplicate_and_out_of_order_example();
     run_teardown_examples();
+    run_generation_boundary_examples();
+    run_runtime_clear_boundary_examples();
     run_reconnect_example();
     run_state_machine_properties();
     run_model_based_differential_test();

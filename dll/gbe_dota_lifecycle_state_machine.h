@@ -446,6 +446,50 @@ constexpr MachineTransitionResult transition(MachineState state, const Event &ev
     return { state, effects, DecisionReason::TransitionApplied, DecisionStatus::Accepted };
 }
 
+// Create and join replace the active lobby, so their generation boundary is
+// decided independently from the in-lobby lifecycle state.
+constexpr MachineTransitionResult transition_generation_boundary(MachineState state, const Event &event)
+{
+    if (event.kind != EventKind::Create && event.kind != EventKind::Join)
+        return rejected_machine_transition(state, DecisionReason::InvalidTransition);
+    if (event.generation != 0u && event.generation != state.generation)
+        return rejected_machine_transition(state, DecisionReason::StaleGeneration);
+    if (state.generation == std::numeric_limits<std::uint64_t>::max())
+        return rejected_machine_transition(state, DecisionReason::GenerationExhausted);
+
+    ++state.generation;
+    state.reconnect_key = {};
+    state.reconnect_queued = false;
+    return {
+        state,
+        { { Effect{ EffectKind::GenerationAdvanced, state.lifecycle, state.lifecycle, state.generation } }, 1u },
+        DecisionReason::TransitionApplied,
+        DecisionStatus::Accepted,
+    };
+}
+
+// Immediate clear requests replace the active runtime without a queued
+// teardown, so they advance generation independently from teardown stages.
+constexpr MachineTransitionResult transition_runtime_clear_boundary(MachineState state, const Event &event)
+{
+    if (event.kind != EventKind::Leave && event.kind != EventKind::Reset)
+        return rejected_machine_transition(state, DecisionReason::InvalidTransition);
+    if (event.generation != 0u && event.generation != state.generation)
+        return rejected_machine_transition(state, DecisionReason::StaleGeneration);
+    if (state.generation == std::numeric_limits<std::uint64_t>::max())
+        return rejected_machine_transition(state, DecisionReason::GenerationExhausted);
+
+    ++state.generation;
+    state.reconnect_key = {};
+    state.reconnect_queued = false;
+    return {
+        state,
+        { { Effect{ EffectKind::GenerationAdvanced, state.lifecycle, state.lifecycle, state.generation } }, 1u },
+        DecisionReason::TransitionApplied,
+        DecisionStatus::Accepted,
+    };
+}
+
 constexpr MachineTransitionResult transition_runtime_poll(
     MachineState state,
     const Event &event,

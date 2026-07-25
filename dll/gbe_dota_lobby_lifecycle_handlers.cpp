@@ -30,7 +30,7 @@
 #include "gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
-#include "gbe_dota_gc_internal.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_lobby_handler_helpers.h"
 #include <algorithm>
 #include <cstdlib>
@@ -209,12 +209,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaGameMatchSignOutRequest(bool wrapped,
     }
 
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
-        if (GBE_local_lobby.game_state < 6u)
-            GBE_local_lobby.game_state = 6u;
-        if (GBE_local_lobby.state < 2u)
-            GBE_local_lobby.state = 2u;
-        GBE_PublishSharedDotaLobbyState("7004_signout_post_game");
-        GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7004_signout_run_post_game");
+        gbe::dota_lifecycle::ExecutionOptions options;
+        options.wrapped = wrapped;
+        options.outer_session_field_raw = outer_session_field_raw;
+        if (!GBE_ExecuteDotaLifecycleActions(
+                gbe::dota_lobby_flow::signout_postgame_action_list(
+                    GBE_local_lobby.state,
+                    GBE_local_lobby.game_state),
+                options).succeeded)
+            return true;
     }
 
     if (!GBE_PushDotaResponse(GBE_kDotaGameMatchSignOutResponse, response_7005, wrapped, outer_session_field_raw, "7004_signout_response"))
@@ -375,7 +378,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(const std:
         return true;
     }
 
-    GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
+    const GBE_DotaActionList launch_init_actions = gbe::dota_lobby_flow::launch_init_action_list();
+    if (launch_init_actions.empty() ||
+        launch_init_actions.front().type != GBE_DotaActionType::LaunchPeripheralReset)
+        return true;
+    if (!GBE_ExecuteDotaLifecycleActions(
+            { launch_init_actions.front() }).succeeded)
+        return true;
 
     const uint32 launch_ip = network ? network->getOwnIP() : 0u;
     const gbe::dota_lobby_state::LaunchInitPlan launch_plan = gbe::dota_lobby_state::compose_launch_init_plan(
@@ -386,7 +395,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(const std:
         static_cast<uint32>(std::time(nullptr)),
         GBE_kDotaLaunchPhaseRequested);
     GBE_local_lobby = launch_plan.lobby;
-    GBE_PublishSharedDotaLobbyState("7041_launch_init");
+    if (launch_init_actions.size() < 2u ||
+        launch_init_actions[1].type != GBE_DotaActionType::SharedLobbyPublish ||
+        !GBE_ExecuteDotaLifecycleActions({ launch_init_actions[1] }).succeeded)
+        return true;
 
     if (gbe::dota_custom_game::has_custom_game_details(GBE_local_lobby.custom_game)) {
         const gbe::dota_lobby_state::LaunchPresenceEvent presence_event = gbe::dota_lobby_state::compose_launch_serversetup_presence_event("7041_custom_game_launch_init");
@@ -515,7 +527,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDestroyLobbyRequest(uint64 request_jo
         return true;
     }
 
-    ResetGCMemory("8246_destroy", true, true, gbe::dota_lobby_generation::Boundary::Leave);
+    gbe::dota_lifecycle_state_machine::MachineState machine_state{};
+    machine_state.generation = GBE_CurrentDotaLobbyGeneration();
+    const auto clear_boundary = gbe::dota_lifecycle_state_machine::transition_runtime_clear_boundary(
+        machine_state,
+        { gbe::dota_lifecycle_state_machine::EventKind::Leave,
+          gbe::dota_lifecycle_state_machine::transport_source(wrapped),
+          GBE_kDotaDestroyLobbyRequest,
+          machine_state.generation });
+    if (!clear_boundary.accepted() || !clear_boundary.effects.contains(
+            gbe::dota_lifecycle_state_machine::EffectKind::GenerationAdvanced))
+        return true;
+    if (!GBE_ExecuteDotaLifecycleActions(
+            gbe::dota_lobby_flow::destroy_lobby_reset_action_list()).succeeded)
+        return true;
     push_incoming_now(outbound_25.emsg, outbound_25.payload);
     GBE_LogDotaResponsePacket("8246_destroy_25", GBE_kDotaCacheUnsubscribed, wrapped, response_25, outbound_25.payload, lobby_id, 0u, 0u);
     if (has_request_job) {

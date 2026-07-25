@@ -25,6 +25,9 @@ public:
 
     // Generation-gated production write path. Cross-role publishes must enter here.
     StoreUpdateResult publish_if_generation_current_or_newer(Snapshot state);
+    StoreUpdateResult update_if_generation_current_or_newer(
+        std::uint64_t generation,
+        const Mutator &mutator);
     StoreUpdateResult compare_clear(std::uint64_t expected_generation);
     StoreUpdateResult compare_update(std::uint64_t expected_generation, const Mutator &mutator);
 

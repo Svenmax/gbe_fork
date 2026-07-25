@@ -31,7 +31,8 @@
 #include "gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
-#include "gbe_dota_gc_internal.h"
+#include "gbe_dota_binary_helpers.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_inventory_ports.h"
 #include <atomic>
 #include <algorithm>

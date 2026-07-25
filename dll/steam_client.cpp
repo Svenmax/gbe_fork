@@ -25,6 +25,28 @@ namespace {
 uint32 GBE_local_ip_binding_ip{};
 uint16 GBE_local_ip_binding_port{};
 
+Steam_Game_Coordinator::Dependencies make_dota_coordinator_dependencies(
+    Settings *settings,
+    Networking *network,
+    Local_Storage *local_storage,
+    SteamCallBacks *callbacks,
+    RunEveryRunCB *run_every_runcb,
+    gbe::dota_lobby_state::Store &shared_lobby_store,
+    gbe::dota_handler_registry::View handler_registry,
+    gbe::dota_lifecycle::Executor &lifecycle_executor)
+{
+    return {
+        settings,
+        network,
+        local_storage,
+        callbacks,
+        run_every_runcb,
+        &shared_lobby_store,
+        handler_registry,
+        &lifecycle_executor,
+    };
+}
+
 }
 
 bool GBE_GetSteamClientLocalIPBinding(uint32 *ip, uint16 *port)
@@ -150,7 +172,18 @@ Steam_Client::Steam_Client()
     dota_locator_binding = std::make_unique<gbe::dota::LocatorBindingGuard>(dota_lobby_store, dota_runtime_state);
     const auto dota_handler_registry = Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry();
     dota_lifecycle_executor_client = new gbe::dota_lifecycle::CoordinatorExecutor();
-    steam_game_coordinator = new Steam_Game_Coordinator(settings_client, network, local_storage, callbacks_client, run_every_runcb, GBE_GetSharedDotaLobbyStateStore(), dota_handler_registry, *dota_lifecycle_executor_client, false);
+    steam_game_coordinator = new Steam_Game_Coordinator(
+        make_dota_coordinator_dependencies(
+            settings_client,
+            network,
+            local_storage,
+            callbacks_client,
+            run_every_runcb,
+            GBE_GetSharedDotaLobbyStateStore(),
+            dota_handler_registry,
+            *dota_lifecycle_executor_client),
+        false);
+    steam_game_coordinator->start();
     steam_networking_utils = new Steam_Networking_Utils(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_unified_messages = new Steam_Unified_Messages(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_game_search = new Steam_Game_Search(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
@@ -180,7 +213,18 @@ Steam_Client::Steam_Client()
     steam_gameserver_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, dota_reconnect_adapter_server, dota_reconnect_adapter_server, dota_reconnect_adapter_server);
     steam_gameserver_networking_messages = new Steam_Networking_Messages(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
     dota_lifecycle_executor_server = new gbe::dota_lifecycle::CoordinatorExecutor();
-    steam_gameserver_game_coordinator = new Steam_Game_Coordinator(settings_server, network, local_storage, callbacks_server, run_every_runcb, GBE_GetSharedDotaLobbyStateStore(), dota_handler_registry, *dota_lifecycle_executor_server, true);
+    steam_gameserver_game_coordinator = new Steam_Game_Coordinator(
+        make_dota_coordinator_dependencies(
+            settings_server,
+            network,
+            local_storage,
+            callbacks_server,
+            run_every_runcb,
+            GBE_GetSharedDotaLobbyStateStore(),
+            dota_handler_registry,
+            *dota_lifecycle_executor_server),
+        true);
+    steam_gameserver_game_coordinator->start();
     steam_masterserver_updater = new Steam_Masterserver_Updater(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, steam_gameserver);
     steam_gameserver_gamestats = new Steam_GameStats(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
     steam_gameserver_items = new Steam_GameServer_Items(settings_server, callbacks_server, callback_results_server);
@@ -220,6 +264,8 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_gameserver_inventory);
     DEL_INST(steam_gameserver_ugc);
     DEL_INST(steam_gameserver_apps);
+    if (steam_gameserver_game_coordinator)
+        steam_gameserver_game_coordinator->stop();
     DEL_INST(steam_gameserver_game_coordinator);
     DEL_INST(dota_lifecycle_executor_server);
     DEL_INST(steam_gameserver_networking_sockets_serialized);
@@ -248,6 +294,8 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_inventory);
     DEL_INST(steam_video);
     DEL_INST(steam_parental);
+    if (steam_game_coordinator)
+        steam_game_coordinator->stop();
     DEL_INST(steam_game_coordinator);
     DEL_INST(dota_lifecycle_executor_client);
     DEL_INST(steam_networking_sockets_serialized);

@@ -128,6 +128,20 @@ bool GBE_ExtractDirectDotaServerHelloContext(uint32 unMsgType, const void *pubDa
 
 bool GBE_BuildDirectDotaClientWelcome(uint64 steam_id, uint32 app_id, uint32 account_id, const GBE_DotaHelloContext &context, std::string &message);
 
+bool GBE_PrepareDotaPracticeLobbyLaunchPeripheralMessage(
+    const char *template_hex,
+    uint64 steam_id,
+    uint64 lobby_id,
+    uint64 server_id,
+    bool patch_server_id,
+    std::string &message);
+
+bool GBE_PrepareDotaPersonaStatePeripheralMessage(
+    const char *template_hex,
+    uint64 steam_id,
+    uint64 lobby_id,
+    std::string &message);
+
 bool GBE_ComposeDotaClientWelcome(uint64 steam_id, uint32 app_id, uint32 account_id, const GBE_DotaHelloContext &context, std::string &message);
 
 #endif // __INCLUDED_GBE_DOTA_PAYLOAD_WIRE_HELPERS_H__

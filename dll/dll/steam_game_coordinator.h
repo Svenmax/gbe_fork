@@ -81,6 +81,7 @@ public ISteamGameCoordinator
     gbe::dota_handler_registry::View handler_registry{};
     gbe::dota_lifecycle::Executor *lifecycle_executor{};
     bool is_server{};
+    bool runtime_started{};
 
     struct GC_Message
     {
@@ -428,10 +429,23 @@ public ISteamGameCoordinator
     static void steam_run_every_runcb(void *object);
 
 public:
+    struct Dependencies {
+        class Settings *settings{};
+        class Networking *network{};
+        class Local_Storage *local_storage{};
+        class SteamCallBacks *callbacks{};
+        class RunEveryRunCB *run_every_runcb{};
+        gbe::dota_lobby_state::Store *shared_lobby_store{};
+        gbe::dota_handler_registry::View handler_registry{};
+        gbe::dota_lifecycle::Executor *lifecycle_executor{};
+    };
+
     static gbe::dota_handler_registry::View GBE_ProductionDotaHandlerRegistry();
-    Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, gbe::dota_handler_registry::View handler_registry, gbe::dota_lifecycle::Executor &lifecycle_executor, bool is_server);
+    Steam_Game_Coordinator(Dependencies dependencies, bool is_server);
     ~Steam_Game_Coordinator();
 
+    void start();
+    void stop();
     void initialize_gc();
     void shutdown_gc();
     void on_appid_changed(uint32 appid);

@@ -11,8 +11,9 @@
  */
 
 #include "stubs.h"
-#include "dll/gbe_dota_gc_internal.h"
-// D.12.2: reconnect/payload types no longer re-exported by gc_internal.
+#include "dll/gbe_dota_gc_diagnostics.h"
+#include "dll/gbe_dota_protocol_assets.h"
+// Reconnect and payload types are test harness dependencies.
 #include "dll/dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_payload_lobby_helpers.h"
 #include "dll/gbe_dota_inventory_ports.h"

@@ -31,6 +31,8 @@
 #include "stubs.h"
 #include "dll/gbe_dota_lobby_state_store.h"
 #include "dll/gbe_dota_runtime_state.h"
+#include "dll/gbe_dota_gc_diagnostics.h"
+#include "dll/gbe_dota_protocol_assets.h"
 
 #include <mutex>
 

@@ -30,10 +30,13 @@
 #include "gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
-#include "gbe_dota_gc_internal.h"
+#include "gbe_dota_binary_helpers.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_runtime_state.h"
 #include "gbe_dota_payload_lobby_helpers.h"
 #include "gbe_dota_payload_wire_helpers.h"
+#include "gbe_dota_server_hello_cache.h"
+#include "gbe_dota_vpk_loot_cache.h"
 #include "gbe_dota_welcome_flow.h"
 #include <atomic>
 #include <algorithm>

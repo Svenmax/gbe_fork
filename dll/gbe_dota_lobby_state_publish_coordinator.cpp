@@ -36,7 +36,7 @@
 #include "gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
-#include "gbe_dota_gc_internal.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_payload_lobby_helpers.h"
 #include <atomic>
 #include <algorithm>
@@ -384,9 +384,14 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
         return;
     }
 
-    auto shared_lobby = GBE_SharedLobbyStore().snapshot();
-    gbe::dota_lobby_state::publish_local_lobby_to_shared(GBE_local_lobby, is_server, shared_lobby);
-    const auto publish_result = GBE_SharedLobbyStore().publish_if_generation_current_or_newer(std::move(shared_lobby));
+    const auto publish_result = GBE_SharedLobbyStore().update_if_generation_current_or_newer(
+        GBE_local_lobby.generation,
+        [&](GBE_SharedDotaLobbyState &shared_lobby) {
+            gbe::dota_lobby_state::publish_local_lobby_to_shared(
+                GBE_local_lobby,
+                is_server,
+                shared_lobby);
+        });
     if (publish_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",

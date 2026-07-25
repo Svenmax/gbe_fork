@@ -27,7 +27,7 @@
 
 ## 进行中工作
 
-见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)。**重构收敛 WIP 为空**；默认 D0 修 bug。重启 L2/L4 须满足 PHASE_E_EXIT / GP10 §13。
+见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)。R4.1 已完成；默认 D0 修 bug。重启 L2/L4 须满足 PHASE_E_EXIT / GP10 §13。
 
 ## 必跑验证
 

@@ -10,6 +10,10 @@
 | [HOST_AUTHORITY.md](./HOST_AUTHORITY.md) | host hero / wearable / showcase 契约 |
 | [GOLDEN_PATHS.md](./GOLDEN_PATHS.md) | 行为黄金路径与测试映射 |
 | [AGENT_PLAYBOOK.md](./AGENT_PLAYBOOK.md) | 多 Agent 协作与停手信号 |
+| [REFACTOR_BASELINE.md](./REFACTOR_BASELINE.md) | 可复现重构基线与验证证据 |
+| [STATE_OWNERSHIP.md](./STATE_OWNERSHIP.md) | 状态所有权、Store 契约与锁域 |
+| [PROTOCOL_BEHAVIOR_MATRIX.md](./PROTOCOL_BEHAVIOR_MATRIX.md) | 生产协议入口、通道与 fixture 矩阵 |
+| [REFACTOR_EXECUTION_PLAN.md](./REFACTOR_EXECUTION_PLAN.md) | 阶段化重构目标与验收条件 |
 
 维护入口也可从 `.monkeycode/docs/INDEX.md` 进入架构/测试长文；**任务与路由权威以本目录 CURRENT + 真相表为准**。
 

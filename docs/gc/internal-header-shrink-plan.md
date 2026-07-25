@@ -10,6 +10,10 @@ This document classifies the remaining declarations in `dll/gbe_dota_gc_internal
 - D.12.2: `gbe_dota_gc_internal.h` no longer re-exports payload-lobby, locator, or reconnect headers; callers include those headers directly. Audit 5b enforces this.
 - D.12.1: template-replay canned hex/byte arrays live in `gbe_dota_template_replay_templates.{h,cpp}`; the handler TU only dispatches.
 - `dll/gbe_dota_gc_internal.h` still carries logging, old-ID const tables, `ser_var`/`deser_var`, hello accessors, and a small set of practice-lobby official hex tables.
+- R3 已将日志、launch phase 描述、CacheSubscribed 摘要和协议边界日志迁至 `dll/gbe_dota_gc_diagnostics.h`。`gbe_dota_lobby_launch_coordinator.cpp` 与 `gbe_dota_gc_payload_helpers.cpp` 已移除对内部总线头的依赖。
+- R3 已将 ServerHello cache、VPK loot cache 和二进制序列化模板分别迁至 `dll/gbe_dota_server_hello_cache.h`、`dll/gbe_dota_vpk_loot_cache.h`、`dll/gbe_dota_binary_helpers.h`。欢迎流、模板回放、库存协调器和 payload helper 通过这些窄接口访问对应能力。
+- R3 已将旧 ID 替换字节、Practice Lobby 固定模板和官方十六进制资产迁至 `dll/gbe_dota_protocol_assets.h`。wire、payload 和 lobby helper 模块通过该只读协议资产接口访问常量。
+- R3 已将 persona 外设消息构造迁至 `dll/gbe_dota_payload_wire_helpers.h`，并将响应包诊断迁至 `dll/gbe_dota_gc_diagnostics.h`。`dll/gbe_dota_gc_internal.h` 已无业务声明，所有源码和测试 include 已移除；保留的迁移标记可在专门的删除提交中清理。
 
 ## Logging And Trace
 
