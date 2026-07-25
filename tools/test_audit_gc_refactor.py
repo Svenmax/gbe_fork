@@ -42,6 +42,13 @@ class InventorySectionHelperTest(unittest.TestCase):
     def test_returns_none_for_missing_heading(self):
         self.assertIsNone(audit.inventory_section("## 1. Alpha\n", "## 2. Beta"))
 
+    def test_ignores_inline_heading_text_before_real_heading(self):
+        text = "intro mentions ## 1. Alpha inline\n## 0. Before\nignore\n## 1. Alpha\nrow\n## 2. Beta\nother\n"
+        self.assertEqual(
+            "## 1. Alpha\nrow\n",
+            audit.inventory_section(text, "## 1. Alpha"),
+        )
+
 
 class DiagnosticReasonInventoryAuditTest(unittest.TestCase):
     def audit(self, header=HEADER, focused=FOCUSED):

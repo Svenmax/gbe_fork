@@ -451,9 +451,10 @@ def read(path):
 
 
 def inventory_section(inventory_text, heading):
-    section_start = inventory_text.find(heading)
-    if section_start < 0:
+    section_match = re.search(rf'^{re.escape(heading)}', inventory_text, re.MULTILINE)
+    if not section_match:
         return None
+    section_start = section_match.start()
     section_tail = inventory_text[section_start:]
     next_section = re.search(r'^##\s+', section_tail[len(heading):], re.MULTILINE)
     if next_section:
