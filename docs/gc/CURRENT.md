@@ -29,6 +29,8 @@
 
 **audit function call helper（2026-07-25）：** `gc-audit-function-call-helper` 已将 lifecycle 与 reconnect ownership audit 的同构函数调用 token 检测收敛为 `contains_function_call(...)`，保持 word-boundary 与 escaped-symbol 语义。
 
+**audit request body marker slicing（2026-07-25）：** `gc-audit-request-body-marker-slicing` 已将 direct/wrapped post-login request body audit slicing 复用到 `text_between_markers(...)`，保持缺失 marker 时空 body 语义。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。

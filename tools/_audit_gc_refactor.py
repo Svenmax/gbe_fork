@@ -1022,9 +1022,11 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
             DIRECT_CONDITIONAL_FALLBACK_EMSGS,
         )
 
-    direct_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest")
-    add_socket_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaAddSocketRequest")
-    direct_body = handler_text[direct_start:add_socket_start] if direct_start != -1 and add_socket_start != -1 else ""
+    direct_body = text_between_markers(
+        handler_text,
+        "bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest",
+        "bool Steam_Game_Coordinator::GBE_HandleDotaAddSocketRequest",
+    )
     if helper_name not in direct_body:
         issues.append("direct post-login: request path does not call conditional fallback helper")
     if "GBE_DispatchDotaPostLoginRequest(request_context)" in direct_body and helper_name in direct_body:
@@ -1089,9 +1091,11 @@ def audit_wrapped_hard_miss_routing(handler_text=None, inventory_text=None):
     if "GBE_HandleDotaTemplateReplayRequest" in helper_body or "GBE_HandleDotaSetTeamSlot" in helper_body:
         issues.append("wrapped post-login: hard-miss helper must not route to template replay or SetTeamSlot")
 
-    wrapped_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest")
-    next_handler_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaFindTopSourceTVGamesRequest")
-    wrapped_body = handler_text[wrapped_start:next_handler_start] if wrapped_start != -1 and next_handler_start != -1 else ""
+    wrapped_body = text_between_markers(
+        handler_text,
+        "bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest",
+        "bool Steam_Game_Coordinator::GBE_HandleDotaFindTopSourceTVGamesRequest",
+    )
     if helper_name not in wrapped_body:
         issues.append("wrapped post-login: request path does not call hard-miss helper")
     if "GBE_DispatchDotaPostLoginRequest(route_context)" in wrapped_body and helper_name in wrapped_body:
