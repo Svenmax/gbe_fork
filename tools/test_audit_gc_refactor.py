@@ -1055,6 +1055,18 @@ class LocalSharedMergeInventoryAuditTest(unittest.TestCase):
             issues,
         )
 
+    def test_rejects_entrypoint_definition_inside_line_comment(self):
+        source_text = """
+            // bool restore_lobby_generation() { return true; }
+        """
+        issues = audit.audit_local_shared_merge_inventory(
+            source_texts={"gbe_dota_lobby_state.cpp": source_text},
+        )
+        self.assertIn(
+            "LOCAL_LOBBY merge entrypoint restore_lobby_generation definition missing from gbe_dota_lobby_state.cpp",
+            issues,
+        )
+
 
 class RetiredLifecycleTransitionLayerAuditTest(unittest.TestCase):
     def test_accepts_registry_only_lifecycle_dispatch(self):

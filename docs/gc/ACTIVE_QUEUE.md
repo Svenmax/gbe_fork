@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | Local/shared merge line-comment guard：补齐 definition audit 的 line comment 伪定义回归测试，锁住 `//` 注释剥离语义 | `.monkeycode/specs/gc-local-shared-merge-line-comment-guard/`、`tools/test_audit_gc_refactor.py` |
 | 2026-07-25 | Local/shared merge comment definition guard：Local/shared merge definition audit 匹配前剥离 C++ 注释，避免 block comment 伪定义误通过 | `.monkeycode/specs/gc-local-shared-merge-comment-definition-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | Local/shared merge definition guard：Local/shared merge entrypoint presence 校验收紧为函数定义匹配，避免调用点或文本引用误判 | `.monkeycode/specs/gc-local-shared-merge-definition-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | Local/shared merge field-group guard：Local/shared merge inventory 的 entrypoint、owner、字段组三元组由 audit 保持同步 | `.monkeycode/specs/gc-local-shared-merge-fieldgroup-guard/`、`LOCAL_LOBBY_USAGE.md` |
