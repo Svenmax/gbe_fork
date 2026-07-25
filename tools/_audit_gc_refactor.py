@@ -2006,9 +2006,9 @@ def audit_local_shared_merge_inventory(source_texts=None, inventory_text=None):
     if section_start < 0:
         return ["LOCAL_LOBBY merge inventory section not found"]
     section_text = inventory_text[section_start:]
-    next_section = re.search(r"^##\s+6\.\s+", section_text, re.MULTILINE)
+    next_section = re.search(r"^##\s+", section_text[len("## 5. Local/shared merge inventory"):], re.MULTILINE)
     if next_section:
-        section_text = section_text[:next_section.start()]
+        section_text = section_text[:len("## 5. Local/shared merge inventory") + next_section.start()]
 
     documented = set()
     duplicate_entries = set()

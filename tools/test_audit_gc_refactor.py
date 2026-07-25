@@ -1133,6 +1133,12 @@ class LocalSharedMergeInventoryAuditTest(unittest.TestCase):
             audit.audit_local_shared_merge_inventory(inventory_text=inventory_text),
         )
 
+    def test_ignores_rows_after_merge_inventory_section_when_next_heading_number_changes(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "LOCAL_LOBBY_USAGE.md"))
+        inventory_text = inventory_text.replace("## 6. C1 结论", "## 7. C1 结论")
+        inventory_text += "\n| `restore_lobby_generation` | `gbe_dota_lobby_state.cpp` | runtime restore |\n"
+        self.assertEqual([], audit.audit_local_shared_merge_inventory(inventory_text=inventory_text))
+
     def test_rejects_duplicate_documented_entrypoint(self):
         inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "LOCAL_LOBBY_USAGE.md"))
         row = "| `restore_lobby_generation` | `gbe_dota_lobby_state.cpp` | generation restore |"

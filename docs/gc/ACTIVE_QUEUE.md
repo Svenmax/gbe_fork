@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | Local/shared merge generic section end：Local/shared merge inventory §5 截止于任意下一个二级标题，避免后续章节编号变化扩大扫描 | `.monkeycode/specs/gc-local-shared-merge-generic-section-end/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | Local/shared merge section presence regression：补齐 Local/shared merge inventory §5 缺失 fail-fast 的回归测试 | `.monkeycode/specs/gc-local-shared-merge-section-presence-regression/`、`tools/test_audit_gc_refactor.py` |
 | 2026-07-25 | legacy wrapped parser section presence guard：缺失解析层 §5 时 legacy wrapped parser audit 直接失败，避免回退整篇扫描 | `.monkeycode/specs/gc-legacy-wrapped-parser-section-presence-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | registry section presence guard：缺失 registry §1 时 registry inventory audit 直接失败，避免回退整篇扫描 | `.monkeycode/specs/gc-registry-section-presence-guard/`、`tools/_audit_gc_refactor.py` |
