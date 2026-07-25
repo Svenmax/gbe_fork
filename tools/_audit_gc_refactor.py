@@ -476,6 +476,14 @@ def markdown_cells(line):
     return [cell.strip() for cell in line.strip().strip("|").split("|")]
 
 
+def numeric_markdown_cell(cell, exact=True):
+    if exact:
+        match = re.fullmatch(r'\d+', cell)
+    else:
+        match = re.search(r'\b(\d+)\b', cell)
+    return match.group(0 if exact else 1) if match else None
+
+
 def record_duplicate(seen, duplicates, value):
     if value in seen:
         duplicates.add(value)
@@ -783,9 +791,8 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
         cells = markdown_cells(line)
         if len(cells) < 2:
             continue
-        match = re.fullmatch(r'(\d+)', cells[0])
-        if match:
-            numeric = match.group(1)
+        numeric = numeric_markdown_cell(cells[0])
+        if numeric:
             record_duplicate(inventory_emsgs, duplicate_inventory_emsgs, numeric)
             if len(cells) >= 5:
                 inventory_rows[numeric] = {
@@ -905,8 +912,9 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
         if "REGISTRY_DEFENSIVE" not in line:
             continue
         cells = markdown_cells(line)
-        if cells and re.fullmatch(r"\d+", cells[0]):
-            record_duplicate(inventory_defensive, duplicate_inventory_defensive, cells[0])
+        numeric = numeric_markdown_cell(cells[0]) if cells else None
+        if numeric:
+            record_duplicate(inventory_defensive, duplicate_inventory_defensive, numeric)
     append_duplicate_issues(issues, duplicate_inventory_defensive, "MESSAGE_ROUTING registry-defensive inventory duplicates")
     if inventory_defensive != REGISTRY_DEFENSIVE_TEMPLATE_EMSGS:
         append_emsg_set_diff_issue(
@@ -1025,9 +1033,8 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
         cells = markdown_cells(line)
         if not cells:
             continue
-        match = re.search(r'\b(\d+)\b', cells[0])
-        if match:
-            emsg = match.group(1)
+        emsg = numeric_markdown_cell(cells[0], exact=False)
+        if emsg:
             record_duplicate(inventory_conditional, duplicate_inventory_conditional, emsg)
     append_duplicate_issues(issues, duplicate_inventory_conditional, "MESSAGE_ROUTING direct conditional fallback inventory duplicates")
     if inventory_conditional != DIRECT_CONDITIONAL_FALLBACK_EMSGS:

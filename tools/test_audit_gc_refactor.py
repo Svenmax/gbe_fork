@@ -72,6 +72,17 @@ class MarkdownCellsHelperTest(unittest.TestCase):
         self.assertEqual(["7091", "REGISTRY"], audit.markdown_cells(" 7091 | REGISTRY "))
 
 
+class NumericMarkdownCellHelperTest(unittest.TestCase):
+    def test_extracts_exact_numeric_cell(self):
+        self.assertEqual("7091", audit.numeric_markdown_cell("7091"))
+
+    def test_rejects_non_exact_numeric_cell_by_default(self):
+        self.assertIsNone(audit.numeric_markdown_cell("emsg 7091"))
+
+    def test_extracts_first_number_when_exact_is_false(self):
+        self.assertEqual("7091", audit.numeric_markdown_cell("emsg 7091 conditional", exact=False))
+
+
 class RecordDuplicateHelperTest(unittest.TestCase):
     def test_first_value_is_seen_without_duplicate(self):
         seen = set()
