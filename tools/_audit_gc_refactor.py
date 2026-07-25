@@ -645,6 +645,73 @@ def audit_post_login_dispatch(main_text):
     return issues, len(entries), high_risk_entries
 
 
+def parse_dota_protocol_constants(constants_text=None):
+    if constants_text is None:
+        constants_text = read(os.path.join(ROOT_DIR, "dll", "gbe_dota_protocol_constants.h"))
+    return {
+        name: value
+        for name, value in re.findall(
+            r'inline\s+constexpr\s+std::uint32_t\s+(GBE_k[A-Za-z0-9_]+)\s*=\s*(\d+)u\s*;',
+            constants_text,
+        )
+    }
+
+
+def audit_registry_inventory_guard(registry_text=None, inventory_text=None, constants_text=None):
+    """Keep production registry emsgs aligned with MESSAGE_ROUTING registry rows."""
+    if registry_text is None:
+        registry_text = read(POST_LOGIN_REGISTRY_CPP)
+    if inventory_text is None:
+        inventory_text = read(os.path.join(ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+
+    issues = []
+    constants = parse_dota_protocol_constants(constants_text)
+    start = registry_text.find("registry::View Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry")
+    table_start = registry_text.find("static const registry::Entry kTable[]", start)
+    table_end = registry_text.find("};", table_start)
+    if start < 0 or table_start < 0 or table_end < 0:
+        return ["registry inventory: production kTable not found"]
+
+    registry_emsgs = set()
+    table_text = registry_text[table_start:table_end]
+    for token in re.findall(r'^\s*\{\s*([^,]+?)\s*,', table_text, re.MULTILINE):
+        token = token.strip()
+        numeric = None
+        literal_match = re.fullmatch(r'(\d+)u?', token)
+        if literal_match:
+            numeric = literal_match.group(1)
+        elif token in constants:
+            numeric = constants[token]
+        else:
+            issues.append(f"registry inventory: cannot resolve registry emsg token {token}")
+            continue
+        registry_emsgs.add(numeric)
+
+    registry_section = inventory_text
+    section_start = inventory_text.find("## 1. Registry")
+    if section_start >= 0:
+        section_tail = inventory_text[section_start:]
+        section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
+        section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+        registry_section = inventory_text[section_start:section_end]
+    inventory_emsgs = set()
+    for line in registry_section.splitlines():
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        match = re.fullmatch(r'(\d+)', cells[0])
+        if match:
+            inventory_emsgs.add(match.group(1))
+
+    if registry_emsgs != inventory_emsgs:
+        issues.append(
+            "MESSAGE_ROUTING registry emsgs "
+            f"{sorted(inventory_emsgs)} differ from production kTable {sorted(registry_emsgs)}"
+        )
+
+    return issues
+
+
 def audit_template_blob_ownership(tu_paths):
     """Keep large canned template/replay blobs out of ordinary handlers."""
     issues = []
@@ -2279,6 +2346,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 4a: Registry inventory guard")
+    print("=" * 70)
+    print("  Action: keep production registry emsgs aligned with MESSAGE_ROUTING.")
+    registry_inventory_issues = audit_registry_inventory_guard()
+    if not registry_inventory_issues:
+        print("  Production registry emsgs match the routing inventory")
+    else:
+        for issue in registry_inventory_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("AUDIT 5: Template/replay canned blob ownership")
     print("=" * 70)
     print("  Action: keep large canned template/replay hex in the template replay or payload helper owners.")
@@ -2652,6 +2731,7 @@ def main():
     print(f"  Under-exposed definitions:           {len(underexposed)}")
     print(f"  Doc line-number mismatches:          {len(mismatches)}")
     print(f"  Dispatch table mismatches:           {len(dispatch_issues)}")
+    print(f"  Registry inventory issues:           {len(registry_inventory_issues)}")
     print(f"  Template blob ownership issues:      {len(template_blob_issues)}")
     print(f"  Template-only inventory issues:      {len(template_only_inventory_issues)}")
     print(f"  Registry-defensive template issues:  {len(registry_defensive_template_issues)}")
@@ -2683,7 +2763,7 @@ def main():
     print(f"  CI failure localization issues:       {len(ci_failure_localization_issues)}")
     print(f"  Architecture investment boundary issues: {len(architecture_investment_boundary_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or template_only_inventory_issues or registry_defensive_template_issues or direct_conditional_fallback_issues or wrapped_hard_miss_issues or legacy_wrapped_parser_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or registry_inventory_issues or template_blob_issues or template_only_inventory_issues or registry_defensive_template_issues or direct_conditional_fallback_issues or wrapped_hard_miss_issues or legacy_wrapped_parser_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
         sys.exit(1)
 
 

@@ -944,6 +944,25 @@ class PostLoginDispatchAuditTest(unittest.TestCase):
             audit.audit_post_login_dispatch(""),
         )
 
+    def test_accepts_registry_inventory_alignment(self):
+        self.assertEqual([], audit.audit_registry_inventory_guard())
+
+    def test_resolves_protocol_constants_for_registry_inventory(self):
+        constants = audit.parse_dota_protocol_constants()
+        self.assertEqual("7009", constants["GBE_kDotaJoinChatChannel"])
+
+    def test_rejects_registry_entry_missing_from_inventory(self):
+        registry_text = audit.read(audit.POST_LOGIN_REGISTRY_CPP)
+        registry_text = registry_text.replace("{ 7091u, registry::RequestMode::DirectAndWrapped", "{ 9999u, registry::RequestMode::DirectAndWrapped")
+        issues = audit.audit_registry_inventory_guard(registry_text=registry_text)
+        self.assertTrue(any("MESSAGE_ROUTING registry emsgs" in issue for issue in issues))
+
+    def test_rejects_inventory_row_missing_from_registry_section(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("| 7091 | WatchGame | WatchGame | D+W | LobbyRead | — |", "")
+        issues = audit.audit_registry_inventory_guard(inventory_text=inventory_text)
+        self.assertTrue(any("MESSAGE_ROUTING registry emsgs" in issue for issue in issues))
+
 
 class RetiredLifecycleTransitionLayerAuditTest(unittest.TestCase):
     def test_accepts_registry_only_lifecycle_dispatch(self):
