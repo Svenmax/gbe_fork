@@ -52,6 +52,7 @@
 - shared restore 通过 `compose_shared_lobby_runtime_restore_plan()` 决定 `state`、`game_state` 与 `launch_phase` 的字段组更新，再由 `apply_shared_lobby_runtime_restore_plan()` 应用；client restore/host 观察语义与 custom-game READYUP 回退拒绝保持。
 - steam-auth ack 路径通过 `compose_steam_auth_ack_launch_plan()` 和 `apply_steam_auth_ack_launch_plan()` 一次更新 CRC、sequence 和 ack 标记；generation-gated shared publish 与 synthetic push 顺序保持。
 - 匹配 lobby 的 4511 通知仅通过 `mark_launch_4511_seen()` 更新去重标记；首次变更后的 generation-gated shared publish 与 server-id 同步顺序保持。
+- `LobbyStateApply` lifecycle action 仅通过 `apply_lifecycle_lobby_state()` 更新 `state` 和 `game_state`；action 执行顺序、条件 gate 与后续 publish 保持。
 - Local 工作副本、host-only generation-gated shared publish 与 client restore/观察语义保持。
 - rich presence、peer push 与 shared publish 仍处于既有顺序；本切片未提取对象，未引入生产 CompositionRoot。
 

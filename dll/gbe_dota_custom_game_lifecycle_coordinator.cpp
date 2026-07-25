@@ -93,8 +93,10 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
         previous_action_succeeded = true;
         switch (action.type) {
             case GBE_DotaActionType::LobbyStateApply:
-                GBE_local_lobby.state = action.lobby_state;
-                GBE_local_lobby.game_state = action.lobby_game_state;
+                gbe::dota_lobby_state::apply_lifecycle_lobby_state(
+                    GBE_local_lobby,
+                    action.lobby_state,
+                    action.lobby_game_state);
                 break;
             case GBE_DotaActionType::PostGameLobbyStateApply:
                 GBE_local_lobby.state = action.lobby_state;

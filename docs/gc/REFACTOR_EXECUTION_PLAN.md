@@ -123,6 +123,7 @@
 21. [x] D2 切片：shared restore 以 `compose_shared_lobby_runtime_restore_plan()` 计算 `state`、`game_state` 与 `launch_phase` 的字段组更新，再由 `apply_shared_lobby_runtime_restore_plan()` 应用；shared runtime 覆盖与 custom-game READYUP 回退拒绝保持。
 22. [x] D2 切片：steam-auth ack 以 `compose_steam_auth_ack_launch_plan()` 计算 CRC、sequence 和 ack 标记，再由 `apply_steam_auth_ack_launch_plan()` 一次写入；既有 ticket CRC 派生、shared publish 与 synthetic push 顺序保持。
 23. [x] D2 切片：4511 LAN server available 通过 `mark_launch_4511_seen()` 单一化幂等去重标记；首次标记才 publish shared state，重复通知不 re-publish。
+24. [x] D2 切片：lifecycle `LobbyStateApply` 通过 `apply_lifecycle_lobby_state()` 单一化 `state` / `game_state` 字段组写入；executor 继续承担 action 序列、条件 gate 与副作用。
 
 ### 验收
 
@@ -148,6 +149,7 @@
 - D2 shared runtime restore 新增 lobby-state 回归，验证 custom-game READYUP state 回退拒绝、shared game_state 与 launch_phase 覆盖；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
 - D2 steam-auth 元数据新增 lobby-state 回归，验证派生 CRC、默认 sequence、ack 标记与既有值保留；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
 - D2 4511 去重标记新增 lobby-state 回归，并保留 handler smoke 对“标记后 publish、重复不 re-publish”的序列验证；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
+- D2 lifecycle state apply 新增 lobby-state 回归，验证 `state` 与 `game_state` 作为字段组写入；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
 
 ## R5：持续验证与上游同步
 

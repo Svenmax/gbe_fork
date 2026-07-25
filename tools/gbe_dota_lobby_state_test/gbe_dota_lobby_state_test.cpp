@@ -296,6 +296,14 @@ bool test_valid_launch_progression()
         ok &= expect_false(gbe::dota_lobby_state::mark_launch_4511_seen(lobby), "4511 marker rejects duplicate notification");
     }
 
+    // apply_lifecycle_lobby_state: lifecycle action writes state fields together.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        gbe::dota_lobby_state::apply_lifecycle_lobby_state(lobby, 5u, 7u);
+        ok &= expect_eq_u32(lobby.state, 5u, "lifecycle state apply updates state");
+        ok &= expect_eq_u32(lobby.game_state, 7u, "lifecycle state apply updates game state");
+    }
+
     // compose_queued_lobby_state_apply_plan: state=1 + game_state=0 + sync -> bump to setup_synced.
     {
         GBE_LocalLobby lobby = make_active_lobby();

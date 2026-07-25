@@ -471,6 +471,15 @@ bool mark_launch_4511_seen(GBE_LocalLobby &lobby)
     return true;
 }
 
+void apply_lifecycle_lobby_state(
+    GBE_LocalLobby &lobby,
+    std::uint32_t state,
+    std::uint32_t game_state)
+{
+    lobby.state = state;
+    lobby.game_state = game_state;
+}
+
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t ready_state,
