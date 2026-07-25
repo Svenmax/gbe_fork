@@ -1899,6 +1899,68 @@ def audit_store_write_discipline(source_texts=None):
     return issues
 
 
+LOCAL_SHARED_MERGE_ENTRYPOINTS = (
+    ("compose_source_aware_shared_runtime_restore_plan", "gbe_dota_lobby_state.cpp"),
+    ("apply_source_aware_shared_runtime_restore_plan", "gbe_dota_lobby_state.cpp"),
+    ("compose_shared_lobby_options_restore_plan", "gbe_dota_lobby_state.cpp"),
+    ("apply_shared_lobby_options_restore_plan", "gbe_dota_lobby_state.cpp"),
+    ("compose_shared_lobby_cache_restore_plan", "gbe_dota_lobby_state.cpp"),
+    ("apply_shared_lobby_cache_restore_plan", "gbe_dota_lobby_state.cpp"),
+    ("restore_lobby_custom_game", "gbe_dota_lobby_state.cpp"),
+    ("restore_lobby_generation", "gbe_dota_lobby_state.cpp"),
+    ("restore_lobby_generic_lobby_id", "gbe_dota_lobby_state.cpp"),
+    ("restore_lobby_owner_connected", "gbe_dota_lobby_state.cpp"),
+    ("restore_lobby_owner_team", "gbe_dota_lobby_state.cpp"),
+    ("restore_lobby_owner_slot", "gbe_dota_lobby_state.cpp"),
+    ("restore_launch_4511_seen", "gbe_dota_lobby_state.cpp"),
+)
+
+
+def audit_local_shared_merge_inventory(source_texts=None, inventory_text=None):
+    """Keep Local/shared merge restore entrypoints documented and present."""
+    if source_texts is None:
+        source_texts = {
+            "gbe_dota_lobby_state.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_state.cpp")),
+        }
+    if inventory_text is None:
+        inventory_text = read(os.path.join(ROOT_DIR, "docs", "gc", "LOCAL_LOBBY_USAGE.md"))
+
+    section_start = inventory_text.find("## 5. Local/shared merge inventory")
+    if section_start < 0:
+        return ["LOCAL_LOBBY merge inventory section not found"]
+    section_text = inventory_text[section_start:]
+    next_section = re.search(r"^##\s+6\.\s+", section_text, re.MULTILINE)
+    if next_section:
+        section_text = section_text[:next_section.start()]
+
+    documented = set()
+    for line in section_text.splitlines():
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        entry = cells[0].strip("`")
+        owner = cells[1].strip("`")
+        if entry in {"entrypoint", "------------"}:
+            continue
+        if entry and owner:
+            documented.add((entry, owner))
+
+    expected = set(LOCAL_SHARED_MERGE_ENTRYPOINTS)
+    issues = []
+    for entry, owner in sorted(expected - documented):
+        issues.append(f"LOCAL_LOBBY merge inventory missing {entry} in {owner}")
+    for entry, owner in sorted(documented - expected):
+        issues.append(f"LOCAL_LOBBY merge inventory has unexpected {entry} in {owner}")
+    if issues:
+        return issues
+
+    for entry, owner in sorted(expected):
+        owner_text = source_texts.get(owner, "")
+        if not re.search(rf"\b{re.escape(entry)}\s*\(", owner_text):
+            issues.append(f"LOCAL_LOBBY merge entrypoint {entry} missing from {owner}")
+    return issues
+
+
 def audit_payload_snapshot_projection(snapshot_text=None, launch_text=None):
     snapshot_text = snapshot_text or read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_snapshot_coordinator.cpp"))
     launch_text = launch_text or read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_launch_coordinator.cpp"))
@@ -2560,6 +2622,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 10c: Local/shared merge inventory")
+    print("=" * 70)
+    print("  Action: keep Local/shared merge restore entrypoints documented and present.")
+    local_shared_merge_inventory_issues = audit_local_shared_merge_inventory()
+    if not local_shared_merge_inventory_issues:
+        print(f"  All {len(LOCAL_SHARED_MERGE_ENTRYPOINTS)} Local/shared merge entrypoints remain documented and present")
+    else:
+        for issue in local_shared_merge_inventory_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("AUDIT 11: Concurrency ownership contract")
     print("=" * 70)
     print("  Action: keep GC state owners, synchronization domains, and async boundaries explicit.")
@@ -2787,6 +2861,7 @@ def main():
     print(f"  Lifecycle ownership issues:          {len(lifecycle_ownership_issues)}")
     print(f"  Shared lobby global access issues:   {len(shared_lobby_global_issues)}")
     print(f"  Store write discipline issues:       {len(store_write_discipline_issues)}")
+    print(f"  Local/shared merge inventory issues: {len(local_shared_merge_inventory_issues)}")
     print(f"  Concurrency ownership issues:        {len(concurrency_ownership_issues)}")
     print(f"  Reconnect transition-layer issues:   {len(reconnect_transition_issues)}")
     print(f"  Shared lobby compatibility issues:   {len(shared_lobby_compatibility_issues)}")
@@ -2805,7 +2880,7 @@ def main():
     print(f"  CI failure localization issues:       {len(ci_failure_localization_issues)}")
     print(f"  Architecture investment boundary issues: {len(architecture_investment_boundary_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or registry_inventory_issues or template_blob_issues or template_only_inventory_issues or registry_defensive_template_issues or direct_conditional_fallback_issues or wrapped_hard_miss_issues or legacy_wrapped_parser_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or registry_inventory_issues or template_blob_issues or template_only_inventory_issues or registry_defensive_template_issues or direct_conditional_fallback_issues or wrapped_hard_miss_issues or legacy_wrapped_parser_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or local_shared_merge_inventory_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
         sys.exit(1)
 
 

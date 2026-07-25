@@ -60,13 +60,31 @@
 - **postgame state / chat / cache**：仅 `PostGameLobbyStateApply` action 通过 `apply_postgame_lobby_state_plan()` 一次写入 state、chat 与 cache 清理字段组；executor 继续管理 action 序列与 publish。
 - **postgame chat tombstone**：`PostGameLobbyStateApply` 同步写入 `postgame_chat_tombstone_active`、`postgame_chat_tombstone_channel_id` 与 `postgame_chat_tombstone_generation`，旧 `abandon_pre_postgame_chat_channel_id` 保持为兼容日志字段；old-channel 7272 与 7014 retrieval 通过 `postgame_chat_tombstone_matches()` 做 generation-scoped 匹配，当前 postgame channel leave 通过 `clear_postgame_chat_tombstone()` 清理。
 
-## 5. C1 结论
+## 5. Local/shared merge inventory（由 audit 保护）
+
+| entrypoint | owner | 字段组 |
+|------------|-------|--------|
+| `compose_source_aware_shared_runtime_restore_plan` | `gbe_dota_lobby_state.cpp` | launch/runtime identity restore |
+| `apply_source_aware_shared_runtime_restore_plan` | `gbe_dota_lobby_state.cpp` | launch/runtime identity restore |
+| `compose_shared_lobby_options_restore_plan` | `gbe_dota_lobby_state.cpp` | options restore |
+| `apply_shared_lobby_options_restore_plan` | `gbe_dota_lobby_state.cpp` | options restore |
+| `compose_shared_lobby_cache_restore_plan` | `gbe_dota_lobby_state.cpp` | cache restore |
+| `apply_shared_lobby_cache_restore_plan` | `gbe_dota_lobby_state.cpp` | cache restore |
+| `restore_lobby_custom_game` | `gbe_dota_lobby_state.cpp` | custom_game restore |
+| `restore_lobby_generation` | `gbe_dota_lobby_state.cpp` | generation restore |
+| `restore_lobby_generic_lobby_id` | `gbe_dota_lobby_state.cpp` | generic_lobby_id restore |
+| `restore_lobby_owner_connected` | `gbe_dota_lobby_state.cpp` | owner runtime restore |
+| `restore_lobby_owner_team` | `gbe_dota_lobby_state.cpp` | owner runtime restore |
+| `restore_lobby_owner_slot` | `gbe_dota_lobby_state.cpp` | owner runtime restore |
+| `restore_launch_4511_seen` | `gbe_dota_lobby_state.cpp` | launch marker restore |
+
+## 6. C1 结论
 
 1. Shared 写路径已单一化到 generation 门控门面；无需本轮改 Store API。
 2. Local 仍是广泛工作副本；queued-state、monotonic launch phase、generic capture state/identity/options/custom_game、source-aware shared launch/runtime identity restore、steam-auth 元数据、4511 标记/restore、owner/options/cache/custom_game/generation/generic_lobby_id restore、lifecycle/postgame state apply、8052 lifecycle pre-write 与 postgame chat tombstone 已采用纯 apply/action/helper 边界。generic capture 的 host sync、client observe 与 pure projection 调用面由 `audit_generic_metadata_capture_modes` 回归保护。
 3. 双轨（local + shared）风险仍在 CURRENT；本清单只冻结入口，不声明状态单一化完成。
 
-## 6. 停手
+## 7. 停手
 
 - 不为美观搬 `GBE_local_lobby` 字段访问。
 - 不改 host 权威字段语义（见 HOST_AUTHORITY）。

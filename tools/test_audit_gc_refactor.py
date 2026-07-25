@@ -982,6 +982,34 @@ class PostLoginDispatchAuditTest(unittest.TestCase):
         self.assertTrue(any("MESSAGE_ROUTING registry metadata for 7091" in issue for issue in issues))
 
 
+class LocalSharedMergeInventoryAuditTest(unittest.TestCase):
+    def test_accepts_current_local_shared_merge_inventory(self):
+        self.assertEqual([], audit.audit_local_shared_merge_inventory())
+
+    def test_rejects_missing_documented_entrypoint(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "LOCAL_LOBBY_USAGE.md"))
+        inventory_text = inventory_text.replace(
+            "| `restore_lobby_generation` | `gbe_dota_lobby_state.cpp` | generation restore |",
+            "",
+        )
+        issues = audit.audit_local_shared_merge_inventory(inventory_text=inventory_text)
+        self.assertIn(
+            "LOCAL_LOBBY merge inventory missing restore_lobby_generation in gbe_dota_lobby_state.cpp",
+            issues,
+        )
+
+    def test_rejects_missing_production_entrypoint(self):
+        source_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "dll", "gbe_dota_lobby_state.cpp"))
+        source_text = source_text.replace("restore_lobby_generation(", "restore_lobby_generation_removed(")
+        issues = audit.audit_local_shared_merge_inventory(
+            source_texts={"gbe_dota_lobby_state.cpp": source_text},
+        )
+        self.assertIn(
+            "LOCAL_LOBBY merge entrypoint restore_lobby_generation missing from gbe_dota_lobby_state.cpp",
+            issues,
+        )
+
+
 class RetiredLifecycleTransitionLayerAuditTest(unittest.TestCase):
     def test_accepts_registry_only_lifecycle_dispatch(self):
         sources = {

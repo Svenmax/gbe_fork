@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | Local/shared merge inventory guard：shared-to-local restore 字段组 entrypoints 由 `LOCAL_LOBBY_USAGE.md` 与 audit 保持同步 | `.monkeycode/specs/gc-local-shared-merge-inventory-guard/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | registry metadata inventory guard：production registry kTable 与 routing inventory §1 的 emsg 集合、HandlerId、modes、lifecycle 由 audit 保持同步 | `.monkeycode/specs/gc-registry-metadata-inventory-guard/`、`MESSAGE_ROUTING_INVENTORY.md` |
 | 2026-07-25 | registry inventory guard：production registry kTable 与 routing inventory §1 的 emsg 集合由 audit 保持同步 | `.monkeycode/specs/gc-registry-inventory-guard/`、`MESSAGE_ROUTING_INVENTORY.md` |
 | 2026-07-25 | template-only inventory guard：template replay 的 `TEMPLATE_ONLY` switch case 与 routing inventory 白名单由 audit 保持同步 | `.monkeycode/specs/gc-template-only-inventory-guard/`、`MESSAGE_ROUTING_INVENTORY.md` |
