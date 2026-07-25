@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | Local/shared merge definition guard：Local/shared merge entrypoint presence 校验收紧为函数定义匹配，避免调用点或文本引用误判 | `.monkeycode/specs/gc-local-shared-merge-definition-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | Local/shared merge field-group guard：Local/shared merge inventory 的 entrypoint、owner、字段组三元组由 audit 保持同步 | `.monkeycode/specs/gc-local-shared-merge-fieldgroup-guard/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | Local/shared merge inventory guard：shared-to-local restore 字段组 entrypoints 由 `LOCAL_LOBBY_USAGE.md` 与 audit 保持同步 | `.monkeycode/specs/gc-local-shared-merge-inventory-guard/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | registry metadata inventory guard：production registry kTable 与 routing inventory §1 的 emsg 集合、HandlerId、modes、lifecycle 由 audit 保持同步 | `.monkeycode/specs/gc-registry-metadata-inventory-guard/`、`MESSAGE_ROUTING_INVENTORY.md` |

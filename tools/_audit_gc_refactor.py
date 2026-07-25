@@ -1916,8 +1916,16 @@ LOCAL_SHARED_MERGE_ENTRYPOINTS = (
 )
 
 
+def has_cpp_function_definition(source_text, function_name):
+    return bool(re.search(
+        rf"(?m)^[\w:\<\>\s\*&]+\b{re.escape(function_name)}\s*\([^;]*\)\s*(?:const\s*)?(?:noexcept\s*)?\{{",
+        source_text,
+        re.S,
+    ))
+
+
 def audit_local_shared_merge_inventory(source_texts=None, inventory_text=None):
-    """Keep Local/shared merge restore entrypoints documented and present."""
+    """Keep Local/shared merge restore entrypoints documented and defined."""
     if source_texts is None:
         source_texts = {
             "gbe_dota_lobby_state.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_state.cpp")),
@@ -1957,8 +1965,8 @@ def audit_local_shared_merge_inventory(source_texts=None, inventory_text=None):
 
     for entry, owner, _field_group in sorted(expected):
         owner_text = source_texts.get(owner, "")
-        if not re.search(rf"\b{re.escape(entry)}\s*\(", owner_text):
-            issues.append(f"LOCAL_LOBBY merge entrypoint {entry} missing from {owner}")
+        if not has_cpp_function_definition(owner_text, entry):
+            issues.append(f"LOCAL_LOBBY merge entrypoint {entry} definition missing from {owner}")
     return issues
 
 
@@ -2625,10 +2633,10 @@ def main():
     print("=" * 70)
     print("AUDIT 10c: Local/shared merge inventory")
     print("=" * 70)
-    print("  Action: keep Local/shared merge restore entrypoints documented and present.")
+    print("  Action: keep Local/shared merge restore entrypoints documented and defined.")
     local_shared_merge_inventory_issues = audit_local_shared_merge_inventory()
     if not local_shared_merge_inventory_issues:
-        print(f"  All {len(LOCAL_SHARED_MERGE_ENTRYPOINTS)} Local/shared merge entrypoints remain documented and present")
+        print(f"  All {len(LOCAL_SHARED_MERGE_ENTRYPOINTS)} Local/shared merge entrypoints remain documented and defined")
     else:
         for issue in local_shared_merge_inventory_issues:
             print(f"  {issue}")

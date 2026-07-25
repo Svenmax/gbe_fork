@@ -1021,7 +1021,21 @@ class LocalSharedMergeInventoryAuditTest(unittest.TestCase):
             source_texts={"gbe_dota_lobby_state.cpp": source_text},
         )
         self.assertIn(
-            "LOCAL_LOBBY merge entrypoint restore_lobby_generation missing from gbe_dota_lobby_state.cpp",
+            "LOCAL_LOBBY merge entrypoint restore_lobby_generation definition missing from gbe_dota_lobby_state.cpp",
+            issues,
+        )
+
+    def test_rejects_entrypoint_call_without_definition(self):
+        source_text = """
+            bool caller() {
+                return restore_lobby_generation();
+            }
+        """
+        issues = audit.audit_local_shared_merge_inventory(
+            source_texts={"gbe_dota_lobby_state.cpp": source_text},
+        )
+        self.assertIn(
+            "LOCAL_LOBBY merge entrypoint restore_lobby_generation definition missing from gbe_dota_lobby_state.cpp",
             issues,
         )
 
