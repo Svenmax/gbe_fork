@@ -100,6 +100,18 @@ class AppendDuplicateIssuesHelperTest(unittest.TestCase):
         self.assertEqual(["existing"], issues)
 
 
+class AppendEmsgSetDiffIssueHelperTest(unittest.TestCase):
+    def test_appends_diff_with_numeric_order_and_default_label(self):
+        issues = []
+        audit.append_emsg_set_diff_issue(issues, "prefix", {"100", "3"}, {"20", "4"})
+        self.assertEqual(["prefix ['3', '100'] differ from expected ['4', '20']"], issues)
+
+    def test_appends_diff_with_custom_expected_label(self):
+        issues = []
+        audit.append_emsg_set_diff_issue(issues, "prefix", {"100", "3"}, {"20", "4"}, "production kTable")
+        self.assertEqual(["prefix ['3', '100'] differ from production kTable ['4', '20']"], issues)
+
+
 class SortedNumericValuesHelperTest(unittest.TestCase):
     def test_sorts_string_values_numerically(self):
         self.assertEqual(["3", "20", "100"], audit.sorted_numeric_values({"20", "100", "3"}))

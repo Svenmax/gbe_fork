@@ -481,6 +481,12 @@ def append_duplicate_issues(issues, duplicates, prefix):
         issues.append(f"{prefix} {value}")
 
 
+def append_emsg_set_diff_issue(issues, prefix, actual, expected, expected_label="expected"):
+    issues.append(
+        f"{prefix} {sorted_numeric_values(actual)} differ from {expected_label} {sorted_numeric_values(expected)}"
+    )
+
+
 def extract_header_symbols(header_text):
     """Extract external GBE_* function/variable declarations from the header."""
     symbols = set()
@@ -766,9 +772,12 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
 
     append_duplicate_issues(issues, duplicate_inventory_emsgs, "MESSAGE_ROUTING registry inventory duplicates")
     if registry_emsgs != inventory_emsgs:
-        issues.append(
-            "MESSAGE_ROUTING registry emsgs "
-            f"{sorted_numeric_values(inventory_emsgs)} differ from production kTable {sorted_numeric_values(registry_emsgs)}"
+        append_emsg_set_diff_issue(
+            issues,
+            "MESSAGE_ROUTING registry emsgs",
+            inventory_emsgs,
+            registry_emsgs,
+            "production kTable",
         )
     for emsg in sorted_numeric_values(registry_emsgs & inventory_emsgs):
         production = registry_rows.get(emsg)
@@ -845,9 +854,11 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
     if "case GBE_kDotaFindTopSourceTVGames:" in helper_body:
         helper_emsgs.add("8009")
     if helper_emsgs != REGISTRY_DEFENSIVE_TEMPLATE_EMSGS:
-        issues.append(
-            "template replay: registry-defensive helper emsgs "
-            f"{sorted_numeric_values(helper_emsgs)} differ from expected {sorted_numeric_values(REGISTRY_DEFENSIVE_TEMPLATE_EMSGS)}"
+        append_emsg_set_diff_issue(
+            issues,
+            "template replay: registry-defensive helper emsgs",
+            helper_emsgs,
+            REGISTRY_DEFENSIVE_TEMPLATE_EMSGS,
         )
 
     switch_match = re.search(
@@ -876,9 +887,11 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
             record_duplicate(inventory_defensive, duplicate_inventory_defensive, cells[0])
     append_duplicate_issues(issues, duplicate_inventory_defensive, "MESSAGE_ROUTING registry-defensive inventory duplicates")
     if inventory_defensive != REGISTRY_DEFENSIVE_TEMPLATE_EMSGS:
-        issues.append(
-            "MESSAGE_ROUTING registry-defensive emsgs "
-            f"{sorted_numeric_values(inventory_defensive)} differ from expected {sorted_numeric_values(REGISTRY_DEFENSIVE_TEMPLATE_EMSGS)}"
+        append_emsg_set_diff_issue(
+            issues,
+            "MESSAGE_ROUTING registry-defensive emsgs",
+            inventory_defensive,
+            REGISTRY_DEFENSIVE_TEMPLATE_EMSGS,
         )
 
     return issues
@@ -905,9 +918,11 @@ def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
     for token in re.findall(r'case\s+([A-Za-z0-9_]+)\s*:', switch_body):
         switch_emsgs.add(TEMPLATE_CASE_TOKEN_TO_EMSG.get(token, token))
     if switch_emsgs != TEMPLATE_ONLY_TEMPLATE_EMSGS:
-        issues.append(
-            "template replay: template-only switch emsgs "
-            f"{sorted_numeric_values(switch_emsgs)} differ from expected {sorted_numeric_values(TEMPLATE_ONLY_TEMPLATE_EMSGS)}"
+        append_emsg_set_diff_issue(
+            issues,
+            "template replay: template-only switch emsgs",
+            switch_emsgs,
+            TEMPLATE_ONLY_TEMPLATE_EMSGS,
         )
 
     inventory_section_text = inventory_section(inventory_text, "## 4. template_replay")
@@ -926,9 +941,11 @@ def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
                 record_duplicate(inventory_template_only, duplicate_inventory_template_only, emsg)
     append_duplicate_issues(issues, duplicate_inventory_template_only, "MESSAGE_ROUTING template-only inventory duplicates")
     if inventory_template_only != TEMPLATE_ONLY_TEMPLATE_EMSGS:
-        issues.append(
-            "MESSAGE_ROUTING template-only emsgs "
-            f"{sorted_numeric_values(inventory_template_only)} differ from expected {sorted_numeric_values(TEMPLATE_ONLY_TEMPLATE_EMSGS)}"
+        append_emsg_set_diff_issue(
+            issues,
+            "MESSAGE_ROUTING template-only emsgs",
+            inventory_template_only,
+            TEMPLATE_ONLY_TEMPLATE_EMSGS,
         )
 
     return issues
@@ -956,9 +973,11 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
     if "GBE_kSteamAuthList" in helper_body:
         helper_emsgs.add("5432")
     if helper_emsgs != DIRECT_CONDITIONAL_FALLBACK_EMSGS:
-        issues.append(
-            "direct post-login: conditional fallback helper emsgs "
-            f"{sorted_numeric_values(helper_emsgs)} differ from expected {sorted_numeric_values(DIRECT_CONDITIONAL_FALLBACK_EMSGS)}"
+        append_emsg_set_diff_issue(
+            issues,
+            "direct post-login: conditional fallback helper emsgs",
+            helper_emsgs,
+            DIRECT_CONDITIONAL_FALLBACK_EMSGS,
         )
 
     direct_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest")
@@ -996,9 +1015,11 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
             record_duplicate(inventory_conditional, duplicate_inventory_conditional, emsg)
     append_duplicate_issues(issues, duplicate_inventory_conditional, "MESSAGE_ROUTING direct conditional fallback inventory duplicates")
     if inventory_conditional != DIRECT_CONDITIONAL_FALLBACK_EMSGS:
-        issues.append(
-            "MESSAGE_ROUTING direct conditional fallback emsgs "
-            f"{sorted_numeric_values(inventory_conditional)} differ from expected {sorted_numeric_values(DIRECT_CONDITIONAL_FALLBACK_EMSGS)}"
+        append_emsg_set_diff_issue(
+            issues,
+            "MESSAGE_ROUTING direct conditional fallback emsgs",
+            inventory_conditional,
+            DIRECT_CONDITIONAL_FALLBACK_EMSGS,
         )
 
     return issues
