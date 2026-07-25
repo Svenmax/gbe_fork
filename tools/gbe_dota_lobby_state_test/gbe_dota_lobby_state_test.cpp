@@ -748,6 +748,24 @@ bool test_stale_generic_lobby_state_regression()
         ok &= expect_eq_u32(plan.game_state, 0u, "queued apply resets game_state when flag disabled");
     }
 
+    // apply_queued_lobby_state_apply_plan: apply the computed launch/runtime field group together.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.state = 1u;
+        lobby.game_state = 2u;
+        lobby.launch_phase = GBE_kDotaLaunchPhaseSetupSynced;
+        const gbe::dota_lobby_state::QueuedLobbyStateApplyPlan plan{
+            2u,
+            3u,
+            GBE_kDotaLaunchPhaseRunQueued,
+            false,
+        };
+        gbe::dota_lobby_state::apply_queued_lobby_state_apply_plan(lobby, plan);
+        ok &= expect_eq_u32(lobby.state, 2u, "queued apply boundary updates state");
+        ok &= expect_eq_u32(lobby.game_state, 3u, "queued apply boundary updates game_state");
+        ok &= expect_eq_u32(lobby.launch_phase, GBE_kDotaLaunchPhaseRunQueued, "queued apply boundary updates launch phase");
+    }
+
     return ok;
 }
 

@@ -344,9 +344,7 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         );
     }
 
-    GBE_local_lobby.state = apply_plan.state;
-    GBE_local_lobby.game_state = apply_plan.game_state;
-    GBE_local_lobby.launch_phase = apply_plan.launch_phase;
+    gbe::dota_lobby_state::apply_queued_lobby_state_apply_plan(GBE_local_lobby, apply_plan);
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",

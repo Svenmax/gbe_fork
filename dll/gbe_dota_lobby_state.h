@@ -474,6 +474,9 @@ QueuedLobbyStateApplyPlan compose_queued_lobby_state_apply_plan(
     bool preserve_monotonic_game_state,
     std::uint32_t setup_synced_launch_phase,
     std::uint32_t run_queued_launch_phase);
+void apply_queued_lobby_state_apply_plan(
+    GBE_LocalLobby &lobby,
+    const QueuedLobbyStateApplyPlan &plan);
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t ready_state,

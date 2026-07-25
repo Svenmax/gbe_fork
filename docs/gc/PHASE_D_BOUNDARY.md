@@ -44,11 +44,11 @@
 | D3 | 单一 publish/details 路径 | 双轨耦合重；需一条路径有完整序测 | 不并行改 HOST 字段 |
 | D4 | 自然子对象（远期） | 仅当依赖收敛且可直测 | 禁止「搬家式」成员迁移 |
 
-### 当前受控切片：R4.1
+### 已完成受控切片：queued launch/runtime apply
 
-- create/join 的 generation boundary 在生产推进前经过纯 lifecycle decision。
-- 该 decision 仅确认事件类别、generation 上限与边界 effect；它不以临时 `MachineState{}` 的 `Idle` 状态拒绝已有 lobby 上的 create/join。
-- `create_lobby_action_list()`、`join_lobby_action_list()` 及其协议动作顺序保持原样；本切片不提取对象、不引入生产 CompositionRoot。
+- `Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState()` 继续以 `compose_queued_lobby_state_apply_plan()` 计算 queued 输入，随后仅通过 `apply_queued_lobby_state_apply_plan()` 应用 `state`、`game_state` 与 `launch_phase`。
+- Local 工作副本、host-only generation-gated shared publish 与 client restore/观察语义保持。
+- rich presence、peer push 与 shared publish 仍处于既有顺序；本切片未提取对象，未引入生产 CompositionRoot。
 
 **明确延后：** 真 DI 替换生产装配；`DotaLobbyRuntime` 等大对象包；全量 getter 假封装。
 

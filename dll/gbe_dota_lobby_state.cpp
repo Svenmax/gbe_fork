@@ -345,6 +345,15 @@ QueuedLobbyStateApplyPlan compose_queued_lobby_state_apply_plan(
     return plan;
 }
 
+void apply_queued_lobby_state_apply_plan(
+    GBE_LocalLobby &lobby,
+    const QueuedLobbyStateApplyPlan &plan)
+{
+    lobby.state = plan.state;
+    lobby.game_state = plan.game_state;
+    lobby.launch_phase = plan.launch_phase;
+}
+
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t ready_state,
