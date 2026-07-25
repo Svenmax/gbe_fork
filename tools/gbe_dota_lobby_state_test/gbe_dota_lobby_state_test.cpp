@@ -607,6 +607,22 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(lobby.owner_slot, 4u, "owner slot restore updates local value");
     }
 
+    // apply_lobby_owner_connected: local owner connection writes are idempotent.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.owner_connected = false;
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_lobby_owner_connected(lobby, false),
+            "owner connected apply keeps matching disconnected value");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_owner_connected(lobby, true),
+            "owner connected apply reports connection change");
+        ok &= expect_true(lobby.owner_connected, "owner connected apply updates local value");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_lobby_owner_connected(lobby, true),
+            "owner connected apply keeps matching connected value");
+    }
+
     // shared options restore: copy lobby options field group when shared differs.
     {
         GBE_LocalLobby lobby = make_active_lobby();

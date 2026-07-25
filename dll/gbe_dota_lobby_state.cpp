@@ -932,10 +932,17 @@ bool restore_lobby_owner_connected(
     GBE_LocalLobby &lobby,
     bool shared_owner_connected)
 {
-    if (lobby.owner_connected == shared_owner_connected)
+    return apply_lobby_owner_connected(lobby, shared_owner_connected);
+}
+
+bool apply_lobby_owner_connected(
+    GBE_LocalLobby &lobby,
+    bool owner_connected)
+{
+    if (lobby.owner_connected == owner_connected)
         return false;
 
-    lobby.owner_connected = shared_owner_connected;
+    lobby.owner_connected = owner_connected;
     return true;
 }
 

@@ -115,10 +115,8 @@ bool Steam_Game_Coordinator::GBE_SetDotaLobbyMemberConnected(uint64 steam_id, bo
         return false;
 
     bool changed = false;
-    if (steam_id == GBE_local_lobby.owner_steam_id && GBE_local_lobby.owner_connected != connected) {
-        GBE_local_lobby.owner_connected = connected;
-        changed = true;
-    }
+    if (steam_id == GBE_local_lobby.owner_steam_id)
+        changed = gbe::dota_lobby_state::apply_lobby_owner_connected(GBE_local_lobby, connected);
 
     const bool has_custom_game = gbe::dota_custom_game::has_custom_game_details(GBE_local_lobby.custom_game);
     const bool should_mark_leaver =

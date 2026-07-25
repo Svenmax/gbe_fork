@@ -47,6 +47,8 @@
 
 **runtime connect local apply helper（2026-07-25）：** 4508 game server info 的 `runtime_connect` 通过 `apply_runtime_connect(...)` 写入 Local，空值和相同值保持 no-op，LAN preserve guard、shared Store compare_update 与日志顺序仍归 post-login handler。
 
+**owner connected local apply helper（2026-07-25）：** launch member connection 的 owner 分支通过 `apply_lobby_owner_connected(...)` 写入 Local，并让 shared restore 复用同一字段变更语义，成员 connected changed 聚合保持不变。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。

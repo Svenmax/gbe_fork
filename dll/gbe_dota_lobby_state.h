@@ -756,6 +756,9 @@ bool restore_launch_4511_seen(
 bool restore_lobby_owner_connected(
     GBE_LocalLobby &lobby,
     bool shared_owner_connected);
+bool apply_lobby_owner_connected(
+    GBE_LocalLobby &lobby,
+    bool owner_connected);
 bool restore_lobby_owner_team(
     GBE_LocalLobby &lobby,
     std::uint32_t shared_owner_team);
