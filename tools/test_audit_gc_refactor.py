@@ -963,6 +963,24 @@ class PostLoginDispatchAuditTest(unittest.TestCase):
         issues = audit.audit_registry_inventory_guard(inventory_text=inventory_text)
         self.assertTrue(any("MESSAGE_ROUTING registry emsgs" in issue for issue in issues))
 
+    def test_rejects_registry_handler_metadata_drift(self):
+        registry_text = audit.read(audit.POST_LOGIN_REGISTRY_CPP)
+        registry_text = registry_text.replace("registry::HandlerId::WatchGame", "registry::HandlerId::FindTopSourceTVGames")
+        issues = audit.audit_registry_inventory_guard(registry_text=registry_text)
+        self.assertTrue(any("MESSAGE_ROUTING registry metadata for 7091" in issue for issue in issues))
+
+    def test_rejects_inventory_mode_metadata_drift(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("| 7091 | WatchGame | WatchGame | D+W | LobbyRead | — |", "| 7091 | WatchGame | WatchGame | Direct | LobbyRead | — |")
+        issues = audit.audit_registry_inventory_guard(inventory_text=inventory_text)
+        self.assertTrue(any("MESSAGE_ROUTING registry metadata for 7091" in issue for issue in issues))
+
+    def test_rejects_inventory_lifecycle_metadata_drift(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("| 7091 | WatchGame | WatchGame | D+W | LobbyRead | — |", "| 7091 | WatchGame | WatchGame | D+W | LobbyLifecycle | — |")
+        issues = audit.audit_registry_inventory_guard(inventory_text=inventory_text)
+        self.assertTrue(any("MESSAGE_ROUTING registry metadata for 7091" in issue for issue in issues))
+
 
 class RetiredLifecycleTransitionLayerAuditTest(unittest.TestCase):
     def test_accepts_registry_only_lifecycle_dispatch(self):

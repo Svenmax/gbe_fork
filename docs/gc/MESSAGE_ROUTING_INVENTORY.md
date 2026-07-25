@@ -21,7 +21,7 @@
 
 ---
 
-## 1. Registry（生产 kTable，52；emsg 集合由 audit 保护）
+## 1. Registry（生产 kTable，52；emsg 集合与 HandlerId/modes/lifecycle 由 audit 保护）
 
 | emsg | 常量/名 | HandlerId | modes | lifecycle | fixture / 测 |
 |------|---------|-----------|-------|-----------|---------------|

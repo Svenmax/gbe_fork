@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | registry metadata inventory guard：production registry kTable 与 routing inventory §1 的 emsg 集合、HandlerId、modes、lifecycle 由 audit 保持同步 | `.monkeycode/specs/gc-registry-metadata-inventory-guard/`、`MESSAGE_ROUTING_INVENTORY.md` |
 | 2026-07-25 | registry inventory guard：production registry kTable 与 routing inventory §1 的 emsg 集合由 audit 保持同步 | `.monkeycode/specs/gc-registry-inventory-guard/`、`MESSAGE_ROUTING_INVENTORY.md` |
 | 2026-07-25 | template-only inventory guard：template replay 的 `TEMPLATE_ONLY` switch case 与 routing inventory 白名单由 audit 保持同步 | `.monkeycode/specs/gc-template-only-inventory-guard/`、`MESSAGE_ROUTING_INVENTORY.md` |
 | 2026-07-25 | legacy wrapped parser guard：`GBE_ExtractWrappedDotaDirectContext` 保持 `LEGACY_UNUSED`，生产 `.cpp` 无调用 contract 由审计保护 | `.monkeycode/specs/gc-legacy-wrapped-parser-guard/`、`MESSAGE_ROUTING_INVENTORY.md` |

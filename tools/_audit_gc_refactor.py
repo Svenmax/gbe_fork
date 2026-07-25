@@ -658,7 +658,7 @@ def parse_dota_protocol_constants(constants_text=None):
 
 
 def audit_registry_inventory_guard(registry_text=None, inventory_text=None, constants_text=None):
-    """Keep production registry emsgs aligned with MESSAGE_ROUTING registry rows."""
+    """Keep production registry rows aligned with MESSAGE_ROUTING registry rows."""
     if registry_text is None:
         registry_text = read(POST_LOGIN_REGISTRY_CPP)
     if inventory_text is None:
@@ -672,10 +672,25 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
     if start < 0 or table_start < 0 or table_end < 0:
         return ["registry inventory: production kTable not found"]
 
+    mode_names = {
+        "DirectAndWrapped": "D+W",
+        "Direct": "Direct",
+        "DirectOnly": "D-only",
+    }
+    registry_rows = {}
     registry_emsgs = set()
     table_text = registry_text[table_start:table_end]
-    for token in re.findall(r'^\s*\{\s*([^,]+?)\s*,', table_text, re.MULTILINE):
-        token = token.strip()
+    entry_re = re.compile(
+        r'^\s*\{\s*(?P<emsg>GBE_k[A-Za-z0-9_]+|\d+u?)\s*,'
+        r'\s*registry::RequestMode::(?P<mode>[A-Za-z]+)\s*,'
+        r'\s*registry::SessionPolicy::[A-Za-z]+\s*,'
+        r'\s*registry::LifecycleClass::(?P<lifecycle>[A-Za-z]+)\s*,'
+        r'\s*[A-Za-z0-9_]+\s*,'
+        r'\s*registry::HandlerId::(?P<handler>[A-Za-z0-9_]+)\s*,',
+        re.MULTILINE,
+    )
+    for entry in entry_re.finditer(table_text):
+        token = entry.group("emsg").strip()
         numeric = None
         literal_match = re.fullmatch(r'(\d+)u?', token)
         if literal_match:
@@ -685,7 +700,16 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
         else:
             issues.append(f"registry inventory: cannot resolve registry emsg token {token}")
             continue
+        mode = entry.group("mode")
+        if mode not in mode_names:
+            issues.append(f"registry inventory: unsupported RequestMode {mode} for {numeric}")
+            continue
         registry_emsgs.add(numeric)
+        registry_rows[numeric] = {
+            "handler": entry.group("handler"),
+            "mode": mode_names[mode],
+            "lifecycle": entry.group("lifecycle"),
+        }
 
     registry_section = inventory_text
     section_start = inventory_text.find("## 1. Registry")
@@ -694,6 +718,7 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
         section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
         section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
         registry_section = inventory_text[section_start:section_end]
+    inventory_rows = {}
     inventory_emsgs = set()
     for line in registry_section.splitlines():
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
@@ -701,13 +726,30 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
             continue
         match = re.fullmatch(r'(\d+)', cells[0])
         if match:
-            inventory_emsgs.add(match.group(1))
+            numeric = match.group(1)
+            inventory_emsgs.add(numeric)
+            if len(cells) >= 5:
+                inventory_rows[numeric] = {
+                    "handler": cells[2],
+                    "mode": cells[3],
+                    "lifecycle": cells[4],
+                }
 
     if registry_emsgs != inventory_emsgs:
         issues.append(
             "MESSAGE_ROUTING registry emsgs "
             f"{sorted(inventory_emsgs)} differ from production kTable {sorted(registry_emsgs)}"
         )
+    for emsg in sorted(registry_emsgs & inventory_emsgs, key=int):
+        production = registry_rows.get(emsg)
+        documented = inventory_rows.get(emsg)
+        if not production or not documented:
+            continue
+        if production != documented:
+            issues.append(
+                "MESSAGE_ROUTING registry metadata for "
+                f"{emsg} {documented} differs from production kTable {production}"
+            )
 
     return issues
 
@@ -2348,10 +2390,10 @@ def main():
     print("=" * 70)
     print("AUDIT 4a: Registry inventory guard")
     print("=" * 70)
-    print("  Action: keep production registry emsgs aligned with MESSAGE_ROUTING.")
+    print("  Action: keep production registry emsgs and metadata aligned with MESSAGE_ROUTING.")
     registry_inventory_issues = audit_registry_inventory_guard()
     if not registry_inventory_issues:
-        print("  Production registry emsgs match the routing inventory")
+        print("  Production registry emsgs and metadata match the routing inventory")
     else:
         for issue in registry_inventory_issues:
             print(f"  {issue}")
