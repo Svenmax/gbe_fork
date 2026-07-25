@@ -67,6 +67,74 @@ static constexpr uint32 GBE_kSteamGamesPlayedWithDataBlob = 5410u;
 static constexpr uint32 GBE_kSteamAuthList = 5432u;
 
 
+namespace {
+
+struct GBE_DotaDirectConditionalFallbackResult {
+    bool consumed{};
+};
+
+GBE_DotaDirectConditionalFallbackResult GBE_HandleDotaDirectConditionalFallback(
+    uint32 request_emsg,
+    const uint8 *body,
+    size_t body_size,
+    uint64 source_job,
+    bool track_late_steam_chain,
+    const GBE_LocalLobby &local_lobby)
+{
+    if (request_emsg == 8744u) {
+        // CONDITIONAL_PROBE: observe only; production reply is TEMPLATE_ONLY 8744.
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "observed req=%u source_job=%llu body_size=%zu fields=%s body_prefix=%s",
+            request_emsg,
+            static_cast<unsigned long long>(source_job),
+            body_size,
+            gbe::proto_wire::format_top_level_field_summary(body, body_size).c_str(),
+            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 32).c_str()
+        );
+        return {};
+    }
+
+    if (request_emsg == GBE_kSteamGamesPlayedWithDataBlob && track_late_steam_chain) {
+        // CONDITIONAL_CONSUME: swallow without synthetic followup while tracking.
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "consumed req=%u source_job=%llu note=late steam chain games played observed without synthetic followup active=%u lobby_id=%llu state=%u game_state=%u body_size=%zu body_prefix=%s",
+            request_emsg,
+            static_cast<unsigned long long>(source_job),
+            local_lobby.active ? 1u : 0u,
+            static_cast<unsigned long long>(local_lobby.lobby_id),
+            local_lobby.state,
+            local_lobby.game_state,
+            body_size,
+            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 48).c_str()
+        );
+        return {true};
+    }
+
+    if (request_emsg == GBE_kSteamAuthList && track_late_steam_chain) {
+        // CONDITIONAL_CONSUME: swallow without synthetic followup while tracking.
+        GBE_GC_DebugLog(
+            "GC_DOTA_DIRECT",
+            "consumed req=%u source_job=%llu note=late steam chain auth list observed without synthetic followup active=%u lobby_id=%llu state=%u game_state=%u body_size=%zu body_prefix=%s",
+            request_emsg,
+            static_cast<unsigned long long>(source_job),
+            local_lobby.active ? 1u : 0u,
+            static_cast<unsigned long long>(local_lobby.lobby_id),
+            local_lobby.state,
+            local_lobby.game_state,
+            body_size,
+            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 48).c_str()
+        );
+        return {true};
+    }
+
+    return {};
+}
+
+}
+
+
 
 bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job)
 {
@@ -263,52 +331,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
     // CONDITIONAL_CONSUME 5410/5432 when late-steam tracking is on
     // else TEMPLATE_ONLY catch-all
 
-    if (request_emsg == 8744u) {
-        // CONDITIONAL_PROBE: observe only; production reply is TEMPLATE_ONLY 8744.
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "observed req=%u source_job=%llu body_size=%zu fields=%s body_prefix=%s",
+    const GBE_DotaDirectConditionalFallbackResult conditional_fallback =
+        GBE_HandleDotaDirectConditionalFallback(
             request_emsg,
-            static_cast<unsigned long long>(source_job),
+            body,
             body_size,
-            gbe::proto_wire::format_top_level_field_summary(body, body_size).c_str(),
-            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 32).c_str()
-        );
-    }
-
-    if (request_emsg == GBE_kSteamGamesPlayedWithDataBlob && GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()) {
-        // CONDITIONAL_CONSUME: swallow without synthetic followup while tracking.
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "consumed req=%u source_job=%llu note=late steam chain games played observed without synthetic followup active=%u lobby_id=%llu state=%u game_state=%u body_size=%zu body_prefix=%s",
-            request_emsg,
-            static_cast<unsigned long long>(source_job),
-            GBE_local_lobby.active ? 1u : 0u,
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            body_size,
-            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 48).c_str()
-        );
+            source_job,
+            GBE_ShouldTrackDotaPracticeLobbyLateSteamChain(),
+            GBE_local_lobby);
+    if (conditional_fallback.consumed)
         return true;
-    }
-
-    if (request_emsg == GBE_kSteamAuthList && GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()) {
-        // CONDITIONAL_CONSUME: swallow without synthetic followup while tracking.
-        GBE_GC_DebugLog(
-            "GC_DOTA_DIRECT",
-            "consumed req=%u source_job=%llu note=late steam chain auth list observed without synthetic followup active=%u lobby_id=%llu state=%u game_state=%u body_size=%zu body_prefix=%s",
-            request_emsg,
-            static_cast<unsigned long long>(source_job),
-            GBE_local_lobby.active ? 1u : 0u,
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            body_size,
-            gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 48).c_str()
-        );
-        return true;
-    }
 
     return GBE_HandleDotaTemplateReplayRequest(request_emsg, body, body_size, has_source_job, source_job);
 }

@@ -170,6 +170,34 @@ class RegistryDefensiveTemplateRoutingAuditTest(unittest.TestCase):
         )
 
 
+class DirectConditionalFallbackRoutingAuditTest(unittest.TestCase):
+    def test_accepts_centralized_direct_conditional_fallback_routing(self):
+        self.assertEqual([], audit.audit_direct_conditional_fallback_routing())
+
+    def test_rejects_missing_direct_conditional_helper_case(self):
+        handler_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "dll", "gbe_dota_post_login_handlers.cpp"))
+        handler_text = handler_text.replace("    if (request_emsg == GBE_kSteamAuthList && track_late_steam_chain) {", "    if (false && track_late_steam_chain) {")
+        issues = audit.audit_direct_conditional_fallback_routing(handler_text=handler_text)
+        self.assertTrue(any("helper emsgs" in issue for issue in issues))
+
+    def test_rejects_inline_direct_conditional_check(self):
+        handler_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "dll", "gbe_dota_post_login_handlers.cpp"))
+        handler_text = handler_text.replace(
+            "    const GBE_DotaDirectConditionalFallbackResult conditional_fallback =\n",
+            "    if (request_emsg == 8744u)\n        GBE_GC_DebugLog(\"GC_DOTA_DIRECT\", \"probe\");\n\n    const GBE_DotaDirectConditionalFallbackResult conditional_fallback =\n",
+        )
+        self.assertIn(
+            "direct post-login: inline conditional fallback check remains for 8744u",
+            audit.audit_direct_conditional_fallback_routing(handler_text=handler_text),
+        )
+
+    def test_rejects_inventory_drift(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("| AuthList (5432) | CONDITIONAL_CONSUME | 同上 | 同上 |", "")
+        issues = audit.audit_direct_conditional_fallback_routing(inventory_text=inventory_text)
+        self.assertTrue(any("MESSAGE_ROUTING direct conditional fallback emsgs" in issue for issue in issues))
+
+
 class PublicHeaderDefinitionAuditTest(unittest.TestCase):
     def test_ignores_virtual_member_destructor(self):
         self.assertEqual(

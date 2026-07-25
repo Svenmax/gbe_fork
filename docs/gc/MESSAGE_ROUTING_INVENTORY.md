@@ -1,6 +1,6 @@
 # 消息路由清单（四轨真相表）
 
-> 源码扫描日期：2026-07-25（registry-defensive template routing boundary 显式化）。改入口必须同步更新本表。
+> 源码扫描日期：2026-07-25（direct conditional fallback 与 registry-defensive template routing boundary 显式化）。改入口必须同步更新本表。
 > 分发顺序（post-login）：**registry → 条件/观察 fallback → template_replay**。
 > Hello / ServerHello 经 `handle_dota_client_message` 转调 welcome handlers（不进 post-login registry）。
 
@@ -88,8 +88,8 @@ Adapter 形态：`self->GBE_Handle…`（仍是 GC 成员，非独立服务）�
 
 | emsg | 归属 | 行为 | 原因 |
 |------|------|------|------|
-| 8744 | CONDITIONAL_PROBE | 仅 debug log，再落 template | 观察探针；生产回复归 TEMPLATE_ONLY |
-| GamesPlayedWithDataBlob (5410) | CONDITIONAL_CONSUME | 条件 consume + return true | 依赖 `GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()` |
+| 8744 | CONDITIONAL_PROBE | 经 direct conditional fallback helper 仅 debug log，再落 template | 观察探针；生产回复归 TEMPLATE_ONLY |
+| GamesPlayedWithDataBlob (5410) | CONDITIONAL_CONSUME | 经 direct conditional fallback helper 条件 consume + return true | 依赖 `GBE_ShouldTrackDotaPracticeLobbyLateSteamChain()` |
 | AuthList (5432) | CONDITIONAL_CONSUME | 同上 | 同上 |
 | （其余 miss） | TEMPLATE_ONLY ladder | `GBE_HandleDotaTemplateReplayRequest` | 白名单 catch-all |
 

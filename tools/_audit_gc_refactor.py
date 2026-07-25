@@ -56,6 +56,7 @@ TEMPLATE_BLOB_OWNER_FILES = {
     "gbe_dota_gc_payload_helpers.cpp",
 }
 REGISTRY_DEFENSIVE_TEMPLATE_EMSGS = {"8879", "8095", "8009", "7091"}
+DIRECT_CONDITIONAL_FALLBACK_EMSGS = {"8744", "5410", "5432"}
 SOURCE_LIST_AUDIT_EXEMPTIONS = {
     "gbe_dota_chat_handlers.cpp": "compiled through handler test wrapper",
     "gbe_dota_connection_lifecycle.cpp": "production lifecycle TU, not directly offline-buildable",
@@ -720,6 +721,68 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
         issues.append(
             "MESSAGE_ROUTING registry-defensive emsgs "
             f"{sorted(inventory_defensive)} differ from expected {sorted(REGISTRY_DEFENSIVE_TEMPLATE_EMSGS)}"
+        )
+
+    return issues
+
+
+def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=None):
+    """Keep direct registry-miss conditional fallback behind one explicit boundary."""
+    if handler_text is None:
+        handler_text = read(os.path.join(ROOT_DIR, "dll", "gbe_dota_post_login_handlers.cpp"))
+    if inventory_text is None:
+        inventory_text = read(os.path.join(ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+
+    issues = []
+    helper_name = "GBE_HandleDotaDirectConditionalFallback"
+    if helper_name not in handler_text:
+        issues.append("direct post-login: missing explicit conditional fallback helper")
+
+    helper_marker = f"{helper_name}("
+    helper_start = handler_text.find(helper_marker)
+    server_assignment_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest")
+    helper_body = handler_text[helper_start:server_assignment_start] if helper_start != -1 and server_assignment_start != -1 else ""
+    helper_emsgs = set(re.findall(r'request_emsg\s*==\s*([0-9]+)u?', helper_body))
+    if "GBE_kSteamGamesPlayedWithDataBlob" in helper_body:
+        helper_emsgs.add("5410")
+    if "GBE_kSteamAuthList" in helper_body:
+        helper_emsgs.add("5432")
+    if helper_emsgs != DIRECT_CONDITIONAL_FALLBACK_EMSGS:
+        issues.append(
+            "direct post-login: conditional fallback helper emsgs "
+            f"{sorted(helper_emsgs)} differ from expected {sorted(DIRECT_CONDITIONAL_FALLBACK_EMSGS)}"
+        )
+
+    direct_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest")
+    add_socket_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaAddSocketRequest")
+    direct_body = handler_text[direct_start:add_socket_start] if direct_start != -1 and add_socket_start != -1 else ""
+    if helper_name not in direct_body:
+        issues.append("direct post-login: request path does not call conditional fallback helper")
+    if "GBE_DispatchDotaPostLoginRequest(request_context)" in direct_body and helper_name in direct_body:
+        if direct_body.find("GBE_DispatchDotaPostLoginRequest(request_context)") > direct_body.find(helper_name):
+            issues.append("direct post-login: conditional fallback must run after registry dispatch")
+    if helper_name in direct_body and "GBE_HandleDotaTemplateReplayRequest" in direct_body:
+        if direct_body.find(helper_name) > direct_body.find("GBE_HandleDotaTemplateReplayRequest"):
+            issues.append("direct post-login: conditional fallback must run before template replay")
+
+    for token in ("8744u", "GBE_kSteamGamesPlayedWithDataBlob", "GBE_kSteamAuthList"):
+        if f"request_emsg == {token}" in direct_body:
+            issues.append(f"direct post-login: inline conditional fallback check remains for {token}")
+
+    inventory_conditional = set()
+    for line in inventory_text.splitlines():
+        if "CONDITIONAL_" not in line:
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if not cells:
+            continue
+        match = re.search(r'\b(\d+)\b', cells[0])
+        if match:
+            inventory_conditional.add(match.group(1))
+    if inventory_conditional != DIRECT_CONDITIONAL_FALLBACK_EMSGS:
+        issues.append(
+            "MESSAGE_ROUTING direct conditional fallback emsgs "
+            f"{sorted(inventory_conditional)} differ from expected {sorted(DIRECT_CONDITIONAL_FALLBACK_EMSGS)}"
         )
 
     return issues
@@ -2115,7 +2178,19 @@ def main():
     print()
 
     print("=" * 70)
-    print("AUDIT 5b: Retired gbe_dota_gc_internal.h boundary")
+    print("AUDIT 5b: Direct conditional fallback routing")
+    print("=" * 70)
+    print("  Action: keep direct registry-miss conditional fallback behind one explicit boundary.")
+    direct_conditional_fallback_issues = audit_direct_conditional_fallback_routing()
+    if not direct_conditional_fallback_issues:
+        print("  Direct conditional fallback emsgs are centralized and documented")
+    else:
+        for issue in direct_conditional_fallback_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
+    print("AUDIT 5c: Retired gbe_dota_gc_internal.h boundary")
     print("=" * 70)
     print("  Action: keep the retired aggregate header deleted and use dedicated capability headers.")
     gc_internal_slim_issues = audit_retired_gc_internal_header()
@@ -2418,6 +2493,7 @@ def main():
     print(f"  Dispatch table mismatches:           {len(dispatch_issues)}")
     print(f"  Template blob ownership issues:      {len(template_blob_issues)}")
     print(f"  Registry-defensive template issues:  {len(registry_defensive_template_issues)}")
+    print(f"  Direct conditional fallback issues:  {len(direct_conditional_fallback_issues)}")
     print(f"  GC internal slim boundary issues:    {len(gc_internal_slim_issues)}")
     print(f"  Source-list inclusion issues:        {len(source_list_issues)}")
     print(f"  Handler side-effect seam issues:     {len(side_effect_issues)}")
@@ -2443,7 +2519,7 @@ def main():
     print(f"  CI failure localization issues:       {len(ci_failure_localization_issues)}")
     print(f"  Architecture investment boundary issues: {len(architecture_investment_boundary_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or registry_defensive_template_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or registry_defensive_template_issues or direct_conditional_fallback_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
         sys.exit(1)
 
 
