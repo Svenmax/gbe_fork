@@ -312,6 +312,14 @@ class WrappedHardMissRoutingAuditTest(unittest.TestCase):
             audit.audit_wrapped_hard_miss_routing(inventory_text=inventory_text),
         )
 
+    def test_rejects_missing_fallback_inventory_section(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("## 2. 仍留在 if/fallback 的路径", "## 2. moved_fallback")
+        self.assertIn(
+            "MESSAGE_ROUTING wrapped hard miss inventory missing fallback section",
+            audit.audit_wrapped_hard_miss_routing(inventory_text=inventory_text),
+        )
+
 
 class LegacyWrappedParserGuardAuditTest(unittest.TestCase):
     def test_accepts_legacy_wrapped_parser_without_production_calls(self):
