@@ -162,16 +162,11 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         const uint64 previous_server_id = GBE_local_lobby.server_id;
         const std::string previous_connect = GBE_local_lobby.connect;
 
-        const std::string shared_connect = gbe::proto_wire::normalize_dota_practice_lobby_connect(shared_lobby.connect);
-        if (!shared_connect.empty() && GBE_local_lobby.connect != shared_connect) {
-            GBE_local_lobby.connect = shared_connect;
+        if (gbe::dota_lobby_state::restore_lobby_connect(GBE_local_lobby, shared_lobby.connect))
             changed = true;
-        }
 
-        if (shared_lobby.match_id != 0 && GBE_local_lobby.match_id != shared_lobby.match_id) {
-            GBE_local_lobby.match_id = shared_lobby.match_id;
+        if (gbe::dota_lobby_state::restore_lobby_match_id(GBE_local_lobby, shared_lobby.match_id))
             changed = true;
-        }
 
         const gbe::dota_lobby_state::SharedLobbyRuntimeRestorePlan runtime_restore_plan =
             gbe::dota_lobby_state::compose_shared_lobby_runtime_restore_plan(

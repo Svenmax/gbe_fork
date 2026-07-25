@@ -299,6 +299,21 @@ bool test_valid_launch_progression()
         ok &= expect_false(lobby.launch_4511_seen, "4511 restore updates marker value");
     }
 
+    // restore_lobby_connect / restore_lobby_match_id: shared launch identity restore.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.connect = "1.2.3.4:27015";
+        lobby.match_id = 100ull;
+        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_connect(lobby, "1.2.3.4:27015"), "connect restore keeps matching endpoint");
+        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_connect(lobby, ""), "connect restore ignores empty shared endpoint");
+        ok &= expect_true(gbe::dota_lobby_state::restore_lobby_connect(lobby, "5.6.7.8:27015"), "connect restore applies shared endpoint");
+        ok &= expect_true(lobby.connect == "5.6.7.8:27015", "connect restore updates local endpoint");
+        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_match_id(lobby, 0ull), "match restore ignores zero shared match");
+        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_match_id(lobby, 100ull), "match restore keeps matching match id");
+        ok &= expect_true(gbe::dota_lobby_state::restore_lobby_match_id(lobby, 200ull), "match restore applies shared match id");
+        ok &= expect_eq_u64(lobby.match_id, 200ull, "match restore updates local match id");
+    }
+
     // apply_lifecycle_lobby_state: lifecycle action writes state fields together.
     {
         GBE_LocalLobby lobby = make_active_lobby();

@@ -537,6 +537,12 @@ bool mark_launch_4511_seen(GBE_LocalLobby &lobby);
 bool restore_launch_4511_seen(
     GBE_LocalLobby &lobby,
     bool launch_4511_seen);
+bool restore_lobby_connect(
+    GBE_LocalLobby &lobby,
+    const std::string &shared_connect);
+bool restore_lobby_match_id(
+    GBE_LocalLobby &lobby,
+    std::uint64_t shared_match_id);
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

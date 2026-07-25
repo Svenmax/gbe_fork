@@ -482,6 +482,29 @@ bool restore_launch_4511_seen(
     return true;
 }
 
+bool restore_lobby_connect(
+    GBE_LocalLobby &lobby,
+    const std::string &shared_connect)
+{
+    const std::string normalized_connect = proto_wire::normalize_dota_practice_lobby_connect(shared_connect);
+    if (normalized_connect.empty() || lobby.connect == normalized_connect)
+        return false;
+
+    lobby.connect = normalized_connect;
+    return true;
+}
+
+bool restore_lobby_match_id(
+    GBE_LocalLobby &lobby,
+    std::uint64_t shared_match_id)
+{
+    if (shared_match_id == 0ull || lobby.match_id == shared_match_id)
+        return false;
+
+    lobby.match_id = shared_match_id;
+    return true;
+}
+
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,
