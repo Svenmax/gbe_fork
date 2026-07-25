@@ -83,6 +83,17 @@ class NumericMarkdownCellHelperTest(unittest.TestCase):
         self.assertEqual("7091", audit.numeric_markdown_cell("emsg 7091 conditional", exact=False))
 
 
+class NumericMarkdownCellValuesHelperTest(unittest.TestCase):
+    def test_extracts_multiple_numeric_values_in_order(self):
+        self.assertEqual(["2536", "8744", "7091"], audit.numeric_markdown_cell_values("2536, 8744, 7091"))
+
+    def test_returns_empty_list_when_no_values_exist(self):
+        self.assertEqual([], audit.numeric_markdown_cell_values("template only"))
+
+    def test_extracts_values_from_mixed_text(self):
+        self.assertEqual(["2536", "8744"], audit.numeric_markdown_cell_values("emsg 2536 / fallback 8744"))
+
+
 class RecordDuplicateHelperTest(unittest.TestCase):
     def test_first_value_is_seen_without_duplicate(self):
         seen = set()

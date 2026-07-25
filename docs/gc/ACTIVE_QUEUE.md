@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | inventory multi numeric cell helper：template-only routing inventory 多 emsg Markdown cell 解析共用 helper，保持 cell 内 emsg 顺序与 duplicate 检测语义 | `.monkeycode/specs/gc-inventory-multi-numeric-cell-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory numeric cell helper：routing inventory 单 emsg Markdown cell 解析共用 helper，区分 exact cell 与 first-number matching | `.monkeycode/specs/gc-inventory-numeric-cell-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory request emsg helper：direct conditional fallback audit 共用 `request_emsg == ...` 提取 helper，统一 named request token 到 numeric emsg 的映射 | `.monkeycode/specs/gc-inventory-request-emsg-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory case emsg helper：template replay routing audit 共用 `case` label emsg 提取 helper，统一 named Dota constant 到 numeric emsg 的映射 | `.monkeycode/specs/gc-inventory-case-emsg-helper/`、`tools/_audit_gc_refactor.py` |

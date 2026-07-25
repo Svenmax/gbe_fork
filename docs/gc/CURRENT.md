@@ -23,6 +23,8 @@
 
 **inventory numeric cell helper（2026-07-25）：** `gc-inventory-numeric-cell-helper` 已将 routing inventory 单 emsg Markdown cell 解析收敛为 `numeric_markdown_cell(...)`，明确 exact cell 与 first-number matching 两种语义。
 
+**inventory multi numeric cell helper（2026-07-25）：** `gc-inventory-multi-numeric-cell-helper` 已将 template-only routing inventory 多 emsg Markdown cell 解析收敛为 `numeric_markdown_cell_values(...)`，保持 cell 内 emsg 顺序与 duplicate 检测语义。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。

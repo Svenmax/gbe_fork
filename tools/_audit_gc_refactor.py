@@ -484,6 +484,10 @@ def numeric_markdown_cell(cell, exact=True):
     return match.group(0 if exact else 1) if match else None
 
 
+def numeric_markdown_cell_values(cell):
+    return re.findall(r'\b\d+\b', cell)
+
+
 def record_duplicate(seen, duplicates, value):
     if value in seen:
         duplicates.add(value)
@@ -965,7 +969,7 @@ def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
             continue
         cells = markdown_cells(line)
         if len(cells) >= 2 and cells[1] == "TEMPLATE_ONLY":
-            for emsg in re.findall(r'\b\d+\b', cells[0]):
+            for emsg in numeric_markdown_cell_values(cells[0]):
                 record_duplicate(inventory_template_only, duplicate_inventory_template_only, emsg)
     append_duplicate_issues(issues, duplicate_inventory_template_only, "MESSAGE_ROUTING template-only inventory duplicates")
     if inventory_template_only != TEMPLATE_ONLY_TEMPLATE_EMSGS:
