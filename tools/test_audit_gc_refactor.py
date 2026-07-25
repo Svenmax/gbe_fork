@@ -234,6 +234,26 @@ class ExtractRequestEmsgComparisonsHelperTest(unittest.TestCase):
         self.assertEqual({"5410", "5432"}, audit.extract_request_emsg_comparisons(body))
 
 
+class ExtractAdapterHandlerCallsHelperTest(unittest.TestCase):
+    def test_extracts_single_adapter_handler_call(self):
+        body = "return self->GBE_HandleDotaJoinChatRequest(ctx);"
+        self.assertEqual(["GBE_HandleDotaJoinChatRequest"], audit.extract_adapter_handler_calls(body))
+
+    def test_extracts_multiple_adapter_handler_calls_in_order(self):
+        body = "self->GBE_HandleDotaOneRequest(ctx); self->GBE_HandleDotaTwoRequest(ctx);"
+        self.assertEqual(
+            ["GBE_HandleDotaOneRequest", "GBE_HandleDotaTwoRequest"],
+            audit.extract_adapter_handler_calls(body),
+        )
+
+    def test_ignores_non_request_handler_names(self):
+        body = "return self->GBE_HandleDotaJoinChat(ctx);"
+        self.assertEqual([], audit.extract_adapter_handler_calls(body))
+
+    def test_returns_empty_list_when_no_handler_call_exists(self):
+        self.assertEqual([], audit.extract_adapter_handler_calls("return false;"))
+
+
 class SortedNumericValuesHelperTest(unittest.TestCase):
     def test_sorts_string_values_numerically(self):
         self.assertEqual(["3", "20", "100"], audit.sorted_numeric_values({"20", "100", "3"}))

@@ -554,6 +554,10 @@ def extract_request_emsg_comparisons(body, token_to_emsg=REQUEST_EMSG_TOKEN_TO_E
     }
 
 
+def extract_adapter_handler_calls(body):
+    return re.findall(r"self->(GBE_HandleDota[A-Za-z0-9_]+Request)\s*\(", body)
+
+
 def extract_header_symbols(header_text):
     """Extract external GBE_* function/variable declarations from the header."""
     symbols = set()
@@ -705,7 +709,7 @@ def audit_post_login_dispatch(main_text):
             issues.append(f"{emsg}: registry adapter {adapter} has no lambda definition")
             continue
 
-        handler_calls = re.findall(r"self->(GBE_HandleDota[A-Za-z0-9_]+Request)\s*\(", body)
+        handler_calls = extract_adapter_handler_calls(body)
         if len(handler_calls) != 1:
             issues.append(f"{emsg}: {adapter} calls {len(handler_calls)} request handlers")
 
