@@ -134,18 +134,14 @@ bool Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbySteamAuthAck(const c
 
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
     const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId() != 0ull ? GBE_GetDotaLobbyOwnerSteamId() : steam_id;
-    const uint32 message_sequence = GBE_local_lobby.launch_steam_auth_message_sequence != 0u
-        ? GBE_local_lobby.launch_steam_auth_message_sequence
-        : 1u;
-    uint32 ticket_crc = GBE_local_lobby.launch_steam_auth_ticket_crc;
-    if (ticket_crc == 0u) {
-        uint64 seed = steam_id ^ (GBE_local_lobby.match_id << 1) ^ (GBE_local_lobby.server_id << 7) ^ 0x4409f3a5u;
-        ticket_crc = static_cast<uint32>(seed) ^ static_cast<uint32>(seed >> 32);
-        if (ticket_crc == 0u)
-            ticket_crc = 1u;
-        GBE_local_lobby.launch_steam_auth_ticket_crc = ticket_crc;
-    }
-    GBE_local_lobby.launch_steam_auth_message_sequence = message_sequence;
+    uint64 seed = steam_id ^ (GBE_local_lobby.match_id << 1) ^ (GBE_local_lobby.server_id << 7) ^ 0x4409f3a5u;
+    uint32 derived_ticket_crc = static_cast<uint32>(seed) ^ static_cast<uint32>(seed >> 32);
+    if (derived_ticket_crc == 0u)
+        derived_ticket_crc = 1u;
+    const gbe::dota_lobby_state::SteamAuthAckLaunchPlan auth_ack_plan =
+        gbe::dota_lobby_state::compose_steam_auth_ack_launch_plan(GBE_local_lobby, derived_ticket_crc);
+    const uint32 ticket_crc = auth_ack_plan.ticket_crc;
+    const uint32 message_sequence = auth_ack_plan.message_sequence;
 
     std::string auth_complete_body;
     gbe::proto_wire::append_fixed64_field(auth_complete_body, 1u, steam_id);
@@ -166,7 +162,7 @@ bool Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbySteamAuthAck(const c
     std::string auth_ack_message = build_protomsg_header(5575u | GBE_kProtoMask, request_job_id, k_GIDNil);
     auth_ack_message.append(auth_ack_body);
 
-    GBE_local_lobby.launch_steam_auth_ack_queued = true;
+    gbe::dota_lobby_state::apply_steam_auth_ack_launch_plan(GBE_local_lobby, auth_ack_plan);
     GBE_PublishSharedDotaLobbyState(reason ? reason : "steam_auth_ack");
 
     push_incoming_now(GBE_kSteamTicketAuthComplete | GBE_kProtoMask, auth_complete_message);

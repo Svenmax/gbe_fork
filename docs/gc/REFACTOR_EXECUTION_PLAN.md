@@ -121,6 +121,7 @@
 19. [x] D2 切片：`GBE_MarkDotaLaunchPhase()` 通过 `advance_launch_phase()` 单一化 monotonic `launch_phase` 更新；publish 和诊断仍在 coordinator 中按原顺序执行。
 20. [x] D2 切片：generic lobby capture 以 `compose_generic_lobby_state_capture_plan()` 分别决定 `state` 与 `game_state` 写许可，再由 `apply_generic_lobby_state_capture_plan()` 应用；custom-game launch 回退保护和 stale-state 日志保持。
 21. [x] D2 切片：shared restore 以 `compose_shared_lobby_runtime_restore_plan()` 计算 `state`、`game_state` 与 `launch_phase` 的字段组更新，再由 `apply_shared_lobby_runtime_restore_plan()` 应用；shared runtime 覆盖与 custom-game READYUP 回退拒绝保持。
+22. [x] D2 切片：steam-auth ack 以 `compose_steam_auth_ack_launch_plan()` 计算 CRC、sequence 和 ack 标记，再由 `apply_steam_auth_ack_launch_plan()` 一次写入；既有 ticket CRC 派生、shared publish 与 synthetic push 顺序保持。
 
 ### 验收
 
@@ -144,6 +145,7 @@
 - D2 monotonic phase apply 新增 lobby-state 回归，验证推进与回退拒绝；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
 - D2 generic capture 新增 lobby-state 回归，验证 custom-game launch 中 stale state/game_state 保留与 fresh 字段应用；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
 - D2 shared runtime restore 新增 lobby-state 回归，验证 custom-game READYUP state 回退拒绝、shared game_state 与 launch_phase 覆盖；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
+- D2 steam-auth 元数据新增 lobby-state 回归，验证派生 CRC、默认 sequence、ack 标记与既有值保留；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
 
 ## R5：持续验证与上游同步
 

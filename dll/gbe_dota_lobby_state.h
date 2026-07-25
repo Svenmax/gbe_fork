@@ -221,6 +221,12 @@ struct SharedLobbyRuntimeRestorePlan {
     bool ignored_readyup_regression{};
 };
 
+struct SteamAuthAckLaunchPlan {
+    std::uint32_t ticket_crc{};
+    std::uint32_t message_sequence{};
+    bool mark_ack_queued{};
+};
+
 struct LaunchLifecycleTransitionDecision {
     bool apply_lobby_state{};
     std::uint32_t next_state{};
@@ -513,6 +519,12 @@ SharedLobbyRuntimeRestorePlan compose_shared_lobby_runtime_restore_plan(
 bool apply_shared_lobby_runtime_restore_plan(
     GBE_LocalLobby &lobby,
     const SharedLobbyRuntimeRestorePlan &plan);
+SteamAuthAckLaunchPlan compose_steam_auth_ack_launch_plan(
+    const GBE_LocalLobby &current_lobby,
+    std::uint32_t derived_ticket_crc);
+void apply_steam_auth_ack_launch_plan(
+    GBE_LocalLobby &lobby,
+    const SteamAuthAckLaunchPlan &plan);
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t ready_state,

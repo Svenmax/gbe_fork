@@ -272,6 +272,22 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(lobby.launch_phase, GBE_kDotaLaunchPhaseLoaded, "shared restore updates launch phase");
     }
 
+    // steam auth ack: derive missing metadata and preserve values assigned earlier in the launch.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        const auto derived_plan = gbe::dota_lobby_state::compose_steam_auth_ack_launch_plan(lobby, 42u);
+        gbe::dota_lobby_state::apply_steam_auth_ack_launch_plan(lobby, derived_plan);
+        ok &= expect_eq_u32(lobby.launch_steam_auth_ticket_crc, 42u, "steam auth applies derived ticket CRC");
+        ok &= expect_eq_u32(lobby.launch_steam_auth_message_sequence, 1u, "steam auth defaults sequence");
+        ok &= expect_true(lobby.launch_steam_auth_ack_queued, "steam auth marks ack queued");
+
+        lobby.launch_steam_auth_ticket_crc = 9u;
+        lobby.launch_steam_auth_message_sequence = 7u;
+        const auto existing_plan = gbe::dota_lobby_state::compose_steam_auth_ack_launch_plan(lobby, 42u);
+        ok &= expect_eq_u32(existing_plan.ticket_crc, 9u, "steam auth keeps ticket CRC");
+        ok &= expect_eq_u32(existing_plan.message_sequence, 7u, "steam auth keeps sequence");
+    }
+
     // compose_queued_lobby_state_apply_plan: state=1 + game_state=0 + sync -> bump to setup_synced.
     {
         GBE_LocalLobby lobby = make_active_lobby();

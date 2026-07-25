@@ -438,6 +438,30 @@ bool apply_shared_lobby_runtime_restore_plan(
     return changed;
 }
 
+SteamAuthAckLaunchPlan compose_steam_auth_ack_launch_plan(
+    const GBE_LocalLobby &current_lobby,
+    std::uint32_t derived_ticket_crc)
+{
+    SteamAuthAckLaunchPlan plan{};
+    plan.ticket_crc = current_lobby.launch_steam_auth_ticket_crc != 0u
+        ? current_lobby.launch_steam_auth_ticket_crc
+        : derived_ticket_crc;
+    plan.message_sequence = current_lobby.launch_steam_auth_message_sequence != 0u
+        ? current_lobby.launch_steam_auth_message_sequence
+        : 1u;
+    plan.mark_ack_queued = true;
+    return plan;
+}
+
+void apply_steam_auth_ack_launch_plan(
+    GBE_LocalLobby &lobby,
+    const SteamAuthAckLaunchPlan &plan)
+{
+    lobby.launch_steam_auth_ticket_crc = plan.ticket_crc;
+    lobby.launch_steam_auth_message_sequence = plan.message_sequence;
+    lobby.launch_steam_auth_ack_queued = plan.mark_ack_queued;
+}
+
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t ready_state,

@@ -45,11 +45,12 @@
 - **members / chat / broadcast**：slot、chat、member_coordinator。
 - **owner_hero_id**：只允许 `HOST_AUTHORITY` 列出的 Apply/adopt/publish 路径（禁止 match/inventory 旁路 `=`）。
 - **server_id / connect / match_id**：recover、launch、restore merge。
+- **launch_steam_auth_***：仅 steam-auth ack 路径通过 `compose_steam_auth_ack_launch_plan()` 与 `apply_steam_auth_ack_launch_plan()` 一次写入 CRC、message sequence 与 ack 标记，再 publish shared state。
 
 ## 5. C1 结论
 
 1. Shared 写路径已单一化到 generation 门控门面；无需本轮改 Store API。
-2. Local 仍是广泛工作副本；queued-state、monotonic launch phase、generic capture 与 shared runtime restore 已采用纯 apply 边界。后续字段组按单路径、单边界推进，减少 handler 内零散字段写。
+2. Local 仍是广泛工作副本；queued-state、monotonic launch phase、generic capture、shared runtime restore 与 steam-auth 元数据已采用纯 apply 边界。后续字段组按单路径、单边界推进，减少 handler 内零散字段写。
 3. 双轨（local + shared）风险仍在 CURRENT；本清单只冻结入口，不声明状态单一化完成。
 
 ## 6. 停手
