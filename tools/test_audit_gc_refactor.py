@@ -186,6 +186,12 @@ class RegistryDefensiveTemplateRoutingAuditTest(unittest.TestCase):
             audit.audit_registry_defensive_template_routing(inventory_text=inventory_text),
         )
 
+    def test_ignores_registry_defensive_row_after_template_replay_section_when_separator_is_missing(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("\n---\n\n## 5. 解析层职责", "\n\n## 5. 解析层职责", 1)
+        inventory_text += "\n| 7091 | REGISTRY_DEFENSIVE | outside template section |\n"
+        self.assertEqual([], audit.audit_registry_defensive_template_routing(inventory_text=inventory_text))
+
 
 class TemplateOnlyInventoryGuardAuditTest(unittest.TestCase):
     def test_accepts_template_only_switch_and_inventory_alignment(self):
@@ -230,6 +236,12 @@ class TemplateOnlyInventoryGuardAuditTest(unittest.TestCase):
             "MESSAGE_ROUTING template-only inventory missing template_replay section",
             audit.audit_template_only_inventory_guard(inventory_text=inventory_text),
         )
+
+    def test_ignores_template_only_row_after_template_replay_section_when_separator_is_missing(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("\n---\n\n## 5. 解析层职责", "\n\n## 5. 解析层职责", 1)
+        inventory_text += "\n| 9999 | TEMPLATE_ONLY | outside template section |\n"
+        self.assertEqual([], audit.audit_template_only_inventory_guard(inventory_text=inventory_text))
 
 
 class DirectConditionalFallbackRoutingAuditTest(unittest.TestCase):

@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | template_replay generic section end：template_replay §4 截止于任意下一个二级标题，避免缺失分隔线时扩大扫描 | `.monkeycode/specs/gc-template-replay-generic-section-end/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | registry generic section end：Registry inventory §1 截止于任意下一个二级标题，避免缺失分隔线时扩大扫描 | `.monkeycode/specs/gc-registry-generic-section-end/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | Local/shared merge generic section end：Local/shared merge inventory §5 截止于任意下一个二级标题，避免后续章节编号变化扩大扫描 | `.monkeycode/specs/gc-local-shared-merge-generic-section-end/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | Local/shared merge section presence regression：补齐 Local/shared merge inventory §5 缺失 fail-fast 的回归测试 | `.monkeycode/specs/gc-local-shared-merge-section-presence-regression/`、`tools/test_audit_gc_refactor.py` |

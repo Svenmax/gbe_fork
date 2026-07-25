@@ -844,8 +844,8 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
         issues.append("MESSAGE_ROUTING registry-defensive inventory missing template_replay section")
         return issues
     section_tail = inventory_text[section_start:]
-    section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
-    section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+    section_end_match = re.search(r'^##\s+', section_tail[len("## 4. template_replay"):], re.MULTILINE)
+    section_end = section_start + len("## 4. template_replay") + section_end_match.start() if section_end_match else len(inventory_text)
     inventory_section = inventory_text[section_start:section_end]
 
     inventory_defensive = set()
@@ -900,8 +900,8 @@ def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
         issues.append("MESSAGE_ROUTING template-only inventory missing template_replay section")
         return issues
     section_tail = inventory_text[section_start:]
-    section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
-    section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+    section_end_match = re.search(r'^##\s+', section_tail[len("## 4. template_replay"):], re.MULTILINE)
+    section_end = section_start + len("## 4. template_replay") + section_end_match.start() if section_end_match else len(inventory_text)
     inventory_section = inventory_text[section_start:section_end]
 
     inventory_template_only = set()
