@@ -766,6 +766,26 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u64(lobby.generic_lobby_id, 80ull, "generic lobby id restore updates local value");
     }
 
+    // apply_source_tv_metadata: SourceTV field group preserves absent values.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.tv_secret_code = 11ull;
+        lobby.tv_port = 22u;
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_source_tv_metadata(lobby, 0ull, 0u),
+            "SourceTV metadata apply preserves zero inputs");
+        ok &= expect_eq_u64(lobby.tv_secret_code, 11ull, "SourceTV metadata keeps secret on zero input");
+        ok &= expect_eq_u32(lobby.tv_port, 22u, "SourceTV metadata keeps port on zero input");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_source_tv_metadata(lobby, 33ull, 44u),
+            "SourceTV metadata apply reports field changes");
+        ok &= expect_eq_u64(lobby.tv_secret_code, 33ull, "SourceTV metadata updates secret");
+        ok &= expect_eq_u32(lobby.tv_port, 44u, "SourceTV metadata updates port");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_source_tv_metadata(lobby, 33ull, 44u),
+            "SourceTV metadata apply reports matching values as no-op");
+    }
+
     // apply_lifecycle_lobby_state: lifecycle action writes state fields together.
     {
         GBE_LocalLobby lobby = make_active_lobby();

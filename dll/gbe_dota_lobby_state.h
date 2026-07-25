@@ -771,6 +771,10 @@ bool restore_lobby_generation(
 bool restore_lobby_generic_lobby_id(
     GBE_LocalLobby &lobby,
     std::uint64_t shared_generic_lobby_id);
+bool apply_source_tv_metadata(
+    GBE_LocalLobby &lobby,
+    std::uint64_t tv_secret_code,
+    std::uint32_t tv_port);
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

@@ -289,10 +289,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(uint32 reques
 
     // Store tv_secret_code and tv_port for SourceTV spectating
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
-        if (tv_secret_code != 0)
-            GBE_local_lobby.tv_secret_code = tv_secret_code;
-        if (tv_port != 0)
-            GBE_local_lobby.tv_port = tv_port;
+        gbe::dota_lobby_state::apply_source_tv_metadata(GBE_local_lobby, tv_secret_code, tv_port);
         GBE_PublishDotaPracticeLobbyMetadata("4508_game_server_info");
     }
 

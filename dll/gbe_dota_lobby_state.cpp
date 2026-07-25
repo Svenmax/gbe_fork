@@ -994,6 +994,23 @@ bool restore_lobby_generic_lobby_id(
     return true;
 }
 
+bool apply_source_tv_metadata(
+    GBE_LocalLobby &lobby,
+    std::uint64_t tv_secret_code,
+    std::uint32_t tv_port)
+{
+    bool changed = false;
+    if (tv_secret_code != 0 && lobby.tv_secret_code != tv_secret_code) {
+        lobby.tv_secret_code = tv_secret_code;
+        changed = true;
+    }
+    if (tv_port != 0 && lobby.tv_port != tv_port) {
+        lobby.tv_port = tv_port;
+        changed = true;
+    }
+    return changed;
+}
+
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

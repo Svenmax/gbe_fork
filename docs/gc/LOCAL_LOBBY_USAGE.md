@@ -53,6 +53,7 @@
 - **cache restore**：shared-to-local restore 的 has_cache_version/cache_version/has_cache_service_id/cache_service_id/cache_service_list/has_cache_sync_version/cache_sync_version 经 `compose_shared_lobby_cache_restore_plan()` 与 `apply_shared_lobby_cache_restore_plan()` 返回字段组变更。
 - **custom_game restore**：shared-to-local restore 经 `restore_lobby_custom_game()` 返回变更；比较复用 `custom_game_details_equal()`。
 - **generation / generic_lobby_id restore**：shared-to-local restore 经 `restore_lobby_generation()` 与 `restore_lobby_generic_lobby_id()` 返回变更；generation counter 同步仍由 Coordinator 负责。
+- **SourceTV metadata local apply**：4508 game server info 的 `tv_secret_code` / `tv_port` 仅通过 `apply_source_tv_metadata()` 写入 Local；零值输入保留既有字段，publish 顺序仍由 post-login handler 原 guard 管理。
 - **launch_steam_auth_***：仅 steam-auth ack 路径通过 `compose_steam_auth_ack_launch_plan()` 与 `apply_steam_auth_ack_launch_plan()` 一次写入 CRC、message sequence 与 ack 标记，再 publish shared state。
 - **launch_4511_seen**：仅匹配 lobby 的 4511 通知通过 `mark_launch_4511_seen()` 幂等标记；首次变更才 publish shared state。
 - **launch_4511_seen restore**：shared-to-local restore 通过 `restore_launch_4511_seen()` 返回字段变更；Coordinator 继续聚合 restore 的 `changed` 结果。
@@ -81,7 +82,7 @@
 ## 6. C1 结论
 
 1. Shared 写路径已单一化到 generation 门控门面；无需本轮改 Store API。
-2. Local 仍是广泛工作副本；queued-state、monotonic launch phase、generic capture state/identity/options/custom_game、source-aware shared launch/runtime identity restore、steam-auth 元数据、4511 标记/restore、owner/options/cache/custom_game/generation/generic_lobby_id restore、lifecycle/postgame state apply、8052 lifecycle pre-write 与 postgame chat tombstone 已采用纯 apply/action/helper 边界。generic capture 的 host sync、client observe 与 pure projection 调用面由 `audit_generic_metadata_capture_modes` 回归保护。
+2. Local 仍是广泛工作副本；queued-state、monotonic launch phase、generic capture state/identity/options/custom_game、source-aware shared launch/runtime identity restore、SourceTV metadata local apply、steam-auth 元数据、4511 标记/restore、owner/options/cache/custom_game/generation/generic_lobby_id restore、lifecycle/postgame state apply、8052 lifecycle pre-write 与 postgame chat tombstone 已采用纯 apply/action/helper 边界。generic capture 的 host sync、client observe 与 pure projection 调用面由 `audit_generic_metadata_capture_modes` 回归保护。
 3. 双轨（local + shared）风险仍在 CURRENT；本清单只冻结入口，不声明状态单一化完成。
 
 ## 7. 停手

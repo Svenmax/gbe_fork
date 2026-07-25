@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | SourceTV metadata local apply helper：4508 game server info 的 `tv_secret_code` / `tv_port` 通过 `apply_source_tv_metadata(...)` 写入 Local，保持零值保留与 publish 顺序 | `.monkeycode/specs/gc-local-shared-sourcetv-metadata-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | audit replay label helper：post-login dispatch audit 的 replay fixture label 提取共用 `extract_replay_fixture_labels(...)` | `.monkeycode/specs/gc-audit-replay-label-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | audit adapter handler call helper：post-login registry adapter body 的 request handler call 提取共用 `extract_adapter_handler_calls(...)` | `.monkeycode/specs/gc-audit-adapter-handler-call-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | audit emsg token resolver：registry inventory audit 的 numeric/`GBE_k...` emsg token 解析共用 `resolve_emsg_token(...)` | `.monkeycode/specs/gc-audit-emsg-token-resolver/`、`tools/_audit_gc_refactor.py` |
