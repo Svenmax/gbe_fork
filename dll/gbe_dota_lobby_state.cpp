@@ -396,6 +396,65 @@ void apply_generic_lobby_state_capture_plan(
         lobby.game_state = plan.game_state;
 }
 
+GenericLobbyRuntimeIdentityCapturePlan compose_generic_lobby_runtime_identity_capture_plan(
+    const GBE_LocalLobby &current_lobby,
+    const std::string &generic_room_name,
+    const std::string &generic_match_id_raw,
+    const std::string &generic_server_id_raw,
+    const std::string &generic_connect,
+    const std::string &generic_game_start_time_raw)
+{
+    GenericLobbyRuntimeIdentityCapturePlan plan{};
+    plan.room_name = generic_room_name;
+    plan.apply_room_name = !generic_room_name.empty();
+
+    plan.match_id = proto_wire::parse_uint64_or_zero(generic_match_id_raw.c_str());
+    plan.apply_match_id =
+        !generic_match_id_raw.empty() &&
+        (plan.match_id != 0ull || current_lobby.match_id == 0ull);
+    const std::uint64_t effective_match_id =
+        plan.apply_match_id ? plan.match_id : current_lobby.match_id;
+
+    plan.preserve_existing_lan_runtime =
+        current_lobby.custom_game.game_id == 0ull &&
+        current_lobby.lan &&
+        effective_match_id != 0ull &&
+        current_lobby.server_id != 0ull &&
+        proto_wire::parse_dota_practice_lobby_connect_ipv4(current_lobby.connect) != 0u;
+
+    plan.server_id = proto_wire::parse_uint64_or_zero(generic_server_id_raw.c_str());
+    plan.apply_server_id =
+        !generic_server_id_raw.empty() &&
+        !plan.preserve_existing_lan_runtime &&
+        (plan.server_id != 0ull ||
+         current_lobby.server_id == 0ull ||
+         effective_match_id == 0ull);
+
+    plan.connect = proto_wire::normalize_dota_practice_lobby_connect(generic_connect);
+    plan.apply_connect = !generic_connect.empty() && !plan.preserve_existing_lan_runtime;
+
+    plan.game_start_time =
+        proto_wire::parse_uint32_or_zero(generic_game_start_time_raw.c_str());
+    plan.apply_game_start_time = !generic_game_start_time_raw.empty();
+    return plan;
+}
+
+void apply_generic_lobby_runtime_identity_capture_plan(
+    GBE_LocalLobby &lobby,
+    const GenericLobbyRuntimeIdentityCapturePlan &plan)
+{
+    if (plan.apply_room_name)
+        lobby.room_name = plan.room_name;
+    if (plan.apply_match_id)
+        lobby.match_id = plan.match_id;
+    if (plan.apply_server_id)
+        lobby.server_id = plan.server_id;
+    if (plan.apply_connect)
+        lobby.connect = plan.connect;
+    if (plan.apply_game_start_time)
+        lobby.game_start_time = plan.game_start_time;
+}
+
 SharedLobbyRuntimeRestorePlan compose_shared_lobby_runtime_restore_plan(
     const GBE_LocalLobby &current_lobby,
     const GBE_SharedDotaLobbyState &shared_lobby,

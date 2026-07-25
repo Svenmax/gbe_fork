@@ -211,6 +211,20 @@ struct GenericLobbyStateCapturePlan {
     bool ignored_stale_state{};
 };
 
+struct GenericLobbyRuntimeIdentityCapturePlan {
+    bool apply_room_name{};
+    std::string room_name;
+    bool apply_match_id{};
+    std::uint64_t match_id{};
+    bool preserve_existing_lan_runtime{};
+    bool apply_server_id{};
+    std::uint64_t server_id{};
+    bool apply_connect{};
+    std::string connect;
+    bool apply_game_start_time{};
+    std::uint32_t game_start_time{};
+};
+
 struct SharedLobbyRuntimeRestorePlan {
     bool apply_state{};
     std::uint32_t state{};
@@ -563,6 +577,16 @@ GenericLobbyStateCapturePlan compose_generic_lobby_state_capture_plan(
 void apply_generic_lobby_state_capture_plan(
     GBE_LocalLobby &lobby,
     const GenericLobbyStateCapturePlan &plan);
+GenericLobbyRuntimeIdentityCapturePlan compose_generic_lobby_runtime_identity_capture_plan(
+    const GBE_LocalLobby &current_lobby,
+    const std::string &generic_room_name,
+    const std::string &generic_match_id_raw,
+    const std::string &generic_server_id_raw,
+    const std::string &generic_connect,
+    const std::string &generic_game_start_time_raw);
+void apply_generic_lobby_runtime_identity_capture_plan(
+    GBE_LocalLobby &lobby,
+    const GenericLobbyRuntimeIdentityCapturePlan &plan);
 SharedLobbyRuntimeRestorePlan compose_shared_lobby_runtime_restore_plan(
     const GBE_LocalLobby &current_lobby,
     const GBE_SharedDotaLobbyState &shared_lobby,

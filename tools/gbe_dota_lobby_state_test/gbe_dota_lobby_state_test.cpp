@@ -246,6 +246,56 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(lobby.game_state, 4u, "generic capture applies game_state");
     }
 
+    // generic runtime identity capture: room/match/server/connect/start_time with LAN preserve.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.room_name = "alpha";
+        lobby.match_id = 100ull;
+        lobby.server_id = 200ull;
+        lobby.connect = "1.2.3.4:27015";
+        lobby.game_start_time = 10u;
+        const auto open_plan = gbe::dota_lobby_state::compose_generic_lobby_runtime_identity_capture_plan(
+            lobby,
+            "beta",
+            "300",
+            "400",
+            "5.6.7.8:27015",
+            "20");
+        ok &= expect_true(open_plan.apply_room_name, "generic identity applies room");
+        ok &= expect_true(open_plan.apply_match_id, "generic identity applies match");
+        ok &= expect_true(open_plan.apply_server_id, "generic identity applies server");
+        ok &= expect_true(open_plan.apply_connect, "generic identity applies connect");
+        ok &= expect_true(open_plan.apply_game_start_time, "generic identity applies start time");
+        gbe::dota_lobby_state::apply_generic_lobby_runtime_identity_capture_plan(lobby, open_plan);
+        ok &= expect_true(lobby.room_name == "beta", "generic identity updates room");
+        ok &= expect_eq_u64(lobby.match_id, 300ull, "generic identity updates match");
+        ok &= expect_eq_u64(lobby.server_id, 400ull, "generic identity updates server");
+        ok &= expect_true(lobby.connect == "5.6.7.8:27015", "generic identity updates connect");
+        ok &= expect_eq_u32(lobby.game_start_time, 20u, "generic identity updates start time");
+
+        lobby = make_active_lobby();
+        lobby.custom_game.game_id = 0ull;
+        lobby.lan = true;
+        lobby.match_id = 100ull;
+        lobby.server_id = 200ull;
+        lobby.connect = "1.2.3.4:27015";
+        const auto preserve_plan = gbe::dota_lobby_state::compose_generic_lobby_runtime_identity_capture_plan(
+            lobby,
+            "",
+            "0",
+            "999",
+            "9.9.9.9:27015",
+            "");
+        ok &= expect_false(preserve_plan.apply_match_id, "generic identity rejects zero match when local match exists");
+        ok &= expect_true(preserve_plan.preserve_existing_lan_runtime, "generic identity preserves launched LAN runtime");
+        ok &= expect_false(preserve_plan.apply_server_id, "generic identity keeps LAN server_id");
+        ok &= expect_false(preserve_plan.apply_connect, "generic identity keeps LAN connect");
+        gbe::dota_lobby_state::apply_generic_lobby_runtime_identity_capture_plan(lobby, preserve_plan);
+        ok &= expect_eq_u64(lobby.match_id, 100ull, "generic identity preserves local match");
+        ok &= expect_eq_u64(lobby.server_id, 200ull, "generic identity preserves local server");
+        ok &= expect_true(lobby.connect == "1.2.3.4:27015", "generic identity preserves local connect");
+    }
+
     // shared runtime restore: retain local RUN when a custom-game READYUP snapshot regresses state.
     {
         GBE_LocalLobby lobby = make_active_lobby();

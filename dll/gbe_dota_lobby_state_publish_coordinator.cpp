@@ -133,27 +133,15 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                     );
                 }
                 gbe::dota_lobby_state::apply_generic_lobby_state_capture_plan(GBE_local_lobby, generic_state_plan);
-                if (!generic_room_name.empty())
-                    GBE_local_lobby.room_name = generic_room_name;
-                const uint64 generic_match_id = gbe::proto_wire::parse_uint64_or_zero(generic_match_id_raw.c_str());
-                if (!generic_match_id_raw.empty() && (generic_match_id != 0ull || GBE_local_lobby.match_id == 0ull))
-                    GBE_local_lobby.match_id = generic_match_id;
-                const uint64 generic_server_id = gbe::proto_wire::parse_uint64_or_zero(generic_server_id_raw.c_str());
-                const bool preserve_existing_lan_runtime =
-                    GBE_local_lobby.custom_game.game_id == 0ull &&
-                    GBE_local_lobby.lan &&
-                    GBE_local_lobby.match_id != 0ull &&
-                    GBE_local_lobby.server_id != 0ull &&
-                    gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(GBE_local_lobby.connect) != 0u;
-                if (!generic_server_id_raw.empty() &&
-                    !preserve_existing_lan_runtime &&
-                    (generic_server_id != 0ull || GBE_local_lobby.server_id == 0ull || GBE_local_lobby.match_id == 0ull))
-                    GBE_local_lobby.server_id = generic_server_id;
-
-                if (!generic_connect.empty() && !preserve_existing_lan_runtime)
-                    GBE_local_lobby.connect = gbe::proto_wire::normalize_dota_practice_lobby_connect(generic_connect);
-                if (!generic_game_start_time_raw.empty())
-                    GBE_local_lobby.game_start_time = gbe::proto_wire::parse_uint32_or_zero(generic_game_start_time_raw.c_str());
+                gbe::dota_lobby_state::apply_generic_lobby_runtime_identity_capture_plan(
+                    GBE_local_lobby,
+                    gbe::dota_lobby_state::compose_generic_lobby_runtime_identity_capture_plan(
+                        GBE_local_lobby,
+                        generic_room_name,
+                        generic_match_id_raw,
+                        generic_server_id_raw,
+                        generic_connect,
+                        generic_game_start_time_raw));
                 if (!generic_allow_cheats_raw.empty())
                     GBE_local_lobby.allow_cheats = gbe::proto_wire::parse_uint32_or_zero(generic_allow_cheats_raw.c_str()) != 0u;
                 if (!generic_fill_with_bots_raw.empty())
