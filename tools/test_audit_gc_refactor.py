@@ -198,6 +198,32 @@ class DirectConditionalFallbackRoutingAuditTest(unittest.TestCase):
         self.assertTrue(any("MESSAGE_ROUTING direct conditional fallback emsgs" in issue for issue in issues))
 
 
+class WrappedHardMissRoutingAuditTest(unittest.TestCase):
+    def test_accepts_centralized_wrapped_hard_miss_routing(self):
+        self.assertEqual([], audit.audit_wrapped_hard_miss_routing())
+
+    def test_rejects_missing_wrapped_hard_miss_helper(self):
+        handler_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "dll", "gbe_dota_post_login_handlers.cpp"))
+        handler_text = handler_text.replace("GBE_HandleDotaWrappedHardMiss", "GBE_HandleDotaWrappedMissInline")
+        issues = audit.audit_wrapped_hard_miss_routing(handler_text=handler_text)
+        self.assertTrue(any("missing explicit hard-miss helper" in issue for issue in issues))
+
+    def test_rejects_wrapped_miss_template_replay(self):
+        handler_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "dll", "gbe_dota_post_login_handlers.cpp"))
+        handler_text = handler_text.replace(
+            "    return GBE_HandleDotaWrappedHardMiss(route_context);",
+            "    return GBE_HandleDotaTemplateReplayRequest(route_context.inner_emsg, reinterpret_cast<const uint8 *>(route_context.body.data()), route_context.body.size(), route_context.has_request_job, route_context.request_job_id);",
+        )
+        issues = audit.audit_wrapped_hard_miss_routing(handler_text=handler_text)
+        self.assertTrue(any("must not route miss to template replay" in issue for issue in issues))
+
+    def test_rejects_wrapped_hard_miss_inventory_drift(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("经 wrapped hard miss helper ", "")
+        issues = audit.audit_wrapped_hard_miss_routing(inventory_text=inventory_text)
+        self.assertTrue(any("wrapped hard miss must mention wrapped hard miss helper" in issue for issue in issues))
+
+
 class PublicHeaderDefinitionAuditTest(unittest.TestCase):
     def test_ignores_virtual_member_destructor(self):
         self.assertEqual(

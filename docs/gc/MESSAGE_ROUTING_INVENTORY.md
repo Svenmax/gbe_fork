@@ -1,6 +1,6 @@
 # 消息路由清单（四轨真相表）
 
-> 源码扫描日期：2026-07-25（direct conditional fallback 与 registry-defensive template routing boundary 显式化）。改入口必须同步更新本表。
+> 源码扫描日期：2026-07-25（direct conditional fallback、wrapped hard miss 与 registry-defensive template routing boundary 显式化）。改入口必须同步更新本表。
 > 分发顺序（post-login）：**registry → 条件/观察 fallback → template_replay**。
 > Hello / ServerHello 经 `handle_dota_client_message` 转调 welcome handlers（不进 post-login registry）。
 
@@ -98,7 +98,7 @@ Adapter 形态：`self->GBE_Handle…`（仍是 GC 成员，非独立服务）�
 | emsg | 归属 | 行为 | 原因 |
 |------|------|------|------|
 | registry hit | REGISTRY | `GBE_DispatchDotaPostLoginRequest` | 主路径 |
-| （未注册 miss） | HARD_MISS | log + return false | B4：删除误落到 SetTeamSlot 的 dead fallback |
+| （未注册 miss） | HARD_MISS | 经 wrapped hard miss helper log + return false | B4：删除误落到 SetTeamSlot 的 dead fallback |
 
 ---
 

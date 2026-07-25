@@ -788,6 +788,49 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
     return issues
 
 
+def audit_wrapped_hard_miss_routing(handler_text=None, inventory_text=None):
+    """Keep wrapped registry misses as an explicit hard stop."""
+    if handler_text is None:
+        handler_text = read(os.path.join(ROOT_DIR, "dll", "gbe_dota_post_login_handlers.cpp"))
+    if inventory_text is None:
+        inventory_text = read(os.path.join(ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+
+    issues = []
+    helper_name = "GBE_HandleDotaWrappedHardMiss"
+    if helper_name not in handler_text:
+        issues.append("wrapped post-login: missing explicit hard-miss helper")
+
+    helper_marker = f"{helper_name}("
+    helper_start = handler_text.find(helper_marker)
+    namespace_end = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest")
+    helper_body = handler_text[helper_start:namespace_end] if helper_start != -1 and namespace_end != -1 else ""
+    if "unregistered wrapped miss" not in helper_body or "return false;" not in helper_body:
+        issues.append("wrapped post-login: hard-miss helper must log and return false")
+    if "GBE_HandleDotaTemplateReplayRequest" in helper_body or "GBE_HandleDotaSetTeamSlot" in helper_body:
+        issues.append("wrapped post-login: hard-miss helper must not route to template replay or SetTeamSlot")
+
+    wrapped_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest")
+    next_handler_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaFindTopSourceTVGamesRequest")
+    wrapped_body = handler_text[wrapped_start:next_handler_start] if wrapped_start != -1 and next_handler_start != -1 else ""
+    if helper_name not in wrapped_body:
+        issues.append("wrapped post-login: request path does not call hard-miss helper")
+    if "GBE_DispatchDotaPostLoginRequest(route_context)" in wrapped_body and helper_name in wrapped_body:
+        if wrapped_body.find("GBE_DispatchDotaPostLoginRequest(route_context)") > wrapped_body.find(helper_name):
+            issues.append("wrapped post-login: hard miss must run after registry dispatch")
+    if "GBE_HandleDotaTemplateReplayRequest" in wrapped_body or "GBE_HandleDotaSetTeamSlot" in wrapped_body:
+        issues.append("wrapped post-login: request path must not route miss to template replay or SetTeamSlot")
+
+    inventory_hard_miss = False
+    for line in inventory_text.splitlines():
+        if "HARD_MISS" in line and "wrapped hard miss helper" in line:
+            inventory_hard_miss = True
+            break
+    if not inventory_hard_miss:
+        issues.append("MESSAGE_ROUTING wrapped hard miss must mention wrapped hard miss helper")
+
+    return issues
+
+
 def audit_retired_gc_internal_header(source_texts=None):
     """D.12.2: the retired internal aggregate header must stay absent."""
     if source_texts is None:
@@ -2190,7 +2233,19 @@ def main():
     print()
 
     print("=" * 70)
-    print("AUDIT 5c: Retired gbe_dota_gc_internal.h boundary")
+    print("AUDIT 5c: Wrapped hard miss routing")
+    print("=" * 70)
+    print("  Action: keep wrapped registry misses as a hard stop behind one explicit boundary.")
+    wrapped_hard_miss_issues = audit_wrapped_hard_miss_routing()
+    if not wrapped_hard_miss_issues:
+        print("  Wrapped hard miss remains centralized and documented")
+    else:
+        for issue in wrapped_hard_miss_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
+    print("AUDIT 5d: Retired gbe_dota_gc_internal.h boundary")
     print("=" * 70)
     print("  Action: keep the retired aggregate header deleted and use dedicated capability headers.")
     gc_internal_slim_issues = audit_retired_gc_internal_header()
@@ -2494,6 +2549,7 @@ def main():
     print(f"  Template blob ownership issues:      {len(template_blob_issues)}")
     print(f"  Registry-defensive template issues:  {len(registry_defensive_template_issues)}")
     print(f"  Direct conditional fallback issues:  {len(direct_conditional_fallback_issues)}")
+    print(f"  Wrapped hard miss issues:            {len(wrapped_hard_miss_issues)}")
     print(f"  GC internal slim boundary issues:    {len(gc_internal_slim_issues)}")
     print(f"  Source-list inclusion issues:        {len(source_list_issues)}")
     print(f"  Handler side-effect seam issues:     {len(side_effect_issues)}")
@@ -2519,7 +2575,7 @@ def main():
     print(f"  CI failure localization issues:       {len(ci_failure_localization_issues)}")
     print(f"  Architecture investment boundary issues: {len(architecture_investment_boundary_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or registry_defensive_template_issues or direct_conditional_fallback_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or registry_defensive_template_issues or direct_conditional_fallback_issues or wrapped_hard_miss_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
         sys.exit(1)
 
 

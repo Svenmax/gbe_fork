@@ -132,6 +132,22 @@ GBE_DotaDirectConditionalFallbackResult GBE_HandleDotaDirectConditionalFallback(
     return {};
 }
 
+bool GBE_HandleDotaWrappedHardMiss(const gbe::dota_gc_router::DotaGcRequestContext &route_context)
+{
+    // B4: unregistered wrapped miss is a hard stop. Former dead path misrouted to
+    // SetTeamSlot (7047); registry owns 7047, so do not invent a mutation here.
+    GBE_GC_DebugLog(
+        "GC_DOTA_LOBBY",
+        "[LOBBY] unregistered wrapped miss emsg=%u has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
+        route_context.inner_emsg,
+        route_context.has_request_job ? 1 : 0,
+        static_cast<unsigned long long>(route_context.request_job_id),
+        route_context.outer_session_field_raw.size(),
+        gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(route_context.body.data()), route_context.body.size(), 48).c_str()
+    );
+    return false;
+}
+
 }
 
 
@@ -491,18 +507,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWrappedPostLoginRequest(const void *p
     if (GBE_DispatchDotaPostLoginRequest(route_context))
         return true;
 
-    // B4: unregistered wrapped miss is a hard stop. Former dead path misrouted to
-    // SetTeamSlot (7047); registry owns 7047, so do not invent a mutation here.
-    GBE_GC_DebugLog(
-        "GC_DOTA_LOBBY",
-        "[LOBBY] unregistered wrapped miss emsg=%u has_job=%d request_job=%llu session_raw_size=%zu body_prefix=%s",
-        route_context.inner_emsg,
-        route_context.has_request_job ? 1 : 0,
-        static_cast<unsigned long long>(route_context.request_job_id),
-        route_context.outer_session_field_raw.size(),
-        gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(route_context.body.data()), route_context.body.size(), 48).c_str()
-    );
-    return false;
+    return GBE_HandleDotaWrappedHardMiss(route_context);
 }
 
 bool Steam_Game_Coordinator::GBE_HandleDotaFindTopSourceTVGamesRequest(
