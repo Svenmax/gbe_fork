@@ -472,8 +472,12 @@ def record_duplicate(seen, duplicates, value):
     seen.add(value)
 
 
+def sorted_numeric_values(values):
+    return sorted(values, key=int)
+
+
 def append_duplicate_issues(issues, duplicates, prefix):
-    for value in sorted(duplicates, key=int):
+    for value in sorted_numeric_values(duplicates):
         issues.append(f"{prefix} {value}")
 
 
@@ -766,7 +770,7 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
             "MESSAGE_ROUTING registry emsgs "
             f"{sorted(inventory_emsgs)} differ from production kTable {sorted(registry_emsgs)}"
         )
-    for emsg in sorted(registry_emsgs & inventory_emsgs, key=int):
+    for emsg in sorted_numeric_values(registry_emsgs & inventory_emsgs):
         production = registry_rows.get(emsg)
         documented = inventory_rows.get(emsg)
         if not production or not documented:

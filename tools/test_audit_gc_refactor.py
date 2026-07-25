@@ -100,6 +100,11 @@ class AppendDuplicateIssuesHelperTest(unittest.TestCase):
         self.assertEqual(["existing"], issues)
 
 
+class SortedNumericValuesHelperTest(unittest.TestCase):
+    def test_sorts_string_values_numerically(self):
+        self.assertEqual(["3", "20", "100"], audit.sorted_numeric_values({"20", "100", "3"}))
+
+
 class DiagnosticReasonInventoryAuditTest(unittest.TestCase):
     def audit(self, header=HEADER, focused=FOCUSED):
         return audit.audit_diagnostic_reason_inventory(header, focused)[0]
