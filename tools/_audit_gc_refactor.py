@@ -879,12 +879,18 @@ def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
         )
 
     inventory_template_only = set()
+    duplicate_inventory_template_only = set()
     for line in inventory_text.splitlines():
         if "TEMPLATE_ONLY" not in line:
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
         if len(cells) >= 2 and cells[1] == "TEMPLATE_ONLY":
-            inventory_template_only.update(re.findall(r'\b\d+\b', cells[0]))
+            for emsg in re.findall(r'\b\d+\b', cells[0]):
+                if emsg in inventory_template_only:
+                    duplicate_inventory_template_only.add(emsg)
+                inventory_template_only.add(emsg)
+    for emsg in sorted(duplicate_inventory_template_only, key=int):
+        issues.append(f"MESSAGE_ROUTING template-only inventory duplicates {emsg}")
     if inventory_template_only != TEMPLATE_ONLY_TEMPLATE_EMSGS:
         issues.append(
             "MESSAGE_ROUTING template-only emsgs "

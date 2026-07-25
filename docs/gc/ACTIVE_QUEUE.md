@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | template-only duplicate inventory guard：template-only inventory 重复 emsg 由 audit 检测，避免 set 比较隐藏重复表格项 | `.monkeycode/specs/gc-template-only-duplicate-inventory-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | registry duplicate inventory guard：registry inventory 重复 emsg 行由 audit 检测，避免 set/dict 比较隐藏重复表格行 | `.monkeycode/specs/gc-registry-duplicate-inventory-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | Local/shared merge duplicate inventory guard：Local/shared merge inventory 重复三元组由 audit 检测，避免 set 比较隐藏重复表格行 | `.monkeycode/specs/gc-local-shared-merge-duplicate-inventory-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | Local/shared merge line-comment guard：补齐 definition audit 的 line comment 伪定义回归测试，锁住 `//` 注释剥离语义 | `.monkeycode/specs/gc-local-shared-merge-line-comment-guard/`、`tools/test_audit_gc_refactor.py` |

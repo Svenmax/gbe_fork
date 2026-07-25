@@ -189,6 +189,15 @@ class TemplateOnlyInventoryGuardAuditTest(unittest.TestCase):
         issues = audit.audit_template_only_inventory_guard(inventory_text=inventory_text)
         self.assertTrue(any("MESSAGE_ROUTING template-only emsgs" in issue for issue in issues))
 
+    def test_rejects_duplicate_template_only_inventory_emsg(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        row = "| 8218 | TEMPLATE_ONLY | synthetic tip success |"
+        inventory_text = inventory_text.replace(row, f"{row}\n{row}")
+        self.assertIn(
+            "MESSAGE_ROUTING template-only inventory duplicates 8218",
+            audit.audit_template_only_inventory_guard(inventory_text=inventory_text),
+        )
+
 
 class DirectConditionalFallbackRoutingAuditTest(unittest.TestCase):
     def test_accepts_centralized_direct_conditional_fallback_routing(self):
