@@ -488,6 +488,13 @@ def numeric_markdown_cell_values(cell):
     return re.findall(r'\b\d+\b', cell)
 
 
+def resolve_emsg_token(token, constants):
+    literal_match = re.fullmatch(r'(\d+)u?', token.strip())
+    if literal_match:
+        return literal_match.group(1)
+    return constants.get(token.strip())
+
+
 def text_between_markers(text, start_marker, end_marker):
     start = text.find(start_marker)
     end = text.find(end_marker)
@@ -788,13 +795,8 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
     )
     for entry in entry_re.finditer(table_text):
         token = entry.group("emsg").strip()
-        numeric = None
-        literal_match = re.fullmatch(r'(\d+)u?', token)
-        if literal_match:
-            numeric = literal_match.group(1)
-        elif token in constants:
-            numeric = constants[token]
-        else:
+        numeric = resolve_emsg_token(token, constants)
+        if numeric is None:
             issues.append(f"registry inventory: cannot resolve registry emsg token {token}")
             continue
         mode = entry.group("mode")

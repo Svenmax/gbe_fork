@@ -94,6 +94,20 @@ class NumericMarkdownCellValuesHelperTest(unittest.TestCase):
         self.assertEqual(["2536", "8744"], audit.numeric_markdown_cell_values("emsg 2536 / fallback 8744"))
 
 
+class ResolveEmsgTokenHelperTest(unittest.TestCase):
+    def test_resolves_numeric_literal(self):
+        self.assertEqual("7091", audit.resolve_emsg_token("7091", {}))
+
+    def test_resolves_unsigned_numeric_literal(self):
+        self.assertEqual("7091", audit.resolve_emsg_token("7091u", {}))
+
+    def test_resolves_named_constant(self):
+        self.assertEqual("7091", audit.resolve_emsg_token("GBE_kDotaJoinChat", {"GBE_kDotaJoinChat": "7091"}))
+
+    def test_returns_none_for_unknown_named_token(self):
+        self.assertIsNone(audit.resolve_emsg_token("GBE_kMissing", {}))
+
+
 class TextBetweenMarkersHelperTest(unittest.TestCase):
     def test_returns_text_from_start_marker_to_before_end_marker(self):
         text = "prefix START body END suffix"
