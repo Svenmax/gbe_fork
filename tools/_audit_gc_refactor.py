@@ -450,6 +450,17 @@ def read(path):
         return f.read()
 
 
+def inventory_section(inventory_text, heading):
+    section_start = inventory_text.find(heading)
+    if section_start < 0:
+        return None
+    section_tail = inventory_text[section_start:]
+    next_section = re.search(r'^##\s+', section_tail[len(heading):], re.MULTILINE)
+    if next_section:
+        return section_tail[:len(heading) + next_section.start()]
+    return section_tail
+
+
 def extract_header_symbols(header_text):
     """Extract external GBE_* function/variable declarations from the header."""
     symbols = set()
@@ -711,16 +722,10 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
             "lifecycle": entry.group("lifecycle"),
         }
 
-    section_start = inventory_text.find("## 1. Registry")
-    if section_start < 0:
+    registry_section = inventory_section(inventory_text, "## 1. Registry")
+    if registry_section is None:
         issues.append("MESSAGE_ROUTING registry inventory missing registry section")
         return issues
-    section_tail = inventory_text[section_start:]
-    section_end_match = re.search(r'^##\s+', section_tail[len("## 1. Registry"):], re.MULTILINE)
-    section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
-    if section_end_match:
-        section_end += len("## 1. Registry")
-    registry_section = inventory_text[section_start:section_end]
     inventory_rows = {}
     inventory_emsgs = set()
     duplicate_inventory_emsgs = set()
@@ -839,18 +844,14 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
         if re.search(rf'case\s+{re.escape(token)}\s*:', switch_body):
             issues.append(f"template replay: registry-defensive emsg {emsg} remains in template-only switch")
 
-    section_start = inventory_text.find("## 4. template_replay")
-    if section_start < 0:
+    inventory_section_text = inventory_section(inventory_text, "## 4. template_replay")
+    if inventory_section_text is None:
         issues.append("MESSAGE_ROUTING registry-defensive inventory missing template_replay section")
         return issues
-    section_tail = inventory_text[section_start:]
-    section_end_match = re.search(r'^##\s+', section_tail[len("## 4. template_replay"):], re.MULTILINE)
-    section_end = section_start + len("## 4. template_replay") + section_end_match.start() if section_end_match else len(inventory_text)
-    inventory_section = inventory_text[section_start:section_end]
 
     inventory_defensive = set()
     duplicate_inventory_defensive = set()
-    for line in inventory_section.splitlines():
+    for line in inventory_section_text.splitlines():
         if "REGISTRY_DEFENSIVE" not in line:
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
@@ -895,18 +896,14 @@ def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
             f"{sorted(switch_emsgs)} differ from expected {sorted(TEMPLATE_ONLY_TEMPLATE_EMSGS)}"
         )
 
-    section_start = inventory_text.find("## 4. template_replay")
-    if section_start < 0:
+    inventory_section_text = inventory_section(inventory_text, "## 4. template_replay")
+    if inventory_section_text is None:
         issues.append("MESSAGE_ROUTING template-only inventory missing template_replay section")
         return issues
-    section_tail = inventory_text[section_start:]
-    section_end_match = re.search(r'^##\s+', section_tail[len("## 4. template_replay"):], re.MULTILINE)
-    section_end = section_start + len("## 4. template_replay") + section_end_match.start() if section_end_match else len(inventory_text)
-    inventory_section = inventory_text[section_start:section_end]
 
     inventory_template_only = set()
     duplicate_inventory_template_only = set()
-    for line in inventory_section.splitlines():
+    for line in inventory_section_text.splitlines():
         if "TEMPLATE_ONLY" not in line:
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
@@ -969,18 +966,14 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
         if f"request_emsg == {token}" in direct_body:
             issues.append(f"direct post-login: inline conditional fallback check remains for {token}")
 
-    section_start = inventory_text.find("## 2. 仍留在 if/fallback 的路径")
-    if section_start < 0:
+    inventory_section_text = inventory_section(inventory_text, "## 2. 仍留在 if/fallback 的路径")
+    if inventory_section_text is None:
         issues.append("MESSAGE_ROUTING direct conditional fallback inventory missing fallback section")
         return issues
-    section_tail = inventory_text[section_start:]
-    section_end_match = re.search(r'^##\s+', section_tail[len("## 2. 仍留在 if/fallback 的路径"):], re.MULTILINE)
-    section_end = section_start + len("## 2. 仍留在 if/fallback 的路径") + section_end_match.start() if section_end_match else len(inventory_text)
-    inventory_section = inventory_text[section_start:section_end]
 
     inventory_conditional = set()
     duplicate_inventory_conditional = set()
-    for line in inventory_section.splitlines():
+    for line in inventory_section_text.splitlines():
         if "CONDITIONAL_" not in line:
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
@@ -1035,17 +1028,13 @@ def audit_wrapped_hard_miss_routing(handler_text=None, inventory_text=None):
     if "GBE_HandleDotaTemplateReplayRequest" in wrapped_body or "GBE_HandleDotaSetTeamSlot" in wrapped_body:
         issues.append("wrapped post-login: request path must not route miss to template replay or SetTeamSlot")
 
-    section_start = inventory_text.find("## 2. 仍留在 if/fallback 的路径")
-    if section_start < 0:
+    inventory_section_text = inventory_section(inventory_text, "## 2. 仍留在 if/fallback 的路径")
+    if inventory_section_text is None:
         issues.append("MESSAGE_ROUTING wrapped hard miss inventory missing fallback section")
         return issues
-    section_tail = inventory_text[section_start:]
-    section_end_match = re.search(r'^##\s+', section_tail[len("## 2. 仍留在 if/fallback 的路径"):], re.MULTILINE)
-    section_end = section_start + len("## 2. 仍留在 if/fallback 的路径") + section_end_match.start() if section_end_match else len(inventory_text)
-    inventory_section = inventory_text[section_start:section_end]
 
     inventory_hard_miss = False
-    for line in inventory_section.splitlines():
+    for line in inventory_section_text.splitlines():
         if "HARD_MISS" in line and "wrapped hard miss helper" in line:
             inventory_hard_miss = True
             break
@@ -1067,18 +1056,14 @@ def audit_legacy_wrapped_parser_guard(source_texts=None, inventory_text=None):
 
     issues = []
     legacy_symbol = "GBE_ExtractWrappedDotaDirectContext"
-    section_start = inventory_text.find("## 5. 解析层职责")
-    if section_start < 0:
+    inventory_section_text = inventory_section(inventory_text, "## 5. 解析层职责")
+    if inventory_section_text is None:
         issues.append("MESSAGE_ROUTING legacy wrapped parser inventory missing parser section")
         return issues
-    section_tail = inventory_text[section_start:]
-    section_end_match = re.search(r'^##\s+', section_tail[len("## 5. 解析层职责"):], re.MULTILINE)
-    section_end = section_start + len("## 5. 解析层职责") + section_end_match.start() if section_end_match else len(inventory_text)
-    inventory_section = inventory_text[section_start:section_end]
 
     inventory_has_marker = any(
         legacy_symbol in line and "LEGACY_UNUSED" in line
-        for line in inventory_section.splitlines()
+        for line in inventory_section_text.splitlines()
     )
     if not inventory_has_marker:
         issues.append("MESSAGE_ROUTING must document GBE_ExtractWrappedDotaDirectContext as LEGACY_UNUSED")
@@ -2004,13 +1989,9 @@ def audit_local_shared_merge_inventory(source_texts=None, inventory_text=None):
     if inventory_text is None:
         inventory_text = read(os.path.join(ROOT_DIR, "docs", "gc", "LOCAL_LOBBY_USAGE.md"))
 
-    section_start = inventory_text.find("## 5. Local/shared merge inventory")
-    if section_start < 0:
+    section_text = inventory_section(inventory_text, "## 5. Local/shared merge inventory")
+    if section_text is None:
         return ["LOCAL_LOBBY merge inventory section not found"]
-    section_text = inventory_text[section_start:]
-    next_section = re.search(r"^##\s+", section_text[len("## 5. Local/shared merge inventory"):], re.MULTILINE)
-    if next_section:
-        section_text = section_text[:len("## 5. Local/shared merge inventory") + next_section.start()]
 
     documented = set()
     duplicate_entries = set()

@@ -31,6 +31,18 @@ FOCUSED = """
 """
 
 
+class InventorySectionHelperTest(unittest.TestCase):
+    def test_returns_section_through_next_level_two_heading(self):
+        text = "intro\n## 1. Alpha\nrow\n### detail\nstill alpha\n## 2. Beta\nother\n"
+        self.assertEqual(
+            "## 1. Alpha\nrow\n### detail\nstill alpha\n",
+            audit.inventory_section(text, "## 1. Alpha"),
+        )
+
+    def test_returns_none_for_missing_heading(self):
+        self.assertIsNone(audit.inventory_section("## 1. Alpha\n", "## 2. Beta"))
+
+
 class DiagnosticReasonInventoryAuditTest(unittest.TestCase):
     def audit(self, header=HEADER, focused=FOCUSED):
         return audit.audit_diagnostic_reason_inventory(header, focused)[0]
