@@ -151,12 +151,14 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             GBE_dota_lobby_generation_counter = gbe::dota_lobby_generation::Counter(
                 gbe::dota_lobby_generation::Generation{synchronized_generation});
         }
-        if (GBE_local_lobby.generation != synchronized_generation) {
-            GBE_local_lobby.generation = synchronized_generation;
+        if (gbe::dota_lobby_state::restore_lobby_generation(
+                GBE_local_lobby,
+                synchronized_generation)) {
             changed = true;
         }
-        if (GBE_local_lobby.generic_lobby_id != shared_lobby.generic_lobby_id) {
-            GBE_local_lobby.generic_lobby_id = shared_lobby.generic_lobby_id;
+        if (gbe::dota_lobby_state::restore_lobby_generic_lobby_id(
+                GBE_local_lobby,
+                shared_lobby.generic_lobby_id)) {
             changed = true;
         }
         const uint64 previous_server_id = GBE_local_lobby.server_id;

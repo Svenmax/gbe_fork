@@ -721,6 +721,28 @@ bool restore_lobby_custom_game(
     return true;
 }
 
+bool restore_lobby_generation(
+    GBE_LocalLobby &lobby,
+    std::uint64_t shared_generation)
+{
+    if (lobby.generation == shared_generation)
+        return false;
+
+    lobby.generation = shared_generation;
+    return true;
+}
+
+bool restore_lobby_generic_lobby_id(
+    GBE_LocalLobby &lobby,
+    std::uint64_t shared_generic_lobby_id)
+{
+    if (lobby.generic_lobby_id == shared_generic_lobby_id)
+        return false;
+
+    lobby.generic_lobby_id = shared_generic_lobby_id;
+    return true;
+}
+
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

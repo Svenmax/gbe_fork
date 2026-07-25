@@ -472,6 +472,27 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(lobby.custom_game.max_players, 10u, "custom game restore updates max_players");
     }
 
+    // restore_lobby_generation / restore_lobby_generic_lobby_id: identity restore.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 7ull;
+        lobby.generic_lobby_id = 70ull;
+        ok &= expect_false(
+            gbe::dota_lobby_state::restore_lobby_generation(lobby, 7ull),
+            "generation restore keeps matching value");
+        ok &= expect_true(
+            gbe::dota_lobby_state::restore_lobby_generation(lobby, 8ull),
+            "generation restore applies shared value");
+        ok &= expect_eq_u64(lobby.generation, 8ull, "generation restore updates local value");
+        ok &= expect_false(
+            gbe::dota_lobby_state::restore_lobby_generic_lobby_id(lobby, 70ull),
+            "generic lobby id restore keeps matching value");
+        ok &= expect_true(
+            gbe::dota_lobby_state::restore_lobby_generic_lobby_id(lobby, 80ull),
+            "generic lobby id restore applies shared value");
+        ok &= expect_eq_u64(lobby.generic_lobby_id, 80ull, "generic lobby id restore updates local value");
+    }
+
     // apply_lifecycle_lobby_state: lifecycle action writes state fields together.
     {
         GBE_LocalLobby lobby = make_active_lobby();
