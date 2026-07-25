@@ -891,9 +891,17 @@ def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
             f"{sorted(switch_emsgs)} differ from expected {sorted(TEMPLATE_ONLY_TEMPLATE_EMSGS)}"
         )
 
+    inventory_section = inventory_text
+    section_start = inventory_text.find("## 4. template_replay")
+    if section_start >= 0:
+        section_tail = inventory_text[section_start:]
+        section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
+        section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+        inventory_section = inventory_text[section_start:section_end]
+
     inventory_template_only = set()
     duplicate_inventory_template_only = set()
-    for line in inventory_text.splitlines():
+    for line in inventory_section.splitlines():
         if "TEMPLATE_ONLY" not in line:
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
