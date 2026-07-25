@@ -1092,6 +1092,11 @@ class PostLoginDispatchAuditTest(unittest.TestCase):
             audit.audit_registry_inventory_guard(inventory_text=inventory_text),
         )
 
+    def test_ignores_rows_after_registry_section_when_separator_is_missing(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("\n---\n\n## 2. 仍留在 if/fallback 的路径", "\n\n## 2. 仍留在 if/fallback 的路径", 1)
+        self.assertEqual([], audit.audit_registry_inventory_guard(inventory_text=inventory_text))
+
 
 class LocalSharedMergeInventoryAuditTest(unittest.TestCase):
     def test_accepts_current_local_shared_merge_inventory(self):

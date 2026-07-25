@@ -716,8 +716,10 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
         issues.append("MESSAGE_ROUTING registry inventory missing registry section")
         return issues
     section_tail = inventory_text[section_start:]
-    section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
+    section_end_match = re.search(r'^##\s+', section_tail[len("## 1. Registry"):], re.MULTILINE)
     section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+    if section_end_match:
+        section_end += len("## 1. Registry")
     registry_section = inventory_text[section_start:section_end]
     inventory_rows = {}
     inventory_emsgs = set()
