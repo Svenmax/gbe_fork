@@ -94,6 +94,18 @@ class NumericMarkdownCellValuesHelperTest(unittest.TestCase):
         self.assertEqual(["2536", "8744"], audit.numeric_markdown_cell_values("emsg 2536 / fallback 8744"))
 
 
+class TextBetweenMarkersHelperTest(unittest.TestCase):
+    def test_returns_text_from_start_marker_to_before_end_marker(self):
+        text = "prefix START body END suffix"
+        self.assertEqual("START body ", audit.text_between_markers(text, "START", "END"))
+
+    def test_returns_empty_string_when_start_marker_is_missing(self):
+        self.assertEqual("", audit.text_between_markers("prefix END", "START", "END"))
+
+    def test_returns_empty_string_when_end_marker_is_missing(self):
+        self.assertEqual("", audit.text_between_markers("START body", "START", "END"))
+
+
 class RecordDuplicateHelperTest(unittest.TestCase):
     def test_first_value_is_seen_without_duplicate(self):
         seen = set()

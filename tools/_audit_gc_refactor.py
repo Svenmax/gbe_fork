@@ -488,6 +488,12 @@ def numeric_markdown_cell_values(cell):
     return re.findall(r'\b\d+\b', cell)
 
 
+def text_between_markers(text, start_marker, end_marker):
+    start = text.find(start_marker)
+    end = text.find(end_marker)
+    return text[start:end] if start != -1 and end != -1 else ""
+
+
 def record_duplicate(seen, duplicates, value):
     if value in seen:
         duplicates.add(value)
@@ -882,9 +888,11 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
         issues.append("template replay: missing explicit registry-defensive routing helper")
 
     helper_marker = f"{helper_name}("
-    helper_start = handler_text.find(helper_marker)
-    request_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest")
-    helper_body = handler_text[helper_start:request_start] if helper_start != -1 and request_start != -1 else ""
+    helper_body = text_between_markers(
+        handler_text,
+        helper_marker,
+        "bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest",
+    )
     helper_emsgs = extract_case_emsgs(helper_body)
     if helper_emsgs != REGISTRY_DEFENSIVE_TEMPLATE_EMSGS:
         append_emsg_set_diff_issue(
@@ -996,9 +1004,11 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
         issues.append("direct post-login: missing explicit conditional fallback helper")
 
     helper_marker = f"{helper_name}("
-    helper_start = handler_text.find(helper_marker)
-    server_assignment_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest")
-    helper_body = handler_text[helper_start:server_assignment_start] if helper_start != -1 and server_assignment_start != -1 else ""
+    helper_body = text_between_markers(
+        handler_text,
+        helper_marker,
+        "bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest",
+    )
     helper_emsgs = extract_request_emsg_comparisons(helper_body)
     if helper_emsgs != DIRECT_CONDITIONAL_FALLBACK_EMSGS:
         append_emsg_set_diff_issue(
@@ -1065,9 +1075,11 @@ def audit_wrapped_hard_miss_routing(handler_text=None, inventory_text=None):
         issues.append("wrapped post-login: missing explicit hard-miss helper")
 
     helper_marker = f"{helper_name}("
-    helper_start = handler_text.find(helper_marker)
-    namespace_end = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest")
-    helper_body = handler_text[helper_start:namespace_end] if helper_start != -1 and namespace_end != -1 else ""
+    helper_body = text_between_markers(
+        handler_text,
+        helper_marker,
+        "bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest",
+    )
     if "unregistered wrapped miss" not in helper_body or "return false;" not in helper_body:
         issues.append("wrapped post-login: hard-miss helper must log and return false")
     if "GBE_HandleDotaTemplateReplayRequest" in helper_body or "GBE_HandleDotaSetTeamSlot" in helper_body:
