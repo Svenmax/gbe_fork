@@ -106,6 +106,20 @@ class TextBetweenMarkersHelperTest(unittest.TestCase):
         self.assertEqual("", audit.text_between_markers("START body", "START", "END"))
 
 
+class MarkerAppearsAfterHelperTest(unittest.TestCase):
+    def test_returns_true_when_marker_follows_reference(self):
+        self.assertTrue(audit.marker_appears_after("registry helper template", "helper", "registry"))
+
+    def test_returns_false_when_marker_precedes_reference(self):
+        self.assertFalse(audit.marker_appears_after("helper registry template", "helper", "registry"))
+
+    def test_returns_false_when_marker_is_missing(self):
+        self.assertFalse(audit.marker_appears_after("registry template", "helper", "registry"))
+
+    def test_returns_false_when_reference_is_missing(self):
+        self.assertFalse(audit.marker_appears_after("helper template", "helper", "registry"))
+
+
 class ContainsFunctionCallHelperTest(unittest.TestCase):
     def test_detects_function_call_with_whitespace(self):
         self.assertTrue(audit.contains_function_call("GBE_DoThing  (value);", "GBE_DoThing"))

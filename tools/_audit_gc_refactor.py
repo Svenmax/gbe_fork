@@ -494,6 +494,12 @@ def text_between_markers(text, start_marker, end_marker):
     return text[start:end] if start != -1 and end != -1 else ""
 
 
+def marker_appears_after(text, marker, reference_marker):
+    marker_position = text.find(marker)
+    reference_position = text.find(reference_marker)
+    return marker_position != -1 and reference_position != -1 and marker_position > reference_position
+
+
 def contains_function_call(text, symbol):
     return bool(re.search(r"\b" + re.escape(symbol) + r"\s*\(", text))
 
@@ -1033,12 +1039,10 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
     )
     if helper_name not in direct_body:
         issues.append("direct post-login: request path does not call conditional fallback helper")
-    if "GBE_DispatchDotaPostLoginRequest(request_context)" in direct_body and helper_name in direct_body:
-        if direct_body.find("GBE_DispatchDotaPostLoginRequest(request_context)") > direct_body.find(helper_name):
-            issues.append("direct post-login: conditional fallback must run after registry dispatch")
-    if helper_name in direct_body and "GBE_HandleDotaTemplateReplayRequest" in direct_body:
-        if direct_body.find(helper_name) > direct_body.find("GBE_HandleDotaTemplateReplayRequest"):
-            issues.append("direct post-login: conditional fallback must run before template replay")
+    if marker_appears_after(direct_body, "GBE_DispatchDotaPostLoginRequest(request_context)", helper_name):
+        issues.append("direct post-login: conditional fallback must run after registry dispatch")
+    if marker_appears_after(direct_body, helper_name, "GBE_HandleDotaTemplateReplayRequest"):
+        issues.append("direct post-login: conditional fallback must run before template replay")
 
     for token in ("8744u", "GBE_kSteamGamesPlayedWithDataBlob", "GBE_kSteamAuthList"):
         if f"request_emsg == {token}" in direct_body:
@@ -1102,9 +1106,8 @@ def audit_wrapped_hard_miss_routing(handler_text=None, inventory_text=None):
     )
     if helper_name not in wrapped_body:
         issues.append("wrapped post-login: request path does not call hard-miss helper")
-    if "GBE_DispatchDotaPostLoginRequest(route_context)" in wrapped_body and helper_name in wrapped_body:
-        if wrapped_body.find("GBE_DispatchDotaPostLoginRequest(route_context)") > wrapped_body.find(helper_name):
-            issues.append("wrapped post-login: hard miss must run after registry dispatch")
+    if marker_appears_after(wrapped_body, "GBE_DispatchDotaPostLoginRequest(route_context)", helper_name):
+        issues.append("wrapped post-login: hard miss must run after registry dispatch")
     if "GBE_HandleDotaTemplateReplayRequest" in wrapped_body or "GBE_HandleDotaSetTeamSlot" in wrapped_body:
         issues.append("wrapped post-login: request path must not route miss to template replay or SetTeamSlot")
 
