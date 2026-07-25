@@ -981,6 +981,15 @@ class PostLoginDispatchAuditTest(unittest.TestCase):
         issues = audit.audit_registry_inventory_guard(inventory_text=inventory_text)
         self.assertTrue(any("MESSAGE_ROUTING registry metadata for 7091" in issue for issue in issues))
 
+    def test_rejects_duplicate_registry_inventory_row(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        row = "| 7091 | WatchGame | WatchGame | D+W | LobbyRead | — |"
+        inventory_text = inventory_text.replace(row, f"{row}\n{row}")
+        self.assertIn(
+            "MESSAGE_ROUTING registry inventory duplicates 7091",
+            audit.audit_registry_inventory_guard(inventory_text=inventory_text),
+        )
+
 
 class LocalSharedMergeInventoryAuditTest(unittest.TestCase):
     def test_accepts_current_local_shared_merge_inventory(self):

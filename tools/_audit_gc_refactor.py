@@ -720,6 +720,7 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
         registry_section = inventory_text[section_start:section_end]
     inventory_rows = {}
     inventory_emsgs = set()
+    duplicate_inventory_emsgs = set()
     for line in registry_section.splitlines():
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
         if len(cells) < 2:
@@ -727,6 +728,8 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
         match = re.fullmatch(r'(\d+)', cells[0])
         if match:
             numeric = match.group(1)
+            if numeric in inventory_emsgs:
+                duplicate_inventory_emsgs.add(numeric)
             inventory_emsgs.add(numeric)
             if len(cells) >= 5:
                 inventory_rows[numeric] = {
@@ -735,6 +738,8 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
                     "lifecycle": cells[4],
                 }
 
+    for emsg in sorted(duplicate_inventory_emsgs, key=int):
+        issues.append(f"MESSAGE_ROUTING registry inventory duplicates {emsg}")
     if registry_emsgs != inventory_emsgs:
         issues.append(
             "MESSAGE_ROUTING registry emsgs "
