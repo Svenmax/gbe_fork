@@ -294,6 +294,15 @@ bool has_launch_server_setup_sync(const GBE_LocalLobby &current_lobby)
         !current_lobby.connect.empty();
 }
 
+bool advance_launch_phase(GBE_LocalLobby &lobby, std::uint32_t phase)
+{
+    if (lobby.launch_phase >= phase)
+        return false;
+
+    lobby.launch_phase = phase;
+    return true;
+}
+
 LaunchRunPlan compose_launch_run_plan(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t setup_synced_launch_phase,

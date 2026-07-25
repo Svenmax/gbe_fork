@@ -47,6 +47,7 @@
 ### 已完成受控切片：queued launch/runtime apply
 
 - `Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState()` 继续以 `compose_queued_lobby_state_apply_plan()` 计算 queued 输入，随后仅通过 `apply_queued_lobby_state_apply_plan()` 应用 `state`、`game_state` 与 `launch_phase`。
+- `Steam_Game_Coordinator::GBE_MarkDotaLaunchPhase()` 仅通过 `advance_launch_phase()` 推进 Local `launch_phase`；既有 generation-gated shared publish 与诊断顺序保持。
 - Local 工作副本、host-only generation-gated shared publish 与 client restore/观察语义保持。
 - rich presence、peer push 与 shared publish 仍处于既有顺序；本切片未提取对象，未引入生产 CompositionRoot。
 

@@ -462,6 +462,7 @@ CustomGameLaunchSetupPlan compose_custom_game_launch_setup_plan(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t synced_launch_phase);
 bool has_launch_server_setup_sync(const GBE_LocalLobby &current_lobby);
+bool advance_launch_phase(GBE_LocalLobby &lobby, std::uint32_t phase);
 LaunchRunPlan compose_launch_run_plan(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t setup_synced_launch_phase,

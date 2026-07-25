@@ -208,6 +208,20 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(plan.launch_phase, GBE_kDotaLaunchPhaseLoaded, "run_plan keeps loaded phase");
     }
 
+    // advance_launch_phase: update once and preserve monotonic launch progress.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.launch_phase = GBE_kDotaLaunchPhaseSetupSynced;
+        ok &= expect_true(
+            gbe::dota_lobby_state::advance_launch_phase(lobby, GBE_kDotaLaunchPhaseRunQueued),
+            "launch phase advances to run queued");
+        ok &= expect_eq_u32(lobby.launch_phase, GBE_kDotaLaunchPhaseRunQueued, "launch phase applies next value");
+        ok &= expect_false(
+            gbe::dota_lobby_state::advance_launch_phase(lobby, GBE_kDotaLaunchPhaseSetupSynced),
+            "launch phase rejects regression");
+        ok &= expect_eq_u32(lobby.launch_phase, GBE_kDotaLaunchPhaseRunQueued, "launch phase keeps monotonic value");
+    }
+
     // compose_queued_lobby_state_apply_plan: state=1 + game_state=0 + sync -> bump to setup_synced.
     {
         GBE_LocalLobby lobby = make_active_lobby();

@@ -118,6 +118,7 @@
 16. [x] D0 审计覆盖：将 Store/Runtime locator 的公开能力头纳入声明/定义审计，防止 locator 生命周期接口与实现漂移。
 17. [x] D0 审计覆盖：将 reconnect network orchestration 的公开能力头纳入声明/定义审计，防止异步 generation gate 接口与实现漂移。
 18. [x] D2 首切片：queued lobby state 以 `compose_queued_lobby_state_apply_plan()` 计算 `state`、`game_state` 与 `launch_phase`，再由 `apply_queued_lobby_state_apply_plan()` 作为唯一 Local 写入入口；rich presence、peer push 和 generation-gated shared publish 顺序保持。
+19. [x] D2 切片：`GBE_MarkDotaLaunchPhase()` 通过 `advance_launch_phase()` 单一化 monotonic `launch_phase` 更新；publish 和诊断仍在 coordinator 中按原顺序执行。
 
 ### 验收
 
@@ -138,6 +139,7 @@
 - R4.5 审计确认 abandon、normal signout 和 reset 三类 deferred slot 在消费时均校验 lobby id 与 generation；新增 flow 回归验证 7035 deferred reset 的 action 类型、reason、generation boundary 及清理选项。
 - R4.6 新增 flow 回归验证 7004 followup 的 details update、25 push 和 pending-finalize action 顺序；handler 直接 details update 归零。
 - D2 queued launch/runtime apply 新增 lobby-state 回归，验证三字段作为一个 field group 写入；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
+- D2 monotonic phase apply 新增 lobby-state 回归，验证推进与回退拒绝；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
 
 ## R5：持续验证与上游同步
 

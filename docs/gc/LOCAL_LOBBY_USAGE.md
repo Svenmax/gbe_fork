@@ -41,7 +41,7 @@
 
 ## 4. Local 字段就地写（摘要）
 
-- **state / game_state / launch_***：queued-state 路径先经 `compose_queued_lobby_state_apply_plan()` 计算，再由 `apply_queued_lobby_state_apply_plan()` 一次写入三字段；其他路径包括 launch_coordinator、publish_coordinator（generic lobby 同步）和 restore 字段级 merge。
+- **state / game_state / launch_***：queued-state 路径先经 `compose_queued_lobby_state_apply_plan()` 计算，再由 `apply_queued_lobby_state_apply_plan()` 一次写入三字段；monotonic phase 推进经 `advance_launch_phase()`；其他路径包括 publish_coordinator（generic lobby 同步）和 restore 字段级 merge。
 - **members / chat / broadcast**：slot、chat、member_coordinator。
 - **owner_hero_id**：只允许 `HOST_AUTHORITY` 列出的 Apply/adopt/publish 路径（禁止 match/inventory 旁路 `=`）。
 - **server_id / connect / match_id**：recover、launch、restore merge。
@@ -49,7 +49,7 @@
 ## 5. C1 结论
 
 1. Shared 写路径已单一化到 generation 门控门面；无需本轮改 Store API。
-2. Local 仍是广泛工作副本；queued-state 已采用 plan → 一次 apply。后续字段组按单路径、单边界推进，减少 handler 内零散字段写。
+2. Local 仍是广泛工作副本；queued-state 与 monotonic launch phase 已采用纯 apply 边界。后续字段组按单路径、单边界推进，减少 handler 内零散字段写。
 3. 双轨（local + shared）风险仍在 CURRENT；本清单只冻结入口，不声明状态单一化完成。
 
 ## 6. 停手
