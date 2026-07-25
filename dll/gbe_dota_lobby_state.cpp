@@ -512,12 +512,134 @@ void apply_generic_lobby_options_capture_plan(
         lobby.bot_dire = plan.bot_dire;
 }
 
-SharedLobbyRuntimeRestorePlan compose_shared_lobby_runtime_restore_plan(
+GenericLobbyCustomGameCapturePlan compose_generic_lobby_custom_game_capture_plan(
+    const std::string &generic_custom_game_mode,
+    const std::string &generic_custom_map_name,
+    const std::string &generic_custom_difficulty_raw,
+    const std::string &generic_custom_game_id_raw,
+    const std::string &generic_custom_min_players_raw,
+    const std::string &generic_custom_max_players_raw,
+    const std::string &generic_custom_game_crc_raw,
+    const std::string &generic_custom_game_timestamp_raw,
+    const std::string &generic_custom_game_penalties_raw)
+{
+    GenericLobbyCustomGameCapturePlan plan{};
+    plan.apply_mode = !generic_custom_game_mode.empty();
+    plan.mode = generic_custom_game_mode;
+    plan.apply_map_name = !generic_custom_map_name.empty();
+    plan.map_name = generic_custom_map_name;
+    plan.apply_difficulty = !generic_custom_difficulty_raw.empty();
+    plan.difficulty = proto_wire::parse_uint32_or_zero(generic_custom_difficulty_raw.c_str());
+    plan.apply_game_id = !generic_custom_game_id_raw.empty();
+    plan.game_id = proto_wire::parse_uint64_or_zero(generic_custom_game_id_raw.c_str());
+    plan.apply_min_players = !generic_custom_min_players_raw.empty();
+    plan.min_players = proto_wire::parse_uint32_or_zero(generic_custom_min_players_raw.c_str());
+    plan.apply_max_players = !generic_custom_max_players_raw.empty();
+    plan.max_players = proto_wire::parse_uint32_or_zero(generic_custom_max_players_raw.c_str());
+    plan.apply_crc = !generic_custom_game_crc_raw.empty();
+    plan.crc = proto_wire::parse_uint64_or_zero(generic_custom_game_crc_raw.c_str());
+    plan.apply_timestamp = !generic_custom_game_timestamp_raw.empty();
+    plan.timestamp = proto_wire::parse_uint32_or_zero(generic_custom_game_timestamp_raw.c_str());
+    plan.apply_penalties = !generic_custom_game_penalties_raw.empty();
+    plan.penalties =
+        proto_wire::parse_uint32_or_zero(generic_custom_game_penalties_raw.c_str()) != 0u;
+    return plan;
+}
+
+void apply_generic_lobby_custom_game_capture_plan(
+    GBE_LocalLobby &lobby,
+    const GenericLobbyCustomGameCapturePlan &plan)
+{
+    if (plan.apply_mode)
+        lobby.custom_game.mode = plan.mode;
+    if (plan.apply_map_name)
+        lobby.custom_game.map_name = plan.map_name;
+    if (plan.apply_difficulty)
+        lobby.custom_game.difficulty = plan.difficulty;
+    if (plan.apply_game_id)
+        lobby.custom_game.game_id = plan.game_id;
+    if (plan.apply_min_players)
+        lobby.custom_game.min_players = plan.min_players;
+    if (plan.apply_max_players)
+        lobby.custom_game.max_players = plan.max_players;
+    if (plan.apply_crc)
+        lobby.custom_game.crc = plan.crc;
+    if (plan.apply_timestamp)
+        lobby.custom_game.timestamp = plan.timestamp;
+    if (plan.apply_penalties)
+        lobby.custom_game.penalties = plan.penalties;
+}
+
+GenericLobbyCapturePlan compose_generic_lobby_capture_plan(
+    const GBE_LocalLobby &current_lobby,
+    const GenericLobbyCaptureInput &input,
+    std::uint32_t setup_synced_launch_phase)
+{
+    GenericLobbyCapturePlan plan{};
+    plan.state = compose_generic_lobby_state_capture_plan(
+        current_lobby,
+        input.has_state,
+        input.state,
+        input.has_game_state,
+        input.game_state,
+        setup_synced_launch_phase);
+    plan.runtime_identity = compose_generic_lobby_runtime_identity_capture_plan(
+        current_lobby,
+        input.room_name,
+        input.match_id_raw,
+        input.server_id_raw,
+        input.connect,
+        input.game_start_time_raw);
+    plan.options = compose_generic_lobby_options_capture_plan(
+        input.allow_cheats_raw,
+        input.fill_with_bots_raw,
+        input.allow_spectating_raw,
+        input.visibility_raw,
+        input.bot_difficulty_radiant_raw,
+        input.bot_difficulty_dire_raw,
+        input.bot_radiant_raw,
+        input.bot_dire_raw);
+    plan.custom_game = compose_generic_lobby_custom_game_capture_plan(
+        input.custom_game_mode,
+        input.custom_map_name,
+        input.custom_difficulty_raw,
+        input.custom_game_id_raw,
+        input.custom_min_players_raw,
+        input.custom_max_players_raw,
+        input.custom_game_crc_raw,
+        input.custom_game_timestamp_raw,
+        input.custom_game_penalties_raw);
+    return plan;
+}
+
+void apply_generic_lobby_capture_plan(
+    GBE_LocalLobby &lobby,
+    const GenericLobbyCapturePlan &plan)
+{
+    apply_generic_lobby_state_capture_plan(lobby, plan.state);
+    apply_generic_lobby_runtime_identity_capture_plan(lobby, plan.runtime_identity);
+    apply_generic_lobby_options_capture_plan(lobby, plan.options);
+    apply_generic_lobby_custom_game_capture_plan(lobby, plan.custom_game);
+    if (plan.state.apply_state || plan.state.apply_game_state)
+        lobby.generic_launch_runtime_generation = lobby.generation;
+    if (plan.runtime_identity.apply_room_name || plan.runtime_identity.apply_match_id ||
+        plan.runtime_identity.apply_server_id || plan.runtime_identity.apply_connect ||
+        plan.runtime_identity.apply_game_start_time)
+        lobby.generic_runtime_identity_generation = lobby.generation;
+}
+
+SourceAwareSharedRuntimeRestorePlan compose_source_aware_shared_runtime_restore_plan(
     const GBE_LocalLobby &current_lobby,
     const GBE_SharedDotaLobbyState &shared_lobby,
     std::uint32_t run_queued_launch_phase)
 {
-    SharedLobbyRuntimeRestorePlan plan{};
+    SourceAwareSharedRuntimeRestorePlan plan{};
+    const bool preserve_local_launch_runtime =
+        current_lobby.generic_launch_runtime_generation != 0ull &&
+        current_lobby.generic_launch_runtime_generation == shared_lobby.generation;
+    const bool preserve_local_runtime_identity =
+        current_lobby.generic_runtime_identity_generation != 0ull &&
+        current_lobby.generic_runtime_identity_generation == shared_lobby.generation;
     plan.ignored_readyup_regression =
         dota_custom_game::has_custom_game_details(current_lobby.custom_game) &&
         current_lobby.match_id != 0ull &&
@@ -528,15 +650,53 @@ SharedLobbyRuntimeRestorePlan compose_shared_lobby_runtime_restore_plan(
     plan.state = shared_lobby.state;
     plan.game_state = shared_lobby.game_state;
     plan.launch_phase = shared_lobby.launch_phase;
-    plan.apply_state = current_lobby.state != plan.state && !plan.ignored_readyup_regression;
-    plan.apply_game_state = current_lobby.game_state != plan.game_state;
-    plan.apply_launch_phase = current_lobby.launch_phase != plan.launch_phase;
+    plan.apply_state = current_lobby.state != plan.state &&
+        !plan.ignored_readyup_regression && !preserve_local_launch_runtime;
+    plan.apply_game_state = current_lobby.game_state != plan.game_state &&
+        !preserve_local_launch_runtime;
+    plan.apply_launch_phase = current_lobby.launch_phase != plan.launch_phase &&
+        !preserve_local_launch_runtime;
+    plan.state_source = plan.ignored_readyup_regression
+        ? SharedLobbyRestoreSource::ReadyupRegression
+        : (preserve_local_launch_runtime
+            ? SharedLobbyRestoreSource::LocalGenericCapture
+            : SharedLobbyRestoreSource::SharedSnapshot);
+    plan.game_state_source = preserve_local_launch_runtime
+        ? SharedLobbyRestoreSource::LocalGenericCapture
+        : SharedLobbyRestoreSource::SharedSnapshot;
+    plan.launch_phase_source = preserve_local_launch_runtime
+        ? SharedLobbyRestoreSource::LocalGenericCapture
+        : SharedLobbyRestoreSource::SharedSnapshot;
+
+    plan.room_name = shared_lobby.room_name;
+    plan.connect = proto_wire::normalize_dota_practice_lobby_connect(shared_lobby.connect);
+    plan.match_id = shared_lobby.match_id;
+    plan.server_id = shared_lobby.server_id;
+    plan.game_start_time = shared_lobby.game_start_time;
+    plan.apply_room_name = current_lobby.room_name != plan.room_name &&
+        !preserve_local_runtime_identity;
+    plan.apply_connect = !plan.connect.empty() && current_lobby.connect != plan.connect &&
+        !preserve_local_runtime_identity;
+    plan.apply_match_id = plan.match_id != 0ull && current_lobby.match_id != plan.match_id &&
+        !preserve_local_runtime_identity;
+    plan.apply_server_id = plan.server_id != 0ull && current_lobby.server_id != plan.server_id &&
+        !preserve_local_runtime_identity;
+    plan.apply_game_start_time = plan.game_start_time != 0u &&
+        current_lobby.game_start_time != plan.game_start_time && !preserve_local_runtime_identity;
+    const SharedLobbyRestoreSource runtime_identity_source = preserve_local_runtime_identity
+        ? SharedLobbyRestoreSource::LocalGenericCapture
+        : SharedLobbyRestoreSource::SharedSnapshot;
+    plan.room_name_source = runtime_identity_source;
+    plan.connect_source = runtime_identity_source;
+    plan.match_id_source = runtime_identity_source;
+    plan.server_id_source = runtime_identity_source;
+    plan.game_start_time_source = runtime_identity_source;
     return plan;
 }
 
-bool apply_shared_lobby_runtime_restore_plan(
+bool apply_source_aware_shared_runtime_restore_plan(
     GBE_LocalLobby &lobby,
-    const SharedLobbyRuntimeRestorePlan &plan)
+    const SourceAwareSharedRuntimeRestorePlan &plan)
 {
     bool changed = false;
     if (plan.apply_state) {
@@ -549,6 +709,26 @@ bool apply_shared_lobby_runtime_restore_plan(
     }
     if (plan.apply_launch_phase) {
         lobby.launch_phase = plan.launch_phase;
+        changed = true;
+    }
+    if (plan.apply_room_name) {
+        lobby.room_name = plan.room_name;
+        changed = true;
+    }
+    if (plan.apply_connect) {
+        lobby.connect = plan.connect;
+        changed = true;
+    }
+    if (plan.apply_match_id) {
+        lobby.match_id = plan.match_id;
+        changed = true;
+    }
+    if (plan.apply_server_id) {
+        lobby.server_id = plan.server_id;
+        changed = true;
+    }
+    if (plan.apply_game_start_time) {
+        lobby.game_start_time = plan.game_start_time;
         changed = true;
     }
     return changed;
@@ -748,51 +928,6 @@ bool restore_launch_4511_seen(
     return true;
 }
 
-bool restore_lobby_connect(
-    GBE_LocalLobby &lobby,
-    const std::string &shared_connect)
-{
-    const std::string normalized_connect = proto_wire::normalize_dota_practice_lobby_connect(shared_connect);
-    if (normalized_connect.empty() || lobby.connect == normalized_connect)
-        return false;
-
-    lobby.connect = normalized_connect;
-    return true;
-}
-
-bool restore_lobby_match_id(
-    GBE_LocalLobby &lobby,
-    std::uint64_t shared_match_id)
-{
-    if (shared_match_id == 0ull || lobby.match_id == shared_match_id)
-        return false;
-
-    lobby.match_id = shared_match_id;
-    return true;
-}
-
-bool restore_lobby_game_start_time(
-    GBE_LocalLobby &lobby,
-    std::uint32_t shared_game_start_time)
-{
-    if (shared_game_start_time == 0u || lobby.game_start_time == shared_game_start_time)
-        return false;
-
-    lobby.game_start_time = shared_game_start_time;
-    return true;
-}
-
-bool restore_lobby_room_name(
-    GBE_LocalLobby &lobby,
-    const std::string &shared_room_name)
-{
-    if (lobby.room_name == shared_room_name)
-        return false;
-
-    lobby.room_name = shared_room_name;
-    return true;
-}
-
 bool restore_lobby_owner_connected(
     GBE_LocalLobby &lobby,
     bool shared_owner_connected)
@@ -879,6 +1014,9 @@ void apply_postgame_lobby_state_plan(
     lobby.chat_channel_name = plan.chat_channel_name;
     lobby.chat_channel_type = 18u;
     lobby.abandon_pre_postgame_chat_channel_id = plan.abandon_pre_postgame_chat_channel_id;
+    lobby.postgame_chat_tombstone_active = plan.abandon_pre_postgame_chat_channel_id != 0ull;
+    lobby.postgame_chat_tombstone_channel_id = plan.abandon_pre_postgame_chat_channel_id;
+    lobby.postgame_chat_tombstone_generation = lobby.postgame_chat_tombstone_active ? lobby.generation : 0ull;
     lobby.has_cache_version = false;
     lobby.cache_version = 0;
     lobby.has_cache_service_id = false;
@@ -887,6 +1025,24 @@ void apply_postgame_lobby_state_plan(
     lobby.has_cache_sync_version = false;
     lobby.cache_sync_version = 0;
     lobby.abandon_postgame_active = true;
+}
+
+bool postgame_chat_tombstone_matches(
+    const GBE_LocalLobby &lobby,
+    std::uint64_t channel_id)
+{
+    return lobby.postgame_chat_tombstone_active &&
+        channel_id != 0ull &&
+        lobby.postgame_chat_tombstone_channel_id == channel_id &&
+        lobby.postgame_chat_tombstone_generation == lobby.generation;
+}
+
+void clear_postgame_chat_tombstone(GBE_LocalLobby &lobby)
+{
+    lobby.abandon_pre_postgame_chat_channel_id = 0ull;
+    lobby.postgame_chat_tombstone_active = false;
+    lobby.postgame_chat_tombstone_channel_id = 0ull;
+    lobby.postgame_chat_tombstone_generation = 0ull;
 }
 
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(

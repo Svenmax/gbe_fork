@@ -144,6 +144,11 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         }
 
         bool changed = false;
+        const gbe::dota_lobby_state::SourceAwareSharedRuntimeRestorePlan runtime_restore_plan =
+            gbe::dota_lobby_state::compose_source_aware_shared_runtime_restore_plan(
+                GBE_local_lobby,
+                shared_lobby,
+                GBE_kDotaLaunchPhaseRunQueued);
         const std::uint64_t synchronized_generation = std::max(
             static_cast<std::uint64_t>(GBE_CurrentDotaLobbyGeneration()),
             shared_lobby.generation);
@@ -164,17 +169,6 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         const uint64 previous_server_id = GBE_local_lobby.server_id;
         const std::string previous_connect = GBE_local_lobby.connect;
 
-        if (gbe::dota_lobby_state::restore_lobby_connect(GBE_local_lobby, shared_lobby.connect))
-            changed = true;
-
-        if (gbe::dota_lobby_state::restore_lobby_match_id(GBE_local_lobby, shared_lobby.match_id))
-            changed = true;
-
-        const gbe::dota_lobby_state::SharedLobbyRuntimeRestorePlan runtime_restore_plan =
-            gbe::dota_lobby_state::compose_shared_lobby_runtime_restore_plan(
-                GBE_local_lobby,
-                shared_lobby,
-                GBE_kDotaLaunchPhaseRunQueued);
         if (runtime_restore_plan.ignored_readyup_regression) {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
@@ -188,21 +182,9 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
             );
         }
-        changed = gbe::dota_lobby_state::apply_shared_lobby_runtime_restore_plan(
+        changed = gbe::dota_lobby_state::apply_source_aware_shared_runtime_restore_plan(
             GBE_local_lobby,
             runtime_restore_plan) || changed;
-
-        if (gbe::dota_lobby_state::restore_lobby_game_start_time(
-                GBE_local_lobby,
-                shared_lobby.game_start_time)) {
-            changed = true;
-        }
-
-        if (gbe::dota_lobby_state::restore_lobby_room_name(
-                GBE_local_lobby,
-                shared_lobby.room_name)) {
-            changed = true;
-        }
 
         changed = gbe::dota_lobby_state::apply_shared_lobby_options_restore_plan(
             GBE_local_lobby,

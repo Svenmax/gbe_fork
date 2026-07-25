@@ -983,6 +983,7 @@ static void test_production_dispatcher_join_chat_modes_and_session()
         TestFixture tf;
         tf.reset();
         install_production_dispatcher(tf);
+        tf.gc.is_server = true;
         tf.gc.GBE_local_lobby.active = true;
         tf.gc.GBE_local_lobby.lobby_id = 0xCAFEu;
         tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.get_local_steam_id().ConvertToUint64();
@@ -1034,6 +1035,7 @@ static void test_chat_join_channel()
 {
     TestFixture tf;
     tf.reset();
+    tf.gc.is_server = true;
     tf.gc.GBE_local_lobby.active = true;
     tf.gc.GBE_local_lobby.lobby_id = 0xCAFEu;
     tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.get_local_steam_id().ConvertToUint64();
@@ -1060,6 +1062,28 @@ static void test_chat_join_channel()
     ++g_tests_passed;
 }
 
+static void test_chat_join_channel_client_observes_without_shared_publish()
+{
+    TestFixture tf;
+    tf.reset();
+    tf.gc.GBE_local_lobby.active = true;
+    tf.gc.GBE_local_lobby.lobby_id = 0xCAFEu;
+    tf.gc.GBE_local_lobby.owner_steam_id = tf.settings.get_local_steam_id().ConvertToUint64();
+    tf.gc.GBE_local_lobby.owner_name = "tester";
+
+    const std::string body = WireBodyBuilder()
+        .bytes(2u, "dota_lobby_chat")
+        .varint(4u, 3u)
+        .take();
+
+    TEST_ASSERT(tf.gc.GBE_HandleDotaJoinChatChannelRequest(body, false, nullptr), "client join chat should return true");
+    TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "client join chat should only push its response");
+    expect_push_payload(tf.recorder.actions[0], GBE_kDotaJoinChatChannelResponse, "client join chat should push 7010");
+    TEST_ASSERT(tf.recorder.lifecycle_events.empty(), "client join chat should not publish shared state");
+
+    ++g_tests_passed;
+}
+
 static void test_chat_leave_postgame_channel_order()
 {
     TestFixture tf;
@@ -1074,6 +1098,11 @@ static void test_chat_leave_postgame_channel_order()
     tf.gc.GBE_local_lobby.chat_channel_name = "postgame";
     tf.gc.GBE_local_lobby.chat_channel_type = 18u;
     tf.gc.GBE_local_lobby.abandon_postgame_active = true;
+    tf.gc.GBE_local_lobby.generation = 9u;
+    tf.gc.GBE_local_lobby.abandon_pre_postgame_chat_channel_id = 0x7009u;
+    tf.gc.GBE_local_lobby.postgame_chat_tombstone_active = true;
+    tf.gc.GBE_local_lobby.postgame_chat_tombstone_channel_id = 0x7009u;
+    tf.gc.GBE_local_lobby.postgame_chat_tombstone_generation = 9u;
     GBE_SharedDotaLobbyState shared;
     shared.valid = true;
     GBE_GetSharedDotaLobbyStateStore().publish(shared);
@@ -1096,7 +1125,46 @@ static void test_chat_leave_postgame_channel_order()
     TEST_ASSERT_EQ(tf.recorder.actions[2].type, GBE_DotaActionType::LobbySnapshotRefresh, "third action should publish lobby state");
     TEST_ASSERT(tf.recorder.actions[2].reason == "7272_leave_chat", "publish reason should identify leave chat");
     TEST_ASSERT(!tf.gc.GBE_local_lobby.has_chat_channel, "postgame leave should clear local chat channel after 7014");
+    TEST_ASSERT(!tf.gc.GBE_local_lobby.postgame_chat_tombstone_active, "postgame leave should clear chat tombstone after 7014");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.postgame_chat_tombstone_channel_id, 0ull, "postgame leave should clear tombstone channel");
+    TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.postgame_chat_tombstone_generation, 0ull, "postgame leave should clear tombstone generation");
     GBE_GetSharedDotaLobbyStateStore().clear();
+
+    ++g_tests_passed;
+}
+
+static void test_chat_leave_postgame_old_channel_tombstone_generation_gate()
+{
+    for (bool current_generation : {true, false}) {
+        TestFixture tf;
+        tf.reset();
+        tf.gc.GBE_local_lobby.active = true;
+        tf.gc.GBE_local_lobby.lobby_id = 0xCAFEu;
+        tf.gc.GBE_local_lobby.generation = 9u;
+        tf.gc.GBE_local_lobby.has_chat_channel = true;
+        tf.gc.GBE_local_lobby.chat_channel_id = 0x9001u;
+        tf.gc.GBE_local_lobby.chat_channel_name = "postgame";
+        tf.gc.GBE_local_lobby.chat_channel_type = 18u;
+        tf.gc.GBE_local_lobby.abandon_postgame_active = true;
+        tf.gc.GBE_local_lobby.abandon_pre_postgame_chat_channel_id = 0x7009u;
+        tf.gc.GBE_local_lobby.postgame_chat_tombstone_active = true;
+        tf.gc.GBE_local_lobby.postgame_chat_tombstone_channel_id = 0x7009u;
+        tf.gc.GBE_local_lobby.postgame_chat_tombstone_generation = current_generation ? 9u : 8u;
+
+        const std::string body = make_leave_chat_body(0x7009u);
+        const bool result = tf.gc.GBE_HandleDotaLeaveChatChannelRequest(body, false, nullptr);
+
+        TEST_ASSERT(result, "old-channel leave should be handled");
+        TEST_ASSERT_EQ(tf.recorder.actions.size(), 1u, "old-channel leave should only queue 7014");
+        expect_push_payload(tf.recorder.actions[0], GBE_kDotaOtherLeftChannel, "old-channel leave should queue 7014");
+        TEST_ASSERT(tf.gc.GBE_local_lobby.has_chat_channel, "old-channel leave should preserve current postgame channel");
+        TEST_ASSERT_EQ(tf.gc.GBE_local_lobby.chat_channel_id, 0x9001u, "old-channel leave should preserve current postgame channel id");
+        if (current_generation) {
+            TEST_ASSERT(tf.gc.GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel(), "current tombstone channel should arm abandon finalize");
+        } else {
+            TEST_ASSERT(!tf.gc.GBE_HasPendingDotaAbandonFinalizeAfterOtherLeftChannel(), "stale tombstone generation should not arm abandon finalize");
+        }
+    }
 
     ++g_tests_passed;
 }
@@ -3563,9 +3631,14 @@ int main()
     RUN_TEST(test_production_dispatcher_direct_only_and_fallbacks);
     std::printf("[run] test_chat_join_channel\n");
     RUN_TEST(test_chat_join_channel);
+    std::printf("[run] test_chat_join_channel_client_observes_without_shared_publish\n");
+    RUN_TEST(test_chat_join_channel_client_observes_without_shared_publish);
 
     std::printf("[run] test_chat_leave_postgame_channel_order\n");
     RUN_TEST(test_chat_leave_postgame_channel_order);
+
+    std::printf("[run] test_chat_leave_postgame_old_channel_tombstone_generation_gate\n");
+    RUN_TEST(test_chat_leave_postgame_old_channel_tombstone_generation_gate);
 
     std::printf("[run] test_chat_leave_postgame_skips_stale_republish_after_shared_clear\n");
     RUN_TEST(test_chat_leave_postgame_skips_stale_republish_after_shared_clear);

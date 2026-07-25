@@ -49,6 +49,11 @@ class Store;
 
 class Steam_User_Items;
 class Steam_GameServer_Items;
+enum class GBE_DotaLobbyCaptureMode : uint8 {
+    Synchronized,
+    WithoutSharedRestore,
+    PureSnapshotProjection,
+};
 struct GCMsgHdr_t;
 #pragma pack( push, 1 )
 struct GCMsgHdrEx_t
@@ -279,7 +284,14 @@ public ISteamGameCoordinator
     void GBE_FinalizeDotaAbandonAfterOtherLeftChannel(uint64 consumed_lobby_id, const char *reason);
     void GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed(uint64 consumed_lobby_id, const char *reason);
     bool GBE_QueueDotaPostGameTeardown(const char *reason, bool wrapped, const std::string *outer_session_field_raw, bool suppress_previous_chat_channel, bool push_cache_unsubscribed, bool push_postgame_join);
-    bool GBE_CaptureCurrentDotaLobbyState(const char *reason, GBE_LocalLobby &snapshot, bool restore_shared = true);
+    bool GBE_CaptureCurrentDotaLobbyState(
+        const char *reason,
+        GBE_LocalLobby &snapshot,
+        GBE_DotaLobbyCaptureMode mode = GBE_DotaLobbyCaptureMode::Synchronized);
+    bool GBE_SyncCapturedDotaLobbyState(const char *reason, bool host_authoritative);
+    bool GBE_CaptureCurrentDotaLobbySnapshotForPayload(
+        const char *reason,
+        GBE_LocalLobby &snapshot);
     bool GBE_CaptureCurrentDotaLobbyStateWithPreviousSlots(const char *reason, const std::vector<GBE_DotaLobbyMemberState> &previous_members, uint64 previous_owner_steam_id, GBE_LocalLobby &snapshot);
     void GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(const char *reason);
     bool GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(const GBE_LocalLobby &lobby, const std::string &player_name, std::string &message, bool preserve_server_id = false);

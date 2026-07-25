@@ -108,7 +108,8 @@ HIGH_RISK_SIDE_EFFECT_APIS = [
     "GBE_SendDotaPracticeLobbyDetailsUpdate",
 ]
 HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE = {
-    ("gbe_dota_chat_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 5,
+    # 7009 routes its host-only write through GBE_SyncCapturedDotaLobbyState.
+    ("gbe_dota_chat_handlers.cpp", "GBE_PublishSharedDotaLobbyState"): 4,
     ("gbe_dota_chat_handlers.cpp", "GBE_SendDotaPracticeLobbyDetailsUpdate"): 3,
     ("gbe_dota_inventory_handlers.cpp", "GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot"): 1,
     ("gbe_dota_inventory_handlers.cpp", "GBE_PushDotaPlayerEquippedItemsCacheToGC"): 2,
@@ -1545,6 +1546,58 @@ def audit_store_write_discipline(source_texts=None):
             issues.append(
                 f"{base}:{line_no}: bare Store::{method}() in production; use publish_if_generation_current_or_newer / compare_update / compare_clear"
             )
+    return issues
+
+
+def audit_payload_snapshot_projection(snapshot_text=None, launch_text=None):
+    snapshot_text = snapshot_text or read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_snapshot_coordinator.cpp"))
+    launch_text = launch_text or read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_launch_coordinator.cpp"))
+    issues = []
+    facade = "GBE_CaptureCurrentDotaLobbySnapshotForPayload"
+    required_snapshot_calls = (
+        ("cache_template_replay", r'GBE_CaptureCurrentDotaLobbySnapshotForPayload\s*\(\s*"cache_template_replay"'),
+        ("cache_payload", r'GBE_CaptureCurrentDotaLobbySnapshotForPayload\s*\(\s*"cache_payload"'),
+        ("replay_current_private_lobby_snapshot", r'GBE_CaptureCurrentDotaLobbySnapshotForPayload\s*\(\s*reason\s*\?\s*reason\s*:\s*"replay_current_private_lobby_snapshot"'),
+    )
+    for reason, pattern in required_snapshot_calls:
+        if not re.search(pattern, snapshot_text):
+            issues.append(f"payload snapshot path {reason}: missing common capture facade")
+    if not re.search(
+        r'GBE_CaptureCurrentDotaLobbySnapshotForPayload\s*\(\s*reason\s*\?\s*reason\s*:\s*"details_update"',
+        launch_text,
+    ):
+        issues.append("payload snapshot path details_update: missing common capture facade")
+    if "GBE_DotaLobbyCaptureMode::PureSnapshotProjection" not in snapshot_text:
+        issues.append("payload snapshot facade: missing pure snapshot projection mode")
+    return issues
+
+
+def audit_generic_metadata_capture_modes(
+    chat_text=None,
+    snapshot_text=None,
+    member_text=None,
+    match_text=None,
+    launch_text=None,
+):
+    """Keep every generic metadata capture caller in an explicit mode."""
+    chat_text = chat_text or read(os.path.join(ROOT_DIR, "dll", "gbe_dota_chat_handlers.cpp"))
+    snapshot_text = snapshot_text or read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_snapshot_coordinator.cpp"))
+    member_text = member_text or read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_state_member_coordinator.cpp"))
+    match_text = match_text or read(os.path.join(ROOT_DIR, "dll", "gbe_dota_match_handlers.cpp"))
+    launch_text = launch_text or read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_launch_coordinator.cpp"))
+    issues = []
+
+    required_calls = (
+        ("7009 host sync", chat_text, r'GBE_CaptureCurrentDotaLobbyState\s*\(\s*"7009_join_chat"\s*,\s*lobby_snapshot\s*,\s*GBE_DotaLobbyCaptureMode::WithoutSharedRestore\s*\).*?GBE_SyncCapturedDotaLobbyState\s*\(\s*"7009_join_chat"\s*,\s*is_server\s*\)', re.S),
+        ("payload facade", snapshot_text, r'GBE_CaptureCurrentDotaLobbyState\s*\(\s*reason\s*,\s*snapshot\s*,\s*GBE_DotaLobbyCaptureMode::PureSnapshotProjection\s*\)', re.S),
+        ("member client observe", snapshot_text, r'GBE_CaptureCurrentDotaLobbyState\s*\(\s*reason\s*,\s*snapshot\s*,\s*GBE_DotaLobbyCaptureMode::WithoutSharedRestore\s*\)', re.S),
+        ("member-change client observe", member_text, r'if\s*\(\s*is_server\s*\|\|.*?GBE_CaptureCurrentDotaLobbyStateWithPreviousSlots\s*\(', re.S),
+        ("7034 runtime observe", match_text, r'GBE_CaptureCurrentDotaLobbyState\s*\(\s*"7034_custom_runtime_member_refresh"\s*,\s*refreshed_lobby\s*,\s*GBE_DotaLobbyCaptureMode::WithoutSharedRestore\s*\)', re.S),
+        ("launch-state client observe", launch_text, r'target->GBE_CaptureCurrentDotaLobbyState\s*\(\s*reason\s*\?\s*reason\s*:\s*"push_launch_state_to_client"\s*,\s*lobby\s*,\s*GBE_DotaLobbyCaptureMode::WithoutSharedRestore\s*\)', re.S),
+    )
+    for name, text, pattern, flags in required_calls:
+        if not re.search(pattern, text, flags):
+            issues.append(f"generic metadata capture mode missing or changed: {name}")
     return issues
 
 

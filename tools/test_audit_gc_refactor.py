@@ -140,6 +140,14 @@ class PublicCapabilityHeaderAuditTest(unittest.TestCase):
                 )
 
 
+class PayloadSnapshotProjectionAuditTest(unittest.TestCase):
+    def test_requires_all_payload_paths_to_use_pure_projection_facade(self):
+        self.assertEqual([], audit.audit_payload_snapshot_projection())
+
+    def test_requires_explicit_generic_metadata_capture_modes(self):
+        self.assertEqual([], audit.audit_generic_metadata_capture_modes())
+
+
 class PublicHeaderDefinitionAuditTest(unittest.TestCase):
     def test_ignores_virtual_member_destructor(self):
         self.assertEqual(

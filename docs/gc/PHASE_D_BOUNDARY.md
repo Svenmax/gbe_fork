@@ -51,6 +51,9 @@
 - generic lobby capture 通过 `compose_generic_lobby_state_capture_plan()` 决定 `state` / `game_state` 的独立写许可，再由 `apply_generic_lobby_state_capture_plan()` 应用；custom-game 启动后的回退拒绝和 stale-state 日志保持。
 - generic lobby capture 的 room/match/server/connect/start_time 通过 `compose_generic_lobby_runtime_identity_capture_plan()` 决定写许可，再由 `apply_generic_lobby_runtime_identity_capture_plan()` 应用；launched LAN runtime 保护保持。
 - generic lobby capture 的 options/bot 通过 `compose_generic_lobby_options_capture_plan()` 决定写许可，再由 `apply_generic_lobby_options_capture_plan()` 应用；空 raw key 跳过语义保持。
+- generic lobby capture 的 custom_game.* 通过 `compose_generic_lobby_custom_game_capture_plan()` 决定写许可，再由 `apply_generic_lobby_custom_game_capture_plan()` 应用；空 raw key 跳过语义保持。
+- generic lobby metadata 读取通过 `GenericLobbyCaptureInput` 输入 `compose_generic_lobby_capture_plan()`，再由 `apply_generic_lobby_capture_plan()` 一次应用 state、runtime identity、options 与 custom_game 字段组；诊断、成员刷新、shared publish 与协议副作用顺序仍由 coordinator 持有。
+- payload snapshot 消费入口统一经 `GBE_CaptureCurrentDotaLobbySnapshotForPayload()`；facade 使用纯无副作用 projection，从 Local 副本应用 generic capture plan、成员合并和 slot normalization。同步 capture 与无 shared restore capture 保留既有 Local apply/owner repair 语义。
 - shared restore 通过 `compose_shared_lobby_runtime_restore_plan()` 决定 `state`、`game_state` 与 `launch_phase` 的字段组更新，再由 `apply_shared_lobby_runtime_restore_plan()` 应用；client restore/host 观察语义与 custom-game READYUP 回退拒绝保持。
 - steam-auth ack 路径通过 `compose_steam_auth_ack_launch_plan()` 和 `apply_steam_auth_ack_launch_plan()` 一次更新 CRC、sequence 和 ack 标记；generation-gated shared publish 与 synthetic push 顺序保持。
 - 匹配 lobby 的 4511 通知仅通过 `mark_launch_4511_seen()` 更新去重标记；首次变更后的 generation-gated shared publish 与 server-id 同步顺序保持。

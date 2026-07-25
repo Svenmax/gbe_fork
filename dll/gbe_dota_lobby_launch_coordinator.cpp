@@ -452,7 +452,11 @@ void Steam_Game_Coordinator::GBE_PushDotaLaunchStateToClientPeer(const char *rea
     }
 
     GBE_LocalLobby lobby{};
-    context.captured_lobby_active = target->GBE_CaptureCurrentDotaLobbyState(reason ? reason : "push_launch_state_to_client", lobby, false);
+    // Launch-state delivery observes the target Local copy after shared restore.
+    context.captured_lobby_active = target->GBE_CaptureCurrentDotaLobbyState(
+        reason ? reason : "push_launch_state_to_client",
+        lobby,
+        GBE_DotaLobbyCaptureMode::WithoutSharedRestore);
     context.captured_lobby = lobby;
     const uint64 target_local_steam_id = target->settings ? target->settings->get_local_steam_id().ConvertToUint64() : 0ull;
     context.last_pushed_game_state = target->GBE_GetLastDotaLaunchStatePushedGameState();
@@ -641,7 +645,7 @@ bool Steam_Game_Coordinator::GBE_QueueDotaPostGameTeardown(const char *reason, b
 bool Steam_Game_Coordinator::GBE_SendDotaPracticeLobbyDetailsUpdate(bool wrapped, const std::string *outer_session_field_raw, const char *reason)
 {
     GBE_LocalLobby lobby{};
-    if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "details_update", lobby))
+    if (!GBE_CaptureCurrentDotaLobbySnapshotForPayload(reason ? reason : "details_update", lobby))
         return false;
 
     if (GBE_ShouldSuppressDotaAbandonedLobby(lobby.lobby_id)) {

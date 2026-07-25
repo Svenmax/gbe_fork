@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| （空） | R2 审计收尾、R3 聚合头与公开符号审计收尾、R4.1 至 R4.6、queued launch/runtime、monotonic launch phase、generic capture state/identity/options、shared runtime restore、steam-auth 元数据、4511 标记/restore、connect/match/start_time/room/owner/options/cache/custom_game/generation/generic_lobby_id restore、lifecycle/postgame state apply 单写入切片已完成；默认 D0 修 bug | — | — | verification --full | PHASE_D / PHASE_E_EXIT |
+| （空） | 三个后续规格均已完成，当前队列清空 | — | generic metadata publish、8052 lifecycle pre-write、postgame chat tombstone 已独立收尾 | `git diff --check`、verification --full | PHASE_D / PHASE_E_EXIT |
 
 ## 本周不做
 
@@ -21,11 +21,18 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | postgame chat tombstone：旧 postgame chat channel 显式记录 tombstone channel/generation，并以 helper 统一 old-channel 7272 与 7014 retrieval 的 generation-scoped 消费 | `.monkeycode/specs/gc-postgame-chat-tombstone/`、`LOCAL_LOBBY_USAGE.md` |
+| 2026-07-25 | 8052 lifecycle pre-write：direct/wrapped 统一经 `LocalLifecyclePreWrite` action 在 runtime queue / fallback publish 前一次写入 Local lifecycle 字段组 | `.monkeycode/specs/gc-8052-lifecycle-pre-write/`、`LOCAL_LOBBY_USAGE.md` |
+| 2026-07-25 | generic metadata publish：盘点全部 capture 调用点，冻结 7009 host sync、client observe、cache/replay/details pure projection 契约并增加审计回归 | `.monkeycode/specs/gc-generic-metadata-publish/`、`LOCAL_LOBBY_USAGE.md` |
+| 2026-07-25 | D2 规划收尾：generic metadata publish、8052 lifecycle pre-write 与 postgame chat tombstone 已拆为独立待实施规格 | `.monkeycode/specs/gc-generic-metadata-publish/`、`.monkeycode/specs/gc-8052-lifecycle-pre-write/`、`.monkeycode/specs/gc-postgame-chat-tombstone/` |
+| 2026-07-25 | D2 切片：same-generation Local generic capture 与 shared snapshot 竞争时，以 source-aware restore plan 保留 Local launch/runtime identity 字段组 | `gc-launch-runtime-single-write/tasklist.md` |
+| 2026-07-25 | D2 切片：7009 host capture 经显式同步边界发布 shared Store，client 保持 observe-only | `gc-launch-runtime-single-write/tasklist.md` |
+| 2026-07-25 | D2 切片：cache、replay 与 details payload 统一 capture facade | `gc-launch-runtime-single-write/tasklist.md` |
+| 2026-07-25 | D2 切片：payload facade 收敛为纯 snapshot projection | `gc-launch-runtime-single-write/tasklist.md` |
+| 2026-07-25 | D2 切片：generic metadata capture 收敛为聚合 plan/apply | `gc-launch-runtime-single-write/tasklist.md` |
+| 2026-07-25 | D2 切片：generic capture 的 custom_game 字段组收敛为 plan/apply | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | D2 切片：generic capture 的 options/bot 字段组收敛为 plan/apply | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | D2 切片：generic capture 的 room/match/server/connect/start_time 收敛为 plan/apply | `REFACTOR_EXECUTION_PLAN.md` |
-| 2026-07-25 | D2 切片：shared restore 的 generation/generic_lobby_id 收敛为变更返回 helper | `REFACTOR_EXECUTION_PLAN.md` |
-| 2026-07-25 | D2 切片：shared restore 的 custom_game 收敛为变更返回 helper | `REFACTOR_EXECUTION_PLAN.md` |
-| 2026-07-25 | D2 切片：shared restore 的 cache 字段组收敛为 plan/apply | `REFACTOR_EXECUTION_PLAN.md` |
 
 ## 队列规则
 

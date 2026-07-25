@@ -10,7 +10,15 @@ GBE_DotaActionList build_transition_actions(const TransitionEffects &effects)
     const auto &transition = effects.transition;
     GBE_DotaActionList actions;
 
-    if (transition.apply_lobby_state && !transition.queue_runtime_lobby_update) {
+    if (effects.local_lifecycle_pre_write && transition.apply_lobby_state) {
+        GBE_DotaAction action;
+        action.type = GBE_DotaActionType::LocalLifecyclePreWrite;
+        action.lobby_state = transition.next_state;
+        action.lobby_game_state = transition.next_game_state;
+        action.launch_phase = transition.launch_phase;
+        action.reason = transition.reason;
+        actions.push_back(std::move(action));
+    } else if (transition.apply_lobby_state && !transition.queue_runtime_lobby_update) {
         GBE_DotaAction action;
         action.type = GBE_DotaActionType::LobbyStateApply;
         action.lobby_state = transition.next_state;
@@ -28,7 +36,7 @@ GBE_DotaActionList build_transition_actions(const TransitionEffects &effects)
         actions.push_back(std::move(action));
     }
 
-    if (transition.mark_launch_phase) {
+    if (transition.mark_launch_phase && !effects.local_lifecycle_pre_write) {
         GBE_DotaAction action;
         action.type = GBE_DotaActionType::LaunchPhaseMark;
         action.launch_phase = transition.launch_phase;

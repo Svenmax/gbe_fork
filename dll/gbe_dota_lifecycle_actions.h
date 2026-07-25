@@ -62,6 +62,7 @@ struct TransitionEffects {
     bool update_local_member_runtime{};
     bool publish_local_member_data{};
     bool fallback_publish_on_runtime_update_failure{};
+    bool local_lifecycle_pre_write{};
 };
 
 GBE_DotaActionList build_transition_actions(const TransitionEffects &effects);

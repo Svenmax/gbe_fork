@@ -99,6 +99,7 @@
 //   PendingResetAfterCacheUnsubscribed lobby_id
 //   PendingResetAfterCacheUnsubscribedClear lobby_id
 //   PendingNormalSignoutFinalizeAfterCacheUnsubscribed lobby_id
+//   LocalLifecyclePreWrite lobby_state, lobby_game_state, launch_phase
 //   LobbyStateApply       lobby_state, lobby_game_state
 //   PostGameLobbyStateApply lobby_state, lobby_game_state, item_id=pre_channel,
 //                           job_id=post_channel, payload=channel_name, reason
@@ -146,6 +147,7 @@ enum class GBE_DotaActionType {
     PendingResetAfterCacheUnsubscribed, // defer full reset until cache unsubscribe is observed
     PendingResetAfterCacheUnsubscribedClear, // clear deferred reset after postgame teardown is queued
     PendingNormalSignoutFinalizeAfterCacheUnsubscribed, // defer normal signout cleanup until 25 is retrieved
+    LocalLifecyclePreWrite, // apply local lifecycle state and launch phase before async/publish effects
     LobbyStateApply,      // apply local lobby state and game state
     PostGameLobbyStateApply, // apply postgame lobby chat/state/cache patch before publish
     LobbyMemberRuntimeUpdate, // apply connected/hero state to a lobby member
@@ -185,6 +187,7 @@ constexpr const char *GBE_DescribeDotaActionType(GBE_DotaActionType type)
         case GBE_DotaActionType::PendingResetAfterCacheUnsubscribed: return "pending_reset_after_cache_unsubscribed";
         case GBE_DotaActionType::PendingResetAfterCacheUnsubscribedClear: return "pending_reset_after_cache_unsubscribed_clear";
         case GBE_DotaActionType::PendingNormalSignoutFinalizeAfterCacheUnsubscribed: return "pending_normal_signout_finalize_after_cache_unsubscribed";
+        case GBE_DotaActionType::LocalLifecyclePreWrite: return "local_lifecycle_pre_write";
         case GBE_DotaActionType::LobbyStateApply: return "lobby_state_apply";
         case GBE_DotaActionType::PostGameLobbyStateApply: return "postgame_lobby_state_apply";
         case GBE_DotaActionType::LobbyMemberRuntimeUpdate: return "lobby_member_runtime_update";

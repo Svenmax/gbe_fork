@@ -74,12 +74,12 @@ using GBE_DotaPracticeLobbyBroadcastChannelRequest = gbe::proto_wire::DotaPracti
 //   3. Mutate GBE_local_lobby: has_chat_channel=true, chat_channel_id
 //      (generate if 0), chat_channel_name, chat_channel_type [coordinator]
 //   4. If generic_lobby_id != 0: RefreshLobbyCallbacksForDota() [coordinator]
-//   5. GBE_PublishSharedDotaLobbyState("7009_join_chat") [network publish]
-//   6. GBE_CaptureCurrentDotaLobbyState -> lobby_snapshot [coordinator read]
+//   5. GBE_CaptureCurrentDotaLobbyState -> lobby_snapshot [coordinator read]
+//   6. GBE_SyncCapturedDotaLobbyState host-only publish [coordinator]
 //   7. Build 7010 payload (pure: GBE_AdaptDotaJoinChatChannelResponsePayload)
 //   8. GBE_PushDotaResponse(7010) [coordinator: push_incoming_now]
 //   9. Log
-//   Invariant: lobby mutation precedes publish precedes response.
+//   Invariant: lobby mutation precedes capture, host publish, and response.
 //
 // GBE_HandleDotaChatMessageRequest (emsg 7273, outgoing):
 //   1. Parse: text (field 1), channel_id (field 2), account_id (field 3),
@@ -211,7 +211,7 @@ inline LeaveChatDecision compute_leave_chat_decision(
         lobby.chat_channel_type == 18u;
     d.matches_current_postgame_channel = (d.channel_id == d.local_channel_id);
     d.matches_pre_postgame_channel =
-        d.pre_postgame_channel_id != 0 && d.channel_id == d.pre_postgame_channel_id;
+        gbe::dota_lobby_state::postgame_chat_tombstone_matches(lobby, d.channel_id);
     d.leaving_non_current_channel_during_abandon =
         d.leaving_postgame_channel &&
         !d.matches_current_postgame_channel &&
@@ -219,7 +219,7 @@ inline LeaveChatDecision compute_leave_chat_decision(
     d.leaving_legacy_channel_after_signout =
         d.leaving_postgame_channel &&
         !d.matches_current_postgame_channel &&
-        d.pre_postgame_channel_id == 0;
+        !lobby.postgame_chat_tombstone_active;
     d.request_matches_local = (d.channel_id == d.local_channel_id);
     return d;
 }
@@ -269,11 +269,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
             steam_client->steam_matchmaking->RefreshLobbyCallbacksForDota();
     }
 
-    GBE_PublishSharedDotaLobbyState("7009_join_chat");
-
     GBE_LocalLobby lobby_snapshot{};
-    if (!GBE_CaptureCurrentDotaLobbyState("7009_join_chat", lobby_snapshot))
+    // 7009 is the only generic-metadata host-sync path: clients observe locally,
+    // while the host publishes the completed Local capture before the 7010 response.
+    if (!GBE_CaptureCurrentDotaLobbyState(
+            "7009_join_chat",
+            lobby_snapshot,
+            GBE_DotaLobbyCaptureMode::WithoutSharedRestore))
         lobby_snapshot = GBE_local_lobby;
+    GBE_SyncCapturedDotaLobbyState("7009_join_chat", is_server);
 
     std::string response_7010;
     if (!GBE_AdaptDotaJoinChatChannelResponsePayload(
@@ -579,7 +583,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         GBE_local_lobby.chat_channel_id = 0;
         GBE_local_lobby.chat_channel_name.clear();
         GBE_local_lobby.chat_channel_type = 0;
-        GBE_local_lobby.abandon_pre_postgame_chat_channel_id = 0;
+        gbe::dota_lobby_state::clear_postgame_chat_tombstone(GBE_local_lobby);
 
         std::string persona_message;
         if (!GBE_PrepareDotaPersonaStatePeripheralMessage(GBE_kDotaAbandonPersonaStateInitHex, steam_id, lobby_id, persona_message)) {

@@ -76,6 +76,9 @@ struct GBE_LocalLobby
     std::uint64_t cache_sync_version{};
     bool abandon_postgame_active{};
     std::uint64_t abandon_pre_postgame_chat_channel_id{};
+    bool postgame_chat_tombstone_active{};
+    std::uint64_t postgame_chat_tombstone_channel_id{};
+    std::uint64_t postgame_chat_tombstone_generation{};
     bool pending_leave_after_7040{};
     std::uint64_t pending_leave_lobby_id{};
     bool seen_local_in_generic_lobby{};
@@ -83,6 +86,8 @@ struct GBE_LocalLobby
     bool waiting_join_confirmation_logged{};
     bool owner_adoption_suppressed_logged{};
     bool ignored_early_arcade_launch{};
+    std::uint64_t generic_launch_runtime_generation{};
+    std::uint64_t generic_runtime_identity_generation{};
     std::chrono::high_resolution_clock::time_point created{};
 };
 
@@ -244,13 +249,94 @@ struct GenericLobbyOptionsCapturePlan {
     std::uint64_t bot_dire{};
 };
 
-struct SharedLobbyRuntimeRestorePlan {
+struct GenericLobbyCustomGameCapturePlan {
+    bool apply_mode{};
+    std::string mode;
+    bool apply_map_name{};
+    std::string map_name;
+    bool apply_difficulty{};
+    std::uint32_t difficulty{};
+    bool apply_game_id{};
+    std::uint64_t game_id{};
+    bool apply_min_players{};
+    std::uint32_t min_players{};
+    bool apply_max_players{};
+    std::uint32_t max_players{};
+    bool apply_crc{};
+    std::uint64_t crc{};
+    bool apply_timestamp{};
+    std::uint32_t timestamp{};
+    bool apply_penalties{};
+    bool penalties{};
+};
+
+struct GenericLobbyCaptureInput {
+    bool has_state{};
+    std::uint32_t state{};
+    bool has_game_state{};
+    std::uint32_t game_state{};
+    std::string room_name;
+    std::string match_id_raw;
+    std::string server_id_raw;
+    std::string connect;
+    std::string game_start_time_raw;
+    std::string allow_cheats_raw;
+    std::string fill_with_bots_raw;
+    std::string allow_spectating_raw;
+    std::string visibility_raw;
+    std::string bot_difficulty_radiant_raw;
+    std::string bot_difficulty_dire_raw;
+    std::string bot_radiant_raw;
+    std::string bot_dire_raw;
+    std::string custom_game_mode;
+    std::string custom_map_name;
+    std::string custom_difficulty_raw;
+    std::string custom_game_id_raw;
+    std::string custom_min_players_raw;
+    std::string custom_max_players_raw;
+    std::string custom_game_crc_raw;
+    std::string custom_game_timestamp_raw;
+    std::string custom_game_penalties_raw;
+};
+
+struct GenericLobbyCapturePlan {
+    GenericLobbyStateCapturePlan state;
+    GenericLobbyRuntimeIdentityCapturePlan runtime_identity;
+    GenericLobbyOptionsCapturePlan options;
+    GenericLobbyCustomGameCapturePlan custom_game;
+};
+
+enum class SharedLobbyRestoreSource {
+    SharedSnapshot,
+    LocalGenericCapture,
+    ReadyupRegression,
+};
+
+struct SourceAwareSharedRuntimeRestorePlan {
     bool apply_state{};
     std::uint32_t state{};
+    SharedLobbyRestoreSource state_source{SharedLobbyRestoreSource::SharedSnapshot};
     bool apply_game_state{};
     std::uint32_t game_state{};
+    SharedLobbyRestoreSource game_state_source{SharedLobbyRestoreSource::SharedSnapshot};
     bool apply_launch_phase{};
     std::uint32_t launch_phase{};
+    SharedLobbyRestoreSource launch_phase_source{SharedLobbyRestoreSource::SharedSnapshot};
+    bool apply_room_name{};
+    std::string room_name;
+    SharedLobbyRestoreSource room_name_source{SharedLobbyRestoreSource::SharedSnapshot};
+    bool apply_connect{};
+    std::string connect;
+    SharedLobbyRestoreSource connect_source{SharedLobbyRestoreSource::SharedSnapshot};
+    bool apply_match_id{};
+    std::uint64_t match_id{};
+    SharedLobbyRestoreSource match_id_source{SharedLobbyRestoreSource::SharedSnapshot};
+    bool apply_server_id{};
+    std::uint64_t server_id{};
+    SharedLobbyRestoreSource server_id_source{SharedLobbyRestoreSource::SharedSnapshot};
+    bool apply_game_start_time{};
+    std::uint32_t game_start_time{};
+    SharedLobbyRestoreSource game_start_time_source{SharedLobbyRestoreSource::SharedSnapshot};
     bool ignored_readyup_regression{};
 };
 
@@ -618,13 +704,33 @@ GenericLobbyOptionsCapturePlan compose_generic_lobby_options_capture_plan(
 void apply_generic_lobby_options_capture_plan(
     GBE_LocalLobby &lobby,
     const GenericLobbyOptionsCapturePlan &plan);
-SharedLobbyRuntimeRestorePlan compose_shared_lobby_runtime_restore_plan(
+GenericLobbyCustomGameCapturePlan compose_generic_lobby_custom_game_capture_plan(
+    const std::string &generic_custom_game_mode,
+    const std::string &generic_custom_map_name,
+    const std::string &generic_custom_difficulty_raw,
+    const std::string &generic_custom_game_id_raw,
+    const std::string &generic_custom_min_players_raw,
+    const std::string &generic_custom_max_players_raw,
+    const std::string &generic_custom_game_crc_raw,
+    const std::string &generic_custom_game_timestamp_raw,
+    const std::string &generic_custom_game_penalties_raw);
+void apply_generic_lobby_custom_game_capture_plan(
+    GBE_LocalLobby &lobby,
+    const GenericLobbyCustomGameCapturePlan &plan);
+GenericLobbyCapturePlan compose_generic_lobby_capture_plan(
+    const GBE_LocalLobby &current_lobby,
+    const GenericLobbyCaptureInput &input,
+    std::uint32_t setup_synced_launch_phase);
+void apply_generic_lobby_capture_plan(
+    GBE_LocalLobby &lobby,
+    const GenericLobbyCapturePlan &plan);
+SourceAwareSharedRuntimeRestorePlan compose_source_aware_shared_runtime_restore_plan(
     const GBE_LocalLobby &current_lobby,
     const GBE_SharedDotaLobbyState &shared_lobby,
     std::uint32_t run_queued_launch_phase);
-bool apply_shared_lobby_runtime_restore_plan(
+bool apply_source_aware_shared_runtime_restore_plan(
     GBE_LocalLobby &lobby,
-    const SharedLobbyRuntimeRestorePlan &plan);
+    const SourceAwareSharedRuntimeRestorePlan &plan);
 SharedLobbyOptionsRestorePlan compose_shared_lobby_options_restore_plan(
     const GBE_LocalLobby &current_lobby,
     const GBE_SharedDotaLobbyState &shared_lobby);
@@ -647,18 +753,6 @@ bool mark_launch_4511_seen(GBE_LocalLobby &lobby);
 bool restore_launch_4511_seen(
     GBE_LocalLobby &lobby,
     bool launch_4511_seen);
-bool restore_lobby_connect(
-    GBE_LocalLobby &lobby,
-    const std::string &shared_connect);
-bool restore_lobby_match_id(
-    GBE_LocalLobby &lobby,
-    std::uint64_t shared_match_id);
-bool restore_lobby_game_start_time(
-    GBE_LocalLobby &lobby,
-    std::uint32_t shared_game_start_time);
-bool restore_lobby_room_name(
-    GBE_LocalLobby &lobby,
-    const std::string &shared_room_name);
 bool restore_lobby_owner_connected(
     GBE_LocalLobby &lobby,
     bool shared_owner_connected);
@@ -684,6 +778,10 @@ void apply_lifecycle_lobby_state(
 void apply_postgame_lobby_state_plan(
     GBE_LocalLobby &lobby,
     const PostGameLobbyStateApplyPlan &plan);
+bool postgame_chat_tombstone_matches(
+    const GBE_LocalLobby &lobby,
+    std::uint64_t channel_id);
+void clear_postgame_chat_tombstone(GBE_LocalLobby &lobby);
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t ready_state,

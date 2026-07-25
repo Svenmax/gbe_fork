@@ -94,6 +94,18 @@ The coordinator receives explicit references to the shared Store, typed handler 
 
 Client and gameserver local lobby state remain separate. Shared coordination occurs through the application Store, using immutable snapshots and generation-aware commits.
 
+Generic lobby metadata capture first creates a pure `GenericLobbyCapturePlan` from raw lobby metadata, then applies state, runtime identity, options, and custom-game fields to the Local lobby in one boundary. The coordinator retains stale-state diagnostics, member refresh, protocol effects, and shared Store synchronization decisions.
+
+Cache, replay, and lobby-details payload consumers use `GBE_CaptureCurrentDotaLobbySnapshotForPayload()` as their common pure projection entry. It starts from a Local copy, applies generic capture and member/runtime merge rules to that copy, and preserves Local state, generic metadata, shared Store, and owner repair/adopt behavior.
+
+`GBE_SyncCapturedDotaLobbyState()` is the explicit coordinator boundary for host capture propagation. The 7009 join-chat path is the generic metadata host-sync path: it completes Local capture, lets the host publish through the generation-gated publish facade, then emits 7010. Member-change, 7034 runtime-member refresh, and launch-state push capture paths are client observe paths; cache, replay, and details use the pure payload projection facade. `audit_generic_metadata_capture_modes` protects this mode contract.
+
+Incremental client restore composes `SourceAwareSharedRuntimeRestorePlan` before synchronizing Local generation, then applies `state`, `game_state`, `launch_phase`, `room_name`, `connect`, `match_id`, `server_id`, and `game_start_time` in one pure boundary. A same-generation Local generic capture owns its launch/runtime or runtime-identity field group; shared snapshot values remain the source for ordinary client observation, while full server adopt keeps its established path.
+
+The 8052 custom-game started-loading lifecycle path uses `LocalLifecyclePreWrite` as its action boundary. Direct and wrapped requests share the same action sequence: pre-write Local lifecycle fields first, then attempt the runtime lobby details update, with fallback shared publish and details update still guarded by the runtime queue result.
+
+Postgame teardown records old chat channel suppression as explicit Local tombstone state: active flag, channel id, and generation. The tombstone helper is the shared matching boundary for old-channel 7272 handling and queued 7014 retrieval finalization, while current postgame channel leave clears the tombstone in one helper call.
+
 ## Request Routing
 
 Direct and wrapped GC requests are normalized into `DotaGcRequestContext`. The context records the inner message ID, request body, source and target jobs, request path, and wrapped session metadata.

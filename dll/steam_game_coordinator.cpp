@@ -1480,7 +1480,11 @@ EGCResults Steam_Game_Coordinator::RetrieveMessage( uint32 *punMsgType, void *pu
     const uint32 retrieved_emsg = GBE_GC_MaskedEMsg(*punMsgType);
     const bool retrieved_other_left_matches_abandon_channel =
         retrieved_emsg == GBE_kDotaOtherLeftChannel &&
-        GBE_IsDotaOtherLeftChannelPayloadForChannel(message.msg_body, GBE_local_lobby.abandon_pre_postgame_chat_channel_id);
+        GBE_local_lobby.postgame_chat_tombstone_active &&
+        GBE_IsDotaOtherLeftChannelPayloadForChannel(message.msg_body, GBE_local_lobby.postgame_chat_tombstone_channel_id) &&
+        gbe::dota_lobby_state::postgame_chat_tombstone_matches(
+            GBE_local_lobby,
+            GBE_local_lobby.postgame_chat_tombstone_channel_id);
     const gbe::dota_lobby_state::TeardownRetrievalDecision teardown_decision =
         gbe::dota_lobby_state::compute_teardown_retrieval_decision(
             gc_profile == GC_PROFILE_DOTA2,

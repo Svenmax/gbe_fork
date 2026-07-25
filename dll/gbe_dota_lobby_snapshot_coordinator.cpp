@@ -58,10 +58,21 @@ using namespace gamecoordinator::tf2;
 
 // --- Lobby-snapshot/build helper member functions (moved from steam_game_coordinator.cpp) ---
 
+bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbySnapshotForPayload(
+    const char *reason,
+    GBE_LocalLobby &snapshot)
+{
+    // Cache, replay, and details consumers project a payload-only copy.
+    return GBE_CaptureCurrentDotaLobbyState(
+        reason,
+        snapshot,
+        GBE_DotaLobbyCaptureMode::PureSnapshotProjection);
+}
+
 bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(const std::string &player_name, std::string &message)
 {
     GBE_LocalLobby lobby{};
-    if (!GBE_CaptureCurrentDotaLobbyState("cache_template_replay", lobby))
+    if (!GBE_CaptureCurrentDotaLobbySnapshotForPayload("cache_template_replay", lobby))
         return false;
 
     return GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(lobby, player_name, message);
@@ -113,7 +124,7 @@ bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTem
 bool Steam_Game_Coordinator::GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(const std::string &player_name, std::string &message)
 {
     GBE_LocalLobby lobby{};
-    if (!GBE_CaptureCurrentDotaLobbyState("cache_payload", lobby))
+    if (!GBE_CaptureCurrentDotaLobbySnapshotForPayload("cache_payload", lobby))
         return false;
 
     return GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayload(lobby, player_name, message);
@@ -214,7 +225,11 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyStateWithPreviousSlots(
     uint64 previous_owner_steam_id,
     GBE_LocalLobby &snapshot)
 {
-    if (!GBE_CaptureCurrentDotaLobbyState(reason, snapshot, false))
+    // Client member observation refreshes its Local working copy without sync.
+    if (!GBE_CaptureCurrentDotaLobbyState(
+            reason,
+            snapshot,
+            GBE_DotaLobbyCaptureMode::WithoutSharedRestore))
         return false;
 
     const uint64 new_owner_steam_id = GBE_local_lobby.owner_steam_id;
@@ -427,7 +442,9 @@ void Steam_Game_Coordinator::GBE_MaybeReplayCurrentDotaPrivateLobbySnapshot(cons
     }
 
     GBE_LocalLobby lobby{};
-    if (!GBE_CaptureCurrentDotaLobbyState(reason ? reason : "replay_current_private_lobby_snapshot", lobby, false)) {
+    if (!GBE_CaptureCurrentDotaLobbySnapshotForPayload(
+            reason ? reason : "replay_current_private_lobby_snapshot",
+            lobby)) {
         GBE_ClearDotaPrivateLobbySnapshotReplayed();
         return;
     }

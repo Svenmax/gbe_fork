@@ -335,6 +335,130 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u64(lobby.bot_dire, 6ull, "generic options updates dire bots");
     }
 
+    // generic custom game capture: present raw keys update custom_game fields.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.custom_game.mode = "old_mode";
+        lobby.custom_game.map_name = "old_map";
+        lobby.custom_game.difficulty = 1u;
+        lobby.custom_game.game_id = 11ull;
+        lobby.custom_game.min_players = 2u;
+        lobby.custom_game.max_players = 4u;
+        lobby.custom_game.crc = 5ull;
+        lobby.custom_game.timestamp = 6u;
+        lobby.custom_game.penalties = false;
+        const auto empty_plan = gbe::dota_lobby_state::compose_generic_lobby_custom_game_capture_plan(
+            "", "", "", "", "", "", "", "", "");
+        ok &= expect_false(empty_plan.apply_mode, "generic custom game skips empty mode");
+        ok &= expect_false(empty_plan.apply_game_id, "generic custom game skips empty game id");
+        gbe::dota_lobby_state::apply_generic_lobby_custom_game_capture_plan(lobby, empty_plan);
+        ok &= expect_true(lobby.custom_game.mode == "old_mode", "generic custom game keeps mode when raw empty");
+        ok &= expect_eq_u64(lobby.custom_game.game_id, 11ull, "generic custom game keeps game id when raw empty");
+        const auto present_plan = gbe::dota_lobby_state::compose_generic_lobby_custom_game_capture_plan(
+            "new_mode",
+            "new_map",
+            "3",
+            "22",
+            "5",
+            "10",
+            "99",
+            "100",
+            "1");
+        ok &= expect_true(present_plan.apply_mode, "generic custom game applies mode");
+        ok &= expect_true(present_plan.apply_map_name, "generic custom game applies map");
+        ok &= expect_true(present_plan.apply_difficulty, "generic custom game applies difficulty");
+        ok &= expect_true(present_plan.apply_game_id, "generic custom game applies game id");
+        ok &= expect_true(present_plan.apply_min_players, "generic custom game applies min players");
+        ok &= expect_true(present_plan.apply_max_players, "generic custom game applies max players");
+        ok &= expect_true(present_plan.apply_crc, "generic custom game applies crc");
+        ok &= expect_true(present_plan.apply_timestamp, "generic custom game applies timestamp");
+        ok &= expect_true(present_plan.apply_penalties, "generic custom game applies penalties");
+        gbe::dota_lobby_state::apply_generic_lobby_custom_game_capture_plan(lobby, present_plan);
+        ok &= expect_true(lobby.custom_game.mode == "new_mode", "generic custom game updates mode");
+        ok &= expect_true(lobby.custom_game.map_name == "new_map", "generic custom game updates map");
+        ok &= expect_eq_u32(lobby.custom_game.difficulty, 3u, "generic custom game updates difficulty");
+        ok &= expect_eq_u64(lobby.custom_game.game_id, 22ull, "generic custom game updates game id");
+        ok &= expect_eq_u32(lobby.custom_game.min_players, 5u, "generic custom game updates min players");
+        ok &= expect_eq_u32(lobby.custom_game.max_players, 10u, "generic custom game updates max players");
+        ok &= expect_eq_u64(lobby.custom_game.crc, 99ull, "generic custom game updates crc");
+        ok &= expect_eq_u32(lobby.custom_game.timestamp, 100u, "generic custom game updates timestamp");
+        ok &= expect_true(lobby.custom_game.penalties, "generic custom game updates penalties");
+    }
+
+    // generic capture: one plan applies state, runtime, options, and custom-game fields.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        gbe::dota_lobby_state::GenericLobbyCaptureInput input{};
+        input.has_state = true;
+        input.state = 3u;
+        input.has_game_state = true;
+        input.game_state = 4u;
+        input.room_name = "capture_room";
+        input.match_id_raw = "10";
+        input.server_id_raw = "20";
+        input.connect = "10.0.0.1:27015";
+        input.game_start_time_raw = "30";
+        input.allow_cheats_raw = "1";
+        input.fill_with_bots_raw = "1";
+        input.allow_spectating_raw = "0";
+        input.visibility_raw = "2";
+        input.bot_difficulty_radiant_raw = "3";
+        input.bot_difficulty_dire_raw = "4";
+        input.bot_radiant_raw = "5";
+        input.bot_dire_raw = "6";
+        input.custom_game_mode = "capture_mode";
+        input.custom_map_name = "capture_map";
+        input.custom_difficulty_raw = "7";
+        input.custom_game_id_raw = "8";
+        input.custom_min_players_raw = "9";
+        input.custom_max_players_raw = "10";
+        input.custom_game_crc_raw = "11";
+        input.custom_game_timestamp_raw = "12";
+        input.custom_game_penalties_raw = "1";
+        const auto plan = gbe::dota_lobby_state::compose_generic_lobby_capture_plan(
+            lobby,
+            input,
+            GBE_kDotaLaunchPhaseSetupSynced);
+        ok &= expect_true(plan.state.apply_state, "generic capture aggregates state");
+        ok &= expect_true(plan.runtime_identity.apply_connect, "generic capture aggregates runtime");
+        ok &= expect_true(plan.options.apply_allow_cheats, "generic capture aggregates options");
+        ok &= expect_true(plan.custom_game.apply_game_id, "generic capture aggregates custom game");
+        gbe::dota_lobby_state::apply_generic_lobby_capture_plan(lobby, plan);
+        ok &= expect_eq_u32(lobby.state, 3u, "generic capture applies state");
+        ok &= expect_eq_u32(lobby.game_state, 4u, "generic capture applies game state");
+        ok &= expect_true(lobby.room_name == "capture_room", "generic capture applies room");
+        ok &= expect_eq_u64(lobby.match_id, 10ull, "generic capture applies match");
+        ok &= expect_true(lobby.connect == "10.0.0.1:27015", "generic capture applies connect");
+        ok &= expect_true(lobby.allow_cheats, "generic capture applies cheats");
+        ok &= expect_eq_u64(lobby.custom_game.game_id, 8ull, "generic capture applies custom game id");
+    }
+
+    // Snapshot projection applies the generic plan to a copy and retains the Local source.
+    {
+        GBE_LocalLobby local_lobby = make_active_lobby();
+        local_lobby.state = 1u;
+        local_lobby.room_name = "local_room";
+        local_lobby.custom_game.game_id = 4ull;
+        const GBE_LocalLobby local_before_projection = local_lobby;
+        gbe::dota_lobby_state::GenericLobbyCaptureInput input{};
+        input.has_state = true;
+        input.state = 3u;
+        input.room_name = "projected_room";
+        input.custom_game_id_raw = "8";
+        const auto plan = gbe::dota_lobby_state::compose_generic_lobby_capture_plan(
+            local_lobby,
+            input,
+            GBE_kDotaLaunchPhaseSetupSynced);
+        GBE_LocalLobby snapshot = local_lobby;
+        gbe::dota_lobby_state::apply_generic_lobby_capture_plan(snapshot, plan);
+        ok &= expect_eq_u32(snapshot.state, 3u, "snapshot projection applies generic state");
+        ok &= expect_true(snapshot.room_name == "projected_room", "snapshot projection applies generic room");
+        ok &= expect_eq_u64(snapshot.custom_game.game_id, 8ull, "snapshot projection applies generic custom game");
+        ok &= expect_eq_u32(local_lobby.state, local_before_projection.state, "snapshot projection retains Local state");
+        ok &= expect_true(local_lobby.room_name == local_before_projection.room_name, "snapshot projection retains Local room");
+        ok &= expect_eq_u64(local_lobby.custom_game.game_id, local_before_projection.custom_game.game_id, "snapshot projection retains Local custom game");
+    }
+
     // shared runtime restore: retain local RUN when a custom-game READYUP snapshot regresses state.
     {
         GBE_LocalLobby lobby = make_active_lobby();
@@ -347,18 +471,70 @@ bool test_valid_launch_progression()
         shared.state = 4u;
         shared.game_state = 2u;
         shared.launch_phase = GBE_kDotaLaunchPhaseLoaded;
-        const auto regression_plan = gbe::dota_lobby_state::compose_shared_lobby_runtime_restore_plan(
+        const auto regression_plan = gbe::dota_lobby_state::compose_source_aware_shared_runtime_restore_plan(
             lobby, shared, GBE_kDotaLaunchPhaseRunQueued);
         ok &= expect_true(regression_plan.ignored_readyup_regression, "shared restore identifies READYUP regression");
         ok &= expect_false(regression_plan.apply_state, "shared restore keeps RUN state");
         ok &= expect_true(regression_plan.apply_game_state, "shared restore applies shared game_state");
         ok &= expect_true(regression_plan.apply_launch_phase, "shared restore applies shared launch phase");
         ok &= expect_true(
-            gbe::dota_lobby_state::apply_shared_lobby_runtime_restore_plan(lobby, regression_plan),
+            gbe::dota_lobby_state::apply_source_aware_shared_runtime_restore_plan(lobby, regression_plan),
             "shared restore reports runtime change");
         ok &= expect_eq_u32(lobby.state, 2u, "shared restore retains RUN state");
         ok &= expect_eq_u32(lobby.game_state, 2u, "shared restore updates game_state");
         ok &= expect_eq_u32(lobby.launch_phase, GBE_kDotaLaunchPhaseLoaded, "shared restore updates launch phase");
+    }
+
+    // Same-generation generic capture keeps its Local launch/runtime field groups over an older shared snapshot.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 9ull;
+        gbe::dota_lobby_state::GenericLobbyCaptureInput input{};
+        input.has_state = true;
+        input.state = 3u;
+        input.has_game_state = true;
+        input.game_state = 4u;
+        input.room_name = "local-room";
+        input.match_id_raw = "22";
+        input.server_id_raw = "33";
+        input.connect = "new-connect";
+        input.game_start_time_raw = "44";
+        const auto capture_plan = gbe::dota_lobby_state::compose_generic_lobby_capture_plan(
+            lobby, input, GBE_kDotaLaunchPhaseSetupSynced);
+        gbe::dota_lobby_state::apply_generic_lobby_capture_plan(lobby, capture_plan);
+        lobby.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.generation = lobby.generation;
+        shared.state = 1u;
+        shared.game_state = 2u;
+        shared.launch_phase = GBE_kDotaLaunchPhaseLoaded;
+        shared.room_name = "shared-room";
+        shared.match_id = 11ull;
+        shared.server_id = 12ull;
+        shared.connect = "old-connect";
+        shared.game_start_time = 13u;
+        const auto restore_plan = gbe::dota_lobby_state::compose_source_aware_shared_runtime_restore_plan(
+            lobby, shared, GBE_kDotaLaunchPhaseRunQueued);
+        ok &= expect_false(restore_plan.apply_state, "same-generation capture keeps local state");
+        ok &= expect_false(restore_plan.apply_game_state, "same-generation capture keeps local game state");
+        ok &= expect_false(restore_plan.apply_launch_phase, "same-generation capture keeps local launch phase");
+        ok &= expect_false(restore_plan.apply_room_name, "same-generation capture keeps local room");
+        ok &= expect_false(restore_plan.apply_connect, "same-generation capture keeps local connect");
+        ok &= expect_false(restore_plan.apply_match_id, "same-generation capture keeps local match id");
+        ok &= expect_false(restore_plan.apply_server_id, "same-generation capture keeps local server id");
+        ok &= expect_false(restore_plan.apply_game_start_time, "same-generation capture keeps local start time");
+        ok &= expect_true(
+            restore_plan.connect_source == gbe::dota_lobby_state::SharedLobbyRestoreSource::LocalGenericCapture,
+            "same-generation capture records local identity source");
+        ok &= expect_true(
+            restore_plan.state_source == gbe::dota_lobby_state::SharedLobbyRestoreSource::LocalGenericCapture,
+            "same-generation capture records local launch source");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_source_aware_shared_runtime_restore_plan(lobby, restore_plan),
+            "same-generation capture does not mutate Local lobby");
+        ok &= expect_true(lobby.connect == "new-connect", "same-generation capture retains local connect value");
+        ok &= expect_eq_u64(lobby.match_id, 22ull, "same-generation capture retains local match value");
     }
 
     // steam auth ack: derive missing metadata and preserve values assigned earlier in the launch.
@@ -388,28 +564,35 @@ bool test_valid_launch_progression()
         ok &= expect_false(lobby.launch_4511_seen, "4511 restore updates marker value");
     }
 
-    // restore_lobby_connect / restore_lobby_match_id: shared launch identity restore.
+    // Source-aware restore: shared identity fills Local values without a same-generation capture.
     {
         GBE_LocalLobby lobby = make_active_lobby();
         lobby.connect = "1.2.3.4:27015";
         lobby.match_id = 100ull;
-        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_connect(lobby, "1.2.3.4:27015"), "connect restore keeps matching endpoint");
-        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_connect(lobby, ""), "connect restore ignores empty shared endpoint");
-        ok &= expect_true(gbe::dota_lobby_state::restore_lobby_connect(lobby, "5.6.7.8:27015"), "connect restore applies shared endpoint");
-        ok &= expect_true(lobby.connect == "5.6.7.8:27015", "connect restore updates local endpoint");
-        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_match_id(lobby, 0ull), "match restore ignores zero shared match");
-        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_match_id(lobby, 100ull), "match restore keeps matching match id");
-        ok &= expect_true(gbe::dota_lobby_state::restore_lobby_match_id(lobby, 200ull), "match restore applies shared match id");
-        ok &= expect_eq_u64(lobby.match_id, 200ull, "match restore updates local match id");
         lobby.game_start_time = 10u;
         lobby.room_name = "alpha";
-        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_game_start_time(lobby, 0u), "start time restore ignores zero shared value");
-        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_game_start_time(lobby, 10u), "start time restore keeps matching value");
-        ok &= expect_true(gbe::dota_lobby_state::restore_lobby_game_start_time(lobby, 20u), "start time restore applies shared value");
-        ok &= expect_eq_u32(lobby.game_start_time, 20u, "start time restore updates local value");
-        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_room_name(lobby, "alpha"), "room restore keeps matching name");
-        ok &= expect_true(gbe::dota_lobby_state::restore_lobby_room_name(lobby, "beta"), "room restore applies shared name");
-        ok &= expect_true(lobby.room_name == "beta", "room restore updates local name");
+        lobby.server_id = 30ull;
+        GBE_SharedDotaLobbyState shared{};
+        shared.connect = "5.6.7.8:27015";
+        shared.match_id = 200ull;
+        shared.server_id = 40ull;
+        shared.game_start_time = 20u;
+        shared.room_name = "beta";
+        const auto plan = gbe::dota_lobby_state::compose_source_aware_shared_runtime_restore_plan(
+            lobby, shared, GBE_kDotaLaunchPhaseRunQueued);
+        ok &= expect_true(plan.apply_connect, "source-aware restore applies shared endpoint");
+        ok &= expect_true(plan.apply_match_id, "source-aware restore applies shared match id");
+        ok &= expect_true(plan.apply_server_id, "source-aware restore applies shared server id");
+        ok &= expect_true(plan.apply_game_start_time, "source-aware restore applies shared start time");
+        ok &= expect_true(plan.apply_room_name, "source-aware restore applies shared room");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_source_aware_shared_runtime_restore_plan(lobby, plan),
+            "source-aware restore reports identity change");
+        ok &= expect_true(lobby.connect == "5.6.7.8:27015", "source-aware restore updates local endpoint");
+        ok &= expect_eq_u64(lobby.match_id, 200ull, "source-aware restore updates local match id");
+        ok &= expect_eq_u64(lobby.server_id, 40ull, "source-aware restore updates local server id");
+        ok &= expect_eq_u32(lobby.game_start_time, 20u, "source-aware restore updates local start time");
+        ok &= expect_true(lobby.room_name == "beta", "source-aware restore updates local room");
         lobby.owner_connected = true;
         lobby.owner_team = 2u;
         lobby.owner_slot = 3u;
@@ -496,6 +679,7 @@ bool test_valid_launch_progression()
     // shared cache restore: copy cache field group when shared differs.
     {
         GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 5ull;
         lobby.has_cache_version = true;
         lobby.cache_version = 11ull;
         lobby.has_cache_service_id = true;
@@ -593,6 +777,7 @@ bool test_valid_launch_progression()
     // apply_postgame_lobby_state_plan: postgame action patches state, chat, and cache together.
     {
         GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 5ull;
         lobby.has_cache_version = true;
         lobby.cache_version = 9u;
         lobby.has_cache_service_id = true;
@@ -617,6 +802,25 @@ bool test_valid_launch_progression()
         ok &= expect_true(lobby.chat_channel_name == "postgame", "postgame plan sets chat channel name");
         ok &= expect_eq_u32(lobby.chat_channel_type, 18u, "postgame plan sets chat channel type");
         ok &= expect_eq_u64(lobby.abandon_pre_postgame_chat_channel_id, 7ull, "postgame plan keeps pre channel");
+        ok &= expect_true(lobby.postgame_chat_tombstone_active, "postgame plan enables chat tombstone");
+        ok &= expect_eq_u64(lobby.postgame_chat_tombstone_channel_id, 7ull, "postgame tombstone records pre channel");
+        ok &= expect_eq_u64(lobby.postgame_chat_tombstone_generation, 5ull, "postgame tombstone records generation");
+        ok &= expect_true(
+            gbe::dota_lobby_state::postgame_chat_tombstone_matches(lobby, 7ull),
+            "postgame tombstone matches pre channel in same generation");
+        ok &= expect_false(
+            gbe::dota_lobby_state::postgame_chat_tombstone_matches(lobby, 8ull),
+            "postgame tombstone rejects other channels");
+        lobby.generation = 6ull;
+        ok &= expect_false(
+            gbe::dota_lobby_state::postgame_chat_tombstone_matches(lobby, 7ull),
+            "postgame tombstone rejects stale generation");
+        lobby.generation = 5ull;
+        gbe::dota_lobby_state::clear_postgame_chat_tombstone(lobby);
+        ok &= expect_false(lobby.postgame_chat_tombstone_active, "postgame tombstone clear disables tombstone");
+        ok &= expect_eq_u64(lobby.postgame_chat_tombstone_channel_id, 0ull, "postgame tombstone clear resets channel");
+        ok &= expect_eq_u64(lobby.postgame_chat_tombstone_generation, 0ull, "postgame tombstone clear resets generation");
+        ok &= expect_eq_u64(lobby.abandon_pre_postgame_chat_channel_id, 0ull, "postgame tombstone clear resets legacy pre channel");
         ok &= expect_false(lobby.has_cache_version, "postgame plan clears cache version flag");
         ok &= expect_eq_u32(lobby.cache_version, 0u, "postgame plan clears cache version");
         ok &= expect_false(lobby.has_cache_service_id, "postgame plan clears cache service flag");

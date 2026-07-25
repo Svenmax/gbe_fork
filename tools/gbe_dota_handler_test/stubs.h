@@ -347,6 +347,7 @@ struct RecordedAction
             case GBE_DotaActionType::PendingResetAfterCacheUnsubscribed: return "PendingResetAfterCacheUnsubscribed";
             case GBE_DotaActionType::PendingResetAfterCacheUnsubscribedClear: return "PendingResetAfterCacheUnsubscribedClear";
             case GBE_DotaActionType::PendingNormalSignoutFinalizeAfterCacheUnsubscribed: return "PendingNormalSignoutFinalizeAfterCacheUnsubscribed";
+            case GBE_DotaActionType::LocalLifecyclePreWrite: return "LocalLifecyclePreWrite";
             case GBE_DotaActionType::LobbyStateApply: return "LobbyStateApply";
             case GBE_DotaActionType::PostGameLobbyStateApply: return "PostGameLobbyStateApply";
             case GBE_DotaActionType::LobbyMemberRuntimeUpdate: return "LobbyMemberRuntimeUpdate";
@@ -945,6 +946,8 @@ enum ESOMsg {
 // Coordinator seam: shared state, side-effect methods, and domain hooks
 // =====================================================================
 
+enum class GBE_DotaLobbyCaptureMode : uint8 { Synchronized, WithoutSharedRestore, PureSnapshotProjection };
+
 class Steam_Game_Coordinator
 {
     friend class gbe::dota_lifecycle::CoordinatorExecutor;
@@ -1378,7 +1381,15 @@ public:
             g_action_recorder->record_practice_lobby_details_update(preserve_server_id, message_override, reason);
         return true;
     }
-    bool GBE_CaptureCurrentDotaLobbyState(const char *, GBE_LocalLobby &snapshot, bool = true) { snapshot = GBE_local_lobby; return GBE_local_lobby.active; }
+    bool GBE_CaptureCurrentDotaLobbyState(const char *, GBE_LocalLobby &snapshot, GBE_DotaLobbyCaptureMode = GBE_DotaLobbyCaptureMode::Synchronized) { snapshot = GBE_local_lobby; return GBE_local_lobby.active; }
+    bool GBE_SyncCapturedDotaLobbyState(const char *reason, bool host_authoritative)
+    {
+        if (!host_authoritative)
+            return false;
+        GBE_PublishSharedDotaLobbyState(reason);
+        return true;
+    }
+    bool GBE_CaptureCurrentDotaLobbySnapshotForPayload(const char *, GBE_LocalLobby &snapshot) { snapshot = GBE_local_lobby; return GBE_local_lobby.active; }
     bool GBE_CaptureCurrentDotaLobbyStateWithPreviousSlots(const char *, const std::vector<GBE_DotaLobbyMemberState> &, uint64, GBE_LocalLobby &snapshot)
     {
         if (m_test_has_next_lobby_capture) {

@@ -135,6 +135,7 @@
 33. [x] D2 切片：shared restore 通过 `restore_lobby_generation()` 与 `restore_lobby_generic_lobby_id()` 单一化 identity 字段复制；generation counter 同步仍由 Coordinator 负责。
 34. [x] D2 切片：generic capture 通过 `compose_generic_lobby_runtime_identity_capture_plan()` 与 `apply_generic_lobby_runtime_identity_capture_plan()` 单一化 room/match/server/connect/start_time 写入；launched LAN runtime 保护保持。
 35. [x] D2 切片：generic capture 通过 `compose_generic_lobby_options_capture_plan()` 与 `apply_generic_lobby_options_capture_plan()` 单一化 options/bot 写入；空 raw key 跳过语义保持。
+36. [x] D2 切片：generic capture 通过 `compose_generic_lobby_custom_game_capture_plan()` 与 `apply_generic_lobby_custom_game_capture_plan()` 单一化 custom_game 字段写入；空 raw key 跳过语义保持。
 
 ### 验收
 

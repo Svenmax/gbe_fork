@@ -10,6 +10,7 @@
 | `GBE_local_lobby` | 本 GC 工作副本；handler/coordinator 可就地改字段 |
 | shared Store | 跨 client/server GC 快照；**生产写只经 generation 门控** |
 | `GBE_PublishSharedDotaLobbyState` | local → shared 唯一 publish 门面 |
+| `GBE_SyncCapturedDotaLobbyState` | 已完成 Local capture 后的显式 host-only publish 边界 |
 | `GBE_RestoreSharedDotaLobbyState` / adopt | shared → local 恢复 |
 | `GBE_ClearDotaLobbyRuntimeState` | local + shared compare_clear + last-launch 全清 |
 
@@ -41,11 +42,12 @@
 
 ## 4. Local 字段就地写（摘要）
 
-- **state / game_state / launch_***：queued-state 路径先经 `compose_queued_lobby_state_apply_plan()` 计算，再由 `apply_queued_lobby_state_apply_plan()` 一次写入三字段；monotonic phase 推进经 `advance_launch_phase()`；generic lobby capture 经 `compose_generic_lobby_state_capture_plan()` 与 `apply_generic_lobby_state_capture_plan()` 保留 launch 回退保护；generic capture 的 room/match/server/connect/start_time 经 `compose_generic_lobby_runtime_identity_capture_plan()` 与 `apply_generic_lobby_runtime_identity_capture_plan()`，保留 launched LAN runtime 保护；generic capture 的 allow_cheats/fill_with_bots/allow_spectating/visibility/bot_* 经 `compose_generic_lobby_options_capture_plan()` 与 `apply_generic_lobby_options_capture_plan()`；shared restore 的 runtime 字段组经 `compose_shared_lobby_runtime_restore_plan()` 与 `apply_shared_lobby_runtime_restore_plan()`，保留 READYUP state 回退保护。
+- **state / game_state / launch_***：queued-state 路径先经 `compose_queued_lobby_state_apply_plan()` 计算，再由 `apply_queued_lobby_state_apply_plan()` 一次写入三字段；monotonic phase 推进经 `advance_launch_phase()`；generic lobby metadata 读取先经 `compose_generic_lobby_capture_plan()` 汇总 state、runtime identity、options 与 custom_game plan，再由 `apply_generic_lobby_capture_plan()` 一次应用，保留既有 state 的 launch 回退保护、runtime identity 的 launched LAN runtime 保护与空 raw key 跳过语义。shared restore 的 launch/runtime 与 identity 字段组统一经 `compose_source_aware_shared_runtime_restore_plan()` 和 `apply_source_aware_shared_runtime_restore_plan()`；同 generation 的 Local generic capture 保留字段组，其他 client observe 采用 shared snapshot，并保留 READYUP state 回退保护。
+- **payload snapshot 消费**：cache template replay、cache payload、private lobby replay 与 26 details update 统一经 `GBE_CaptureCurrentDotaLobbySnapshotForPayload()` 取得纯 projection 快照。capture 显式区分同步 capture、无 shared restore capture 与纯 snapshot projection；纯模式从 Local 副本应用 generic plan、成员合并与 arcade slot normalization，保持 Local、generic metadata、shared Store 与 owner repair/adopt/hero apply 不变。private replay 的无 shared restore 语义由纯 projection 保持。
+- **generic metadata capture 模式契约**：7009 是唯一 host sync：无 shared restore 的 Local capture 后，`GBE_SyncCapturedDotaLobbyState(..., is_server)` 仅发布 host 快照，顺序为 capture、host publish、7010 response。成员变更（含 previous slots）、7034 custom runtime member refresh 与 launch-state push 为 client observe：更新目标 Local 工作副本，不由 capture 触发 publish。cache template、cache payload、private replay 与 26 details 通过 `GBE_CaptureCurrentDotaLobbySnapshotForPayload()` 走 pure projection：只修改 payload 副本，保持 Local、shared Store、owner repair/adopt 不变。
 - **members / chat / broadcast**：slot、chat、member_coordinator。
 - **owner_hero_id**：只允许 `HOST_AUTHORITY` 列出的 Apply/adopt/publish 路径（禁止 match/inventory 旁路 `=`）。
-- **server_id / connect / match_id**：recover、launch、restore merge；shared-to-local restore 的 connect/match_id 经 `restore_lobby_connect()` 与 `restore_lobby_match_id()` 返回变更。
-- **game_start_time / room_name restore**：shared-to-local restore 经 `restore_lobby_game_start_time()` 与 `restore_lobby_room_name()` 返回变更；零 start_time 拒绝。
+- **server_id / connect / match_id / game_start_time / room_name restore**：shared-to-local restore 由 source-aware plan 一次应用；空 connect、零 match_id、零 server_id 与零 start_time 保留 Local 值，room_name 继续允许 shared 清空。
 - **owner_connected / owner_team / owner_slot restore**：shared-to-local restore 经 `restore_lobby_owner_connected()`、`restore_lobby_owner_team()` 与 `restore_lobby_owner_slot()` 返回变更。
 - **options restore**：shared-to-local restore 的 game_mode/server_region/lan/ping/allow_cheats/fill_with_bots/allow_spectating/pass_key/visibility/bot_* 经 `compose_shared_lobby_options_restore_plan()` 与 `apply_shared_lobby_options_restore_plan()` 返回字段组变更。
 - **cache restore**：shared-to-local restore 的 has_cache_version/cache_version/has_cache_service_id/cache_service_id/cache_service_list/has_cache_sync_version/cache_sync_version 经 `compose_shared_lobby_cache_restore_plan()` 与 `apply_shared_lobby_cache_restore_plan()` 返回字段组变更。
@@ -54,13 +56,14 @@
 - **launch_steam_auth_***：仅 steam-auth ack 路径通过 `compose_steam_auth_ack_launch_plan()` 与 `apply_steam_auth_ack_launch_plan()` 一次写入 CRC、message sequence 与 ack 标记，再 publish shared state。
 - **launch_4511_seen**：仅匹配 lobby 的 4511 通知通过 `mark_launch_4511_seen()` 幂等标记；首次变更才 publish shared state。
 - **launch_4511_seen restore**：shared-to-local restore 通过 `restore_launch_4511_seen()` 返回字段变更；Coordinator 继续聚合 restore 的 `changed` 结果。
-- **lifecycle state / game_state**：仅 `LobbyStateApply` action 通过 `apply_lifecycle_lobby_state()` 一次写入；action 序列和后续 publish 继续由 lifecycle executor 管理。
+- **lifecycle state / game_state**：非 runtime-queue lifecycle 路径仅 `LobbyStateApply` action 通过 `apply_lifecycle_lobby_state()` 一次写入；`8052` runtime-queue 路径经 `LocalLifecyclePreWrite` action 在 queue / fallback publish 前一次写入 Local `state`、`game_state` 与 `launch_phase`；action 序列和后续 publish 继续由 lifecycle executor 管理。
 - **postgame state / chat / cache**：仅 `PostGameLobbyStateApply` action 通过 `apply_postgame_lobby_state_plan()` 一次写入 state、chat 与 cache 清理字段组；executor 继续管理 action 序列与 publish。
+- **postgame chat tombstone**：`PostGameLobbyStateApply` 同步写入 `postgame_chat_tombstone_active`、`postgame_chat_tombstone_channel_id` 与 `postgame_chat_tombstone_generation`，旧 `abandon_pre_postgame_chat_channel_id` 保持为兼容日志字段；old-channel 7272 与 7014 retrieval 通过 `postgame_chat_tombstone_matches()` 做 generation-scoped 匹配，当前 postgame channel leave 通过 `clear_postgame_chat_tombstone()` 清理。
 
 ## 5. C1 结论
 
 1. Shared 写路径已单一化到 generation 门控门面；无需本轮改 Store API。
-2. Local 仍是广泛工作副本；queued-state、monotonic launch phase、generic capture state/identity/options、shared runtime restore、steam-auth 元数据、4511 标记/restore、connect/match/start_time/room/owner/options/cache/custom_game/generation/generic_lobby_id restore、lifecycle/postgame state apply 已采用纯 apply 边界。后续字段组按单路径、单边界推进，减少 handler 内零散字段写。
+2. Local 仍是广泛工作副本；queued-state、monotonic launch phase、generic capture state/identity/options/custom_game、source-aware shared launch/runtime identity restore、steam-auth 元数据、4511 标记/restore、owner/options/cache/custom_game/generation/generic_lobby_id restore、lifecycle/postgame state apply、8052 lifecycle pre-write 与 postgame chat tombstone 已采用纯 apply/action/helper 边界。generic capture 的 host sync、client observe 与 pure projection 调用面由 `audit_generic_metadata_capture_modes` 回归保护。
 3. 双轨（local + shared）风险仍在 CURRENT；本清单只冻结入口，不声明状态单一化完成。
 
 ## 6. 停手

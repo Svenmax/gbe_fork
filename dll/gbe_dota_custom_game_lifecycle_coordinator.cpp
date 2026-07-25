@@ -92,6 +92,13 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
 
         previous_action_succeeded = true;
         switch (action.type) {
+            case GBE_DotaActionType::LocalLifecyclePreWrite:
+                gbe::dota_lobby_state::apply_lifecycle_lobby_state(
+                    GBE_local_lobby,
+                    action.lobby_state,
+                    action.lobby_game_state);
+                GBE_MarkDotaLaunchPhase(action.launch_phase, action.reason.c_str(), false);
+                break;
             case GBE_DotaActionType::LobbyStateApply:
                 gbe::dota_lobby_state::apply_lifecycle_lobby_state(
                     GBE_local_lobby,
@@ -281,6 +288,8 @@ bool Steam_Game_Coordinator::GBE_ExecuteDotaCustomGameLifecycleTransition(
     effects.update_local_member_runtime = context.update_local_member_runtime;
     effects.publish_local_member_data = context.publish_local_member_data;
     effects.fallback_publish_on_runtime_update_failure = context.transition.queue_runtime_lobby_update;
+    effects.local_lifecycle_pre_write = context.trigger_emsg == 8052u &&
+        context.transition.queue_runtime_lobby_update;
 
     gbe::dota_lifecycle::ExecutionOptions options;
     options.wrapped = context.wrapped;

@@ -397,7 +397,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Request(
 
         if (custom_game_launch) {
             GBE_LocalLobby refreshed_lobby{};
-            GBE_CaptureCurrentDotaLobbyState("7034_custom_runtime_member_refresh", refreshed_lobby, false);
+            // 7034 observes generic runtime members locally; its slot-normalization
+            // publish remains an independent, existing state-change boundary.
+            GBE_CaptureCurrentDotaLobbyState(
+                "7034_custom_runtime_member_refresh",
+                refreshed_lobby,
+                GBE_DotaLobbyCaptureMode::WithoutSharedRestore);
             if (GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby))
                 GBE_PublishSharedDotaLobbyState("7034_custom_runtime_slot_normalize");
         }
