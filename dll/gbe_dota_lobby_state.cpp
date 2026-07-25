@@ -1011,6 +1011,17 @@ bool apply_source_tv_metadata(
     return changed;
 }
 
+bool apply_runtime_connect(
+    GBE_LocalLobby &lobby,
+    const std::string &connect)
+{
+    if (connect.empty() || lobby.connect == connect)
+        return false;
+
+    lobby.connect = connect;
+    return true;
+}
+
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

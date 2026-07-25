@@ -45,6 +45,8 @@
 
 **SourceTV metadata local apply helper（2026-07-25）：** 4508 game server info 的 `tv_secret_code` / `tv_port` 通过 `apply_source_tv_metadata(...)` 写入 Local，零值输入保留既有字段，post-login handler 保持原 publish guard 与顺序。
 
+**runtime connect local apply helper（2026-07-25）：** 4508 game server info 的 `runtime_connect` 通过 `apply_runtime_connect(...)` 写入 Local，空值和相同值保持 no-op，LAN preserve guard、shared Store compare_update 与日志顺序仍归 post-login handler。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。

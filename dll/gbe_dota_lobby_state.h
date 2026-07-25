@@ -775,6 +775,9 @@ bool apply_source_tv_metadata(
     GBE_LocalLobby &lobby,
     std::uint64_t tv_secret_code,
     std::uint32_t tv_port);
+bool apply_runtime_connect(
+    GBE_LocalLobby &lobby,
+    const std::string &connect);
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

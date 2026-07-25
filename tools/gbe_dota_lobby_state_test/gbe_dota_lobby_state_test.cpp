@@ -786,6 +786,23 @@ bool test_valid_launch_progression()
             "SourceTV metadata apply reports matching values as no-op");
     }
 
+    // apply_runtime_connect: 4508 runtime endpoint preserves absent values.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.connect = "1.2.3.4:27015";
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_runtime_connect(lobby, ""),
+            "runtime connect apply preserves empty input");
+        ok &= expect_true(lobby.connect == "1.2.3.4:27015", "runtime connect keeps existing endpoint");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_runtime_connect(lobby, "5.6.7.8:27015"),
+            "runtime connect apply reports endpoint change");
+        ok &= expect_true(lobby.connect == "5.6.7.8:27015", "runtime connect updates endpoint");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_runtime_connect(lobby, "5.6.7.8:27015"),
+            "runtime connect apply reports matching endpoint as no-op");
+    }
+
     // apply_lifecycle_lobby_state: lifecycle action writes state fields together.
     {
         GBE_LocalLobby lobby = make_active_lobby();

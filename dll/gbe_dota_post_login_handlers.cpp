@@ -229,33 +229,32 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(uint32 reques
         gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(GBE_local_lobby.connect) != 0u &&
         gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(runtime_connect) != 0u &&
         runtime_connect != GBE_local_lobby.connect;
-    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
-        !runtime_connect.empty() && runtime_connect != GBE_local_lobby.connect &&
-        !preserve_existing_lan_connect) {
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && !preserve_existing_lan_connect) {
         const std::string previous_connect = GBE_local_lobby.connect;
-        GBE_local_lobby.connect = runtime_connect;
-        const auto shared_update_result = GBE_SharedLobbyStore().compare_update(
-            GBE_local_lobby.generation,
-            [&](GBE_SharedDotaLobbyState &shared_lobby) {
-                if (shared_lobby.valid && shared_lobby.lobby_id == GBE_local_lobby.lobby_id)
-                    shared_lobby.connect = runtime_connect;
-            });
-        if (shared_update_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
+        if (gbe::dota_lobby_state::apply_runtime_connect(GBE_local_lobby, runtime_connect)) {
+            const auto shared_update_result = GBE_SharedLobbyStore().compare_update(
+                GBE_local_lobby.generation,
+                [&](GBE_SharedDotaLobbyState &shared_lobby) {
+                    if (shared_lobby.valid && shared_lobby.lobby_id == GBE_local_lobby.lobby_id)
+                        shared_lobby.connect = runtime_connect;
+                });
+            if (shared_update_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
+                GBE_GC_DebugLog(
+                    "GC_DOTA_SYNC",
+                    "skipped stale shared lobby connect update reason=4508_game_server_info lobby_id=%llu generation=%llu candidate=%s",
+                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    static_cast<unsigned long long>(GBE_local_lobby.generation),
+                    runtime_connect.c_str());
+            }
+
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
-                "skipped stale shared lobby connect update reason=4508_game_server_info lobby_id=%llu generation=%llu candidate=%s",
+                "adopted game server address as lobby connect reason=4508_game_server_info lobby_id=%llu previous=%s new=%s",
                 static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                static_cast<unsigned long long>(GBE_local_lobby.generation),
-                runtime_connect.c_str());
+                previous_connect.c_str(),
+                runtime_connect.c_str()
+            );
         }
-
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "adopted game server address as lobby connect reason=4508_game_server_info lobby_id=%llu previous=%s new=%s",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            previous_connect.c_str(),
-            runtime_connect.c_str()
-        );
     } else if (preserve_existing_lan_connect) {
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
