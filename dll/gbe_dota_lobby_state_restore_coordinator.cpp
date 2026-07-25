@@ -245,31 +245,11 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             changed = true;
         }
 
-        if (GBE_local_lobby.has_cache_version != shared_lobby.has_cache_version ||
-                GBE_local_lobby.cache_version != shared_lobby.cache_version) {
-            GBE_local_lobby.has_cache_version = shared_lobby.has_cache_version;
-            GBE_local_lobby.cache_version = shared_lobby.cache_version;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.has_cache_service_id != shared_lobby.has_cache_service_id ||
-                GBE_local_lobby.cache_service_id != shared_lobby.cache_service_id) {
-            GBE_local_lobby.has_cache_service_id = shared_lobby.has_cache_service_id;
-            GBE_local_lobby.cache_service_id = shared_lobby.cache_service_id;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.cache_service_list != shared_lobby.cache_service_list) {
-            GBE_local_lobby.cache_service_list = shared_lobby.cache_service_list;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.has_cache_sync_version != shared_lobby.has_cache_sync_version ||
-                GBE_local_lobby.cache_sync_version != shared_lobby.cache_sync_version) {
-            GBE_local_lobby.has_cache_sync_version = shared_lobby.has_cache_sync_version;
-            GBE_local_lobby.cache_sync_version = shared_lobby.cache_sync_version;
-            changed = true;
-        }
+        changed = gbe::dota_lobby_state::apply_shared_lobby_cache_restore_plan(
+            GBE_local_lobby,
+            gbe::dota_lobby_state::compose_shared_lobby_cache_restore_plan(
+                GBE_local_lobby,
+                shared_lobby)) || changed;
 
         if (changed) {
             GBE_GC_DebugLog(

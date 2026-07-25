@@ -404,6 +404,53 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u64(lobby.bot_dire, 40ull, "options restore updates dire bots");
     }
 
+    // shared cache restore: copy cache field group when shared differs.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.has_cache_version = true;
+        lobby.cache_version = 11ull;
+        lobby.has_cache_service_id = true;
+        lobby.cache_service_id = 22u;
+        lobby.cache_service_list = {1u, 2u};
+        lobby.has_cache_sync_version = true;
+        lobby.cache_sync_version = 33ull;
+        GBE_SharedDotaLobbyState shared{};
+        shared.has_cache_version = lobby.has_cache_version;
+        shared.cache_version = lobby.cache_version;
+        shared.has_cache_service_id = lobby.has_cache_service_id;
+        shared.cache_service_id = lobby.cache_service_id;
+        shared.cache_service_list = lobby.cache_service_list;
+        shared.has_cache_sync_version = lobby.has_cache_sync_version;
+        shared.cache_sync_version = lobby.cache_sync_version;
+        const auto matching_plan = gbe::dota_lobby_state::compose_shared_lobby_cache_restore_plan(lobby, shared);
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_shared_lobby_cache_restore_plan(lobby, matching_plan),
+            "cache restore keeps matching field group");
+        shared.has_cache_version = false;
+        shared.cache_version = 0ull;
+        shared.has_cache_service_id = false;
+        shared.cache_service_id = 0u;
+        shared.cache_service_list = {9u};
+        shared.has_cache_sync_version = false;
+        shared.cache_sync_version = 0ull;
+        const auto changed_plan = gbe::dota_lobby_state::compose_shared_lobby_cache_restore_plan(lobby, shared);
+        ok &= expect_true(changed_plan.apply_cache_version, "cache restore marks version change");
+        ok &= expect_true(changed_plan.apply_cache_service_id, "cache restore marks service id change");
+        ok &= expect_true(changed_plan.apply_cache_service_list, "cache restore marks service list change");
+        ok &= expect_true(changed_plan.apply_cache_sync_version, "cache restore marks sync version change");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_shared_lobby_cache_restore_plan(lobby, changed_plan),
+            "cache restore reports field group change");
+        ok &= expect_false(lobby.has_cache_version, "cache restore updates has_cache_version");
+        ok &= expect_eq_u64(lobby.cache_version, 0ull, "cache restore updates cache_version");
+        ok &= expect_false(lobby.has_cache_service_id, "cache restore updates has_cache_service_id");
+        ok &= expect_eq_u32(lobby.cache_service_id, 0u, "cache restore updates cache_service_id");
+        ok &= expect_true(lobby.cache_service_list.size() == 1u && lobby.cache_service_list[0] == 9u,
+            "cache restore updates cache_service_list");
+        ok &= expect_false(lobby.has_cache_sync_version, "cache restore updates has_cache_sync_version");
+        ok &= expect_eq_u64(lobby.cache_sync_version, 0ull, "cache restore updates cache_sync_version");
+    }
+
     // apply_lifecycle_lobby_state: lifecycle action writes state fields together.
     {
         GBE_LocalLobby lobby = make_active_lobby();

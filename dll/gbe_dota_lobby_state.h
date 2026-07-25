@@ -250,6 +250,20 @@ struct SharedLobbyOptionsRestorePlan {
     std::uint64_t bot_dire{};
 };
 
+struct SharedLobbyCacheRestorePlan {
+    bool apply_cache_version{};
+    bool has_cache_version{};
+    std::uint64_t cache_version{};
+    bool apply_cache_service_id{};
+    bool has_cache_service_id{};
+    std::uint32_t cache_service_id{};
+    bool apply_cache_service_list{};
+    std::vector<std::uint32_t> cache_service_list;
+    bool apply_cache_sync_version{};
+    bool has_cache_sync_version{};
+    std::uint64_t cache_sync_version{};
+};
+
 struct SteamAuthAckLaunchPlan {
     std::uint32_t ticket_crc{};
     std::uint32_t message_sequence{};
@@ -562,6 +576,12 @@ SharedLobbyOptionsRestorePlan compose_shared_lobby_options_restore_plan(
 bool apply_shared_lobby_options_restore_plan(
     GBE_LocalLobby &lobby,
     const SharedLobbyOptionsRestorePlan &plan);
+SharedLobbyCacheRestorePlan compose_shared_lobby_cache_restore_plan(
+    const GBE_LocalLobby &current_lobby,
+    const GBE_SharedDotaLobbyState &shared_lobby);
+bool apply_shared_lobby_cache_restore_plan(
+    GBE_LocalLobby &lobby,
+    const SharedLobbyCacheRestorePlan &plan);
 SteamAuthAckLaunchPlan compose_steam_auth_ack_launch_plan(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t derived_ticket_crc);

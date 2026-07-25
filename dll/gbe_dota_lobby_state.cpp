@@ -535,6 +535,59 @@ bool apply_shared_lobby_options_restore_plan(
     return changed;
 }
 
+SharedLobbyCacheRestorePlan compose_shared_lobby_cache_restore_plan(
+    const GBE_LocalLobby &current_lobby,
+    const GBE_SharedDotaLobbyState &shared_lobby)
+{
+    SharedLobbyCacheRestorePlan plan{};
+    plan.has_cache_version = shared_lobby.has_cache_version;
+    plan.cache_version = shared_lobby.cache_version;
+    plan.apply_cache_version =
+        current_lobby.has_cache_version != plan.has_cache_version ||
+        current_lobby.cache_version != plan.cache_version;
+    plan.has_cache_service_id = shared_lobby.has_cache_service_id;
+    plan.cache_service_id = shared_lobby.cache_service_id;
+    plan.apply_cache_service_id =
+        current_lobby.has_cache_service_id != plan.has_cache_service_id ||
+        current_lobby.cache_service_id != plan.cache_service_id;
+    plan.cache_service_list = shared_lobby.cache_service_list;
+    plan.apply_cache_service_list =
+        current_lobby.cache_service_list != plan.cache_service_list;
+    plan.has_cache_sync_version = shared_lobby.has_cache_sync_version;
+    plan.cache_sync_version = shared_lobby.cache_sync_version;
+    plan.apply_cache_sync_version =
+        current_lobby.has_cache_sync_version != plan.has_cache_sync_version ||
+        current_lobby.cache_sync_version != plan.cache_sync_version;
+    return plan;
+}
+
+bool apply_shared_lobby_cache_restore_plan(
+    GBE_LocalLobby &lobby,
+    const SharedLobbyCacheRestorePlan &plan)
+{
+    bool changed = false;
+    if (plan.apply_cache_version) {
+        lobby.has_cache_version = plan.has_cache_version;
+        lobby.cache_version = plan.cache_version;
+        changed = true;
+    }
+    if (plan.apply_cache_service_id) {
+        lobby.has_cache_service_id = plan.has_cache_service_id;
+        lobby.cache_service_id = plan.cache_service_id;
+        changed = true;
+    }
+    if (plan.apply_cache_service_list) {
+        lobby.cache_service_list = plan.cache_service_list;
+        changed = true;
+    }
+    if (plan.apply_cache_sync_version) {
+        lobby.has_cache_sync_version = plan.has_cache_sync_version;
+        lobby.cache_sync_version = plan.cache_sync_version;
+        changed = true;
+    }
+    return changed;
+}
+
 SteamAuthAckLaunchPlan compose_steam_auth_ack_launch_plan(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t derived_ticket_crc)
