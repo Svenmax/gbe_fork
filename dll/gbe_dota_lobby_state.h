@@ -543,6 +543,12 @@ bool restore_lobby_connect(
 bool restore_lobby_match_id(
     GBE_LocalLobby &lobby,
     std::uint64_t shared_match_id);
+bool restore_lobby_game_start_time(
+    GBE_LocalLobby &lobby,
+    std::uint32_t shared_game_start_time);
+bool restore_lobby_room_name(
+    GBE_LocalLobby &lobby,
+    const std::string &shared_room_name);
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

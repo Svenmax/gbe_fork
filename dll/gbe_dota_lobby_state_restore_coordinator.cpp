@@ -190,13 +190,15 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             GBE_local_lobby,
             runtime_restore_plan) || changed;
 
-        if (shared_lobby.game_start_time != 0 && GBE_local_lobby.game_start_time != shared_lobby.game_start_time) {
-            GBE_local_lobby.game_start_time = shared_lobby.game_start_time;
+        if (gbe::dota_lobby_state::restore_lobby_game_start_time(
+                GBE_local_lobby,
+                shared_lobby.game_start_time)) {
             changed = true;
         }
 
-        if (GBE_local_lobby.room_name != shared_lobby.room_name) {
-            GBE_local_lobby.room_name = shared_lobby.room_name;
+        if (gbe::dota_lobby_state::restore_lobby_room_name(
+                GBE_local_lobby,
+                shared_lobby.room_name)) {
             changed = true;
         }
 

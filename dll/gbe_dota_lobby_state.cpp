@@ -505,6 +505,28 @@ bool restore_lobby_match_id(
     return true;
 }
 
+bool restore_lobby_game_start_time(
+    GBE_LocalLobby &lobby,
+    std::uint32_t shared_game_start_time)
+{
+    if (shared_game_start_time == 0u || lobby.game_start_time == shared_game_start_time)
+        return false;
+
+    lobby.game_start_time = shared_game_start_time;
+    return true;
+}
+
+bool restore_lobby_room_name(
+    GBE_LocalLobby &lobby,
+    const std::string &shared_room_name)
+{
+    if (lobby.room_name == shared_room_name)
+        return false;
+
+    lobby.room_name = shared_room_name;
+    return true;
+}
+
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

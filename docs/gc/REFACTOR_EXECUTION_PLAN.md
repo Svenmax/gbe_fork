@@ -127,6 +127,7 @@
 25. [x] D2 切片：shared restore 通过 `restore_launch_4511_seen()` 单一化 4511 去重标记复制；Coordinator 继续聚合字段变更以保留 client restore 语义。
 26. [x] D2 切片：lifecycle `PostGameLobbyStateApply` 通过 `apply_postgame_lobby_state_plan()` 单一化 state、chat 与 cache 清理字段组；executor 继续承担 action 序列与副作用。
 27. [x] D2 切片：shared restore 通过 `restore_lobby_connect()` 与 `restore_lobby_match_id()` 单一化 connect/match_id 复制；Coordinator 继续聚合字段变更以保留 client restore 语义。
+28. [x] D2 切片：shared restore 通过 `restore_lobby_game_start_time()` 与 `restore_lobby_room_name()` 单一化 start_time/room 复制；零 start_time 拒绝与 client restore 聚合保持。
 
 ### 验收
 
@@ -156,6 +157,7 @@
 - D2 shared 4511 restore 新增 lobby-state 回归，验证 matching restore 不变更、不同值 restore 返回变更并更新标记；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
 - D2 postgame state apply 新增 lobby-state 回归，验证 state、chat channel 与 cache 清理作为字段组写入；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
 - D2 shared connect/match restore 新增 lobby-state 回归，验证空 connect/零 match 拒绝、匹配值无变更、不同值返回变更；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
+- D2 shared start_time/room restore 新增 lobby-state 回归，验证零 start_time 拒绝、匹配值无变更、不同值返回变更；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
 
 ## R5：持续验证与上游同步
 

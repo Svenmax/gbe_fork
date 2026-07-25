@@ -45,6 +45,7 @@
 - **members / chat / broadcast**：slot、chat、member_coordinator。
 - **owner_hero_id**：只允许 `HOST_AUTHORITY` 列出的 Apply/adopt/publish 路径（禁止 match/inventory 旁路 `=`）。
 - **server_id / connect / match_id**：recover、launch、restore merge；shared-to-local restore 的 connect/match_id 经 `restore_lobby_connect()` 与 `restore_lobby_match_id()` 返回变更。
+- **game_start_time / room_name restore**：shared-to-local restore 经 `restore_lobby_game_start_time()` 与 `restore_lobby_room_name()` 返回变更；零 start_time 拒绝。
 - **launch_steam_auth_***：仅 steam-auth ack 路径通过 `compose_steam_auth_ack_launch_plan()` 与 `apply_steam_auth_ack_launch_plan()` 一次写入 CRC、message sequence 与 ack 标记，再 publish shared state。
 - **launch_4511_seen**：仅匹配 lobby 的 4511 通知通过 `mark_launch_4511_seen()` 幂等标记；首次变更才 publish shared state。
 - **launch_4511_seen restore**：shared-to-local restore 通过 `restore_launch_4511_seen()` 返回字段变更；Coordinator 继续聚合 restore 的 `changed` 结果。
@@ -54,7 +55,7 @@
 ## 5. C1 结论
 
 1. Shared 写路径已单一化到 generation 门控门面；无需本轮改 Store API。
-2. Local 仍是广泛工作副本；queued-state、monotonic launch phase、generic capture、shared runtime restore、steam-auth 元数据、4511 标记/restore、connect/match restore、lifecycle/postgame state apply 已采用纯 apply 边界。后续字段组按单路径、单边界推进，减少 handler 内零散字段写。
+2. Local 仍是广泛工作副本；queued-state、monotonic launch phase、generic capture、shared runtime restore、steam-auth 元数据、4511 标记/restore、connect/match/start_time/room restore、lifecycle/postgame state apply 已采用纯 apply 边界。后续字段组按单路径、单边界推进，减少 handler 内零散字段写。
 3. 双轨（local + shared）风险仍在 CURRENT；本清单只冻结入口，不声明状态单一化完成。
 
 ## 6. 停手

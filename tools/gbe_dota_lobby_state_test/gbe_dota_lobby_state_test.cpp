@@ -312,6 +312,15 @@ bool test_valid_launch_progression()
         ok &= expect_false(gbe::dota_lobby_state::restore_lobby_match_id(lobby, 100ull), "match restore keeps matching match id");
         ok &= expect_true(gbe::dota_lobby_state::restore_lobby_match_id(lobby, 200ull), "match restore applies shared match id");
         ok &= expect_eq_u64(lobby.match_id, 200ull, "match restore updates local match id");
+        lobby.game_start_time = 10u;
+        lobby.room_name = "alpha";
+        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_game_start_time(lobby, 0u), "start time restore ignores zero shared value");
+        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_game_start_time(lobby, 10u), "start time restore keeps matching value");
+        ok &= expect_true(gbe::dota_lobby_state::restore_lobby_game_start_time(lobby, 20u), "start time restore applies shared value");
+        ok &= expect_eq_u32(lobby.game_start_time, 20u, "start time restore updates local value");
+        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_room_name(lobby, "alpha"), "room restore keeps matching name");
+        ok &= expect_true(gbe::dota_lobby_state::restore_lobby_room_name(lobby, "beta"), "room restore applies shared name");
+        ok &= expect_true(lobby.room_name == "beta", "room restore updates local name");
     }
 
     // apply_lifecycle_lobby_state: lifecycle action writes state fields together.
