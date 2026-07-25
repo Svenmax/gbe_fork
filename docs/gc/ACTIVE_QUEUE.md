@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | inventory section exact heading：shared inventory section helper 要求 heading 边界匹配，避免同前缀更长 heading 误定位 | `.monkeycode/specs/gc-inventory-section-exact-heading/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory section heading anchor：shared inventory section helper 只接受行首 heading，避免正文提及 heading token 时误定位 | `.monkeycode/specs/gc-inventory-section-heading-anchor/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory section helper：routing 与 Local/shared merge inventory audit 共用二级标题 section slicing helper，避免 offset 逻辑漂移 | `.monkeycode/specs/gc-inventory-section-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | parser generic section end：解析层 §5 截止于任意下一个二级标题，避免缺失分隔线时扩大 legacy parser 扫描 | `.monkeycode/specs/gc-parser-generic-section-end/`、`tools/_audit_gc_refactor.py` |

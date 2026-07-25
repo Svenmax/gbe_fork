@@ -49,6 +49,20 @@ class InventorySectionHelperTest(unittest.TestCase):
             audit.inventory_section(text, "## 1. Alpha"),
         )
 
+    def test_ignores_same_prefix_longer_heading_before_real_heading(self):
+        text = "## 1. Alpha extended\nwrong\n## 1. Alpha\nrow\n## 2. Beta\nother\n"
+        self.assertEqual(
+            "## 1. Alpha\nrow\n",
+            audit.inventory_section(text, "## 1. Alpha"),
+        )
+
+    def test_accepts_heading_with_parenthetical_annotation(self):
+        text = "## 1. Alpha（annotated）\nrow\n## 2. Beta\nother\n"
+        self.assertEqual(
+            "## 1. Alpha（annotated）\nrow\n",
+            audit.inventory_section(text, "## 1. Alpha"),
+        )
+
 
 class DiagnosticReasonInventoryAuditTest(unittest.TestCase):
     def audit(self, header=HEADER, focused=FOCUSED):
