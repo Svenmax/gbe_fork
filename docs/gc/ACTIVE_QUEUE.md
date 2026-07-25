@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| （空） | 三个后续规格均已完成，当前队列清空 | — | generic metadata publish、8052 lifecycle pre-write、postgame chat tombstone 已独立收尾 | `git diff --check`、verification --full | PHASE_D / PHASE_E_EXIT |
+| — | — | — | — | — | — |
 
 ## 本周不做
 
@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | template registry-defensive routing：`8879`、`8095`、`8009`、`7091` 从 template-only switch 收敛到显式 defensive helper，并由 audit 保护路由真相表一致性 | `.monkeycode/specs/gc-template-registry-defensive-routing/`、`MESSAGE_ROUTING_INVENTORY.md` |
 | 2026-07-25 | postgame chat tombstone：旧 postgame chat channel 显式记录 tombstone channel/generation，并以 helper 统一 old-channel 7272 与 7014 retrieval 的 generation-scoped 消费 | `.monkeycode/specs/gc-postgame-chat-tombstone/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | 8052 lifecycle pre-write：direct/wrapped 统一经 `LocalLifecyclePreWrite` action 在 runtime queue / fallback publish 前一次写入 Local lifecycle 字段组 | `.monkeycode/specs/gc-8052-lifecycle-pre-write/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | generic metadata publish：盘点全部 capture 调用点，冻结 7009 host sync、client observe、cache/replay/details pure projection 契约并增加审计回归 | `.monkeycode/specs/gc-generic-metadata-publish/`、`LOCAL_LOBBY_USAGE.md` |

@@ -138,7 +138,7 @@ The production typed registry and dispatcher live in `dll/gbe_dota_post_login_di
 - Adapter and handler identity.
 - High-risk smoke or replay fixture metadata.
 
-Special handlers with custom context shaping remain explicit outside the table until their routing contract can be unified safely.
+Special handlers with custom context shaping remain explicit outside the table until their routing contract can be unified safely. Template replay owns only the `TEMPLATE_ONLY` whitelist; registry-owned defensive fallbacks for `8879`, `8095`, `8009`, and `7091` route through `GBE_TryHandleDotaRegistryDefensiveTemplateReplay()` before the template-only switch, and `audit_registry_defensive_template_routing` keeps the helper, switch, and routing inventory aligned.
 
 ## Handler And Effect Boundaries
 

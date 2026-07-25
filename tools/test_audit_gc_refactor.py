@@ -148,6 +148,28 @@ class PayloadSnapshotProjectionAuditTest(unittest.TestCase):
         self.assertEqual([], audit.audit_generic_metadata_capture_modes())
 
 
+class RegistryDefensiveTemplateRoutingAuditTest(unittest.TestCase):
+    def test_accepts_centralized_registry_defensive_template_routing(self):
+        self.assertEqual([], audit.audit_registry_defensive_template_routing())
+
+    def test_rejects_missing_registry_defensive_helper_case(self):
+        handler_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "dll", "gbe_dota_template_replay_handlers.cpp"))
+        handler_text = handler_text.replace("        case 7091:\n", "")
+        issues = audit.audit_registry_defensive_template_routing(handler_text=handler_text)
+        self.assertTrue(any("helper emsgs" in issue for issue in issues))
+
+    def test_rejects_registry_defensive_case_in_template_switch(self):
+        handler_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "dll", "gbe_dota_template_replay_handlers.cpp"))
+        handler_text = handler_text.replace(
+            "        // TEMPLATE_ONLY (synthetic custom game info)\n",
+            "        case 8879:\n            return GBE_HandleDotaRankRequest(body, body_size, has_source_job, source_job);\n        // TEMPLATE_ONLY (synthetic custom game info)\n",
+        )
+        self.assertIn(
+            "template replay: registry-defensive emsg 8879 remains in template-only switch",
+            audit.audit_registry_defensive_template_routing(handler_text=handler_text),
+        )
+
+
 class PublicHeaderDefinitionAuditTest(unittest.TestCase):
     def test_ignores_virtual_member_destructor(self):
         self.assertEqual(

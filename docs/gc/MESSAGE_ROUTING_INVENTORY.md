@@ -1,6 +1,6 @@
 # 消息路由清单（四轨真相表）
 
-> 源码扫描日期：2026-07-13（B4：wrapped dead fallback 删除；解析层职责文档化）。改入口必须同步更新本表。
+> 源码扫描日期：2026-07-25（registry-defensive template routing boundary 显式化）。改入口必须同步更新本表。
 > 分发顺序（post-login）：**registry → 条件/观察 fallback → template_replay**。
 > Hello / ServerHello 经 `handle_dota_client_message` 转调 welcome handlers（不进 post-login registry）。
 

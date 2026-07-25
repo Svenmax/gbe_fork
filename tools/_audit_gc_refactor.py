@@ -55,6 +55,7 @@ TEMPLATE_BLOB_OWNER_FILES = {
     "gbe_dota_template_replay_templates.cpp",
     "gbe_dota_gc_payload_helpers.cpp",
 }
+REGISTRY_DEFENSIVE_TEMPLATE_EMSGS = {"8879", "8095", "8009", "7091"}
 SOURCE_LIST_AUDIT_EXEMPTIONS = {
     "gbe_dota_chat_handlers.cpp": "compiled through handler test wrapper",
     "gbe_dota_connection_lifecycle.cpp": "production lifecycle TU, not directly offline-buildable",
@@ -669,6 +670,58 @@ def audit_template_blob_ownership(tu_paths):
                     "must include gbe_dota_template_replay_templates.h",
                 )
             )
+    return issues
+
+
+def audit_registry_defensive_template_routing(handler_text=None, inventory_text=None):
+    """Keep registry-owned template fallback cases behind one explicit boundary."""
+    if handler_text is None:
+        handler_text = read(os.path.join(ROOT_DIR, "dll", "gbe_dota_template_replay_handlers.cpp"))
+    if inventory_text is None:
+        inventory_text = read(os.path.join(ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+
+    issues = []
+    helper_name = "GBE_TryHandleDotaRegistryDefensiveTemplateReplay"
+    if helper_name not in handler_text:
+        issues.append("template replay: missing explicit registry-defensive routing helper")
+
+    helper_marker = f"{helper_name}("
+    helper_start = handler_text.find(helper_marker)
+    request_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest")
+    helper_body = handler_text[helper_start:request_start] if helper_start != -1 and request_start != -1 else ""
+    helper_emsgs = set(re.findall(r'case\s+([0-9]+)\s*:', helper_body))
+    if "case GBE_kDotaFindTopSourceTVGames:" in helper_body:
+        helper_emsgs.add("8009")
+    if helper_emsgs != REGISTRY_DEFENSIVE_TEMPLATE_EMSGS:
+        issues.append(
+            "template replay: registry-defensive helper emsgs "
+            f"{sorted(helper_emsgs)} differ from expected {sorted(REGISTRY_DEFENSIVE_TEMPLATE_EMSGS)}"
+        )
+
+    switch_match = re.search(
+        r'bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest.*?switch \(request_emsg\) \{(?P<body>.*?)\n\s*default:',
+        handler_text,
+        re.S,
+    )
+    switch_body = switch_match.group("body") if switch_match else ""
+    for emsg in sorted(REGISTRY_DEFENSIVE_TEMPLATE_EMSGS):
+        token = "GBE_kDotaFindTopSourceTVGames" if emsg == "8009" else emsg
+        if re.search(rf'case\s+{re.escape(token)}\s*:', switch_body):
+            issues.append(f"template replay: registry-defensive emsg {emsg} remains in template-only switch")
+
+    inventory_defensive = set()
+    for line in inventory_text.splitlines():
+        if "REGISTRY_DEFENSIVE" not in line:
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if cells and re.fullmatch(r"\d+", cells[0]):
+            inventory_defensive.add(cells[0])
+    if inventory_defensive != REGISTRY_DEFENSIVE_TEMPLATE_EMSGS:
+        issues.append(
+            "MESSAGE_ROUTING registry-defensive emsgs "
+            f"{sorted(inventory_defensive)} differ from expected {sorted(REGISTRY_DEFENSIVE_TEMPLATE_EMSGS)}"
+        )
+
     return issues
 
 
@@ -2050,6 +2103,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 5a: Registry-defensive template routing")
+    print("=" * 70)
+    print("  Action: keep registry-owned template fallback cases behind one explicit boundary.")
+    registry_defensive_template_issues = audit_registry_defensive_template_routing()
+    if not registry_defensive_template_issues:
+        print("  Registry-defensive template replay emsgs are centralized and documented")
+    else:
+        for issue in registry_defensive_template_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("AUDIT 5b: Retired gbe_dota_gc_internal.h boundary")
     print("=" * 70)
     print("  Action: keep the retired aggregate header deleted and use dedicated capability headers.")
@@ -2352,6 +2417,7 @@ def main():
     print(f"  Doc line-number mismatches:          {len(mismatches)}")
     print(f"  Dispatch table mismatches:           {len(dispatch_issues)}")
     print(f"  Template blob ownership issues:      {len(template_blob_issues)}")
+    print(f"  Registry-defensive template issues:  {len(registry_defensive_template_issues)}")
     print(f"  GC internal slim boundary issues:    {len(gc_internal_slim_issues)}")
     print(f"  Source-list inclusion issues:        {len(source_list_issues)}")
     print(f"  Handler side-effect seam issues:     {len(side_effect_issues)}")
@@ -2377,7 +2443,7 @@ def main():
     print(f"  CI failure localization issues:       {len(ci_failure_localization_issues)}")
     print(f"  Architecture investment boundary issues: {len(architecture_investment_boundary_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or registry_defensive_template_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
         sys.exit(1)
 
 

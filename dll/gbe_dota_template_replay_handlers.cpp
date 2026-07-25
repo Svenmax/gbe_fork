@@ -64,6 +64,47 @@
 
 using namespace gamecoordinator::tf2;
 
+namespace {
+
+struct RegistryDefensiveTemplateReplayResult {
+    bool matched{};
+    bool handled{};
+};
+
+RegistryDefensiveTemplateReplayResult GBE_TryHandleDotaRegistryDefensiveTemplateReplay(
+    Steam_Game_Coordinator &coordinator,
+    uint32 request_emsg,
+    const uint8 *body,
+    size_t body_size,
+    bool has_source_job,
+    uint64 source_job)
+{
+    switch (request_emsg) {
+        case 8879:
+            return {true, coordinator.GBE_HandleDotaRankRequest(body, body_size, has_source_job, source_job)};
+        case 8095:
+            return {true, coordinator.GBE_HandleDotaConductScorecardRequest(body, body_size, has_source_job, source_job)};
+        case GBE_kDotaFindTopSourceTVGames:
+            return {true, coordinator.GBE_HandleDotaFindTopSourceTVGamesRequest(
+                std::string(reinterpret_cast<const char *>(body), body_size),
+                has_source_job,
+                source_job,
+                false,
+                nullptr)};
+        case 7091:
+            return {true, coordinator.GBE_HandleDotaWatchGameRequest(
+                std::string(reinterpret_cast<const char *>(body), body_size),
+                has_source_job,
+                source_job,
+                false,
+                nullptr)};
+        default:
+            return {};
+    }
+}
+
+}
+
 
 bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job) {
     const GBE_DotaLootListData &loot_data = GBE_GetDotaVpkLootData();
@@ -74,6 +115,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
     bool replace_account = false;
     bool replace_steam_id = false;
     const char *response_note = "";
+
+    const RegistryDefensiveTemplateReplayResult registry_defensive =
+        GBE_TryHandleDotaRegistryDefensiveTemplateReplay(*this, request_emsg, body, body_size, has_source_job, source_job);
+    if (registry_defensive.matched)
+        return registry_defensive.handled;
 
     switch (request_emsg) {
         // TEMPLATE_ONLY (canned)
@@ -208,14 +254,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             GBE_GC_DebugLog("GC_DOTA_DIRECT", "tip request -> success response source_job=%llu", static_cast<unsigned long long>(source_job));
             return true;
         }
-        // REGISTRY_DEFENSIVE: production Rank is GBE_HandleDotaRankRequest (misc).
-        // Former template branch used a divergent canned builder and is removed.
-        case 8879:
-            return GBE_HandleDotaRankRequest(body, body_size, has_source_job, source_job);
-        // REGISTRY_DEFENSIVE: production Conduct is GBE_HandleDotaConductScorecardRequest.
-        // Former template branch suppressed the reply (divergent) and is removed.
-        case 8095:
-            return GBE_HandleDotaConductScorecardRequest(body, body_size, has_source_job, source_job);
         // TEMPLATE_ONLY (synthetic custom game info)
         case GBE_kDotaCustomGameInfoRequest: {
             uint64 custom_game_id = 0ull;
@@ -325,14 +363,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 static_cast<unsigned long long>(source_job));
             return true;
         }
-        // REGISTRY_DEFENSIVE: production owner is post_login FindTopSourceTVGames handler.
-        case GBE_kDotaFindTopSourceTVGames:
-            return GBE_HandleDotaFindTopSourceTVGamesRequest(
-                std::string(reinterpret_cast<const char *>(body), body_size),
-                has_source_job,
-                source_job,
-                false,
-                nullptr);
         // TEMPLATE_ONLY (synthetic spectate friend game)
         case 7073: {
             // CMsgSpectateFriendGame -> CMsgSpectateFriendGameResponse
@@ -399,14 +429,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 static_cast<unsigned long long>(source_job));
             return true;
         }
-        // REGISTRY_DEFENSIVE: production owner is post_login WatchGame handler.
-        case 7091:
-            return GBE_HandleDotaWatchGameRequest(
-                std::string(reinterpret_cast<const char *>(body), body_size),
-                has_source_job,
-                source_job,
-                false,
-                nullptr);
         // TEMPLATE_ONLY (synthetic claim event action)
         case 8209: {
             // CMsgDOTAClaimEventAction -> CMsgDOTAClaimEventActionResponse
