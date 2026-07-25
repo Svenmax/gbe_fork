@@ -836,13 +836,14 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
         if re.search(rf'case\s+{re.escape(token)}\s*:', switch_body):
             issues.append(f"template replay: registry-defensive emsg {emsg} remains in template-only switch")
 
-    inventory_section = inventory_text
     section_start = inventory_text.find("## 4. template_replay")
-    if section_start >= 0:
-        section_tail = inventory_text[section_start:]
-        section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
-        section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
-        inventory_section = inventory_text[section_start:section_end]
+    if section_start < 0:
+        issues.append("MESSAGE_ROUTING registry-defensive inventory missing template_replay section")
+        return issues
+    section_tail = inventory_text[section_start:]
+    section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
+    section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+    inventory_section = inventory_text[section_start:section_end]
 
     inventory_defensive = set()
     duplicate_inventory_defensive = set()

@@ -178,6 +178,14 @@ class RegistryDefensiveTemplateRoutingAuditTest(unittest.TestCase):
             audit.audit_registry_defensive_template_routing(inventory_text=inventory_text),
         )
 
+    def test_rejects_missing_template_replay_inventory_section(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("## 4. template_replay", "## 4. moved_template_replay")
+        self.assertIn(
+            "MESSAGE_ROUTING registry-defensive inventory missing template_replay section",
+            audit.audit_registry_defensive_template_routing(inventory_text=inventory_text),
+        )
+
 
 class TemplateOnlyInventoryGuardAuditTest(unittest.TestCase):
     def test_accepts_template_only_switch_and_inventory_alignment(self):
