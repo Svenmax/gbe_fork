@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | inventory duplicate helper：routing inventory audit 共用 duplicate tracking helper，避免 seen/duplicates 记录语义漂移 | `.monkeycode/specs/gc-inventory-duplicate-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory markdown cells helper：routing 与 Local/shared merge inventory audit 共用 Markdown table cell split helper，避免后续解析语义漂移 | `.monkeycode/specs/gc-inventory-markdown-cells-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory section exact heading：shared inventory section helper 要求 heading 边界匹配，避免同前缀更长 heading 误定位 | `.monkeycode/specs/gc-inventory-section-exact-heading/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory section heading anchor：shared inventory section helper 只接受行首 heading，避免正文提及 heading token 时误定位 | `.monkeycode/specs/gc-inventory-section-heading-anchor/`、`tools/_audit_gc_refactor.py` |

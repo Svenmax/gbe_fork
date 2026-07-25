@@ -72,6 +72,22 @@ class MarkdownCellsHelperTest(unittest.TestCase):
         self.assertEqual(["7091", "REGISTRY"], audit.markdown_cells(" 7091 | REGISTRY "))
 
 
+class RecordDuplicateHelperTest(unittest.TestCase):
+    def test_first_value_is_seen_without_duplicate(self):
+        seen = set()
+        duplicates = set()
+        audit.record_duplicate(seen, duplicates, "7091")
+        self.assertEqual({"7091"}, seen)
+        self.assertEqual(set(), duplicates)
+
+    def test_repeated_value_is_recorded_as_duplicate(self):
+        seen = {"7091"}
+        duplicates = set()
+        audit.record_duplicate(seen, duplicates, "7091")
+        self.assertEqual({"7091"}, seen)
+        self.assertEqual({"7091"}, duplicates)
+
+
 class DiagnosticReasonInventoryAuditTest(unittest.TestCase):
     def audit(self, header=HEADER, focused=FOCUSED):
         return audit.audit_diagnostic_reason_inventory(header, focused)[0]
