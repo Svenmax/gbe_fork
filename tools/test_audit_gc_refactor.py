@@ -235,6 +235,15 @@ class DirectConditionalFallbackRoutingAuditTest(unittest.TestCase):
         issues = audit.audit_direct_conditional_fallback_routing(inventory_text=inventory_text)
         self.assertTrue(any("MESSAGE_ROUTING direct conditional fallback emsgs" in issue for issue in issues))
 
+    def test_rejects_duplicate_direct_conditional_inventory_row(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        row = "| AuthList (5432) | CONDITIONAL_CONSUME | 同上 | 同上 |"
+        inventory_text = inventory_text.replace(row, f"{row}\n{row}")
+        self.assertIn(
+            "MESSAGE_ROUTING direct conditional fallback inventory duplicates 5432",
+            audit.audit_direct_conditional_fallback_routing(inventory_text=inventory_text),
+        )
+
 
 class WrappedHardMissRoutingAuditTest(unittest.TestCase):
     def test_accepts_centralized_wrapped_hard_miss_routing(self):

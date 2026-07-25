@@ -956,8 +956,17 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
         if f"request_emsg == {token}" in direct_body:
             issues.append(f"direct post-login: inline conditional fallback check remains for {token}")
 
+    inventory_section = inventory_text
+    section_start = inventory_text.find("## 2. 仍留在 if/fallback 的路径")
+    if section_start >= 0:
+        section_tail = inventory_text[section_start:]
+        section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
+        section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+        inventory_section = inventory_text[section_start:section_end]
+
     inventory_conditional = set()
-    for line in inventory_text.splitlines():
+    duplicate_inventory_conditional = set()
+    for line in inventory_section.splitlines():
         if "CONDITIONAL_" not in line:
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
@@ -965,7 +974,12 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
             continue
         match = re.search(r'\b(\d+)\b', cells[0])
         if match:
-            inventory_conditional.add(match.group(1))
+            emsg = match.group(1)
+            if emsg in inventory_conditional:
+                duplicate_inventory_conditional.add(emsg)
+            inventory_conditional.add(emsg)
+    for emsg in sorted(duplicate_inventory_conditional, key=int):
+        issues.append(f"MESSAGE_ROUTING direct conditional fallback inventory duplicates {emsg}")
     if inventory_conditional != DIRECT_CONDITIONAL_FALLBACK_EMSGS:
         issues.append(
             "MESSAGE_ROUTING direct conditional fallback emsgs "
