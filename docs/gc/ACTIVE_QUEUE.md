@@ -21,11 +21,11 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | D0 审计覆盖：reconnect network 公开头纳入声明/定义检查 | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | D0 审计覆盖：Store/Runtime locator 公开头纳入声明/定义检查 | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | D0 审计覆盖：split lobby helper 公开头纳入声明/定义检查 | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | D0 审计修复：公开声明 zombie 检查恢复阻断能力 | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | R3 审计收尾：专用 capability headers 纳入公开符号审计 | `REFACTOR_EXECUTION_PLAN.md` |
-| 2026-07-24 | R2 审计收尾：Dependencies 聚合对象作为显式构造依赖契约 | `REFACTOR_EXECUTION_PLAN.md` |
 
 ## 队列规则
 

@@ -85,6 +85,7 @@ class PublicCapabilityHeaderAuditTest(unittest.TestCase):
             "gbe_dota_gc_diagnostics.h",
             "gbe_dota_lobby_handler_helpers.h",
             "gbe_dota_locator.h",
+            "gbe_dota_reconnect_network.h",
             "gbe_dota_vpk_loot_cache.h",
             "gbe_dota_server_hello_cache.h",
         }.issubset(header_names))
@@ -118,6 +119,11 @@ class PublicCapabilityHeaderAuditTest(unittest.TestCase):
                 "GBE_UnbindDotaRuntimeState",
                 "GBE_DotaRuntimeState",
             },
+            "gbe_dota_reconnect_network.h": {
+                "GBE_PrepareDotaReconnectPostConnectionState",
+                "GBE_ExecuteDotaReconnectPostEffects",
+                "GBE_ExecuteDotaReconnectPostConnectionState",
+            },
             "gbe_dota_server_hello_cache.h": {
                 "GBE_HasLastDotaServerHelloContext",
                 "GBE_GetLastDotaServerHelloContext",
@@ -135,6 +141,12 @@ class PublicCapabilityHeaderAuditTest(unittest.TestCase):
 
 
 class PublicHeaderDefinitionAuditTest(unittest.TestCase):
+    def test_ignores_virtual_member_destructor(self):
+        self.assertEqual(
+            set(),
+            audit.extract_header_symbols("struct GBE_Interface { virtual ~GBE_Interface() = default; };"),
+        )
+
     def test_accepts_declarations_with_definitions(self):
         declared, zombies = audit.audit_public_header_definitions(
             ["void GBE_Alpha();", "bool GBE_Beta(int value);"],

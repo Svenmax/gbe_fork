@@ -116,6 +116,7 @@
 14. [x] D0 审计修复：公开声明 zombie 检查实际收集 capability header 符号，并将 header-inline 定义视为有效实现；缺失 `.cpp` 定义重新成为阻断项。
 15. [x] D0 审计覆盖：将 split lobby handler 共享 helper 的公开头纳入声明/定义审计，防止跨 TU 接口缺失实现未被阻断。
 16. [x] D0 审计覆盖：将 Store/Runtime locator 的公开能力头纳入声明/定义审计，防止 locator 生命周期接口与实现漂移。
+17. [x] D0 审计覆盖：将 reconnect network orchestration 的公开能力头纳入声明/定义审计，防止异步 generation gate 接口与实现漂移。
 
 ### 验收
 

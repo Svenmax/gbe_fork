@@ -24,6 +24,7 @@ PUBLIC_HEADERS = [
     os.path.join(ROOT_DIR, "dll", "gbe_dota_gc_diagnostics.h"),
     os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_handler_helpers.h"),
     os.path.join(ROOT_DIR, "dll", "gbe_dota_locator.h"),
+    os.path.join(ROOT_DIR, "dll", "gbe_dota_reconnect_network.h"),
     os.path.join(ROOT_DIR, "dll", "gbe_dota_vpk_loot_cache.h"),
     os.path.join(ROOT_DIR, "dll", "gbe_dota_server_hello_cache.h"),
     os.path.join(ROOT_DIR, "dll", "dll", "gbe_dota_reconnect_shared.h"),
@@ -441,6 +442,9 @@ def extract_header_symbols(header_text):
     for raw_line in header_text.splitlines():
         line = raw_line.split("//", 1)[0].strip()
         if not line:
+            continue
+        if line.startswith("virtual "):
+            declaration = ""
             continue
         if line.startswith(("struct ", "class ", "using ", "template ", "#")):
             declaration = ""
