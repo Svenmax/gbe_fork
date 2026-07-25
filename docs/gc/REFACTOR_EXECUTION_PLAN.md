@@ -110,6 +110,7 @@
 8. [x] R4.3 将 8246 destroy 的 immediate clear 先经 `transition_runtime_clear_boundary()` 决策，再由 `destroy_lobby_reset_action_list()` 和 lifecycle executor 执行 reset；25、8247 response 顺序保持原位。
 9. [x] R4.4 将 7004 signout 的 postgame state 提升、shared publish 和 details update 收敛为 `signout_postgame_action_list()` 经 lifecycle executor 执行；7005 response 与后续 postgame queue 保持原位。
 10. [x] R4.5 将 7035 current-game disconnect 在取回 25 后的 deferred reset 收敛为 `abandon_disconnect_reset_action_list()` 经 lifecycle executor 执行；保留 Reset generation boundary、清空消息队列与协议取回顺序。
+11. [x] R4.6 将 7004 postgame queue 后的 details update、25 response 与 pending-finalize slot 收敛为 `normal_signout_postgame_followup_action_list()` 经 lifecycle executor 执行；保持 details、25、pending 的原有顺序与 DotaResponse route。
 
 ### 验收
 
@@ -128,6 +129,7 @@
 - R4.3 的初版错误地复用了 finalize teardown gate；handler smoke 证明 8246 无 pending teardown，改为 immediate runtime-clear boundary 后 `bash tools/run_gc_offline_tests.sh --full` 通过，包含 handler `90/90`。
 - R4.4 更新 handler side-effect seam 基线：7004 迁移后 lifecycle handler 的直接 shared publish 归零，直接 details update 从 2 降至 1。
 - R4.5 审计确认 abandon、normal signout 和 reset 三类 deferred slot 在消费时均校验 lobby id 与 generation；新增 flow 回归验证 7035 deferred reset 的 action 类型、reason、generation boundary 及清理选项。
+- R4.6 新增 flow 回归验证 7004 followup 的 details update、25 push 和 pending-finalize action 顺序；handler 直接 details update 归零。
 
 ## R5：持续验证与上游同步
 

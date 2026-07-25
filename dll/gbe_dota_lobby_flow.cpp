@@ -206,6 +206,17 @@ GBE_DotaActionList normal_signout_cache_unsubscribed_action_list(
     return actions;
 }
 
+GBE_DotaActionList normal_signout_postgame_followup_action_list(
+    std::uint64_t lobby_id,
+    const std::string &response_25)
+{
+    GBE_DotaActionList actions;
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PracticeLobbyDetailsUpdate, 0u, std::string(), 0ull, 0ull, 0ull, "7004_signout_postgame_state" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PushIncomingNow, GBE_kDotaCacheUnsubscribed | GBE_kProtoMask, response_25, 0ull, 0ull, 0ull, "25_after_7004" });
+    actions.push_back(GBE_DotaAction{ GBE_DotaActionType::PendingNormalSignoutFinalizeAfterCacheUnsubscribed, 0u, std::string(), 0ull, lobby_id, 0ull, "25_after_7004" });
+    return actions;
+}
+
 GBE_DotaActionList leave_lobby_cache_unsubscribed_action_list(
     std::uint64_t lobby_id,
     const std::string &response_25,

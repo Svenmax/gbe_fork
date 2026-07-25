@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| （空） | R4.1 至 R4.5 已完成；默认 D0 修 bug | — | — | verification --full | PHASE_D / PHASE_E_EXIT |
+| （空） | R4.1 至 R4.6 已完成；默认 D0 修 bug | — | — | verification --full | PHASE_D / PHASE_E_EXIT |
 
 ## 本周不做
 
@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-24 | R4.6：7004 followup details/25/pending 经 action list 与 executor | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-24 | R4.5：7035 deferred reset 经 action list 与 executor | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-24 | R4.4：7004 postgame state/publish/details 经 action list 与 executor | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-24 | R4.3：8246 immediate clear 经独立 decision 与 reset action executor | `REFACTOR_EXECUTION_PLAN.md` |

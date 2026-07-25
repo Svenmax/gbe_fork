@@ -239,7 +239,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaGameMatchSignOutRequest(bool wrapped,
                 gbe::dota_lifecycle_state_machine::EffectKind::TeardownPostGameInitiateRequested))
             return true;
         GBE_QueueDotaPostGameTeardown("7004_signout_postgame", wrapped, outer_session_field_raw, false, false, false);
-        GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7004_signout_postgame_state");
 
         std::string response_25;
         if (gbe::gc_message::build_dota_lobby_cache_unsubscribed_payload(lobby_id, response_25)) {
@@ -248,10 +247,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaGameMatchSignOutRequest(bool wrapped,
             options.outer_session_field_raw = outer_session_field_raw;
             options.push_route = gbe::dota_lifecycle::PushRoute::DotaResponse;
             GBE_ExecuteDotaLifecycleActions(
-                gbe::dota_lobby_flow::normal_signout_cache_unsubscribed_action_list(
-                    lobby_id,
-                    response_25,
-                    "25_after_7004"),
+                gbe::dota_lobby_flow::normal_signout_postgame_followup_action_list(lobby_id, response_25),
                 options);
         } else {
             GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 25 after 7004 LobbyID=%llu", static_cast<unsigned long long>(lobby_id));

@@ -531,6 +531,19 @@ bool test_signout_postgame_action_list()
         expect_true(actions[2].reason == "7004_signout_run_post_game", "signout details reason");
 }
 
+bool test_normal_signout_postgame_followup_action_list()
+{
+    const GBE_DotaActionList actions = gbe::dota_lobby_flow::normal_signout_postgame_followup_action_list(42u, "response-25");
+    return expect_eq_u64(actions.size(), 3u, "normal signout followup action count") &&
+        expect_eq_action_type(actions[0].type, GBE_DotaActionType::PracticeLobbyDetailsUpdate, "normal signout details first") &&
+        expect_true(actions[0].reason == "7004_signout_postgame_state", "normal signout details reason") &&
+        expect_eq_action_type(actions[1].type, GBE_DotaActionType::PushIncomingNow, "normal signout 25 after details") &&
+        expect_eq_u64(actions[1].emsg, 25u | 0x80000000u, "normal signout 25 emsg") &&
+        expect_true(actions[1].payload == "response-25", "normal signout 25 payload") &&
+        expect_eq_action_type(actions[2].type, GBE_DotaActionType::PendingNormalSignoutFinalizeAfterCacheUnsubscribed, "normal signout pending after 25") &&
+        expect_eq_u64(actions[2].item_id, 42u, "normal signout pending lobby id");
+}
+
 bool test_join_lobby_context_mapping()
 {
     bool ok = true;
@@ -2025,6 +2038,7 @@ int main()
     ok &= test_destroy_lobby_reset_action_list();
     ok &= test_abandon_disconnect_reset_action_list();
     ok &= test_signout_postgame_action_list();
+    ok &= test_normal_signout_postgame_followup_action_list();
     ok &= test_join_lobby_context_mapping();
     ok &= test_join_lobby_action_list();
     ok &= test_launch_state_plan_input_source_lobby_mapping();

@@ -115,6 +115,10 @@ GBE_DotaActionList normal_signout_cache_unsubscribed_action_list(
     const std::string &response_25,
     const char *reason);
 
+GBE_DotaActionList normal_signout_postgame_followup_action_list(
+    std::uint64_t lobby_id,
+    const std::string &response_25);
+
 GBE_DotaActionList leave_lobby_cache_unsubscribed_action_list(
     std::uint64_t lobby_id,
     const std::string &response_25,
