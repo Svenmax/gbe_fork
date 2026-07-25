@@ -221,6 +221,35 @@ struct SharedLobbyRuntimeRestorePlan {
     bool ignored_readyup_regression{};
 };
 
+struct SharedLobbyOptionsRestorePlan {
+    bool apply_game_mode{};
+    std::uint32_t game_mode{};
+    bool apply_server_region{};
+    std::uint32_t server_region{};
+    bool apply_lan{};
+    bool lan{};
+    bool apply_lan_host_ping_location{};
+    std::string lan_host_ping_location;
+    bool apply_allow_cheats{};
+    bool allow_cheats{};
+    bool apply_fill_with_bots{};
+    bool fill_with_bots{};
+    bool apply_allow_spectating{};
+    bool allow_spectating{};
+    bool apply_pass_key{};
+    std::string pass_key;
+    bool apply_visibility{};
+    std::uint32_t visibility{};
+    bool apply_bot_difficulty_radiant{};
+    std::uint32_t bot_difficulty_radiant{};
+    bool apply_bot_difficulty_dire{};
+    std::uint32_t bot_difficulty_dire{};
+    bool apply_bot_radiant{};
+    std::uint64_t bot_radiant{};
+    bool apply_bot_dire{};
+    std::uint64_t bot_dire{};
+};
+
 struct SteamAuthAckLaunchPlan {
     std::uint32_t ticket_crc{};
     std::uint32_t message_sequence{};
@@ -527,6 +556,12 @@ SharedLobbyRuntimeRestorePlan compose_shared_lobby_runtime_restore_plan(
 bool apply_shared_lobby_runtime_restore_plan(
     GBE_LocalLobby &lobby,
     const SharedLobbyRuntimeRestorePlan &plan);
+SharedLobbyOptionsRestorePlan compose_shared_lobby_options_restore_plan(
+    const GBE_LocalLobby &current_lobby,
+    const GBE_SharedDotaLobbyState &shared_lobby);
+bool apply_shared_lobby_options_restore_plan(
+    GBE_LocalLobby &lobby,
+    const SharedLobbyOptionsRestorePlan &plan);
 SteamAuthAckLaunchPlan compose_steam_auth_ack_launch_plan(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t derived_ticket_crc);

@@ -438,6 +438,103 @@ bool apply_shared_lobby_runtime_restore_plan(
     return changed;
 }
 
+SharedLobbyOptionsRestorePlan compose_shared_lobby_options_restore_plan(
+    const GBE_LocalLobby &current_lobby,
+    const GBE_SharedDotaLobbyState &shared_lobby)
+{
+    SharedLobbyOptionsRestorePlan plan{};
+    plan.game_mode = shared_lobby.game_mode;
+    plan.apply_game_mode = current_lobby.game_mode != plan.game_mode;
+    plan.server_region = shared_lobby.server_region;
+    plan.apply_server_region = current_lobby.server_region != plan.server_region;
+    plan.lan = shared_lobby.lan;
+    plan.apply_lan = current_lobby.lan != plan.lan;
+    plan.lan_host_ping_location = shared_lobby.lan_host_ping_location;
+    plan.apply_lan_host_ping_location =
+        current_lobby.lan_host_ping_location != plan.lan_host_ping_location;
+    plan.allow_cheats = shared_lobby.allow_cheats;
+    plan.apply_allow_cheats = current_lobby.allow_cheats != plan.allow_cheats;
+    plan.fill_with_bots = shared_lobby.fill_with_bots;
+    plan.apply_fill_with_bots = current_lobby.fill_with_bots != plan.fill_with_bots;
+    plan.allow_spectating = shared_lobby.allow_spectating;
+    plan.apply_allow_spectating = current_lobby.allow_spectating != plan.allow_spectating;
+    plan.pass_key = shared_lobby.pass_key;
+    plan.apply_pass_key = current_lobby.pass_key != plan.pass_key;
+    plan.visibility = shared_lobby.visibility;
+    plan.apply_visibility = current_lobby.visibility != plan.visibility;
+    plan.bot_difficulty_radiant = shared_lobby.bot_difficulty_radiant;
+    plan.apply_bot_difficulty_radiant =
+        current_lobby.bot_difficulty_radiant != plan.bot_difficulty_radiant;
+    plan.bot_difficulty_dire = shared_lobby.bot_difficulty_dire;
+    plan.apply_bot_difficulty_dire =
+        current_lobby.bot_difficulty_dire != plan.bot_difficulty_dire;
+    plan.bot_radiant = shared_lobby.bot_radiant;
+    plan.apply_bot_radiant = current_lobby.bot_radiant != plan.bot_radiant;
+    plan.bot_dire = shared_lobby.bot_dire;
+    plan.apply_bot_dire = current_lobby.bot_dire != plan.bot_dire;
+    return plan;
+}
+
+bool apply_shared_lobby_options_restore_plan(
+    GBE_LocalLobby &lobby,
+    const SharedLobbyOptionsRestorePlan &plan)
+{
+    bool changed = false;
+    if (plan.apply_game_mode) {
+        lobby.game_mode = plan.game_mode;
+        changed = true;
+    }
+    if (plan.apply_server_region) {
+        lobby.server_region = plan.server_region;
+        changed = true;
+    }
+    if (plan.apply_lan) {
+        lobby.lan = plan.lan;
+        changed = true;
+    }
+    if (plan.apply_lan_host_ping_location) {
+        lobby.lan_host_ping_location = plan.lan_host_ping_location;
+        changed = true;
+    }
+    if (plan.apply_allow_cheats) {
+        lobby.allow_cheats = plan.allow_cheats;
+        changed = true;
+    }
+    if (plan.apply_fill_with_bots) {
+        lobby.fill_with_bots = plan.fill_with_bots;
+        changed = true;
+    }
+    if (plan.apply_allow_spectating) {
+        lobby.allow_spectating = plan.allow_spectating;
+        changed = true;
+    }
+    if (plan.apply_pass_key) {
+        lobby.pass_key = plan.pass_key;
+        changed = true;
+    }
+    if (plan.apply_visibility) {
+        lobby.visibility = plan.visibility;
+        changed = true;
+    }
+    if (plan.apply_bot_difficulty_radiant) {
+        lobby.bot_difficulty_radiant = plan.bot_difficulty_radiant;
+        changed = true;
+    }
+    if (plan.apply_bot_difficulty_dire) {
+        lobby.bot_difficulty_dire = plan.bot_difficulty_dire;
+        changed = true;
+    }
+    if (plan.apply_bot_radiant) {
+        lobby.bot_radiant = plan.bot_radiant;
+        changed = true;
+    }
+    if (plan.apply_bot_dire) {
+        lobby.bot_dire = plan.bot_dire;
+        changed = true;
+    }
+    return changed;
+}
+
 SteamAuthAckLaunchPlan compose_steam_auth_ack_launch_plan(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t derived_ticket_crc)

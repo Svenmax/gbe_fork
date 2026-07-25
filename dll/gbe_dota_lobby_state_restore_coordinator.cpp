@@ -202,70 +202,11 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             changed = true;
         }
 
-        if (GBE_local_lobby.game_mode != shared_lobby.game_mode) {
-            GBE_local_lobby.game_mode = shared_lobby.game_mode;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.server_region != shared_lobby.server_region) {
-            GBE_local_lobby.server_region = shared_lobby.server_region;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.lan != shared_lobby.lan) {
-            GBE_local_lobby.lan = shared_lobby.lan;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.lan_host_ping_location != shared_lobby.lan_host_ping_location) {
-            GBE_local_lobby.lan_host_ping_location = shared_lobby.lan_host_ping_location;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.allow_cheats != shared_lobby.allow_cheats) {
-            GBE_local_lobby.allow_cheats = shared_lobby.allow_cheats;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.fill_with_bots != shared_lobby.fill_with_bots) {
-            GBE_local_lobby.fill_with_bots = shared_lobby.fill_with_bots;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.allow_spectating != shared_lobby.allow_spectating) {
-            GBE_local_lobby.allow_spectating = shared_lobby.allow_spectating;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.pass_key != shared_lobby.pass_key) {
-            GBE_local_lobby.pass_key = shared_lobby.pass_key;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.visibility != shared_lobby.visibility) {
-            GBE_local_lobby.visibility = shared_lobby.visibility;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.bot_difficulty_radiant != shared_lobby.bot_difficulty_radiant) {
-            GBE_local_lobby.bot_difficulty_radiant = shared_lobby.bot_difficulty_radiant;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.bot_difficulty_dire != shared_lobby.bot_difficulty_dire) {
-            GBE_local_lobby.bot_difficulty_dire = shared_lobby.bot_difficulty_dire;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.bot_radiant != shared_lobby.bot_radiant) {
-            GBE_local_lobby.bot_radiant = shared_lobby.bot_radiant;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.bot_dire != shared_lobby.bot_dire) {
-            GBE_local_lobby.bot_dire = shared_lobby.bot_dire;
-            changed = true;
-        }
+        changed = gbe::dota_lobby_state::apply_shared_lobby_options_restore_plan(
+            GBE_local_lobby,
+            gbe::dota_lobby_state::compose_shared_lobby_options_restore_plan(
+                GBE_local_lobby,
+                shared_lobby)) || changed;
 
         if (!gbe::dota_custom_game::custom_game_details_equal(GBE_local_lobby.custom_game, shared_lobby.custom_game)) {
             GBE_local_lobby.custom_game = shared_lobby.custom_game;

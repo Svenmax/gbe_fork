@@ -335,6 +335,75 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(lobby.owner_slot, 4u, "owner slot restore updates local value");
     }
 
+    // shared options restore: copy lobby options field group when shared differs.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.game_mode = 1u;
+        lobby.server_region = 2u;
+        lobby.lan = true;
+        lobby.lan_host_ping_location = "cn";
+        lobby.allow_cheats = false;
+        lobby.fill_with_bots = true;
+        lobby.allow_spectating = true;
+        lobby.pass_key = "secret";
+        lobby.visibility = 1u;
+        lobby.bot_difficulty_radiant = 2u;
+        lobby.bot_difficulty_dire = 3u;
+        lobby.bot_radiant = 10ull;
+        lobby.bot_dire = 20ull;
+        GBE_SharedDotaLobbyState shared{};
+        shared.game_mode = lobby.game_mode;
+        shared.server_region = lobby.server_region;
+        shared.lan = lobby.lan;
+        shared.lan_host_ping_location = lobby.lan_host_ping_location;
+        shared.allow_cheats = lobby.allow_cheats;
+        shared.fill_with_bots = lobby.fill_with_bots;
+        shared.allow_spectating = lobby.allow_spectating;
+        shared.pass_key = lobby.pass_key;
+        shared.visibility = lobby.visibility;
+        shared.bot_difficulty_radiant = lobby.bot_difficulty_radiant;
+        shared.bot_difficulty_dire = lobby.bot_difficulty_dire;
+        shared.bot_radiant = lobby.bot_radiant;
+        shared.bot_dire = lobby.bot_dire;
+        const auto matching_plan = gbe::dota_lobby_state::compose_shared_lobby_options_restore_plan(lobby, shared);
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_shared_lobby_options_restore_plan(lobby, matching_plan),
+            "options restore keeps matching field group");
+        shared.game_mode = 5u;
+        shared.server_region = 6u;
+        shared.lan = false;
+        shared.lan_host_ping_location = "us";
+        shared.allow_cheats = true;
+        shared.fill_with_bots = false;
+        shared.allow_spectating = false;
+        shared.pass_key = "open";
+        shared.visibility = 0u;
+        shared.bot_difficulty_radiant = 4u;
+        shared.bot_difficulty_dire = 5u;
+        shared.bot_radiant = 30ull;
+        shared.bot_dire = 40ull;
+        const auto changed_plan = gbe::dota_lobby_state::compose_shared_lobby_options_restore_plan(lobby, shared);
+        ok &= expect_true(changed_plan.apply_game_mode, "options restore marks game_mode change");
+        ok &= expect_true(changed_plan.apply_pass_key, "options restore marks pass_key change");
+        ok &= expect_true(changed_plan.apply_bot_dire, "options restore marks bot_dire change");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_shared_lobby_options_restore_plan(lobby, changed_plan),
+            "options restore reports field group change");
+        ok &= expect_eq_u32(lobby.game_mode, 5u, "options restore updates game_mode");
+        ok &= expect_eq_u32(lobby.server_region, 6u, "options restore updates server_region");
+        ok &= expect_false(lobby.lan, "options restore updates lan");
+        ok &= expect_true(lobby.lan_host_ping_location == "us", "options restore updates lan host ping");
+        ok &= expect_true(lobby.allow_cheats, "options restore updates allow_cheats");
+        ok &= expect_false(lobby.fill_with_bots, "options restore updates fill_with_bots");
+        ok &= expect_false(lobby.allow_spectating, "options restore updates allow_spectating");
+        ok &= expect_true(lobby.pass_key == "open", "options restore updates pass_key");
+        ok &= expect_eq_u32(lobby.visibility, 0u, "options restore updates visibility");
+        ok &= expect_eq_u32(lobby.bot_difficulty_radiant, 4u, "options restore updates radiant bot difficulty");
+        ok &= expect_eq_u32(lobby.bot_difficulty_dire, 5u, "options restore updates dire bot difficulty");
+        ok &= expect_eq_u64(lobby.bot_radiant, 30ull, "options restore updates radiant bots");
+        ok &= expect_eq_u64(lobby.bot_dire, 40ull, "options restore updates dire bots");
+    }
+
     // apply_lifecycle_lobby_state: lifecycle action writes state fields together.
     {
         GBE_LocalLobby lobby = make_active_lobby();
