@@ -354,6 +354,14 @@ class LegacyWrappedParserGuardAuditTest(unittest.TestCase):
             audit.audit_legacy_wrapped_parser_guard(inventory_text=inventory_text),
         )
 
+    def test_rejects_missing_parser_inventory_section(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("## 5. 解析层职责", "## 5. moved_parser")
+        self.assertIn(
+            "MESSAGE_ROUTING legacy wrapped parser inventory missing parser section",
+            audit.audit_legacy_wrapped_parser_guard(inventory_text=inventory_text),
+        )
+
 
 class PublicHeaderDefinitionAuditTest(unittest.TestCase):
     def test_ignores_virtual_member_destructor(self):

@@ -1065,13 +1065,14 @@ def audit_legacy_wrapped_parser_guard(source_texts=None, inventory_text=None):
 
     issues = []
     legacy_symbol = "GBE_ExtractWrappedDotaDirectContext"
-    inventory_section = inventory_text
     section_start = inventory_text.find("## 5. 解析层职责")
-    if section_start >= 0:
-        section_tail = inventory_text[section_start:]
-        section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
-        section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
-        inventory_section = inventory_text[section_start:section_end]
+    if section_start < 0:
+        issues.append("MESSAGE_ROUTING legacy wrapped parser inventory missing parser section")
+        return issues
+    section_tail = inventory_text[section_start:]
+    section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
+    section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+    inventory_section = inventory_text[section_start:section_end]
 
     inventory_has_marker = any(
         legacy_symbol in line and "LEGACY_UNUSED" in line
