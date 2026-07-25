@@ -112,6 +112,16 @@ class AppendEmsgSetDiffIssueHelperTest(unittest.TestCase):
         self.assertEqual(["prefix ['3', '100'] differ from production kTable ['4', '20']"], issues)
 
 
+class ExtractCaseEmsgsHelperTest(unittest.TestCase):
+    def test_extracts_numeric_case_labels(self):
+        body = "case 2536:\ncase 8744:\nbreak;"
+        self.assertEqual({"2536", "8744"}, audit.extract_case_emsgs(body))
+
+    def test_maps_named_case_labels_to_emsgs(self):
+        body = "case GBE_kDotaFindTopSourceTVGames:\ncase GBE_kDotaCustomGameInfoRequest:\nbreak;"
+        self.assertEqual({"8009", "8020"}, audit.extract_case_emsgs(body))
+
+
 class SortedNumericValuesHelperTest(unittest.TestCase):
     def test_sorts_string_values_numerically(self):
         self.assertEqual(["3", "20", "100"], audit.sorted_numeric_values({"20", "100", "3"}))

@@ -63,7 +63,8 @@ TEMPLATE_ONLY_TEMPLATE_EMSGS = {
     "7466", "7468", "7073", "8209", "8260",
     "2510", "1092", "1025", "2574", "2576",
 }
-TEMPLATE_CASE_TOKEN_TO_EMSG = {
+CASE_TOKEN_TO_EMSG = {
+    "GBE_kDotaFindTopSourceTVGames": "8009",
     "GBE_kDotaCustomGameInfoRequest": "8020",
     "GBE_kDotaJoinableCustomGameModesRequest": "7466",
     "GBE_kDotaJoinableCustomLobbiesRequest": "7468",
@@ -492,6 +493,13 @@ def append_emsg_set_diff_issue(issues, prefix, actual, expected, expected_label=
     )
 
 
+def extract_case_emsgs(body, token_to_emsg=CASE_TOKEN_TO_EMSG):
+    return {
+        token_to_emsg.get(token, token)
+        for token in re.findall(r'case\s+([A-Za-z0-9_]+)\s*:', body)
+    }
+
+
 def extract_header_symbols(header_text):
     """Extract external GBE_* function/variable declarations from the header."""
     symbols = set()
@@ -855,9 +863,7 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
     helper_start = handler_text.find(helper_marker)
     request_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest")
     helper_body = handler_text[helper_start:request_start] if helper_start != -1 and request_start != -1 else ""
-    helper_emsgs = set(re.findall(r'case\s+([0-9]+)\s*:', helper_body))
-    if "case GBE_kDotaFindTopSourceTVGames:" in helper_body:
-        helper_emsgs.add("8009")
+    helper_emsgs = extract_case_emsgs(helper_body)
     if helper_emsgs != REGISTRY_DEFENSIVE_TEMPLATE_EMSGS:
         append_emsg_set_diff_issue(
             issues,
@@ -919,9 +925,7 @@ def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
         return ["template replay: missing template-only switch body"]
 
     switch_body = switch_match.group("body")
-    switch_emsgs = set()
-    for token in re.findall(r'case\s+([A-Za-z0-9_]+)\s*:', switch_body):
-        switch_emsgs.add(TEMPLATE_CASE_TOKEN_TO_EMSG.get(token, token))
+    switch_emsgs = extract_case_emsgs(switch_body)
     if switch_emsgs != TEMPLATE_ONLY_TEMPLATE_EMSGS:
         append_emsg_set_diff_issue(
             issues,
