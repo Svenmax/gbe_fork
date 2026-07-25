@@ -644,6 +644,31 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(lobby.owner_slot, 5u, "owner slot apply updates local value");
     }
 
+    // apply_chat_channel / clear_chat_channel: local chat channel writes are grouped.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_chat_channel(lobby, 42ull, "lobby", 3u),
+            "chat channel apply reports initial channel change");
+        ok &= expect_true(lobby.has_chat_channel, "chat channel apply marks channel present");
+        ok &= expect_eq_u64(lobby.chat_channel_id, 42ull, "chat channel apply updates channel id");
+        ok &= expect_true(lobby.chat_channel_name == "lobby", "chat channel apply updates channel name");
+        ok &= expect_eq_u32(lobby.chat_channel_type, 3u, "chat channel apply updates channel type");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_chat_channel(lobby, 42ull, "lobby", 3u),
+            "chat channel apply keeps matching values");
+        ok &= expect_true(
+            gbe::dota_lobby_state::clear_chat_channel(lobby),
+            "chat channel clear reports existing channel change");
+        ok &= expect_false(lobby.has_chat_channel, "chat channel clear marks channel absent");
+        ok &= expect_eq_u64(lobby.chat_channel_id, 0ull, "chat channel clear resets channel id");
+        ok &= expect_true(lobby.chat_channel_name.empty(), "chat channel clear resets channel name");
+        ok &= expect_eq_u32(lobby.chat_channel_type, 0u, "chat channel clear resets channel type");
+        ok &= expect_false(
+            gbe::dota_lobby_state::clear_chat_channel(lobby),
+            "chat channel clear keeps empty channel state");
+    }
+
     // shared options restore: copy lobby options field group when shared differs.
     {
         GBE_LocalLobby lobby = make_active_lobby();

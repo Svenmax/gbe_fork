@@ -257,11 +257,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
         return true;
     }
 
-    GBE_local_lobby.has_chat_channel = true;
-    if (GBE_local_lobby.chat_channel_id == 0)
-        GBE_local_lobby.chat_channel_id = GBE_GenerateDotaChatChannelId();
-    GBE_local_lobby.chat_channel_name = request.channel_name;
-    GBE_local_lobby.chat_channel_type = request.has_channel_type ? request.channel_type : 3u;
+    const uint64 chat_channel_id = GBE_local_lobby.chat_channel_id != 0 ?
+        GBE_local_lobby.chat_channel_id : GBE_GenerateDotaChatChannelId();
+    gbe::dota_lobby_state::apply_chat_channel(
+        GBE_local_lobby,
+        chat_channel_id,
+        request.channel_name,
+        request.has_channel_type ? request.channel_type : 3u);
 
     if (GBE_local_lobby.generic_lobby_id != 0) {
         Steam_Client *steam_client = get_steam_client();
@@ -579,10 +581,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         // During host disconnect from hero selection, the real client can still be unwinding
         // server/game-rules state after postgame chat leaves. Clearing the entire local/generic
         // lobby snapshot here is too early and can race later disconnect teardown.
-        GBE_local_lobby.has_chat_channel = false;
-        GBE_local_lobby.chat_channel_id = 0;
-        GBE_local_lobby.chat_channel_name.clear();
-        GBE_local_lobby.chat_channel_type = 0;
+        gbe::dota_lobby_state::clear_chat_channel(GBE_local_lobby);
         gbe::dota_lobby_state::clear_postgame_chat_tombstone(GBE_local_lobby);
 
         std::string persona_message;
@@ -619,10 +618,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         // which prevents the postgame 7272/7014 from triggering ResetGCMemory and the
         // client never sees the score screen.
         if (d.request_matches_local) {
-            GBE_local_lobby.has_chat_channel = false;
-            GBE_local_lobby.chat_channel_id = 0;
-            GBE_local_lobby.chat_channel_name.clear();
-            GBE_local_lobby.chat_channel_type = 0;
+            gbe::dota_lobby_state::clear_chat_channel(GBE_local_lobby);
         } else {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",

@@ -1043,6 +1043,38 @@ bool apply_runtime_connect(
     return true;
 }
 
+bool apply_chat_channel(
+    GBE_LocalLobby &lobby,
+    std::uint64_t channel_id,
+    const std::string &channel_name,
+    std::uint32_t channel_type)
+{
+    const bool changed =
+        !lobby.has_chat_channel ||
+        lobby.chat_channel_id != channel_id ||
+        lobby.chat_channel_name != channel_name ||
+        lobby.chat_channel_type != channel_type;
+    lobby.has_chat_channel = true;
+    lobby.chat_channel_id = channel_id;
+    lobby.chat_channel_name = channel_name;
+    lobby.chat_channel_type = channel_type;
+    return changed;
+}
+
+bool clear_chat_channel(GBE_LocalLobby &lobby)
+{
+    const bool changed =
+        lobby.has_chat_channel ||
+        lobby.chat_channel_id != 0ull ||
+        !lobby.chat_channel_name.empty() ||
+        lobby.chat_channel_type != 0u;
+    lobby.has_chat_channel = false;
+    lobby.chat_channel_id = 0ull;
+    lobby.chat_channel_name.clear();
+    lobby.chat_channel_type = 0u;
+    return changed;
+}
+
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

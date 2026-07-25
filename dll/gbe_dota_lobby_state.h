@@ -787,6 +787,12 @@ bool apply_source_tv_metadata(
 bool apply_runtime_connect(
     GBE_LocalLobby &lobby,
     const std::string &connect);
+bool apply_chat_channel(
+    GBE_LocalLobby &lobby,
+    std::uint64_t channel_id,
+    const std::string &channel_name,
+    std::uint32_t channel_type);
+bool clear_chat_channel(GBE_LocalLobby &lobby);
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,
