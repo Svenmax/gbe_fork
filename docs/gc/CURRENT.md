@@ -35,6 +35,8 @@
 
 **audit marker order helper（2026-07-25）：** `gc-audit-marker-order-helper` 已将 direct/wrapped post-login routing audit 的 marker 顺序比较收敛为 `marker_appears_after(...)`，保持缺失 marker 时不触发顺序诊断的语义。
 
+**audit any token helper（2026-07-25）：** `gc-audit-any-token-helper` 已将 wrapped hard-miss audit 的禁用 route token 检测收敛为 `contains_any_token(...)`，保持 substring membership 语义。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。

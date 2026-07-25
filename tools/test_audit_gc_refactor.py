@@ -120,6 +120,17 @@ class MarkerAppearsAfterHelperTest(unittest.TestCase):
         self.assertFalse(audit.marker_appears_after("helper template", "helper", "registry"))
 
 
+class ContainsAnyTokenHelperTest(unittest.TestCase):
+    def test_returns_true_when_any_token_is_present(self):
+        self.assertTrue(audit.contains_any_token("before beta after", ("alpha", "beta")))
+
+    def test_returns_false_when_tokens_are_absent(self):
+        self.assertFalse(audit.contains_any_token("before gamma after", ("alpha", "beta")))
+
+    def test_returns_false_for_empty_token_collection(self):
+        self.assertFalse(audit.contains_any_token("before beta after", ()))
+
+
 class ContainsFunctionCallHelperTest(unittest.TestCase):
     def test_detects_function_call_with_whitespace(self):
         self.assertTrue(audit.contains_function_call("GBE_DoThing  (value);", "GBE_DoThing"))

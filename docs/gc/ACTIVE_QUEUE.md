@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | audit any token helper：wrapped hard-miss audit 的禁用 route token 检测共用 `contains_any_token(...)` | `.monkeycode/specs/gc-audit-any-token-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | audit marker order helper：direct/wrapped post-login routing audit 的 marker 顺序比较共用 `marker_appears_after(...)` | `.monkeycode/specs/gc-audit-marker-order-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | audit word token helper：retired lifecycle/reconnect/shared-lobby audit 的 whole-word token 检测共用 `contains_word_token(...)` | `.monkeycode/specs/gc-audit-word-token-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | audit request body marker slicing：direct/wrapped post-login request body audit slicing 复用 `text_between_markers(...)`，保持缺失 marker 空 body 语义 | `.monkeycode/specs/gc-audit-request-body-marker-slicing/`、`tools/_audit_gc_refactor.py` |

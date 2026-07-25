@@ -500,6 +500,10 @@ def marker_appears_after(text, marker, reference_marker):
     return marker_position != -1 and reference_position != -1 and marker_position > reference_position
 
 
+def contains_any_token(text, tokens):
+    return any(token in text for token in tokens)
+
+
 def contains_function_call(text, symbol):
     return bool(re.search(r"\b" + re.escape(symbol) + r"\s*\(", text))
 
@@ -1085,6 +1089,7 @@ def audit_wrapped_hard_miss_routing(handler_text=None, inventory_text=None):
 
     issues = []
     helper_name = "GBE_HandleDotaWrappedHardMiss"
+    prohibited_route_tokens = ("GBE_HandleDotaTemplateReplayRequest", "GBE_HandleDotaSetTeamSlot")
     if helper_name not in handler_text:
         issues.append("wrapped post-login: missing explicit hard-miss helper")
 
@@ -1096,7 +1101,7 @@ def audit_wrapped_hard_miss_routing(handler_text=None, inventory_text=None):
     )
     if "unregistered wrapped miss" not in helper_body or "return false;" not in helper_body:
         issues.append("wrapped post-login: hard-miss helper must log and return false")
-    if "GBE_HandleDotaTemplateReplayRequest" in helper_body or "GBE_HandleDotaSetTeamSlot" in helper_body:
+    if contains_any_token(helper_body, prohibited_route_tokens):
         issues.append("wrapped post-login: hard-miss helper must not route to template replay or SetTeamSlot")
 
     wrapped_body = text_between_markers(
@@ -1108,7 +1113,7 @@ def audit_wrapped_hard_miss_routing(handler_text=None, inventory_text=None):
         issues.append("wrapped post-login: request path does not call hard-miss helper")
     if marker_appears_after(wrapped_body, "GBE_DispatchDotaPostLoginRequest(route_context)", helper_name):
         issues.append("wrapped post-login: hard miss must run after registry dispatch")
-    if "GBE_HandleDotaTemplateReplayRequest" in wrapped_body or "GBE_HandleDotaSetTeamSlot" in wrapped_body:
+    if contains_any_token(wrapped_body, prohibited_route_tokens):
         issues.append("wrapped post-login: request path must not route miss to template replay or SetTeamSlot")
 
     inventory_section_text = inventory_section(inventory_text, MESSAGE_ROUTING_FALLBACK_HEADING)
