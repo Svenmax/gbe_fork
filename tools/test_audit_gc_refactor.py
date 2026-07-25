@@ -288,6 +288,15 @@ class DirectConditionalFallbackRoutingAuditTest(unittest.TestCase):
             audit.audit_direct_conditional_fallback_routing(inventory_text=inventory_text),
         )
 
+    def test_rejects_direct_conditional_row_after_fallback_section_when_separator_is_missing(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        row = "| AuthList (5432) | CONDITIONAL_CONSUME | 同上 | 同上 |"
+        inventory_text = inventory_text.replace(row, "")
+        inventory_text = inventory_text.replace("\n---\n\n## 3. Hello / Welcome pipeline", "\n\n## 3. Hello / Welcome pipeline", 1)
+        inventory_text += f"\n{row}\n"
+        issues = audit.audit_direct_conditional_fallback_routing(inventory_text=inventory_text)
+        self.assertTrue(any("MESSAGE_ROUTING direct conditional fallback emsgs" in issue for issue in issues))
+
 
 class WrappedHardMissRoutingAuditTest(unittest.TestCase):
     def test_accepts_centralized_wrapped_hard_miss_routing(self):
@@ -329,6 +338,17 @@ class WrappedHardMissRoutingAuditTest(unittest.TestCase):
         inventory_text = inventory_text.replace("## 2. 仍留在 if/fallback 的路径", "## 2. moved_fallback")
         self.assertIn(
             "MESSAGE_ROUTING wrapped hard miss inventory missing fallback section",
+            audit.audit_wrapped_hard_miss_routing(inventory_text=inventory_text),
+        )
+
+    def test_rejects_wrapped_hard_miss_marker_after_fallback_section_when_separator_is_missing(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        row = "| （未注册 miss） | HARD_MISS | 经 wrapped hard miss helper log + return false | B4：删除误落到 SetTeamSlot 的 dead fallback |"
+        inventory_text = inventory_text.replace(row, "")
+        inventory_text = inventory_text.replace("\n---\n\n## 3. Hello / Welcome pipeline", "\n\n## 3. Hello / Welcome pipeline", 1)
+        inventory_text += "\n| moved | HARD_MISS | wrapped hard miss helper | outside fallback |\n"
+        self.assertIn(
+            "MESSAGE_ROUTING wrapped hard miss must mention wrapped hard miss helper",
             audit.audit_wrapped_hard_miss_routing(inventory_text=inventory_text),
         )
 

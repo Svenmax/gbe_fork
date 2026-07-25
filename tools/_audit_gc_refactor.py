@@ -974,8 +974,8 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
         issues.append("MESSAGE_ROUTING direct conditional fallback inventory missing fallback section")
         return issues
     section_tail = inventory_text[section_start:]
-    section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
-    section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+    section_end_match = re.search(r'^##\s+', section_tail[len("## 2. 仍留在 if/fallback 的路径"):], re.MULTILINE)
+    section_end = section_start + len("## 2. 仍留在 if/fallback 的路径") + section_end_match.start() if section_end_match else len(inventory_text)
     inventory_section = inventory_text[section_start:section_end]
 
     inventory_conditional = set()
@@ -1040,8 +1040,8 @@ def audit_wrapped_hard_miss_routing(handler_text=None, inventory_text=None):
         issues.append("MESSAGE_ROUTING wrapped hard miss inventory missing fallback section")
         return issues
     section_tail = inventory_text[section_start:]
-    section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
-    section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+    section_end_match = re.search(r'^##\s+', section_tail[len("## 2. 仍留在 if/fallback 的路径"):], re.MULTILINE)
+    section_end = section_start + len("## 2. 仍留在 if/fallback 的路径") + section_end_match.start() if section_end_match else len(inventory_text)
     inventory_section = inventory_text[section_start:section_end]
 
     inventory_hard_miss = False
