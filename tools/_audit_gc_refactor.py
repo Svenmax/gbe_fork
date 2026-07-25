@@ -22,6 +22,7 @@ PUBLIC_HEADERS = [
     os.path.join(ROOT_DIR, "dll", "gbe_dota_payload_wire_helpers.h"),
     os.path.join(ROOT_DIR, "dll", "gbe_dota_inventory_ports.h"),
     os.path.join(ROOT_DIR, "dll", "gbe_dota_gc_diagnostics.h"),
+    os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_handler_helpers.h"),
     os.path.join(ROOT_DIR, "dll", "gbe_dota_vpk_loot_cache.h"),
     os.path.join(ROOT_DIR, "dll", "gbe_dota_server_hello_cache.h"),
     os.path.join(ROOT_DIR, "dll", "dll", "gbe_dota_reconnect_shared.h"),

@@ -83,6 +83,7 @@ class PublicCapabilityHeaderAuditTest(unittest.TestCase):
         header_names = {header.rsplit("/", 1)[-1] for header in audit.PUBLIC_HEADERS}
         self.assertTrue({
             "gbe_dota_gc_diagnostics.h",
+            "gbe_dota_lobby_handler_helpers.h",
             "gbe_dota_vpk_loot_cache.h",
             "gbe_dota_server_hello_cache.h",
         }.issubset(header_names))
@@ -99,6 +100,14 @@ class PublicCapabilityHeaderAuditTest(unittest.TestCase):
             "gbe_dota_vpk_loot_cache.h": {
                 "GBE_GetDotaVpkLootData",
                 "GBE_SetDotaVpkLootData",
+            },
+            "gbe_dota_lobby_handler_helpers.h": {
+                "GBE_ApplyDotaCustomGameDetailsRequest",
+                "GBE_NormalizeDotaCustomGameDetailsFromInstalledMod",
+                "GBE_GenerateDotaLobbyId",
+                "GBE_GenerateDotaMatchId",
+                "GBE_AdaptDotaLobbyInviteCacheSubscribedPayload",
+                "GBE_IsDotaLobbyInviteCacheSubscribedPayload",
             },
             "gbe_dota_server_hello_cache.h": {
                 "GBE_HasLastDotaServerHelloContext",
