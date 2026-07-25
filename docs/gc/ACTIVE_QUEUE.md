@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| （空） | R2 审计收尾、R3 聚合头与公开符号审计收尾、R4.1 至 R4.6、queued launch/runtime 与 monotonic launch phase 单写入切片已完成；默认 D0 修 bug | — | — | verification --full | PHASE_D / PHASE_E_EXIT |
+| （空） | R2 审计收尾、R3 聚合头与公开符号审计收尾、R4.1 至 R4.6、queued launch/runtime、monotonic launch phase 与 generic capture 单写入切片已完成；默认 D0 修 bug | — | — | verification --full | PHASE_D / PHASE_E_EXIT |
 
 ## 本周不做
 
@@ -21,11 +21,11 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | D2 切片：generic lobby capture 的 state/game_state merge 收敛为纯 plan/apply，保留 launch 回退保护 | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | D2 切片：monotonic launch phase 收敛为纯 apply 边界，保留 publish 与日志顺序 | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | D2 首切片：queued lobby state 的 state/game_state/launch_phase 收敛为单一 Local apply 边界 | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | D0 审计覆盖：reconnect network 公开头纳入声明/定义检查 | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | D0 审计覆盖：Store/Runtime locator 公开头纳入声明/定义检查 | `REFACTOR_EXECUTION_PLAN.md` |
-| 2026-07-25 | D0 审计覆盖：split lobby helper 公开头纳入声明/定义检查 | `REFACTOR_EXECUTION_PLAN.md` |
 
 ## 队列规则
 

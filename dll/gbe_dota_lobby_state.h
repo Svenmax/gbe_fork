@@ -203,6 +203,14 @@ struct QueuedLobbyStateApplyPlan {
     bool preserved_game_state{};
 };
 
+struct GenericLobbyStateCapturePlan {
+    bool apply_state{};
+    std::uint32_t state{};
+    bool apply_game_state{};
+    std::uint32_t game_state{};
+    bool ignored_stale_state{};
+};
+
 struct LaunchLifecycleTransitionDecision {
     bool apply_lobby_state{};
     std::uint32_t next_state{};
@@ -478,6 +486,16 @@ QueuedLobbyStateApplyPlan compose_queued_lobby_state_apply_plan(
 void apply_queued_lobby_state_apply_plan(
     GBE_LocalLobby &lobby,
     const QueuedLobbyStateApplyPlan &plan);
+GenericLobbyStateCapturePlan compose_generic_lobby_state_capture_plan(
+    const GBE_LocalLobby &current_lobby,
+    bool has_generic_state,
+    std::uint32_t generic_state,
+    bool has_generic_game_state,
+    std::uint32_t generic_game_state,
+    std::uint32_t setup_synced_launch_phase);
+void apply_generic_lobby_state_capture_plan(
+    GBE_LocalLobby &lobby,
+    const GenericLobbyStateCapturePlan &plan);
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t ready_state,

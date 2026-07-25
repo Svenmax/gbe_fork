@@ -110,38 +110,29 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                 const std::string generic_custom_game_crc_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomGameCrcKey);
                 const std::string generic_custom_game_timestamp_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomGameTimestampKey);
                 const std::string generic_custom_game_penalties_raw = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomGamePenaltiesKey);
-                if (!generic_lobby_state_raw.empty()) {
-                    const uint32 generic_lobby_state = gbe::proto_wire::parse_uint32_or_zero(generic_lobby_state_raw.c_str());
-                    const bool stale_launch_regression =
-                        GBE_local_lobby.custom_game.game_id != 0ull &&
-                        generic_lobby_state < GBE_local_lobby.state &&
-                        GBE_local_lobby.match_id != 0ull &&
-                        GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced;
-                    if (stale_launch_regression) {
-                        GBE_GC_DebugLog(
-                            "GC_DOTA_LOBBY",
-                            "[LOBBY] Ignored stale generic lobby state reason=%s lobby_id=%llu generic_lobby_id=%llu local_state=%u generic_state=%u launch_phase=%s",
-                            reason ? reason : "capture_current_lobby_state",
-                            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                            static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
-                            GBE_local_lobby.state,
-                            generic_lobby_state,
-                            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
-                        );
-                    } else {
-                        GBE_local_lobby.state = generic_lobby_state;
-                    }
+                const uint32 generic_lobby_state = gbe::proto_wire::parse_uint32_or_zero(generic_lobby_state_raw.c_str());
+                const uint32 generic_lobby_game_state = gbe::proto_wire::parse_uint32_or_zero(generic_lobby_game_state_raw.c_str());
+                const gbe::dota_lobby_state::GenericLobbyStateCapturePlan generic_state_plan =
+                    gbe::dota_lobby_state::compose_generic_lobby_state_capture_plan(
+                        GBE_local_lobby,
+                        !generic_lobby_state_raw.empty(),
+                        generic_lobby_state,
+                        !generic_lobby_game_state_raw.empty(),
+                        generic_lobby_game_state,
+                        GBE_kDotaLaunchPhaseSetupSynced);
+                if (generic_state_plan.ignored_stale_state) {
+                    GBE_GC_DebugLog(
+                        "GC_DOTA_LOBBY",
+                        "[LOBBY] Ignored stale generic lobby state reason=%s lobby_id=%llu generic_lobby_id=%llu local_state=%u generic_state=%u launch_phase=%s",
+                        reason ? reason : "capture_current_lobby_state",
+                        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                        static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+                        GBE_local_lobby.state,
+                        generic_lobby_state,
+                        GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
+                    );
                 }
-                if (!generic_lobby_game_state_raw.empty()) {
-                    const uint32 generic_lobby_game_state = gbe::proto_wire::parse_uint32_or_zero(generic_lobby_game_state_raw.c_str());
-                    const bool stale_launch_game_regression =
-                        GBE_local_lobby.custom_game.game_id != 0ull &&
-                        generic_lobby_game_state < GBE_local_lobby.game_state &&
-                        GBE_local_lobby.match_id != 0ull &&
-                        GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced;
-                    if (!stale_launch_game_regression)
-                        GBE_local_lobby.game_state = generic_lobby_game_state;
-                }
+                gbe::dota_lobby_state::apply_generic_lobby_state_capture_plan(GBE_local_lobby, generic_state_plan);
                 if (!generic_room_name.empty())
                     GBE_local_lobby.room_name = generic_room_name;
                 const uint64 generic_match_id = gbe::proto_wire::parse_uint64_or_zero(generic_match_id_raw.c_str());

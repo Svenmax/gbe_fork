@@ -363,6 +363,39 @@ void apply_queued_lobby_state_apply_plan(
     lobby.launch_phase = plan.launch_phase;
 }
 
+GenericLobbyStateCapturePlan compose_generic_lobby_state_capture_plan(
+    const GBE_LocalLobby &current_lobby,
+    bool has_generic_state,
+    std::uint32_t generic_state,
+    bool has_generic_game_state,
+    std::uint32_t generic_game_state,
+    std::uint32_t setup_synced_launch_phase)
+{
+    const bool protect_launch_progress =
+        current_lobby.custom_game.game_id != 0ull &&
+        current_lobby.match_id != 0ull &&
+        current_lobby.launch_phase >= setup_synced_launch_phase;
+    GenericLobbyStateCapturePlan plan{};
+    plan.state = generic_state;
+    plan.game_state = generic_game_state;
+    plan.ignored_stale_state = has_generic_state && protect_launch_progress && generic_state < current_lobby.state;
+    plan.apply_state = has_generic_state && !plan.ignored_stale_state;
+    plan.apply_game_state =
+        has_generic_game_state &&
+        !(protect_launch_progress && generic_game_state < current_lobby.game_state);
+    return plan;
+}
+
+void apply_generic_lobby_state_capture_plan(
+    GBE_LocalLobby &lobby,
+    const GenericLobbyStateCapturePlan &plan)
+{
+    if (plan.apply_state)
+        lobby.state = plan.state;
+    if (plan.apply_game_state)
+        lobby.game_state = plan.game_state;
+}
+
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t ready_state,

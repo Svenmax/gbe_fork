@@ -222,6 +222,30 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(lobby.launch_phase, GBE_kDotaLaunchPhaseRunQueued, "launch phase keeps monotonic value");
     }
 
+    // generic lobby capture: preserve custom-game launch progress and apply fresh fields together.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.custom_game.game_id = 1ull;
+        lobby.match_id = 2ull;
+        lobby.launch_phase = GBE_kDotaLaunchPhaseSetupSynced;
+        lobby.state = 2u;
+        lobby.game_state = 3u;
+        const auto stale_plan = gbe::dota_lobby_state::compose_generic_lobby_state_capture_plan(
+            lobby, true, 1u, true, 2u, GBE_kDotaLaunchPhaseSetupSynced);
+        ok &= expect_true(stale_plan.ignored_stale_state, "generic capture identifies stale state");
+        ok &= expect_false(stale_plan.apply_state, "generic capture skips stale state");
+        ok &= expect_false(stale_plan.apply_game_state, "generic capture skips stale game state");
+        gbe::dota_lobby_state::apply_generic_lobby_state_capture_plan(lobby, stale_plan);
+        ok &= expect_eq_u32(lobby.state, 2u, "generic capture preserves state");
+        ok &= expect_eq_u32(lobby.game_state, 3u, "generic capture preserves game_state");
+
+        const auto fresh_plan = gbe::dota_lobby_state::compose_generic_lobby_state_capture_plan(
+            lobby, true, 3u, true, 4u, GBE_kDotaLaunchPhaseSetupSynced);
+        gbe::dota_lobby_state::apply_generic_lobby_state_capture_plan(lobby, fresh_plan);
+        ok &= expect_eq_u32(lobby.state, 3u, "generic capture applies state");
+        ok &= expect_eq_u32(lobby.game_state, 4u, "generic capture applies game_state");
+    }
+
     // compose_queued_lobby_state_apply_plan: state=1 + game_state=0 + sync -> bump to setup_synced.
     {
         GBE_LocalLobby lobby = make_active_lobby();
