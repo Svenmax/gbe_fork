@@ -1072,8 +1072,8 @@ def audit_legacy_wrapped_parser_guard(source_texts=None, inventory_text=None):
         issues.append("MESSAGE_ROUTING legacy wrapped parser inventory missing parser section")
         return issues
     section_tail = inventory_text[section_start:]
-    section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
-    section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+    section_end_match = re.search(r'^##\s+', section_tail[len("## 5. 解析层职责"):], re.MULTILINE)
+    section_end = section_start + len("## 5. 解析层职责") + section_end_match.start() if section_end_match else len(inventory_text)
     inventory_section = inventory_text[section_start:section_end]
 
     inventory_has_marker = any(

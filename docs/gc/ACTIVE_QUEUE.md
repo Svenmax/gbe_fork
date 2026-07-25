@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | parser generic section end：解析层 §5 截止于任意下一个二级标题，避免缺失分隔线时扩大 legacy parser 扫描 | `.monkeycode/specs/gc-parser-generic-section-end/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | fallback generic section end：fallback §2 截止于任意下一个二级标题，避免缺失分隔线时扩大 direct/wrapped 扫描 | `.monkeycode/specs/gc-fallback-generic-section-end/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | template_replay generic section end：template_replay §4 截止于任意下一个二级标题，避免缺失分隔线时扩大扫描 | `.monkeycode/specs/gc-template-replay-generic-section-end/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | registry generic section end：Registry inventory §1 截止于任意下一个二级标题，避免缺失分隔线时扩大扫描 | `.monkeycode/specs/gc-registry-generic-section-end/`、`tools/_audit_gc_refactor.py` |

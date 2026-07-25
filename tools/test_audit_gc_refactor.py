@@ -394,6 +394,16 @@ class LegacyWrappedParserGuardAuditTest(unittest.TestCase):
             audit.audit_legacy_wrapped_parser_guard(inventory_text=inventory_text),
         )
 
+    def test_rejects_legacy_unused_marker_after_parser_section_when_separator_is_missing(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("**LEGACY_UNUSED**", "ACTIVE")
+        inventory_text = inventory_text.replace("\n---\n\n## 6. 维护检查清单", "\n\n## 6. 维护检查清单", 1)
+        inventory_text += "\n`GBE_ExtractWrappedDotaDirectContext` **LEGACY_UNUSED** outside parser section\n"
+        self.assertIn(
+            "MESSAGE_ROUTING must document GBE_ExtractWrappedDotaDirectContext as LEGACY_UNUSED",
+            audit.audit_legacy_wrapped_parser_guard(inventory_text=inventory_text),
+        )
+
 
 class PublicHeaderDefinitionAuditTest(unittest.TestCase):
     def test_ignores_virtual_member_destructor(self):
