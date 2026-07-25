@@ -125,9 +125,9 @@
 
 - `gbe_dota_lifecycle_state_machine_test` 通过。
 - `bash tools/run_gc_verification.sh --full` 完整通过：audit、replay、flow、payload helper `555/555`、handler `90/90` 和 behavior replay 均通过。
-- 架构审计保留两项既有告警：内部头 inventory 注记与 `Dependencies` 构造依赖识别；本切片未新增告警，验证命令成功退出。
+- R4.1 时架构审计曾保留内部头 inventory 注记与 `Dependencies` 构造依赖识别；二者已分别在 R3 与 R2 审计收尾中消除。
 - R4.2 更新 handler side-effect seam 基线：7041 publish 已迁至 executor，lifecycle handler 的直接 publish 计数从 2 降至 1。
-- R4.2 后再次运行 `bash tools/run_gc_verification.sh --full`：handler seam 与 architecture boundary 均为 0；审计仅保留既有内部头 inventory 注记和 `Dependencies` 构造依赖识别。
+- R4.2 后再次运行 `bash tools/run_gc_verification.sh --full`：handler seam 与 architecture boundary 均为 0；后续 R2/R3 审计收尾将公开依赖契约和 capability header 符号审计同步至当前实现。
 - R4.3 的初版错误地复用了 finalize teardown gate；handler smoke 证明 8246 无 pending teardown，改为 immediate runtime-clear boundary 后 `bash tools/run_gc_offline_tests.sh --full` 通过，包含 handler `90/90`。
 - R4.4 更新 handler side-effect seam 基线：7004 迁移后 lifecycle handler 的直接 shared publish 归零，直接 details update 从 2 降至 1。
 - R4.5 审计确认 abandon、normal signout 和 reset 三类 deferred slot 在消费时均校验 lobby id 与 generation；新增 flow 回归验证 7035 deferred reset 的 action 类型、reason、generation boundary 及清理选项。
