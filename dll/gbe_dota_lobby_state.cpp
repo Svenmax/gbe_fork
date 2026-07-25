@@ -491,6 +491,27 @@ void apply_lifecycle_lobby_state(
     lobby.game_state = game_state;
 }
 
+void apply_postgame_lobby_state_plan(
+    GBE_LocalLobby &lobby,
+    const PostGameLobbyStateApplyPlan &plan)
+{
+    lobby.state = plan.state;
+    lobby.game_state = plan.game_state;
+    lobby.has_chat_channel = true;
+    lobby.chat_channel_id = plan.chat_channel_id;
+    lobby.chat_channel_name = plan.chat_channel_name;
+    lobby.chat_channel_type = 18u;
+    lobby.abandon_pre_postgame_chat_channel_id = plan.abandon_pre_postgame_chat_channel_id;
+    lobby.has_cache_version = false;
+    lobby.cache_version = 0;
+    lobby.has_cache_service_id = false;
+    lobby.cache_service_id = 0;
+    lobby.cache_service_list.clear();
+    lobby.has_cache_sync_version = false;
+    lobby.cache_sync_version = 0;
+    lobby.abandon_postgame_active = true;
+}
+
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t ready_state,

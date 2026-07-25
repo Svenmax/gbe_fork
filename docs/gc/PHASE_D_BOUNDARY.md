@@ -54,6 +54,7 @@
 - 匹配 lobby 的 4511 通知仅通过 `mark_launch_4511_seen()` 更新去重标记；首次变更后的 generation-gated shared publish 与 server-id 同步顺序保持。
 - shared-to-local 4511 标记恢复仅通过 `restore_launch_4511_seen()` 更新；client restore 的 `changed` 聚合语义保持。
 - `LobbyStateApply` lifecycle action 仅通过 `apply_lifecycle_lobby_state()` 更新 `state` 和 `game_state`；action 执行顺序、条件 gate 与后续 publish 保持。
+- `PostGameLobbyStateApply` lifecycle action 仅通过 `apply_postgame_lobby_state_plan()` 更新 postgame state、chat 与 cache 清理字段组；action 序列与后续 publish 保持。
 - Local 工作副本、host-only generation-gated shared publish 与 client restore/观察语义保持。
 - rich presence、peer push 与 shared publish 仍处于既有顺序；本切片未提取对象，未引入生产 CompositionRoot。
 

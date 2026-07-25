@@ -227,6 +227,14 @@ struct SteamAuthAckLaunchPlan {
     bool mark_ack_queued{};
 };
 
+struct PostGameLobbyStateApplyPlan {
+    std::uint32_t state{};
+    std::uint32_t game_state{};
+    std::uint64_t chat_channel_id{};
+    std::string chat_channel_name;
+    std::uint64_t abandon_pre_postgame_chat_channel_id{};
+};
+
 struct LaunchLifecycleTransitionDecision {
     bool apply_lobby_state{};
     std::uint32_t next_state{};
@@ -533,6 +541,9 @@ void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,
     std::uint32_t game_state);
+void apply_postgame_lobby_state_plan(
+    GBE_LocalLobby &lobby,
+    const PostGameLobbyStateApplyPlan &plan);
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t ready_state,

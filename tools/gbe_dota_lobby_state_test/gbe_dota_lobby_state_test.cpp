@@ -307,6 +307,43 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(lobby.game_state, 7u, "lifecycle state apply updates game state");
     }
 
+    // apply_postgame_lobby_state_plan: postgame action patches state, chat, and cache together.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.has_cache_version = true;
+        lobby.cache_version = 9u;
+        lobby.has_cache_service_id = true;
+        lobby.cache_service_id = 11u;
+        lobby.cache_service_list = {1u, 2u};
+        lobby.has_cache_sync_version = true;
+        lobby.cache_sync_version = 13u;
+        lobby.abandon_postgame_active = false;
+
+        gbe::dota_lobby_state::PostGameLobbyStateApplyPlan plan{};
+        plan.state = 3u;
+        plan.game_state = 6u;
+        plan.chat_channel_id = 42ull;
+        plan.chat_channel_name = "postgame";
+        plan.abandon_pre_postgame_chat_channel_id = 7ull;
+        gbe::dota_lobby_state::apply_postgame_lobby_state_plan(lobby, plan);
+
+        ok &= expect_eq_u32(lobby.state, 3u, "postgame plan updates state");
+        ok &= expect_eq_u32(lobby.game_state, 6u, "postgame plan updates game state");
+        ok &= expect_true(lobby.has_chat_channel, "postgame plan enables chat channel");
+        ok &= expect_eq_u64(lobby.chat_channel_id, 42ull, "postgame plan sets chat channel id");
+        ok &= expect_true(lobby.chat_channel_name == "postgame", "postgame plan sets chat channel name");
+        ok &= expect_eq_u32(lobby.chat_channel_type, 18u, "postgame plan sets chat channel type");
+        ok &= expect_eq_u64(lobby.abandon_pre_postgame_chat_channel_id, 7ull, "postgame plan keeps pre channel");
+        ok &= expect_false(lobby.has_cache_version, "postgame plan clears cache version flag");
+        ok &= expect_eq_u32(lobby.cache_version, 0u, "postgame plan clears cache version");
+        ok &= expect_false(lobby.has_cache_service_id, "postgame plan clears cache service flag");
+        ok &= expect_eq_u64(lobby.cache_service_id, 0ull, "postgame plan clears cache service id");
+        ok &= expect_true(lobby.cache_service_list.empty(), "postgame plan clears cache service list");
+        ok &= expect_false(lobby.has_cache_sync_version, "postgame plan clears cache sync flag");
+        ok &= expect_eq_u32(lobby.cache_sync_version, 0u, "postgame plan clears cache sync version");
+        ok &= expect_true(lobby.abandon_postgame_active, "postgame plan marks abandon postgame active");
+    }
+
     // compose_queued_lobby_state_apply_plan: state=1 + game_state=0 + sync -> bump to setup_synced.
     {
         GBE_LocalLobby lobby = make_active_lobby();

@@ -98,23 +98,16 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
                     action.lobby_state,
                     action.lobby_game_state);
                 break;
-            case GBE_DotaActionType::PostGameLobbyStateApply:
-                GBE_local_lobby.state = action.lobby_state;
-                GBE_local_lobby.game_state = action.lobby_game_state;
-                GBE_local_lobby.has_chat_channel = true;
-                GBE_local_lobby.chat_channel_id = action.job_id;
-                GBE_local_lobby.chat_channel_name = action.payload;
-                GBE_local_lobby.chat_channel_type = 18u;
-                GBE_local_lobby.abandon_pre_postgame_chat_channel_id = action.item_id;
-                GBE_local_lobby.has_cache_version = false;
-                GBE_local_lobby.cache_version = 0;
-                GBE_local_lobby.has_cache_service_id = false;
-                GBE_local_lobby.cache_service_id = 0;
-                GBE_local_lobby.cache_service_list.clear();
-                GBE_local_lobby.has_cache_sync_version = false;
-                GBE_local_lobby.cache_sync_version = 0;
-                GBE_local_lobby.abandon_postgame_active = true;
+            case GBE_DotaActionType::PostGameLobbyStateApply: {
+                gbe::dota_lobby_state::PostGameLobbyStateApplyPlan plan{};
+                plan.state = action.lobby_state;
+                plan.game_state = action.lobby_game_state;
+                plan.chat_channel_id = action.job_id;
+                plan.chat_channel_name = action.payload;
+                plan.abandon_pre_postgame_chat_channel_id = action.item_id;
+                gbe::dota_lobby_state::apply_postgame_lobby_state_plan(GBE_local_lobby, plan);
                 break;
+            }
             case GBE_DotaActionType::LobbyMemberRuntimeUpdate:
                 previous_action_succeeded = GBE_SetDotaLobbyMemberRuntimeState(
                     action.target_steam_id,

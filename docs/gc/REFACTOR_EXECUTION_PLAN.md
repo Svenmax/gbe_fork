@@ -125,6 +125,7 @@
 23. [x] D2 切片：4511 LAN server available 通过 `mark_launch_4511_seen()` 单一化幂等去重标记；首次标记才 publish shared state，重复通知不 re-publish。
 24. [x] D2 切片：lifecycle `LobbyStateApply` 通过 `apply_lifecycle_lobby_state()` 单一化 `state` / `game_state` 字段组写入；executor 继续承担 action 序列、条件 gate 与副作用。
 25. [x] D2 切片：shared restore 通过 `restore_launch_4511_seen()` 单一化 4511 去重标记复制；Coordinator 继续聚合字段变更以保留 client restore 语义。
+26. [x] D2 切片：lifecycle `PostGameLobbyStateApply` 通过 `apply_postgame_lobby_state_plan()` 单一化 state、chat 与 cache 清理字段组；executor 继续承担 action 序列与副作用。
 
 ### 验收
 
@@ -152,6 +153,7 @@
 - D2 4511 去重标记新增 lobby-state 回归，并保留 handler smoke 对“标记后 publish、重复不 re-publish”的序列验证；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
 - D2 lifecycle state apply 新增 lobby-state 回归，验证 `state` 与 `game_state` 作为字段组写入；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
 - D2 shared 4511 restore 新增 lobby-state 回归，验证 matching restore 不变更、不同值 restore 返回变更并更新标记；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
+- D2 postgame state apply 新增 lobby-state 回归，验证 state、chat channel 与 cache 清理作为字段组写入；`bash tools/run_gc_verification.sh --full` 完整通过，含 audit、payload helper `555/555` 与 handler `90/90`。
 
 ## R5：持续验证与上游同步
 
