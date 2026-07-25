@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | legacy wrapped parser section guard：`GBE_ExtractWrappedDotaDirectContext` 的 `LEGACY_UNUSED` 标记只在解析层 §5 中有效，避免其它段落文字误满足 audit | `.monkeycode/specs/gc-legacy-wrapped-parser-section-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | wrapped hard miss section guard：wrapped HARD_MISS inventory 标记只在 fallback §2 中有效，避免其它段落文字误满足 audit | `.monkeycode/specs/gc-wrapped-hard-miss-section-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | direct conditional duplicate inventory guard：direct conditional fallback inventory 重复 emsg 行由 audit 检测，且解析限定在 fallback §2 | `.monkeycode/specs/gc-direct-conditional-duplicate-inventory-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | registry-defensive duplicate inventory guard：registry-defensive inventory 重复 emsg 行由 audit 检测，且解析限定在 template_replay §4 | `.monkeycode/specs/gc-registry-defensive-duplicate-inventory-guard/`、`tools/_audit_gc_refactor.py` |
