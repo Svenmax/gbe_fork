@@ -340,14 +340,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Request(
 
         bool updated_owner_team_or_slot_from_7034 = false;
         if (!custom_game_launch && request.has_draft_steam_id && request.draft_steam_id == GBE_GetDotaLobbyOwnerSteamId()) {
-            if (request.has_draft_team && GBE_local_lobby.owner_team != request.draft_team) {
-                GBE_local_lobby.owner_team = request.draft_team;
+            if (request.has_draft_team &&
+                gbe::dota_lobby_state::apply_lobby_owner_team(GBE_local_lobby, request.draft_team)) {
                 updated_owner_team_or_slot_from_7034 = true;
             }
 
             const uint32 draft_owner_slot = request.has_draft_team_slot ? (request.draft_team_slot + 1u) : 0u;
-            if (draft_owner_slot != 0u && GBE_local_lobby.owner_slot != draft_owner_slot) {
-                GBE_local_lobby.owner_slot = draft_owner_slot;
+            if (draft_owner_slot != 0u &&
+                gbe::dota_lobby_state::apply_lobby_owner_slot(GBE_local_lobby, draft_owner_slot)) {
                 updated_owner_team_or_slot_from_7034 = true;
             }
         }

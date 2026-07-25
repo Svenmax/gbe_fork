@@ -762,9 +762,15 @@ bool apply_lobby_owner_connected(
 bool restore_lobby_owner_team(
     GBE_LocalLobby &lobby,
     std::uint32_t shared_owner_team);
+bool apply_lobby_owner_team(
+    GBE_LocalLobby &lobby,
+    std::uint32_t owner_team);
 bool restore_lobby_owner_slot(
     GBE_LocalLobby &lobby,
     std::uint32_t shared_owner_slot);
+bool apply_lobby_owner_slot(
+    GBE_LocalLobby &lobby,
+    std::uint32_t owner_slot);
 bool restore_lobby_custom_game(
     GBE_LocalLobby &lobby,
     const GBE_DotaCustomGameDetails &shared_custom_game);

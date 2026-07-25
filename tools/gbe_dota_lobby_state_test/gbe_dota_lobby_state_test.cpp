@@ -623,6 +623,27 @@ bool test_valid_launch_progression()
             "owner connected apply keeps matching connected value");
     }
 
+    // apply_lobby_owner_team / apply_lobby_owner_slot: local owner runtime writes are idempotent.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.owner_team = 2u;
+        lobby.owner_slot = 3u;
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_lobby_owner_team(lobby, 2u),
+            "owner team apply keeps matching value");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_owner_team(lobby, 4u),
+            "owner team apply reports value change");
+        ok &= expect_eq_u32(lobby.owner_team, 4u, "owner team apply updates local value");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_lobby_owner_slot(lobby, 3u),
+            "owner slot apply keeps matching value");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_owner_slot(lobby, 5u),
+            "owner slot apply reports value change");
+        ok &= expect_eq_u32(lobby.owner_slot, 5u, "owner slot apply updates local value");
+    }
+
     // shared options restore: copy lobby options field group when shared differs.
     {
         GBE_LocalLobby lobby = make_active_lobby();

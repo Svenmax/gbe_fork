@@ -950,10 +950,17 @@ bool restore_lobby_owner_team(
     GBE_LocalLobby &lobby,
     std::uint32_t shared_owner_team)
 {
-    if (lobby.owner_team == shared_owner_team)
+    return apply_lobby_owner_team(lobby, shared_owner_team);
+}
+
+bool apply_lobby_owner_team(
+    GBE_LocalLobby &lobby,
+    std::uint32_t owner_team)
+{
+    if (lobby.owner_team == owner_team)
         return false;
 
-    lobby.owner_team = shared_owner_team;
+    lobby.owner_team = owner_team;
     return true;
 }
 
@@ -961,10 +968,17 @@ bool restore_lobby_owner_slot(
     GBE_LocalLobby &lobby,
     std::uint32_t shared_owner_slot)
 {
-    if (lobby.owner_slot == shared_owner_slot)
+    return apply_lobby_owner_slot(lobby, shared_owner_slot);
+}
+
+bool apply_lobby_owner_slot(
+    GBE_LocalLobby &lobby,
+    std::uint32_t owner_slot)
+{
+    if (lobby.owner_slot == owner_slot)
         return false;
 
-    lobby.owner_slot = shared_owner_slot;
+    lobby.owner_slot = owner_slot;
     return true;
 }
 
