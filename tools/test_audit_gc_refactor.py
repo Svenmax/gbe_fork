@@ -106,6 +106,20 @@ class TextBetweenMarkersHelperTest(unittest.TestCase):
         self.assertEqual("", audit.text_between_markers("START body", "START", "END"))
 
 
+class ContainsFunctionCallHelperTest(unittest.TestCase):
+    def test_detects_function_call_with_whitespace(self):
+        self.assertTrue(audit.contains_function_call("GBE_DoThing  (value);", "GBE_DoThing"))
+
+    def test_returns_false_when_call_is_missing(self):
+        self.assertFalse(audit.contains_function_call("GBE_DoThingValue;", "GBE_DoThing"))
+
+    def test_escapes_symbol_text(self):
+        self.assertTrue(audit.contains_function_call("GBE_DoThing_v1(value);", "GBE_DoThing_v1"))
+
+    def test_requires_word_boundary_before_symbol(self):
+        self.assertFalse(audit.contains_function_call("NotGBE_DoThing(value);", "GBE_DoThing"))
+
+
 class RecordDuplicateHelperTest(unittest.TestCase):
     def test_first_value_is_seen_without_duplicate(self):
         seen = set()

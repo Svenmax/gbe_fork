@@ -494,6 +494,10 @@ def text_between_markers(text, start_marker, end_marker):
     return text[start:end] if start != -1 and end != -1 else ""
 
 
+def contains_function_call(text, symbol):
+    return bool(re.search(r"\b" + re.escape(symbol) + r"\s*\(", text))
+
+
 def record_duplicate(seen, duplicates, value):
     if value in seen:
         duplicates.add(value)
@@ -1298,7 +1302,7 @@ def audit_state_effect_ownership(source_texts=None):
 
     executor = strip_comments(source_texts.get(LIFECYCLE_EXECUTOR_OWNER, ""))
     for api in LIFECYCLE_SIDE_EFFECT_APIS:
-        if not re.search(r"\b" + re.escape(api) + r"\s*\(", executor):
+        if not contains_function_call(executor, api):
             issues.append(f"{LIFECYCLE_EXECUTOR_OWNER}: lifecycle executor no longer owns {api}")
 
     for source_name, source_text in source_texts.items():
@@ -1307,11 +1311,11 @@ def audit_state_effect_ownership(source_texts=None):
             continue
         if base == "gbe_dota_reconnect_network_adapter.cpp":
             continue
-        if re.search(r"\bConnectByIPAddress\s*\(", strip_comments(source_text)):
+        if contains_function_call(strip_comments(source_text), "ConnectByIPAddress"):
             issues.append(f"{base}: Dota reconnect network call bypasses gbe_dota_reconnect_network_adapter.cpp")
 
     adapter = strip_comments(source_texts.get("gbe_dota_reconnect_network_adapter.cpp", ""))
-    if not re.search(r"\bConnectByIPAddress\s*\(", adapter):
+    if not contains_function_call(adapter, "ConnectByIPAddress"):
         issues.append("gbe_dota_reconnect_network_adapter.cpp: canonical direct-connect call is missing")
     return issues
 
@@ -1322,19 +1326,19 @@ def audit_lifecycle_side_effect_ownership():
     owner_path = os.path.join(ROOT_DIR, "dll", LIFECYCLE_EXECUTOR_OWNER)
     owner_text = strip_comments(read(owner_path))
     for api in LIFECYCLE_SIDE_EFFECT_APIS:
-        if not re.search(r"\b" + re.escape(api) + r"\s*\(", owner_text):
+        if not contains_function_call(owner_text, api):
             issues.append(f"{LIFECYCLE_EXECUTOR_OWNER}: executor owner no longer calls required lifecycle API {api}")
 
     planner_path = os.path.join(ROOT_DIR, "dll", LIFECYCLE_PLANNER)
     planner_text = strip_comments(read(planner_path))
     for api in LIFECYCLE_SIDE_EFFECT_APIS:
-        if re.search(r"\b" + re.escape(api) + r"\s*\(", planner_text):
+        if contains_function_call(planner_text, api):
             issues.append(f"{LIFECYCLE_PLANNER}: pure planner directly calls lifecycle side-effect API {api}")
 
     for base, forbidden_apis in sorted(MIGRATED_LIFECYCLE_HANDLER_FORBIDDEN_APIS.items()):
         handler_text = strip_comments(read(os.path.join(ROOT_DIR, "dll", base)))
         for api in sorted(forbidden_apis):
-            if re.search(r"\b" + re.escape(api) + r"\s*\(", handler_text):
+            if contains_function_call(handler_text, api):
                 issues.append(f"{base}: migrated lifecycle handler directly calls {api}; route through {LIFECYCLE_EXECUTOR_OWNER}")
 
     return issues

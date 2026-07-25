@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | audit function call helper：lifecycle 与 reconnect ownership audit 的同构函数调用 token 检测共用 `contains_function_call(...)` | `.monkeycode/specs/gc-audit-function-call-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | audit text between markers helper：routing audit helper body slicing 共用 marker-based text helper，保持缺失 marker 时空 body 语义 | `.monkeycode/specs/gc-audit-text-between-markers-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory multi numeric cell helper：template-only routing inventory 多 emsg Markdown cell 解析共用 helper，保持 cell 内 emsg 顺序与 duplicate 检测语义 | `.monkeycode/specs/gc-inventory-multi-numeric-cell-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory numeric cell helper：routing inventory 单 emsg Markdown cell 解析共用 helper，区分 exact cell 与 first-number matching | `.monkeycode/specs/gc-inventory-numeric-cell-helper/`、`tools/_audit_gc_refactor.py` |
