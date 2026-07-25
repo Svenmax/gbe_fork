@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | audit replay label helper：post-login dispatch audit 的 replay fixture label 提取共用 `extract_replay_fixture_labels(...)` | `.monkeycode/specs/gc-audit-replay-label-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | audit adapter handler call helper：post-login registry adapter body 的 request handler call 提取共用 `extract_adapter_handler_calls(...)` | `.monkeycode/specs/gc-audit-adapter-handler-call-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | audit emsg token resolver：registry inventory audit 的 numeric/`GBE_k...` emsg token 解析共用 `resolve_emsg_token(...)` | `.monkeycode/specs/gc-audit-emsg-token-resolver/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | audit any token helper：wrapped hard-miss audit 的禁用 route token 检测共用 `contains_any_token(...)` | `.monkeycode/specs/gc-audit-any-token-helper/`、`tools/_audit_gc_refactor.py` |

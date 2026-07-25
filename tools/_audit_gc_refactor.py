@@ -558,6 +558,15 @@ def extract_adapter_handler_calls(body):
     return re.findall(r"self->(GBE_HandleDota[A-Za-z0-9_]+Request)\s*\(", body)
 
 
+def extract_replay_fixture_labels(fixture_text):
+    labels = set()
+    for line in fixture_text.splitlines():
+        fields = line.split(maxsplit=2)
+        if len(fields) == 3:
+            labels.add(fields[2])
+    return labels
+
+
 def extract_header_symbols(header_text):
     """Extract external GBE_* function/variable declarations from the header."""
     symbols = set()
@@ -693,12 +702,7 @@ def audit_post_login_dispatch(main_text):
         if fixture_path.endswith(".expected.txt"):
             continue
         fixture_name = os.path.basename(fixture_path)[:-4]
-        labels = set()
-        for line in read(fixture_path).splitlines():
-            fields = line.split(maxsplit=2)
-            if len(fields) == 3:
-                labels.add(fields[2])
-        replay_labels[fixture_name] = labels
+        replay_labels[fixture_name] = extract_replay_fixture_labels(read(fixture_path))
 
     registered_adapters = set()
     high_risk_entries = 0

@@ -254,6 +254,20 @@ class ExtractAdapterHandlerCallsHelperTest(unittest.TestCase):
         self.assertEqual([], audit.extract_adapter_handler_calls("return false;"))
 
 
+class ExtractReplayFixtureLabelsHelperTest(unittest.TestCase):
+    def test_extracts_third_field_labels(self):
+        text = "100 direct join_chat\n200 wrapped lobby_create\n"
+        self.assertEqual({"join_chat", "lobby_create"}, audit.extract_replay_fixture_labels(text))
+
+    def test_ignores_blank_and_malformed_lines(self):
+        text = "\n100 direct\nmalformed\n200 wrapped label\n"
+        self.assertEqual({"label"}, audit.extract_replay_fixture_labels(text))
+
+    def test_preserves_label_text_after_second_field(self):
+        text = "100 direct label with spaces\n"
+        self.assertEqual({"label with spaces"}, audit.extract_replay_fixture_labels(text))
+
+
 class SortedNumericValuesHelperTest(unittest.TestCase):
     def test_sorts_string_values_numerically(self):
         self.assertEqual(["3", "20", "100"], audit.sorted_numeric_values({"20", "100", "3"}))
