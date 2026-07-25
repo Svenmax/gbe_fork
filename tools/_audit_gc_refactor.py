@@ -2,7 +2,7 @@
 """Comprehensive audit of the GC refactor.
 
 Checks:
-  1. Every GBE_* declaration in gbe_dota_gc_internal.h has a matching
+  1. Every GBE_* declaration in the canonical public headers has a matching
      definition somewhere in the GC TUs (find zombie declarations).
   2. Every shared GBE_* free-function definition has a declaration in the
      header, while member/static helpers are classified as non-actionable.
@@ -16,7 +16,6 @@ import json
 import sys
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-INTERNAL_H = os.path.join(ROOT_DIR, "dll", "gbe_dota_gc_internal.h")
 PUBLIC_HEADERS = [
     os.path.join(ROOT_DIR, "dll", "gbe_dota_payload_item_helpers.h"),
     os.path.join(ROOT_DIR, "dll", "gbe_dota_payload_lobby_helpers.h"),
@@ -653,38 +652,20 @@ def audit_template_blob_ownership(tu_paths):
     return issues
 
 
-def audit_gc_internal_slim_boundary(internal_text=None):
-    """D.12.2: gbe_dota_gc_internal.h must not re-export equip/networking/lobby payload/locator."""
-    if internal_text is None:
-        internal_text = read(INTERNAL_H)
+def audit_retired_gc_internal_header(source_texts=None):
+    """D.12.2: the retired internal aggregate header must stay absent."""
+    if source_texts is None:
+        source_texts = {
+            os.path.basename(path): read(path)
+            for path in GC_TUS
+        }
     issues = []
-    forbidden_includes = (
-        "gbe_dota_payload_lobby_helpers.h",
-        "gbe_dota_locator.h",
-        "gbe_dota_reconnect_shared.h",
-        "gbe_dota_inventory_ports.h",
-        "steam_networking",
-    )
-    # Only flag real #include lines; comments may mention the dedicated headers.
-    for line in internal_text.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("#include"):
-            continue
-        for token in forbidden_includes:
-            if token in stripped:
-                issues.append(f"gbe_dota_gc_internal.h: must not include or re-export '{token}'")
-    forbidden_symbols = (
-        "GBE_PushDotaPlayerEquippedItemsCacheToGC",
-        "GBE_RefreshDotaHostEquippedItemsCache",
-        "GBE_PushDotaHeroEquippedItemUpdatesToClientGC",
-    )
-    for symbol in forbidden_symbols:
-        if re.search(r"\b" + re.escape(symbol) + r"\b", internal_text):
-            issues.append(f"gbe_dota_gc_internal.h: free equip port '{symbol}' must stay in inventory_ports.h")
-    if "Cross-GC equip ports live in gbe_dota_inventory_ports.h" not in internal_text:
-        issues.append(
-            "gbe_dota_gc_internal.h: must document that free equip ports live in inventory_ports.h"
-        )
+    retired_path = os.path.join(ROOT_DIR, "dll", "gbe_dota_gc_internal.h")
+    if os.path.exists(retired_path):
+        issues.append("gbe_dota_gc_internal.h: retired aggregate header must remain deleted")
+    for path, text in source_texts.items():
+        if re.search(r'#include\s+["<]gbe_dota_gc_internal\.h[">]', text):
+            issues.append(f"{path}: must not include retired gbe_dota_gc_internal.h")
     return issues
 
 
@@ -1486,7 +1467,7 @@ def audit_reason_inventory():
 def audit_shared_lobby_global_access():
     """Keep production shared lobby state accessible only through the store."""
     issues = []
-    paths = list(GC_TUS) + [INTERNAL_H]
+    paths = list(GC_TUS)
     for path in paths:
         text = strip_comments(read(path))
         for match in re.finditer(r"\b" + re.escape(RETIRED_SHARED_LOBBY_GLOBAL) + r"\b", text):
@@ -1890,9 +1871,8 @@ def audit_concurrency_ownership_contract():
 
 
 def main():
-    header_text = read(INTERNAL_H)
-    real_decls = extract_header_symbols(header_text)
-    all_declared_symbols = set(real_decls)
+    real_decls = set()
+    all_declared_symbols = set()
     for header in PUBLIC_HEADERS:
         if os.path.exists(header):
             all_declared_symbols.update(extract_header_symbols(read(header)))
@@ -1989,12 +1969,12 @@ def main():
     print()
 
     print("=" * 70)
-    print("AUDIT 5b: gbe_dota_gc_internal.h slim boundary")
+    print("AUDIT 5b: Retired gbe_dota_gc_internal.h boundary")
     print("=" * 70)
-    print("  Action: keep free equip, networking/reconnect, payload-lobby, and locator out of gc_internal.")
-    gc_internal_slim_issues = audit_gc_internal_slim_boundary()
+    print("  Action: keep the retired aggregate header deleted and use dedicated capability headers.")
+    gc_internal_slim_issues = audit_retired_gc_internal_header()
     if not gc_internal_slim_issues:
-        print("  gc_internal remains free of equip/networking/payload-lobby/locator re-exports")
+        print("  retired aggregate header remains absent and unreferenced")
     else:
         for issue in gc_internal_slim_issues:
             print(f"  {issue}")

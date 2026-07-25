@@ -82,14 +82,14 @@
 1. [x] 为其中现有声明标注使用方和所属能力，记录在 `internal-header-shrink-plan.md`。
 2. [x] 将日志和协议边界诊断迁至 `gbe_dota_gc_diagnostics.h`；相关 payload、lobby coordinator 已直接依赖该接口。
 3. [x] 将 ServerHello cache、VPK loot cache、二进制序列化和旧协议资产迁至 `gbe_dota_server_hello_cache.h`、`gbe_dota_vpk_loot_cache.h`、`gbe_dota_binary_helpers.h`、`gbe_dota_protocol_assets.h`；欢迎、模板回放、库存、payload 和 lobby helper 模块已直接依赖这些接口。
-4. [x] 将 persona 外设消息构造和响应包诊断分别归入 wire helper 与 diagnostics 接口；`gbe_dota_gc_internal.h` 已清空业务声明且所有源码与测试 include 已移除，文件仅保留迁移标记。
+4. [x] 将 persona 外设消息构造和响应包诊断分别归入 wire helper 与 diagnostics 接口；`gbe_dota_gc_internal.h` 的业务声明与全部源码/测试 include 已移除，空兼容头已删除。
 4. [ ] 新 handler 通过 capability 接口、请求对象或专用头文件获取依赖。
 5. [ ] 为该内部头设置 include-count 与声明数的下降目标。
 
 ### 验收
 
 - [x] 本轮迁移的模块不新增对 `gbe_dota_gc_internal.h` 的依赖；诊断拆分后为 27 个实现文件，ServerHello、VPK 和二进制辅助接口拆分后为 23 个实现文件，协议资产拆分后为 21 个实现文件，清空业务声明后为 17 个实现文件，最终 include 数为 0。
-- [x] 该头文件不含业务域声明；迁移标记可在确认删除文件的提交中移除。
+- [x] 已删除该内部聚合头；审计强制其保持删除且生产源码不引用它。
 - [x] 受影响的纯 helper 与 handler 测试通过；离线测试在 `gbe_dota_behavior_replay` 构建前达到 120 秒运行上限。
 
 ## R4：生命周期状态单向化
