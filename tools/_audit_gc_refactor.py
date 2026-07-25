@@ -966,13 +966,14 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
         if f"request_emsg == {token}" in direct_body:
             issues.append(f"direct post-login: inline conditional fallback check remains for {token}")
 
-    inventory_section = inventory_text
     section_start = inventory_text.find("## 2. 仍留在 if/fallback 的路径")
-    if section_start >= 0:
-        section_tail = inventory_text[section_start:]
-        section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
-        section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
-        inventory_section = inventory_text[section_start:section_end]
+    if section_start < 0:
+        issues.append("MESSAGE_ROUTING direct conditional fallback inventory missing fallback section")
+        return issues
+    section_tail = inventory_text[section_start:]
+    section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
+    section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+    inventory_section = inventory_text[section_start:section_end]
 
     inventory_conditional = set()
     duplicate_inventory_conditional = set()

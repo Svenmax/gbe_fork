@@ -268,6 +268,14 @@ class DirectConditionalFallbackRoutingAuditTest(unittest.TestCase):
             audit.audit_direct_conditional_fallback_routing(inventory_text=inventory_text),
         )
 
+    def test_rejects_missing_fallback_inventory_section(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("## 2. 仍留在 if/fallback 的路径", "## 2. moved_fallback")
+        self.assertIn(
+            "MESSAGE_ROUTING direct conditional fallback inventory missing fallback section",
+            audit.audit_direct_conditional_fallback_routing(inventory_text=inventory_text),
+        )
+
 
 class WrappedHardMissRoutingAuditTest(unittest.TestCase):
     def test_accepts_centralized_wrapped_hard_miss_routing(self):
