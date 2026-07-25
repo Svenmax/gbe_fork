@@ -462,6 +462,15 @@ void apply_steam_auth_ack_launch_plan(
     lobby.launch_steam_auth_ack_queued = plan.mark_ack_queued;
 }
 
+bool mark_launch_4511_seen(GBE_LocalLobby &lobby)
+{
+    if (lobby.launch_4511_seen)
+        return false;
+
+    lobby.launch_4511_seen = true;
+    return true;
+}
+
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t ready_state,

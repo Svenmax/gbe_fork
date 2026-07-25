@@ -511,8 +511,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLanServerAvailableRequest(uint32 requ
 
     const bool matches_local_lobby = (lobby_id != 0 && lobby_id == GBE_local_lobby.lobby_id);
     if (matches_local_lobby) {
-        if (!GBE_local_lobby.launch_4511_seen) {
-            GBE_local_lobby.launch_4511_seen = true;
+        if (gbe::dota_lobby_state::mark_launch_4511_seen(GBE_local_lobby)) {
             GBE_PublishSharedDotaLobbyState("4511_lan_server_available_seen");
         }
         GBE_TrySyncDotaLobbyServerIdFromGameServer("4511_lan_server_available");

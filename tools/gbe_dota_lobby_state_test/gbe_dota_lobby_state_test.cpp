@@ -288,6 +288,14 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(existing_plan.message_sequence, 7u, "steam auth keeps sequence");
     }
 
+    // mark_launch_4511_seen: mark once for publish deduplication.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        ok &= expect_true(gbe::dota_lobby_state::mark_launch_4511_seen(lobby), "4511 marker changes on first notification");
+        ok &= expect_true(lobby.launch_4511_seen, "4511 marker is retained");
+        ok &= expect_false(gbe::dota_lobby_state::mark_launch_4511_seen(lobby), "4511 marker rejects duplicate notification");
+    }
+
     // compose_queued_lobby_state_apply_plan: state=1 + game_state=0 + sync -> bump to setup_synced.
     {
         GBE_LocalLobby lobby = make_active_lobby();
