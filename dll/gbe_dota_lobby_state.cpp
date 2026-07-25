@@ -455,6 +455,63 @@ void apply_generic_lobby_runtime_identity_capture_plan(
         lobby.game_start_time = plan.game_start_time;
 }
 
+GenericLobbyOptionsCapturePlan compose_generic_lobby_options_capture_plan(
+    const std::string &generic_allow_cheats_raw,
+    const std::string &generic_fill_with_bots_raw,
+    const std::string &generic_allow_spectating_raw,
+    const std::string &generic_visibility_raw,
+    const std::string &generic_bot_difficulty_radiant_raw,
+    const std::string &generic_bot_difficulty_dire_raw,
+    const std::string &generic_bot_radiant_raw,
+    const std::string &generic_bot_dire_raw)
+{
+    GenericLobbyOptionsCapturePlan plan{};
+    plan.apply_allow_cheats = !generic_allow_cheats_raw.empty();
+    plan.allow_cheats =
+        proto_wire::parse_uint32_or_zero(generic_allow_cheats_raw.c_str()) != 0u;
+    plan.apply_fill_with_bots = !generic_fill_with_bots_raw.empty();
+    plan.fill_with_bots =
+        proto_wire::parse_uint32_or_zero(generic_fill_with_bots_raw.c_str()) != 0u;
+    plan.apply_allow_spectating = !generic_allow_spectating_raw.empty();
+    plan.allow_spectating =
+        proto_wire::parse_uint32_or_zero(generic_allow_spectating_raw.c_str()) != 0u;
+    plan.apply_visibility = !generic_visibility_raw.empty();
+    plan.visibility = proto_wire::parse_uint32_or_zero(generic_visibility_raw.c_str());
+    plan.apply_bot_difficulty_radiant = !generic_bot_difficulty_radiant_raw.empty();
+    plan.bot_difficulty_radiant =
+        proto_wire::parse_uint32_or_zero(generic_bot_difficulty_radiant_raw.c_str());
+    plan.apply_bot_difficulty_dire = !generic_bot_difficulty_dire_raw.empty();
+    plan.bot_difficulty_dire =
+        proto_wire::parse_uint32_or_zero(generic_bot_difficulty_dire_raw.c_str());
+    plan.apply_bot_radiant = !generic_bot_radiant_raw.empty();
+    plan.bot_radiant = proto_wire::parse_uint64_or_zero(generic_bot_radiant_raw.c_str());
+    plan.apply_bot_dire = !generic_bot_dire_raw.empty();
+    plan.bot_dire = proto_wire::parse_uint64_or_zero(generic_bot_dire_raw.c_str());
+    return plan;
+}
+
+void apply_generic_lobby_options_capture_plan(
+    GBE_LocalLobby &lobby,
+    const GenericLobbyOptionsCapturePlan &plan)
+{
+    if (plan.apply_allow_cheats)
+        lobby.allow_cheats = plan.allow_cheats;
+    if (plan.apply_fill_with_bots)
+        lobby.fill_with_bots = plan.fill_with_bots;
+    if (plan.apply_allow_spectating)
+        lobby.allow_spectating = plan.allow_spectating;
+    if (plan.apply_visibility)
+        lobby.visibility = plan.visibility;
+    if (plan.apply_bot_difficulty_radiant)
+        lobby.bot_difficulty_radiant = plan.bot_difficulty_radiant;
+    if (plan.apply_bot_difficulty_dire)
+        lobby.bot_difficulty_dire = plan.bot_difficulty_dire;
+    if (plan.apply_bot_radiant)
+        lobby.bot_radiant = plan.bot_radiant;
+    if (plan.apply_bot_dire)
+        lobby.bot_dire = plan.bot_dire;
+}
+
 SharedLobbyRuntimeRestorePlan compose_shared_lobby_runtime_restore_plan(
     const GBE_LocalLobby &current_lobby,
     const GBE_SharedDotaLobbyState &shared_lobby,

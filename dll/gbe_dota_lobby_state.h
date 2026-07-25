@@ -225,6 +225,25 @@ struct GenericLobbyRuntimeIdentityCapturePlan {
     std::uint32_t game_start_time{};
 };
 
+struct GenericLobbyOptionsCapturePlan {
+    bool apply_allow_cheats{};
+    bool allow_cheats{};
+    bool apply_fill_with_bots{};
+    bool fill_with_bots{};
+    bool apply_allow_spectating{};
+    bool allow_spectating{};
+    bool apply_visibility{};
+    std::uint32_t visibility{};
+    bool apply_bot_difficulty_radiant{};
+    std::uint32_t bot_difficulty_radiant{};
+    bool apply_bot_difficulty_dire{};
+    std::uint32_t bot_difficulty_dire{};
+    bool apply_bot_radiant{};
+    std::uint64_t bot_radiant{};
+    bool apply_bot_dire{};
+    std::uint64_t bot_dire{};
+};
+
 struct SharedLobbyRuntimeRestorePlan {
     bool apply_state{};
     std::uint32_t state{};
@@ -587,6 +606,18 @@ GenericLobbyRuntimeIdentityCapturePlan compose_generic_lobby_runtime_identity_ca
 void apply_generic_lobby_runtime_identity_capture_plan(
     GBE_LocalLobby &lobby,
     const GenericLobbyRuntimeIdentityCapturePlan &plan);
+GenericLobbyOptionsCapturePlan compose_generic_lobby_options_capture_plan(
+    const std::string &generic_allow_cheats_raw,
+    const std::string &generic_fill_with_bots_raw,
+    const std::string &generic_allow_spectating_raw,
+    const std::string &generic_visibility_raw,
+    const std::string &generic_bot_difficulty_radiant_raw,
+    const std::string &generic_bot_difficulty_dire_raw,
+    const std::string &generic_bot_radiant_raw,
+    const std::string &generic_bot_dire_raw);
+void apply_generic_lobby_options_capture_plan(
+    GBE_LocalLobby &lobby,
+    const GenericLobbyOptionsCapturePlan &plan);
 SharedLobbyRuntimeRestorePlan compose_shared_lobby_runtime_restore_plan(
     const GBE_LocalLobby &current_lobby,
     const GBE_SharedDotaLobbyState &shared_lobby,

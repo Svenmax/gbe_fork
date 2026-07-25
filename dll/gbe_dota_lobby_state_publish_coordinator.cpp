@@ -142,22 +142,17 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason
                         generic_server_id_raw,
                         generic_connect,
                         generic_game_start_time_raw));
-                if (!generic_allow_cheats_raw.empty())
-                    GBE_local_lobby.allow_cheats = gbe::proto_wire::parse_uint32_or_zero(generic_allow_cheats_raw.c_str()) != 0u;
-                if (!generic_fill_with_bots_raw.empty())
-                    GBE_local_lobby.fill_with_bots = gbe::proto_wire::parse_uint32_or_zero(generic_fill_with_bots_raw.c_str()) != 0u;
-                if (!generic_allow_spectating_raw.empty())
-                    GBE_local_lobby.allow_spectating = gbe::proto_wire::parse_uint32_or_zero(generic_allow_spectating_raw.c_str()) != 0u;
-                if (!generic_visibility_raw.empty())
-                    GBE_local_lobby.visibility = gbe::proto_wire::parse_uint32_or_zero(generic_visibility_raw.c_str());
-                if (!generic_bot_difficulty_radiant_raw.empty())
-                    GBE_local_lobby.bot_difficulty_radiant = gbe::proto_wire::parse_uint32_or_zero(generic_bot_difficulty_radiant_raw.c_str());
-                if (!generic_bot_difficulty_dire_raw.empty())
-                    GBE_local_lobby.bot_difficulty_dire = gbe::proto_wire::parse_uint32_or_zero(generic_bot_difficulty_dire_raw.c_str());
-                if (!generic_bot_radiant_raw.empty())
-                    GBE_local_lobby.bot_radiant = gbe::proto_wire::parse_uint64_or_zero(generic_bot_radiant_raw.c_str());
-                if (!generic_bot_dire_raw.empty())
-                    GBE_local_lobby.bot_dire = gbe::proto_wire::parse_uint64_or_zero(generic_bot_dire_raw.c_str());
+                gbe::dota_lobby_state::apply_generic_lobby_options_capture_plan(
+                    GBE_local_lobby,
+                    gbe::dota_lobby_state::compose_generic_lobby_options_capture_plan(
+                        generic_allow_cheats_raw,
+                        generic_fill_with_bots_raw,
+                        generic_allow_spectating_raw,
+                        generic_visibility_raw,
+                        generic_bot_difficulty_radiant_raw,
+                        generic_bot_difficulty_dire_raw,
+                        generic_bot_radiant_raw,
+                        generic_bot_dire_raw));
                 if (!generic_custom_game_mode.empty())
                     GBE_local_lobby.custom_game.mode = generic_custom_game_mode;
                 if (!generic_custom_map_name.empty())

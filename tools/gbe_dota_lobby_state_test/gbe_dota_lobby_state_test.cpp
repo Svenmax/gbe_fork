@@ -296,6 +296,45 @@ bool test_valid_launch_progression()
         ok &= expect_true(lobby.connect == "1.2.3.4:27015", "generic identity preserves local connect");
     }
 
+    // generic options capture: present raw keys update options/bot fields.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.allow_cheats = false;
+        lobby.fill_with_bots = false;
+        lobby.allow_spectating = true;
+        lobby.visibility = 1u;
+        lobby.bot_difficulty_radiant = 1u;
+        lobby.bot_difficulty_dire = 1u;
+        lobby.bot_radiant = 1ull;
+        lobby.bot_dire = 1ull;
+        const auto empty_plan = gbe::dota_lobby_state::compose_generic_lobby_options_capture_plan(
+            "", "", "", "", "", "", "", "");
+        ok &= expect_false(empty_plan.apply_allow_cheats, "generic options skips empty cheats");
+        ok &= expect_false(empty_plan.apply_bot_dire, "generic options skips empty bot dire");
+        gbe::dota_lobby_state::apply_generic_lobby_options_capture_plan(lobby, empty_plan);
+        ok &= expect_false(lobby.allow_cheats, "generic options keeps cheats when raw empty");
+        ok &= expect_eq_u64(lobby.bot_dire, 1ull, "generic options keeps bot dire when raw empty");
+        const auto present_plan = gbe::dota_lobby_state::compose_generic_lobby_options_capture_plan(
+            "1", "1", "0", "2", "3", "4", "5", "6");
+        ok &= expect_true(present_plan.apply_allow_cheats, "generic options applies cheats");
+        ok &= expect_true(present_plan.apply_fill_with_bots, "generic options applies fill bots");
+        ok &= expect_true(present_plan.apply_allow_spectating, "generic options applies spectating");
+        ok &= expect_true(present_plan.apply_visibility, "generic options applies visibility");
+        ok &= expect_true(present_plan.apply_bot_difficulty_radiant, "generic options applies radiant difficulty");
+        ok &= expect_true(present_plan.apply_bot_difficulty_dire, "generic options applies dire difficulty");
+        ok &= expect_true(present_plan.apply_bot_radiant, "generic options applies radiant bots");
+        ok &= expect_true(present_plan.apply_bot_dire, "generic options applies dire bots");
+        gbe::dota_lobby_state::apply_generic_lobby_options_capture_plan(lobby, present_plan);
+        ok &= expect_true(lobby.allow_cheats, "generic options updates cheats");
+        ok &= expect_true(lobby.fill_with_bots, "generic options updates fill bots");
+        ok &= expect_false(lobby.allow_spectating, "generic options updates spectating");
+        ok &= expect_eq_u32(lobby.visibility, 2u, "generic options updates visibility");
+        ok &= expect_eq_u32(lobby.bot_difficulty_radiant, 3u, "generic options updates radiant difficulty");
+        ok &= expect_eq_u32(lobby.bot_difficulty_dire, 4u, "generic options updates dire difficulty");
+        ok &= expect_eq_u64(lobby.bot_radiant, 5ull, "generic options updates radiant bots");
+        ok &= expect_eq_u64(lobby.bot_dire, 6ull, "generic options updates dire bots");
+    }
+
     // shared runtime restore: retain local RUN when a custom-game READYUP snapshot regresses state.
     {
         GBE_LocalLobby lobby = make_active_lobby();
