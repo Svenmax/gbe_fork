@@ -111,6 +111,7 @@
 9. [x] R4.4 将 7004 signout 的 postgame state 提升、shared publish 和 details update 收敛为 `signout_postgame_action_list()` 经 lifecycle executor 执行；7005 response 与后续 postgame queue 保持原位。
 10. [x] R4.5 将 7035 current-game disconnect 在取回 25 后的 deferred reset 收敛为 `abandon_disconnect_reset_action_list()` 经 lifecycle executor 执行；保留 Reset generation boundary、清空消息队列与协议取回顺序。
 11. [x] R4.6 将 7004 postgame queue 后的 details update、25 response 与 pending-finalize slot 收敛为 `normal_signout_postgame_followup_action_list()` 经 lifecycle executor 执行；保持 details、25、pending 的原有顺序与 DotaResponse route。
+12. [x] R2 审计收尾：Dependencies 聚合对象列出 coordinator 的全部服务依赖，构造函数显式接收该对象；架构审计同步验证这一契约。
 
 ### 验收
 

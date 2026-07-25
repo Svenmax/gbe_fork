@@ -624,7 +624,19 @@ class CompositionRoot {
                 "test_recreated_root_starts_without_previous_state",
             )
         )
-        coordinator = "Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, gbe::dota_handler_registry::View handler_registry, gbe::dota_lifecycle::Executor &lifecycle_executor, bool is_server);"
+        coordinator = """
+struct Dependencies {
+    class Settings *settings{};
+    class Networking *network{};
+    class Local_Storage *local_storage{};
+    class SteamCallBacks *callbacks{};
+    class RunEveryRunCB *run_every_runcb{};
+    gbe::dota_lobby_state::Store *shared_lobby_store{};
+    gbe::dota_handler_registry::View handler_registry{};
+    gbe::dota_lifecycle::Executor *lifecycle_executor{};
+};
+Steam_Game_Coordinator(Dependencies dependencies, bool is_server);
+"""
         client = """
 GBE_SharedDotaLobbyState dota_lobby_state{};
 dota_lobby_state::Store dota_lobby_store;
@@ -652,7 +664,7 @@ gbe::dota_lifecycle::CoordinatorExecutor *dota_lifecycle_executor_server{};
 
     def test_rejects_implicit_service_dependency(self):
         sources = list(self.valid_sources())
-        sources[3] = "Steam_Game_Coordinator(bool is_server);"
+        sources[3] = "struct Dependencies {}; Steam_Game_Coordinator(bool is_server);"
         self.assertIn(
             "steam_game_coordinator.h: GC service lost explicit constructor dependencies",
             self.audit(sources),

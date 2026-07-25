@@ -1670,7 +1670,16 @@ def audit_dependency_object_lifecycle(
     explicit_dependencies = (
         (composition_header_text, "gbe_dota_composition_root.h", "RoleContext(\n        dota_lobby_state::Store &lobby_store,\n        RoleDependencies dependencies)"),
         (composition_header_text, "gbe_dota_composition_root.h", "ReconnectService(\n        GBE_DotaReconnectContextProvider &context_provider,\n        GBE_DotaReconnectDirectConnector &direct_connector,\n        GBE_DotaReconnectCallbackQueue &callback_queue)"),
-        (coordinator_header_text, "steam_game_coordinator.h", "Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, gbe::dota_lobby_state::Store &shared_lobby_store, gbe::dota_handler_registry::View handler_registry, gbe::dota_lifecycle::Executor &lifecycle_executor, bool is_server)"),
+        (coordinator_header_text, "steam_game_coordinator.h", "struct Dependencies"),
+        (coordinator_header_text, "steam_game_coordinator.h", "class Settings *settings{}"),
+        (coordinator_header_text, "steam_game_coordinator.h", "class Networking *network{}"),
+        (coordinator_header_text, "steam_game_coordinator.h", "class Local_Storage *local_storage{}"),
+        (coordinator_header_text, "steam_game_coordinator.h", "class SteamCallBacks *callbacks{}"),
+        (coordinator_header_text, "steam_game_coordinator.h", "class RunEveryRunCB *run_every_runcb{}"),
+        (coordinator_header_text, "steam_game_coordinator.h", "gbe::dota_lobby_state::Store *shared_lobby_store{}"),
+        (coordinator_header_text, "steam_game_coordinator.h", "gbe::dota_handler_registry::View handler_registry{}"),
+        (coordinator_header_text, "steam_game_coordinator.h", "gbe::dota_lifecycle::Executor *lifecycle_executor{}"),
+        (coordinator_header_text, "steam_game_coordinator.h", "Steam_Game_Coordinator(Dependencies dependencies, bool is_server)"),
     )
     for source, filename, token in explicit_dependencies:
         if token not in source:
