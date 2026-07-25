@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | registry section presence guard：缺失 registry §1 时 registry inventory audit 直接失败，避免回退整篇扫描 | `.monkeycode/specs/gc-registry-section-presence-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | wrapped hard miss section presence guard：缺失 fallback §2 时 wrapped hard miss inventory audit 直接失败，避免回退整篇扫描 | `.monkeycode/specs/gc-wrapped-hard-miss-section-presence-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | direct conditional section presence guard：缺失 fallback §2 时 direct conditional inventory audit 直接失败，避免回退整篇扫描 | `.monkeycode/specs/gc-direct-conditional-section-presence-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | registry-defensive section presence guard：缺失 template_replay §4 时 registry-defensive inventory audit 直接失败，避免回退整篇扫描 | `.monkeycode/specs/gc-registry-defensive-section-presence-guard/`、`tools/_audit_gc_refactor.py` |

@@ -1076,6 +1076,14 @@ class PostLoginDispatchAuditTest(unittest.TestCase):
             audit.audit_registry_inventory_guard(inventory_text=inventory_text),
         )
 
+    def test_rejects_missing_registry_inventory_section(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("## 1. Registry", "## 1. moved_registry")
+        self.assertIn(
+            "MESSAGE_ROUTING registry inventory missing registry section",
+            audit.audit_registry_inventory_guard(inventory_text=inventory_text),
+        )
+
 
 class LocalSharedMergeInventoryAuditTest(unittest.TestCase):
     def test_accepts_current_local_shared_merge_inventory(self):
