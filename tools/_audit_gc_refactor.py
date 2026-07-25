@@ -1900,19 +1900,19 @@ def audit_store_write_discipline(source_texts=None):
 
 
 LOCAL_SHARED_MERGE_ENTRYPOINTS = (
-    ("compose_source_aware_shared_runtime_restore_plan", "gbe_dota_lobby_state.cpp"),
-    ("apply_source_aware_shared_runtime_restore_plan", "gbe_dota_lobby_state.cpp"),
-    ("compose_shared_lobby_options_restore_plan", "gbe_dota_lobby_state.cpp"),
-    ("apply_shared_lobby_options_restore_plan", "gbe_dota_lobby_state.cpp"),
-    ("compose_shared_lobby_cache_restore_plan", "gbe_dota_lobby_state.cpp"),
-    ("apply_shared_lobby_cache_restore_plan", "gbe_dota_lobby_state.cpp"),
-    ("restore_lobby_custom_game", "gbe_dota_lobby_state.cpp"),
-    ("restore_lobby_generation", "gbe_dota_lobby_state.cpp"),
-    ("restore_lobby_generic_lobby_id", "gbe_dota_lobby_state.cpp"),
-    ("restore_lobby_owner_connected", "gbe_dota_lobby_state.cpp"),
-    ("restore_lobby_owner_team", "gbe_dota_lobby_state.cpp"),
-    ("restore_lobby_owner_slot", "gbe_dota_lobby_state.cpp"),
-    ("restore_launch_4511_seen", "gbe_dota_lobby_state.cpp"),
+    ("compose_source_aware_shared_runtime_restore_plan", "gbe_dota_lobby_state.cpp", "launch/runtime identity restore"),
+    ("apply_source_aware_shared_runtime_restore_plan", "gbe_dota_lobby_state.cpp", "launch/runtime identity restore"),
+    ("compose_shared_lobby_options_restore_plan", "gbe_dota_lobby_state.cpp", "options restore"),
+    ("apply_shared_lobby_options_restore_plan", "gbe_dota_lobby_state.cpp", "options restore"),
+    ("compose_shared_lobby_cache_restore_plan", "gbe_dota_lobby_state.cpp", "cache restore"),
+    ("apply_shared_lobby_cache_restore_plan", "gbe_dota_lobby_state.cpp", "cache restore"),
+    ("restore_lobby_custom_game", "gbe_dota_lobby_state.cpp", "custom_game restore"),
+    ("restore_lobby_generation", "gbe_dota_lobby_state.cpp", "generation restore"),
+    ("restore_lobby_generic_lobby_id", "gbe_dota_lobby_state.cpp", "generic_lobby_id restore"),
+    ("restore_lobby_owner_connected", "gbe_dota_lobby_state.cpp", "owner runtime restore"),
+    ("restore_lobby_owner_team", "gbe_dota_lobby_state.cpp", "owner runtime restore"),
+    ("restore_lobby_owner_slot", "gbe_dota_lobby_state.cpp", "owner runtime restore"),
+    ("restore_launch_4511_seen", "gbe_dota_lobby_state.cpp", "launch marker restore"),
 )
 
 
@@ -1936,25 +1936,26 @@ def audit_local_shared_merge_inventory(source_texts=None, inventory_text=None):
     documented = set()
     for line in section_text.splitlines():
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) < 2:
+        if len(cells) < 3:
             continue
         entry = cells[0].strip("`")
         owner = cells[1].strip("`")
+        field_group = cells[2]
         if entry in {"entrypoint", "------------"}:
             continue
-        if entry and owner:
-            documented.add((entry, owner))
+        if entry and owner and field_group:
+            documented.add((entry, owner, field_group))
 
     expected = set(LOCAL_SHARED_MERGE_ENTRYPOINTS)
     issues = []
-    for entry, owner in sorted(expected - documented):
-        issues.append(f"LOCAL_LOBBY merge inventory missing {entry} in {owner}")
-    for entry, owner in sorted(documented - expected):
-        issues.append(f"LOCAL_LOBBY merge inventory has unexpected {entry} in {owner}")
+    for entry, owner, field_group in sorted(expected - documented):
+        issues.append(f"LOCAL_LOBBY merge inventory missing {entry} in {owner} for {field_group}")
+    for entry, owner, field_group in sorted(documented - expected):
+        issues.append(f"LOCAL_LOBBY merge inventory has unexpected {entry} in {owner} for {field_group}")
     if issues:
         return issues
 
-    for entry, owner in sorted(expected):
+    for entry, owner, _field_group in sorted(expected):
         owner_text = source_texts.get(owner, "")
         if not re.search(rf"\b{re.escape(entry)}\s*\(", owner_text):
             issues.append(f"LOCAL_LOBBY merge entrypoint {entry} missing from {owner}")

@@ -994,7 +994,23 @@ class LocalSharedMergeInventoryAuditTest(unittest.TestCase):
         )
         issues = audit.audit_local_shared_merge_inventory(inventory_text=inventory_text)
         self.assertIn(
-            "LOCAL_LOBBY merge inventory missing restore_lobby_generation in gbe_dota_lobby_state.cpp",
+            "LOCAL_LOBBY merge inventory missing restore_lobby_generation in gbe_dota_lobby_state.cpp for generation restore",
+            issues,
+        )
+
+    def test_rejects_field_group_metadata_drift(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "LOCAL_LOBBY_USAGE.md"))
+        inventory_text = inventory_text.replace(
+            "| `restore_lobby_generation` | `gbe_dota_lobby_state.cpp` | generation restore |",
+            "| `restore_lobby_generation` | `gbe_dota_lobby_state.cpp` | runtime restore |",
+        )
+        issues = audit.audit_local_shared_merge_inventory(inventory_text=inventory_text)
+        self.assertIn(
+            "LOCAL_LOBBY merge inventory missing restore_lobby_generation in gbe_dota_lobby_state.cpp for generation restore",
+            issues,
+        )
+        self.assertIn(
+            "LOCAL_LOBBY merge inventory has unexpected restore_lobby_generation in gbe_dota_lobby_state.cpp for runtime restore",
             issues,
         )
 
