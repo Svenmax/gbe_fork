@@ -131,6 +131,7 @@
 29. [x] D2 切片：shared restore 通过 `restore_lobby_owner_connected()`、`restore_lobby_owner_team()` 与 `restore_lobby_owner_slot()` 单一化 owner 字段复制；Coordinator 继续聚合字段变更。
 30. [x] D2 切片：shared restore 通过 `compose_shared_lobby_options_restore_plan()` 与 `apply_shared_lobby_options_restore_plan()` 单一化 options/bot 字段组复制；Coordinator 继续聚合字段变更。
 31. [x] D2 切片：shared restore 通过 `compose_shared_lobby_cache_restore_plan()` 与 `apply_shared_lobby_cache_restore_plan()` 单一化 cache 字段组复制；Coordinator 继续聚合字段变更。
+32. [x] D2 切片：shared restore 通过 `restore_lobby_custom_game()` 单一化 custom_game 复制；比较复用 `custom_game_details_equal()`，Coordinator 继续聚合字段变更。
 
 ### 验收
 

@@ -208,8 +208,9 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 GBE_local_lobby,
                 shared_lobby)) || changed;
 
-        if (!gbe::dota_custom_game::custom_game_details_equal(GBE_local_lobby.custom_game, shared_lobby.custom_game)) {
-            GBE_local_lobby.custom_game = shared_lobby.custom_game;
+        if (gbe::dota_lobby_state::restore_lobby_custom_game(
+                GBE_local_lobby,
+                shared_lobby.custom_game)) {
             changed = true;
         }
 

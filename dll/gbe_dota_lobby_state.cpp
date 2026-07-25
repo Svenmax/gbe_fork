@@ -710,6 +710,17 @@ bool restore_lobby_owner_slot(
     return true;
 }
 
+bool restore_lobby_custom_game(
+    GBE_LocalLobby &lobby,
+    const GBE_DotaCustomGameDetails &shared_custom_game)
+{
+    if (dota_custom_game::custom_game_details_equal(lobby.custom_game, shared_custom_game))
+        return false;
+
+    lobby.custom_game = shared_custom_game;
+    return true;
+}
+
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

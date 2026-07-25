@@ -613,6 +613,9 @@ bool restore_lobby_owner_team(
 bool restore_lobby_owner_slot(
     GBE_LocalLobby &lobby,
     std::uint32_t shared_owner_slot);
+bool restore_lobby_custom_game(
+    GBE_LocalLobby &lobby,
+    const GBE_DotaCustomGameDetails &shared_custom_game);
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

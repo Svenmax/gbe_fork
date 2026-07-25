@@ -451,6 +451,27 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u64(lobby.cache_sync_version, 0ull, "cache restore updates cache_sync_version");
     }
 
+    // restore_lobby_custom_game: shared custom game details restore.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.custom_game.game_id = 11ull;
+        lobby.custom_game.map_name = "map_a";
+        GBE_DotaCustomGameDetails matching = lobby.custom_game;
+        ok &= expect_false(
+            gbe::dota_lobby_state::restore_lobby_custom_game(lobby, matching),
+            "custom game restore keeps matching details");
+        GBE_DotaCustomGameDetails shared{};
+        shared.game_id = 22ull;
+        shared.map_name = "map_b";
+        shared.max_players = 10u;
+        ok &= expect_true(
+            gbe::dota_lobby_state::restore_lobby_custom_game(lobby, shared),
+            "custom game restore applies shared details");
+        ok &= expect_eq_u64(lobby.custom_game.game_id, 22ull, "custom game restore updates game_id");
+        ok &= expect_true(lobby.custom_game.map_name == "map_b", "custom game restore updates map_name");
+        ok &= expect_eq_u32(lobby.custom_game.max_players, 10u, "custom game restore updates max_players");
+    }
+
     // apply_lifecycle_lobby_state: lifecycle action writes state fields together.
     {
         GBE_LocalLobby lobby = make_active_lobby();

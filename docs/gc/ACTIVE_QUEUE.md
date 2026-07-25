@@ -7,7 +7,7 @@
 
 | ID | 目标 | 触碰文件（预期） | 完成定义 | 验证 | 停手条件 |
 |----|------|------------------|----------|------|------|
-| （空） | R2 审计收尾、R3 聚合头与公开符号审计收尾、R4.1 至 R4.6、queued launch/runtime、monotonic launch phase、generic capture、shared runtime restore、steam-auth 元数据、4511 标记/restore、connect/match/start_time/room/owner/options/cache restore、lifecycle/postgame state apply 单写入切片已完成；默认 D0 修 bug | — | — | verification --full | PHASE_D / PHASE_E_EXIT |
+| （空） | R2 审计收尾、R3 聚合头与公开符号审计收尾、R4.1 至 R4.6、queued launch/runtime、monotonic launch phase、generic capture、shared runtime restore、steam-auth 元数据、4511 标记/restore、connect/match/start_time/room/owner/options/cache/custom_game restore、lifecycle/postgame state apply 单写入切片已完成；默认 D0 修 bug | — | — | verification --full | PHASE_D / PHASE_E_EXIT |
 
 ## 本周不做
 
@@ -21,11 +21,11 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | D2 切片：shared restore 的 custom_game 收敛为变更返回 helper | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | D2 切片：shared restore 的 cache 字段组收敛为 plan/apply | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | D2 切片：shared restore 的 lobby options/bot 字段组收敛为 plan/apply | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | D2 切片：shared restore 的 owner_connected/team/slot 收敛为变更返回 helper | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | D2 切片：shared restore 的 game_start_time/room_name 收敛为变更返回 helper | `REFACTOR_EXECUTION_PLAN.md` |
-| 2026-07-25 | D2 切片：shared restore 的 connect/match_id 收敛为变更返回 helper，保留 client restore 聚合 | `REFACTOR_EXECUTION_PLAN.md` |
 
 ## 队列规则
 
