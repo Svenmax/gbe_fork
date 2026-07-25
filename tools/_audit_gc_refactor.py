@@ -1943,6 +1943,7 @@ def audit_local_shared_merge_inventory(source_texts=None, inventory_text=None):
         section_text = section_text[:next_section.start()]
 
     documented = set()
+    duplicate_entries = set()
     for line in section_text.splitlines():
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
         if len(cells) < 3:
@@ -1953,10 +1954,15 @@ def audit_local_shared_merge_inventory(source_texts=None, inventory_text=None):
         if entry in {"entrypoint", "------------"}:
             continue
         if entry and owner and field_group:
-            documented.add((entry, owner, field_group))
+            key = (entry, owner, field_group)
+            if key in documented:
+                duplicate_entries.add(key)
+            documented.add(key)
 
     expected = set(LOCAL_SHARED_MERGE_ENTRYPOINTS)
     issues = []
+    for entry, owner, field_group in sorted(duplicate_entries):
+        issues.append(f"LOCAL_LOBBY merge inventory duplicates {entry} in {owner} for {field_group}")
     for entry, owner, field_group in sorted(expected - documented):
         issues.append(f"LOCAL_LOBBY merge inventory missing {entry} in {owner} for {field_group}")
     for entry, owner, field_group in sorted(documented - expected):
