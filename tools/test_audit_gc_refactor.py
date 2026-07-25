@@ -116,6 +116,32 @@ class PublicCapabilityHeaderAuditTest(unittest.TestCase):
                 )
 
 
+class PublicHeaderDefinitionAuditTest(unittest.TestCase):
+    def test_accepts_declarations_with_definitions(self):
+        declared, zombies = audit.audit_public_header_definitions(
+            ["void GBE_Alpha();", "bool GBE_Beta(int value);"],
+            {"GBE_Alpha": ("alpha.cpp", 1, "free_function"), "GBE_Beta": ("beta.cpp", 1, "free_function")},
+        )
+        self.assertEqual({"GBE_Alpha", "GBE_Beta"}, declared)
+        self.assertEqual([], zombies)
+
+    def test_reports_declaration_without_definition(self):
+        declared, zombies = audit.audit_public_header_definitions(
+            ["void GBE_Alpha();", "bool GBE_Beta(int value);"],
+            {"GBE_Alpha": ("alpha.cpp", 1, "free_function")},
+        )
+        self.assertEqual({"GBE_Alpha", "GBE_Beta"}, declared)
+        self.assertEqual(["GBE_Beta"], zombies)
+
+    def test_accepts_inline_header_definition(self):
+        declared, zombies = audit.audit_public_header_definitions(
+            ["inline bool GBE_Alpha() { return true; }"],
+            {},
+        )
+        self.assertEqual({"GBE_Alpha"}, declared)
+        self.assertEqual([], zombies)
+
+
 class LifecycleTransitionGateAuditTest(unittest.TestCase):
     def valid_sources(self):
         return {

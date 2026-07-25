@@ -512,6 +512,16 @@ def extract_defined_symbols(tu_paths):
     return defined
 
 
+def audit_public_header_definitions(header_texts, defined_symbols):
+    """Return declared public symbols and declarations lacking a definition."""
+    declared_symbols = set()
+    inline_definitions = set()
+    for header_text in header_texts:
+        declared_symbols.update(extract_header_symbols(header_text))
+        inline_definitions.update(re.findall(r"\binline\s+[\w:&*\s<>,]+\b(GBE_\w+)\s*\(", header_text))
+    return declared_symbols, sorted(declared_symbols - set(defined_symbols) - inline_definitions)
+
+
 def audit_post_login_dispatch(main_text):
     start = main_text.find("registry::View Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry")
     if start < 0:
@@ -1883,20 +1893,20 @@ def audit_concurrency_ownership_contract():
 
 
 def main():
-    real_decls = set()
-    all_declared_symbols = set()
+    header_texts = []
     for header in PUBLIC_HEADERS:
         if os.path.exists(header):
-            all_declared_symbols.update(extract_header_symbols(read(header)))
+            header_texts.append(read(header))
 
     defined = extract_defined_symbols(GC_TUS)
+    real_decls, zombies = audit_public_header_definitions(header_texts, defined)
+    all_declared_symbols = real_decls
 
     print("=" * 70)
     print("AUDIT 1: Header declarations WITHOUT any definition (zombie decls)")
     print("=" * 70)
     print("  Action: remove stale declarations or restore the missing definition.")
     print("  False-positive class: declarations for non-GBE types are ignored.")
-    zombies = sorted(real_decls - set(defined.keys()))
     if not zombies:
         print("  (none) - all header declarations have a definition")
     else:

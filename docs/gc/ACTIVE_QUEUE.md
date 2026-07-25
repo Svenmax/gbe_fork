@@ -21,10 +21,10 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | D0 审计修复：公开声明 zombie 检查恢复阻断能力 | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-25 | R3 审计收尾：专用 capability headers 纳入公开符号审计 | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-24 | R2 审计收尾：Dependencies 聚合对象作为显式构造依赖契约 | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-24 | R3 收尾：删除 retired `gbe_dota_gc_internal.h`，审计改为强制缺席 | `REFACTOR_EXECUTION_PLAN.md` |
-| 2026-07-24 | R4.6：7004 followup details/25/pending 经 action list 与 executor | `REFACTOR_EXECUTION_PLAN.md` |
 | 2026-07-24 | R4.5：7035 deferred reset 经 action list 与 executor | `REFACTOR_EXECUTION_PLAN.md` |
 
 ## 队列规则
