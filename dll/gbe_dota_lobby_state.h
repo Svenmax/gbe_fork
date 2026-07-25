@@ -526,6 +526,9 @@ void apply_steam_auth_ack_launch_plan(
     GBE_LocalLobby &lobby,
     const SteamAuthAckLaunchPlan &plan);
 bool mark_launch_4511_seen(GBE_LocalLobby &lobby);
+bool restore_launch_4511_seen(
+    GBE_LocalLobby &lobby,
+    bool launch_4511_seen);
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

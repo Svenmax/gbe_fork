@@ -471,6 +471,17 @@ bool mark_launch_4511_seen(GBE_LocalLobby &lobby)
     return true;
 }
 
+bool restore_launch_4511_seen(
+    GBE_LocalLobby &lobby,
+    bool launch_4511_seen)
+{
+    if (lobby.launch_4511_seen == launch_4511_seen)
+        return false;
+
+    lobby.launch_4511_seen = launch_4511_seen;
+    return true;
+}
+
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

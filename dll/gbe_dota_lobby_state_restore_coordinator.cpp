@@ -280,8 +280,9 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             changed = true;
         }
 
-        if (GBE_local_lobby.launch_4511_seen != shared_lobby.launch_4511_seen) {
-            GBE_local_lobby.launch_4511_seen = shared_lobby.launch_4511_seen;
+        if (gbe::dota_lobby_state::restore_launch_4511_seen(
+                GBE_local_lobby,
+                shared_lobby.launch_4511_seen)) {
             changed = true;
         }
 

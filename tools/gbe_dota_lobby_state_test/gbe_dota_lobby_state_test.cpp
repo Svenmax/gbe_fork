@@ -294,6 +294,9 @@ bool test_valid_launch_progression()
         ok &= expect_true(gbe::dota_lobby_state::mark_launch_4511_seen(lobby), "4511 marker changes on first notification");
         ok &= expect_true(lobby.launch_4511_seen, "4511 marker is retained");
         ok &= expect_false(gbe::dota_lobby_state::mark_launch_4511_seen(lobby), "4511 marker rejects duplicate notification");
+        ok &= expect_false(gbe::dota_lobby_state::restore_launch_4511_seen(lobby, true), "4511 restore keeps matching marker");
+        ok &= expect_true(gbe::dota_lobby_state::restore_launch_4511_seen(lobby, false), "4511 restore applies shared marker");
+        ok &= expect_false(lobby.launch_4511_seen, "4511 restore updates marker value");
     }
 
     // apply_lifecycle_lobby_state: lifecycle action writes state fields together.
