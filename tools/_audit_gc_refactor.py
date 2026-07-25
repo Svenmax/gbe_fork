@@ -69,6 +69,10 @@ CASE_TOKEN_TO_EMSG = {
     "GBE_kDotaJoinableCustomGameModesRequest": "7466",
     "GBE_kDotaJoinableCustomLobbiesRequest": "7468",
 }
+REQUEST_EMSG_TOKEN_TO_EMSG = {
+    "GBE_kSteamGamesPlayedWithDataBlob": "5410",
+    "GBE_kSteamAuthList": "5432",
+}
 DIRECT_CONDITIONAL_FALLBACK_EMSGS = {"8744", "5410", "5432"}
 MESSAGE_ROUTING_REGISTRY_HEADING = "## 1. Registry"
 MESSAGE_ROUTING_FALLBACK_HEADING = "## 2. 仍留在 if/fallback 的路径"
@@ -497,6 +501,13 @@ def extract_case_emsgs(body, token_to_emsg=CASE_TOKEN_TO_EMSG):
     return {
         token_to_emsg.get(token, token)
         for token in re.findall(r'case\s+([A-Za-z0-9_]+)\s*:', body)
+    }
+
+
+def extract_request_emsg_comparisons(body, token_to_emsg=REQUEST_EMSG_TOKEN_TO_EMSG):
+    return {
+        token_to_emsg.get(token.rstrip("u"), token.rstrip("u"))
+        for token in re.findall(r'request_emsg\s*==\s*([A-Za-z0-9_]+)u?', body)
     }
 
 
@@ -976,11 +987,7 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
     helper_start = handler_text.find(helper_marker)
     server_assignment_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest")
     helper_body = handler_text[helper_start:server_assignment_start] if helper_start != -1 and server_assignment_start != -1 else ""
-    helper_emsgs = set(re.findall(r'request_emsg\s*==\s*([0-9]+)u?', helper_body))
-    if "GBE_kSteamGamesPlayedWithDataBlob" in helper_body:
-        helper_emsgs.add("5410")
-    if "GBE_kSteamAuthList" in helper_body:
-        helper_emsgs.add("5432")
+    helper_emsgs = extract_request_emsg_comparisons(helper_body)
     if helper_emsgs != DIRECT_CONDITIONAL_FALLBACK_EMSGS:
         append_emsg_set_diff_issue(
             issues,

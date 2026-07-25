@@ -122,6 +122,20 @@ class ExtractCaseEmsgsHelperTest(unittest.TestCase):
         self.assertEqual({"8009", "8020"}, audit.extract_case_emsgs(body))
 
 
+class ExtractRequestEmsgComparisonsHelperTest(unittest.TestCase):
+    def test_extracts_numeric_request_comparisons(self):
+        body = "request_emsg == 8744 || request_emsg == 7777"
+        self.assertEqual({"8744", "7777"}, audit.extract_request_emsg_comparisons(body))
+
+    def test_strips_unsigned_suffix_from_numeric_request_comparisons(self):
+        body = "request_emsg == 8744u"
+        self.assertEqual({"8744"}, audit.extract_request_emsg_comparisons(body))
+
+    def test_maps_named_request_tokens_to_emsgs(self):
+        body = "request_emsg == GBE_kSteamGamesPlayedWithDataBlob || request_emsg == GBE_kSteamAuthList"
+        self.assertEqual({"5410", "5432"}, audit.extract_request_emsg_comparisons(body))
+
+
 class SortedNumericValuesHelperTest(unittest.TestCase):
     def test_sorts_string_values_numerically(self):
         self.assertEqual(["3", "20", "100"], audit.sorted_numeric_values({"20", "100", "3"}))
