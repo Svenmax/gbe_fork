@@ -270,6 +270,16 @@ class WrappedHardMissRoutingAuditTest(unittest.TestCase):
         issues = audit.audit_wrapped_hard_miss_routing(inventory_text=inventory_text)
         self.assertTrue(any("wrapped hard miss must mention wrapped hard miss helper" in issue for issue in issues))
 
+    def test_rejects_wrapped_hard_miss_marker_outside_fallback_section(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        row = "| （未注册 miss） | HARD_MISS | 经 wrapped hard miss helper log + return false | B4：删除误落到 SetTeamSlot 的 dead fallback |"
+        inventory_text = inventory_text.replace(row, "")
+        inventory_text += "\n\n| moved | HARD_MISS | wrapped hard miss helper | outside fallback |\n"
+        self.assertIn(
+            "MESSAGE_ROUTING wrapped hard miss must mention wrapped hard miss helper",
+            audit.audit_wrapped_hard_miss_routing(inventory_text=inventory_text),
+        )
+
 
 class LegacyWrappedParserGuardAuditTest(unittest.TestCase):
     def test_accepts_legacy_wrapped_parser_without_production_calls(self):

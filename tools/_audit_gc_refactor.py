@@ -1021,8 +1021,16 @@ def audit_wrapped_hard_miss_routing(handler_text=None, inventory_text=None):
     if "GBE_HandleDotaTemplateReplayRequest" in wrapped_body or "GBE_HandleDotaSetTeamSlot" in wrapped_body:
         issues.append("wrapped post-login: request path must not route miss to template replay or SetTeamSlot")
 
+    inventory_section = inventory_text
+    section_start = inventory_text.find("## 2. 仍留在 if/fallback 的路径")
+    if section_start >= 0:
+        section_tail = inventory_text[section_start:]
+        section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
+        section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+        inventory_section = inventory_text[section_start:section_end]
+
     inventory_hard_miss = False
-    for line in inventory_text.splitlines():
+    for line in inventory_section.splitlines():
         if "HARD_MISS" in line and "wrapped hard miss helper" in line:
             inventory_hard_miss = True
             break
