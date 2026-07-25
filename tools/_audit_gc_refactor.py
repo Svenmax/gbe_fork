@@ -472,6 +472,11 @@ def record_duplicate(seen, duplicates, value):
     seen.add(value)
 
 
+def append_duplicate_issues(issues, duplicates, prefix):
+    for value in sorted(duplicates, key=int):
+        issues.append(f"{prefix} {value}")
+
+
 def extract_header_symbols(header_text):
     """Extract external GBE_* function/variable declarations from the header."""
     symbols = set()
@@ -755,8 +760,7 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
                     "lifecycle": cells[4],
                 }
 
-    for emsg in sorted(duplicate_inventory_emsgs, key=int):
-        issues.append(f"MESSAGE_ROUTING registry inventory duplicates {emsg}")
+    append_duplicate_issues(issues, duplicate_inventory_emsgs, "MESSAGE_ROUTING registry inventory duplicates")
     if registry_emsgs != inventory_emsgs:
         issues.append(
             "MESSAGE_ROUTING registry emsgs "
@@ -866,8 +870,7 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
         cells = markdown_cells(line)
         if cells and re.fullmatch(r"\d+", cells[0]):
             record_duplicate(inventory_defensive, duplicate_inventory_defensive, cells[0])
-    for emsg in sorted(duplicate_inventory_defensive, key=int):
-        issues.append(f"MESSAGE_ROUTING registry-defensive inventory duplicates {emsg}")
+    append_duplicate_issues(issues, duplicate_inventory_defensive, "MESSAGE_ROUTING registry-defensive inventory duplicates")
     if inventory_defensive != REGISTRY_DEFENSIVE_TEMPLATE_EMSGS:
         issues.append(
             "MESSAGE_ROUTING registry-defensive emsgs "
@@ -917,8 +920,7 @@ def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
         if len(cells) >= 2 and cells[1] == "TEMPLATE_ONLY":
             for emsg in re.findall(r'\b\d+\b', cells[0]):
                 record_duplicate(inventory_template_only, duplicate_inventory_template_only, emsg)
-    for emsg in sorted(duplicate_inventory_template_only, key=int):
-        issues.append(f"MESSAGE_ROUTING template-only inventory duplicates {emsg}")
+    append_duplicate_issues(issues, duplicate_inventory_template_only, "MESSAGE_ROUTING template-only inventory duplicates")
     if inventory_template_only != TEMPLATE_ONLY_TEMPLATE_EMSGS:
         issues.append(
             "MESSAGE_ROUTING template-only emsgs "
@@ -988,8 +990,7 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
         if match:
             emsg = match.group(1)
             record_duplicate(inventory_conditional, duplicate_inventory_conditional, emsg)
-    for emsg in sorted(duplicate_inventory_conditional, key=int):
-        issues.append(f"MESSAGE_ROUTING direct conditional fallback inventory duplicates {emsg}")
+    append_duplicate_issues(issues, duplicate_inventory_conditional, "MESSAGE_ROUTING direct conditional fallback inventory duplicates")
     if inventory_conditional != DIRECT_CONDITIONAL_FALLBACK_EMSGS:
         issues.append(
             "MESSAGE_ROUTING direct conditional fallback emsgs "

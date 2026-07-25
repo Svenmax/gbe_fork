@@ -88,6 +88,18 @@ class RecordDuplicateHelperTest(unittest.TestCase):
         self.assertEqual({"7091"}, duplicates)
 
 
+class AppendDuplicateIssuesHelperTest(unittest.TestCase):
+    def test_appends_duplicates_in_numeric_order(self):
+        issues = []
+        audit.append_duplicate_issues(issues, {"20", "3", "100"}, "prefix")
+        self.assertEqual(["prefix 3", "prefix 20", "prefix 100"], issues)
+
+    def test_empty_duplicates_do_not_append_issues(self):
+        issues = ["existing"]
+        audit.append_duplicate_issues(issues, set(), "prefix")
+        self.assertEqual(["existing"], issues)
+
+
 class DiagnosticReasonInventoryAuditTest(unittest.TestCase):
     def audit(self, header=HEADER, focused=FOCUSED):
         return audit.audit_diagnostic_reason_inventory(header, focused)[0]
