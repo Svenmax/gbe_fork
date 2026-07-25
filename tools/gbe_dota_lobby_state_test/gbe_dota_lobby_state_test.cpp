@@ -321,6 +321,18 @@ bool test_valid_launch_progression()
         ok &= expect_false(gbe::dota_lobby_state::restore_lobby_room_name(lobby, "alpha"), "room restore keeps matching name");
         ok &= expect_true(gbe::dota_lobby_state::restore_lobby_room_name(lobby, "beta"), "room restore applies shared name");
         ok &= expect_true(lobby.room_name == "beta", "room restore updates local name");
+        lobby.owner_connected = true;
+        lobby.owner_team = 2u;
+        lobby.owner_slot = 3u;
+        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_owner_connected(lobby, true), "owner connected restore keeps matching value");
+        ok &= expect_true(gbe::dota_lobby_state::restore_lobby_owner_connected(lobby, false), "owner connected restore applies shared value");
+        ok &= expect_false(lobby.owner_connected, "owner connected restore updates local value");
+        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_owner_team(lobby, 2u), "owner team restore keeps matching value");
+        ok &= expect_true(gbe::dota_lobby_state::restore_lobby_owner_team(lobby, 3u), "owner team restore applies shared value");
+        ok &= expect_eq_u32(lobby.owner_team, 3u, "owner team restore updates local value");
+        ok &= expect_false(gbe::dota_lobby_state::restore_lobby_owner_slot(lobby, 3u), "owner slot restore keeps matching value");
+        ok &= expect_true(gbe::dota_lobby_state::restore_lobby_owner_slot(lobby, 4u), "owner slot restore applies shared value");
+        ok &= expect_eq_u32(lobby.owner_slot, 4u, "owner slot restore updates local value");
     }
 
     // apply_lifecycle_lobby_state: lifecycle action writes state fields together.

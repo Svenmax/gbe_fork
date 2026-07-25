@@ -7,7 +7,7 @@
 
 ## 状态一句话
 
-**收敛出口（2026-07-25）：** Phase A–C 主路径已收口；R2 Dependencies、R3 capability-header 审计收尾、R4.1–R4.6 局部生命周期单向化、queued launch/runtime、monotonic launch phase、generic capture、shared runtime restore、steam-auth 元数据、4511 标记/restore、connect/match/start_time/room restore、lifecycle/postgame state apply 单写入切片已完成。Phase D **边界+默认不实施**；Phase E **主线关闭**（plan L1.5 + GP-10 设计；L2/L4 链接 spike 失败已书面延期，见 `PHASE_E_EXIT.md`）。日常 D0 修 bug。Store 门控在；local/shared 双轨与上帝类仍为已知债。
+**收敛出口（2026-07-25）：** Phase A–C 主路径已收口；R2 Dependencies、R3 capability-header 审计收尾、R4.1–R4.6 局部生命周期单向化、queued launch/runtime、monotonic launch phase、generic capture、shared runtime restore、steam-auth 元数据、4511 标记/restore、connect/match/start_time/room/owner restore、lifecycle/postgame state apply 单写入切片已完成。Phase D **边界+默认不实施**；Phase E **主线关闭**（plan L1.5 + GP-10 设计；L2/L4 链接 spike 失败已书面延期，见 `PHASE_E_EXIT.md`）。日常 D0 修 bug。Store 门控在；local/shared 双轨与上帝类仍为已知债。
 
 ## 硬规则（违反即停手）
 
@@ -27,7 +27,7 @@
 
 ## 进行中工作
 
-见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)。R2、R3、R4.1–R4.6、queued launch/runtime、monotonic launch phase、generic capture、shared runtime restore、steam-auth 元数据、4511 标记/restore、connect/match/start_time/room restore、lifecycle/postgame state apply 单写入切片已完成；默认 D0 修 bug。重启 L2/L4 须满足 PHASE_E_EXIT / GP10 §13。
+见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)。R2、R3、R4.1–R4.6、queued launch/runtime、monotonic launch phase、generic capture、shared runtime restore、steam-auth 元数据、4511 标记/restore、connect/match/start_time/room/owner restore、lifecycle/postgame state apply 单写入切片已完成；默认 D0 修 bug。重启 L2/L4 须满足 PHASE_E_EXIT / GP10 §13。
 
 ## 必跑验证
 

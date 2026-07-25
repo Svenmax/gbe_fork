@@ -272,8 +272,9 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             changed = true;
         }
 
-        if (GBE_local_lobby.owner_connected != shared_lobby.owner_connected) {
-            GBE_local_lobby.owner_connected = shared_lobby.owner_connected;
+        if (gbe::dota_lobby_state::restore_lobby_owner_connected(
+                GBE_local_lobby,
+                shared_lobby.owner_connected)) {
             changed = true;
         }
 
@@ -283,13 +284,15 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             changed = true;
         }
 
-        if (GBE_local_lobby.owner_team != shared_lobby.owner_team) {
-            GBE_local_lobby.owner_team = shared_lobby.owner_team;
+        if (gbe::dota_lobby_state::restore_lobby_owner_team(
+                GBE_local_lobby,
+                shared_lobby.owner_team)) {
             changed = true;
         }
 
-        if (GBE_local_lobby.owner_slot != shared_lobby.owner_slot) {
-            GBE_local_lobby.owner_slot = shared_lobby.owner_slot;
+        if (gbe::dota_lobby_state::restore_lobby_owner_slot(
+                GBE_local_lobby,
+                shared_lobby.owner_slot)) {
             changed = true;
         }
 

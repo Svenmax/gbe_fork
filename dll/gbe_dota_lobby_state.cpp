@@ -527,6 +527,39 @@ bool restore_lobby_room_name(
     return true;
 }
 
+bool restore_lobby_owner_connected(
+    GBE_LocalLobby &lobby,
+    bool shared_owner_connected)
+{
+    if (lobby.owner_connected == shared_owner_connected)
+        return false;
+
+    lobby.owner_connected = shared_owner_connected;
+    return true;
+}
+
+bool restore_lobby_owner_team(
+    GBE_LocalLobby &lobby,
+    std::uint32_t shared_owner_team)
+{
+    if (lobby.owner_team == shared_owner_team)
+        return false;
+
+    lobby.owner_team = shared_owner_team;
+    return true;
+}
+
+bool restore_lobby_owner_slot(
+    GBE_LocalLobby &lobby,
+    std::uint32_t shared_owner_slot)
+{
+    if (lobby.owner_slot == shared_owner_slot)
+        return false;
+
+    lobby.owner_slot = shared_owner_slot;
+    return true;
+}
+
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

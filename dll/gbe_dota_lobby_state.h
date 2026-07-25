@@ -549,6 +549,15 @@ bool restore_lobby_game_start_time(
 bool restore_lobby_room_name(
     GBE_LocalLobby &lobby,
     const std::string &shared_room_name);
+bool restore_lobby_owner_connected(
+    GBE_LocalLobby &lobby,
+    bool shared_owner_connected);
+bool restore_lobby_owner_team(
+    GBE_LocalLobby &lobby,
+    std::uint32_t shared_owner_team);
+bool restore_lobby_owner_slot(
+    GBE_LocalLobby &lobby,
+    std::uint32_t shared_owner_slot);
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

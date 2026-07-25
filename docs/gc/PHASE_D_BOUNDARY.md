@@ -55,6 +55,7 @@
 - shared-to-local 4511 标记恢复仅通过 `restore_launch_4511_seen()` 更新；client restore 的 `changed` 聚合语义保持。
 - shared-to-local connect/match_id 恢复仅通过 `restore_lobby_connect()` 与 `restore_lobby_match_id()` 更新；空 connect 与零 match_id 拒绝语义保持。
 - shared-to-local game_start_time/room_name 恢复仅通过 `restore_lobby_game_start_time()` 与 `restore_lobby_room_name()` 更新；零 start_time 拒绝语义保持。
+- shared-to-local owner_connected/team/slot 恢复仅通过 `restore_lobby_owner_connected()`、`restore_lobby_owner_team()` 与 `restore_lobby_owner_slot()` 更新；client restore 的 `changed` 聚合语义保持。
 - `LobbyStateApply` lifecycle action 仅通过 `apply_lifecycle_lobby_state()` 更新 `state` 和 `game_state`；action 执行顺序、条件 gate 与后续 publish 保持。
 - `PostGameLobbyStateApply` lifecycle action 仅通过 `apply_postgame_lobby_state_plan()` 更新 postgame state、chat 与 cache 清理字段组；action 序列与后续 publish 保持。
 - Local 工作副本、host-only generation-gated shared publish 与 client restore/观察语义保持。
