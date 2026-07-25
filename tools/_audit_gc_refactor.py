@@ -836,13 +836,26 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
         if re.search(rf'case\s+{re.escape(token)}\s*:', switch_body):
             issues.append(f"template replay: registry-defensive emsg {emsg} remains in template-only switch")
 
+    inventory_section = inventory_text
+    section_start = inventory_text.find("## 4. template_replay")
+    if section_start >= 0:
+        section_tail = inventory_text[section_start:]
+        section_end_match = re.search(r'^---\s*$', section_tail, re.MULTILINE)
+        section_end = section_start + section_end_match.start() if section_end_match else len(inventory_text)
+        inventory_section = inventory_text[section_start:section_end]
+
     inventory_defensive = set()
-    for line in inventory_text.splitlines():
+    duplicate_inventory_defensive = set()
+    for line in inventory_section.splitlines():
         if "REGISTRY_DEFENSIVE" not in line:
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
         if cells and re.fullmatch(r"\d+", cells[0]):
+            if cells[0] in inventory_defensive:
+                duplicate_inventory_defensive.add(cells[0])
             inventory_defensive.add(cells[0])
+    for emsg in sorted(duplicate_inventory_defensive, key=int):
+        issues.append(f"MESSAGE_ROUTING registry-defensive inventory duplicates {emsg}")
     if inventory_defensive != REGISTRY_DEFENSIVE_TEMPLATE_EMSGS:
         issues.append(
             "MESSAGE_ROUTING registry-defensive emsgs "

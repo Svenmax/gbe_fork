@@ -169,6 +169,15 @@ class RegistryDefensiveTemplateRoutingAuditTest(unittest.TestCase):
             audit.audit_registry_defensive_template_routing(handler_text=handler_text),
         )
 
+    def test_rejects_duplicate_registry_defensive_inventory_row(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        row = "| 7091 | REGISTRY_DEFENSIVE | → WatchGame handler |"
+        inventory_text = inventory_text.replace(row, f"{row}\n{row}")
+        self.assertIn(
+            "MESSAGE_ROUTING registry-defensive inventory duplicates 7091",
+            audit.audit_registry_defensive_template_routing(inventory_text=inventory_text),
+        )
+
 
 class TemplateOnlyInventoryGuardAuditTest(unittest.TestCase):
     def test_accepts_template_only_switch_and_inventory_alignment(self):

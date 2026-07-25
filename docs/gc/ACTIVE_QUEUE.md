@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | registry-defensive duplicate inventory guard：registry-defensive inventory 重复 emsg 行由 audit 检测，且解析限定在 template_replay §4 | `.monkeycode/specs/gc-registry-defensive-duplicate-inventory-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | template-only duplicate inventory guard：template-only inventory 重复 emsg 由 audit 检测，避免 set 比较隐藏重复表格项 | `.monkeycode/specs/gc-template-only-duplicate-inventory-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | registry duplicate inventory guard：registry inventory 重复 emsg 行由 audit 检测，避免 set/dict 比较隐藏重复表格行 | `.monkeycode/specs/gc-registry-duplicate-inventory-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | Local/shared merge duplicate inventory guard：Local/shared merge inventory 重复三元组由 audit 检测，避免 set 比较隐藏重复表格行 | `.monkeycode/specs/gc-local-shared-merge-duplicate-inventory-guard/`、`tools/_audit_gc_refactor.py` |
