@@ -115,6 +115,7 @@
 13. [x] R3 审计收尾：将 diagnostics、VPK loot cache 与 server-hello cache 的专用能力头纳入公开符号审计，消除已声明共享 helper 的 under-exposed 误报。
 14. [x] D0 审计修复：公开声明 zombie 检查实际收集 capability header 符号，并将 header-inline 定义视为有效实现；缺失 `.cpp` 定义重新成为阻断项。
 15. [x] D0 审计覆盖：将 split lobby handler 共享 helper 的公开头纳入声明/定义审计，防止跨 TU 接口缺失实现未被阻断。
+16. [x] D0 审计覆盖：将 Store/Runtime locator 的公开能力头纳入声明/定义审计，防止 locator 生命周期接口与实现漂移。
 
 ### 验收
 

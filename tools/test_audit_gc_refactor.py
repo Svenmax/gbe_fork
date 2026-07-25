@@ -84,6 +84,7 @@ class PublicCapabilityHeaderAuditTest(unittest.TestCase):
         self.assertTrue({
             "gbe_dota_gc_diagnostics.h",
             "gbe_dota_lobby_handler_helpers.h",
+            "gbe_dota_locator.h",
             "gbe_dota_vpk_loot_cache.h",
             "gbe_dota_server_hello_cache.h",
         }.issubset(header_names))
@@ -108,6 +109,14 @@ class PublicCapabilityHeaderAuditTest(unittest.TestCase):
                 "GBE_GenerateDotaMatchId",
                 "GBE_AdaptDotaLobbyInviteCacheSubscribedPayload",
                 "GBE_IsDotaLobbyInviteCacheSubscribedPayload",
+            },
+            "gbe_dota_locator.h": {
+                "GBE_GetSharedDotaLobbyStateStore",
+                "GBE_BindSharedDotaLobbyStateStore",
+                "GBE_UnbindSharedDotaLobbyStateStore",
+                "GBE_BindDotaRuntimeState",
+                "GBE_UnbindDotaRuntimeState",
+                "GBE_DotaRuntimeState",
             },
             "gbe_dota_server_hello_cache.h": {
                 "GBE_HasLastDotaServerHelloContext",
