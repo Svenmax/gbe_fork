@@ -64,6 +64,14 @@ class InventorySectionHelperTest(unittest.TestCase):
         )
 
 
+class MarkdownCellsHelperTest(unittest.TestCase):
+    def test_trims_outer_pipes_and_cell_whitespace(self):
+        self.assertEqual(["7091", "REGISTRY", "JoinChat"], audit.markdown_cells("| 7091 | REGISTRY | JoinChat |"))
+
+    def test_accepts_rows_without_outer_pipes(self):
+        self.assertEqual(["7091", "REGISTRY"], audit.markdown_cells(" 7091 | REGISTRY "))
+
+
 class DiagnosticReasonInventoryAuditTest(unittest.TestCase):
     def audit(self, header=HEADER, focused=FOCUSED):
         return audit.audit_diagnostic_reason_inventory(header, focused)[0]

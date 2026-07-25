@@ -462,6 +462,10 @@ def inventory_section(inventory_text, heading):
     return section_tail
 
 
+def markdown_cells(line):
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
 def extract_header_symbols(header_text):
     """Extract external GBE_* function/variable declarations from the header."""
     symbols = set()
@@ -731,7 +735,7 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
     inventory_emsgs = set()
     duplicate_inventory_emsgs = set()
     for line in registry_section.splitlines():
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        cells = markdown_cells(line)
         if len(cells) < 2:
             continue
         match = re.fullmatch(r'(\d+)', cells[0])
@@ -855,7 +859,7 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
     for line in inventory_section_text.splitlines():
         if "REGISTRY_DEFENSIVE" not in line:
             continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        cells = markdown_cells(line)
         if cells and re.fullmatch(r"\d+", cells[0]):
             if cells[0] in inventory_defensive:
                 duplicate_inventory_defensive.add(cells[0])
@@ -907,7 +911,7 @@ def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
     for line in inventory_section_text.splitlines():
         if "TEMPLATE_ONLY" not in line:
             continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        cells = markdown_cells(line)
         if len(cells) >= 2 and cells[1] == "TEMPLATE_ONLY":
             for emsg in re.findall(r'\b\d+\b', cells[0]):
                 if emsg in inventory_template_only:
@@ -977,7 +981,7 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
     for line in inventory_section_text.splitlines():
         if "CONDITIONAL_" not in line:
             continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        cells = markdown_cells(line)
         if not cells:
             continue
         match = re.search(r'\b(\d+)\b', cells[0])
@@ -1997,7 +2001,7 @@ def audit_local_shared_merge_inventory(source_texts=None, inventory_text=None):
     documented = set()
     duplicate_entries = set()
     for line in section_text.splitlines():
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        cells = markdown_cells(line)
         if len(cells) < 3:
             continue
         entry = cells[0].strip("`")
