@@ -396,6 +396,48 @@ void apply_generic_lobby_state_capture_plan(
         lobby.game_state = plan.game_state;
 }
 
+SharedLobbyRuntimeRestorePlan compose_shared_lobby_runtime_restore_plan(
+    const GBE_LocalLobby &current_lobby,
+    const GBE_SharedDotaLobbyState &shared_lobby,
+    std::uint32_t run_queued_launch_phase)
+{
+    SharedLobbyRuntimeRestorePlan plan{};
+    plan.ignored_readyup_regression =
+        dota_custom_game::has_custom_game_details(current_lobby.custom_game) &&
+        current_lobby.match_id != 0ull &&
+        current_lobby.launch_phase >= run_queued_launch_phase &&
+        current_lobby.state == 2u &&
+        current_lobby.game_state >= 2u &&
+        shared_lobby.state == 4u;
+    plan.state = shared_lobby.state;
+    plan.game_state = shared_lobby.game_state;
+    plan.launch_phase = shared_lobby.launch_phase;
+    plan.apply_state = current_lobby.state != plan.state && !plan.ignored_readyup_regression;
+    plan.apply_game_state = current_lobby.game_state != plan.game_state;
+    plan.apply_launch_phase = current_lobby.launch_phase != plan.launch_phase;
+    return plan;
+}
+
+bool apply_shared_lobby_runtime_restore_plan(
+    GBE_LocalLobby &lobby,
+    const SharedLobbyRuntimeRestorePlan &plan)
+{
+    bool changed = false;
+    if (plan.apply_state) {
+        lobby.state = plan.state;
+        changed = true;
+    }
+    if (plan.apply_game_state) {
+        lobby.game_state = plan.game_state;
+        changed = true;
+    }
+    if (plan.apply_launch_phase) {
+        lobby.launch_phase = plan.launch_phase;
+        changed = true;
+    }
+    return changed;
+}
+
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t ready_state,

@@ -173,17 +173,12 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             changed = true;
         }
 
-        const bool ignore_shared_readyup_regression =
-            gbe::dota_custom_game::has_custom_game_details(GBE_local_lobby.custom_game) &&
-            GBE_local_lobby.match_id != 0ull &&
-            GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseRunQueued &&
-            GBE_local_lobby.state == 2u &&
-            GBE_local_lobby.game_state >= 2u &&
-            shared_lobby.state == 4u;
-        if (GBE_local_lobby.state != shared_lobby.state && !ignore_shared_readyup_regression) {
-            GBE_local_lobby.state = shared_lobby.state;
-            changed = true;
-        } else if (ignore_shared_readyup_regression) {
+        const gbe::dota_lobby_state::SharedLobbyRuntimeRestorePlan runtime_restore_plan =
+            gbe::dota_lobby_state::compose_shared_lobby_runtime_restore_plan(
+                GBE_local_lobby,
+                shared_lobby,
+                GBE_kDotaLaunchPhaseRunQueued);
+        if (runtime_restore_plan.ignored_readyup_regression) {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Ignored shared READYUP regression reason=%s lobby_id=%llu local_state=%u local_game_state=%u shared_state=%u shared_game_state=%u launch_phase=%s",
@@ -196,11 +191,9 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
             );
         }
-
-        if (GBE_local_lobby.game_state != shared_lobby.game_state) {
-            GBE_local_lobby.game_state = shared_lobby.game_state;
-            changed = true;
-        }
+        changed = gbe::dota_lobby_state::apply_shared_lobby_runtime_restore_plan(
+            GBE_local_lobby,
+            runtime_restore_plan) || changed;
 
         if (shared_lobby.game_start_time != 0 && GBE_local_lobby.game_start_time != shared_lobby.game_start_time) {
             GBE_local_lobby.game_start_time = shared_lobby.game_start_time;
@@ -284,11 +277,6 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
 
         if (GBE_local_lobby.owner_connected != shared_lobby.owner_connected) {
             GBE_local_lobby.owner_connected = shared_lobby.owner_connected;
-            changed = true;
-        }
-
-        if (GBE_local_lobby.launch_phase != shared_lobby.launch_phase) {
-            GBE_local_lobby.launch_phase = shared_lobby.launch_phase;
             changed = true;
         }
 

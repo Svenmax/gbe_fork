@@ -211,6 +211,16 @@ struct GenericLobbyStateCapturePlan {
     bool ignored_stale_state{};
 };
 
+struct SharedLobbyRuntimeRestorePlan {
+    bool apply_state{};
+    std::uint32_t state{};
+    bool apply_game_state{};
+    std::uint32_t game_state{};
+    bool apply_launch_phase{};
+    std::uint32_t launch_phase{};
+    bool ignored_readyup_regression{};
+};
+
 struct LaunchLifecycleTransitionDecision {
     bool apply_lobby_state{};
     std::uint32_t next_state{};
@@ -496,6 +506,13 @@ GenericLobbyStateCapturePlan compose_generic_lobby_state_capture_plan(
 void apply_generic_lobby_state_capture_plan(
     GBE_LocalLobby &lobby,
     const GenericLobbyStateCapturePlan &plan);
+SharedLobbyRuntimeRestorePlan compose_shared_lobby_runtime_restore_plan(
+    const GBE_LocalLobby &current_lobby,
+    const GBE_SharedDotaLobbyState &shared_lobby,
+    std::uint32_t run_queued_launch_phase);
+bool apply_shared_lobby_runtime_restore_plan(
+    GBE_LocalLobby &lobby,
+    const SharedLobbyRuntimeRestorePlan &plan);
 LaunchLifecycleTransitionDecision compute_custom_game_ready_up_transition(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t ready_state,

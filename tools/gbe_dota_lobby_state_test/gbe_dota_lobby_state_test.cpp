@@ -246,6 +246,32 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(lobby.game_state, 4u, "generic capture applies game_state");
     }
 
+    // shared runtime restore: retain local RUN when a custom-game READYUP snapshot regresses state.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.custom_game.game_id = 1ull;
+        lobby.match_id = 2ull;
+        lobby.launch_phase = GBE_kDotaLaunchPhaseRunQueued;
+        lobby.state = 2u;
+        lobby.game_state = 3u;
+        GBE_SharedDotaLobbyState shared{};
+        shared.state = 4u;
+        shared.game_state = 2u;
+        shared.launch_phase = GBE_kDotaLaunchPhaseLoaded;
+        const auto regression_plan = gbe::dota_lobby_state::compose_shared_lobby_runtime_restore_plan(
+            lobby, shared, GBE_kDotaLaunchPhaseRunQueued);
+        ok &= expect_true(regression_plan.ignored_readyup_regression, "shared restore identifies READYUP regression");
+        ok &= expect_false(regression_plan.apply_state, "shared restore keeps RUN state");
+        ok &= expect_true(regression_plan.apply_game_state, "shared restore applies shared game_state");
+        ok &= expect_true(regression_plan.apply_launch_phase, "shared restore applies shared launch phase");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_shared_lobby_runtime_restore_plan(lobby, regression_plan),
+            "shared restore reports runtime change");
+        ok &= expect_eq_u32(lobby.state, 2u, "shared restore retains RUN state");
+        ok &= expect_eq_u32(lobby.game_state, 2u, "shared restore updates game_state");
+        ok &= expect_eq_u32(lobby.launch_phase, GBE_kDotaLaunchPhaseLoaded, "shared restore updates launch phase");
+    }
+
     // compose_queued_lobby_state_apply_plan: state=1 + game_state=0 + sync -> bump to setup_synced.
     {
         GBE_LocalLobby lobby = make_active_lobby();
