@@ -1917,6 +1917,7 @@ LOCAL_SHARED_MERGE_ENTRYPOINTS = (
 
 
 def has_cpp_function_definition(source_text, function_name):
+    source_text = strip_comments(source_text)
     return bool(re.search(
         rf"(?m)^[\w:\<\>\s\*&]+\b{re.escape(function_name)}\s*\([^;]*\)\s*(?:const\s*)?(?:noexcept\s*)?\{{",
         source_text,
