@@ -1125,6 +1125,14 @@ class LocalSharedMergeInventoryAuditTest(unittest.TestCase):
             issues,
         )
 
+    def test_rejects_missing_merge_inventory_section(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "LOCAL_LOBBY_USAGE.md"))
+        inventory_text = inventory_text.replace("## 5. Local/shared merge inventory", "## 5. moved_merge_inventory")
+        self.assertIn(
+            "LOCAL_LOBBY merge inventory section not found",
+            audit.audit_local_shared_merge_inventory(inventory_text=inventory_text),
+        )
+
     def test_rejects_duplicate_documented_entrypoint(self):
         inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "LOCAL_LOBBY_USAGE.md"))
         row = "| `restore_lobby_generation` | `gbe_dota_lobby_state.cpp` | generation restore |"
