@@ -120,6 +120,17 @@ class ContainsFunctionCallHelperTest(unittest.TestCase):
         self.assertFalse(audit.contains_function_call("NotGBE_DoThing(value);", "GBE_DoThing"))
 
 
+class ContainsWordTokenHelperTest(unittest.TestCase):
+    def test_detects_whole_word_token(self):
+        self.assertTrue(audit.contains_word_token("before GBE_DoThing after", "GBE_DoThing"))
+
+    def test_rejects_token_inside_longer_word(self):
+        self.assertFalse(audit.contains_word_token("before GBE_DoThingExtra after", "GBE_DoThing"))
+
+    def test_escapes_token_text(self):
+        self.assertTrue(audit.contains_word_token("emsg 7034 found", "7034"))
+
+
 class RecordDuplicateHelperTest(unittest.TestCase):
     def test_first_value_is_seen_without_duplicate(self):
         seen = set()

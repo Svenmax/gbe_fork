@@ -498,6 +498,10 @@ def contains_function_call(text, symbol):
     return bool(re.search(r"\b" + re.escape(symbol) + r"\s*\(", text))
 
 
+def contains_word_token(text, token):
+    return bool(re.search(r"\b" + re.escape(token) + r"\b", text))
+
+
 def record_duplicate(seen, duplicates, value):
     if value in seen:
         duplicates.add(value)
@@ -1613,12 +1617,12 @@ def audit_retired_lifecycle_transition_layers(source_texts=None):
     for source_name, source_text in source_texts.items():
         uncommented = strip_comments(source_text)
         for symbol in RETIRED_LIFECYCLE_HANDLER_SYMBOLS:
-            if re.search(r"\b" + re.escape(symbol) + r"\b", uncommented):
+            if contains_word_token(uncommented, symbol):
                 issues.append(f"{source_name}: retired lifecycle handler {symbol} returned")
 
     post_login_text = strip_comments(source_texts.get("gbe_dota_post_login_handlers.cpp", ""))
     for emsg in RETIRED_LIFECYCLE_FALLBACK_EMSGS:
-        if re.search(r"\b" + re.escape(emsg) + r"\b", post_login_text):
+        if contains_word_token(post_login_text, emsg):
             issues.append(f"gbe_dota_post_login_handlers.cpp: lifecycle emsg {emsg} bypasses the typed registry")
     return issues
 
@@ -1636,7 +1640,7 @@ def audit_retired_reconnect_transition_layers(source_texts=None):
     for source_name, source_text in source_texts.items():
         uncommented = strip_comments(source_text)
         for symbol in RETIRED_RECONNECT_TRANSITION_SYMBOLS:
-            if re.search(r"\b" + re.escape(symbol) + r"\b", uncommented):
+            if contains_word_token(uncommented, symbol):
                 issues.append(f"{source_name}: retired reconnect transition symbol {symbol} returned")
 
     serialized_header = strip_comments(source_texts.get(
@@ -1679,7 +1683,7 @@ def audit_retired_shared_lobby_compatibility_layers(source_texts=None):
     for source_name, source_text in source_texts.items():
         uncommented = strip_comments(source_text)
         for symbol in RETIRED_SHARED_LOBBY_COMPATIBILITY_SYMBOLS:
-            if re.search(r"\b" + re.escape(symbol) + r"\b", uncommented):
+            if contains_word_token(uncommented, symbol):
                 issues.append(f"{source_name}: retired shared lobby compatibility symbol {symbol} returned")
     return issues
 

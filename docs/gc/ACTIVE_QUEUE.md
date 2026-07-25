@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | audit word token helper：retired lifecycle/reconnect/shared-lobby audit 的 whole-word token 检测共用 `contains_word_token(...)` | `.monkeycode/specs/gc-audit-word-token-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | audit request body marker slicing：direct/wrapped post-login request body audit slicing 复用 `text_between_markers(...)`，保持缺失 marker 空 body 语义 | `.monkeycode/specs/gc-audit-request-body-marker-slicing/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | audit function call helper：lifecycle 与 reconnect ownership audit 的同构函数调用 token 检测共用 `contains_function_call(...)` | `.monkeycode/specs/gc-audit-function-call-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | audit text between markers helper：routing audit helper body slicing 共用 marker-based text helper，保持缺失 marker 时空 body 语义 | `.monkeycode/specs/gc-audit-text-between-markers-helper/`、`tools/_audit_gc_refactor.py` |

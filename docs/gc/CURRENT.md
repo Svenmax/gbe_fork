@@ -31,6 +31,8 @@
 
 **audit request body marker slicing（2026-07-25）：** `gc-audit-request-body-marker-slicing` 已将 direct/wrapped post-login request body audit slicing 复用到 `text_between_markers(...)`，保持缺失 marker 时空 body 语义。
 
+**audit word token helper（2026-07-25）：** `gc-audit-word-token-helper` 已将 retired lifecycle/reconnect/shared-lobby audit 的 whole-word token 检测收敛为 `contains_word_token(...)`，保持 escaped-token 与 word-boundary 语义。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。
