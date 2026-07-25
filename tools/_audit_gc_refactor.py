@@ -56,6 +56,18 @@ TEMPLATE_BLOB_OWNER_FILES = {
     "gbe_dota_gc_payload_helpers.cpp",
 }
 REGISTRY_DEFENSIVE_TEMPLATE_EMSGS = {"8879", "8095", "8009", "7091"}
+TEMPLATE_ONLY_TEMPLATE_EMSGS = {
+    "2536", "2617", "8137", "8673", "7197",
+    "8729", "8744", "8330", "8676", "7387",
+    "8078", "8853", "9023", "8218", "8020",
+    "7466", "7468", "7073", "8209", "8260",
+    "2510", "1092", "1025", "2574", "2576",
+}
+TEMPLATE_CASE_TOKEN_TO_EMSG = {
+    "GBE_kDotaCustomGameInfoRequest": "8020",
+    "GBE_kDotaJoinableCustomGameModesRequest": "7466",
+    "GBE_kDotaJoinableCustomLobbiesRequest": "7468",
+}
 DIRECT_CONDITIONAL_FALLBACK_EMSGS = {"8744", "5410", "5432"}
 SOURCE_LIST_AUDIT_EXEMPTIONS = {
     "gbe_dota_chat_handlers.cpp": "compiled through handler test wrapper",
@@ -721,6 +733,48 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
         issues.append(
             "MESSAGE_ROUTING registry-defensive emsgs "
             f"{sorted(inventory_defensive)} differ from expected {sorted(REGISTRY_DEFENSIVE_TEMPLATE_EMSGS)}"
+        )
+
+    return issues
+
+
+def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
+    """Keep template-only production switch cases aligned with the routing inventory."""
+    if handler_text is None:
+        handler_text = read(os.path.join(ROOT_DIR, "dll", "gbe_dota_template_replay_handlers.cpp"))
+    if inventory_text is None:
+        inventory_text = read(os.path.join(ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+
+    issues = []
+    switch_match = re.search(
+        r'bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest.*?switch \(request_emsg\) \{(?P<body>.*?)\n\s*default:',
+        handler_text,
+        re.S,
+    )
+    if not switch_match:
+        return ["template replay: missing template-only switch body"]
+
+    switch_body = switch_match.group("body")
+    switch_emsgs = set()
+    for token in re.findall(r'case\s+([A-Za-z0-9_]+)\s*:', switch_body):
+        switch_emsgs.add(TEMPLATE_CASE_TOKEN_TO_EMSG.get(token, token))
+    if switch_emsgs != TEMPLATE_ONLY_TEMPLATE_EMSGS:
+        issues.append(
+            "template replay: template-only switch emsgs "
+            f"{sorted(switch_emsgs)} differ from expected {sorted(TEMPLATE_ONLY_TEMPLATE_EMSGS)}"
+        )
+
+    inventory_template_only = set()
+    for line in inventory_text.splitlines():
+        if "TEMPLATE_ONLY" not in line:
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) >= 2 and cells[1] == "TEMPLATE_ONLY":
+            inventory_template_only.update(re.findall(r'\b\d+\b', cells[0]))
+    if inventory_template_only != TEMPLATE_ONLY_TEMPLATE_EMSGS:
+        issues.append(
+            "MESSAGE_ROUTING template-only emsgs "
+            f"{sorted(inventory_template_only)} differ from expected {sorted(TEMPLATE_ONLY_TEMPLATE_EMSGS)}"
         )
 
     return issues
@@ -2237,7 +2291,19 @@ def main():
     print()
 
     print("=" * 70)
-    print("AUDIT 5a: Registry-defensive template routing")
+    print("AUDIT 5a: Template-only inventory guard")
+    print("=" * 70)
+    print("  Action: keep template-only switch cases aligned with MESSAGE_ROUTING.")
+    template_only_inventory_issues = audit_template_only_inventory_guard()
+    if not template_only_inventory_issues:
+        print("  Template-only replay emsgs remain centralized and documented")
+    else:
+        for issue in template_only_inventory_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
+    print("AUDIT 5b: Registry-defensive template routing")
     print("=" * 70)
     print("  Action: keep registry-owned template fallback cases behind one explicit boundary.")
     registry_defensive_template_issues = audit_registry_defensive_template_routing()
@@ -2249,7 +2315,7 @@ def main():
     print()
 
     print("=" * 70)
-    print("AUDIT 5b: Direct conditional fallback routing")
+    print("AUDIT 5c: Direct conditional fallback routing")
     print("=" * 70)
     print("  Action: keep direct registry-miss conditional fallback behind one explicit boundary.")
     direct_conditional_fallback_issues = audit_direct_conditional_fallback_routing()
@@ -2261,7 +2327,7 @@ def main():
     print()
 
     print("=" * 70)
-    print("AUDIT 5c: Wrapped hard miss routing")
+    print("AUDIT 5d: Wrapped hard miss routing")
     print("=" * 70)
     print("  Action: keep wrapped registry misses as a hard stop behind one explicit boundary.")
     wrapped_hard_miss_issues = audit_wrapped_hard_miss_routing()
@@ -2273,7 +2339,7 @@ def main():
     print()
 
     print("=" * 70)
-    print("AUDIT 5d: Legacy wrapped parser guard")
+    print("AUDIT 5e: Legacy wrapped parser guard")
     print("=" * 70)
     print("  Action: keep legacy wrapped-direct parser out of production routing.")
     legacy_wrapped_parser_issues = audit_legacy_wrapped_parser_guard()
@@ -2285,7 +2351,7 @@ def main():
     print()
 
     print("=" * 70)
-    print("AUDIT 5e: Retired gbe_dota_gc_internal.h boundary")
+    print("AUDIT 5f: Retired gbe_dota_gc_internal.h boundary")
     print("=" * 70)
     print("  Action: keep the retired aggregate header deleted and use dedicated capability headers.")
     gc_internal_slim_issues = audit_retired_gc_internal_header()
@@ -2587,6 +2653,7 @@ def main():
     print(f"  Doc line-number mismatches:          {len(mismatches)}")
     print(f"  Dispatch table mismatches:           {len(dispatch_issues)}")
     print(f"  Template blob ownership issues:      {len(template_blob_issues)}")
+    print(f"  Template-only inventory issues:      {len(template_only_inventory_issues)}")
     print(f"  Registry-defensive template issues:  {len(registry_defensive_template_issues)}")
     print(f"  Direct conditional fallback issues:  {len(direct_conditional_fallback_issues)}")
     print(f"  Wrapped hard miss issues:            {len(wrapped_hard_miss_issues)}")
@@ -2616,7 +2683,7 @@ def main():
     print(f"  CI failure localization issues:       {len(ci_failure_localization_issues)}")
     print(f"  Architecture investment boundary issues: {len(architecture_investment_boundary_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or registry_defensive_template_issues or direct_conditional_fallback_issues or wrapped_hard_miss_issues or legacy_wrapped_parser_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or template_only_inventory_issues or registry_defensive_template_issues or direct_conditional_fallback_issues or wrapped_hard_miss_issues or legacy_wrapped_parser_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
         sys.exit(1)
 
 

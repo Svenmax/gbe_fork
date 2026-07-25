@@ -170,6 +170,26 @@ class RegistryDefensiveTemplateRoutingAuditTest(unittest.TestCase):
         )
 
 
+class TemplateOnlyInventoryGuardAuditTest(unittest.TestCase):
+    def test_accepts_template_only_switch_and_inventory_alignment(self):
+        self.assertEqual([], audit.audit_template_only_inventory_guard())
+
+    def test_rejects_untracked_template_only_switch_case(self):
+        handler_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "dll", "gbe_dota_template_replay_handlers.cpp"))
+        handler_text = handler_text.replace(
+            "        // TEMPLATE_ONLY (canned)\n        case 2536:\n",
+            "        // TEMPLATE_ONLY (canned)\n        case 9999:\n        case 2536:\n",
+        )
+        issues = audit.audit_template_only_inventory_guard(handler_text=handler_text)
+        self.assertTrue(any("template-only switch emsgs" in issue for issue in issues))
+
+    def test_rejects_template_only_inventory_drift(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("| 8218 | TEMPLATE_ONLY | synthetic tip success |", "")
+        issues = audit.audit_template_only_inventory_guard(inventory_text=inventory_text)
+        self.assertTrue(any("MESSAGE_ROUTING template-only emsgs" in issue for issue in issues))
+
+
 class DirectConditionalFallbackRoutingAuditTest(unittest.TestCase):
     def test_accepts_centralized_direct_conditional_fallback_routing(self):
         self.assertEqual([], audit.audit_direct_conditional_fallback_routing())

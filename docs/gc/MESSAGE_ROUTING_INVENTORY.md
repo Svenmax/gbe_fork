@@ -1,6 +1,6 @@
 # 消息路由清单（四轨真相表）
 
-> 源码扫描日期：2026-07-25（direct conditional fallback、wrapped hard miss、registry-defensive template routing boundary 与 legacy parser guard 显式化）。改入口必须同步更新本表。
+> 源码扫描日期：2026-07-25（direct conditional fallback、wrapped hard miss、template-only whitelist、registry-defensive template routing boundary 与 legacy parser guard 显式化）。改入口必须同步更新本表。
 > 分发顺序（post-login）：**registry → 条件/观察 fallback → template_replay**。
 > Hello / ServerHello 经 `handle_dota_client_message` 转调 welcome handlers（不进 post-login registry）。
 
@@ -118,7 +118,7 @@ Adapter 形态：`self->GBE_Handle…`（仍是 GC 成员，非独立服务）�
 
 源：`dll/gbe_dota_template_replay_handlers.cpp` switch。
 **语义：** registry 与条件 fallback 皆未处理时的兜底。
-**归属标签：** `TEMPLATE_ONLY`（本轨生产 owner）| `REGISTRY_DEFENSIVE`（registry 已有，仅转调，防 dispatch 顺序漂移）。
+**归属标签：** `TEMPLATE_ONLY`（本轨生产 owner，白名单由 audit 保护）| `REGISTRY_DEFENSIVE`（registry 已有，仅转调，防 dispatch 顺序漂移）。
 
 | emsg | 归属 | 备注 |
 |------|------|------|
