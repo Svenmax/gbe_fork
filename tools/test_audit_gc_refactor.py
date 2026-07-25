@@ -215,6 +215,14 @@ class TemplateOnlyInventoryGuardAuditTest(unittest.TestCase):
         issues = audit.audit_template_only_inventory_guard(inventory_text=inventory_text)
         self.assertTrue(any("MESSAGE_ROUTING template-only emsgs" in issue for issue in issues))
 
+    def test_rejects_missing_template_replay_inventory_section(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("## 4. template_replay", "## 4. moved_template_replay")
+        self.assertIn(
+            "MESSAGE_ROUTING template-only inventory missing template_replay section",
+            audit.audit_template_only_inventory_guard(inventory_text=inventory_text),
+        )
+
 
 class DirectConditionalFallbackRoutingAuditTest(unittest.TestCase):
     def test_accepts_centralized_direct_conditional_fallback_routing(self):

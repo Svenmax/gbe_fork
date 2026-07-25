@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | template-only section presence guard：缺失 template_replay §4 时 template-only inventory audit 直接失败，避免回退整篇扫描 | `.monkeycode/specs/gc-template-only-section-presence-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | template-only section guard：`TEMPLATE_ONLY` inventory 行只在 template_replay §4 中有效，避免其它段落行误参与 audit | `.monkeycode/specs/gc-template-only-section-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | legacy wrapped parser section guard：`GBE_ExtractWrappedDotaDirectContext` 的 `LEGACY_UNUSED` 标记只在解析层 §5 中有效，避免其它段落文字误满足 audit | `.monkeycode/specs/gc-legacy-wrapped-parser-section-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | wrapped hard miss section guard：wrapped HARD_MISS inventory 标记只在 fallback §2 中有效，避免其它段落文字误满足 audit | `.monkeycode/specs/gc-wrapped-hard-miss-section-guard/`、`tools/_audit_gc_refactor.py` |
