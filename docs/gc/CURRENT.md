@@ -27,7 +27,7 @@
 
 ## 进行中工作
 
-见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)。`gc-generic-metadata-publish`、`gc-8052-lifecycle-pre-write`、`gc-postgame-chat-tombstone`、`gc-registry-inventory-guard`、`gc-template-only-inventory-guard`、`gc-template-registry-defensive-routing`、`gc-direct-conditional-fallback-routing`、`gc-wrapped-hard-miss-routing` 与 `gc-legacy-wrapped-parser-guard` 已完成。R2、R3、R4.1–R4.6、queued launch/runtime、monotonic launch phase、generic capture state/identity/options/custom_game 与聚合 apply、payload 纯 snapshot projection、显式 host capture 同步边界、source-aware shared launch/runtime identity restore、steam-auth 元数据、4511 标记/restore、owner/options/cache/custom_game/generation/generic_lobby_id restore、lifecycle/postgame state apply 单写入切片已完成。重启 L2/L4 须满足 PHASE_E_EXIT / GP10 §13。
+见 [ACTIVE_QUEUE.md](./ACTIVE_QUEUE.md)。`gc-generic-metadata-publish`、`gc-8052-lifecycle-pre-write`、`gc-postgame-chat-tombstone`、`gc-registry-inventory-guard`、`gc-registry-metadata-inventory-guard`、`gc-template-only-inventory-guard`、`gc-template-registry-defensive-routing`、`gc-direct-conditional-fallback-routing`、`gc-wrapped-hard-miss-routing` 与 `gc-legacy-wrapped-parser-guard` 已完成。R2、R3、R4.1–R4.6、queued launch/runtime、monotonic launch phase、generic capture state/identity/options/custom_game 与聚合 apply、payload 纯 snapshot projection、显式 host capture 同步边界、source-aware shared launch/runtime identity restore、steam-auth 元数据、4511 标记/restore、owner/options/cache/custom_game/generation/generic_lobby_id restore、lifecycle/postgame state apply 单写入切片已完成。重启 L2/L4 须满足 PHASE_E_EXIT / GP10 §13。
 
 ## 必跑验证
 
