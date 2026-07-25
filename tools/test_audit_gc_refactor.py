@@ -224,6 +224,31 @@ class WrappedHardMissRoutingAuditTest(unittest.TestCase):
         self.assertTrue(any("wrapped hard miss must mention wrapped hard miss helper" in issue for issue in issues))
 
 
+class LegacyWrappedParserGuardAuditTest(unittest.TestCase):
+    def test_accepts_legacy_wrapped_parser_without_production_calls(self):
+        self.assertEqual([], audit.audit_legacy_wrapped_parser_guard())
+
+    def test_rejects_production_call_to_legacy_wrapped_parser(self):
+        issues = audit.audit_legacy_wrapped_parser_guard(
+            source_texts={
+                "gbe_dota_post_login_handlers.cpp": "GBE_ExtractWrappedDotaDirectContext(pubData, cubData, context);",
+            }
+        )
+        self.assertIn(
+            "gbe_dota_post_login_handlers.cpp:1: production must not call legacy wrapped parser GBE_ExtractWrappedDotaDirectContext",
+            issues,
+        )
+
+    def test_rejects_missing_legacy_unused_inventory_marker(self):
+        inventory_text = audit.read(audit.os.path.join(audit.ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+        inventory_text = inventory_text.replace("**LEGACY_UNUSED**", "ACTIVE")
+        issues = audit.audit_legacy_wrapped_parser_guard(inventory_text=inventory_text)
+        self.assertIn(
+            "MESSAGE_ROUTING must document GBE_ExtractWrappedDotaDirectContext as LEGACY_UNUSED",
+            issues,
+        )
+
+
 class PublicHeaderDefinitionAuditTest(unittest.TestCase):
     def test_ignores_virtual_member_destructor(self):
         self.assertEqual(

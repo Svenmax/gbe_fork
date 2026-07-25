@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | legacy wrapped parser guard：`GBE_ExtractWrappedDotaDirectContext` 保持 `LEGACY_UNUSED`，生产 `.cpp` 无调用 contract 由审计保护 | `.monkeycode/specs/gc-legacy-wrapped-parser-guard/`、`MESSAGE_ROUTING_INVENTORY.md` |
 | 2026-07-25 | wrapped hard miss routing：wrapped post-login registry miss 收敛到显式 hard-miss helper，保持 log + return false，并由 audit 保护 template replay / SetTeamSlot dead fallback 缺席 | `.monkeycode/specs/gc-wrapped-hard-miss-routing/`、`MESSAGE_ROUTING_INVENTORY.md` |
 | 2026-07-25 | direct conditional fallback routing：`8744` observe-only 与 `5410`/`5432` late-steam conditional consume 收敛到显式 helper，并由 audit 保护实现与路由真相表一致性 | `.monkeycode/specs/gc-direct-conditional-fallback-routing/`、`MESSAGE_ROUTING_INVENTORY.md` |
 | 2026-07-25 | template registry-defensive routing：`8879`、`8095`、`8009`、`7091` 从 template-only switch 收敛到显式 defensive helper，并由 audit 保护路由真相表一致性 | `.monkeycode/specs/gc-template-registry-defensive-routing/`、`MESSAGE_ROUTING_INVENTORY.md` |

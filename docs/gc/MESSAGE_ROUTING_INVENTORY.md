@@ -1,6 +1,6 @@
 # 消息路由清单（四轨真相表）
 
-> 源码扫描日期：2026-07-25（direct conditional fallback、wrapped hard miss 与 registry-defensive template routing boundary 显式化）。改入口必须同步更新本表。
+> 源码扫描日期：2026-07-25（direct conditional fallback、wrapped hard miss、registry-defensive template routing boundary 与 legacy parser guard 显式化）。改入口必须同步更新本表。
 > 分发顺序（post-login）：**registry → 条件/观察 fallback → template_replay**。
 > Hello / ServerHello 经 `handle_dota_client_message` 转调 welcome handlers（不进 post-login registry）。
 
@@ -150,7 +150,7 @@ Adapter 形态：`self->GBE_Handle…`（仍是 GC 成员，非独立服务）�
 |------|------|----------|------|
 | gc_router | `gbe_dota_gc_router.*` | **wrapped post-login 入站**（`extract_wrapped_post_login_request`）+ 出站 `build_outbound_message`；产出 `DotaGcRequestContext` 供 registry | 权威入口 |
 | request_router | `gbe_dota_request_router.h` | **direct 帧解析**（`GBE_ParseDirectProtoContext`）+ 模板内层抽取 `GBE_ExtractWrappedClientFromGCPayload` | 权威入口 |
-| request_router | `GBE_ExtractWrappedDotaDirectContext` | 与 gc_router wrapped 抽取语义重叠 | **LEGACY_UNUSED**（无生产 call site） |
+| request_router | `GBE_ExtractWrappedDotaDirectContext` | 与 gc_router wrapped 抽取语义重叠 | **LEGACY_UNUSED**（无生产 call site；由 audit 保护） |
 
 决策（B4）：
 1. 不合并实现：direct 需要 protobuf header 对象；wrapped 需要 session field 字符串；合并收益低、回归面大。

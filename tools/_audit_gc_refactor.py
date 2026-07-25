@@ -831,6 +831,34 @@ def audit_wrapped_hard_miss_routing(handler_text=None, inventory_text=None):
     return issues
 
 
+def audit_legacy_wrapped_parser_guard(source_texts=None, inventory_text=None):
+    """Keep the legacy wrapped-direct parser unused by production routing."""
+    if source_texts is None:
+        source_texts = {
+            os.path.basename(path): read(path)
+            for path in GC_TUS
+        }
+    if inventory_text is None:
+        inventory_text = read(os.path.join(ROOT_DIR, "docs", "gc", "MESSAGE_ROUTING_INVENTORY.md"))
+
+    issues = []
+    legacy_symbol = "GBE_ExtractWrappedDotaDirectContext"
+    inventory_has_marker = any(
+        legacy_symbol in line and "LEGACY_UNUSED" in line
+        for line in inventory_text.splitlines()
+    )
+    if not inventory_has_marker:
+        issues.append("MESSAGE_ROUTING must document GBE_ExtractWrappedDotaDirectContext as LEGACY_UNUSED")
+
+    call_pattern = re.compile(r'\bGBE_ExtractWrappedDotaDirectContext\s*\(')
+    for path, text in sorted(source_texts.items()):
+        for line_no, line in enumerate(text.splitlines(), 1):
+            if call_pattern.search(line):
+                issues.append(f"{path}:{line_no}: production must not call legacy wrapped parser {legacy_symbol}")
+
+    return issues
+
+
 def audit_retired_gc_internal_header(source_texts=None):
     """D.12.2: the retired internal aggregate header must stay absent."""
     if source_texts is None:
@@ -2245,7 +2273,19 @@ def main():
     print()
 
     print("=" * 70)
-    print("AUDIT 5d: Retired gbe_dota_gc_internal.h boundary")
+    print("AUDIT 5d: Legacy wrapped parser guard")
+    print("=" * 70)
+    print("  Action: keep legacy wrapped-direct parser out of production routing.")
+    legacy_wrapped_parser_issues = audit_legacy_wrapped_parser_guard()
+    if not legacy_wrapped_parser_issues:
+        print("  Legacy wrapped-direct parser remains documented as unused and has no production calls")
+    else:
+        for issue in legacy_wrapped_parser_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
+    print("AUDIT 5e: Retired gbe_dota_gc_internal.h boundary")
     print("=" * 70)
     print("  Action: keep the retired aggregate header deleted and use dedicated capability headers.")
     gc_internal_slim_issues = audit_retired_gc_internal_header()
@@ -2550,6 +2590,7 @@ def main():
     print(f"  Registry-defensive template issues:  {len(registry_defensive_template_issues)}")
     print(f"  Direct conditional fallback issues:  {len(direct_conditional_fallback_issues)}")
     print(f"  Wrapped hard miss issues:            {len(wrapped_hard_miss_issues)}")
+    print(f"  Legacy wrapped parser issues:        {len(legacy_wrapped_parser_issues)}")
     print(f"  GC internal slim boundary issues:    {len(gc_internal_slim_issues)}")
     print(f"  Source-list inclusion issues:        {len(source_list_issues)}")
     print(f"  Handler side-effect seam issues:     {len(side_effect_issues)}")
@@ -2575,7 +2616,7 @@ def main():
     print(f"  CI failure localization issues:       {len(ci_failure_localization_issues)}")
     print(f"  Architecture investment boundary issues: {len(architecture_investment_boundary_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or registry_defensive_template_issues or direct_conditional_fallback_issues or wrapped_hard_miss_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or template_blob_issues or registry_defensive_template_issues or direct_conditional_fallback_issues or wrapped_hard_miss_issues or legacy_wrapped_parser_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
         sys.exit(1)
 
 
