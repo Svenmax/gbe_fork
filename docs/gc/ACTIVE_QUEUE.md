@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | inventory emsg list helper：routing inventory emsg 集合 diagnostics 与迭代统一使用 numeric sort helper，避免集合输出顺序漂移 | `.monkeycode/specs/gc-inventory-emsg-list-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory sorted numeric helper：routing inventory audit 共用 numeric emsg sort helper，避免排序语义漂移 | `.monkeycode/specs/gc-inventory-sorted-numeric-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory duplicate issues helper：routing inventory audit 共用 duplicate issue 输出 helper，保持 emsg numeric sort 与消息前缀一致 | `.monkeycode/specs/gc-inventory-duplicate-issues-helper/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-25 | inventory duplicate helper：routing inventory audit 共用 duplicate tracking helper，避免 seen/duplicates 记录语义漂移 | `.monkeycode/specs/gc-inventory-duplicate-helper/`、`tools/_audit_gc_refactor.py` |

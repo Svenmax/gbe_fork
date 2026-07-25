@@ -768,7 +768,7 @@ def audit_registry_inventory_guard(registry_text=None, inventory_text=None, cons
     if registry_emsgs != inventory_emsgs:
         issues.append(
             "MESSAGE_ROUTING registry emsgs "
-            f"{sorted(inventory_emsgs)} differ from production kTable {sorted(registry_emsgs)}"
+            f"{sorted_numeric_values(inventory_emsgs)} differ from production kTable {sorted_numeric_values(registry_emsgs)}"
         )
     for emsg in sorted_numeric_values(registry_emsgs & inventory_emsgs):
         production = registry_rows.get(emsg)
@@ -847,7 +847,7 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
     if helper_emsgs != REGISTRY_DEFENSIVE_TEMPLATE_EMSGS:
         issues.append(
             "template replay: registry-defensive helper emsgs "
-            f"{sorted(helper_emsgs)} differ from expected {sorted(REGISTRY_DEFENSIVE_TEMPLATE_EMSGS)}"
+            f"{sorted_numeric_values(helper_emsgs)} differ from expected {sorted_numeric_values(REGISTRY_DEFENSIVE_TEMPLATE_EMSGS)}"
         )
 
     switch_match = re.search(
@@ -856,7 +856,7 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
         re.S,
     )
     switch_body = switch_match.group("body") if switch_match else ""
-    for emsg in sorted(REGISTRY_DEFENSIVE_TEMPLATE_EMSGS):
+    for emsg in sorted_numeric_values(REGISTRY_DEFENSIVE_TEMPLATE_EMSGS):
         token = "GBE_kDotaFindTopSourceTVGames" if emsg == "8009" else emsg
         if re.search(rf'case\s+{re.escape(token)}\s*:', switch_body):
             issues.append(f"template replay: registry-defensive emsg {emsg} remains in template-only switch")
@@ -878,7 +878,7 @@ def audit_registry_defensive_template_routing(handler_text=None, inventory_text=
     if inventory_defensive != REGISTRY_DEFENSIVE_TEMPLATE_EMSGS:
         issues.append(
             "MESSAGE_ROUTING registry-defensive emsgs "
-            f"{sorted(inventory_defensive)} differ from expected {sorted(REGISTRY_DEFENSIVE_TEMPLATE_EMSGS)}"
+            f"{sorted_numeric_values(inventory_defensive)} differ from expected {sorted_numeric_values(REGISTRY_DEFENSIVE_TEMPLATE_EMSGS)}"
         )
 
     return issues
@@ -907,7 +907,7 @@ def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
     if switch_emsgs != TEMPLATE_ONLY_TEMPLATE_EMSGS:
         issues.append(
             "template replay: template-only switch emsgs "
-            f"{sorted(switch_emsgs)} differ from expected {sorted(TEMPLATE_ONLY_TEMPLATE_EMSGS)}"
+            f"{sorted_numeric_values(switch_emsgs)} differ from expected {sorted_numeric_values(TEMPLATE_ONLY_TEMPLATE_EMSGS)}"
         )
 
     inventory_section_text = inventory_section(inventory_text, "## 4. template_replay")
@@ -928,7 +928,7 @@ def audit_template_only_inventory_guard(handler_text=None, inventory_text=None):
     if inventory_template_only != TEMPLATE_ONLY_TEMPLATE_EMSGS:
         issues.append(
             "MESSAGE_ROUTING template-only emsgs "
-            f"{sorted(inventory_template_only)} differ from expected {sorted(TEMPLATE_ONLY_TEMPLATE_EMSGS)}"
+            f"{sorted_numeric_values(inventory_template_only)} differ from expected {sorted_numeric_values(TEMPLATE_ONLY_TEMPLATE_EMSGS)}"
         )
 
     return issues
@@ -958,7 +958,7 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
     if helper_emsgs != DIRECT_CONDITIONAL_FALLBACK_EMSGS:
         issues.append(
             "direct post-login: conditional fallback helper emsgs "
-            f"{sorted(helper_emsgs)} differ from expected {sorted(DIRECT_CONDITIONAL_FALLBACK_EMSGS)}"
+            f"{sorted_numeric_values(helper_emsgs)} differ from expected {sorted_numeric_values(DIRECT_CONDITIONAL_FALLBACK_EMSGS)}"
         )
 
     direct_start = handler_text.find("bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest")
@@ -998,7 +998,7 @@ def audit_direct_conditional_fallback_routing(handler_text=None, inventory_text=
     if inventory_conditional != DIRECT_CONDITIONAL_FALLBACK_EMSGS:
         issues.append(
             "MESSAGE_ROUTING direct conditional fallback emsgs "
-            f"{sorted(inventory_conditional)} differ from expected {sorted(DIRECT_CONDITIONAL_FALLBACK_EMSGS)}"
+            f"{sorted_numeric_values(inventory_conditional)} differ from expected {sorted_numeric_values(DIRECT_CONDITIONAL_FALLBACK_EMSGS)}"
         )
 
     return issues
