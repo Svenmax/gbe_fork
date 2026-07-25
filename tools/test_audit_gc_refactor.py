@@ -78,6 +78,44 @@ class DiagnosticReasonInventoryAuditTest(unittest.TestCase):
         )
 
 
+class PublicCapabilityHeaderAuditTest(unittest.TestCase):
+    def test_includes_all_shared_capability_headers(self):
+        header_names = {header.rsplit("/", 1)[-1] for header in audit.PUBLIC_HEADERS}
+        self.assertTrue({
+            "gbe_dota_gc_diagnostics.h",
+            "gbe_dota_vpk_loot_cache.h",
+            "gbe_dota_server_hello_cache.h",
+        }.issubset(header_names))
+
+    def test_capability_headers_declare_their_shared_functions(self):
+        expected_symbols = {
+            "gbe_dota_gc_diagnostics.h": {
+                "GBE_GC_DebugLog",
+                "GBE_DescribeDotaLaunchPhase",
+                "GBE_LogDotaSOCacheSubscribedSummary",
+                "GBE_LogGCProtoBoundary",
+                "GBE_LogDotaResponsePacket",
+            },
+            "gbe_dota_vpk_loot_cache.h": {
+                "GBE_GetDotaVpkLootData",
+                "GBE_SetDotaVpkLootData",
+            },
+            "gbe_dota_server_hello_cache.h": {
+                "GBE_HasLastDotaServerHelloContext",
+                "GBE_GetLastDotaServerHelloContext",
+                "GBE_SetLastDotaServerHelloContext",
+                "GBE_ClearLastDotaServerHelloContext",
+            },
+        }
+        for header in audit.PUBLIC_HEADERS:
+            header_name = header.rsplit("/", 1)[-1]
+            if header_name in expected_symbols:
+                self.assertEqual(
+                    expected_symbols[header_name],
+                    audit.extract_header_symbols(audit.read(header)),
+                )
+
+
 class LifecycleTransitionGateAuditTest(unittest.TestCase):
     def valid_sources(self):
         return {
