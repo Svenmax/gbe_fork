@@ -59,6 +59,8 @@
 
 **owner connection lifecycle local apply helper（2026-07-25）：** `on_client_connected(...)` / `on_client_disconnected(...)` 的 owner connected 写入复用 `apply_lobby_owner_connected(...)`，suppress guard、postgame publish suppression 与 inventory cache 保留日志顺序保持不变。
 
+**owner team/slot slot-handler local apply helper（2026-07-25）：** 7047 set team slot 的 owner team/slot 写入复用 `apply_lobby_owner_team(...)` 与 `apply_lobby_owner_slot(...)`，member update、bot difficulty、normalize、publish/details/ack 顺序保持不变。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。

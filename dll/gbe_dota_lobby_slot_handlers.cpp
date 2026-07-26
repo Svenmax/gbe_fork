@@ -78,9 +78,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
     const bool local_is_owner = local_steam_id != 0ull && local_steam_id == GBE_local_lobby.owner_steam_id;
     if (local_is_owner) {
         if (request.has_team)
-            GBE_local_lobby.owner_team = request.team;
+            gbe::dota_lobby_state::apply_lobby_owner_team(GBE_local_lobby, request.team);
         if (request.has_slot)
-            GBE_local_lobby.owner_slot = request.slot;
+            gbe::dota_lobby_state::apply_lobby_owner_slot(GBE_local_lobby, request.slot);
     }
     gbe::dota_lobby_flow::apply_lobby_member_team_slot_update(
         GBE_local_lobby.members,
