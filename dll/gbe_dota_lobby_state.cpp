@@ -1078,6 +1078,13 @@ void apply_lobby_member_kick_snapshot(
     lobby = snapshot;
 }
 
+void apply_create_lobby_state_plan(
+    GBE_LocalLobby &lobby,
+    const CreateLobbyStateApplyPlan &plan)
+{
+    lobby = plan.lobby;
+}
+
 bool restore_lobby_custom_game(
     GBE_LocalLobby &lobby,
     const GBE_DotaCustomGameDetails &shared_custom_game)

@@ -795,6 +795,9 @@ void clear_local_lobby(GBE_LocalLobby &lobby);
 void apply_lobby_member_kick_snapshot(
     GBE_LocalLobby &lobby,
     const GBE_LocalLobby &snapshot);
+void apply_create_lobby_state_plan(
+    GBE_LocalLobby &lobby,
+    const CreateLobbyStateApplyPlan &plan);
 bool apply_lobby_bot_difficulty_for_team(
     GBE_LocalLobby &lobby,
     std::uint32_t team,

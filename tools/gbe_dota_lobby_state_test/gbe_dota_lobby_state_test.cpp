@@ -715,6 +715,17 @@ bool test_valid_launch_progression()
         ok &= expect_true(
             gbe::dota_lobby_flow::lobby_members_equal(current.members, snapshot.members),
             "kick snapshot applies member list");
+        GBE_LocalLobby create_target = make_active_lobby();
+        create_target.lobby_id = 99ull;
+        gbe::dota_lobby_state::CreateLobbyStateApplyPlan create_apply_plan{};
+        create_apply_plan.lobby = snapshot;
+        create_apply_plan.normalize_custom_game_details = true;
+        gbe::dota_lobby_state::apply_create_lobby_state_plan(create_target, create_apply_plan);
+        ok &= expect_eq_u64(create_target.lobby_id, snapshot.lobby_id, "create state apply replaces Local snapshot");
+        ok &= expect_eq_str(create_target.room_name, "after", "create state apply applies plan lobby");
+        ok &= expect_true(
+            gbe::dota_lobby_flow::lobby_members_equal(create_target.members, snapshot.members),
+            "create state apply preserves plan members");
     }
 
     // apply_chat_channel / clear_chat_channel: local chat channel writes are grouped.
