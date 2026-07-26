@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | direct Local lobby explicit type alias guard：audit 10d mutable alias matcher 覆盖 `GBE_LocalLobby& lobby = GBE_local_lobby` / pointer 形式，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-explicit-type-alias-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-26 | direct target Local lobby prefix inc/dec guard：补充 audit 10d 回归，显式覆盖 `++options.client_target->GBE_local_lobby.generation` target pointer 前缀 mutation，生产代码与 audit 实现保持不变 | `.monkeycode/specs/gc-direct-target-local-lobby-prefix-incdec-guard/`、`tools/test_audit_gc_refactor.py` |
 | 2026-07-26 | direct Local lobby prefix inc/dec guard：audit 10d 覆盖 `++GBE_local_lobby.generation` / `--GBE_local_lobby.generation` 这类前缀 direct field mutation，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-prefix-incdec-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-26 | direct Local lobby pointer alias guard：补充 audit 10d 回归，显式覆盖 `GBE_DotaLobbyState* lobby = &GBE_local_lobby` mutable pointer alias，生产代码与 audit 实现保持不变 | `.monkeycode/specs/gc-direct-local-lobby-pointer-alias-guard/`、`tools/test_audit_gc_refactor.py` |

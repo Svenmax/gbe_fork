@@ -1115,6 +1115,15 @@ class DirectLocalLobbyWriteAuditTest(unittest.TestCase):
             audit.audit_direct_local_lobby_writes(sources),
         )
 
+    def test_rejects_explicit_local_lobby_mutable_alias_to_local_lobby(self):
+        sources = {
+            "gbe_dota_lobby_create_handlers.cpp": "GBE_LocalLobby& lobby = GBE_local_lobby; lobby.state = 1u;",
+        }
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: mutable GBE_local_lobby alias count 1; route writes through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
     def test_rejects_mutable_pointer_alias_to_local_lobby(self):
         sources = {
             "gbe_dota_lobby_create_handlers.cpp": "GBE_DotaLobbyState* lobby = &GBE_local_lobby; lobby->state = 1u;",
