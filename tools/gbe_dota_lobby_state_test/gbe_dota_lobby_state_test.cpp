@@ -699,6 +699,10 @@ bool test_valid_launch_progression()
         ok &= expect_false(
             gbe::dota_lobby_state::mark_generic_lobby_owner_adoption_suppressed_logged(lobby),
             "owner adoption suppression flag suppresses duplicate log");
+        gbe::dota_lobby_state::clear_local_lobby(lobby);
+        ok &= expect_false(lobby.active, "clear local lobby resets active flag");
+        ok &= expect_eq_u64(lobby.lobby_id, 0ull, "clear local lobby resets lobby id");
+        ok &= expect_true(lobby.members.empty(), "clear local lobby resets members");
     }
 
     // apply_chat_channel / clear_chat_channel: local chat channel writes are grouped.

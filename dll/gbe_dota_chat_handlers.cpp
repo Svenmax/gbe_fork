@@ -644,7 +644,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         );
         // Leave the generic lobby so other members see the lobby destroyed and can clean up.
         GBE_LeaveGenericLobby();
-        GBE_local_lobby = GBE_LocalLobby{};
+        gbe::dota_lobby_state::clear_local_lobby(GBE_local_lobby);
     } else {
         GBE_PublishSharedDotaLobbyState("7272_leave_chat");
     }

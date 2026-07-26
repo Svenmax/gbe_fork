@@ -1047,7 +1047,7 @@ void Steam_Game_Coordinator::initialize_gc()
 void Steam_Game_Coordinator::GBE_ClearDotaLobbyRuntimeState()
 {
     const uint64 generation = GBE_local_lobby.generation;
-    GBE_local_lobby = GBE_LocalLobby{};
+    gbe::dota_lobby_state::clear_local_lobby(GBE_local_lobby);
     const auto clear_result = GBE_SharedLobbyStore().compare_clear(generation);
     if (clear_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
         GBE_GC_DebugLog(

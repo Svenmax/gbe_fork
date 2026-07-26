@@ -1066,6 +1066,11 @@ bool mark_generic_lobby_owner_adoption_suppressed_logged(GBE_LocalLobby &lobby)
     return true;
 }
 
+void clear_local_lobby(GBE_LocalLobby &lobby)
+{
+    lobby = GBE_LocalLobby{};
+}
+
 bool restore_lobby_custom_game(
     GBE_LocalLobby &lobby,
     const GBE_DotaCustomGameDetails &shared_custom_game)

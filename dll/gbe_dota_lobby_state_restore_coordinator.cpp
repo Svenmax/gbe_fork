@@ -120,7 +120,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             GBE_dota_lobby_generation_counter = gbe::dota_lobby_generation::Counter(
                 gbe::dota_lobby_generation::Generation{recovery_base_generation});
             if (GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Recover, reason) == GBE_DotaGenerationAdvanceResult::Exhausted) {
-                GBE_local_lobby = {};
+                gbe::dota_lobby_state::clear_local_lobby(GBE_local_lobby);
                 return;
             }
             gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, GBE_CurrentDotaLobbyGeneration());
