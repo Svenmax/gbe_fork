@@ -1313,6 +1313,7 @@ def audit_direct_local_lobby_writes(source_texts=None):
     local_field_chain = r"[A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)*"
     direct_field_write_op = r"(?:=(?!=)|[+\-*/%|&^]=|\+\+|--)"
     direct_field_write = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*{direct_field_write_op}")
+    direct_parenthesized_field_write = re.compile(rf"\(\s*GBE_local_lobby\s*\)\s*\.\s*{local_field_chain}\s*{direct_field_write_op}")
     direct_indexed_field_write = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*\[[^\]]+\]\s*{direct_field_write_op}")
     direct_indexed_member_write = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*\[[^\]]+\]\s*\.\s*{local_field_chain}\s*{direct_field_write_op}")
     direct_prefix_field_write = re.compile(rf"(?:\+\+|--)\s*{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\b(?!\s*\[)")
@@ -1331,6 +1332,7 @@ def audit_direct_local_lobby_writes(source_texts=None):
         object_writes = len(direct_object_write.findall(uncommented))
         field_writes = (
             len(direct_field_write.findall(uncommented))
+            + len(direct_parenthesized_field_write.findall(uncommented))
             + len(direct_indexed_field_write.findall(uncommented))
             + len(direct_indexed_member_write.findall(uncommented))
             + len(direct_prefix_field_write.findall(uncommented))
