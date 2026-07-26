@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | direct Local lobby pointer alias guard：补充 audit 10d 回归，显式覆盖 `GBE_DotaLobbyState* lobby = &GBE_local_lobby` mutable pointer alias，生产代码与 audit 实现保持不变 | `.monkeycode/specs/gc-direct-local-lobby-pointer-alias-guard/`、`tools/test_audit_gc_refactor.py` |
 | 2026-07-26 | direct Local lobby const alias guard：audit 10d mutable alias matcher 跳过 `const auto& lobby = GBE_local_lobby` 只读别名，继续拦截 mutable alias，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-const-alias-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-26 | direct target Local lobby field variant guard：补充 audit 10d 回归，显式覆盖 target pointer 的嵌套字段、compound 写入和 mutating method 形式，生产代码与 audit 实现保持不变 | `.monkeycode/specs/gc-direct-target-local-lobby-field-variant-guard/`、`tools/test_audit_gc_refactor.py` |
 | 2026-07-26 | direct Local lobby mutable alias guard：audit 10d 覆盖 `auto& lobby = GBE_local_lobby` / mutable pointer alias 这类 direct write 旁路，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-mutable-alias-guard/`、`tools/_audit_gc_refactor.py` |
