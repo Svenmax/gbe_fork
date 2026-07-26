@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | direct Local lobby indexed postfix write guard：补充 audit 10d 回归，显式覆盖 `GBE_local_lobby.members[0].team++` indexed postfix mutation，生产代码与 audit 实现保持不变 | `.monkeycode/specs/gc-direct-local-lobby-indexed-postfix-write-guard/`、`tools/test_audit_gc_refactor.py` |
 | 2026-07-26 | direct target Local lobby indexed prefix write guard：补充 audit 10d 回归，显式覆盖 `++options.client_target->GBE_local_lobby.members[0].team` target indexed prefix mutation，生产代码与 audit 实现保持不变 | `.monkeycode/specs/gc-direct-target-local-lobby-indexed-prefix-write-guard/`、`tools/test_audit_gc_refactor.py` |
 | 2026-07-26 | direct Local lobby indexed prefix write guard：audit 10d 覆盖 `++GBE_local_lobby.members[0].team` / indexed field 前缀 mutation，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-indexed-prefix-write-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-26 | direct target Local lobby indexed member write guard：补充 audit 10d 回归，显式覆盖 `options.client_target->GBE_local_lobby.members[0].team = team` target subscript-member direct write，生产代码与 audit 实现保持不变 | `.monkeycode/specs/gc-direct-target-local-lobby-indexed-member-write-guard/`、`tools/test_audit_gc_refactor.py` |
