@@ -1319,6 +1319,7 @@ def audit_direct_local_lobby_writes(source_texts=None):
     direct_prefix_indexed_write = re.compile(rf"(?:\+\+|--)\s*{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*\[[^\]]+\](?:\s*\.\s*{local_field_chain})?")
     mutating_methods = r"(?:push_back|emplace_back|clear|erase|insert|assign|resize|swap)"
     direct_field_mutation = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*\.\s*{mutating_methods}\s*\(")
+    direct_indexed_field_mutation = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*\[[^\]]+\]\s*\.\s*{local_field_chain}\s*\.\s*{mutating_methods}\s*\(")
     mutable_alias = re.compile(r"(?<!const\s)\b(?:auto|GBE_DotaLobbyState|GBE_LocalLobby)\s*(?:&&|&|\*)\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*&?\s*GBE_local_lobby\b")
     decltype_auto_alias = re.compile(r"\bdecltype\s*\(\s*auto\s*\)\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*\(\s*GBE_local_lobby\s*\)")
     issues = []
@@ -1335,6 +1336,7 @@ def audit_direct_local_lobby_writes(source_texts=None):
             + len(direct_prefix_field_write.findall(uncommented))
             + len(direct_prefix_indexed_write.findall(uncommented))
             + len(direct_field_mutation.findall(uncommented))
+            + len(direct_indexed_field_mutation.findall(uncommented))
         )
         alias_writes = len(mutable_alias.findall(uncommented)) + len(decltype_auto_alias.findall(uncommented))
         if object_writes:
