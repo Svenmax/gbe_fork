@@ -1317,6 +1317,7 @@ def audit_direct_local_lobby_writes(source_texts=None):
     mutating_methods = r"(?:push_back|emplace_back|clear|erase|insert|assign|resize|swap)"
     direct_field_mutation = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*\.\s*{mutating_methods}\s*\(")
     mutable_alias = re.compile(r"(?<!const\s)\b(?:auto|GBE_DotaLobbyState|GBE_LocalLobby)\s*(?:&&|&|\*)\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*&?\s*GBE_local_lobby\b")
+    decltype_auto_alias = re.compile(r"\bdecltype\s*\(\s*auto\s*\)\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*\(\s*GBE_local_lobby\s*\)")
     issues = []
     for source_name, source_text in sorted(source_texts.items()):
         base = os.path.basename(source_name)
@@ -1329,7 +1330,7 @@ def audit_direct_local_lobby_writes(source_texts=None):
             + len(direct_prefix_field_write.findall(uncommented))
             + len(direct_field_mutation.findall(uncommented))
         )
-        alias_writes = len(mutable_alias.findall(uncommented))
+        alias_writes = len(mutable_alias.findall(uncommented)) + len(decltype_auto_alias.findall(uncommented))
         if object_writes:
             issues.append(f"{base}: direct GBE_local_lobby object write count {object_writes}; route through a named state helper")
         if field_writes:
