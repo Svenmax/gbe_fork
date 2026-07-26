@@ -1006,6 +1006,12 @@ class DirectLocalLobbyWriteAuditTest(unittest.TestCase):
         }
         self.assertEqual([], audit.audit_direct_local_lobby_writes(sources))
 
+    def test_accepts_const_alias_to_local_lobby(self):
+        sources = {
+            "gbe_dota_lobby_create_handlers.cpp": "const auto& lobby = GBE_local_lobby; return lobby.active;",
+        }
+        self.assertEqual([], audit.audit_direct_local_lobby_writes(sources))
+
     def test_rejects_direct_object_write(self):
         sources = {
             "gbe_dota_lobby_create_handlers.cpp": "GBE_local_lobby = plan.lobby;",
