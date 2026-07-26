@@ -547,35 +547,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
         );
     }
 
-    if (request.has_room_name)
-        GBE_local_lobby.room_name = request.room_name;
-    if (request.has_server_region)
-        GBE_local_lobby.server_region = request.server_region;
-    if (request.has_lan)
-        GBE_local_lobby.lan = request.lan;
-    if (request.has_lan_host_ping_location)
-        GBE_local_lobby.lan_host_ping_location = request.lan_host_ping_location;
-    if (request.has_game_mode)
-        GBE_local_lobby.game_mode = request.game_mode;
-    if (request.has_bot_difficulty_radiant)
-        GBE_local_lobby.bot_difficulty_radiant = request.bot_difficulty_radiant;
-    if (request.has_allow_cheats)
-        GBE_local_lobby.allow_cheats = request.allow_cheats;
-    if (request.has_fill_with_bots)
-        GBE_local_lobby.fill_with_bots = request.fill_with_bots;
-    if (request.has_allow_spectating)
-        GBE_local_lobby.allow_spectating = request.allow_spectating;
-    if (request.has_pass_key)
-        GBE_local_lobby.pass_key = request.pass_key;
-    if (request.has_visibility)
-        GBE_local_lobby.visibility = request.visibility;
-    if (request.has_bot_difficulty_dire)
-        GBE_local_lobby.bot_difficulty_dire = request.bot_difficulty_dire;
-    if (request.has_bot_radiant)
-        GBE_local_lobby.bot_radiant = request.bot_radiant;
-    if (request.has_bot_dire)
-        GBE_local_lobby.bot_dire = request.bot_dire;
-    GBE_ApplyDotaCustomGameDetailsRequest(request, GBE_local_lobby.custom_game);
+    gbe::dota_lobby_state::apply_lobby_details_update(GBE_local_lobby, request);
     GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, GBE_local_lobby.custom_game);
     GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby);
 

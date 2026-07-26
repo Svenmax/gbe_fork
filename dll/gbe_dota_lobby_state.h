@@ -12,6 +12,7 @@
 
 namespace gbe::proto_wire {
 struct DotaPracticeLobbyCreateRequest;
+struct DotaPracticeLobbyDetailsRequest;
 }
 
 // Shared Dota lobby state DTOs and pure transition plans used by GC handlers.
@@ -814,6 +815,9 @@ bool apply_runtime_metadata(
 bool apply_lobby_server_id(
     GBE_LocalLobby &lobby,
     std::uint64_t server_id);
+void apply_lobby_details_update(
+    GBE_LocalLobby &lobby,
+    const proto_wire::DotaPracticeLobbyDetailsRequest &details);
 bool apply_runtime_connect(
     GBE_LocalLobby &lobby,
     const std::string &connect);

@@ -13,6 +13,7 @@
 #include "dll/gbe_dota_lobby_state.h"
 #include "dll/gbe_dota_lifecycle_actions.h"
 #include "dll/gbe_dota_lobby_generation.h"
+#include "dll/gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_context.h"
 #include "dll/gbe_dota_types.h"
 #include "dll/dll/gbe_dota_reconnect_shared.h"
@@ -1005,6 +1006,39 @@ bool test_valid_launch_progression()
             gbe::dota_lobby_state::apply_runtime_metadata(lobby, "5.6.7.8:27015", 0ull),
             "runtime metadata applies zero server id input");
         ok &= expect_eq_u64(lobby.server_id, 0ull, "runtime metadata clears server id on zero input");
+    }
+
+    // apply_lobby_details_update: 7046 details update applies options and custom game fields.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.room_name = "old room";
+        lobby.server_region = 1u;
+        lobby.lan = false;
+        lobby.allow_cheats = false;
+        lobby.pass_key = "old";
+        lobby.custom_game.game_id = 10ull;
+
+        gbe::proto_wire::DotaPracticeLobbyDetailsRequest details{};
+        details.has_room_name = true;
+        details.room_name = "new room";
+        details.has_server_region = true;
+        details.server_region = 3u;
+        details.has_lan = true;
+        details.lan = true;
+        details.has_allow_cheats = true;
+        details.allow_cheats = true;
+        details.has_pass_key = true;
+        details.pass_key = "new";
+        details.has_custom_game_id = true;
+        details.custom_game_id = 20ull;
+        gbe::dota_lobby_state::apply_lobby_details_update(lobby, details);
+
+        ok &= expect_eq_str(lobby.room_name, "new room", "details update applies room name");
+        ok &= expect_eq_u32(lobby.server_region, 3u, "details update applies server region");
+        ok &= expect_true(lobby.lan, "details update applies lan flag");
+        ok &= expect_true(lobby.allow_cheats, "details update applies cheats flag");
+        ok &= expect_eq_str(lobby.pass_key, "new", "details update applies pass key");
+        ok &= expect_eq_u64(lobby.custom_game.game_id, 20ull, "details update applies custom game id");
     }
 
     // apply_lobby_server_id: server id applies exact runtime identity.

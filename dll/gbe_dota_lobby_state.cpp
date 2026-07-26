@@ -1140,6 +1140,13 @@ bool apply_lobby_server_id(
     return true;
 }
 
+void apply_lobby_details_update(
+    GBE_LocalLobby &lobby,
+    const proto_wire::DotaPracticeLobbyDetailsRequest &details)
+{
+    apply_create_lobby_details(details, lobby);
+}
+
 bool apply_chat_channel(
     GBE_LocalLobby &lobby,
     std::uint64_t channel_id,

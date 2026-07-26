@@ -73,6 +73,8 @@
 
 **generation local apply helper（2026-07-26）：** create/join/runtime reset/lifecycle clear/recover 的 Local generation 写入经 `apply_lobby_generation(...)`，restore helper 复用同一 apply 语义；generation advance 与 counter 更新顺序保持不变。
 
+**details update local apply helper（2026-07-26）：** 7046 set details 的 options/custom_game 字段组经 `apply_lobby_details_update(...)` 写入 Local，lobby id mismatch 日志、custom game normalize、arcade slot normalize、details push 与 diagnostics 顺序保持不变。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。
