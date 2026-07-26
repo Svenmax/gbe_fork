@@ -77,6 +77,8 @@
 
 **members restore helper（2026-07-26）：** shared-to-local runtime restore 的 members 字段组经 `restore_lobby_members(...)` 写入 Local，changed 聚合、sync settings、rich presence replay 与 login sync 顺序保持不变。
 
+**owner name local apply helper（2026-07-26）：** generic lobby owner adoption 的 Local owner_name 写入经 `apply_lobby_owner_name(...)`，owner adoption、local owner publish、metadata publish 与日志顺序保持不变。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。

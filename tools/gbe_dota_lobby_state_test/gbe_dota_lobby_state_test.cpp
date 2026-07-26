@@ -662,6 +662,14 @@ bool test_valid_launch_progression()
             gbe::dota_lobby_state::apply_lobby_owner_slot(lobby, 5u),
             "owner slot apply reports value change");
         ok &= expect_eq_u32(lobby.owner_slot, 5u, "owner slot apply updates local value");
+        lobby.owner_name = "old owner";
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_lobby_owner_name(lobby, "old owner"),
+            "owner name apply keeps matching value");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_owner_name(lobby, "new owner"),
+            "owner name apply reports value change");
+        ok &= expect_eq_str(lobby.owner_name, "new owner", "owner name apply updates local value");
     }
 
     // apply_chat_channel / clear_chat_channel: local chat channel writes are grouped.

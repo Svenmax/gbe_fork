@@ -597,10 +597,14 @@ bool Steam_Game_Coordinator::GBE_AdoptDotaGenericLobbyOwnerIfNeeded(const char *
         GBE_local_lobby.owner_hero_id,
         GBE_local_lobby.owner_connected);
     if (new_owner_steam_id == local_steam_id) {
-        GBE_local_lobby.owner_name = std::string(settings->get_local_name());
+        gbe::dota_lobby_state::apply_lobby_owner_name(
+            GBE_local_lobby,
+            std::string(settings->get_local_name()));
     } else {
         const char *owner_name = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerNameKey);
-        GBE_local_lobby.owner_name = std::string(owner_name ? owner_name : "Lobby Host");
+        gbe::dota_lobby_state::apply_lobby_owner_name(
+            GBE_local_lobby,
+            std::string(owner_name ? owner_name : "Lobby Host"));
     }
 
     if (new_owner_steam_id == local_steam_id) {

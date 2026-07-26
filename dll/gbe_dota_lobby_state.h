@@ -784,6 +784,9 @@ bool restore_lobby_members(
 bool apply_lobby_owner_slot(
     GBE_LocalLobby &lobby,
     std::uint32_t owner_slot);
+bool apply_lobby_owner_name(
+    GBE_LocalLobby &lobby,
+    const std::string &owner_name);
 bool apply_lobby_bot_difficulty_for_team(
     GBE_LocalLobby &lobby,
     std::uint32_t team,

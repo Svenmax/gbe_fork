@@ -1020,6 +1020,16 @@ bool apply_lobby_owner_slot(
     return true;
 }
 
+bool apply_lobby_owner_name(
+    GBE_LocalLobby &lobby,
+    const std::string &owner_name)
+{
+    if (lobby.owner_name == owner_name)
+        return false;
+    lobby.owner_name = owner_name;
+    return true;
+}
+
 bool restore_lobby_custom_game(
     GBE_LocalLobby &lobby,
     const GBE_DotaCustomGameDetails &shared_custom_game)
