@@ -1102,6 +1102,15 @@ class DirectLocalLobbyWriteAuditTest(unittest.TestCase):
             audit.audit_direct_local_lobby_writes(sources),
         )
 
+    def test_rejects_direct_parenthesized_indexed_member_write(self):
+        sources = {
+            "gbe_dota_lobby_create_handlers.cpp": "(GBE_local_lobby).members[0].team = team;",
+        }
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
     def test_rejects_direct_indexed_compound_member_write(self):
         sources = {
             "gbe_dota_lobby_create_handlers.cpp": "GBE_local_lobby.members[0].team += 1u;",

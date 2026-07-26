@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | direct Local lobby parenthesized indexed member write guard：audit 10d 覆盖 `(GBE_local_lobby).members[0].team = team` parenthesized indexed member direct write 旁路，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-parenthesized-indexed-member-write-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-26 | direct target Local lobby parenthesized indexed write guard：补充 audit 10d 回归，显式覆盖 `(options.client_target->GBE_local_lobby).members[0] = member` target parenthesized indexed direct write 旁路，生产代码与 audit 实现保持不变 | `.monkeycode/specs/gc-direct-target-local-lobby-parenthesized-indexed-write-guard/`、`tools/test_audit_gc_refactor.py` |
 | 2026-07-26 | direct Local lobby parenthesized indexed write guard：audit 10d 覆盖 `(GBE_local_lobby).members[0] = member` parenthesized indexed direct write 旁路，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-parenthesized-indexed-write-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-26 | direct target Local lobby parenthesized field write guard：audit 10d 覆盖 `(options.client_target->GBE_local_lobby).state = 1u` target parenthesized direct field write 旁路，生产代码保持不变 | `.monkeycode/specs/gc-direct-target-local-lobby-parenthesized-field-write-guard/`、`tools/_audit_gc_refactor.py` |
