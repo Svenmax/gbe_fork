@@ -121,6 +121,13 @@ bool test_valid_launch_progression()
         ok &= expect_eq_str(plan.lobby.connect, "1.2.3.4:27015", "launch_init connect preferred when empty");
         ok &= expect_eq_u32(plan.lobby.game_start_time, 11111u, "launch_init game_start_time");
         ok &= expect_eq_u32(plan.lobby.launch_phase, GBE_kDotaLaunchPhaseRequested, "launch_init launch_phase");
+        GBE_LocalLobby applied = make_active_lobby();
+        applied.lobby_id = 321ull;
+        gbe::dota_lobby_state::apply_launch_init_plan(applied, plan);
+        ok &= expect_eq_u64(applied.match_id, 500ull, "launch_init apply updates match_id");
+        ok &= expect_eq_u64(applied.server_id, 700ull, "launch_init apply updates server_id");
+        ok &= expect_eq_str(applied.connect, "1.2.3.4:27015", "launch_init apply updates connect");
+        ok &= expect_eq_u32(applied.launch_phase, GBE_kDotaLaunchPhaseRequested, "launch_init apply updates launch phase");
     }
 
     // compose_launch_init_plan: does NOT overwrite a non-loopback connect with a different one.

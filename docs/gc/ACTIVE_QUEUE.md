@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | launch init apply helper：7041 launch init plan 的 Local 快照写回经 `apply_launch_init_plan(...)`，LaunchPeripheralReset、shared publish、custom game setup flow、rich presence 与 persona state 顺序保持不变 | `.monkeycode/specs/gc-local-launch-init-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | join merge apply helper：7044 join plan 的 Local 快照写回经 `apply_join_lobby_merge_plan(...)`，generation advance/write、generic lobby join/settings sync、local member data、publish 与 response 顺序保持不变 | `.monkeycode/specs/gc-local-join-merge-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | create state apply helper：7038 create plan 的 Local 快照写回经 `apply_create_lobby_state_plan(...)`，generation 写入、normalize、reconnect context 与后续 create actions 顺序保持不变 | `.monkeycode/specs/gc-local-create-state-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | kick member snapshot apply helper：7081 generic kick 成功后的 Local 快照写回经 `apply_lobby_member_kick_snapshot(...)`，kick 调用、shared publish、details update 与日志顺序保持不变 | `.monkeycode/specs/gc-local-kick-member-snapshot-apply/`、`LOCAL_LOBBY_USAGE.md` |

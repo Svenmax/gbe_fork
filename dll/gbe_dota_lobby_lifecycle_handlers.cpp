@@ -390,7 +390,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(const std:
         gbe::proto_wire::format_dota_practice_lobby_connect_from_ip(launch_ip),
         static_cast<uint32>(std::time(nullptr)),
         GBE_kDotaLaunchPhaseRequested);
-    GBE_local_lobby = launch_plan.lobby;
+    gbe::dota_lobby_state::apply_launch_init_plan(GBE_local_lobby, launch_plan);
     if (launch_init_actions.size() < 2u ||
         launch_init_actions[1].type != GBE_DotaActionType::SharedLobbyPublish ||
         !GBE_ExecuteDotaLifecycleActions({ launch_init_actions[1] }).succeeded)

@@ -801,6 +801,9 @@ void apply_create_lobby_state_plan(
 void apply_join_lobby_merge_plan(
     GBE_LocalLobby &lobby,
     const JoinLobbyMergePlan &plan);
+void apply_launch_init_plan(
+    GBE_LocalLobby &lobby,
+    const LaunchInitPlan &plan);
 bool apply_lobby_bot_difficulty_for_team(
     GBE_LocalLobby &lobby,
     std::uint32_t team,
