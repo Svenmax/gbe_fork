@@ -1183,6 +1183,15 @@ class DirectLocalLobbyWriteAuditTest(unittest.TestCase):
             audit.audit_direct_local_lobby_writes(sources),
         )
 
+    def test_rejects_direct_target_indexed_mutating_method_field_write(self):
+        sources = {
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": "options.client_target->GBE_local_lobby.members[0].slots.clear();",
+        }
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
     def test_rejects_direct_target_nested_compound_and_method_field_writes(self):
         sources = {
             "gbe_dota_custom_game_lifecycle_coordinator.cpp": (
