@@ -1311,7 +1311,8 @@ def audit_direct_local_lobby_writes(source_texts=None):
     target_prefix = r"(?:[A-Za-z_][A-Za-z0-9_\.]*\s*->\s*)?"
     direct_object_write = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*=(?!=)")
     local_field_chain = r"[A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)*"
-    direct_field_write = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*=(?!=)")
+    direct_field_write_op = r"(?:=(?!=)|[+\-*/%|&^]=|\+\+|--)"
+    direct_field_write = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*{direct_field_write_op}")
     issues = []
     for source_name, source_text in sorted(source_texts.items()):
         base = os.path.basename(source_name)
