@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | generic lobby id local apply helper：7038 create、7040 leave fallback 与 leave-generic clear 的 generic_lobby_id 写入经 `apply_lobby_generic_lobby_id(...)`，restore helper 复用同一 apply 语义 | `.monkeycode/specs/gc-local-generic-lobby-id-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | runtime metadata local apply helper：generic metadata publish 的 connect/server_id Local 写入经 `apply_runtime_metadata(...)`，保留 shared Store compare_update、generic metadata publish 与日志顺序 | `.monkeycode/specs/gc-local-runtime-metadata-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | bot difficulty team local apply helper：7047 set team slot 的 radiant/dire bot difficulty 写入经 `apply_lobby_bot_difficulty_for_team(...)` 选择字段，保留 bot team 推导、member update、normalize、publish/details/ack 顺序 | `.monkeycode/specs/gc-local-bot-difficulty-team-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | custom game loading metadata local apply helper：8052 started loading 的 custom_game_id / start_time 经 `apply_custom_game_loading_metadata(...)` 写入 Local，保留非零 guard、launch setup 计算与 lifecycle decision 顺序 | `.monkeycode/specs/gc-local-custom-game-loading-metadata-apply/`、`LOCAL_LOBBY_USAGE.md` |

@@ -150,7 +150,7 @@ void Steam_Game_Coordinator::GBE_LeaveGenericLobby()
             steam_client->steam_matchmaking->LeaveLobby(generic_lobby_id);
     }
 
-    GBE_local_lobby.generic_lobby_id = 0;
+    gbe::dota_lobby_state::apply_lobby_generic_lobby_id(GBE_local_lobby, 0ull);
     GBE_SyncSettingsLobbyFromGenericLobby("leave_generic_lobby");
 }
 

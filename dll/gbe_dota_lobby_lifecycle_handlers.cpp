@@ -319,7 +319,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
         }
         if (matched_generic_lobby && matched_generic_lobby_id.IsLobby()) {
             fallback_generic_lobby_id = matched_generic_lobby_id.ConvertToUint64();
-            GBE_local_lobby.generic_lobby_id = fallback_generic_lobby_id;
+            gbe::dota_lobby_state::apply_lobby_generic_lobby_id(GBE_local_lobby, fallback_generic_lobby_id);
             GBE_SyncSettingsLobbyFromGenericLobby("7040_leave_local_find");
         }
         GBE_GC_DebugLog(

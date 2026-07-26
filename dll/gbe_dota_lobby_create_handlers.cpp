@@ -382,7 +382,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
                 if (steam_client && steam_client->steam_matchmaking) {
                     CSteamID generic_lobby_id = steam_client->steam_matchmaking->CreateLobbyImmediate(k_ELobbyTypeInvisible, 10);
                     if (generic_lobby_id.IsLobby())
-                        GBE_local_lobby.generic_lobby_id = generic_lobby_id.ConvertToUint64();
+                        gbe::dota_lobby_state::apply_lobby_generic_lobby_id(GBE_local_lobby, generic_lobby_id.ConvertToUint64());
                 }
                 break;
             case GBE_DotaActionType::LobbyLocalMemberData:

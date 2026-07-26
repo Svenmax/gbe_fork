@@ -1067,10 +1067,17 @@ bool restore_lobby_generic_lobby_id(
     GBE_LocalLobby &lobby,
     std::uint64_t shared_generic_lobby_id)
 {
-    if (lobby.generic_lobby_id == shared_generic_lobby_id)
+    return apply_lobby_generic_lobby_id(lobby, shared_generic_lobby_id);
+}
+
+bool apply_lobby_generic_lobby_id(
+    GBE_LocalLobby &lobby,
+    std::uint64_t generic_lobby_id)
+{
+    if (lobby.generic_lobby_id == generic_lobby_id)
         return false;
 
-    lobby.generic_lobby_id = shared_generic_lobby_id;
+    lobby.generic_lobby_id = generic_lobby_id;
     return true;
 }
 
