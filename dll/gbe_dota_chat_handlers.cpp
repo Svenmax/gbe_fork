@@ -126,15 +126,15 @@ using GBE_DotaPracticeLobbyBroadcastChannelRequest = gbe::proto_wire::DotaPracti
 //   9. If leaving_postgame_channel:
 //      a. If !matches_current_postgame_channel: return
 //      b. GBE_UpdateDotaPracticeLobbyLaunchRichPresence [coordinator]
-//      c. Clear chat channel state in GBE_local_lobby [coordinator mutation]
+//      c. clear_chat_channel [state helper]
 //      d. Build persona_message (GBE_PrepareDotaPersonaStatePeripheralMessage)
 //      e. Log (do NOT queue 766 -- rich presence handled via SetRichPresence)
 //   10. Else (not postgame):
-//       a. If request_matches_local: clear chat state [coordinator mutation]
+//       a. If request_matches_local: clear_chat_channel [state helper]
 //       b. Else: return (preserve state, stale 7272 for previous game)
 //   11. If leaving_postgame_channel && matches_current && !shared_state.valid:
 //       a. GBE_LeaveGenericLobby [coordinator]
-//       b. GBE_local_lobby = {} [coordinator mutation]
+//       b. clear_local_lobby [state helper]
 //       Else: GBE_PublishSharedDotaLobbyState("7272_leave_chat") [publish]
 //   12. GBE_MaybeHandleDotaPracticeLobbyKicked [coordinator]
 //   13. Log
@@ -144,8 +144,7 @@ using GBE_DotaPracticeLobbyBroadcastChannelRequest = gbe::proto_wire::DotaPracti
 // GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest (emsg 7149 -> 7055):
 //   1. Parse: channel (field 1), country_code/description/language_code (opt)
 //   2. If no local lobby: early return
-//   3. Mutate GBE_local_lobby: has_broadcast_channel=true, broadcast_channel_id,
-//      broadcast_country_code/description/language_code [coordinator]
+//   3. apply_broadcast_channel [state helper]
 //   4. GBE_PublishSharedDotaLobbyState("7149_join_broadcast") [publish]
 //   5. GBE_SendDotaPracticeLobbyDetailsUpdate [coordinator: pushes details]
 //   6. If has_request_job:

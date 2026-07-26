@@ -119,9 +119,9 @@ bool Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbySetDetailsUpdate(bool w
 //      has lobby_id, FindLobbyByDotaLobbyIdForInvite + JoinLobby +
 //      RefreshLobbyCallbacksForDota + re-find [coordinator + matchmaking]
 //   3. If !matched && !has_lobby_id && !active: generate lobby_id (pure)
-//   4. compose_join_lobby_merge_plan (pure) -> GBE_local_lobby
+//   4. compose_join_lobby_merge_plan (pure) -> apply_join_lobby_merge_plan
 //   5. If matched_generic_lobby: JoinLobby + SyncSettingsLobby [coordinator]
-//   6. If has_pass_key: GBE_local_lobby.pass_key = pass_key [coordinator mutation]
+//   6. pass_key is carried in the join merge plan when present
 //   7. PublishDotaPracticeLobbyLocalMemberData + PublishSharedDotaLobbyState [publish]
 //   8. Build 24 (pure: GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed)
 //   9. If send_join_response: build 7113 (pure)
@@ -257,7 +257,7 @@ bool Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbySetDetailsUpdate(bool w
 //   2. Build 25 (pure)
 //   3. push_incoming_now(25) [coordinator]
 //   4. GBE_MarkDotaAbandonedLobbySuppressed [coordinator]
-//   5. GBE_local_lobby = {} [coordinator mutation]
+//   5. clear_local_lobby [state helper]
 //   6. GBE_LeaveGenericLobby [coordinator]
 //   7. If has_request_job: build 7055 + PushDotaResponse(7055) [coordinator]
 //   Invariant: 25 precedes lobby clear precedes generic lobby leave.

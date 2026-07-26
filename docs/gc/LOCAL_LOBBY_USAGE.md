@@ -32,13 +32,13 @@
 | `lobby_join_handlers` | apply join plan | 经 `apply_join_lobby_merge_plan()` 应用完整 lobby |
 | `lobby_lifecycle_handlers` | apply launch_init plan | 经 `apply_launch_init_plan()` 应用完整 lobby |
 | `lobby_launch_coordinator` | apply serversetup lobby | 经 `apply_custom_game_launch_serversetup_plan()` 应用完整 lobby |
-| `lobby_slot_handlers` | kick 后回滚 `before_lobby` | 失败/踢人边界 |
-| `chat_handlers` | leave postgame 后 `{}` | 不 re-publish stale shared（见 shared-lobby-state-contract） |
-| `steam_game_coordinator` | `GBE_ClearDotaLobbyRuntimeState` → `{}` | 全清 |
-| `lobby_state_restore_coordinator` | adopt 失败/空 shared 时 `{}` | restore 路径 |
+| `lobby_slot_handlers` | kick 后回滚 `before_lobby` | 经 `apply_lobby_member_kick_snapshot()` 应用完整 lobby |
+| `chat_handlers` | leave postgame 后 `{}` | 经 `clear_local_lobby()` 清空 Local，不 re-publish stale shared（见 shared-lobby-state-contract） |
+| `steam_game_coordinator` | `GBE_ClearDotaLobbyRuntimeState` → `{}` | 经 `clear_local_lobby()` 清空 Local |
+| `lobby_state_restore_coordinator` | adopt 失败/空 shared 时 `{}` | 经 `clear_local_lobby()` 清空 Local |
 | `custom_game_lifecycle_coordinator` | 对侧 client restore 指针 | 经 `apply_client_lobby_restore_snapshot()` 应用完整 lobby |
 
-规则：新增全量赋值须有 plan/restore/clear 语义；禁止在 payload helper 里整结构覆盖。
+规则：新增完整 Local 快照写入须有 plan/restore/clear 语义，并通过命名 state helper；禁止在 payload helper 里整结构覆盖。
 
 ## 4. Local 字段就地写（摘要）
 
