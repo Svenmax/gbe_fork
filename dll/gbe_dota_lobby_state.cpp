@@ -1099,6 +1099,13 @@ void apply_launch_init_plan(
     lobby = plan.lobby;
 }
 
+void apply_custom_game_launch_serversetup_plan(
+    GBE_LocalLobby &lobby,
+    const CustomGameLaunchSetupPlan &plan)
+{
+    lobby = plan.serversetup_lobby;
+}
+
 bool restore_lobby_custom_game(
     GBE_LocalLobby &lobby,
     const GBE_DotaCustomGameDetails &shared_custom_game)

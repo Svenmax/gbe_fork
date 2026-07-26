@@ -128,6 +128,14 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u64(applied.server_id, 700ull, "launch_init apply updates server_id");
         ok &= expect_eq_str(applied.connect, "1.2.3.4:27015", "launch_init apply updates connect");
         ok &= expect_eq_u32(applied.launch_phase, GBE_kDotaLaunchPhaseRequested, "launch_init apply updates launch phase");
+        auto custom_setup_plan = gbe::dota_lobby_state::compose_custom_game_launch_setup_plan(
+            plan.lobby, GBE_kDotaLaunchPhaseSetupSynced);
+        ok &= expect_eq_u32(custom_setup_plan.readyup_lobby.state, 4u, "custom setup readyup state");
+        ok &= expect_eq_u32(custom_setup_plan.serversetup_lobby.state, 1u, "custom setup serversetup state");
+        gbe::dota_lobby_state::apply_custom_game_launch_serversetup_plan(applied, custom_setup_plan);
+        ok &= expect_eq_u64(applied.match_id, 500ull, "custom setup apply preserves match_id");
+        ok &= expect_eq_u32(applied.state, 1u, "custom setup apply updates serversetup state");
+        ok &= expect_eq_u32(applied.game_state, 0u, "custom setup apply updates serversetup game_state");
     }
 
     // compose_launch_init_plan: does NOT overwrite a non-loopback connect with a different one.

@@ -91,6 +91,8 @@
 
 **launch init apply helper（2026-07-26）：** 7041 launch init plan 的 Local 快照写回经 `apply_launch_init_plan(...)`，LaunchPeripheralReset、shared publish、custom game setup flow、rich presence 与 persona state 顺序保持不变。
 
+**custom game launch serversetup apply helper（2026-07-26）：** 7041 custom game setup flow 的 SERVERSETUP Local 快照写回经 `apply_custom_game_launch_serversetup_plan(...)`，READYUP details push、shared publish、SERVERSETUP details push、launch phase mark 与 steam-auth ack queue 顺序保持不变。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。

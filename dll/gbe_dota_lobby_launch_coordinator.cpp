@@ -790,7 +790,7 @@ bool Steam_Game_Coordinator::GBE_SendDotaCustomGameLaunchSetupFlow(bool wrapped,
     if (!readyup_event || !GBE_PushDotaResponse(readyup_event->emsg, readyup_26, wrapped, outer_session_field_raw, readyup_event->reason.c_str(), readyup_event->apply_lobby_state, readyup_event->lobby_state, readyup_event->lobby_game_state))
         return false;
 
-    GBE_local_lobby = launch_plan.serversetup_lobby;
+    gbe::dota_lobby_state::apply_custom_game_launch_serversetup_plan(GBE_local_lobby, launch_plan);
     GBE_PublishSharedDotaLobbyState("7041_custom_game_serversetup");
 
     std::string serversetup_26;

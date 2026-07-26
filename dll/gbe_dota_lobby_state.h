@@ -804,6 +804,9 @@ void apply_join_lobby_merge_plan(
 void apply_launch_init_plan(
     GBE_LocalLobby &lobby,
     const LaunchInitPlan &plan);
+void apply_custom_game_launch_serversetup_plan(
+    GBE_LocalLobby &lobby,
+    const CustomGameLaunchSetupPlan &plan);
 bool apply_lobby_bot_difficulty_for_team(
     GBE_LocalLobby &lobby,
     std::uint32_t team,
