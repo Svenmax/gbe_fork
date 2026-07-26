@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | custom game loading metadata local apply helper：8052 started loading 的 custom_game_id / start_time 经 `apply_custom_game_loading_metadata(...)` 写入 Local，保留非零 guard、launch setup 计算与 lifecycle decision 顺序 | `.monkeycode/specs/gc-local-custom-game-loading-metadata-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | owner team/slot slot-handler local apply helper：7047 set team slot 的 owner team/slot 写入复用 `apply_lobby_owner_team(...)` 与 `apply_lobby_owner_slot(...)`，保留 member update、bot difficulty、normalize 与 publish 顺序 | `.monkeycode/specs/gc-local-owner-team-slot-handler-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | owner connection lifecycle local apply helper：`on_client_connected(...)` / `on_client_disconnected(...)` 的 owner connected 写入复用 `apply_lobby_owner_connected(...)`，保留 suppress guard 与 postgame publish suppression 顺序 | `.monkeycode/specs/gc-local-owner-connection-lifecycle-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | cache subscription metadata local apply helper：`GBE_RecordDotaLobbyCacheSubscriptionState(...)` 解析后的 cache metadata 字段组通过 `apply_cache_subscription_metadata(...)` 写入 Local，日志与 publish 顺序保持不变 | `.monkeycode/specs/gc-local-cache-subscription-metadata-apply/`、`LOCAL_LOBBY_USAGE.md` |

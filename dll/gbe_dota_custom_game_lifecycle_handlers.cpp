@@ -89,10 +89,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameLifecycleRequest(const gbe:
         const auto request = gbe::proto_wire::parse_dota8052_started_loading_request(body, body_size);
         if (request.lobby_id != 0 && request.lobby_id != GBE_local_lobby.lobby_id)
             return true;
-        if (request.custom_game_id != 0)
-            GBE_local_lobby.custom_game.game_id = request.custom_game_id;
-        if (request.start_time != 0)
-            GBE_local_lobby.game_start_time = static_cast<uint32>(request.start_time);
+        gbe::dota_lobby_state::apply_custom_game_loading_metadata(
+            GBE_local_lobby,
+            request.custom_game_id,
+            static_cast<uint32>(request.start_time));
 
         request_state.has_launch_server_setup = gbe::dota_lobby_state::has_launch_server_setup_sync(GBE_local_lobby);
         gbe::dota_lifecycle_state_machine::CustomGameRequest machine_request{};

@@ -872,6 +872,26 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(lobby.custom_game.max_players, 10u, "custom game restore updates max_players");
     }
 
+    // apply_custom_game_loading_metadata: 8052 runtime metadata preserves absent values.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.custom_game.game_id = 10ull;
+        lobby.game_start_time = 20u;
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_custom_game_loading_metadata(lobby, 0ull, 0u),
+            "custom game loading metadata keeps absent values");
+        ok &= expect_eq_u64(lobby.custom_game.game_id, 10ull, "custom game loading metadata preserves game id");
+        ok &= expect_eq_u32(lobby.game_start_time, 20u, "custom game loading metadata preserves start time");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_custom_game_loading_metadata(lobby, 30ull, 40u),
+            "custom game loading metadata reports changed values");
+        ok &= expect_eq_u64(lobby.custom_game.game_id, 30ull, "custom game loading metadata updates game id");
+        ok &= expect_eq_u32(lobby.game_start_time, 40u, "custom game loading metadata updates start time");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_custom_game_loading_metadata(lobby, 30ull, 40u),
+            "custom game loading metadata keeps matching values");
+    }
+
     // restore_lobby_generation / restore_lobby_generic_lobby_id: identity restore.
     {
         GBE_LocalLobby lobby = make_active_lobby();

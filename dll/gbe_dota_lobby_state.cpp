@@ -1021,6 +1021,23 @@ bool restore_lobby_custom_game(
     return true;
 }
 
+bool apply_custom_game_loading_metadata(
+    GBE_LocalLobby &lobby,
+    std::uint64_t custom_game_id,
+    std::uint32_t game_start_time)
+{
+    bool changed = false;
+    if (custom_game_id != 0ull && lobby.custom_game.game_id != custom_game_id) {
+        lobby.custom_game.game_id = custom_game_id;
+        changed = true;
+    }
+    if (game_start_time != 0u && lobby.game_start_time != game_start_time) {
+        lobby.game_start_time = game_start_time;
+        changed = true;
+    }
+    return changed;
+}
+
 bool restore_lobby_generation(
     GBE_LocalLobby &lobby,
     std::uint64_t shared_generation)

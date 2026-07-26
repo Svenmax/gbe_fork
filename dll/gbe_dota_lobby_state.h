@@ -783,6 +783,10 @@ bool apply_lobby_owner_slot(
 bool restore_lobby_custom_game(
     GBE_LocalLobby &lobby,
     const GBE_DotaCustomGameDetails &shared_custom_game);
+bool apply_custom_game_loading_metadata(
+    GBE_LocalLobby &lobby,
+    std::uint64_t custom_game_id,
+    std::uint32_t game_start_time);
 bool restore_lobby_generation(
     GBE_LocalLobby &lobby,
     std::uint64_t shared_generation);
