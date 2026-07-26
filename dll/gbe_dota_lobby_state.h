@@ -798,6 +798,9 @@ void apply_lobby_member_kick_snapshot(
 void apply_create_lobby_state_plan(
     GBE_LocalLobby &lobby,
     const CreateLobbyStateApplyPlan &plan);
+void apply_join_lobby_merge_plan(
+    GBE_LocalLobby &lobby,
+    const JoinLobbyMergePlan &plan);
 bool apply_lobby_bot_difficulty_for_team(
     GBE_LocalLobby &lobby,
     std::uint32_t team,

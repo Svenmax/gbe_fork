@@ -1085,6 +1085,13 @@ void apply_create_lobby_state_plan(
     lobby = plan.lobby;
 }
 
+void apply_join_lobby_merge_plan(
+    GBE_LocalLobby &lobby,
+    const JoinLobbyMergePlan &plan)
+{
+    lobby = plan.lobby;
+}
+
 bool restore_lobby_custom_game(
     GBE_LocalLobby &lobby,
     const GBE_DotaCustomGameDetails &shared_custom_game)

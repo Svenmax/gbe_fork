@@ -87,6 +87,8 @@
 
 **create state apply helper（2026-07-26）：** 7038 create plan 的 Local 快照写回经 `apply_create_lobby_state_plan(...)`，generation 写入、normalize、reconnect context 与后续 create actions 顺序保持不变。
 
+**join merge apply helper（2026-07-26）：** 7044 join plan 的 Local 快照写回经 `apply_join_lobby_merge_plan(...)`，generation advance/write、generic lobby join/settings sync、local member data、publish 与 response 顺序保持不变。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。
