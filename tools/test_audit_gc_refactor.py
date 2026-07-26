@@ -968,7 +968,7 @@ The Model Consistency CI Gate is therefore closed.
 class HandlerResponsibilityBoundaryAuditTest(unittest.TestCase):
     def test_accepts_existing_or_reduced_compatibility_operations(self):
         sources = {
-            "gbe_dota_lobby_create_handlers.cpp": "push_incoming_now(24, payload); GBE_local_lobby = lobby;",
+            "gbe_dota_lobby_create_handlers.cpp": "push_incoming_now(24, payload);",
             "gbe_dota_inventory_handlers.cpp": "network->sendToAllGameservers(&message, true);",
         }
         self.assertEqual([], audit.audit_handler_responsibility_boundaries(sources)[0])
@@ -996,6 +996,42 @@ class HandlerResponsibilityBoundaryAuditTest(unittest.TestCase):
             "gbe_dota_match_handlers.cpp": "// push_incoming_now(1, payload);\n/* GBE_local_lobby = lobby; */",
         }
         self.assertEqual([], audit.audit_handler_responsibility_boundaries(sources)[0])
+
+
+class DirectLocalLobbyWriteAuditTest(unittest.TestCase):
+    def test_accepts_helper_wrapped_local_writes_and_comments(self):
+        sources = {
+            "gbe_dota_lobby_state.cpp": "lobby = plan.lobby; lobby.state = 1u;",
+            "gbe_dota_lobby_create_handlers.cpp": "// GBE_local_lobby = lobby;\napply_create_lobby_state_plan(GBE_local_lobby, plan);",
+        }
+        self.assertEqual([], audit.audit_direct_local_lobby_writes(sources))
+
+    def test_rejects_direct_object_write(self):
+        sources = {
+            "gbe_dota_lobby_create_handlers.cpp": "GBE_local_lobby = plan.lobby;",
+        }
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: direct GBE_local_lobby object write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
+    def test_rejects_direct_field_write(self):
+        sources = {
+            "gbe_dota_lobby_create_handlers.cpp": "GBE_local_lobby.state = 1u;",
+        }
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
+    def test_rejects_direct_target_field_write(self):
+        sources = {
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": "options.client_target->GBE_local_lobby.state = 1u;",
+        }
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
 
 
 class StateEffectOwnershipAuditTest(unittest.TestCase):

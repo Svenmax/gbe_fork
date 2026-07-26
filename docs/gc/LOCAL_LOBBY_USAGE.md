@@ -38,7 +38,7 @@
 | `lobby_state_restore_coordinator` | adopt 失败/空 shared 时 `{}` | 经 `clear_local_lobby()` 清空 Local |
 | `custom_game_lifecycle_coordinator` | 对侧 client restore 指针 | 经 `apply_client_lobby_restore_snapshot()` 应用完整 lobby |
 
-规则：新增完整 Local 快照写入须有 plan/restore/clear 语义，并通过命名 state helper；禁止在 payload helper 里整结构覆盖。
+规则：新增完整 Local 快照写入须有 plan/restore/clear 语义，并通过命名 state helper；生产 `.cpp` 中直接 `GBE_local_lobby = ...` 或 `GBE_local_lobby.<field> = ...` 写入由 audit 10d 禁止；禁止在 payload helper 里整结构覆盖。
 
 ## 4. Local 字段就地写（摘要）
 

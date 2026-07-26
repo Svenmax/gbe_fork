@@ -160,19 +160,14 @@ HIGH_RISK_SIDE_EFFECT_HANDLER_BASELINE = {
     ("gbe_dota_template_replay_handlers.cpp", "save_items_to_file"): 4,
 }
 HANDLER_RESPONSIBILITY_BASELINE = {
-    ("gbe_dota_chat_handlers.cpp", "GBE_local_lobby assignment"): 1,
     ("gbe_dota_chat_handlers.cpp", "push_incoming_now"): 1,
     ("gbe_dota_custom_game_lifecycle_handlers.cpp", "push_incoming_now"): 1,
     ("gbe_dota_inventory_handlers.cpp", "network sendToAllGameservers"): 1,
     ("gbe_dota_inventory_handlers.cpp", "push_incoming_now"): 6,
-    ("gbe_dota_lobby_create_handlers.cpp", "GBE_local_lobby assignment"): 1,
     ("gbe_dota_lobby_create_handlers.cpp", "push_incoming_now"): 1,
-    ("gbe_dota_lobby_join_handlers.cpp", "GBE_local_lobby assignment"): 1,
     ("gbe_dota_lobby_join_handlers.cpp", "push_incoming_now"): 2,
     ("gbe_dota_lobby_invite_handlers.cpp", "push_incoming_now"): 2,
-    ("gbe_dota_lobby_lifecycle_handlers.cpp", "GBE_local_lobby assignment"): 1,
     ("gbe_dota_lobby_lifecycle_handlers.cpp", "push_incoming_now"): 2,
-    ("gbe_dota_lobby_slot_handlers.cpp", "GBE_local_lobby assignment"): 1,
     ("gbe_dota_match_handlers.cpp", "push_incoming_now"): 1,
     ("gbe_dota_misc_handlers.cpp", "push_incoming_now"): 1,
     # 1x AddSocket + 2x WatchGame direct (pending/ready; moved from template in B1)
@@ -1303,6 +1298,32 @@ def audit_handler_responsibility_boundaries(source_texts=None, baseline=None):
                 f"{key[0]}: direct {key[1]} count {count} exceeds accepted handler boundary {allowed}; route new work through a coordinator or executor"
             )
     return issues, actual
+
+
+def audit_direct_local_lobby_writes(source_texts=None):
+    """Keep direct Local lobby writes behind named state helpers."""
+    if source_texts is None:
+        source_texts = {
+            os.path.basename(path): read(path)
+            for path in GC_TUS
+        }
+
+    target_prefix = r"(?:[A-Za-z_][A-Za-z0-9_\.]*\s*->\s*)?"
+    direct_object_write = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*=(?!=)")
+    direct_field_write = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*[A-Za-z_][A-Za-z0-9_]*\s*=(?!=)")
+    issues = []
+    for source_name, source_text in sorted(source_texts.items()):
+        base = os.path.basename(source_name)
+        if not base.endswith(".cpp"):
+            continue
+        uncommented = strip_comments(source_text)
+        object_writes = len(direct_object_write.findall(uncommented))
+        field_writes = len(direct_field_write.findall(uncommented))
+        if object_writes:
+            issues.append(f"{base}: direct GBE_local_lobby object write count {object_writes}; route through a named state helper")
+        if field_writes:
+            issues.append(f"{base}: direct GBE_local_lobby field write count {field_writes}; route through a named state helper")
+    return issues
 
 
 def audit_state_effect_ownership(source_texts=None):
@@ -2799,6 +2820,18 @@ def main():
     print()
 
     print("=" * 70)
+    print("AUDIT 10d: Direct Local lobby writes")
+    print("=" * 70)
+    print("  Action: keep production Local lobby writes behind named state helpers.")
+    direct_local_lobby_write_issues = audit_direct_local_lobby_writes()
+    if not direct_local_lobby_write_issues:
+        print("  (none) - production paths avoid direct GBE_local_lobby object and field writes")
+    else:
+        for issue in direct_local_lobby_write_issues:
+            print(f"  {issue}")
+    print()
+
+    print("=" * 70)
     print("AUDIT 11: Concurrency ownership contract")
     print("=" * 70)
     print("  Action: keep GC state owners, synchronization domains, and async boundaries explicit.")
@@ -3027,6 +3060,7 @@ def main():
     print(f"  Shared lobby global access issues:   {len(shared_lobby_global_issues)}")
     print(f"  Store write discipline issues:       {len(store_write_discipline_issues)}")
     print(f"  Local/shared merge inventory issues: {len(local_shared_merge_inventory_issues)}")
+    print(f"  Direct Local lobby write issues:     {len(direct_local_lobby_write_issues)}")
     print(f"  Concurrency ownership issues:        {len(concurrency_ownership_issues)}")
     print(f"  Reconnect transition-layer issues:   {len(reconnect_transition_issues)}")
     print(f"  Shared lobby compatibility issues:   {len(shared_lobby_compatibility_issues)}")
@@ -3045,7 +3079,7 @@ def main():
     print(f"  CI failure localization issues:       {len(ci_failure_localization_issues)}")
     print(f"  Architecture investment boundary issues: {len(architecture_investment_boundary_issues)}")
 
-    if zombies or underexposed or mismatches or dispatch_issues or registry_inventory_issues or template_blob_issues or template_only_inventory_issues or registry_defensive_template_issues or direct_conditional_fallback_issues or wrapped_hard_miss_issues or legacy_wrapped_parser_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or local_shared_merge_inventory_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
+    if zombies or underexposed or mismatches or dispatch_issues or registry_inventory_issues or template_blob_issues or template_only_inventory_issues or registry_defensive_template_issues or direct_conditional_fallback_issues or wrapped_hard_miss_issues or legacy_wrapped_parser_issues or gc_internal_slim_issues or source_list_issues or side_effect_issues or reason_issues or lifecycle_ownership_issues or shared_lobby_global_issues or store_write_discipline_issues or local_shared_merge_inventory_issues or direct_local_lobby_write_issues or concurrency_ownership_issues or reconnect_transition_issues or shared_lobby_compatibility_issues or architecture_boundary_issues or composition_root_lifecycle_issues or mutable_gc_global_issues or layered_ci_issues or lifecycle_transition_gate_issues or architecture_investment_input_issues or handler_responsibility_issues or state_effect_ownership_issues or dependency_object_lifecycle_issues or core_state_machine_issues or async_generation_issues or test_credibility_issues or ci_failure_localization_issues or architecture_investment_boundary_issues:
         sys.exit(1)
 
 
