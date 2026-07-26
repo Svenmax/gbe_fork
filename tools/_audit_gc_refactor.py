@@ -1315,7 +1315,8 @@ def audit_direct_local_lobby_writes(source_texts=None):
     direct_field_write = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*{direct_field_write_op}")
     direct_indexed_field_write = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*\[[^\]]+\]\s*{direct_field_write_op}")
     direct_indexed_member_write = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*\[[^\]]+\]\s*\.\s*{local_field_chain}\s*{direct_field_write_op}")
-    direct_prefix_field_write = re.compile(rf"(?:\+\+|--)\s*{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\b")
+    direct_prefix_field_write = re.compile(rf"(?:\+\+|--)\s*{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\b(?!\s*\[)")
+    direct_prefix_indexed_write = re.compile(rf"(?:\+\+|--)\s*{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*\[[^\]]+\](?:\s*\.\s*{local_field_chain})?")
     mutating_methods = r"(?:push_back|emplace_back|clear|erase|insert|assign|resize|swap)"
     direct_field_mutation = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*\.\s*{mutating_methods}\s*\(")
     mutable_alias = re.compile(r"(?<!const\s)\b(?:auto|GBE_DotaLobbyState|GBE_LocalLobby)\s*(?:&&|&|\*)\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*&?\s*GBE_local_lobby\b")
@@ -1332,6 +1333,7 @@ def audit_direct_local_lobby_writes(source_texts=None):
             + len(direct_indexed_field_write.findall(uncommented))
             + len(direct_indexed_member_write.findall(uncommented))
             + len(direct_prefix_field_write.findall(uncommented))
+            + len(direct_prefix_indexed_write.findall(uncommented))
             + len(direct_field_mutation.findall(uncommented))
         )
         alias_writes = len(mutable_alias.findall(uncommented)) + len(decltype_auto_alias.findall(uncommented))
