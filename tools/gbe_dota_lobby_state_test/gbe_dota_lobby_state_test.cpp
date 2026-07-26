@@ -933,6 +933,19 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u64(lobby.generic_lobby_id, 80ull, "generic lobby id restore updates local value");
     }
 
+    // apply_lobby_generation: generation applies and reports identity changes.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 10ull;
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_lobby_generation(lobby, 10ull),
+            "generation apply keeps matching value");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_generation(lobby, 20ull),
+            "generation apply reports changed value");
+        ok &= expect_eq_u64(lobby.generation, 20ull, "generation apply updates local value");
+    }
+
     // apply_lobby_generic_lobby_id: generic lobby id applies and clears identity.
     {
         GBE_LocalLobby lobby = make_active_lobby();

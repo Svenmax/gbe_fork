@@ -1231,7 +1231,7 @@ bool Steam_Game_Coordinator::ResetGCMemory(
         gbe::dota_lobby_state::compute_runtime_reset_decision(
             gbe::dota_diagnostic::reason_from_string(reason ? reason : ""));
     clear_dota_runtime_state(reset_decision.preserve_reconnect_context);
-    GBE_local_lobby.generation = next_generation;
+    gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, next_generation);
 
     std::size_t equipped_item_count = 0;
     std::size_t equip_state_count = 0;

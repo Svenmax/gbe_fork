@@ -130,7 +130,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
     if (GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Join, "7044_join") == GBE_DotaGenerationAdvanceResult::Exhausted)
         return true;
     GBE_local_lobby = join_plan.lobby;
-    GBE_local_lobby.generation = GBE_CurrentDotaLobbyGeneration();
+    gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, GBE_CurrentDotaLobbyGeneration());
 
     const GBE_DotaActionList join_actions = gbe::dota_lobby_flow::join_lobby_action_list(
         gbe::dota_lobby_flow::join_lobby_action_plan_from_context(join_context),

@@ -353,7 +353,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         create_plan,
         create_context.parsed_request && create_context.request.has_lobby_details);
     GBE_local_lobby = state_apply_plan.lobby;
-    GBE_local_lobby.generation = GBE_CurrentDotaLobbyGeneration();
+    gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, GBE_CurrentDotaLobbyGeneration());
     if (state_apply_plan.normalize_custom_game_details)
         GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, GBE_local_lobby.custom_game);
     if (state_apply_plan.normalize_arcade_member_slots)

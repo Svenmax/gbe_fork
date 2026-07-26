@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | generation local apply helper：create/join/runtime reset/lifecycle clear/recover 的 Local generation 写入经 `apply_lobby_generation(...)`，restore helper 复用同一 apply 语义 | `.monkeycode/specs/gc-local-generation-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | server id local apply helper：recover coordinator 的 derived server_id 写入经 `apply_lobby_server_id(...)`，runtime metadata helper 复用同一 server id apply 语义 | `.monkeycode/specs/gc-local-server-id-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | generic lobby id local apply helper：7038 create、7040 leave fallback 与 leave-generic clear 的 generic_lobby_id 写入经 `apply_lobby_generic_lobby_id(...)`，restore helper 复用同一 apply 语义 | `.monkeycode/specs/gc-local-generic-lobby-id-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | runtime metadata local apply helper：generic metadata publish 的 connect/server_id Local 写入经 `apply_runtime_metadata(...)`，保留 shared Store compare_update、generic metadata publish 与日志顺序 | `.monkeycode/specs/gc-local-runtime-metadata-apply/`、`LOCAL_LOBBY_USAGE.md` |

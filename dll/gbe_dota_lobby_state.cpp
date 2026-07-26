@@ -1056,10 +1056,17 @@ bool restore_lobby_generation(
     GBE_LocalLobby &lobby,
     std::uint64_t shared_generation)
 {
-    if (lobby.generation == shared_generation)
+    return apply_lobby_generation(lobby, shared_generation);
+}
+
+bool apply_lobby_generation(
+    GBE_LocalLobby &lobby,
+    std::uint64_t generation)
+{
+    if (lobby.generation == generation)
         return false;
 
-    lobby.generation = shared_generation;
+    lobby.generation = generation;
     return true;
 }
 

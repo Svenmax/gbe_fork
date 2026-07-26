@@ -794,6 +794,9 @@ bool apply_custom_game_loading_metadata(
 bool restore_lobby_generation(
     GBE_LocalLobby &lobby,
     std::uint64_t shared_generation);
+bool apply_lobby_generation(
+    GBE_LocalLobby &lobby,
+    std::uint64_t generation);
 bool restore_lobby_generic_lobby_id(
     GBE_LocalLobby &lobby,
     std::uint64_t shared_generic_lobby_id);

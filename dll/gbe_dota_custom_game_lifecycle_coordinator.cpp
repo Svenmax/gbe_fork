@@ -194,7 +194,7 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
                 {
                     const uint64 next_generation = GBE_CurrentDotaLobbyGeneration();
                     GBE_ClearDotaLobbyRuntimeState();
-                    GBE_local_lobby.generation = next_generation;
+                    gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, next_generation);
                 }
                 break;
             case GBE_DotaActionType::RichPresenceClear: {

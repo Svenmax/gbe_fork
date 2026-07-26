@@ -123,7 +123,7 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 GBE_local_lobby = {};
                 return;
             }
-            GBE_local_lobby.generation = GBE_CurrentDotaLobbyGeneration();
+            gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, GBE_CurrentDotaLobbyGeneration());
 
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
