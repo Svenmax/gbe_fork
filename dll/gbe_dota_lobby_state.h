@@ -801,6 +801,10 @@ bool apply_source_tv_metadata(
     GBE_LocalLobby &lobby,
     std::uint64_t tv_secret_code,
     std::uint32_t tv_port);
+bool apply_runtime_metadata(
+    GBE_LocalLobby &lobby,
+    const std::string &connect,
+    std::uint64_t server_id);
 bool apply_runtime_connect(
     GBE_LocalLobby &lobby,
     const std::string &connect);

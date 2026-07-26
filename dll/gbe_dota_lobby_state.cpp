@@ -1102,6 +1102,23 @@ bool apply_runtime_connect(
     return true;
 }
 
+bool apply_runtime_metadata(
+    GBE_LocalLobby &lobby,
+    const std::string &connect,
+    std::uint64_t server_id)
+{
+    bool changed = false;
+    if (lobby.connect != connect) {
+        lobby.connect = connect;
+        changed = true;
+    }
+    if (lobby.server_id != server_id) {
+        lobby.server_id = server_id;
+        changed = true;
+    }
+    return changed;
+}
+
 bool apply_chat_channel(
     GBE_LocalLobby &lobby,
     std::uint64_t channel_id,

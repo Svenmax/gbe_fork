@@ -953,6 +953,30 @@ bool test_valid_launch_progression()
             "SourceTV metadata apply reports matching values as no-op");
     }
 
+    // apply_runtime_metadata: metadata publish applies connect and server id exactly.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.connect = "1.2.3.4:27015";
+        lobby.server_id = 10ull;
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_runtime_metadata(lobby, "", 20ull),
+            "runtime metadata applies empty connect values");
+        ok &= expect_eq_str(lobby.connect, "", "runtime metadata clears connect");
+        ok &= expect_eq_u64(lobby.server_id, 20ull, "runtime metadata updates server id with empty connect");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_runtime_metadata(lobby, "5.6.7.8:27015", 20ull),
+            "runtime metadata reports connect change");
+        ok &= expect_eq_str(lobby.connect, "5.6.7.8:27015", "runtime metadata updates connect");
+        ok &= expect_eq_u64(lobby.server_id, 20ull, "runtime metadata preserves matching server id");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_runtime_metadata(lobby, "5.6.7.8:27015", 20ull),
+            "runtime metadata keeps matching values");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_runtime_metadata(lobby, "5.6.7.8:27015", 0ull),
+            "runtime metadata applies zero server id input");
+        ok &= expect_eq_u64(lobby.server_id, 0ull, "runtime metadata clears server id on zero input");
+    }
+
     // apply_runtime_connect: 4508 runtime endpoint preserves absent values.
     {
         GBE_LocalLobby lobby = make_active_lobby();

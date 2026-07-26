@@ -560,8 +560,10 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyStateKey, scalar_publish_data.state.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStateKey, scalar_publish_data.game_state.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey, scalar_publish_data.match_id.c_str());
-    GBE_local_lobby.connect = publish_data.connect;
-    GBE_local_lobby.server_id = publish_data.server_id;
+    gbe::dota_lobby_state::apply_runtime_metadata(
+        GBE_local_lobby,
+        publish_data.connect,
+        publish_data.server_id);
     const auto shared_update_result = GBE_SharedLobbyStore().compare_update(
         GBE_local_lobby.generation,
         [&](GBE_SharedDotaLobbyState &shared_lobby) {
