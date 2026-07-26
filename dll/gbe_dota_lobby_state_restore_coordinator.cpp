@@ -225,8 +225,9 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         if (gbe::dota_lobby_state::apply_owner_hero_from_shared(GBE_local_lobby, shared_lobby))
             changed = true;
 
-        if (!gbe::dota_lobby_flow::lobby_members_equal(GBE_local_lobby.members, shared_lobby.members)) {
-            GBE_local_lobby.members = shared_lobby.members;
+        if (gbe::dota_lobby_state::restore_lobby_members(
+                GBE_local_lobby,
+                shared_lobby.members)) {
             changed = true;
         }
 

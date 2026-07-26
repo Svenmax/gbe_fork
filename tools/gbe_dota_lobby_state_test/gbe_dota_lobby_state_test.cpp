@@ -12,6 +12,7 @@
 
 #include "dll/gbe_dota_lobby_state.h"
 #include "dll/gbe_dota_lifecycle_actions.h"
+#include "dll/gbe_dota_lobby_flow.h"
 #include "dll/gbe_dota_lobby_generation.h"
 #include "dll/gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_context.h"
@@ -606,6 +607,24 @@ bool test_valid_launch_progression()
         ok &= expect_false(gbe::dota_lobby_state::restore_lobby_owner_slot(lobby, 3u), "owner slot restore keeps matching value");
         ok &= expect_true(gbe::dota_lobby_state::restore_lobby_owner_slot(lobby, 4u), "owner slot restore applies shared value");
         ok &= expect_eq_u32(lobby.owner_slot, 4u, "owner slot restore updates local value");
+
+        GBE_DotaLobbyMemberState local_member{};
+        local_member.steam_id = 1ull;
+        local_member.account_id = 11u;
+        local_member.team = 2u;
+        local_member.slot = 3u;
+        lobby.members = {local_member};
+        ok &= expect_false(
+            gbe::dota_lobby_state::restore_lobby_members(lobby, {local_member}),
+            "members restore keeps matching members");
+        GBE_DotaLobbyMemberState shared_member = local_member;
+        shared_member.slot = 4u;
+        ok &= expect_true(
+            gbe::dota_lobby_state::restore_lobby_members(lobby, {shared_member}),
+            "members restore applies changed members");
+        ok &= expect_true(
+            gbe::dota_lobby_flow::lobby_members_equal(lobby.members, {shared_member}),
+            "members restore updates Local members");
     }
 
     // apply_lobby_owner_connected: local owner connection writes are idempotent.

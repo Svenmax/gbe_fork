@@ -999,6 +999,16 @@ bool restore_lobby_owner_slot(
     return apply_lobby_owner_slot(lobby, shared_owner_slot);
 }
 
+bool restore_lobby_members(
+    GBE_LocalLobby &lobby,
+    const std::vector<GBE_DotaLobbyMemberState> &shared_members)
+{
+    if (gbe::dota_lobby_flow::lobby_members_equal(lobby.members, shared_members))
+        return false;
+    lobby.members = shared_members;
+    return true;
+}
+
 bool apply_lobby_owner_slot(
     GBE_LocalLobby &lobby,
     std::uint32_t owner_slot)

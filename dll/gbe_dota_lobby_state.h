@@ -778,6 +778,9 @@ bool apply_lobby_owner_team(
 bool restore_lobby_owner_slot(
     GBE_LocalLobby &lobby,
     std::uint32_t shared_owner_slot);
+bool restore_lobby_members(
+    GBE_LocalLobby &lobby,
+    const std::vector<GBE_DotaLobbyMemberState> &shared_members);
 bool apply_lobby_owner_slot(
     GBE_LocalLobby &lobby,
     std::uint32_t owner_slot);
