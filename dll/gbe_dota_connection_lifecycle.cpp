@@ -75,8 +75,7 @@ void Steam_Game_Coordinator::on_client_connected(CSteamID steam_id)
                 );
                 return;
             }
-            if (!GBE_local_lobby.owner_connected) {
-                GBE_local_lobby.owner_connected = true;
+            if (gbe::dota_lobby_state::apply_lobby_owner_connected(GBE_local_lobby, true)) {
                 GBE_PublishSharedDotaLobbyState("owner_connected");
             }
         } else if (gc_initialized && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && connected_steam_id != 0) {
@@ -117,7 +116,7 @@ void Steam_Game_Coordinator::on_client_disconnected(CSteamID steam_id)
         const bool postgame_suppress_publish = GBE_local_lobby.state >= 3u;
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && disconnected_steam_id != 0 && disconnected_steam_id == owner_steam_id) {
-            GBE_local_lobby.owner_connected = false;
+            gbe::dota_lobby_state::apply_lobby_owner_connected(GBE_local_lobby, false);
             if (!postgame_suppress_publish)
                 GBE_PublishSharedDotaLobbyState("owner_disconnected");
 

@@ -57,6 +57,8 @@
 
 **cache subscription metadata local apply helper（2026-07-25）：** `GBE_RecordDotaLobbyCacheSubscriptionState(...)` 解析后的 cache metadata 字段组通过 `apply_cache_subscription_metadata(...)` 写入 Local，日志、summary 与 publish 顺序保持不变。
 
+**owner connection lifecycle local apply helper（2026-07-25）：** `on_client_connected(...)` / `on_client_disconnected(...)` 的 owner connected 写入复用 `apply_lobby_owner_connected(...)`，suppress guard、postgame publish suppression 与 inventory cache 保留日志顺序保持不变。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。

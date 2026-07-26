@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | owner connection lifecycle local apply helper：`on_client_connected(...)` / `on_client_disconnected(...)` 的 owner connected 写入复用 `apply_lobby_owner_connected(...)`，保留 suppress guard 与 postgame publish suppression 顺序 | `.monkeycode/specs/gc-local-owner-connection-lifecycle-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | cache subscription metadata local apply helper：`GBE_RecordDotaLobbyCacheSubscriptionState(...)` 解析后的 cache metadata 字段组通过 `apply_cache_subscription_metadata(...)` 写入 Local，日志与 publish 顺序保持不变 | `.monkeycode/specs/gc-local-cache-subscription-metadata-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | broadcast channel local apply helper：7149 join、7367 update 与 8054 close 通过 `apply_broadcast_channel(...)` / `patch_broadcast_channel(...)` / `clear_broadcast_channel(...)` 写入 Local，保留 publish/details/ack 顺序 | `.monkeycode/specs/gc-local-broadcast-channel-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | chat channel local apply helper：7009 join 与 7272 leave 通过 `apply_chat_channel(...)` / `clear_chat_channel(...)` 写入 Local，保留 host sync、7010/7014 push 与 postgame tombstone 顺序 | `.monkeycode/specs/gc-local-chat-channel-apply/`、`LOCAL_LOBBY_USAGE.md` |
