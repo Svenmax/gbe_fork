@@ -1057,6 +1057,15 @@ class DirectLocalLobbyWriteAuditTest(unittest.TestCase):
             audit.audit_direct_local_lobby_writes(sources),
         )
 
+    def test_rejects_direct_indexed_field_write(self):
+        sources = {
+            "gbe_dota_lobby_create_handlers.cpp": "GBE_local_lobby.members[0] = member;",
+        }
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
     def test_rejects_direct_target_prefix_increment_field_write(self):
         sources = {
             "gbe_dota_custom_game_lifecycle_coordinator.cpp": "++options.client_target->GBE_local_lobby.generation;",

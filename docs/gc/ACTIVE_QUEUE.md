@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | direct Local lobby indexed field write guard：audit 10d 覆盖 `GBE_local_lobby.members[0] = member` subscript direct write 形式，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-indexed-field-write-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-26 | direct Local lobby decltype auto alias guard：audit 10d 覆盖 `decltype(auto) lobby = (GBE_local_lobby)` parenthesized reference alias 形式，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-decltype-auto-alias-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-26 | direct Local lobby forwarding alias guard：audit 10d mutable alias matcher 覆盖 `auto&& lobby = GBE_local_lobby` forwarding reference 形式，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-forwarding-alias-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-26 | direct Local lobby explicit type alias guard：audit 10d mutable alias matcher 覆盖 `GBE_LocalLobby& lobby = GBE_local_lobby` / pointer 形式，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-explicit-type-alias-guard/`、`tools/_audit_gc_refactor.py` |
