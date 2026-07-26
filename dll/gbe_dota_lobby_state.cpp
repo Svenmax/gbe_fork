@@ -1071,6 +1071,13 @@ void clear_local_lobby(GBE_LocalLobby &lobby)
     lobby = GBE_LocalLobby{};
 }
 
+void apply_lobby_member_kick_snapshot(
+    GBE_LocalLobby &lobby,
+    const GBE_LocalLobby &snapshot)
+{
+    lobby = snapshot;
+}
+
 bool restore_lobby_custom_game(
     GBE_LocalLobby &lobby,
     const GBE_DotaCustomGameDetails &shared_custom_game)

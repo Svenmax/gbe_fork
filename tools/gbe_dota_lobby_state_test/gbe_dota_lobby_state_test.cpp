@@ -703,6 +703,18 @@ bool test_valid_launch_progression()
         ok &= expect_false(lobby.active, "clear local lobby resets active flag");
         ok &= expect_eq_u64(lobby.lobby_id, 0ull, "clear local lobby resets lobby id");
         ok &= expect_true(lobby.members.empty(), "clear local lobby resets members");
+        GBE_LocalLobby current = make_active_lobby();
+        current.room_name = "before";
+        GBE_LocalLobby snapshot = current;
+        snapshot.room_name = "after";
+        GBE_DotaLobbyMemberState kicked_snapshot_member{};
+        kicked_snapshot_member.steam_id = 2ull;
+        snapshot.members = {kicked_snapshot_member};
+        gbe::dota_lobby_state::apply_lobby_member_kick_snapshot(current, snapshot);
+        ok &= expect_eq_str(current.room_name, "after", "kick snapshot applies full Local snapshot");
+        ok &= expect_true(
+            gbe::dota_lobby_flow::lobby_members_equal(current.members, snapshot.members),
+            "kick snapshot applies member list");
     }
 
     // apply_chat_channel / clear_chat_channel: local chat channel writes are grouped.

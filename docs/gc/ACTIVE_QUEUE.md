@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | kick member snapshot apply helper：7081 generic kick 成功后的 Local 快照写回经 `apply_lobby_member_kick_snapshot(...)`，kick 调用、shared publish、details update 与日志顺序保持不变 | `.monkeycode/specs/gc-local-kick-member-snapshot-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | local lobby clear helper：runtime clear、postgame 7272 stale shared cleanup 与 recover generation exhausted 的 Local 清空经 `clear_local_lobby(...)`，shared clear、generic leave 与后续副作用顺序保持不变 | `.monkeycode/specs/gc-local-clear-helper/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | generic lobby observation flags helper：kick/adoption 观察标记经 state helper 写入 Local，等待确认、kick suppression 与 owner adoption suppression 的一次性日志语义保持不变 | `.monkeycode/specs/gc-local-generic-observation-flags/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | owner name local apply helper：generic lobby owner adoption 的 Local owner_name 写入经 `apply_lobby_owner_name(...)`，owner adoption、publish 与日志顺序保持不变 | `.monkeycode/specs/gc-local-owner-name-apply/`、`LOCAL_LOBBY_USAGE.md` |

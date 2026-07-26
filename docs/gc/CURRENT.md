@@ -83,6 +83,8 @@
 
 **local lobby clear helper（2026-07-26）：** runtime clear、postgame 7272 stale shared cleanup 与 recover generation exhausted 的 Local 清空经 `clear_local_lobby(...)`，shared clear、generic leave、launch-state clear 与 reconnect context 清理顺序保持不变。
 
+**kick member snapshot apply helper（2026-07-26）：** 7081 generic kick 成功后的 Local 快照写回经 `apply_lobby_member_kick_snapshot(...)`，kick 调用、shared publish、details update 与日志顺序保持不变。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。

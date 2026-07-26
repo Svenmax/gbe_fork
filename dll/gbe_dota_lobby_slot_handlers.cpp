@@ -212,7 +212,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyKickRequest(const std::s
         return true;
     }
 
-    GBE_local_lobby = before_lobby;
+    gbe::dota_lobby_state::apply_lobby_member_kick_snapshot(GBE_local_lobby, before_lobby);
     GBE_PublishSharedDotaLobbyState("7081_kick_member");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7081"))

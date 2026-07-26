@@ -792,6 +792,9 @@ bool mark_generic_lobby_waiting_join_confirmation_logged(GBE_LocalLobby &lobby);
 bool mark_generic_lobby_kicked_suppressed_logged(GBE_LocalLobby &lobby);
 bool mark_generic_lobby_owner_adoption_suppressed_logged(GBE_LocalLobby &lobby);
 void clear_local_lobby(GBE_LocalLobby &lobby);
+void apply_lobby_member_kick_snapshot(
+    GBE_LocalLobby &lobby,
+    const GBE_LocalLobby &snapshot);
 bool apply_lobby_bot_difficulty_for_team(
     GBE_LocalLobby &lobby,
     std::uint32_t team,
