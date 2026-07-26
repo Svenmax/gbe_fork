@@ -669,6 +669,39 @@ bool test_valid_launch_progression()
             "chat channel clear keeps empty channel state");
     }
 
+    // apply_broadcast_channel / patch_broadcast_channel / clear_broadcast_channel: local broadcast writes are grouped.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_broadcast_channel(lobby, 7u, "US", "cast", "en"),
+            "broadcast apply reports initial channel change");
+        ok &= expect_true(lobby.has_broadcast_channel, "broadcast apply marks channel present");
+        ok &= expect_eq_u32(lobby.broadcast_channel_id, 7u, "broadcast apply updates channel id");
+        ok &= expect_true(lobby.broadcast_country_code == "US", "broadcast apply updates country");
+        ok &= expect_true(lobby.broadcast_description == "cast", "broadcast apply updates description");
+        ok &= expect_true(lobby.broadcast_language_code == "en", "broadcast apply updates language");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_broadcast_channel(lobby, 7u, "US", "cast", "en"),
+            "broadcast apply keeps matching values");
+        ok &= expect_true(
+            gbe::dota_lobby_state::patch_broadcast_channel(lobby, 7u, false, "", true, "cast2", false, ""),
+            "broadcast patch reports optional field change");
+        ok &= expect_true(lobby.broadcast_country_code == "US", "broadcast patch preserves absent country");
+        ok &= expect_true(lobby.broadcast_description == "cast2", "broadcast patch updates present description");
+        ok &= expect_true(lobby.broadcast_language_code == "en", "broadcast patch preserves absent language");
+        ok &= expect_false(
+            gbe::dota_lobby_state::patch_broadcast_channel(lobby, 7u, false, "", false, "", false, ""),
+            "broadcast patch keeps matching id and absent optional fields");
+        ok &= expect_true(
+            gbe::dota_lobby_state::clear_broadcast_channel(lobby, 8u),
+            "broadcast clear reports existing channel change");
+        ok &= expect_false(lobby.has_broadcast_channel, "broadcast clear marks channel absent");
+        ok &= expect_eq_u32(lobby.broadcast_channel_id, 8u, "broadcast clear records request channel id");
+        ok &= expect_true(lobby.broadcast_country_code.empty(), "broadcast clear resets country");
+        ok &= expect_true(lobby.broadcast_description.empty(), "broadcast clear resets description");
+        ok &= expect_true(lobby.broadcast_language_code.empty(), "broadcast clear resets language");
+    }
+
     // shared options restore: copy lobby options field group when shared differs.
     {
         GBE_LocalLobby lobby = make_active_lobby();

@@ -793,6 +793,24 @@ bool apply_chat_channel(
     const std::string &channel_name,
     std::uint32_t channel_type);
 bool clear_chat_channel(GBE_LocalLobby &lobby);
+bool apply_broadcast_channel(
+    GBE_LocalLobby &lobby,
+    std::uint32_t channel_id,
+    const std::string &country_code,
+    const std::string &description,
+    const std::string &language_code);
+bool patch_broadcast_channel(
+    GBE_LocalLobby &lobby,
+    std::uint32_t channel_id,
+    bool has_country_code,
+    const std::string &country_code,
+    bool has_description,
+    const std::string &description,
+    bool has_language_code,
+    const std::string &language_code);
+bool clear_broadcast_channel(
+    GBE_LocalLobby &lobby,
+    std::uint32_t channel_id);
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,

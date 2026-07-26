@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-25 | broadcast channel local apply helper：7149 join、7367 update 与 8054 close 通过 `apply_broadcast_channel(...)` / `patch_broadcast_channel(...)` / `clear_broadcast_channel(...)` 写入 Local，保留 publish/details/ack 顺序 | `.monkeycode/specs/gc-local-broadcast-channel-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | chat channel local apply helper：7009 join 与 7272 leave 通过 `apply_chat_channel(...)` / `clear_chat_channel(...)` 写入 Local，保留 host sync、7010/7014 push 与 postgame tombstone 顺序 | `.monkeycode/specs/gc-local-chat-channel-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | owner team/slot local apply helper：7034 draft owner team/slot 通过 `apply_lobby_owner_team(...)` 与 `apply_lobby_owner_slot(...)` 写入 Local，shared restore 复用同一字段变更语义 | `.monkeycode/specs/gc-local-shared-owner-team-slot-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | owner connected local apply helper：launch member connection owner 分支通过 `apply_lobby_owner_connected(...)` 写入 Local，shared restore 复用同一字段变更语义 | `.monkeycode/specs/gc-local-shared-owner-connected-apply/`、`LOCAL_LOBBY_USAGE.md` |

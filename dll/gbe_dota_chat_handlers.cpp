@@ -685,11 +685,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequ
         return true;
     }
 
-    GBE_local_lobby.has_broadcast_channel = true;
-    GBE_local_lobby.broadcast_channel_id = request.channel;
-    GBE_local_lobby.broadcast_country_code = request.has_country_code ? request.country_code : std::string();
-    GBE_local_lobby.broadcast_description = request.has_description ? request.description : std::string();
-    GBE_local_lobby.broadcast_language_code = request.has_language_code ? request.language_code : std::string();
+    gbe::dota_lobby_state::apply_broadcast_channel(
+        GBE_local_lobby,
+        request.channel,
+        request.has_country_code ? request.country_code : std::string(),
+        request.has_description ? request.description : std::string(),
+        request.has_language_code ? request.language_code : std::string());
     GBE_PublishSharedDotaLobbyState("7149_join_broadcast");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7149"))
@@ -736,14 +737,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyUpdateBroadcastChannelInfoReques
         return true;
     }
 
-    GBE_local_lobby.has_broadcast_channel = true;
-    GBE_local_lobby.broadcast_channel_id = request.channel;
-    if (request.has_country_code)
-        GBE_local_lobby.broadcast_country_code = request.country_code;
-    if (request.has_description)
-        GBE_local_lobby.broadcast_description = request.description;
-    if (request.has_language_code)
-        GBE_local_lobby.broadcast_language_code = request.language_code;
+    gbe::dota_lobby_state::patch_broadcast_channel(
+        GBE_local_lobby,
+        request.channel,
+        request.has_country_code,
+        request.country_code,
+        request.has_description,
+        request.description,
+        request.has_language_code,
+        request.language_code);
     GBE_PublishSharedDotaLobbyState("7367_update_broadcast");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7367"))
@@ -779,11 +781,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCloseBroadcastChannelReq
         return true;
     }
 
-    GBE_local_lobby.has_broadcast_channel = false;
-    GBE_local_lobby.broadcast_channel_id = request.channel;
-    GBE_local_lobby.broadcast_country_code.clear();
-    GBE_local_lobby.broadcast_description.clear();
-    GBE_local_lobby.broadcast_language_code.clear();
+    gbe::dota_lobby_state::clear_broadcast_channel(GBE_local_lobby, request.channel);
     GBE_PublishSharedDotaLobbyState("8054_close_broadcast");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "8054"))

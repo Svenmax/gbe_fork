@@ -1075,6 +1075,73 @@ bool clear_chat_channel(GBE_LocalLobby &lobby)
     return changed;
 }
 
+bool apply_broadcast_channel(
+    GBE_LocalLobby &lobby,
+    std::uint32_t channel_id,
+    const std::string &country_code,
+    const std::string &description,
+    const std::string &language_code)
+{
+    const bool changed =
+        !lobby.has_broadcast_channel ||
+        lobby.broadcast_channel_id != channel_id ||
+        lobby.broadcast_country_code != country_code ||
+        lobby.broadcast_description != description ||
+        lobby.broadcast_language_code != language_code;
+    lobby.has_broadcast_channel = true;
+    lobby.broadcast_channel_id = channel_id;
+    lobby.broadcast_country_code = country_code;
+    lobby.broadcast_description = description;
+    lobby.broadcast_language_code = language_code;
+    return changed;
+}
+
+bool patch_broadcast_channel(
+    GBE_LocalLobby &lobby,
+    std::uint32_t channel_id,
+    bool has_country_code,
+    const std::string &country_code,
+    bool has_description,
+    const std::string &description,
+    bool has_language_code,
+    const std::string &language_code)
+{
+    bool changed = !lobby.has_broadcast_channel || lobby.broadcast_channel_id != channel_id;
+    lobby.has_broadcast_channel = true;
+    lobby.broadcast_channel_id = channel_id;
+    if (has_country_code && lobby.broadcast_country_code != country_code) {
+        lobby.broadcast_country_code = country_code;
+        changed = true;
+    }
+    if (has_description && lobby.broadcast_description != description) {
+        lobby.broadcast_description = description;
+        changed = true;
+    }
+    if (has_language_code && lobby.broadcast_language_code != language_code) {
+        lobby.broadcast_language_code = language_code;
+        changed = true;
+    }
+    return changed;
+}
+
+bool clear_broadcast_channel(
+    GBE_LocalLobby &lobby,
+    std::uint32_t channel_id)
+{
+    const bool changed =
+        lobby.has_broadcast_channel ||
+        lobby.broadcast_channel_id != channel_id ||
+        !lobby.broadcast_country_code.empty() ||
+        !lobby.broadcast_description.empty() ||
+        !lobby.broadcast_language_code.empty();
+    lobby.has_broadcast_channel = false;
+    lobby.broadcast_channel_id = channel_id;
+    lobby.broadcast_country_code.clear();
+    lobby.broadcast_description.clear();
+    lobby.broadcast_language_code.clear();
+    return changed;
+}
+
 void apply_lifecycle_lobby_state(
     GBE_LocalLobby &lobby,
     std::uint32_t state,
