@@ -1313,6 +1313,8 @@ def audit_direct_local_lobby_writes(source_texts=None):
     local_field_chain = r"[A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)*"
     direct_field_write_op = r"(?:=(?!=)|[+\-*/%|&^]=|\+\+|--)"
     direct_field_write = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*{direct_field_write_op}")
+    mutating_methods = r"(?:push_back|emplace_back|clear|erase|insert|assign|resize|swap)"
+    direct_field_mutation = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*\.\s*{mutating_methods}\s*\(")
     issues = []
     for source_name, source_text in sorted(source_texts.items()):
         base = os.path.basename(source_name)
@@ -1320,7 +1322,7 @@ def audit_direct_local_lobby_writes(source_texts=None):
             continue
         uncommented = strip_comments(source_text)
         object_writes = len(direct_object_write.findall(uncommented))
-        field_writes = len(direct_field_write.findall(uncommented))
+        field_writes = len(direct_field_write.findall(uncommented)) + len(direct_field_mutation.findall(uncommented))
         if object_writes:
             issues.append(f"{base}: direct GBE_local_lobby object write count {object_writes}; route through a named state helper")
         if field_writes:
