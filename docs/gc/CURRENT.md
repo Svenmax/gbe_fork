@@ -63,6 +63,8 @@
 
 **custom game loading metadata local apply helper（2026-07-25）：** 8052 started loading 的 custom_game_id / start_time 经 `apply_custom_game_loading_metadata(...)` 写入 Local，非零 guard、launch setup 计算与 lifecycle decision 顺序保持不变。
 
+**bot difficulty team local apply helper（2026-07-25）：** 7047 set team slot 的 radiant/dire bot difficulty 写入经 `apply_lobby_bot_difficulty_for_team(...)` 选择字段，bot team 推导、member update、normalize、publish/details/ack 顺序保持不变。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。

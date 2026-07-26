@@ -94,10 +94,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
         GBE_local_lobby.state == 3u);
     if (request.has_bot_difficulty) {
         const uint32 bot_team = request.has_team ? request.team : GBE_local_lobby.owner_team;
-        if (gbe::proto_wire::dota_is_dire_team(bot_team))
-            GBE_local_lobby.bot_difficulty_dire = request.bot_difficulty;
-        else
-            GBE_local_lobby.bot_difficulty_radiant = request.bot_difficulty;
+        gbe::dota_lobby_state::apply_lobby_bot_difficulty_for_team(
+            GBE_local_lobby,
+            bot_team,
+            request.bot_difficulty);
     }
     GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby);
     GBE_PublishDotaPracticeLobbyLocalMemberData("7047_set_team_slot");

@@ -1021,6 +1021,20 @@ bool restore_lobby_custom_game(
     return true;
 }
 
+bool apply_lobby_bot_difficulty_for_team(
+    GBE_LocalLobby &lobby,
+    std::uint32_t team,
+    std::uint32_t bot_difficulty)
+{
+    std::uint32_t &target = proto_wire::dota_is_dire_team(team)
+        ? lobby.bot_difficulty_dire
+        : lobby.bot_difficulty_radiant;
+    if (target == bot_difficulty)
+        return false;
+    target = bot_difficulty;
+    return true;
+}
+
 bool apply_custom_game_loading_metadata(
     GBE_LocalLobby &lobby,
     std::uint64_t custom_game_id,

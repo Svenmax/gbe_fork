@@ -780,6 +780,10 @@ bool restore_lobby_owner_slot(
 bool apply_lobby_owner_slot(
     GBE_LocalLobby &lobby,
     std::uint32_t owner_slot);
+bool apply_lobby_bot_difficulty_for_team(
+    GBE_LocalLobby &lobby,
+    std::uint32_t team,
+    std::uint32_t bot_difficulty);
 bool restore_lobby_custom_game(
     GBE_LocalLobby &lobby,
     const GBE_DotaCustomGameDetails &shared_custom_game);

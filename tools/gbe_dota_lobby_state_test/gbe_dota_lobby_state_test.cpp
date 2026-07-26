@@ -872,6 +872,26 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u32(lobby.custom_game.max_players, 10u, "custom game restore updates max_players");
     }
 
+    // apply_lobby_bot_difficulty_for_team: team selects radiant or dire field.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.bot_difficulty_radiant = 1u;
+        lobby.bot_difficulty_dire = 2u;
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_bot_difficulty_for_team(lobby, GBE_kDotaTeamGoodGuys, 3u),
+            "bot difficulty apply updates radiant team");
+        ok &= expect_eq_u32(lobby.bot_difficulty_radiant, 3u, "bot difficulty apply stores radiant difficulty");
+        ok &= expect_eq_u32(lobby.bot_difficulty_dire, 2u, "bot difficulty apply preserves dire difficulty");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_bot_difficulty_for_team(lobby, GBE_kDotaTeamBadGuys, 4u),
+            "bot difficulty apply updates dire team");
+        ok &= expect_eq_u32(lobby.bot_difficulty_radiant, 3u, "bot difficulty apply preserves radiant difficulty");
+        ok &= expect_eq_u32(lobby.bot_difficulty_dire, 4u, "bot difficulty apply stores dire difficulty");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_lobby_bot_difficulty_for_team(lobby, GBE_kDotaTeamBadGuys, 4u),
+            "bot difficulty apply keeps matching dire value");
+    }
+
     // apply_custom_game_loading_metadata: 8052 runtime metadata preserves absent values.
     {
         GBE_LocalLobby lobby = make_active_lobby();
