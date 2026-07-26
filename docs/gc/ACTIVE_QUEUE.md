@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | direct Local lobby mutable alias guard：audit 10d 覆盖 `auto& lobby = GBE_local_lobby` / mutable pointer alias 这类 direct write 旁路，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-mutable-alias-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-26 | direct Local lobby mutating method write guard：audit 10d 覆盖 `GBE_local_lobby.members.clear()` 这类无等号 direct mutation 形式，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-mutating-method-write-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-26 | direct Local lobby compound field write guard：audit 10d 字段写操作符覆盖 `+=` 与 `++/--` 等直接 mutation 形式，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-compound-field-write-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-26 | direct Local lobby nested field write guard：audit 10d 字段写匹配扩展到 `GBE_local_lobby.custom_game.game_id = ...` 这类嵌套 member chain，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-nested-field-write-guard/`、`tools/_audit_gc_refactor.py` |

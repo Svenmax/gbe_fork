@@ -1069,6 +1069,15 @@ class DirectLocalLobbyWriteAuditTest(unittest.TestCase):
             audit.audit_direct_local_lobby_writes(sources),
         )
 
+    def test_rejects_mutable_alias_to_local_lobby(self):
+        sources = {
+            "gbe_dota_lobby_create_handlers.cpp": "auto& lobby = GBE_local_lobby; lobby.state = 1u;",
+        }
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: mutable GBE_local_lobby alias count 1; route writes through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
 
 class StateEffectOwnershipAuditTest(unittest.TestCase):
     def valid_sources(self):

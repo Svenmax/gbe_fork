@@ -1315,6 +1315,7 @@ def audit_direct_local_lobby_writes(source_texts=None):
     direct_field_write = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*{direct_field_write_op}")
     mutating_methods = r"(?:push_back|emplace_back|clear|erase|insert|assign|resize|swap)"
     direct_field_mutation = re.compile(rf"\b{target_prefix}GBE_local_lobby\s*\.\s*{local_field_chain}\s*\.\s*{mutating_methods}\s*\(")
+    mutable_alias = re.compile(r"\b(?:auto|GBE_DotaLobbyState)\s*(?:&|\*)\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*&?\s*GBE_local_lobby\b")
     issues = []
     for source_name, source_text in sorted(source_texts.items()):
         base = os.path.basename(source_name)
@@ -1323,10 +1324,13 @@ def audit_direct_local_lobby_writes(source_texts=None):
         uncommented = strip_comments(source_text)
         object_writes = len(direct_object_write.findall(uncommented))
         field_writes = len(direct_field_write.findall(uncommented)) + len(direct_field_mutation.findall(uncommented))
+        alias_writes = len(mutable_alias.findall(uncommented))
         if object_writes:
             issues.append(f"{base}: direct GBE_local_lobby object write count {object_writes}; route through a named state helper")
         if field_writes:
             issues.append(f"{base}: direct GBE_local_lobby field write count {field_writes}; route through a named state helper")
+        if alias_writes:
+            issues.append(f"{base}: mutable GBE_local_lobby alias count {alias_writes}; route writes through a named state helper")
     return issues
 
 
@@ -2829,7 +2833,7 @@ def main():
     print("  Action: keep production Local lobby writes behind named state helpers.")
     direct_local_lobby_write_issues = audit_direct_local_lobby_writes()
     if not direct_local_lobby_write_issues:
-        print("  (none) - production paths avoid direct GBE_local_lobby object and field writes")
+        print("  (none) - production paths avoid direct GBE_local_lobby object writes, field writes, and mutable aliases")
     else:
         for issue in direct_local_lobby_write_issues:
             print(f"  {issue}")
