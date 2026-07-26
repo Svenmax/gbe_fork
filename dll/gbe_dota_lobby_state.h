@@ -787,6 +787,10 @@ bool apply_lobby_owner_slot(
 bool apply_lobby_owner_name(
     GBE_LocalLobby &lobby,
     const std::string &owner_name);
+bool note_generic_lobby_local_member_seen(GBE_LocalLobby &lobby);
+bool mark_generic_lobby_waiting_join_confirmation_logged(GBE_LocalLobby &lobby);
+bool mark_generic_lobby_kicked_suppressed_logged(GBE_LocalLobby &lobby);
+bool mark_generic_lobby_owner_adoption_suppressed_logged(GBE_LocalLobby &lobby);
 bool apply_lobby_bot_difficulty_for_team(
     GBE_LocalLobby &lobby,
     std::uint32_t team,

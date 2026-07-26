@@ -1030,6 +1030,42 @@ bool apply_lobby_owner_name(
     return true;
 }
 
+bool note_generic_lobby_local_member_seen(GBE_LocalLobby &lobby)
+{
+    const bool changed =
+        !lobby.seen_local_in_generic_lobby ||
+        lobby.kicked_suppressed_logged ||
+        lobby.owner_adoption_suppressed_logged;
+    lobby.seen_local_in_generic_lobby = true;
+    lobby.kicked_suppressed_logged = false;
+    lobby.owner_adoption_suppressed_logged = false;
+    return changed;
+}
+
+bool mark_generic_lobby_waiting_join_confirmation_logged(GBE_LocalLobby &lobby)
+{
+    if (lobby.waiting_join_confirmation_logged)
+        return false;
+    lobby.waiting_join_confirmation_logged = true;
+    return true;
+}
+
+bool mark_generic_lobby_kicked_suppressed_logged(GBE_LocalLobby &lobby)
+{
+    if (lobby.kicked_suppressed_logged)
+        return false;
+    lobby.kicked_suppressed_logged = true;
+    return true;
+}
+
+bool mark_generic_lobby_owner_adoption_suppressed_logged(GBE_LocalLobby &lobby)
+{
+    if (lobby.owner_adoption_suppressed_logged)
+        return false;
+    lobby.owner_adoption_suppressed_logged = true;
+    return true;
+}
+
 bool restore_lobby_custom_game(
     GBE_LocalLobby &lobby,
     const GBE_DotaCustomGameDetails &shared_custom_game)

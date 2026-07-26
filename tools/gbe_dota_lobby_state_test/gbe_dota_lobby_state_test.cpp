@@ -670,6 +670,35 @@ bool test_valid_launch_progression()
             gbe::dota_lobby_state::apply_lobby_owner_name(lobby, "new owner"),
             "owner name apply reports value change");
         ok &= expect_eq_str(lobby.owner_name, "new owner", "owner name apply updates local value");
+        ok &= expect_true(
+            gbe::dota_lobby_state::note_generic_lobby_local_member_seen(lobby),
+            "generic local seen applies initial observation flags");
+        ok &= expect_true(lobby.seen_local_in_generic_lobby, "generic local seen marks observation");
+        lobby.kicked_suppressed_logged = true;
+        lobby.owner_adoption_suppressed_logged = true;
+        ok &= expect_true(
+            gbe::dota_lobby_state::note_generic_lobby_local_member_seen(lobby),
+            "generic local seen clears suppression flags");
+        ok &= expect_false(lobby.kicked_suppressed_logged, "generic local seen clears kicked suppression flag");
+        ok &= expect_false(lobby.owner_adoption_suppressed_logged, "generic local seen clears owner adoption flag");
+        ok &= expect_true(
+            gbe::dota_lobby_state::mark_generic_lobby_waiting_join_confirmation_logged(lobby),
+            "waiting join flag marks first log");
+        ok &= expect_false(
+            gbe::dota_lobby_state::mark_generic_lobby_waiting_join_confirmation_logged(lobby),
+            "waiting join flag suppresses duplicate log");
+        ok &= expect_true(
+            gbe::dota_lobby_state::mark_generic_lobby_kicked_suppressed_logged(lobby),
+            "kicked suppression flag marks first log");
+        ok &= expect_false(
+            gbe::dota_lobby_state::mark_generic_lobby_kicked_suppressed_logged(lobby),
+            "kicked suppression flag suppresses duplicate log");
+        ok &= expect_true(
+            gbe::dota_lobby_state::mark_generic_lobby_owner_adoption_suppressed_logged(lobby),
+            "owner adoption suppression flag marks first log");
+        ok &= expect_false(
+            gbe::dota_lobby_state::mark_generic_lobby_owner_adoption_suppressed_logged(lobby),
+            "owner adoption suppression flag suppresses duplicate log");
     }
 
     // apply_chat_channel / clear_chat_channel: local chat channel writes are grouped.

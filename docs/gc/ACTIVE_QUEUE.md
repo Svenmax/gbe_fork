@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | generic lobby observation flags helper：kick/adoption 观察标记经 state helper 写入 Local，等待确认、kick suppression 与 owner adoption suppression 的一次性日志语义保持不变 | `.monkeycode/specs/gc-local-generic-observation-flags/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | owner name local apply helper：generic lobby owner adoption 的 Local owner_name 写入经 `apply_lobby_owner_name(...)`，owner adoption、publish 与日志顺序保持不变 | `.monkeycode/specs/gc-local-owner-name-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | members restore helper：shared-to-local runtime restore 的 members 字段组经 `restore_lobby_members(...)` 写入 Local，changed 聚合与后续 sync/rich presence/login sync 顺序保持不变 | `.monkeycode/specs/gc-local-members-restore/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | details update local apply helper：7046 set details 的 options/custom_game 字段组经 `apply_lobby_details_update(...)` 写入 Local，保留 normalize、details push 与日志顺序 | `.monkeycode/specs/gc-local-details-update-apply/`、`LOCAL_LOBBY_USAGE.md` |
