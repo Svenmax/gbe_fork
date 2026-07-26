@@ -181,7 +181,7 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
                     !options.client_target->is_server) {
                     options.client_target->GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
                     if (options.client_lobby_restore && options.client_lobby_restore->active && options.client_lobby_restore->lobby_id != 0)
-                        options.client_target->GBE_local_lobby = *options.client_lobby_restore;
+                        gbe::dota_lobby_state::apply_client_lobby_restore_snapshot(options.client_target->GBE_local_lobby, *options.client_lobby_restore);
                     options.client_target->GBE_ClearLastDotaLaunchStatePushedGameState();
                 }
                 GBE_ResetDotaPracticeLobbyLaunchPeripheralState();

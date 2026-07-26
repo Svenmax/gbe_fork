@@ -1106,6 +1106,13 @@ void apply_custom_game_launch_serversetup_plan(
     lobby = plan.serversetup_lobby;
 }
 
+void apply_client_lobby_restore_snapshot(
+    GBE_LocalLobby &lobby,
+    const GBE_LocalLobby &snapshot)
+{
+    lobby = snapshot;
+}
+
 bool restore_lobby_custom_game(
     GBE_LocalLobby &lobby,
     const GBE_DotaCustomGameDetails &shared_custom_game)

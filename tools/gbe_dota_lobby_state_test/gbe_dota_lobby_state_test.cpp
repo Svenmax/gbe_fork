@@ -136,6 +136,12 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u64(applied.match_id, 500ull, "custom setup apply preserves match_id");
         ok &= expect_eq_u32(applied.state, 1u, "custom setup apply updates serversetup state");
         ok &= expect_eq_u32(applied.game_state, 0u, "custom setup apply updates serversetup game_state");
+        GBE_LocalLobby restore_target = make_active_lobby();
+        restore_target.lobby_id = 444ull;
+        gbe::dota_lobby_state::apply_client_lobby_restore_snapshot(restore_target, applied);
+        ok &= expect_eq_u64(restore_target.lobby_id, applied.lobby_id, "client restore apply replaces Local snapshot");
+        ok &= expect_eq_u64(restore_target.match_id, 500ull, "client restore apply preserves match_id");
+        ok &= expect_eq_u32(restore_target.state, 1u, "client restore apply preserves state");
     }
 
     // compose_launch_init_plan: does NOT overwrite a non-loopback connect with a different one.

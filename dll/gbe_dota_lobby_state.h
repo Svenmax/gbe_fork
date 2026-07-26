@@ -807,6 +807,9 @@ void apply_launch_init_plan(
 void apply_custom_game_launch_serversetup_plan(
     GBE_LocalLobby &lobby,
     const CustomGameLaunchSetupPlan &plan);
+void apply_client_lobby_restore_snapshot(
+    GBE_LocalLobby &lobby,
+    const GBE_LocalLobby &snapshot);
 bool apply_lobby_bot_difficulty_for_team(
     GBE_LocalLobby &lobby,
     std::uint32_t team,

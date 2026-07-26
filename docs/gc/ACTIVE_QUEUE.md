@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | client lobby restore snapshot apply helper：custom game lifecycle cross-GC mirror 的 client Local 快照恢复经 `apply_client_lobby_restore_snapshot(...)`，client target guard、active/lobby_id guard、launch peripheral reset 与 last launch state clear 顺序保持不变 | `.monkeycode/specs/gc-local-client-lobby-restore-snapshot-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | custom game launch serversetup apply helper：7041 custom game setup flow 的 SERVERSETUP Local 快照写回经 `apply_custom_game_launch_serversetup_plan(...)`，READYUP details push、shared publish、SERVERSETUP details push、launch phase mark 与 steam-auth ack queue 顺序保持不变 | `.monkeycode/specs/gc-local-custom-game-launch-serversetup-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | launch init apply helper：7041 launch init plan 的 Local 快照写回经 `apply_launch_init_plan(...)`，LaunchPeripheralReset、shared publish、custom game setup flow、rich presence 与 persona state 顺序保持不变 | `.monkeycode/specs/gc-local-launch-init-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | join merge apply helper：7044 join plan 的 Local 快照写回经 `apply_join_lobby_merge_plan(...)`，generation advance/write、generic lobby join/settings sync、local member data、publish 与 response 顺序保持不变 | `.monkeycode/specs/gc-local-join-merge-apply/`、`LOCAL_LOBBY_USAGE.md` |
