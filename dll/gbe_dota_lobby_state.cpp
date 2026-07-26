@@ -1119,11 +1119,18 @@ bool apply_runtime_metadata(
         lobby.connect = connect;
         changed = true;
     }
-    if (lobby.server_id != server_id) {
-        lobby.server_id = server_id;
-        changed = true;
-    }
+    changed = apply_lobby_server_id(lobby, server_id) || changed;
     return changed;
+}
+
+bool apply_lobby_server_id(
+    GBE_LocalLobby &lobby,
+    std::uint64_t server_id)
+{
+    if (lobby.server_id == server_id)
+        return false;
+    lobby.server_id = server_id;
+    return true;
 }
 
 bool apply_chat_channel(

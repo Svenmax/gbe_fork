@@ -808,6 +808,9 @@ bool apply_runtime_metadata(
     GBE_LocalLobby &lobby,
     const std::string &connect,
     std::uint64_t server_id);
+bool apply_lobby_server_id(
+    GBE_LocalLobby &lobby,
+    std::uint64_t server_id);
 bool apply_runtime_connect(
     GBE_LocalLobby &lobby,
     const std::string &connect);

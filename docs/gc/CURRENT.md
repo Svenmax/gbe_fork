@@ -69,6 +69,8 @@
 
 **generic lobby id local apply helper（2026-07-26）：** 7038 create、7040 leave fallback 与 leave-generic clear 的 generic_lobby_id 写入经 `apply_lobby_generic_lobby_id(...)`，restore helper 复用同一 apply 语义；create action、settings sync 与 leave cleanup 顺序保持不变。
 
+**server id local apply helper（2026-07-26）：** recover coordinator 的 derived server_id 写入经 `apply_lobby_server_id(...)`，runtime metadata helper 复用同一 server id apply 语义；derived guard、shared Store compare_update 与 diagnostics 顺序保持不变。
+
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。
 3. **CompositionRoot** 仅 offline 测试；生产装配在 `dll/steam_client.cpp`，禁止生产构造 CompositionRoot。

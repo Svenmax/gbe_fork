@@ -254,7 +254,7 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
         return false;
 
     const uint64 previous_server_id = GBE_local_lobby.server_id;
-    GBE_local_lobby.server_id = derived_server_id;
+    gbe::dota_lobby_state::apply_lobby_server_id(GBE_local_lobby, derived_server_id);
     const auto shared_update_result = GBE_SharedLobbyStore().compare_update(
         GBE_local_lobby.generation,
         [&](GBE_SharedDotaLobbyState &shared_lobby) {

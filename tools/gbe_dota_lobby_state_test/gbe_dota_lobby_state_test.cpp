@@ -994,6 +994,23 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u64(lobby.server_id, 0ull, "runtime metadata clears server id on zero input");
     }
 
+    // apply_lobby_server_id: server id applies exact runtime identity.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.server_id = 10ull;
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_lobby_server_id(lobby, 10ull),
+            "server id apply keeps matching value");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_server_id(lobby, 20ull),
+            "server id apply reports changed value");
+        ok &= expect_eq_u64(lobby.server_id, 20ull, "server id apply updates local value");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_server_id(lobby, 0ull),
+            "server id apply clears local value");
+        ok &= expect_eq_u64(lobby.server_id, 0ull, "server id apply stores zero clear value");
+    }
+
     // apply_runtime_connect: 4508 runtime endpoint preserves absent values.
     {
         GBE_LocalLobby lobby = make_active_lobby();

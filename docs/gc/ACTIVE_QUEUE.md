@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | server id local apply helper：recover coordinator 的 derived server_id 写入经 `apply_lobby_server_id(...)`，runtime metadata helper 复用同一 server id apply 语义 | `.monkeycode/specs/gc-local-server-id-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | generic lobby id local apply helper：7038 create、7040 leave fallback 与 leave-generic clear 的 generic_lobby_id 写入经 `apply_lobby_generic_lobby_id(...)`，restore helper 复用同一 apply 语义 | `.monkeycode/specs/gc-local-generic-lobby-id-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-26 | runtime metadata local apply helper：generic metadata publish 的 connect/server_id Local 写入经 `apply_runtime_metadata(...)`，保留 shared Store compare_update、generic metadata publish 与日志顺序 | `.monkeycode/specs/gc-local-runtime-metadata-apply/`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-25 | bot difficulty team local apply helper：7047 set team slot 的 radiant/dire bot difficulty 写入经 `apply_lobby_bot_difficulty_for_team(...)` 选择字段，保留 bot team 推导、member update、normalize、publish/details/ack 顺序 | `.monkeycode/specs/gc-local-bot-difficulty-team-apply/`、`LOCAL_LOBBY_USAGE.md` |
