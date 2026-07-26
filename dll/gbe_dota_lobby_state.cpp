@@ -884,6 +884,34 @@ bool apply_shared_lobby_cache_restore_plan(
     return changed;
 }
 
+bool apply_cache_subscription_metadata(
+    GBE_LocalLobby &lobby,
+    bool has_cache_version,
+    std::uint64_t cache_version,
+    bool has_cache_service_id,
+    std::uint32_t cache_service_id,
+    const std::vector<std::uint32_t> &cache_service_list,
+    bool has_cache_sync_version,
+    std::uint64_t cache_sync_version)
+{
+    const bool changed =
+        lobby.has_cache_version != has_cache_version ||
+        lobby.cache_version != cache_version ||
+        lobby.has_cache_service_id != has_cache_service_id ||
+        lobby.cache_service_id != cache_service_id ||
+        lobby.cache_service_list != cache_service_list ||
+        lobby.has_cache_sync_version != has_cache_sync_version ||
+        lobby.cache_sync_version != cache_sync_version;
+    lobby.has_cache_version = has_cache_version;
+    lobby.cache_version = cache_version;
+    lobby.has_cache_service_id = has_cache_service_id;
+    lobby.cache_service_id = cache_service_id;
+    lobby.cache_service_list = cache_service_list;
+    lobby.has_cache_sync_version = has_cache_sync_version;
+    lobby.cache_sync_version = cache_sync_version;
+    return changed;
+}
+
 SteamAuthAckLaunchPlan compose_steam_auth_ack_launch_plan(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t derived_ticket_crc)

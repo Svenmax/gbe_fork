@@ -743,6 +743,15 @@ SharedLobbyCacheRestorePlan compose_shared_lobby_cache_restore_plan(
 bool apply_shared_lobby_cache_restore_plan(
     GBE_LocalLobby &lobby,
     const SharedLobbyCacheRestorePlan &plan);
+bool apply_cache_subscription_metadata(
+    GBE_LocalLobby &lobby,
+    bool has_cache_version,
+    std::uint64_t cache_version,
+    bool has_cache_service_id,
+    std::uint32_t cache_service_id,
+    const std::vector<std::uint32_t> &cache_service_list,
+    bool has_cache_sync_version,
+    std::uint64_t cache_sync_version);
 SteamAuthAckLaunchPlan compose_steam_auth_ack_launch_plan(
     const GBE_LocalLobby &current_lobby,
     std::uint32_t derived_ticket_crc);

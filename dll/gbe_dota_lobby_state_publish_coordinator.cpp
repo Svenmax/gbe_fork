@@ -326,13 +326,16 @@ void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && protomsg.owner_soid().id() != GBE_local_lobby.lobby_id)
         return;
 
-    GBE_local_lobby.has_cache_version = protomsg.has_version();
-    GBE_local_lobby.cache_version = protomsg.has_version() ? protomsg.version() : 0ull;
-    GBE_local_lobby.has_cache_service_id = protomsg.has_service_id();
-    GBE_local_lobby.cache_service_id = protomsg.has_service_id() ? protomsg.service_id() : 0u;
-    GBE_local_lobby.cache_service_list.assign(protomsg.service_list().begin(), protomsg.service_list().end());
-    GBE_local_lobby.has_cache_sync_version = protomsg.has_sync_version();
-    GBE_local_lobby.cache_sync_version = protomsg.has_sync_version() ? protomsg.sync_version() : 0ull;
+    const std::vector<std::uint32_t> cache_service_list(protomsg.service_list().begin(), protomsg.service_list().end());
+    gbe::dota_lobby_state::apply_cache_subscription_metadata(
+        GBE_local_lobby,
+        protomsg.has_version(),
+        protomsg.has_version() ? protomsg.version() : 0ull,
+        protomsg.has_service_id(),
+        protomsg.has_service_id() ? protomsg.service_id() : 0u,
+        cache_service_list,
+        protomsg.has_sync_version(),
+        protomsg.has_sync_version() ? protomsg.sync_version() : 0ull);
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",

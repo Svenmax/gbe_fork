@@ -819,6 +819,38 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u64(lobby.cache_sync_version, 0ull, "cache restore updates cache_sync_version");
     }
 
+    // apply_cache_subscription_metadata: local cache metadata writes are grouped.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_cache_subscription_metadata(
+                lobby, true, 100ull, true, 10u, {1u, 2u}, true, 200ull),
+            "cache metadata apply reports initial field group change");
+        ok &= expect_true(lobby.has_cache_version, "cache metadata apply marks version present");
+        ok &= expect_eq_u64(lobby.cache_version, 100ull, "cache metadata apply updates version");
+        ok &= expect_true(lobby.has_cache_service_id, "cache metadata apply marks service id present");
+        ok &= expect_eq_u32(lobby.cache_service_id, 10u, "cache metadata apply updates service id");
+        ok &= expect_true(lobby.cache_service_list.size() == 2u && lobby.cache_service_list[1] == 2u,
+            "cache metadata apply updates service list");
+        ok &= expect_true(lobby.has_cache_sync_version, "cache metadata apply marks sync version present");
+        ok &= expect_eq_u64(lobby.cache_sync_version, 200ull, "cache metadata apply updates sync version");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_cache_subscription_metadata(
+                lobby, true, 100ull, true, 10u, {1u, 2u}, true, 200ull),
+            "cache metadata apply keeps matching field group");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_cache_subscription_metadata(
+                lobby, false, 0ull, false, 0u, {}, false, 0ull),
+            "cache metadata apply reports cleared field group change");
+        ok &= expect_false(lobby.has_cache_version, "cache metadata apply clears version present flag");
+        ok &= expect_eq_u64(lobby.cache_version, 0ull, "cache metadata apply clears version");
+        ok &= expect_false(lobby.has_cache_service_id, "cache metadata apply clears service id present flag");
+        ok &= expect_eq_u32(lobby.cache_service_id, 0u, "cache metadata apply clears service id");
+        ok &= expect_true(lobby.cache_service_list.empty(), "cache metadata apply clears service list");
+        ok &= expect_false(lobby.has_cache_sync_version, "cache metadata apply clears sync version present flag");
+        ok &= expect_eq_u64(lobby.cache_sync_version, 0ull, "cache metadata apply clears sync version");
+    }
+
     // restore_lobby_custom_game: shared custom game details restore.
     {
         GBE_LocalLobby lobby = make_active_lobby();
