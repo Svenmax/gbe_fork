@@ -1304,6 +1304,9 @@ void f()
 void f()
 {
     gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    GBE_LocalLobby snapshot = local_lobby.snapshot();
+    if (snapshot.active && snapshot.lobby_id != 0 && snapshot.generic_lobby_id != 0 && snapshot.server_id != 0 && snapshot.lan)
+        log(snapshot.connect, snapshot.generation, snapshot.match_id, snapshot.custom_game.game_id);
     local_lobby.apply("leave_generic_lobby", [](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::apply_lobby_generic_lobby_id(lobby, 0ull);
     });
@@ -1613,6 +1616,8 @@ void f()
 {
     gbe::dota_lobby_state::apply_lobby_generic_lobby_id(GBE_local_lobby, 0ull);
     gbe::dota_lobby_state::apply_lobby_server_id(GBE_local_lobby, derived_server_id);
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.generic_lobby_id != 0 && GBE_local_lobby.server_id != 0 && GBE_local_lobby.lan)
+        log(GBE_local_lobby.connect, GBE_local_lobby.generation, GBE_local_lobby.match_id, GBE_local_lobby.custom_game.game_id);
 }
 """,
             "gbe_dota_lobby_snapshot_coordinator.cpp": """

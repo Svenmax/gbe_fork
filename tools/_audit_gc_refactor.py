@@ -1597,6 +1597,8 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_lobby_state_recover_coordinator.cpp: generic lobby id reset must route through LocalLobbyOwner::apply")
     if re.search(r"apply_lobby_server_id\s*\(\s*GBE_local_lobby\s*,", recover_coordinator):
         issues.append("gbe_dota_lobby_state_recover_coordinator.cpp: server id sync must route through LocalLobbyOwner::apply")
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|generic_lobby_id|server_id|lan|connect|generation|match_id|custom_game)\b", recover_coordinator):
+        issues.append("gbe_dota_lobby_state_recover_coordinator.cpp: recover guard/log/shared-update reads must route through LocalLobbyOwner::snapshot")
 
     post_login_handlers = strip_comments(source_texts.get("gbe_dota_post_login_handlers.cpp", ""))
     if re.search(r"apply_runtime_connect\s*\(\s*GBE_local_lobby\s*,", post_login_handlers):

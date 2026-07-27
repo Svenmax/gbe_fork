@@ -113,9 +113,11 @@ void Steam_Game_Coordinator::GBE_SyncSettingsLobbyFromGenericLobby(const char *r
     if (!settings)
         return;
 
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
     CSteamID target_lobby_id = k_steamIDNil;
-    if (GBE_local_lobby.active && GBE_local_lobby.generic_lobby_id != 0) {
-        CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
+    if (local_lobby_snapshot.active && local_lobby_snapshot.generic_lobby_id != 0) {
+        CSteamID generic_lobby_id((uint64)local_lobby_snapshot.generic_lobby_id);
         if (generic_lobby_id.IsLobby())
             target_lobby_id = generic_lobby_id;
     }
@@ -129,9 +131,9 @@ void Steam_Game_Coordinator::GBE_SyncSettingsLobbyFromGenericLobby(const char *r
         "GC_DOTA_SYNC",
         "synced settings lobby from generic reason=%s active=%u dota_lobby_id=%llu generic_lobby_id=%llu old_settings_lobby=%llu new_settings_lobby=%llu",
         reason ? reason : "unknown",
-        GBE_local_lobby.active ? 1u : 0u,
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+        local_lobby_snapshot.active ? 1u : 0u,
+        static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.generic_lobby_id),
         static_cast<unsigned long long>(previous_lobby_id.ConvertToUint64()),
         static_cast<unsigned long long>(target_lobby_id.ConvertToUint64())
     );
@@ -140,19 +142,20 @@ void Steam_Game_Coordinator::GBE_SyncSettingsLobbyFromGenericLobby(const char *r
 void Steam_Game_Coordinator::GBE_LeaveGenericLobby()
 {
     GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
-    if (GBE_local_lobby.generic_lobby_id == 0) {
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (local_lobby_snapshot.generic_lobby_id == 0) {
         GBE_SyncSettingsLobbyFromGenericLobby("leave_generic_lobby_noop");
         return;
     }
 
     Steam_Client *steam_client = get_steam_client();
     if (steam_client && steam_client->steam_matchmaking) {
-        CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
+        CSteamID generic_lobby_id((uint64)local_lobby_snapshot.generic_lobby_id);
         if (generic_lobby_id.IsLobby())
             steam_client->steam_matchmaking->LeaveLobby(generic_lobby_id);
     }
 
-    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
     local_lobby.apply("leave_generic_lobby", [](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::apply_lobby_generic_lobby_id(lobby, 0ull);
     });
@@ -164,7 +167,10 @@ bool Steam_Game_Coordinator::GBE_SyncGenericLobbyGameServer(const char *reason)
     if (!is_server)
         return false;
 
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.generic_lobby_id == 0 || GBE_local_lobby.server_id == 0)
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+
+    if (!local_lobby_snapshot.active || local_lobby_snapshot.lobby_id == 0 || local_lobby_snapshot.generic_lobby_id == 0 || local_lobby_snapshot.server_id == 0)
         return false;
 
     Steam_Client *steam_client = get_steam_client();
@@ -176,17 +182,17 @@ bool Steam_Game_Coordinator::GBE_SyncGenericLobbyGameServer(const char *reason)
         return false;
 
     uint32 lobby_ip = game_server->GetPublicIP_old();
-    if (GBE_local_lobby.lan) {
-        const uint32 connect_ip = gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(GBE_local_lobby.connect);
+    if (local_lobby_snapshot.lan) {
+        const uint32 connect_ip = gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(local_lobby_snapshot.connect);
         if (connect_ip != 0)
             lobby_ip = connect_ip;
         else if (network)
             lobby_ip = network->getOwnIP();
     }
     constexpr uint16 lobby_port = 27015u;
-    CSteamID lobby_steam_id((uint64)GBE_local_lobby.generic_lobby_id);
-    CSteamID gameserver_steam_id((uint64)GBE_local_lobby.server_id);
-    const bool has_ip_server_id = GBE_local_lobby.server_id != 0ull && !gameserver_steam_id.IsValid() && gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(GBE_local_lobby.connect) != 0u;
+    CSteamID lobby_steam_id((uint64)local_lobby_snapshot.generic_lobby_id);
+    CSteamID gameserver_steam_id((uint64)local_lobby_snapshot.server_id);
+    const bool has_ip_server_id = local_lobby_snapshot.server_id != 0ull && !gameserver_steam_id.IsValid() && gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(local_lobby_snapshot.connect) != 0u;
     if (!lobby_steam_id.IsLobby() || (!gameserver_steam_id.IsValid() && !has_ip_server_id))
         return false;
 
@@ -220,9 +226,9 @@ bool Steam_Game_Coordinator::GBE_SyncGenericLobbyGameServer(const char *reason)
         "GC_DOTA_SYNC",
         "synced generic lobby gameserver reason=%s dota_lobby_id=%llu generic_lobby_id=%llu server_id=%llu ip=%s port=%u had_previous=%u previous_server_id=%llu previous_ip=%s previous_port=%u",
         reason ? reason : "unknown",
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
-        static_cast<unsigned long long>(GBE_local_lobby.server_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.generic_lobby_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.server_id),
         gbe::proto_wire::format_ipv4(lobby_ip).c_str(),
         static_cast<unsigned>(lobby_port),
         had_previous_gameserver ? 1u : 0u,
@@ -239,7 +245,10 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
     if (!is_server)
         return false;
 
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.match_id == 0)
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    GBE_LocalLobby local_lobby_snapshot = local_lobby.snapshot();
+
+    if (!local_lobby_snapshot.active || local_lobby_snapshot.lobby_id == 0 || local_lobby_snapshot.match_id == 0)
         return false;
 
     Steam_Client *steam_client = get_steam_client();
@@ -250,23 +259,23 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
     if (!game_server->BLoggedOn())
         return false;
 
-    uint32 connect_server_ip = gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(GBE_local_lobby.connect);
-    if (connect_server_ip == 0u && GBE_local_lobby.lan && network)
+    uint32 connect_server_ip = gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(local_lobby_snapshot.connect);
+    if (connect_server_ip == 0u && local_lobby_snapshot.lan && network)
         connect_server_ip = network->getOwnIP();
 
     const uint64 derived_server_id = gbe::dota_custom_game::derive_practice_lobby_ip_server_id(connect_server_ip);
-    if (GBE_local_lobby.server_id == 0ull)
+    if (local_lobby_snapshot.server_id == 0ull)
         return false;
 
-    const uint64 previous_server_id = GBE_local_lobby.server_id;
-    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const uint64 previous_server_id = local_lobby_snapshot.server_id;
     local_lobby.apply(reason ? reason : "server_id_clear", [derived_server_id](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::apply_lobby_server_id(lobby, derived_server_id);
     });
+    local_lobby_snapshot = local_lobby.snapshot();
     const auto shared_update_result = GBE_SharedLobbyStore().compare_update(
-        GBE_local_lobby.generation,
-        [&](GBE_SharedDotaLobbyState &shared_lobby) {
-            if (shared_lobby.valid && shared_lobby.lobby_id == GBE_local_lobby.lobby_id)
+        local_lobby_snapshot.generation,
+        [local_lobby_snapshot, derived_server_id](GBE_SharedDotaLobbyState &shared_lobby) {
+            if (shared_lobby.valid && shared_lobby.lobby_id == local_lobby_snapshot.lobby_id)
                 shared_lobby.server_id = derived_server_id;
         });
     if (shared_update_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
@@ -274,8 +283,8 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
             "GC_DOTA_SYNC",
             "skipped stale shared lobby server_id update reason=%s lobby_id=%llu generation=%llu derived=%llu",
             reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.generation),
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+            static_cast<unsigned long long>(local_lobby_snapshot.generation),
             static_cast<unsigned long long>(derived_server_id));
     }
 
@@ -283,12 +292,12 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
         "GC_DOTA_SYNC",
         "synced lobby server_id from connect endpoint reason=%s lobby_id=%llu match_id=%llu old=%llu derived=%llu lan_ip=%s custom_game_id=%llu",
         reason ? reason : "unknown",
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        static_cast<unsigned long long>(GBE_local_lobby.match_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.match_id),
         static_cast<unsigned long long>(previous_server_id),
         static_cast<unsigned long long>(derived_server_id),
         gbe::proto_wire::format_ipv4(connect_server_ip).c_str(),
-        static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id)
+        static_cast<unsigned long long>(local_lobby_snapshot.custom_game.game_id)
     );
 
     GBE_PublishSharedDotaLobbyState(reason ? reason : "server_id_clear");
