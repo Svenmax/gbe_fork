@@ -1333,6 +1333,19 @@ void f()
 }
 """,
             "gbe_dota_lobby_state_publish_coordinator.cpp": """
+void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason)
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    if (snapshot.active && snapshot.lobby_id != 0 && owner_id != snapshot.lobby_id)
+        return;
+    local_lobby.apply("cache_metadata", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_cache_subscription_metadata(lobby, has_version, version, has_service_id, service_id, service_list, has_sync_version, sync_version);
+    });
+    log(snapshot.has_cache_version, snapshot.cache_version, snapshot.has_cache_service_id, snapshot.cache_service_id, snapshot.cache_service_list.size(), snapshot.has_cache_sync_version, snapshot.cache_sync_version);
+    if (snapshot.active && snapshot.lobby_id != 0)
+        publish();
+}
 void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyLocalMemberData(const char *reason)
 {
     gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
@@ -1562,6 +1575,15 @@ void f()
 }
 """,
             "gbe_dota_lobby_state_publish_coordinator.cpp": """
+void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason)
+{
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && owner_id != GBE_local_lobby.lobby_id)
+        return;
+    gbe::dota_lobby_state::apply_cache_subscription_metadata(GBE_local_lobby, has_version, version, has_service_id, service_id, service_list, has_sync_version, sync_version);
+    log(GBE_local_lobby.has_cache_version, GBE_local_lobby.cache_version, GBE_local_lobby.has_cache_service_id, GBE_local_lobby.cache_service_id, GBE_local_lobby.cache_service_list.size(), GBE_local_lobby.has_cache_sync_version, GBE_local_lobby.cache_sync_version);
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0)
+        GBE_PublishSharedDotaLobbyState(reason);
+}
 void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyLocalMemberData(const char *reason)
 {
     gbe::dota_lobby_state::apply_cache_subscription_metadata(GBE_local_lobby, has_version, version, has_service_id, service_id, service_list, has_sync_version, sync_version);

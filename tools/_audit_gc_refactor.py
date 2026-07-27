@@ -1644,6 +1644,18 @@ def audit_local_lobby_owner_boundary(source_texts=None):
     publish_coordinator = strip_comments(source_texts.get("gbe_dota_lobby_state_publish_coordinator.cpp", ""))
     if re.search(r"apply_cache_subscription_metadata\s*\(\s*GBE_local_lobby\s*,", publish_coordinator):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: cache subscription metadata must route through LocalLobbyOwner::apply")
+    cache_subscription_match = re.search(
+        r"void\s+Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState\s*\([^)]*\)\s*\{(?P<body>.*?)\n\}",
+        publish_coordinator,
+        flags=re.DOTALL,
+    )
+    cache_subscription_body = cache_subscription_match.group("body") if cache_subscription_match else ""
+    if re.search(r"GBE_local_lobby\.active\s*&&\s*GBE_local_lobby\.lobby_id\s*!=\s*0\s*&&[^\n]*GBE_local_lobby\.lobby_id", cache_subscription_body):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: cache subscription owner guard must route through LocalLobbyOwner::snapshot")
+    if re.search(r"GBE_local_lobby\.has_cache_|GBE_local_lobby\.cache_(?:version|service_id|service_list|sync_version)", cache_subscription_body):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: cache subscription debug metadata must route through LocalLobbyOwner::snapshot")
+    if re.search(r"GBE_local_lobby\.active\s*&&\s*GBE_local_lobby\.lobby_id\s*!=\s*0\s*\)\s*\n\s*GBE_PublishSharedDotaLobbyState", cache_subscription_body):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: cache subscription publish guard must route through LocalLobbyOwner::snapshot")
     if re.search(r"apply_runtime_metadata\s*\(\s*GBE_local_lobby\s*,", publish_coordinator):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: runtime metadata must route through LocalLobbyOwner::apply")
     if re.search(r"source_from_local_lobby\s*\(\s*GBE_local_lobby\s*\)", publish_coordinator):
