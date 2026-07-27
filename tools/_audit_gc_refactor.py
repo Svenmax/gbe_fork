@@ -1673,12 +1673,16 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_chat_handlers.cpp: chat channel updates must route through LocalLobbyOwner::apply")
     if re.search(r"apply_broadcast_channel\s*\(\s*GBE_local_lobby\s*,", chat_handlers):
         issues.append("gbe_dota_chat_handlers.cpp: broadcast channel updates must route through LocalLobbyOwner::apply")
+    if re.search(r"patch_broadcast_channel\s*\(\s*GBE_local_lobby\s*,", chat_handlers):
+        issues.append("gbe_dota_chat_handlers.cpp: broadcast channel patches must route through LocalLobbyOwner::apply")
     if re.search(r"clear_chat_channel\s*\(\s*GBE_local_lobby\s*\)", chat_handlers):
         issues.append("gbe_dota_chat_handlers.cpp: chat channel clears must route through LocalLobbyOwner::apply")
     if re.search(r"clear_postgame_chat_tombstone\s*\(\s*GBE_local_lobby\s*\)", chat_handlers):
         issues.append("gbe_dota_chat_handlers.cpp: postgame chat tombstone clears must route through LocalLobbyOwner::apply")
     if re.search(r"clear_broadcast_channel\s*\(\s*GBE_local_lobby\s*,", chat_handlers):
         issues.append("gbe_dota_chat_handlers.cpp: broadcast channel clears must route through LocalLobbyOwner::apply")
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|generic_lobby_id|chat_channel_id|chat_channel_name|chat_channel_type|has_chat_channel|members|state|game_state|match_id|server_id|broadcast_channel_id|broadcast_country_code|broadcast_description|broadcast_language_code)\b", chat_handlers):
+        issues.append("gbe_dota_chat_handlers.cpp: chat guard/log/message reads must route through LocalLobbyOwner::snapshot")
 
     misc_handlers = strip_comments(source_texts.get("gbe_dota_misc_handlers.cpp", ""))
     if re.search(r"mark_launch_4511_seen\s*\(\s*GBE_local_lobby\s*\)", misc_handlers):

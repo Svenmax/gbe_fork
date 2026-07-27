@@ -1364,12 +1364,18 @@ void f()
 void f()
 {
     gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    if (snapshot.active && snapshot.lobby_id != 0 && snapshot.has_chat_channel)
+        log(snapshot.generic_lobby_id, snapshot.chat_channel_id, snapshot.chat_channel_name, snapshot.chat_channel_type, snapshot.members, snapshot.state, snapshot.game_state, snapshot.match_id, snapshot.server_id, snapshot.broadcast_channel_id, snapshot.broadcast_country_code, snapshot.broadcast_description, snapshot.broadcast_language_code);
     local_lobby.replace_for_reset(GBE_LocalLobby{});
     local_lobby.apply("7009_join_chat", [](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::apply_chat_channel(lobby, chat_channel_id, channel_name, channel_type);
     });
     local_lobby.apply("7149_join_broadcast", [](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::apply_broadcast_channel(lobby, channel, country_code, description, language_code);
+    });
+    local_lobby.apply("7367_update_broadcast", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::patch_broadcast_channel(lobby, channel, has_country_code, country_code, has_description, description, has_language_code, language_code);
     });
     local_lobby.apply("8054_close_broadcast", [](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::clear_broadcast_channel(lobby, channel);
@@ -1695,9 +1701,12 @@ void f()
     local_lobby.replace_for_reset(GBE_LocalLobby{});
     gbe::dota_lobby_state::apply_chat_channel(GBE_local_lobby, chat_channel_id, channel_name, channel_type);
     gbe::dota_lobby_state::apply_broadcast_channel(GBE_local_lobby, channel, country_code, description, language_code);
+    gbe::dota_lobby_state::patch_broadcast_channel(GBE_local_lobby, channel, has_country_code, country_code, has_description, description, has_language_code, language_code);
     gbe::dota_lobby_state::clear_chat_channel(GBE_local_lobby);
     gbe::dota_lobby_state::clear_postgame_chat_tombstone(GBE_local_lobby);
     gbe::dota_lobby_state::clear_broadcast_channel(GBE_local_lobby, channel);
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.has_chat_channel)
+        log(GBE_local_lobby.generic_lobby_id, GBE_local_lobby.chat_channel_id, GBE_local_lobby.chat_channel_name, GBE_local_lobby.chat_channel_type, GBE_local_lobby.members, GBE_local_lobby.state, GBE_local_lobby.game_state, GBE_local_lobby.match_id, GBE_local_lobby.server_id, GBE_local_lobby.broadcast_channel_id, GBE_local_lobby.broadcast_country_code, GBE_local_lobby.broadcast_description, GBE_local_lobby.broadcast_language_code);
 }
 """,
             "gbe_dota_misc_handlers.cpp": """
@@ -2157,6 +2166,10 @@ void f()
             issues,
         )
         self.assertIn(
+            "gbe_dota_chat_handlers.cpp: broadcast channel patches must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
             "gbe_dota_chat_handlers.cpp: chat channel clears must route through LocalLobbyOwner::apply",
             issues,
         )
@@ -2166,6 +2179,10 @@ void f()
         )
         self.assertIn(
             "gbe_dota_chat_handlers.cpp: broadcast channel clears must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_chat_handlers.cpp: chat guard/log/message reads must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(

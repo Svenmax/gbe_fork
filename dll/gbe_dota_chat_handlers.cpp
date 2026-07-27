@@ -32,6 +32,7 @@
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lobby_state_store.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -185,7 +186,7 @@ namespace {
 // the documented order without interleaving boolean derivation logic.
 struct LeaveChatDecision {
     uint64 channel_id{};                      // resolved request channel (or local)
-    uint64 local_channel_id{};                // GBE_local_lobby.chat_channel_id
+    uint64 local_channel_id{};                // current local chat channel id
     uint64 pre_postgame_channel_id{};         // abandon_pre_postgame_chat_channel_id
     bool leaving_postgame_channel{};          // active postgame abandon + has chat + type==18
     bool matches_current_postgame_channel{};  // request channel == local channel
@@ -240,7 +241,9 @@ static uint64 GBE_GenerateDotaChatChannelId()
 
 bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw)
 {
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &initial_lobby_snapshot = local_lobby.snapshot();
+    if (!initial_lobby_snapshot.active || initial_lobby_snapshot.lobby_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7009 because no local lobby is active");
         return true;
     }
@@ -256,20 +259,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
         return true;
     }
 
-    const uint64 chat_channel_id = GBE_local_lobby.chat_channel_id != 0 ?
-        GBE_local_lobby.chat_channel_id : GBE_GenerateDotaChatChannelId();
-    {
-        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
-        local_lobby.apply("7009_join_chat", [chat_channel_id, &request](GBE_LocalLobby &lobby) {
-            gbe::dota_lobby_state::apply_chat_channel(
-                lobby,
-                chat_channel_id,
-                request.channel_name,
-                request.has_channel_type ? request.channel_type : 3u);
-        });
-    }
+    const uint64 chat_channel_id = initial_lobby_snapshot.chat_channel_id != 0 ?
+        initial_lobby_snapshot.chat_channel_id : GBE_GenerateDotaChatChannelId();
+    local_lobby.apply("7009_join_chat", [chat_channel_id, &request](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_chat_channel(
+            lobby,
+            chat_channel_id,
+            request.channel_name,
+            request.has_channel_type ? request.channel_type : 3u);
+    });
 
-    if (GBE_local_lobby.generic_lobby_id != 0) {
+    const GBE_LocalLobby &joined_lobby_snapshot = local_lobby.snapshot();
+    if (joined_lobby_snapshot.generic_lobby_id != 0) {
         Steam_Client *steam_client = get_steam_client();
         if (steam_client && steam_client->steam_matchmaking)
             steam_client->steam_matchmaking->RefreshLobbyCallbacksForDota();
@@ -282,7 +283,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
             "7009_join_chat",
             lobby_snapshot,
             GBE_DotaLobbyCaptureMode::WithoutSharedRestore))
-        lobby_snapshot = GBE_local_lobby;
+        lobby_snapshot = joined_lobby_snapshot;
     GBE_SyncCapturedDotaLobbyState("7009_join_chat", is_server);
 
     std::string response_7010;
@@ -297,7 +298,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
             lobby_snapshot.owner_name,
             lobby_snapshot.chat_channel_type,
             response_7010)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7010 payload for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7010 payload for LobbyID=%llu", static_cast<unsigned long long>(lobby_snapshot.lobby_id));
         return true;
     }
 
@@ -307,9 +308,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Chat channel joined. name=%s channel_id=%llu channel_type=%u members=%zu wrapped=%d",
-        GBE_local_lobby.chat_channel_name.c_str(),
-        static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
-        GBE_local_lobby.chat_channel_type,
+        lobby_snapshot.chat_channel_name.c_str(),
+        static_cast<unsigned long long>(lobby_snapshot.chat_channel_id),
+        lobby_snapshot.chat_channel_type,
         lobby_snapshot.members.size(),
         wrapped ? 1 : 0
     );
@@ -318,7 +319,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
 
 bool Steam_Game_Coordinator::GBE_HandleDotaChatMessageRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw)
 {
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (!local_lobby_snapshot.active || local_lobby_snapshot.lobby_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7273 because no local lobby is active");
         return true;
     }
@@ -334,7 +337,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaChatMessageRequest(const std::string 
         return true;
     }
 
-    const uint64 channel_id = request.has_channel_id ? request.channel_id : GBE_local_lobby.chat_channel_id;
+    const uint64 channel_id = request.has_channel_id ? request.channel_id : local_lobby_snapshot.chat_channel_id;
     const uint32 account_id = request.has_account_id ? request.account_id : settings->get_local_steam_id().GetAccountID();
     const std::string persona_name = request.has_persona_name ? request.persona_name : std::string(settings->get_local_name());
 
@@ -346,7 +349,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaChatMessageRequest(const std::string 
     (void)wrapped;
     (void)outer_session_field_raw;
 
-    if (network && GBE_local_lobby.generic_lobby_id != 0) {
+    if (network && local_lobby_snapshot.generic_lobby_id != 0) {
         auto steam_message = new Steam_Messages();
         steam_message->set_type(Steam_Messages::FRIEND_CHAT);
         steam_message->set_message(chat_7273);
@@ -374,7 +377,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaNetworkChatMessage(Common_Message *ms
     if (!msg || !msg->has_steam_messages() || !gc_initialized || gc_profile != GC_PROFILE_DOTA2)
         return false;
 
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (!local_lobby_snapshot.active || local_lobby_snapshot.lobby_id == 0)
         return false;
 
     if (msg->steam_messages().type() != Steam_Messages::FRIEND_CHAT)
@@ -411,7 +416,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaNetworkChatMessage(Common_Message *ms
     if (!gbe::proto_wire::rewrite_varint_fields(
             message.substr(body_offset),
             { 2u },
-            GBE_local_lobby.chat_channel_id,
+            local_lobby_snapshot.chat_channel_id,
             local_channel_body))
         return false;
 
@@ -425,8 +430,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaNetworkChatMessage(Common_Message *ms
             sender_name = std::string(settings->get_local_name());
         } else {
             Steam_Client *steam_client = get_steam_client();
-            if (steam_client && steam_client->steam_matchmaking && GBE_local_lobby.generic_lobby_id != 0ull) {
-                CSteamID generic_lobby((uint64)GBE_local_lobby.generic_lobby_id);
+            if (steam_client && steam_client->steam_matchmaking && local_lobby_snapshot.generic_lobby_id != 0ull) {
+                CSteamID generic_lobby((uint64)local_lobby_snapshot.generic_lobby_id);
                 CSteamID sender_id((uint64)sender_steam_id);
                 if (generic_lobby.IsLobby() && sender_id.IsValid()) {
                     const char *generic_name = steam_client->steam_matchmaking->GetLobbyMemberData(generic_lobby, sender_id, GBE_kDotaGenericLobbyMemberNameKey);
@@ -435,7 +440,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaNetworkChatMessage(Common_Message *ms
                 }
             }
 
-            for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+            for (const GBE_DotaLobbyMemberState &member : local_lobby_snapshot.members) {
                 if (!sender_name.empty())
                     break;
                 if (member.steam_id != sender_steam_id && member.account_id != sender_account_id)
@@ -467,7 +472,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaNetworkChatMessage(Common_Message *ms
         message.size(),
         sender_account_id,
         static_cast<unsigned long long>(request.channel_id),
-        static_cast<unsigned long long>(GBE_local_lobby.chat_channel_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.chat_channel_id),
         request.text.size(),
         (request.has_persona_name ? request.persona_name : sender_name).c_str()
     );
@@ -487,17 +492,19 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         return true;
     }
 
-    const LeaveChatDecision d = compute_leave_chat_decision(request, GBE_local_lobby);
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    const LeaveChatDecision d = compute_leave_chat_decision(request, local_lobby_snapshot);
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
-    const uint64 lobby_id = GBE_local_lobby.lobby_id;
+    const uint64 lobby_id = local_lobby_snapshot.lobby_id;
 
-    if (!GBE_local_lobby.active || !GBE_local_lobby.has_chat_channel) {
+    if (!local_lobby_snapshot.active || !local_lobby_snapshot.has_chat_channel) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Replying 7014 for stale 7272 after lobby reset without restoring lobby state. request_channel=%llu active=%u has_chat=%u local_channel=%llu",
             static_cast<unsigned long long>(d.channel_id),
-            GBE_local_lobby.active ? 1u : 0u,
-            GBE_local_lobby.has_chat_channel ? 1u : 0u,
+            local_lobby_snapshot.active ? 1u : 0u,
+            local_lobby_snapshot.has_chat_channel ? 1u : 0u,
             static_cast<unsigned long long>(d.local_channel_id)
         );
 
@@ -527,7 +534,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         if (gbe::gc_message::build_dota_post_game_join_chat_channel_response_payload(
                 steam_id,
                 d.local_channel_id,
-                GBE_local_lobby.chat_channel_name,
+                local_lobby_snapshot.chat_channel_name,
                 std::string(settings->get_local_name()),
                 response_7010_postgame)) {
             if (wrapped && !outer_session_field_raw) {
@@ -586,7 +593,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         // server/game-rules state after postgame chat leaves. Clearing the entire local/generic
         // lobby snapshot here is too early and can race later disconnect teardown.
         {
-            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
             local_lobby.apply("7272_postgame_leave_chat", [](GBE_LocalLobby &lobby) {
                 gbe::dota_lobby_state::clear_chat_channel(lobby);
                 gbe::dota_lobby_state::clear_postgame_chat_tombstone(lobby);
@@ -614,11 +620,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Deferred full lobby reset after postgame 7272 to avoid racing disconnect teardown LobbyID=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            static_cast<unsigned long long>(GBE_local_lobby.match_id),
-            static_cast<unsigned long long>(GBE_local_lobby.server_id)
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+            local_lobby_snapshot.state,
+            local_lobby_snapshot.game_state,
+            static_cast<unsigned long long>(local_lobby_snapshot.match_id),
+            static_cast<unsigned long long>(local_lobby_snapshot.server_id)
         );
     } else {
         // Only clear chat state if the request channel matches the current local channel.
@@ -627,7 +633,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         // which prevents the postgame 7272/7014 from triggering ResetGCMemory and the
         // client never sees the score screen.
         if (d.request_matches_local) {
-            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
             local_lobby.apply("7272_leave_chat", [](GBE_LocalLobby &lobby) {
                 gbe::dota_lobby_state::clear_chat_channel(lobby);
             });
@@ -637,9 +642,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
                 "[LOBBY] Ignoring stale 7272 for non-current channel; preserving current chat state. request_channel=%llu local_channel=%llu lobby_id=%llu state=%u game_state=%u",
                 static_cast<unsigned long long>(d.channel_id),
                 static_cast<unsigned long long>(d.local_channel_id),
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_local_lobby.state,
-                GBE_local_lobby.game_state
+                static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+                local_lobby_snapshot.state,
+                local_lobby_snapshot.game_state
             );
             return true;
         }
@@ -652,11 +657,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Skipping publish after postgame 7272 because shared state was already cleared by signout finalize LobbyID=%llu",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id)
         );
         // Leave the generic lobby so other members see the lobby destroyed and can clean up.
         GBE_LeaveGenericLobby();
-        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
         local_lobby.replace_for_reset(GBE_LocalLobby{});
     } else {
         GBE_PublishSharedDotaLobbyState("7272_leave_chat");
@@ -682,7 +686,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
 
 bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw)
 {
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &initial_lobby_snapshot = local_lobby.snapshot();
+    if (!initial_lobby_snapshot.active || initial_lobby_snapshot.lobby_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7149 because no local lobby is active");
         return true;
     }
@@ -698,17 +704,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequ
         return true;
     }
 
-    {
-        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
-        local_lobby.apply("7149_join_broadcast", [&request](GBE_LocalLobby &lobby) {
-            gbe::dota_lobby_state::apply_broadcast_channel(
-                lobby,
-                request.channel,
-                request.has_country_code ? request.country_code : std::string(),
-                request.has_description ? request.description : std::string(),
-                request.has_language_code ? request.language_code : std::string());
-        });
-    }
+    local_lobby.apply("7149_join_broadcast", [&request](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_broadcast_channel(
+            lobby,
+            request.channel,
+            request.has_country_code ? request.country_code : std::string(),
+            request.has_description ? request.description : std::string(),
+            request.has_language_code ? request.language_code : std::string());
+    });
+    const GBE_LocalLobby &broadcast_lobby_snapshot = local_lobby.snapshot();
     GBE_PublishSharedDotaLobbyState("7149_join_broadcast");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7149"))
@@ -717,7 +721,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequ
     if (has_request_job) {
         std::string response_7055;
         if (!gbe::gc_message::build_dota_practice_lobby_response_payload(request_job_id, true, response_7055)) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7055 payload for 7149 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7055 payload for 7149 LobbyID=%llu", static_cast<unsigned long long>(broadcast_lobby_snapshot.lobby_id));
             return true;
         }
 
@@ -728,10 +732,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequ
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Broadcast channel joined. channel=%u country=%s description=%s language=%s",
-        GBE_local_lobby.broadcast_channel_id,
-        GBE_local_lobby.broadcast_country_code.c_str(),
-        GBE_local_lobby.broadcast_description.c_str(),
-        GBE_local_lobby.broadcast_language_code.c_str()
+        broadcast_lobby_snapshot.broadcast_channel_id,
+        broadcast_lobby_snapshot.broadcast_country_code.c_str(),
+        broadcast_lobby_snapshot.broadcast_description.c_str(),
+        broadcast_lobby_snapshot.broadcast_language_code.c_str()
     );
     return true;
 }
@@ -739,7 +743,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequ
 
 bool Steam_Game_Coordinator::GBE_HandleDotaLobbyUpdateBroadcastChannelInfoRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw)
 {
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &initial_lobby_snapshot = local_lobby.snapshot();
+    if (!initial_lobby_snapshot.active || initial_lobby_snapshot.lobby_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7367 because no local lobby is active");
         return true;
     }
@@ -755,15 +761,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyUpdateBroadcastChannelInfoReques
         return true;
     }
 
-    gbe::dota_lobby_state::patch_broadcast_channel(
-        GBE_local_lobby,
-        request.channel,
-        request.has_country_code,
-        request.country_code,
-        request.has_description,
-        request.description,
-        request.has_language_code,
-        request.language_code);
+    local_lobby.apply("7367_update_broadcast", [&request](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::patch_broadcast_channel(
+            lobby,
+            request.channel,
+            request.has_country_code,
+            request.country_code,
+            request.has_description,
+            request.description,
+            request.has_language_code,
+            request.language_code);
+    });
+    const GBE_LocalLobby &broadcast_lobby_snapshot = local_lobby.snapshot();
     GBE_PublishSharedDotaLobbyState("7367_update_broadcast");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7367"))
@@ -772,10 +781,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyUpdateBroadcastChannelInfoReques
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Broadcast channel info updated. channel=%u country=%s description=%s language=%s",
-        GBE_local_lobby.broadcast_channel_id,
-        GBE_local_lobby.broadcast_country_code.c_str(),
-        GBE_local_lobby.broadcast_description.c_str(),
-        GBE_local_lobby.broadcast_language_code.c_str()
+        broadcast_lobby_snapshot.broadcast_channel_id,
+        broadcast_lobby_snapshot.broadcast_country_code.c_str(),
+        broadcast_lobby_snapshot.broadcast_description.c_str(),
+        broadcast_lobby_snapshot.broadcast_language_code.c_str()
     );
     return true;
 }
@@ -783,7 +792,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyUpdateBroadcastChannelInfoReques
 
 bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCloseBroadcastChannelRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw)
 {
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (!local_lobby_snapshot.active || local_lobby_snapshot.lobby_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 8054 because no local lobby is active");
         return true;
     }
@@ -799,12 +810,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCloseBroadcastChannelReq
         return true;
     }
 
-    {
-        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
-        local_lobby.apply("8054_close_broadcast", [&request](GBE_LocalLobby &lobby) {
-            gbe::dota_lobby_state::clear_broadcast_channel(lobby, request.channel);
-        });
-    }
+    local_lobby.apply("8054_close_broadcast", [&request](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::clear_broadcast_channel(lobby, request.channel);
+    });
     GBE_PublishSharedDotaLobbyState("8054_close_broadcast");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "8054"))
