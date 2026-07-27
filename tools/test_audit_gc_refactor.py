@@ -1081,6 +1081,10 @@ void f()
     local_lobby.apply("runtime_reset", [](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::apply_lobby_generation(lobby, next_generation);
     });
+    const GBE_LocalLobby &queued_snapshot = local_lobby.snapshot();
+    queued_msg.lobby_id = queued_snapshot.lobby_id;
+    if (queued_snapshot.active && queued_snapshot.lan && queued_snapshot.state == 2u)
+        log(queued_snapshot.match_id, queued_snapshot.server_id);
 }
 """,
             "gbe_dota_lobby_create_handlers.cpp": """
@@ -1499,6 +1503,8 @@ void f()
     gbe::dota_lobby_state::apply_queued_lobby_state_apply_plan(GBE_local_lobby, apply_plan);
     gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, next_generation);
     lobbies.push_back(GBE_local_lobby);
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0)
+        log(GBE_local_lobby.owner_steam_id, GBE_local_lobby.owner_hero_id, GBE_local_lobby.generation, GBE_local_lobby.state, GBE_local_lobby.game_state, GBE_local_lobby.launch_phase, GBE_local_lobby.server_id, GBE_local_lobby.match_id, GBE_local_lobby.generic_lobby_id, GBE_local_lobby.owner_name, GBE_local_lobby.postgame_chat_tombstone_active, GBE_local_lobby.postgame_chat_tombstone_channel_id, GBE_local_lobby.abandon_pre_postgame_chat_channel_id, GBE_local_lobby.lan);
 }
 """,
             "gbe_dota_lobby_create_handlers.cpp": """
@@ -2043,6 +2049,10 @@ void f()
         )
         self.assertIn(
             "steam_game_coordinator.cpp: HTTP joinable custom lobby exports must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "steam_game_coordinator.cpp: queue/runtime/retrieve callback lobby reads must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(

@@ -304,7 +304,7 @@ CORE_STATE_MACHINE_HEADER_TOKENS = (
 )
 ASYNC_GENERATION_GATES = {
     "steam_game_coordinator.cpp": (
-        "new_item.lobby_id = GBE_local_lobby.lobby_id;",
+        "new_item.lobby_id =",
         "new_item.generation = GBE_CurrentDotaLobbyGeneration();",
         'GBE_IsQueuedLobbyMessageCurrent(new_item, "enqueue_immediate")',
         'GBE_IsQueuedLobbyMessageCurrent(*it, "delay_expired")',
@@ -1637,6 +1637,8 @@ def audit_local_lobby_owner_boundary(source_texts=None):
     steam_game_coordinator = strip_comments(source_texts.get("steam_game_coordinator.cpp", ""))
     if re.search(r"push_back\s*\(\s*GBE_local_lobby\s*\)", steam_game_coordinator):
         issues.append("steam_game_coordinator.cpp: HTTP joinable custom lobby exports must route through LocalLobbyOwner::snapshot")
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|owner_steam_id|owner_hero_id|generation|state|game_state|launch_phase|server_id|match_id|generic_lobby_id|owner_name|postgame_chat_tombstone_active|postgame_chat_tombstone_channel_id|abandon_pre_postgame_chat_channel_id|lan)\b", steam_game_coordinator):
+        issues.append("steam_game_coordinator.cpp: queue/runtime/retrieve callback lobby reads must route through LocalLobbyOwner::snapshot")
 
     restore_coordinator = strip_comments(source_texts.get("gbe_dota_lobby_state_restore_coordinator.cpp", ""))
     if re.search(r"compose_source_aware_shared_runtime_restore_plan\s*\(\s*GBE_local_lobby\s*,", restore_coordinator):
