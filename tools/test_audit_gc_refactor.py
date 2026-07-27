@@ -1333,6 +1333,21 @@ void f()
 }
 """,
             "gbe_dota_lobby_state_publish_coordinator.cpp": """
+bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason, GBE_LocalLobby &snapshot, GBE_DotaLobbyCaptureMode mode)
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (!local_lobby_snapshot.active || local_lobby_snapshot.lobby_id == 0)
+        return false;
+    GBE_LocalLobby projected_lobby = local_lobby_snapshot;
+    auto refresh_captured_lobby = [&](GBE_LocalLobby &captured_lobby) {
+        captured_lobby.members = members;
+    };
+    local_lobby.apply("capture_current_lobby_state", [&](GBE_LocalLobby &captured_lobby) {
+        refresh_captured_lobby(captured_lobby);
+    });
+    return true;
+}
 void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason)
 {
     gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
@@ -1575,6 +1590,14 @@ void f()
 }
 """,
             "gbe_dota_lobby_state_publish_coordinator.cpp": """
+bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason, GBE_LocalLobby &snapshot, GBE_DotaLobbyCaptureMode mode)
+{
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)
+        return false;
+    GBE_LocalLobby projected_lobby = GBE_local_lobby;
+    GBE_LocalLobby &captured_lobby = pure ? projected_lobby : GBE_local_lobby;
+    return true;
+}
 void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std::string &message, const char *reason)
 {
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && owner_id != GBE_local_lobby.lobby_id)
@@ -1932,12 +1955,23 @@ void f()
             "gbe_dota_lobby_state_publish_coordinator.cpp: cache subscription metadata must route through LocalLobbyOwner::apply",
             issues,
         )
+        expected_cache_subscription_issues = [
+            "gbe_dota_lobby_state_publish_coordinator.cpp: cache subscription owner guard must route through LocalLobbyOwner::snapshot",
+            "gbe_dota_lobby_state_publish_coordinator.cpp: cache subscription debug metadata must route through LocalLobbyOwner::snapshot",
+            "gbe_dota_lobby_state_publish_coordinator.cpp: cache subscription publish guard must route through LocalLobbyOwner::snapshot",
+        ]
+        for expected_issue in expected_cache_subscription_issues:
+            self.assertIn(expected_issue, issues)
         self.assertIn(
             "gbe_dota_lobby_state_publish_coordinator.cpp: runtime metadata must route through LocalLobbyOwner::apply",
             issues,
         )
         self.assertIn(
             "gbe_dota_lobby_state_publish_coordinator.cpp: reconnect source compose must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_publish_coordinator.cpp: capture active guard must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(

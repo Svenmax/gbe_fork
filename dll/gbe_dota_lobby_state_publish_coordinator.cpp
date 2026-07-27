@@ -81,15 +81,17 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(
     if (mode == GBE_DotaLobbyCaptureMode::Synchronized)
         GBE_RestoreSharedDotaLobbyState(reason);
 
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+
+    if (!local_lobby_snapshot.active || local_lobby_snapshot.lobby_id == 0)
         return false;
 
     // Pure projection applies capture only to projected_lobby. All other modes
     // update the Local working copy; publication stays at explicit call boundaries.
     const bool pure_snapshot_projection =
         mode == GBE_DotaLobbyCaptureMode::PureSnapshotProjection;
-    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
-    GBE_LocalLobby projected_lobby = local_lobby.snapshot();
+    GBE_LocalLobby projected_lobby = local_lobby_snapshot;
 
     auto refresh_captured_lobby = [&](GBE_LocalLobby &captured_lobby) {
     if (captured_lobby.generic_lobby_id != 0) {

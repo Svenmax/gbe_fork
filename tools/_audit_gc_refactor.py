@@ -1660,6 +1660,14 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: runtime metadata must route through LocalLobbyOwner::apply")
     if re.search(r"source_from_local_lobby\s*\(\s*GBE_local_lobby\s*\)", publish_coordinator):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: reconnect source compose must route through LocalLobbyOwner::snapshot")
+    capture_match = re.search(
+        r"bool\s+Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState\s*\([^)]*\)\s*\{(?P<body>.*?)\n\}",
+        publish_coordinator,
+        flags=re.DOTALL,
+    )
+    capture_body = capture_match.group("body") if capture_match else ""
+    if re.search(r"!\s*GBE_local_lobby\.active\s*\|\|\s*GBE_local_lobby\.lobby_id\s*==\s*0", capture_body):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: capture active guard must route through LocalLobbyOwner::snapshot")
     if re.search(r"GBE_LocalLobby\s+projected_lobby\s*=\s*GBE_local_lobby", publish_coordinator):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: capture projection must route through LocalLobbyOwner::snapshot")
     if re.search(r"publish_local_lobby_to_shared\s*\(\s*GBE_local_lobby\s*,", publish_coordinator):
