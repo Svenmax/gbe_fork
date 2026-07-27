@@ -69,10 +69,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaInviteToLobbyRequest(const std::strin
         return true;
     }
 
-    uint64 dota_lobby_id = GBE_local_lobby.lobby_id;
-    CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    uint64 dota_lobby_id = local_lobby_snapshot.lobby_id;
+    CSteamID generic_lobby_id((uint64)local_lobby_snapshot.generic_lobby_id);
     const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
-    if ((!GBE_local_lobby.active || dota_lobby_id == 0 || !generic_lobby_id.IsLobby()) && shared_lobby.valid) {
+    if ((!local_lobby_snapshot.active || dota_lobby_id == 0 || !generic_lobby_id.IsLobby()) && shared_lobby.valid) {
         dota_lobby_id = shared_lobby.lobby_id;
         generic_lobby_id = CSteamID((uint64)shared_lobby.generic_lobby_id);
     }

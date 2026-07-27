@@ -1646,7 +1646,25 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
             "gbe_dota_lobby_list_handlers.cpp": """
 void f()
 {
+    const bool finishing_leave = GBE_local_lobby.pending_leave_after_7040 && GBE_local_lobby.pending_leave_lobby_id != 0;
+    GBE_GC_DebugLog("active=%u", GBE_local_lobby.active ? 1u : 0u);
     lobby_snapshots.push_back(GBE_local_lobby);
+}
+""",
+            "gbe_dota_lobby_invite_handlers.cpp": """
+void f()
+{
+    uint64 dota_lobby_id = GBE_local_lobby.lobby_id;
+    CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
+    if (!GBE_local_lobby.active)
+        return;
+}
+""",
+            "gbe_dota_network_callbacks.cpp": """
+void f()
+{
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0)
+        push_cache();
 }
 """,
             "gbe_dota_template_replay_handlers.cpp": """
@@ -1654,6 +1672,7 @@ void f()
 {
     lobbies.push_back(GBE_local_lobby);
     modes.push_back(gbe::gc_message::DotaJoinableCustomGameMode{GBE_local_lobby.custom_game.game_id, static_cast<uint32>(GBE_local_lobby.members.size())});
+    spectate_server_steamid = GBE_local_lobby.server_id;
 }
 """,
         }
@@ -1823,11 +1842,27 @@ void f()
             issues,
         )
         self.assertIn(
+            "gbe_dota_lobby_list_handlers.cpp: lobby list guard and log reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_invite_handlers.cpp: invite lobby id fallback reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_network_callbacks.cpp: remote inventory lobby guard reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
             "gbe_dota_template_replay_handlers.cpp: joinable custom lobby exports must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(
             "gbe_dota_template_replay_handlers.cpp: joinable custom mode exports must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_template_replay_handlers.cpp: spectate server fallback reads must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(

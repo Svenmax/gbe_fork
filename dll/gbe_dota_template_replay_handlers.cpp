@@ -401,8 +401,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                 }
             }
 
-            if (spectate_server_steamid == 0)
-                spectate_server_steamid = GBE_local_lobby.server_id;
+            if (spectate_server_steamid == 0) {
+                gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+                spectate_server_steamid = local_lobby.snapshot().server_id;
+            }
 
             // Build 7074 CMsgSpectateFriendGameResponse
             // Official GC always sends job_id_target = 0xFFFFFFFFFFFFFFFF in the header,

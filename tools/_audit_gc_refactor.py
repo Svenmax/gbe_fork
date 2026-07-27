@@ -1580,12 +1580,24 @@ def audit_local_lobby_owner_boundary(source_texts=None):
     lobby_list_handlers = strip_comments(source_texts.get("gbe_dota_lobby_list_handlers.cpp", ""))
     if re.search(r"push_back\s*\(\s*GBE_local_lobby\s*\)", lobby_list_handlers):
         issues.append("gbe_dota_lobby_list_handlers.cpp: lobby list exports must route through LocalLobbyOwner::snapshot")
+    if re.search(r"GBE_local_lobby\.(?:pending_leave_after_7040|pending_leave_lobby_id|active)\b", lobby_list_handlers):
+        issues.append("gbe_dota_lobby_list_handlers.cpp: lobby list guard and log reads must route through LocalLobbyOwner::snapshot")
+
+    lobby_invite_handlers = strip_comments(source_texts.get("gbe_dota_lobby_invite_handlers.cpp", ""))
+    if re.search(r"GBE_local_lobby\.(?:lobby_id|generic_lobby_id|active)\b", lobby_invite_handlers):
+        issues.append("gbe_dota_lobby_invite_handlers.cpp: invite lobby id fallback reads must route through LocalLobbyOwner::snapshot")
+
+    network_callbacks = strip_comments(source_texts.get("gbe_dota_network_callbacks.cpp", ""))
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id)\b", network_callbacks):
+        issues.append("gbe_dota_network_callbacks.cpp: remote inventory lobby guard reads must route through LocalLobbyOwner::snapshot")
 
     template_replay_handlers = strip_comments(source_texts.get("gbe_dota_template_replay_handlers.cpp", ""))
     if re.search(r"push_back\s*\(\s*GBE_local_lobby\s*\)", template_replay_handlers):
         issues.append("gbe_dota_template_replay_handlers.cpp: joinable custom lobby exports must route through LocalLobbyOwner::snapshot")
     if re.search(r"DotaJoinableCustomGameMode\s*\{\s*GBE_local_lobby\.", template_replay_handlers):
         issues.append("gbe_dota_template_replay_handlers.cpp: joinable custom mode exports must route through LocalLobbyOwner::snapshot")
+    if re.search(r"GBE_local_lobby\.server_id\b", template_replay_handlers):
+        issues.append("gbe_dota_template_replay_handlers.cpp: spectate server fallback reads must route through LocalLobbyOwner::snapshot")
 
     steam_game_coordinator = strip_comments(source_texts.get("steam_game_coordinator.cpp", ""))
     if re.search(r"push_back\s*\(\s*GBE_local_lobby\s*\)", steam_game_coordinator):

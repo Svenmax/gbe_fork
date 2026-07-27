@@ -59,8 +59,10 @@ using GBE_DotaPracticeLobbyKickRequest = gbe::proto_wire::DotaPracticeLobbyKickR
 
 bool Steam_Game_Coordinator::GBE_HandleDotaLobbyListRequest(bool has_request_job, uint64 request_job_id, bool wrapped, const std::string *outer_session_field_raw)
 {
-    const bool finishing_leave = GBE_local_lobby.pending_leave_after_7040 && GBE_local_lobby.pending_leave_lobby_id != 0;
-    const uint64 leaving_lobby_id = GBE_local_lobby.pending_leave_lobby_id;
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    const bool finishing_leave = local_lobby_snapshot.pending_leave_after_7040 && local_lobby_snapshot.pending_leave_lobby_id != 0;
+    const uint64 leaving_lobby_id = local_lobby_snapshot.pending_leave_lobby_id;
 
     std::string response_25;
     if (finishing_leave && !gbe::gc_message::build_dota_lobby_cache_unsubscribed_payload(leaving_lobby_id, response_25)) {
@@ -71,8 +73,6 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyListRequest(bool has_request_job
     std::vector<GBE_LocalLobby> lobby_snapshots;
     if (!finishing_leave)
         lobby_snapshots = GBE_GetDotaGenericLobbySnapshots("8011_lobby_list");
-    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
-    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
     if (!finishing_leave && local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0) {
         const uint64 local_lobby_id = local_lobby_snapshot.lobby_id;
         const bool already_included = std::any_of(lobby_snapshots.begin(), lobby_snapshots.end(), [local_lobby_id](const GBE_LocalLobby &snapshot) {
@@ -101,7 +101,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyListRequest(bool has_request_job
 
     std::string response_8012;
     if (!gbe::gc_message::build_dota_lobby_list_response_payload(entries, response_8012)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 8012 lobby list response active=%u finishing_leave=%u", GBE_local_lobby.active ? 1u : 0u, finishing_leave ? 1u : 0u);
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 8012 lobby list response active=%u finishing_leave=%u", local_lobby_snapshot.active ? 1u : 0u, finishing_leave ? 1u : 0u);
         return true;
     }
 

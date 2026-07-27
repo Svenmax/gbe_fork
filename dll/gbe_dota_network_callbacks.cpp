@@ -212,7 +212,9 @@ void Steam_Game_Coordinator::network_callback_inventory_response(Common_Message 
     // [Dota 2 LAN] When the server GC receives a remote player's inventory,
     // build and inject a player item CacheSubscribed so the dedicated server
     // knows that player's equipped cosmetics for wearable loading.
-    if (is_server && gc_profile == GC_PROFILE_DOTA2 && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (is_server && gc_profile == GC_PROFILE_DOTA2 && local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0) {
         std::vector<const Econ_Item *> equipped_items;
         for (const Econ_Item &item : items) {
             if (!item.equip_states.empty())
