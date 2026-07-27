@@ -1579,6 +1579,8 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_lobby_lifecycle_handlers.cpp: leave generic lobby id must route through LocalLobbyOwner::apply")
     if re.search(r"apply_launch_init_plan\s*\(\s*GBE_local_lobby\s*,", lifecycle_handlers):
         issues.append("gbe_dota_lobby_lifecycle_handlers.cpp: launch init plan must route through LocalLobbyOwner::apply")
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|match_id|game_start_time|state|game_state|abandon_postgame_active|pending_leave_after_7040|generic_lobby_id|launch_phase|owner_connected|server_id|custom_game|connect)\b", lifecycle_handlers):
+        issues.append("gbe_dota_lobby_lifecycle_handlers.cpp: lifecycle guard/log reads must route through LocalLobbyOwner::snapshot")
 
     member_coordinator = strip_comments(source_texts.get("gbe_dota_lobby_state_member_coordinator.cpp", ""))
     if re.search(r"apply_lobby_owner_name\s*\(\s*GBE_local_lobby\s*,", member_coordinator):

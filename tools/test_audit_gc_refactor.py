@@ -1276,6 +1276,8 @@ void f()
     gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
     const GBE_LocalLobby &snapshot = local_lobby.snapshot();
     gbe::dota_lobby_state::compose_launch_init_plan(snapshot, match_id, server_id, connect, game_start_time, launch_phase);
+    if (snapshot.active && snapshot.lobby_id != 0 && snapshot.state != 2u)
+        log(snapshot.lobby_id, snapshot.match_id, snapshot.game_start_time, snapshot.state, snapshot.game_state, snapshot.abandon_postgame_active, snapshot.pending_leave_after_7040, snapshot.generic_lobby_id, snapshot.launch_phase, snapshot.owner_connected, snapshot.server_id, snapshot.custom_game.game_id, snapshot.connect);
     local_lobby.apply("7040_leave_local_find", [](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::apply_lobby_generic_lobby_id(lobby, fallback_generic_lobby_id);
     });
@@ -1648,6 +1650,8 @@ void f()
     GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, owner_name, message, true);
     gbe::dota_lobby_state::apply_lobby_generic_lobby_id(GBE_local_lobby, fallback_generic_lobby_id);
     gbe::dota_lobby_state::apply_launch_init_plan(GBE_local_lobby, launch_plan);
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0)
+        log(GBE_local_lobby.match_id, GBE_local_lobby.game_start_time, GBE_local_lobby.state, GBE_local_lobby.game_state, GBE_local_lobby.abandon_postgame_active, GBE_local_lobby.pending_leave_after_7040, GBE_local_lobby.generic_lobby_id, GBE_local_lobby.launch_phase, GBE_local_lobby.owner_connected, GBE_local_lobby.server_id, GBE_local_lobby.custom_game.game_id, GBE_local_lobby.connect);
 }
 """,
             "gbe_dota_lobby_state_member_coordinator.cpp": """
@@ -2081,6 +2085,10 @@ void f()
         )
         self.assertIn(
             "gbe_dota_lobby_lifecycle_handlers.cpp: launch init plan must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_lifecycle_handlers.cpp: lifecycle guard/log reads must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(
