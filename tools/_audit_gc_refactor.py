@@ -1459,6 +1459,8 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_lobby_create_handlers.cpp: generic lobby id must route through LocalLobbyOwner::apply")
     if re.search(r"apply_lobby_details_update\s*\(\s*GBE_local_lobby\s*,", create_handlers):
         issues.append("gbe_dota_lobby_create_handlers.cpp: lobby details update must route through LocalLobbyOwner::apply")
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|generic_lobby_id|room_name|server_region|lan|lan_host_ping_location|game_mode|pass_key|custom_game|allow_cheats|fill_with_bots|allow_spectating|visibility|bot_difficulty_radiant|bot_difficulty_dire|bot_radiant|bot_dire)\b", create_handlers):
+        issues.append("gbe_dota_lobby_create_handlers.cpp: create/set-details guard and log reads must route through LocalLobbyOwner::snapshot")
 
     join_handlers = strip_comments(source_texts.get("gbe_dota_lobby_join_handlers.cpp", ""))
     if re.search(r"apply_join_lobby_merge_plan\s*\(\s*GBE_local_lobby\s*,", join_handlers):

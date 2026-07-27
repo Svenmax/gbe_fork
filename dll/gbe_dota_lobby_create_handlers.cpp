@@ -367,11 +367,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     if (state_apply_plan.set_reconnect_eligible)
         GBE_SetDotaReconnectEligible(true);
     if (state_apply_plan.log_arcade_isolation) {
+        const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Isolated arcade lobby from prior practice runtime lobby_id=%llu custom_game_id=%llu",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id)
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+            static_cast<unsigned long long>(local_lobby_snapshot.custom_game.game_id)
         );
     }
 
@@ -410,37 +411,38 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         }
     }
 
+    const GBE_LocalLobby &created_lobby_snapshot = local_lobby.snapshot();
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] State creating path=%s has_job=%u request_job=%llu NewLobbyID=%llu GenericLobbyID=%llu room=%s server_region=%u lan=%u lan_ping=%s mode=%u pass_len=%zu custom_id=%llu custom_mode=%s custom_map=%s custom_min=%u custom_max=%u",
         wrapped ? "wrapped" : "direct",
         has_request_job ? 1u : 0u,
         static_cast<unsigned long long>(request_job_id),
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
-        GBE_local_lobby.room_name.c_str(),
-        GBE_local_lobby.server_region,
-        GBE_local_lobby.lan ? 1u : 0u,
-        GBE_local_lobby.lan_host_ping_location.c_str(),
-        GBE_local_lobby.game_mode,
-        GBE_local_lobby.pass_key.size(),
-        static_cast<unsigned long long>(GBE_local_lobby.custom_game.game_id),
-        GBE_local_lobby.custom_game.mode.c_str(),
-        GBE_local_lobby.custom_game.map_name.c_str(),
-        GBE_local_lobby.custom_game.min_players,
-        GBE_local_lobby.custom_game.max_players
+        static_cast<unsigned long long>(created_lobby_snapshot.lobby_id),
+        static_cast<unsigned long long>(created_lobby_snapshot.generic_lobby_id),
+        created_lobby_snapshot.room_name.c_str(),
+        created_lobby_snapshot.server_region,
+        created_lobby_snapshot.lan ? 1u : 0u,
+        created_lobby_snapshot.lan_host_ping_location.c_str(),
+        created_lobby_snapshot.game_mode,
+        created_lobby_snapshot.pass_key.size(),
+        static_cast<unsigned long long>(created_lobby_snapshot.custom_game.game_id),
+        created_lobby_snapshot.custom_game.mode.c_str(),
+        created_lobby_snapshot.custom_game.map_name.c_str(),
+        created_lobby_snapshot.custom_game.min_players,
+        created_lobby_snapshot.custom_game.max_players
     );
 
     std::string response_24;
     const uint64 steam_id = settings->get_local_steam_id().ConvertToUint64();
     if (!GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplay(GBE_GetDotaLobbyOwnerName(), response_24)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building template 24 cache update for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building template 24 cache update for LobbyID=%llu", static_cast<unsigned long long>(created_lobby_snapshot.lobby_id));
         return true;
     }
 
     std::string response_7055;
     if (!gbe::gc_message::build_dota_practice_lobby_response_payload(request_job_id, has_request_job, response_7055)) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7055 payload for LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7055 payload for LobbyID=%llu", static_cast<unsigned long long>(created_lobby_snapshot.lobby_id));
         return true;
     }
 
@@ -470,7 +472,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Sent wrapped 24 cache update with NewLobbyID=%llu size=%zu body_prefix=%s packet_prefix=%s",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(created_lobby_snapshot.lobby_id),
             wrapped_24.size(),
             gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(response_24.data()), response_24.size(), 32).c_str(),
             gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(wrapped_24.data()), wrapped_24.size(), 32).c_str()
@@ -479,7 +481,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Sent direct 24 cache update with NewLobbyID=%llu size=%zu body_prefix=%s",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(created_lobby_snapshot.lobby_id),
             response_24.size(),
             gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(response_24.data()), response_24.size(), 32).c_str()
         );
@@ -499,7 +501,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Sent wrapped 7055 with NewLobbyID=%llu has_job=%u request_job=%llu size=%zu body_prefix=%s packet_prefix=%s",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(created_lobby_snapshot.lobby_id),
             has_request_job ? 1u : 0u,
             static_cast<unsigned long long>(request_job_id),
             wrapped_7055.size(),
@@ -510,7 +512,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Sent direct 7055 with NewLobbyID=%llu has_job=%u request_job=%llu size=%zu body_prefix=%s",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(created_lobby_snapshot.lobby_id),
             has_request_job ? 1u : 0u,
             static_cast<unsigned long long>(request_job_id),
             response_7055.size(),
@@ -521,7 +523,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Skipping initial 26 details update for 7038 to match official create flow LobbyID=%llu",
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+        static_cast<unsigned long long>(created_lobby_snapshot.lobby_id)
     );
 
     return true;
@@ -530,7 +532,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
 
 bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw)
 {
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &initial_lobby_snapshot = local_lobby.snapshot();
+    if (!initial_lobby_snapshot.active || initial_lobby_snapshot.lobby_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7046 because no local lobby is active");
         return true;
     }
@@ -546,16 +550,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
         return true;
     }
 
-    if (request.has_lobby_id && request.lobby_id != GBE_local_lobby.lobby_id) {
+    if (request.has_lobby_id && request.lobby_id != initial_lobby_snapshot.lobby_id) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] 7046 LobbyID mismatch request=%llu local=%llu, keeping local state",
             static_cast<unsigned long long>(request.lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+            static_cast<unsigned long long>(initial_lobby_snapshot.lobby_id)
         );
     }
 
-    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
     local_lobby.apply("7046_details_update", [this, &request](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::apply_lobby_details_update(lobby, request);
         GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, lobby.custom_game);
@@ -565,23 +568,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
     if (!GBE_PublishDotaPracticeLobbySetDetailsUpdate(wrapped, outer_session_field_raw))
         return true;
 
+    const GBE_LocalLobby &updated_lobby_snapshot = local_lobby.snapshot();
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Room details updated. mode=%u server_region=%u lan=%u lan_ping=%s cheats=%u bots=%u spectating=%u visibility=%u bot_diff_r=%u bot_diff_d=%u bot_radiant=%llu bot_dire=%llu name=%s password_len=%zu",
-        GBE_local_lobby.game_mode,
-        GBE_local_lobby.server_region,
-        GBE_local_lobby.lan ? 1u : 0u,
-        GBE_local_lobby.lan_host_ping_location.c_str(),
-        GBE_local_lobby.allow_cheats ? 1u : 0u,
-        GBE_local_lobby.fill_with_bots ? 1u : 0u,
-        GBE_local_lobby.allow_spectating ? 1u : 0u,
-        GBE_local_lobby.visibility,
-        GBE_local_lobby.bot_difficulty_radiant,
-        GBE_local_lobby.bot_difficulty_dire,
-        static_cast<unsigned long long>(GBE_local_lobby.bot_radiant),
-        static_cast<unsigned long long>(GBE_local_lobby.bot_dire),
-        GBE_local_lobby.room_name.c_str(),
-        GBE_local_lobby.pass_key.size()
+        updated_lobby_snapshot.game_mode,
+        updated_lobby_snapshot.server_region,
+        updated_lobby_snapshot.lan ? 1u : 0u,
+        updated_lobby_snapshot.lan_host_ping_location.c_str(),
+        updated_lobby_snapshot.allow_cheats ? 1u : 0u,
+        updated_lobby_snapshot.fill_with_bots ? 1u : 0u,
+        updated_lobby_snapshot.allow_spectating ? 1u : 0u,
+        updated_lobby_snapshot.visibility,
+        updated_lobby_snapshot.bot_difficulty_radiant,
+        updated_lobby_snapshot.bot_difficulty_dire,
+        static_cast<unsigned long long>(updated_lobby_snapshot.bot_radiant),
+        static_cast<unsigned long long>(updated_lobby_snapshot.bot_dire),
+        updated_lobby_snapshot.room_name.c_str(),
+        updated_lobby_snapshot.pass_key.size()
     );
     return true;
 }

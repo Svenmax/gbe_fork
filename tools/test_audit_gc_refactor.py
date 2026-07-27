@@ -1096,6 +1096,9 @@ void f()
     local_lobby.apply("7046_details_update", [](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::apply_lobby_details_update(lobby, request);
     });
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    if (snapshot.active && snapshot.lobby_id != 0)
+        log(snapshot.lobby_id, snapshot.generic_lobby_id, snapshot.room_name, snapshot.server_region, snapshot.lan, snapshot.lan_host_ping_location, snapshot.game_mode, snapshot.pass_key.size(), snapshot.custom_game.game_id, snapshot.allow_cheats, snapshot.fill_with_bots, snapshot.allow_spectating, snapshot.visibility, snapshot.bot_difficulty_radiant, snapshot.bot_difficulty_dire, snapshot.bot_radiant, snapshot.bot_dire);
 }
 """,
             "gbe_dota_lobby_join_handlers.cpp": """
@@ -1471,6 +1474,8 @@ void f()
     gbe::dota_lobby_state::apply_create_lobby_state_plan(GBE_local_lobby, state_apply_plan);
     gbe::dota_lobby_state::apply_lobby_generic_lobby_id(GBE_local_lobby, generic_lobby_id);
     gbe::dota_lobby_state::apply_lobby_details_update(GBE_local_lobby, request);
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0)
+        log(GBE_local_lobby.lobby_id, GBE_local_lobby.generic_lobby_id, GBE_local_lobby.room_name, GBE_local_lobby.server_region, GBE_local_lobby.lan, GBE_local_lobby.lan_host_ping_location, GBE_local_lobby.game_mode, GBE_local_lobby.pass_key.size(), GBE_local_lobby.custom_game.game_id, GBE_local_lobby.allow_cheats, GBE_local_lobby.fill_with_bots, GBE_local_lobby.allow_spectating, GBE_local_lobby.visibility, GBE_local_lobby.bot_difficulty_radiant, GBE_local_lobby.bot_difficulty_dire, GBE_local_lobby.bot_radiant, GBE_local_lobby.bot_dire);
 }
 """,
             "gbe_dota_lobby_join_handlers.cpp": """
@@ -1784,6 +1789,10 @@ void f()
         )
         self.assertIn(
             "gbe_dota_lobby_create_handlers.cpp: lobby details update must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: create/set-details guard and log reads must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(
