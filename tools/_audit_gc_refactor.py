@@ -1474,6 +1474,8 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_lobby_slot_handlers.cpp: member team/slot updates must route through LocalLobbyOwner::apply")
     if re.search(r"find_lobby_member_steam_id_by_account_id\s*\(\s*GBE_local_lobby\.members\s*,", slot_handlers):
         issues.append("gbe_dota_lobby_slot_handlers.cpp: member kick lookup must route through LocalLobbyOwner::snapshot")
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|generic_lobby_id|owner_steam_id|owner_team|owner_slot)\b", slot_handlers):
+        issues.append("gbe_dota_lobby_slot_handlers.cpp: lobby guard and log reads must route through LocalLobbyOwner::snapshot")
     if re.search(r"apply_lobby_bot_difficulty_for_team\s*\(\s*GBE_local_lobby\s*,", slot_handlers):
         issues.append("gbe_dota_lobby_slot_handlers.cpp: bot difficulty updates must route through LocalLobbyOwner::apply")
     if re.search(r"GBE_NormalizeDotaArcadeLobbyMemberSlots\s*\(\s*GBE_local_lobby\s*\)", slot_handlers):

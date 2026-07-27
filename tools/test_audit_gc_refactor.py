@@ -1111,6 +1111,12 @@ void f()
 void f()
 {
     gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    if (!snapshot.active || snapshot.lobby_id == 0 || snapshot.generic_lobby_id == 0)
+        return;
+    if (local_steam_id != snapshot.owner_steam_id)
+        return;
+    log(snapshot.lobby_id, snapshot.generic_lobby_id, snapshot.owner_team, snapshot.owner_slot);
     local_lobby.apply("7047_owner_team_slot", [](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::apply_lobby_owner_team(lobby, team);
         gbe::dota_lobby_state::apply_lobby_owner_slot(lobby, slot);
@@ -1442,6 +1448,11 @@ void f()
             "gbe_dota_lobby_slot_handlers.cpp": """
 void f()
 {
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.generic_lobby_id == 0)
+        return;
+    if (local_steam_id != GBE_local_lobby.owner_steam_id)
+        return;
+    log(GBE_local_lobby.lobby_id, GBE_local_lobby.generic_lobby_id, GBE_local_lobby.owner_team, GBE_local_lobby.owner_slot);
     gbe::dota_lobby_state::apply_lobby_owner_team(GBE_local_lobby, team);
     gbe::dota_lobby_state::apply_lobby_owner_slot(GBE_local_lobby, slot);
     gbe::dota_lobby_state::apply_lobby_member_kick_snapshot(GBE_local_lobby, before_lobby);
@@ -1701,6 +1712,10 @@ void f()
         )
         self.assertIn(
             "gbe_dota_lobby_slot_handlers.cpp: member kick lookup must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_slot_handlers.cpp: lobby guard and log reads must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(

@@ -59,7 +59,10 @@ using GBE_DotaPracticeLobbyKickRequest = gbe::proto_wire::DotaPracticeLobbyKickR
 
 bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const std::string &request_body, uint64 request_job_id, bool has_request_job, bool wrapped, const std::string *outer_session_field_raw)
 {
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+
+    if (!local_lobby_snapshot.active || local_lobby_snapshot.lobby_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7047 because no local lobby is active");
         return true;
     }
@@ -77,8 +80,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
 
     const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
     const uint32 local_account_id = settings->get_local_steam_id().GetAccountID();
-    const bool local_is_owner = local_steam_id != 0ull && local_steam_id == GBE_local_lobby.owner_steam_id;
-    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const bool local_is_owner = local_steam_id != 0ull && local_steam_id == local_lobby_snapshot.owner_steam_id;
     if (local_is_owner) {
         local_lobby.apply("7047_owner_team_slot", [&request](GBE_LocalLobby &lobby) {
             if (request.has_team)
@@ -101,7 +103,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
             lobby_finished);
     });
     if (request.has_bot_difficulty) {
-        const uint32 bot_team = request.has_team ? request.team : GBE_local_lobby.owner_team;
+        const uint32 bot_team = request.has_team ? request.team : local_lobby_snapshot.owner_team;
         local_lobby.apply("7047_bot_difficulty", [bot_team, &request](GBE_LocalLobby &lobby) {
             gbe::dota_lobby_state::apply_lobby_bot_difficulty_for_team(
                 lobby,
@@ -123,7 +125,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
     if (has_request_job) {
         std::string response_7055;
         if (!gbe::gc_message::build_dota_practice_lobby_response_payload(request_job_id, true, response_7055)) {
-            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7055 payload for 7047 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+            GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 7055 payload for 7047 LobbyID=%llu", static_cast<unsigned long long>(local_lobby_snapshot.lobby_id));
             return true;
         }
 
@@ -135,7 +137,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Sent wrapped 7055 ack for 7047 LobbyID=%llu request_job=%llu size=%zu body_prefix=%s packet_prefix=%s",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
                 static_cast<unsigned long long>(request_job_id),
                 wrapped_7055.size(),
                 gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(response_7055.data()), response_7055.size(), 32).c_str(),
@@ -145,7 +147,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Sent direct 7055 ack for 7047 LobbyID=%llu request_job=%llu size=%zu body_prefix=%s",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
                 static_cast<unsigned long long>(request_job_id),
                 response_7055.size(),
                 gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(response_7055.data()), response_7055.size(), 32).c_str()
@@ -158,8 +160,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
         "[LOBBY] Team slot updated. local_team=%u local_slot=%u owner_team=%u owner_slot=%u bot_diff_req=%u has_bot_diff=%d",
         request.has_team ? request.team : 0u,
         request.has_slot ? request.slot : 0u,
-        GBE_local_lobby.owner_team,
-        GBE_local_lobby.owner_slot,
+        local_lobby_snapshot.owner_team,
+        local_lobby_snapshot.owner_slot,
         request.bot_difficulty,
         request.has_bot_difficulty ? 1 : 0
     );
@@ -169,14 +171,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
 
 bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyKickRequest(const std::string &request_body, bool wrapped, const std::string *outer_session_field_raw)
 {
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.generic_lobby_id == 0) {
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+
+    if (!local_lobby_snapshot.active || local_lobby_snapshot.lobby_id == 0 || local_lobby_snapshot.generic_lobby_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7081 because no local lobby is active");
         return true;
     }
 
     const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
-    if (local_steam_id != GBE_local_lobby.owner_steam_id) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7081 because local user is not Dota lobby owner LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+    if (local_steam_id != local_lobby_snapshot.owner_steam_id) {
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7081 because local user is not Dota lobby owner LobbyID=%llu", static_cast<unsigned long long>(local_lobby_snapshot.lobby_id));
         return true;
     }
 
@@ -192,36 +197,34 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyKickRequest(const std::s
     }
 
     if (request.account_id == 0u || request.account_id == settings->get_local_steam_id().GetAccountID()) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7081 invalid target account_id=%u LobbyID=%llu", request.account_id, static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7081 invalid target account_id=%u LobbyID=%llu", request.account_id, static_cast<unsigned long long>(local_lobby_snapshot.lobby_id));
         return true;
     }
 
-    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
-    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
     const uint64 kicked_steam_id = gbe::dota_lobby_flow::find_lobby_member_steam_id_by_account_id(local_lobby_snapshot.members, request.account_id);
 
     if (kicked_steam_id == 0ull) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7081 because target account_id=%u is not in Dota lobby LobbyID=%llu", request.account_id, static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7081 because target account_id=%u is not in Dota lobby LobbyID=%llu", request.account_id, static_cast<unsigned long long>(local_lobby_snapshot.lobby_id));
         return true;
     }
 
     Steam_Client *steam_client = get_steam_client();
     if (!steam_client || !steam_client->steam_matchmaking) {
-        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7081 because matchmaking is unavailable LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
+        GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7081 because matchmaking is unavailable LobbyID=%llu", static_cast<unsigned long long>(local_lobby_snapshot.lobby_id));
         return true;
     }
 
     GBE_LocalLobby before_lobby = local_lobby_snapshot;
     gbe::dota_lobby_flow::clear_lobby_member_by_account_id(before_lobby.members, request.account_id);
 
-    CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
+    CSteamID generic_lobby_id((uint64)local_lobby_snapshot.generic_lobby_id);
     const bool kicked = steam_client->steam_matchmaking->KickLobbyMemberForDota(generic_lobby_id, CSteamID((uint64)kicked_steam_id));
     if (!kicked) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Failed kicking generic lobby member for 7081 LobbyID=%llu generic_lobby_id=%llu target_account=%u target_steam=%llu",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+            static_cast<unsigned long long>(local_lobby_snapshot.generic_lobby_id),
             request.account_id,
             static_cast<unsigned long long>(kicked_steam_id)
         );
@@ -241,8 +244,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyKickRequest(const std::s
         "[LOBBY] Kicked practice lobby member target_account=%u target_steam=%llu LobbyID=%llu generic_lobby_id=%llu wrapped=%d",
         request.account_id,
         static_cast<unsigned long long>(kicked_steam_id),
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.generic_lobby_id),
         wrapped ? 1 : 0
     );
     return true;
