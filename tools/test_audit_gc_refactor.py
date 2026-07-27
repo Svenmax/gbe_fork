@@ -1898,6 +1898,10 @@ void f()
             issues,
         )
         self.assertIn(
+            "gbe_dota_lobby_snapshot_coordinator.cpp: owner transfer snapshot reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
             "gbe_dota_lobby_state_restore_coordinator.cpp: Local lobby reset must route through LocalLobbyOwner::replace_for_reset",
             issues,
         )

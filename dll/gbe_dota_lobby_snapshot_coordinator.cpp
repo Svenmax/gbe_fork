@@ -232,35 +232,35 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyStateWithPreviousSlots(
             GBE_DotaLobbyCaptureMode::WithoutSharedRestore))
         return false;
 
-    const uint64 new_owner_steam_id = GBE_local_lobby.owner_steam_id;
-    const size_t before_count = GBE_local_lobby.members.size();
-    {
-        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
-        local_lobby.apply("owner_transfer_preserve_slots", [&](GBE_LocalLobby &lobby) {
-            gbe::dota_lobby_flow::preserve_lobby_owner_transfer_slots(lobby.members, previous_members, previous_owner_steam_id, new_owner_steam_id);
-        });
-    }
-    if (!gbe::dota_lobby_flow::lobby_members_equal(snapshot.members, GBE_local_lobby.members)) {
-        snapshot.members = GBE_local_lobby.members;
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    const uint64 new_owner_steam_id = local_lobby_snapshot.owner_steam_id;
+    const size_t before_count = local_lobby_snapshot.members.size();
+    local_lobby.apply("owner_transfer_preserve_slots", [&](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_flow::preserve_lobby_owner_transfer_slots(lobby.members, previous_members, previous_owner_steam_id, new_owner_steam_id);
+    });
+
+    const GBE_LocalLobby &preserved_lobby_snapshot = local_lobby.snapshot();
+    if (!gbe::dota_lobby_flow::lobby_members_equal(snapshot.members, preserved_lobby_snapshot.members)) {
+        snapshot.members = preserved_lobby_snapshot.members;
         if (is_server)
             GBE_PublishSharedDotaLobbyState(reason ? reason : "owner_transfer_preserve_slots");
 
         size_t previous_owner_index = 0;
         size_t new_owner_index = 0;
         const bool has_previous_owner_index = gbe::dota_lobby_flow::find_lobby_member_index(previous_members, previous_owner_steam_id, previous_owner_index);
-        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
-        const bool has_new_owner_index = gbe::dota_lobby_flow::find_lobby_member_index(local_lobby.snapshot().members, new_owner_steam_id, new_owner_index);
+        const bool has_new_owner_index = gbe::dota_lobby_flow::find_lobby_member_index(preserved_lobby_snapshot.members, new_owner_steam_id, new_owner_index);
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Preserved owner transfer member slots reason=%s lobby_id=%llu old_owner=%llu new_owner=%llu old_owner_index=%lld new_owner_index=%lld before_members=%zu after_members=%zu",
             reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(preserved_lobby_snapshot.lobby_id),
             static_cast<unsigned long long>(previous_owner_steam_id),
             static_cast<unsigned long long>(new_owner_steam_id),
             has_previous_owner_index ? static_cast<long long>(previous_owner_index) : -1ll,
             has_new_owner_index ? static_cast<long long>(new_owner_index) : -1ll,
             before_count,
-            GBE_local_lobby.members.size()
+            preserved_lobby_snapshot.members.size()
         );
     }
 

@@ -1642,6 +1642,8 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_lobby_snapshot_coordinator.cpp: owner transfer slot preservation must route through LocalLobbyOwner::apply")
     if re.search(r"find_lobby_member_index\s*\(\s*GBE_local_lobby\.members\s*,", snapshot_coordinator):
         issues.append("gbe_dota_lobby_snapshot_coordinator.cpp: owner transfer member index read must route through LocalLobbyOwner::snapshot")
+    if re.search(r"GBE_local_lobby\.(?:owner_steam_id|members|lobby_id)\b", snapshot_coordinator):
+        issues.append("gbe_dota_lobby_snapshot_coordinator.cpp: owner transfer snapshot reads must route through LocalLobbyOwner::snapshot")
 
     publish_coordinator = strip_comments(source_texts.get("gbe_dota_lobby_state_publish_coordinator.cpp", ""))
     if re.search(r"apply_cache_subscription_metadata\s*\(\s*GBE_local_lobby\s*,", publish_coordinator):
