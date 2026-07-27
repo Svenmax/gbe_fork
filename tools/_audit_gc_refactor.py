@@ -1650,6 +1650,12 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: reconnect source compose must route through LocalLobbyOwner::snapshot")
     if re.search(r"GBE_LocalLobby\s+projected_lobby\s*=\s*GBE_local_lobby", publish_coordinator):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: capture projection must route through LocalLobbyOwner::snapshot")
+    if re.search(r"GBE_LocalLobby\s*&\s*captured_lobby\s*=\s*[^;]*GBE_local_lobby", publish_coordinator, flags=re.DOTALL):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: capture mutable fallback must route through LocalLobbyOwner::apply")
+    if not re.search(r"refresh_captured_lobby\s*=\s*\[&\]\s*\(\s*GBE_LocalLobby\s*&\s*captured_lobby\s*\)", publish_coordinator):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: capture refresh must target an explicit lobby parameter")
+    if not re.search(r"local_lobby\.apply\s*\([^;]*refresh_captured_lobby\s*\(\s*captured_lobby\s*\)", publish_coordinator, flags=re.DOTALL):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: capture mutable refresh must route through LocalLobbyOwner::apply")
 
     if re.search(r"(?:const\s+)?GBE_LocalLobby\s+postgame_lobby\s*=\s*GBE_local_lobby", flow_coordinator):
         issues.append("gbe_dota_lobby_flow_coordinator.cpp: postgame finalization snapshot must route through LocalLobbyOwner::snapshot")

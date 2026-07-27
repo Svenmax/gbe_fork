@@ -1338,6 +1338,13 @@ void f()
     gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
     const GBE_LocalLobby &snapshot = local_lobby.snapshot();
     GBE_LocalLobby projected_lobby = snapshot;
+    auto refresh_captured_lobby = [&](GBE_LocalLobby &captured_lobby) {
+        captured_lobby.members = members;
+    };
+    refresh_captured_lobby(projected_lobby);
+    local_lobby.apply("capture_current_lobby_state", [&](GBE_LocalLobby &captured_lobby) {
+        refresh_captured_lobby(captured_lobby);
+    });
     local_lobby.apply("cache_metadata", [](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::apply_cache_subscription_metadata(lobby, has_version, version, has_service_id, service_id, service_list, has_sync_version, sync_version);
     });
@@ -1543,6 +1550,7 @@ void f()
     gbe::dota_lobby_state::apply_runtime_metadata(GBE_local_lobby, connect, server_id);
     gbe::dota_reconnect::source_from_local_lobby(GBE_local_lobby);
     GBE_LocalLobby projected_lobby = GBE_local_lobby;
+    GBE_LocalLobby &captured_lobby = pure ? projected_lobby : GBE_local_lobby;
 }
 """,
             "gbe_dota_lobby_list_handlers.cpp": """
@@ -1878,6 +1886,18 @@ void f()
         )
         self.assertIn(
             "gbe_dota_lobby_state_publish_coordinator.cpp: capture projection must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_publish_coordinator.cpp: capture mutable fallback must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_publish_coordinator.cpp: capture refresh must target an explicit lobby parameter",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_publish_coordinator.cpp: capture mutable refresh must route through LocalLobbyOwner::apply",
             issues,
         )
         self.assertIn(

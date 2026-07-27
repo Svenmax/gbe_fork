@@ -90,10 +90,8 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(
         mode == GBE_DotaLobbyCaptureMode::PureSnapshotProjection;
     gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
     GBE_LocalLobby projected_lobby = local_lobby.snapshot();
-    GBE_LocalLobby &captured_lobby = pure_snapshot_projection
-        ? projected_lobby
-        : GBE_local_lobby;
 
+    auto refresh_captured_lobby = [&](GBE_LocalLobby &captured_lobby) {
     if (captured_lobby.generic_lobby_id != 0) {
         Steam_Client *steam_client = get_steam_client();
         if (steam_client && steam_client->steam_matchmaking) {
@@ -184,8 +182,8 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(
                         "GC_DOTA_LOBBY",
                         "[LOBBY] Repaired missing generic lobby owner before Dota snapshot reason=%s dota_lobby_id=%llu generic_lobby_id=%llu",
                         reason ? reason : "capture_current_lobby_state",
-                        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                        static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id)
+                        static_cast<unsigned long long>(captured_lobby.lobby_id),
+                        static_cast<unsigned long long>(captured_lobby.generic_lobby_id)
                     );
                 }
                 if (!pure_snapshot_projection && !custom_runtime_member_refresh)
@@ -295,8 +293,17 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(
             }
         }
     }
+    };
 
-    snapshot = captured_lobby;
+    if (pure_snapshot_projection) {
+        refresh_captured_lobby(projected_lobby);
+        snapshot = projected_lobby;
+    } else {
+        local_lobby.apply(reason ? reason : "capture_current_lobby_state", [&](GBE_LocalLobby &captured_lobby) {
+            refresh_captured_lobby(captured_lobby);
+        });
+        snapshot = local_lobby.snapshot();
+    }
     return true;
 }
 
