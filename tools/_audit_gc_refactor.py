@@ -1506,6 +1506,10 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_custom_game_lifecycle_handlers.cpp: custom game loading metadata must route through LocalLobbyOwner::apply")
     if re.search(r"has_launch_server_setup_sync\s*\(\s*GBE_local_lobby\s*\)", custom_game_lifecycle_handlers):
         issues.append("gbe_dota_custom_game_lifecycle_handlers.cpp: launch server setup reads must route through LocalLobbyOwner::snapshot")
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|custom_game|state|game_state|launch_phase)\b", custom_game_lifecycle_handlers):
+        issues.append("gbe_dota_custom_game_lifecycle_handlers.cpp: lifecycle handler guard and state reads must route through LocalLobbyOwner::snapshot")
+    if re.search(r"decide_(?:ready_up|started_loading|finished_loading)\s*\([^;]*GBE_local_lobby", custom_game_lifecycle_handlers, flags=re.DOTALL):
+        issues.append("gbe_dota_custom_game_lifecycle_handlers.cpp: lifecycle decision compose must route through LocalLobbyOwner::snapshot")
 
     launch_coordinator = strip_comments(source_texts.get("gbe_dota_lobby_launch_coordinator.cpp", ""))
     if re.search(r"apply_lobby_owner_connected\s*\(\s*GBE_local_lobby\s*,", launch_coordinator):

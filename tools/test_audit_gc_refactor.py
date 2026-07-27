@@ -1490,6 +1490,10 @@ void f()
 {
     gbe::dota_lobby_state::apply_custom_game_loading_metadata(GBE_local_lobby, custom_game_id, start_time);
     gbe::dota_lobby_state::has_launch_server_setup_sync(GBE_local_lobby);
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || !has_custom_game(GBE_local_lobby.custom_game))
+        return;
+    state(GBE_local_lobby.state, GBE_local_lobby.game_state, GBE_local_lobby.launch_phase);
+    decide_ready_up(request_state, machine_request, GBE_local_lobby, setup, run, reason);
 }
 """,
             "gbe_dota_lobby_launch_coordinator.cpp": """
@@ -1780,6 +1784,14 @@ void f()
         )
         self.assertIn(
             "gbe_dota_custom_game_lifecycle_handlers.cpp: launch server setup reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_handlers.cpp: lifecycle handler guard and state reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_handlers.cpp: lifecycle decision compose must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(
