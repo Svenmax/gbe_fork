@@ -1102,9 +1102,18 @@ void f()
 void f()
 {
     gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &pre_join_lobby_snapshot = local_lobby.snapshot();
+    if (!pre_join_lobby_snapshot.active || pre_join_lobby_snapshot.lobby_id == 0)
+        return;
+    join_context.current_lobby = pre_join_lobby_snapshot;
     local_lobby.apply("7044_join", [](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::apply_join_lobby_merge_plan(lobby, join_plan);
     });
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(local_lobby_snapshot, owner_name, response_24);
+    log(local_lobby_snapshot.lobby_id, local_lobby_snapshot.owner_steam_id, local_lobby_snapshot.members.size(), local_lobby_snapshot.custom_game.game_id);
+    log(local_lobby_snapshot.state, local_lobby_snapshot.game_state, local_lobby_snapshot.match_id, local_lobby_snapshot.server_id);
+    log(local_lobby_snapshot.connect, local_lobby_snapshot.generic_lobby_id, local_lobby_snapshot.pass_key.size());
 }
 """,
             "gbe_dota_lobby_slot_handlers.cpp": """
@@ -1443,6 +1452,12 @@ void f()
 {
     gbe::dota_lobby_state::apply_join_lobby_merge_plan(GBE_local_lobby, join_plan);
     GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(GBE_local_lobby, owner_name, response_24);
+    join_context.current_lobby = GBE_local_lobby;
+    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0)
+        return;
+    log(GBE_local_lobby.lobby_id, GBE_local_lobby.owner_steam_id, GBE_local_lobby.members.size(), GBE_local_lobby.custom_game.game_id);
+    log(GBE_local_lobby.state, GBE_local_lobby.game_state, GBE_local_lobby.match_id, GBE_local_lobby.server_id);
+    log(GBE_local_lobby.connect, GBE_local_lobby.generic_lobby_id, GBE_local_lobby.pass_key.size());
 }
 """,
             "gbe_dota_lobby_slot_handlers.cpp": """
@@ -1730,6 +1745,14 @@ void f()
         )
         self.assertIn(
             "gbe_dota_lobby_join_handlers.cpp: authoritative cache build must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_join_handlers.cpp: join context current lobby must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_join_handlers.cpp: join guard and response reads must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(

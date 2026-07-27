@@ -1464,6 +1464,10 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_lobby_join_handlers.cpp: join lobby merge must route through LocalLobbyOwner::apply")
     if re.search(r"GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed\s*\(\s*GBE_local_lobby\s*,", join_handlers):
         issues.append("gbe_dota_lobby_join_handlers.cpp: authoritative cache build must route through LocalLobbyOwner::snapshot")
+    if re.search(r"join_context\.current_lobby\s*=\s*GBE_local_lobby\b", join_handlers):
+        issues.append("gbe_dota_lobby_join_handlers.cpp: join context current lobby must route through LocalLobbyOwner::snapshot")
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|owner_steam_id|members|custom_game|state|game_state|match_id|server_id|connect|generic_lobby_id|pass_key)\b", join_handlers):
+        issues.append("gbe_dota_lobby_join_handlers.cpp: join guard and response reads must route through LocalLobbyOwner::snapshot")
 
     slot_handlers = strip_comments(source_texts.get("gbe_dota_lobby_slot_handlers.cpp", ""))
     if re.search(r"apply_lobby_owner_(?:team|slot)\s*\(\s*GBE_local_lobby\s*,", slot_handlers):
