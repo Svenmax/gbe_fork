@@ -23,6 +23,7 @@
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_custom_lobby_http.h"
 #include "gbe_dota_handler_registry.h"
+#include "gbe_dota_binary_helpers.h"
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
@@ -324,9 +325,11 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         }
     }
 
-    const uint32 previous_game_state = GBE_local_lobby.game_state;
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    const uint32 previous_game_state = local_lobby_snapshot.game_state;
     const gbe::dota_lobby_state::QueuedLobbyStateApplyPlan apply_plan = gbe::dota_lobby_state::compose_queued_lobby_state_apply_plan(
-        GBE_local_lobby,
+        local_lobby_snapshot,
         message.lobby_state,
         message.lobby_game_state,
         gc_profile == GC_PROFILE_DOTA2,
@@ -344,7 +347,11 @@ void Steam_Game_Coordinator::GBE_ApplyQueuedLobbyState(const GC_Message &message
         );
     }
 
-    gbe::dota_lobby_state::apply_queued_lobby_state_apply_plan(GBE_local_lobby, apply_plan);
+    {
+        local_lobby.apply("queued_state", [&apply_plan](GBE_LocalLobby &lobby) {
+            gbe::dota_lobby_state::apply_queued_lobby_state_apply_plan(lobby, apply_plan);
+        });
+    }
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
@@ -839,6 +846,19 @@ std::string Steam_Game_Coordinator::build_protomsg_header(uint32 msg_type, JobID
     return message;
 }
 
+const GBE_LocalLobby &Steam_Game_Coordinator::GBE_PeerLocalLobbySnapshot() const
+{
+    return GBE_local_lobby;
+}
+
+void Steam_Game_Coordinator::GBE_ApplyPeerClientLobbyRestoreSnapshot(const GBE_LocalLobby &snapshot)
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("peer_client_lobby_restore", [&snapshot](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_client_lobby_restore_snapshot(lobby, snapshot);
+    });
+}
+
 template <class T>
 std::tuple<ProtoBufMsgHeader_t, CMsgProtoBufHeader, T, bool> Steam_Game_Coordinator::parse_protomsg(const void *input, uint32 input_size)
 {
@@ -1047,7 +1067,8 @@ void Steam_Game_Coordinator::initialize_gc()
 void Steam_Game_Coordinator::GBE_ClearDotaLobbyRuntimeState()
 {
     const uint64 generation = GBE_local_lobby.generation;
-    gbe::dota_lobby_state::clear_local_lobby(GBE_local_lobby);
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.replace_for_reset(GBE_LocalLobby{});
     const auto clear_result = GBE_SharedLobbyStore().compare_clear(generation);
     if (clear_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
         GBE_GC_DebugLog(
@@ -1153,8 +1174,10 @@ std::string Steam_Game_Coordinator::GBE_GetDotaJoinableCustomLobbiesHTTPJSON(uin
     response["lobbies"] = nlohmann::json::array();
 
     std::vector<GBE_LocalLobby> lobbies = GBE_GetDotaGenericLobbySnapshots("http_joinable_custom_lobbies");
-    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0ull)
-        lobbies.push_back(GBE_local_lobby);
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0ull)
+        lobbies.push_back(local_lobby_snapshot);
 
     std::vector<std::uint64_t> seen_lobby_ids;
     for (const GBE_LocalLobby &lobby : lobbies) {
@@ -1231,7 +1254,12 @@ bool Steam_Game_Coordinator::ResetGCMemory(
         gbe::dota_lobby_state::compute_runtime_reset_decision(
             gbe::dota_diagnostic::reason_from_string(reason ? reason : ""));
     clear_dota_runtime_state(reset_decision.preserve_reconnect_context);
-    gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, next_generation);
+    {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        local_lobby.apply(reason ? reason : "runtime_reset", [next_generation](GBE_LocalLobby &lobby) {
+            gbe::dota_lobby_state::apply_lobby_generation(lobby, next_generation);
+        });
+    }
 
     std::size_t equipped_item_count = 0;
     std::size_t equip_state_count = 0;

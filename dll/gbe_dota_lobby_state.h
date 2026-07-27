@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace gbe::proto_wire {
@@ -148,6 +149,24 @@ struct GBE_SharedDotaLobbyState {
 };
 
 namespace gbe::dota_lobby_state {
+
+class LocalLobbyOwner {
+public:
+    explicit LocalLobbyOwner(GBE_LocalLobby &lobby);
+
+    const GBE_LocalLobby &snapshot() const;
+    void replace_for_reset(GBE_LocalLobby lobby);
+
+    template <typename Apply>
+    decltype(auto) apply(const char *reason, Apply &&apply)
+    {
+        (void)reason;
+        return std::forward<Apply>(apply)(lobby_);
+    }
+
+private:
+    GBE_LocalLobby &lobby_;
+};
 
 struct CreateLobbyPlan {
     GBE_LocalLobby lobby;

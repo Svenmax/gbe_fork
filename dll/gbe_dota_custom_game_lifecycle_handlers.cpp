@@ -43,7 +43,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameLifecycleRequest(const gbe:
     request_state.game_state = GBE_local_lobby.game_state;
     request_state.launch_phase = GBE_local_lobby.launch_phase;
     request_state.has_custom_game = true;
-    request_state.has_launch_server_setup = gbe::dota_lobby_state::has_launch_server_setup_sync(GBE_local_lobby);
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    request_state.has_launch_server_setup = gbe::dota_lobby_state::has_launch_server_setup_sync(local_lobby_snapshot);
 
     auto execute_decision = [&](const gbe::dota_custom_game_lifecycle::LifecycleDecision &decision) {
         if (!decision.accepted)
@@ -89,12 +91,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameLifecycleRequest(const gbe:
         const auto request = gbe::proto_wire::parse_dota8052_started_loading_request(body, body_size);
         if (request.lobby_id != 0 && request.lobby_id != GBE_local_lobby.lobby_id)
             return true;
-        gbe::dota_lobby_state::apply_custom_game_loading_metadata(
-            GBE_local_lobby,
-            request.custom_game_id,
-            static_cast<uint32>(request.start_time));
+        {
+            local_lobby.apply(context.wrapped ? "8052_wrapped_started_loading" : "8052_started_loading", [&request](GBE_LocalLobby &lobby) {
+                gbe::dota_lobby_state::apply_custom_game_loading_metadata(
+                    lobby,
+                    request.custom_game_id,
+                    static_cast<uint32>(request.start_time));
+            });
+        }
 
-        request_state.has_launch_server_setup = gbe::dota_lobby_state::has_launch_server_setup_sync(GBE_local_lobby);
+        request_state.has_launch_server_setup = gbe::dota_lobby_state::has_launch_server_setup_sync(local_lobby_snapshot);
         gbe::dota_lifecycle_state_machine::CustomGameRequest machine_request{};
         machine_request.event = event_mapping.event;
         execute_decision(gbe::dota_custom_game_lifecycle::decide_started_loading(

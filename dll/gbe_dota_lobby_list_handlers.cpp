@@ -19,6 +19,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_dota_custom_game.h"
@@ -70,13 +71,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLobbyListRequest(bool has_request_job
     std::vector<GBE_LocalLobby> lobby_snapshots;
     if (!finishing_leave)
         lobby_snapshots = GBE_GetDotaGenericLobbySnapshots("8011_lobby_list");
-    if (!finishing_leave && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
-        const uint64 local_lobby_id = GBE_local_lobby.lobby_id;
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (!finishing_leave && local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0) {
+        const uint64 local_lobby_id = local_lobby_snapshot.lobby_id;
         const bool already_included = std::any_of(lobby_snapshots.begin(), lobby_snapshots.end(), [local_lobby_id](const GBE_LocalLobby &snapshot) {
             return snapshot.lobby_id == local_lobby_id;
         });
         if (!already_included)
-            lobby_snapshots.push_back(GBE_local_lobby);
+            lobby_snapshots.push_back(local_lobby_snapshot);
     }
 
     std::vector<std::string> entries;
@@ -160,13 +163,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomLobbyListRequest(const std::str
     gbe::proto_wire::read_bytes_field(request_data, request_body.size(), 2u, requested_pass_key);
 
     std::vector<GBE_LocalLobby> lobby_snapshots = GBE_GetDotaGenericLobbySnapshots("7042_custom_lobby_list");
-    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0ull) {
-        const uint64 local_lobby_id = GBE_local_lobby.lobby_id;
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0ull) {
+        const uint64 local_lobby_id = local_lobby_snapshot.lobby_id;
         const bool already_included = std::any_of(lobby_snapshots.begin(), lobby_snapshots.end(), [local_lobby_id](const GBE_LocalLobby &snapshot) {
             return snapshot.lobby_id == local_lobby_id;
         });
         if (!already_included)
-            lobby_snapshots.push_back(GBE_local_lobby);
+            lobby_snapshots.push_back(local_lobby_snapshot);
     }
 
     std::vector<uint64> seen_lobby_ids;

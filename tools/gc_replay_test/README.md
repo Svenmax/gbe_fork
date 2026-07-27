@@ -21,6 +21,16 @@ Examples:
 
 Hex payloads may use `0x` or `hex=` prefixes and may include `_`, `-`, or `:` separators.
 
+## Capture conversion
+
+Raw NetHook capture directories can be converted into replay fixtures with:
+
+```bash
+python3 tools/gc_replay_test/capture_dir_to_fixture.py /path/to/captures/hostinviteplayerlobby --output tools/gc_replay_test/fixtures/hostinviteplayerlobby.txt
+```
+
+The converter reads `*_5452_*` and `*_5453_*` GC `.bin` files by default, preserves capture ordering in labels, and emits the fixture format described above. Use `--include-direct` when a scenario intentionally includes non-GC direct Steam messages.
+
 ## Usage
 
 Generate a summary:

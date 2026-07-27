@@ -129,8 +129,11 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
         return true;
     if (GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Join, "7044_join") == GBE_DotaGenerationAdvanceResult::Exhausted)
         return true;
-    gbe::dota_lobby_state::apply_join_lobby_merge_plan(GBE_local_lobby, join_plan);
-    gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, GBE_CurrentDotaLobbyGeneration());
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("7044_join", [this, &join_plan](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_join_lobby_merge_plan(lobby, join_plan);
+        gbe::dota_lobby_state::apply_lobby_generation(lobby, GBE_CurrentDotaLobbyGeneration());
+    });
 
     const GBE_DotaActionList join_actions = gbe::dota_lobby_flow::join_lobby_action_list(
         gbe::dota_lobby_flow::join_lobby_action_plan_from_context(join_context),
@@ -204,7 +207,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinRequest(const std::s
     );
 
     std::string response_24;
-    if (!GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(GBE_local_lobby, GBE_GetDotaLobbyOwnerName(), response_24)) {
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (!GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(local_lobby_snapshot, GBE_GetDotaLobbyOwnerName(), response_24)) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Failed building 24 cache update for 7044 LobbyID=%llu", static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
         return true;
     }

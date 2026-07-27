@@ -104,6 +104,36 @@ GBE_LocalLobby make_active_lobby()
     return lobby;
 }
 
+bool test_local_lobby_owner_boundaries()
+{
+    bool ok = true;
+
+    GBE_LocalLobby backing = make_active_lobby();
+    backing.generation = 7ull;
+    gbe::dota_lobby_state::LocalLobbyOwner owner(backing);
+
+    ok &= expect_eq_u64(owner.snapshot().lobby_id, 100ull, "owner snapshot reads backing lobby");
+    ok &= expect_eq_u64(owner.snapshot().generation, 7ull, "owner snapshot reads generation");
+
+    GBE_LocalLobby reset_lobby{};
+    reset_lobby.active = true;
+    reset_lobby.lobby_id = 200ull;
+    reset_lobby.generation = 8ull;
+    owner.replace_for_reset(reset_lobby);
+    ok &= expect_eq_u64(backing.lobby_id, 200ull, "owner reset replaces backing lobby");
+    ok &= expect_eq_u64(owner.snapshot().generation, 8ull, "owner reset updates snapshot");
+
+    owner.apply("unit_test_apply", [](GBE_LocalLobby &lobby) {
+        lobby.lobby_id = 300ull;
+        lobby.state = 2u;
+        return true;
+    });
+    ok &= expect_eq_u64(backing.lobby_id, 300ull, "owner apply mutates through named boundary");
+    ok &= expect_eq_u32(owner.snapshot().state, 2u, "owner apply preserves mutation result");
+
+    return ok;
+}
+
 // ---- Category 1: valid launch progression ---------------------------------
 
 bool test_valid_launch_progression()
@@ -2793,6 +2823,7 @@ bool test_generation_change_clears_connection_dedup_properties()
 int main()
 {
     bool ok = true;
+    ok &= test_local_lobby_owner_boundaries();
     ok &= test_valid_launch_progression();
     ok &= test_launch_lifecycle_transition_decision();
     ok &= test_launch_lifecycle_action_sequence();

@@ -19,6 +19,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_proto_buf_header.h"
@@ -433,12 +434,18 @@ bool Steam_Game_Coordinator::GBE_MaybeHandleDotaPracticeLobbyKicked(const char *
         }
     }
     if (still_in_generic_lobby) {
-        gbe::dota_lobby_state::note_generic_lobby_local_member_seen(GBE_local_lobby);
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        local_lobby.apply("generic_lobby_local_member_seen", [](GBE_LocalLobby &lobby) {
+            gbe::dota_lobby_state::note_generic_lobby_local_member_seen(lobby);
+        });
         return false;
     }
 
     if (!GBE_local_lobby.seen_local_in_generic_lobby) {
-        if (gbe::dota_lobby_state::mark_generic_lobby_waiting_join_confirmation_logged(GBE_local_lobby)) {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        if (local_lobby.apply("generic_lobby_waiting_join_confirmation", [](GBE_LocalLobby &lobby) {
+            return gbe::dota_lobby_state::mark_generic_lobby_waiting_join_confirmation_logged(lobby);
+        })) {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Waiting for generic lobby join confirmation before treating local user as kicked. LobbyID=%llu generic_lobby_id=%llu reason=%s",
@@ -462,7 +469,10 @@ bool Steam_Game_Coordinator::GBE_MaybeHandleDotaPracticeLobbyKicked(const char *
         GBE_local_lobby.state < 3u &&
         GBE_local_lobby.match_id != 0ull &&
         !GBE_local_lobby.connect.empty()) {
-        if (gbe::dota_lobby_state::mark_generic_lobby_kicked_suppressed_logged(GBE_local_lobby)) {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        if (local_lobby.apply("generic_lobby_kicked_suppressed", [](GBE_LocalLobby &lobby) {
+            return gbe::dota_lobby_state::mark_generic_lobby_kicked_suppressed_logged(lobby);
+        })) {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Suppressed kicked detection during launched LAN game (generic lobby member loss from P2P disconnect). "
@@ -531,7 +541,10 @@ bool Steam_Game_Coordinator::GBE_AdoptDotaGenericLobbyOwnerIfNeeded(const char *
         GBE_local_lobby.match_id != 0ull &&
         GBE_local_lobby.launch_phase >= GBE_kDotaLaunchPhaseSetupSynced;
     if (preserve_custom_game_launch_owner) {
-        if (gbe::dota_lobby_state::mark_generic_lobby_owner_adoption_suppressed_logged(GBE_local_lobby)) {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        if (local_lobby.apply("generic_lobby_owner_adoption_suppressed", [](GBE_LocalLobby &lobby) {
+            return gbe::dota_lobby_state::mark_generic_lobby_owner_adoption_suppressed_logged(lobby);
+        })) {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Ignored generic lobby owner adoption during custom game launch reason=%s dota_lobby_id=%llu generic_lobby_id=%llu dota_owner=%llu generic_owner=%llu state=%u game_state=%u launch_phase=%s team=%u slot=%u",
@@ -559,7 +572,10 @@ bool Steam_Game_Coordinator::GBE_AdoptDotaGenericLobbyOwnerIfNeeded(const char *
         GBE_local_lobby.state == 2u &&
         GBE_local_lobby.match_id != 0ull &&
         !GBE_local_lobby.connect.empty()) {
-        if (gbe::dota_lobby_state::mark_generic_lobby_owner_adoption_suppressed_logged(GBE_local_lobby)) {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        if (local_lobby.apply("generic_lobby_owner_adoption_suppressed", [](GBE_LocalLobby &lobby) {
+            return gbe::dota_lobby_state::mark_generic_lobby_owner_adoption_suppressed_logged(lobby);
+        })) {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
                 "[LOBBY] Ignored generic lobby owner adoption during launched LAN peer disconnect reason=%s dota_lobby_id=%llu generic_lobby_id=%llu dota_owner=%llu generic_owner=%llu local=%llu state=%u game_state=%u match_id=%llu connect=%s",
@@ -578,27 +594,30 @@ bool Steam_Game_Coordinator::GBE_AdoptDotaGenericLobbyOwnerIfNeeded(const char *
         return false;
     }
 
-    gbe::dota_lobby_flow::adopt_lobby_owner_member(
-        GBE_local_lobby.members,
-        new_owner_steam_id,
-        generic_owner.GetAccountID(),
-        GBE_kDotaTeamGoodGuys,
-        GBE_local_lobby.state == 3u,
-        GBE_local_lobby.owner_steam_id,
-        GBE_local_lobby.owner_account_id,
-        GBE_local_lobby.owner_team,
-        GBE_local_lobby.owner_slot,
-        GBE_local_lobby.owner_hero_id,
-        GBE_local_lobby.owner_connected);
+    std::string new_owner_name;
     if (new_owner_steam_id == local_steam_id) {
-        gbe::dota_lobby_state::apply_lobby_owner_name(
-            GBE_local_lobby,
-            std::string(settings->get_local_name()));
+        new_owner_name = settings->get_local_name();
     } else {
         const char *owner_name = steam_client->steam_matchmaking->GetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyOwnerNameKey);
-        gbe::dota_lobby_state::apply_lobby_owner_name(
-            GBE_local_lobby,
-            std::string(owner_name ? owner_name : "Lobby Host"));
+        new_owner_name = owner_name ? owner_name : "Lobby Host";
+    }
+    {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        local_lobby.apply(reason ? reason : "adopt_generic_owner", [new_owner_steam_id, generic_owner, &new_owner_name](GBE_LocalLobby &lobby) {
+            gbe::dota_lobby_flow::adopt_lobby_owner_member(
+                lobby.members,
+                new_owner_steam_id,
+                generic_owner.GetAccountID(),
+                GBE_kDotaTeamGoodGuys,
+                lobby.state == 3u,
+                lobby.owner_steam_id,
+                lobby.owner_account_id,
+                lobby.owner_team,
+                lobby.owner_slot,
+                lobby.owner_hero_id,
+                lobby.owner_connected);
+            gbe::dota_lobby_state::apply_lobby_owner_name(lobby, new_owner_name);
+        });
     }
 
     if (new_owner_steam_id == local_steam_id) {

@@ -17,6 +17,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_proto_buf_header.h"

@@ -79,7 +79,7 @@ jobs:
         shell: "bash"
         run: |
           sudo apt update -y
-          sudo apt install -y build-essential python3
+          sudo apt install -y build-essential python3 protobuf-compiler libprotobuf-dev libcurl4-openssl-dev libmbedtls-dev libopus-dev portaudio19-dev
 
       - name: "Run full GC verification"
         shell: "bash"

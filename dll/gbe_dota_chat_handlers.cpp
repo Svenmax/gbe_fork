@@ -258,11 +258,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaJoinChatChannelRequest(const std::str
 
     const uint64 chat_channel_id = GBE_local_lobby.chat_channel_id != 0 ?
         GBE_local_lobby.chat_channel_id : GBE_GenerateDotaChatChannelId();
-    gbe::dota_lobby_state::apply_chat_channel(
-        GBE_local_lobby,
-        chat_channel_id,
-        request.channel_name,
-        request.has_channel_type ? request.channel_type : 3u);
+    {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        local_lobby.apply("7009_join_chat", [chat_channel_id, &request](GBE_LocalLobby &lobby) {
+            gbe::dota_lobby_state::apply_chat_channel(
+                lobby,
+                chat_channel_id,
+                request.channel_name,
+                request.has_channel_type ? request.channel_type : 3u);
+        });
+    }
 
     if (GBE_local_lobby.generic_lobby_id != 0) {
         Steam_Client *steam_client = get_steam_client();
@@ -580,8 +585,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         // During host disconnect from hero selection, the real client can still be unwinding
         // server/game-rules state after postgame chat leaves. Clearing the entire local/generic
         // lobby snapshot here is too early and can race later disconnect teardown.
-        gbe::dota_lobby_state::clear_chat_channel(GBE_local_lobby);
-        gbe::dota_lobby_state::clear_postgame_chat_tombstone(GBE_local_lobby);
+        {
+            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+            local_lobby.apply("7272_postgame_leave_chat", [](GBE_LocalLobby &lobby) {
+                gbe::dota_lobby_state::clear_chat_channel(lobby);
+                gbe::dota_lobby_state::clear_postgame_chat_tombstone(lobby);
+            });
+        }
 
         std::string persona_message;
         if (!GBE_PrepareDotaPersonaStatePeripheralMessage(GBE_kDotaAbandonPersonaStateInitHex, steam_id, lobby_id, persona_message)) {
@@ -617,7 +627,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         // which prevents the postgame 7272/7014 from triggering ResetGCMemory and the
         // client never sees the score screen.
         if (d.request_matches_local) {
-            gbe::dota_lobby_state::clear_chat_channel(GBE_local_lobby);
+            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+            local_lobby.apply("7272_leave_chat", [](GBE_LocalLobby &lobby) {
+                gbe::dota_lobby_state::clear_chat_channel(lobby);
+            });
         } else {
             GBE_GC_DebugLog(
                 "GC_DOTA_LOBBY",
@@ -643,7 +656,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaveChatChannelRequest(const std::st
         );
         // Leave the generic lobby so other members see the lobby destroyed and can clean up.
         GBE_LeaveGenericLobby();
-        gbe::dota_lobby_state::clear_local_lobby(GBE_local_lobby);
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        local_lobby.replace_for_reset(GBE_LocalLobby{});
     } else {
         GBE_PublishSharedDotaLobbyState("7272_leave_chat");
     }
@@ -684,12 +698,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyJoinBroadcastChannelRequ
         return true;
     }
 
-    gbe::dota_lobby_state::apply_broadcast_channel(
-        GBE_local_lobby,
-        request.channel,
-        request.has_country_code ? request.country_code : std::string(),
-        request.has_description ? request.description : std::string(),
-        request.has_language_code ? request.language_code : std::string());
+    {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        local_lobby.apply("7149_join_broadcast", [&request](GBE_LocalLobby &lobby) {
+            gbe::dota_lobby_state::apply_broadcast_channel(
+                lobby,
+                request.channel,
+                request.has_country_code ? request.country_code : std::string(),
+                request.has_description ? request.description : std::string(),
+                request.has_language_code ? request.language_code : std::string());
+        });
+    }
     GBE_PublishSharedDotaLobbyState("7149_join_broadcast");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7149"))
@@ -780,7 +799,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCloseBroadcastChannelReq
         return true;
     }
 
-    gbe::dota_lobby_state::clear_broadcast_channel(GBE_local_lobby, request.channel);
+    {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        local_lobby.apply("8054_close_broadcast", [&request](GBE_LocalLobby &lobby) {
+            gbe::dota_lobby_state::clear_broadcast_channel(lobby, request.channel);
+        });
+    }
     GBE_PublishSharedDotaLobbyState("8054_close_broadcast");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "8054"))

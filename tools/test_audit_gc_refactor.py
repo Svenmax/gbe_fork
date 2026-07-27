@@ -1012,12 +1012,921 @@ class DirectLocalLobbyWriteAuditTest(unittest.TestCase):
         }
         self.assertEqual([], audit.audit_direct_local_lobby_writes(sources))
 
+    def test_accepts_peer_local_lobby_boundary_methods(self):
+        sources = {
+            "gbe_dota_inventory_handlers.cpp": "const auto &lobby = server_gc->GBE_PeerLocalLobbySnapshot();",
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": "options.client_target->GBE_ApplyPeerClientLobbyRestoreSnapshot(snapshot);",
+        }
+        self.assertEqual([], audit.audit_cross_instance_local_lobby_access(sources))
+
+    def test_rejects_cross_instance_pointer_local_lobby_access(self):
+        sources = {
+            "gbe_dota_inventory_handlers.cpp": "server_gc->GBE_local_lobby.active;",
+        }
+        self.assertIn(
+            "gbe_dota_inventory_handlers.cpp: cross-instance GBE_local_lobby access count 1; use GBE_PeerLocalLobbySnapshot or GBE_ApplyPeerClientLobbyRestoreSnapshot",
+            audit.audit_cross_instance_local_lobby_access(sources),
+        )
+
+    def test_rejects_cross_instance_object_local_lobby_access(self):
+        sources = {
+            "gbe_dota_match_handlers.cpp": "client_gc.GBE_local_lobby.owner_hero_id;",
+        }
+        self.assertIn(
+            "gbe_dota_match_handlers.cpp: cross-instance GBE_local_lobby access count 1; use GBE_PeerLocalLobbySnapshot or GBE_ApplyPeerClientLobbyRestoreSnapshot",
+            audit.audit_cross_instance_local_lobby_access(sources),
+        )
+
+    def test_rejects_cross_instance_dereferenced_local_lobby_access(self):
+        sources = {
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": "(*options.client_target).GBE_local_lobby = lobby;",
+        }
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: cross-instance GBE_local_lobby access count 1; use GBE_PeerLocalLobbySnapshot or GBE_ApplyPeerClientLobbyRestoreSnapshot",
+            audit.audit_cross_instance_local_lobby_access(sources),
+        )
+
+    def test_accepts_local_lobby_owner_boundary(self):
+        sources = {
+            "gbe_dota_lobby_state.h": """
+class LocalLobbyOwner {
+public:
+    const GBE_LocalLobby &snapshot() const;
+    void replace_for_reset(GBE_LocalLobby lobby);
+    template <typename Apply>
+    decltype(auto) apply(const char *reason, Apply &&apply);
+};
+""",
+            "steam_game_coordinator.cpp": """
+void Steam_Game_Coordinator::GBE_ApplyPeerClientLobbyRestoreSnapshot(const GBE_LocalLobby &snapshot)
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("peer_client_lobby_restore", [&snapshot](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_client_lobby_restore_snapshot(lobby, snapshot);
+    });
+}
+void Steam_Game_Coordinator::GBE_ClearDotaLobbyRuntimeState()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.replace_for_reset(GBE_LocalLobby{});
+}
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("queued_state", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_queued_lobby_state_apply_plan(lobby, apply_plan);
+    });
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    gbe::dota_lobby_state::compose_queued_lobby_state_apply_plan(snapshot, queued_state, queued_game_state, preserve, setup_phase, run_phase);
+    local_lobby.apply("runtime_reset", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_generation(lobby, next_generation);
+    });
+}
+""",
+            "gbe_dota_lobby_create_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("7038_create", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_create_lobby_state_plan(lobby, state_apply_plan);
+    });
+    local_lobby.apply("7038_generic_lobby_create", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_generic_lobby_id(lobby, generic_lobby_id);
+    });
+    local_lobby.apply("7046_details_update", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_details_update(lobby, request);
+    });
+}
+""",
+            "gbe_dota_lobby_join_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("7044_join", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_join_lobby_merge_plan(lobby, join_plan);
+    });
+}
+""",
+            "gbe_dota_lobby_slot_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("7047_owner_team_slot", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_owner_team(lobby, team);
+        gbe::dota_lobby_state::apply_lobby_owner_slot(lobby, slot);
+    });
+    local_lobby.apply("7081_kick_member", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_member_kick_snapshot(lobby, before_lobby);
+    });
+    local_lobby.apply("7047_member_team_slot", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_flow::apply_lobby_member_team_slot_update(lobby.members, steam_id, account_id, has_team, team, has_slot, slot, player_pool, finished);
+    });
+    local_lobby.apply("7047_bot_difficulty", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_bot_difficulty_for_team(lobby, bot_team, bot_difficulty);
+    });
+    local_lobby.apply("7047_normalize_member_slots", [](GBE_LocalLobby &lobby) {
+        GBE_NormalizeDotaArcadeLobbyMemberSlots(lobby);
+    });
+}
+""",
+            "gbe_dota_match_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("7034_draft_team_slot", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_owner_team(lobby, team);
+        gbe::dota_lobby_state::apply_lobby_owner_slot(lobby, slot);
+        return true;
+    });
+    local_lobby.apply("7034_custom_runtime_slot_normalize", [](GBE_LocalLobby &lobby) {
+        return GBE_NormalizeDotaArcadeLobbyMemberSlots(lobby);
+    });
+}
+""",
+            "gbe_dota_connection_lifecycle.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("owner_connected", [](GBE_LocalLobby &lobby) {
+        return gbe::dota_lobby_state::apply_lobby_owner_connected(lobby, true);
+    });
+}
+""",
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("postgame", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_postgame_lobby_state_plan(lobby, plan);
+    });
+    local_lobby.apply("lifecycle_state", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lifecycle_lobby_state(lobby, lobby_state, lobby_game_state);
+    });
+    local_lobby.apply("runtime_clear", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_generation(lobby, next_generation);
+    });
+}
+""",
+            "gbe_dota_custom_game_lifecycle_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("8052_started_loading", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_custom_game_loading_metadata(lobby, custom_game_id, start_time);
+    });
+}
+""",
+            "gbe_dota_lobby_launch_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    gbe::dota_lobby_state::compose_launch_run_plan(snapshot, setup_phase, run_phase, next_game_state);
+    gbe::dota_lobby_state::compose_custom_game_launch_setup_plan(snapshot, setup_phase);
+    GBE_LocalLobby wait_for_players_lobby = snapshot;
+    GBE_LocalLobby next_lobby = snapshot;
+    gbe::dota_lobby_flow::should_hold_lan_launch_for_remote_members(snapshot.members, owner_steam_id, remote_count, connected_remote_count);
+    local_lobby.apply("member_connected_owner", [](GBE_LocalLobby &lobby) {
+        return gbe::dota_lobby_state::apply_lobby_owner_connected(lobby, true);
+    });
+    local_lobby.apply("owner_hero", [](GBE_LocalLobby &lobby) {
+        return gbe::dota_lobby_state::apply_owner_hero_id(lobby, hero_id);
+    });
+    local_lobby.apply("7041_custom_game_serversetup", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_custom_game_launch_serversetup_plan(lobby, launch_plan);
+    });
+    local_lobby.apply("launch_phase", [](GBE_LocalLobby &lobby) {
+        return gbe::dota_lobby_state::advance_launch_phase(lobby, phase);
+    });
+    local_lobby.apply("member_runtime_member_hero", [](GBE_LocalLobby &lobby) {
+        return gbe::dota_lobby_flow::set_lobby_member_hero(lobby.members, steam_id, hero_id);
+    });
+}
+""",
+            "gbe_dota_post_login_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("4508_runtime_connect", [](GBE_LocalLobby &lobby) {
+        return gbe::dota_lobby_state::apply_runtime_connect(lobby, runtime_connect);
+    });
+    local_lobby.apply("4508_source_tv_metadata", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_source_tv_metadata(lobby, tv_secret_code, tv_port);
+    });
+}
+""",
+            "gbe_dota_lobby_flow_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    gbe::dota_lobby_state::compose_steam_auth_ack_launch_plan(snapshot, ticket_crc);
+    const GBE_LocalLobby postgame_lobby = snapshot;
+    local_lobby.apply("steam_auth_ack", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_steam_auth_ack_launch_plan(lobby, auth_ack_plan);
+    });
+}
+""",
+            "gbe_dota_lobby_lifecycle_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    gbe::dota_lobby_state::compose_launch_init_plan(snapshot, match_id, server_id, connect, game_start_time, launch_phase);
+    local_lobby.apply("7040_leave_local_find", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_generic_lobby_id(lobby, fallback_generic_lobby_id);
+    });
+    local_lobby.apply("7041_launch_init", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_launch_init_plan(lobby, launch_plan);
+    });
+}
+""",
+            "gbe_dota_lobby_state_member_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("owner_name", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_owner_name(lobby, owner_name);
+    });
+    local_lobby.apply("adopt_generic_owner", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_flow::adopt_lobby_owner_member(lobby.members, new_owner_steam_id, account_id, good_guys, finished, lobby.owner_steam_id, lobby.owner_account_id, lobby.owner_team, lobby.owner_slot, lobby.owner_hero_id, lobby.owner_connected);
+        gbe::dota_lobby_state::apply_lobby_owner_name(lobby, owner_name);
+    });
+    local_lobby.apply("generic_lobby_local_member_seen", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::note_generic_lobby_local_member_seen(lobby);
+    });
+    local_lobby.apply("generic_lobby_waiting_join_confirmation", [](GBE_LocalLobby &lobby) {
+        return gbe::dota_lobby_state::mark_generic_lobby_waiting_join_confirmation_logged(lobby);
+    });
+    local_lobby.apply("generic_lobby_kicked_suppressed", [](GBE_LocalLobby &lobby) {
+        return gbe::dota_lobby_state::mark_generic_lobby_kicked_suppressed_logged(lobby);
+    });
+    local_lobby.apply("generic_lobby_owner_adoption_suppressed", [](GBE_LocalLobby &lobby) {
+        return gbe::dota_lobby_state::mark_generic_lobby_owner_adoption_suppressed_logged(lobby);
+    });
+}
+""",
+            "gbe_dota_lobby_state_recover_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("leave_generic_lobby", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_generic_lobby_id(lobby, 0ull);
+    });
+    local_lobby.apply("server_id_clear", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_server_id(lobby, derived_server_id);
+    });
+}
+""",
+            "gbe_dota_lobby_snapshot_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("owner_transfer_preserve_slots", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_flow::preserve_lobby_owner_transfer_slots(lobby.members, previous_members, previous_owner_steam_id, new_owner_steam_id);
+    });
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    gbe::dota_lobby_flow::find_lobby_member_index(snapshot.members, new_owner_steam_id, new_owner_index);
+}
+""",
+            "gbe_dota_lobby_state_restore_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.replace_for_reset(GBE_LocalLobby{});
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    gbe::dota_lobby_state::compose_source_aware_shared_runtime_restore_plan(snapshot, shared_lobby, launch_phase);
+    local_lobby.apply("restore_client_full_adopt", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared_lobby, false, true, lobby);
+        gbe::dota_lobby_state::apply_lobby_generation(lobby, generation);
+    });
+    local_lobby.apply("restore_client_runtime", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::restore_lobby_generation(lobby, generation);
+        gbe::dota_lobby_state::restore_lobby_generic_lobby_id(lobby, generic_lobby_id);
+        gbe::dota_lobby_state::apply_source_aware_shared_runtime_restore_plan(lobby, runtime_restore_plan);
+        gbe::dota_lobby_state::apply_shared_lobby_options_restore_plan(lobby, options_restore_plan);
+        gbe::dota_lobby_state::restore_lobby_custom_game(lobby, custom_game);
+        gbe::dota_lobby_state::restore_lobby_owner_connected(lobby, owner_connected);
+        gbe::dota_lobby_state::restore_launch_4511_seen(lobby, launch_4511_seen);
+        gbe::dota_lobby_state::restore_lobby_owner_team(lobby, owner_team);
+        gbe::dota_lobby_state::restore_lobby_owner_slot(lobby, owner_slot);
+        gbe::dota_lobby_state::restore_lobby_members(lobby, members);
+        gbe::dota_lobby_state::apply_shared_lobby_cache_restore_plan(lobby, cache_restore_plan);
+        return gbe::dota_lobby_state::apply_owner_hero_from_shared(lobby, shared_lobby);
+    });
+}
+""",
+            "gbe_dota_chat_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.replace_for_reset(GBE_LocalLobby{});
+    local_lobby.apply("7009_join_chat", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_chat_channel(lobby, chat_channel_id, channel_name, channel_type);
+    });
+    local_lobby.apply("7149_join_broadcast", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_broadcast_channel(lobby, channel, country_code, description, language_code);
+    });
+    local_lobby.apply("8054_close_broadcast", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::clear_broadcast_channel(lobby, channel);
+    });
+}
+""",
+            "gbe_dota_lobby_state_publish_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    GBE_LocalLobby projected_lobby = snapshot;
+    local_lobby.apply("cache_metadata", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_cache_subscription_metadata(lobby, has_version, version, has_service_id, service_id, service_list, has_sync_version, sync_version);
+    });
+    local_lobby.apply("runtime_metadata", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_runtime_metadata(lobby, connect, server_id);
+    });
+}
+""",
+        }
+        self.assertEqual([], audit.audit_local_lobby_owner_boundary(sources))
+
+    def test_rejects_missing_local_lobby_owner_apply(self):
+        sources = {
+            "gbe_dota_lobby_state.h": """
+class LocalLobbyOwner {
+public:
+    const GBE_LocalLobby &snapshot() const;
+    void replace_for_reset(GBE_LocalLobby lobby);
+};
+""",
+            "steam_game_coordinator.cpp": """
+void Steam_Game_Coordinator::GBE_ApplyPeerClientLobbyRestoreSnapshot(const GBE_LocalLobby &snapshot)
+{
+    gbe::dota_lobby_state::apply_client_lobby_restore_snapshot(GBE_local_lobby, snapshot);
+}
+void f()
+{
+    gbe::dota_lobby_state::compose_queued_lobby_state_apply_plan(GBE_local_lobby, queued_state, queued_game_state, preserve, setup_phase, run_phase);
+    gbe::dota_lobby_state::apply_queued_lobby_state_apply_plan(GBE_local_lobby, apply_plan);
+    gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, next_generation);
+    lobbies.push_back(GBE_local_lobby);
+}
+""",
+            "gbe_dota_lobby_create_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::apply_create_lobby_state_plan(GBE_local_lobby, state_apply_plan);
+    gbe::dota_lobby_state::apply_lobby_generic_lobby_id(GBE_local_lobby, generic_lobby_id);
+    gbe::dota_lobby_state::apply_lobby_details_update(GBE_local_lobby, request);
+}
+""",
+            "gbe_dota_lobby_join_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::apply_join_lobby_merge_plan(GBE_local_lobby, join_plan);
+    GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(GBE_local_lobby, owner_name, response_24);
+}
+""",
+            "gbe_dota_lobby_slot_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::apply_lobby_owner_team(GBE_local_lobby, team);
+    gbe::dota_lobby_state::apply_lobby_owner_slot(GBE_local_lobby, slot);
+    gbe::dota_lobby_state::apply_lobby_member_kick_snapshot(GBE_local_lobby, before_lobby);
+    gbe::dota_lobby_flow::apply_lobby_member_team_slot_update(GBE_local_lobby.members, steam_id, account_id, has_team, team, has_slot, slot, player_pool, finished);
+    gbe::dota_lobby_flow::find_lobby_member_steam_id_by_account_id(GBE_local_lobby.members, account_id);
+    gbe::dota_lobby_state::apply_lobby_bot_difficulty_for_team(GBE_local_lobby, bot_team, bot_difficulty);
+    GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby);
+}
+""",
+            "gbe_dota_match_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::apply_lobby_owner_team(GBE_local_lobby, team);
+    gbe::dota_lobby_state::apply_lobby_owner_slot(GBE_local_lobby, slot);
+    GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby);
+}
+""",
+            "gbe_dota_connection_lifecycle.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::apply_lobby_owner_connected(GBE_local_lobby, true);
+}
+""",
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::apply_postgame_lobby_state_plan(GBE_local_lobby, plan);
+    gbe::dota_lobby_state::apply_lifecycle_lobby_state(GBE_local_lobby, lobby_state, lobby_game_state);
+    gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, next_generation);
+}
+""",
+            "gbe_dota_custom_game_lifecycle_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::apply_custom_game_loading_metadata(GBE_local_lobby, custom_game_id, start_time);
+    gbe::dota_lobby_state::has_launch_server_setup_sync(GBE_local_lobby);
+}
+""",
+            "gbe_dota_lobby_launch_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::compose_launch_run_plan(GBE_local_lobby, setup_phase, run_phase, next_game_state);
+    gbe::dota_lobby_state::compose_custom_game_launch_setup_plan(GBE_local_lobby, setup_phase);
+    GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, owner_name, message, true);
+    gbe::dota_lobby_state::apply_lobby_owner_connected(GBE_local_lobby, true);
+    gbe::dota_lobby_state::apply_owner_hero_id(GBE_local_lobby, hero_id);
+    gbe::dota_lobby_state::apply_custom_game_launch_serversetup_plan(GBE_local_lobby, launch_plan);
+    gbe::dota_lobby_state::advance_launch_phase(GBE_local_lobby, phase);
+    gbe::dota_lobby_flow::set_lobby_member_connected(GBE_local_lobby.members, steam_id, account_id, connected, has_custom_game, should_mark_leaver, owner_steam_id, owner_slot, good_guys, player_pool);
+    gbe::dota_lobby_flow::set_lobby_member_hero(GBE_local_lobby.members, steam_id, hero_id);
+    gbe::dota_lobby_state::has_launch_server_setup_sync(GBE_local_lobby);
+    GBE_LocalLobby wait_for_players_lobby = GBE_local_lobby;
+    GBE_LocalLobby next_lobby = GBE_local_lobby;
+    gbe::dota_lobby_flow::should_hold_lan_launch_for_remote_members(GBE_local_lobby.members, owner_steam_id, remote_count, connected_remote_count);
+}
+""",
+            "gbe_dota_post_login_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::apply_runtime_connect(GBE_local_lobby, runtime_connect);
+    gbe::dota_lobby_state::apply_source_tv_metadata(GBE_local_lobby, tv_secret_code, tv_port);
+}
+""",
+            "gbe_dota_lobby_flow_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::compose_steam_auth_ack_launch_plan(GBE_local_lobby, ticket_crc);
+    gbe::dota_lobby_state::apply_steam_auth_ack_launch_plan(GBE_local_lobby, auth_ack_plan);
+    const GBE_LocalLobby postgame_lobby = GBE_local_lobby;
+}
+""",
+            "gbe_dota_lobby_lifecycle_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::compose_launch_init_plan(GBE_local_lobby, match_id, server_id, connect, game_start_time, launch_phase);
+    GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, owner_name, message, true);
+    gbe::dota_lobby_state::apply_lobby_generic_lobby_id(GBE_local_lobby, fallback_generic_lobby_id);
+    gbe::dota_lobby_state::apply_launch_init_plan(GBE_local_lobby, launch_plan);
+}
+""",
+            "gbe_dota_lobby_state_member_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_flow::adopt_lobby_owner_member(GBE_local_lobby.members, new_owner_steam_id, account_id, good_guys, finished, GBE_local_lobby.owner_steam_id, GBE_local_lobby.owner_account_id, GBE_local_lobby.owner_team, GBE_local_lobby.owner_slot, GBE_local_lobby.owner_hero_id, GBE_local_lobby.owner_connected);
+    gbe::dota_lobby_state::apply_lobby_owner_name(GBE_local_lobby, owner_name);
+    gbe::dota_lobby_state::note_generic_lobby_local_member_seen(GBE_local_lobby);
+    gbe::dota_lobby_state::mark_generic_lobby_waiting_join_confirmation_logged(GBE_local_lobby);
+    gbe::dota_lobby_state::mark_generic_lobby_kicked_suppressed_logged(GBE_local_lobby);
+    gbe::dota_lobby_state::mark_generic_lobby_owner_adoption_suppressed_logged(GBE_local_lobby);
+}
+""",
+            "gbe_dota_lobby_state_recover_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::apply_lobby_generic_lobby_id(GBE_local_lobby, 0ull);
+    gbe::dota_lobby_state::apply_lobby_server_id(GBE_local_lobby, derived_server_id);
+}
+""",
+            "gbe_dota_lobby_snapshot_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_flow::preserve_lobby_owner_transfer_slots(GBE_local_lobby.members, previous_members, previous_owner_steam_id, new_owner_steam_id);
+    gbe::dota_lobby_flow::find_lobby_member_index(GBE_local_lobby.members, new_owner_steam_id, new_owner_index);
+}
+""",
+            "gbe_dota_lobby_state_restore_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::clear_local_lobby(GBE_local_lobby);
+    gbe::dota_lobby_state::compose_source_aware_shared_runtime_restore_plan(GBE_local_lobby, shared_lobby, launch_phase);
+    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared_lobby, false, true, GBE_local_lobby);
+    gbe::dota_lobby_state::restore_lobby_generation(GBE_local_lobby, generation);
+    gbe::dota_lobby_state::restore_lobby_generic_lobby_id(GBE_local_lobby, generic_lobby_id);
+    gbe::dota_lobby_state::apply_source_aware_shared_runtime_restore_plan(GBE_local_lobby, runtime_restore_plan);
+    gbe::dota_lobby_state::apply_shared_lobby_options_restore_plan(GBE_local_lobby, options_restore_plan);
+    gbe::dota_lobby_state::restore_lobby_custom_game(GBE_local_lobby, custom_game);
+    gbe::dota_lobby_state::restore_lobby_owner_connected(GBE_local_lobby, owner_connected);
+    gbe::dota_lobby_state::restore_launch_4511_seen(GBE_local_lobby, launch_4511_seen);
+    gbe::dota_lobby_state::restore_lobby_owner_team(GBE_local_lobby, owner_team);
+    gbe::dota_lobby_state::restore_lobby_owner_slot(GBE_local_lobby, owner_slot);
+    gbe::dota_lobby_state::restore_lobby_members(GBE_local_lobby, members);
+    gbe::dota_lobby_state::apply_shared_lobby_cache_restore_plan(GBE_local_lobby, cache_restore_plan);
+    gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, generation);
+    gbe::dota_lobby_state::apply_owner_hero_from_shared(GBE_local_lobby, shared_lobby);
+}
+""",
+            "gbe_dota_chat_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.replace_for_reset(GBE_LocalLobby{});
+    gbe::dota_lobby_state::apply_chat_channel(GBE_local_lobby, chat_channel_id, channel_name, channel_type);
+    gbe::dota_lobby_state::apply_broadcast_channel(GBE_local_lobby, channel, country_code, description, language_code);
+    gbe::dota_lobby_state::clear_chat_channel(GBE_local_lobby);
+    gbe::dota_lobby_state::clear_postgame_chat_tombstone(GBE_local_lobby);
+    gbe::dota_lobby_state::clear_broadcast_channel(GBE_local_lobby, channel);
+}
+""",
+            "gbe_dota_misc_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::mark_launch_4511_seen(GBE_local_lobby);
+    for (GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+        member.leaver_status = leaver_status;
+    }
+}
+""",
+            "gbe_dota_lobby_state_publish_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::apply_cache_subscription_metadata(GBE_local_lobby, has_version, version, has_service_id, service_id, service_list, has_sync_version, sync_version);
+    gbe::dota_lobby_state::apply_runtime_metadata(GBE_local_lobby, connect, server_id);
+    gbe::dota_reconnect::source_from_local_lobby(GBE_local_lobby);
+    GBE_LocalLobby projected_lobby = GBE_local_lobby;
+}
+""",
+            "gbe_dota_lobby_list_handlers.cpp": """
+void f()
+{
+    lobby_snapshots.push_back(GBE_local_lobby);
+}
+""",
+            "gbe_dota_template_replay_handlers.cpp": """
+void f()
+{
+    lobbies.push_back(GBE_local_lobby);
+    modes.push_back(gbe::gc_message::DotaJoinableCustomGameMode{GBE_local_lobby.custom_game.game_id, static_cast<uint32>(GBE_local_lobby.members.size())});
+}
+""",
+        }
+        issues = audit.audit_local_lobby_owner_boundary(sources)
+        self.assertIn(
+            "gbe_dota_lobby_state.h: LocalLobbyOwner boundary missing decltype(auto) apply(const char *reason, Apply &&apply)",
+            issues,
+        )
+        self.assertIn(
+            "steam_game_coordinator.cpp: peer client lobby restore must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "steam_game_coordinator.cpp: queued lobby state compose must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "steam_game_coordinator.cpp: queued lobby state apply plan must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "steam_game_coordinator.cpp: runtime reset generation must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: create lobby state plan must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: generic lobby id must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: lobby details update must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_join_handlers.cpp: join lobby merge must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_join_handlers.cpp: authoritative cache build must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_slot_handlers.cpp: owner team/slot updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_slot_handlers.cpp: member kick snapshot must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_slot_handlers.cpp: member team/slot updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_slot_handlers.cpp: member kick lookup must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_slot_handlers.cpp: bot difficulty updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_slot_handlers.cpp: arcade member slot normalize must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_match_handlers.cpp: draft owner team/slot updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_match_handlers.cpp: custom runtime slot normalize must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_connection_lifecycle.cpp: owner connected updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: postgame lobby state plan must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: lifecycle lobby state must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: runtime clear generation must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_handlers.cpp: custom game loading metadata must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_handlers.cpp: launch server setup reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_launch_coordinator.cpp: owner connected updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_launch_coordinator.cpp: owner hero updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_launch_coordinator.cpp: custom game serversetup must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_launch_coordinator.cpp: launch phase advance must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_launch_coordinator.cpp: member runtime hero must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_launch_coordinator.cpp: member connected updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_launch_coordinator.cpp: launch run compose must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_launch_coordinator.cpp: custom game launch setup compose must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_launch_coordinator.cpp: authoritative details build must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_launch_coordinator.cpp: launch server setup reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_launch_coordinator.cpp: prelaunch lobby projection must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_launch_coordinator.cpp: runtime details projection must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_launch_coordinator.cpp: LAN launch hold member reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_post_login_handlers.cpp: runtime connect must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_post_login_handlers.cpp: SourceTV metadata must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_list_handlers.cpp: lobby list exports must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_template_replay_handlers.cpp: joinable custom lobby exports must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_template_replay_handlers.cpp: joinable custom mode exports must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "steam_game_coordinator.cpp: HTTP joinable custom lobby exports must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_flow_coordinator.cpp: steam auth ack launch plan must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_flow_coordinator.cpp: steam auth ack launch compose must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_flow_coordinator.cpp: postgame finalization snapshot must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_lifecycle_handlers.cpp: leave generic lobby id must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_lifecycle_handlers.cpp: launch init compose must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_lifecycle_handlers.cpp: authoritative details build must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_lifecycle_handlers.cpp: launch init plan must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_member_coordinator.cpp: owner name updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_member_coordinator.cpp: generic lobby owner member adoption must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_member_coordinator.cpp: generic lobby local member seen flag must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        expected_generic_lobby_member_issues = [
+            "gbe_dota_lobby_state_member_coordinator.cpp: generic lobby waiting join confirmation flag must route through LocalLobbyOwner::apply",
+            "gbe_dota_lobby_state_member_coordinator.cpp: generic lobby kicked suppressed flag must route through LocalLobbyOwner::apply",
+            "gbe_dota_lobby_state_member_coordinator.cpp: generic lobby owner adoption suppressed flag must route through LocalLobbyOwner::apply",
+        ]
+        for expected_issue in expected_generic_lobby_member_issues:
+            self.assertIn(expected_issue, issues)
+        self.assertIn(
+            "gbe_dota_lobby_state_recover_coordinator.cpp: generic lobby id reset must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_recover_coordinator.cpp: server id sync must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_snapshot_coordinator.cpp: owner transfer slot preservation must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_snapshot_coordinator.cpp: owner transfer member index read must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_restore_coordinator.cpp: Local lobby reset must route through LocalLobbyOwner::replace_for_reset",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_restore_coordinator.cpp: shared lobby adopt must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_restore_coordinator.cpp: source-aware shared runtime restore compose must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_restore_coordinator.cpp: runtime generation restore must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_restore_coordinator.cpp: runtime generic lobby id restore must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_restore_coordinator.cpp: full adopt generation must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_restore_coordinator.cpp: owner hero restore must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        expected_restore_owner_issues = [
+            "gbe_dota_lobby_state_restore_coordinator.cpp: source-aware runtime restore plan must route through LocalLobbyOwner::apply",
+            "gbe_dota_lobby_state_restore_coordinator.cpp: shared lobby options restore plan must route through LocalLobbyOwner::apply",
+            "gbe_dota_lobby_state_restore_coordinator.cpp: custom game restore must route through LocalLobbyOwner::apply",
+            "gbe_dota_lobby_state_restore_coordinator.cpp: owner connected restore must route through LocalLobbyOwner::apply",
+            "gbe_dota_lobby_state_restore_coordinator.cpp: launch 4511 restore must route through LocalLobbyOwner::apply",
+            "gbe_dota_lobby_state_restore_coordinator.cpp: owner team restore must route through LocalLobbyOwner::apply",
+            "gbe_dota_lobby_state_restore_coordinator.cpp: owner slot restore must route through LocalLobbyOwner::apply",
+            "gbe_dota_lobby_state_restore_coordinator.cpp: member restore must route through LocalLobbyOwner::apply",
+            "gbe_dota_lobby_state_restore_coordinator.cpp: shared lobby cache restore plan must route through LocalLobbyOwner::apply",
+        ]
+        for expected_issue in expected_restore_owner_issues:
+            self.assertIn(expected_issue, issues)
+        self.assertIn(
+            "gbe_dota_chat_handlers.cpp: chat channel updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_chat_handlers.cpp: broadcast channel updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_chat_handlers.cpp: chat channel clears must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_chat_handlers.cpp: postgame chat tombstone clears must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_chat_handlers.cpp: broadcast channel clears must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_misc_handlers.cpp: launch 4511 seen marker must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_misc_handlers.cpp: leaver member updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_publish_coordinator.cpp: cache subscription metadata must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_publish_coordinator.cpp: runtime metadata must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_publish_coordinator.cpp: reconnect source compose must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_publish_coordinator.cpp: capture projection must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "Local lobby reset owner boundary count 1; expected at least 3 production reset paths",
+            issues,
+        )
+
     def test_rejects_direct_object_write(self):
         sources = {
             "gbe_dota_lobby_create_handlers.cpp": "GBE_local_lobby = plan.lobby;",
         }
         self.assertIn(
             "gbe_dota_lobby_create_handlers.cpp: direct GBE_local_lobby object write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
+    def test_rejects_direct_parenthesized_target_object_write(self):
+        sources = {
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": "(options.client_target->GBE_local_lobby) = lobby;",
+        }
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: direct GBE_local_lobby object write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
+    def test_rejects_direct_double_parenthesized_object_write(self):
+        sources = {
+            "gbe_dota_lobby_create_handlers.cpp": "((GBE_local_lobby)) = lobby;",
+        }
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: direct GBE_local_lobby object write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
+    def test_rejects_direct_dereferenced_target_object_write(self):
+        sources = {
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": "(*options.client_target).GBE_local_lobby = lobby;",
+        }
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: direct GBE_local_lobby object write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
+    def test_rejects_direct_parenthesized_pointer_target_object_write(self):
+        sources = {
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": "(options.client_target)->GBE_local_lobby = lobby;",
+        }
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: direct GBE_local_lobby object write count 1; route through a named state helper",
             audit.audit_direct_local_lobby_writes(sources),
         )
 
@@ -1048,9 +1957,36 @@ class DirectLocalLobbyWriteAuditTest(unittest.TestCase):
             audit.audit_direct_local_lobby_writes(sources),
         )
 
+    def test_rejects_direct_double_parenthesized_field_write(self):
+        sources = {
+            "gbe_dota_lobby_create_handlers.cpp": "((GBE_local_lobby)).state = 1u;",
+        }
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
     def test_rejects_direct_target_parenthesized_field_write(self):
         sources = {
             "gbe_dota_custom_game_lifecycle_coordinator.cpp": "(options.client_target->GBE_local_lobby).state = 1u;",
+        }
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
+    def test_rejects_direct_dereferenced_target_field_write(self):
+        sources = {
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": "(*options.client_target).GBE_local_lobby.state = 1u;",
+        }
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
+    def test_rejects_direct_parenthesized_pointer_target_field_write(self):
+        sources = {
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": "(options.client_target)->GBE_local_lobby.state = 1u;",
         }
         self.assertIn(
             "gbe_dota_custom_game_lifecycle_coordinator.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
@@ -1105,6 +2041,15 @@ class DirectLocalLobbyWriteAuditTest(unittest.TestCase):
     def test_rejects_direct_parenthesized_indexed_member_write(self):
         sources = {
             "gbe_dota_lobby_create_handlers.cpp": "(GBE_local_lobby).members[0].team = team;",
+        }
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
+    def test_rejects_direct_double_parenthesized_indexed_member_write(self):
+        sources = {
+            "gbe_dota_lobby_create_handlers.cpp": "((GBE_local_lobby)).members[0].team = team;",
         }
         self.assertIn(
             "gbe_dota_lobby_create_handlers.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
@@ -1183,6 +2128,24 @@ class DirectLocalLobbyWriteAuditTest(unittest.TestCase):
             audit.audit_direct_local_lobby_writes(sources),
         )
 
+    def test_rejects_direct_parenthesized_mutating_method_field_write(self):
+        sources = {
+            "gbe_dota_lobby_create_handlers.cpp": "(GBE_local_lobby).members.clear();",
+        }
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
+    def test_rejects_direct_double_parenthesized_indexed_mutating_method_field_write(self):
+        sources = {
+            "gbe_dota_lobby_create_handlers.cpp": "((GBE_local_lobby)).members[0].slots.clear();",
+        }
+        self.assertIn(
+            "gbe_dota_lobby_create_handlers.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
     def test_rejects_direct_target_field_write(self):
         sources = {
             "gbe_dota_custom_game_lifecycle_coordinator.cpp": "options.client_target->GBE_local_lobby.state = 1u;",
@@ -1219,6 +2182,24 @@ class DirectLocalLobbyWriteAuditTest(unittest.TestCase):
             audit.audit_direct_local_lobby_writes(sources),
         )
 
+    def test_rejects_direct_dereferenced_target_indexed_member_write(self):
+        sources = {
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": "(*options.client_target).GBE_local_lobby.members[0].team = team;",
+        }
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
+    def test_rejects_direct_parenthesized_pointer_target_indexed_member_write(self):
+        sources = {
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": "(options.client_target)->GBE_local_lobby.members[0].team = team;",
+        }
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
     def test_rejects_direct_target_parenthesized_indexed_member_write(self):
         sources = {
             "gbe_dota_custom_game_lifecycle_coordinator.cpp": "(options.client_target->GBE_local_lobby).members[0].team = team;",
@@ -1240,6 +2221,15 @@ class DirectLocalLobbyWriteAuditTest(unittest.TestCase):
     def test_rejects_direct_target_indexed_mutating_method_field_write(self):
         sources = {
             "gbe_dota_custom_game_lifecycle_coordinator.cpp": "options.client_target->GBE_local_lobby.members[0].slots.clear();",
+        }
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",
+            audit.audit_direct_local_lobby_writes(sources),
+        )
+
+    def test_rejects_direct_target_parenthesized_mutating_method_field_write(self):
+        sources = {
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp": "(options.client_target->GBE_local_lobby).members.clear();",
         }
         self.assertIn(
             "gbe_dota_custom_game_lifecycle_coordinator.cpp: direct GBE_local_lobby field write count 1; route through a named state helper",

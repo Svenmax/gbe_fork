@@ -13,6 +13,26 @@ namespace gbe::dota_lobby_state {
 
 namespace {
 
+template <typename T>
+bool apply_value_if_changed(T &field, const T &value)
+{
+    if (field == value)
+        return false;
+
+    field = value;
+    return true;
+}
+
+template <typename T>
+bool apply_nonzero_value_if_changed(T &field, T value)
+{
+    if (value == T{} || field == value)
+        return false;
+
+    field = value;
+    return true;
+}
+
 void apply_create_lobby_details(const proto_wire::DotaPracticeLobbyDetailsRequest &details, GBE_LocalLobby &lobby)
 {
     if (details.has_room_name)
@@ -64,6 +84,21 @@ void apply_create_lobby_details(const proto_wire::DotaPracticeLobbyDetailsReques
 }
 
 } // namespace
+
+LocalLobbyOwner::LocalLobbyOwner(GBE_LocalLobby &lobby)
+    : lobby_(lobby)
+{
+}
+
+const GBE_LocalLobby &LocalLobbyOwner::snapshot() const
+{
+    return lobby_;
+}
+
+void LocalLobbyOwner::replace_for_reset(GBE_LocalLobby lobby)
+{
+    lobby_ = std::move(lobby);
+}
 
 CreateLobbyPlan compose_create_lobby_plan(
     const proto_wire::DotaPracticeLobbyCreateRequest &request,
@@ -949,11 +984,7 @@ bool restore_launch_4511_seen(
     GBE_LocalLobby &lobby,
     bool launch_4511_seen)
 {
-    if (lobby.launch_4511_seen == launch_4511_seen)
-        return false;
-
-    lobby.launch_4511_seen = launch_4511_seen;
-    return true;
+    return apply_value_if_changed(lobby.launch_4511_seen, launch_4511_seen);
 }
 
 bool restore_lobby_owner_connected(
@@ -967,11 +998,7 @@ bool apply_lobby_owner_connected(
     GBE_LocalLobby &lobby,
     bool owner_connected)
 {
-    if (lobby.owner_connected == owner_connected)
-        return false;
-
-    lobby.owner_connected = owner_connected;
-    return true;
+    return apply_value_if_changed(lobby.owner_connected, owner_connected);
 }
 
 bool restore_lobby_owner_team(
@@ -985,11 +1012,7 @@ bool apply_lobby_owner_team(
     GBE_LocalLobby &lobby,
     std::uint32_t owner_team)
 {
-    if (lobby.owner_team == owner_team)
-        return false;
-
-    lobby.owner_team = owner_team;
-    return true;
+    return apply_value_if_changed(lobby.owner_team, owner_team);
 }
 
 bool restore_lobby_owner_slot(
@@ -1013,21 +1036,14 @@ bool apply_lobby_owner_slot(
     GBE_LocalLobby &lobby,
     std::uint32_t owner_slot)
 {
-    if (lobby.owner_slot == owner_slot)
-        return false;
-
-    lobby.owner_slot = owner_slot;
-    return true;
+    return apply_value_if_changed(lobby.owner_slot, owner_slot);
 }
 
 bool apply_lobby_owner_name(
     GBE_LocalLobby &lobby,
     const std::string &owner_name)
 {
-    if (lobby.owner_name == owner_name)
-        return false;
-    lobby.owner_name = owner_name;
-    return true;
+    return apply_value_if_changed(lobby.owner_name, owner_name);
 }
 
 bool note_generic_lobby_local_member_seen(GBE_LocalLobby &lobby)
@@ -1144,14 +1160,8 @@ bool apply_custom_game_loading_metadata(
     std::uint32_t game_start_time)
 {
     bool changed = false;
-    if (custom_game_id != 0ull && lobby.custom_game.game_id != custom_game_id) {
-        lobby.custom_game.game_id = custom_game_id;
-        changed = true;
-    }
-    if (game_start_time != 0u && lobby.game_start_time != game_start_time) {
-        lobby.game_start_time = game_start_time;
-        changed = true;
-    }
+    changed = apply_nonzero_value_if_changed(lobby.custom_game.game_id, custom_game_id) || changed;
+    changed = apply_nonzero_value_if_changed(lobby.game_start_time, game_start_time) || changed;
     return changed;
 }
 
@@ -1166,11 +1176,7 @@ bool apply_lobby_generation(
     GBE_LocalLobby &lobby,
     std::uint64_t generation)
 {
-    if (lobby.generation == generation)
-        return false;
-
-    lobby.generation = generation;
-    return true;
+    return apply_value_if_changed(lobby.generation, generation);
 }
 
 bool restore_lobby_generic_lobby_id(
@@ -1184,11 +1190,7 @@ bool apply_lobby_generic_lobby_id(
     GBE_LocalLobby &lobby,
     std::uint64_t generic_lobby_id)
 {
-    if (lobby.generic_lobby_id == generic_lobby_id)
-        return false;
-
-    lobby.generic_lobby_id = generic_lobby_id;
-    return true;
+    return apply_value_if_changed(lobby.generic_lobby_id, generic_lobby_id);
 }
 
 bool apply_source_tv_metadata(
@@ -1197,14 +1199,8 @@ bool apply_source_tv_metadata(
     std::uint32_t tv_port)
 {
     bool changed = false;
-    if (tv_secret_code != 0 && lobby.tv_secret_code != tv_secret_code) {
-        lobby.tv_secret_code = tv_secret_code;
-        changed = true;
-    }
-    if (tv_port != 0 && lobby.tv_port != tv_port) {
-        lobby.tv_port = tv_port;
-        changed = true;
-    }
+    changed = apply_nonzero_value_if_changed(lobby.tv_secret_code, tv_secret_code) || changed;
+    changed = apply_nonzero_value_if_changed(lobby.tv_port, tv_port) || changed;
     return changed;
 }
 
@@ -1237,10 +1233,7 @@ bool apply_lobby_server_id(
     GBE_LocalLobby &lobby,
     std::uint64_t server_id)
 {
-    if (lobby.server_id == server_id)
-        return false;
-    lobby.server_id = server_id;
-    return true;
+    return apply_value_if_changed(lobby.server_id, server_id);
 }
 
 void apply_lobby_details_update(

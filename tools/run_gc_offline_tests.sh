@@ -238,6 +238,26 @@ if [[ "$FULL" -eq 1 ]]; then
         tools/gc_replay_test/fixtures/wire_edge_cases.txt \
         --expect tools/gc_replay_test/fixtures/wire_edge_cases.expected.txt
 
+    printf '[run] %s capture_hostinviteplayerlobby\n' gc_replay_test
+    "$BUILD_DIR/gc_replay_test" \
+        tools/gc_replay_test/fixtures/capture_hostinviteplayerlobby.txt \
+        --expect tools/gc_replay_test/fixtures/capture_hostinviteplayerlobby.expected.txt
+
+    printf '[run] %s capture_hostlobbykickplayer\n' gc_replay_test
+    "$BUILD_DIR/gc_replay_test" \
+        tools/gc_replay_test/fixtures/capture_hostlobbykickplayer.txt \
+        --expect tools/gc_replay_test/fixtures/capture_hostlobbykickplayer.expected.txt
+
+    printf '[run] %s capture_steamhostlobbyswapteam\n' gc_replay_test
+    "$BUILD_DIR/gc_replay_test" \
+        tools/gc_replay_test/fixtures/capture_steamhostlobbyswapteam.txt \
+        --expect tools/gc_replay_test/fixtures/capture_steamhostlobbyswapteam.expected.txt
+
+    printf '[run] %s capture_steamplayersearchjoinstartleave\n' gc_replay_test
+    "$BUILD_DIR/gc_replay_test" \
+        tools/gc_replay_test/fixtures/capture_steamplayersearchjoinstartleave.txt \
+        --expect tools/gc_replay_test/fixtures/capture_steamplayersearchjoinstartleave.expected.txt
+
     build_and_run \
         gbe_dota_lobby_flow_test \
         tools/gbe_dota_lobby_flow_test/gbe_dota_lobby_flow_test.cpp \

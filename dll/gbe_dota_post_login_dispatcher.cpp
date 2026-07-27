@@ -1,5 +1,6 @@
 #include "dll/steam_game_coordinator.h"
 
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_proto_wire.h"
 

@@ -3,6 +3,7 @@
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
 #include "gbe_dota_custom_game_lifecycle.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_dota_protocol_constants.h"
 
 namespace {
@@ -92,19 +93,27 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
 
         previous_action_succeeded = true;
         switch (action.type) {
-            case GBE_DotaActionType::LocalLifecyclePreWrite:
-                gbe::dota_lobby_state::apply_lifecycle_lobby_state(
-                    GBE_local_lobby,
-                    action.lobby_state,
-                    action.lobby_game_state);
+            case GBE_DotaActionType::LocalLifecyclePreWrite: {
+                gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+                local_lobby.apply(action.reason.c_str(), [&action](GBE_LocalLobby &lobby) {
+                    gbe::dota_lobby_state::apply_lifecycle_lobby_state(
+                        lobby,
+                        action.lobby_state,
+                        action.lobby_game_state);
+                });
                 GBE_MarkDotaLaunchPhase(action.launch_phase, action.reason.c_str(), false);
                 break;
-            case GBE_DotaActionType::LobbyStateApply:
-                gbe::dota_lobby_state::apply_lifecycle_lobby_state(
-                    GBE_local_lobby,
-                    action.lobby_state,
-                    action.lobby_game_state);
+            }
+            case GBE_DotaActionType::LobbyStateApply: {
+                gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+                local_lobby.apply(action.reason.c_str(), [&action](GBE_LocalLobby &lobby) {
+                    gbe::dota_lobby_state::apply_lifecycle_lobby_state(
+                        lobby,
+                        action.lobby_state,
+                        action.lobby_game_state);
+                });
                 break;
+            }
             case GBE_DotaActionType::PostGameLobbyStateApply: {
                 gbe::dota_lobby_state::PostGameLobbyStateApplyPlan plan{};
                 plan.state = action.lobby_state;
@@ -112,7 +121,10 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
                 plan.chat_channel_id = action.job_id;
                 plan.chat_channel_name = action.payload;
                 plan.abandon_pre_postgame_chat_channel_id = action.item_id;
-                gbe::dota_lobby_state::apply_postgame_lobby_state_plan(GBE_local_lobby, plan);
+                gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+                local_lobby.apply(action.reason.c_str(), [&plan](GBE_LocalLobby &lobby) {
+                    gbe::dota_lobby_state::apply_postgame_lobby_state_plan(lobby, plan);
+                });
                 break;
             }
             case GBE_DotaActionType::LobbyMemberRuntimeUpdate:
@@ -181,7 +193,7 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
                     !options.client_target->is_server) {
                     options.client_target->GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
                     if (options.client_lobby_restore && options.client_lobby_restore->active && options.client_lobby_restore->lobby_id != 0)
-                        gbe::dota_lobby_state::apply_client_lobby_restore_snapshot(options.client_target->GBE_local_lobby, *options.client_lobby_restore);
+                        options.client_target->GBE_ApplyPeerClientLobbyRestoreSnapshot(*options.client_lobby_restore);
                     options.client_target->GBE_ClearLastDotaLaunchStatePushedGameState();
                 }
                 GBE_ResetDotaPracticeLobbyLaunchPeripheralState();
@@ -194,7 +206,10 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
                 {
                     const uint64 next_generation = GBE_CurrentDotaLobbyGeneration();
                     GBE_ClearDotaLobbyRuntimeState();
-                    gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, next_generation);
+                    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+                    local_lobby.apply(action.reason.c_str(), [next_generation](GBE_LocalLobby &lobby) {
+                        gbe::dota_lobby_state::apply_lobby_generation(lobby, next_generation);
+                    });
                 }
                 break;
             case GBE_DotaActionType::RichPresenceClear: {

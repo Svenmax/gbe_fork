@@ -17,6 +17,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_proto_buf_header.h"
@@ -25,6 +26,7 @@
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -75,7 +77,10 @@ void Steam_Game_Coordinator::on_client_connected(CSteamID steam_id)
                 );
                 return;
             }
-            if (gbe::dota_lobby_state::apply_lobby_owner_connected(GBE_local_lobby, true)) {
+            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+            if (local_lobby.apply("owner_connected", [](GBE_LocalLobby &lobby) {
+                    return gbe::dota_lobby_state::apply_lobby_owner_connected(lobby, true);
+                })) {
                 GBE_PublishSharedDotaLobbyState("owner_connected");
             }
         } else if (gc_initialized && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && connected_steam_id != 0) {
@@ -116,7 +121,10 @@ void Steam_Game_Coordinator::on_client_disconnected(CSteamID steam_id)
         const bool postgame_suppress_publish = GBE_local_lobby.state >= 3u;
 
         if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && disconnected_steam_id != 0 && disconnected_steam_id == owner_steam_id) {
-            gbe::dota_lobby_state::apply_lobby_owner_connected(GBE_local_lobby, false);
+            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+            local_lobby.apply("owner_disconnected", [](GBE_LocalLobby &lobby) {
+                return gbe::dota_lobby_state::apply_lobby_owner_connected(lobby, false);
+            });
             if (!postgame_suppress_publish)
                 GBE_PublishSharedDotaLobbyState("owner_disconnected");
 

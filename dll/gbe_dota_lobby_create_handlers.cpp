@@ -19,6 +19,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_dota_custom_game.h"
@@ -352,12 +353,15 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     const gbe::dota_lobby_state::CreateLobbyStateApplyPlan state_apply_plan = gbe::dota_lobby_state::compose_create_lobby_state_apply_plan(
         create_plan,
         create_context.parsed_request && create_context.request.has_lobby_details);
-    gbe::dota_lobby_state::apply_create_lobby_state_plan(GBE_local_lobby, state_apply_plan);
-    gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, GBE_CurrentDotaLobbyGeneration());
-    if (state_apply_plan.normalize_custom_game_details)
-        GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, GBE_local_lobby.custom_game);
-    if (state_apply_plan.normalize_arcade_member_slots)
-        GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby);
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("7038_create", [this, &state_apply_plan](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_create_lobby_state_plan(lobby, state_apply_plan);
+        gbe::dota_lobby_state::apply_lobby_generation(lobby, GBE_CurrentDotaLobbyGeneration());
+        if (state_apply_plan.normalize_custom_game_details)
+            GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, lobby.custom_game);
+        if (state_apply_plan.normalize_arcade_member_slots)
+            GBE_NormalizeDotaArcadeLobbyMemberSlots(lobby);
+    });
     if (state_apply_plan.clear_reconnect_context)
         GBE_ClearRecentDotaReconnectContext();
     if (state_apply_plan.set_reconnect_eligible)
@@ -381,8 +385,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
             case GBE_DotaActionType::GenericLobbyCreate:
                 if (steam_client && steam_client->steam_matchmaking) {
                     CSteamID generic_lobby_id = steam_client->steam_matchmaking->CreateLobbyImmediate(k_ELobbyTypeInvisible, 10);
-                    if (generic_lobby_id.IsLobby())
-                        gbe::dota_lobby_state::apply_lobby_generic_lobby_id(GBE_local_lobby, generic_lobby_id.ConvertToUint64());
+                    if (generic_lobby_id.IsLobby()) {
+                        const uint64 generic_lobby_id_value = generic_lobby_id.ConvertToUint64();
+                        local_lobby.apply("7038_generic_lobby_create", [generic_lobby_id_value](GBE_LocalLobby &lobby) {
+                            gbe::dota_lobby_state::apply_lobby_generic_lobby_id(lobby, generic_lobby_id_value);
+                        });
+                    }
                 }
                 break;
             case GBE_DotaActionType::LobbyLocalMemberData:
@@ -547,9 +555,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetDetailsRequest(const 
         );
     }
 
-    gbe::dota_lobby_state::apply_lobby_details_update(GBE_local_lobby, request);
-    GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, GBE_local_lobby.custom_game);
-    GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby);
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("7046_details_update", [this, &request](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_details_update(lobby, request);
+        GBE_NormalizeDotaCustomGameDetailsFromInstalledMod(settings, lobby.custom_game);
+        GBE_NormalizeDotaArcadeLobbyMemberSlots(lobby);
+    });
 
     if (!GBE_PublishDotaPracticeLobbySetDetailsUpdate(wrapped, outer_session_field_raw))
         return true;

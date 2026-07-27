@@ -25,6 +25,7 @@
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_dota_lifecycle_state_machine.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lobby_state_store.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -319,7 +320,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLeaveRequest(bool wrappe
         }
         if (matched_generic_lobby && matched_generic_lobby_id.IsLobby()) {
             fallback_generic_lobby_id = matched_generic_lobby_id.ConvertToUint64();
-            gbe::dota_lobby_state::apply_lobby_generic_lobby_id(GBE_local_lobby, fallback_generic_lobby_id);
+            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+            local_lobby.apply("7040_leave_local_find", [fallback_generic_lobby_id](GBE_LocalLobby &lobby) {
+                gbe::dota_lobby_state::apply_lobby_generic_lobby_id(lobby, fallback_generic_lobby_id);
+            });
             GBE_SyncSettingsLobbyFromGenericLobby("7040_leave_local_find");
         }
         GBE_GC_DebugLog(
@@ -383,20 +387,24 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(const std:
         return true;
 
     const uint32 launch_ip = network ? network->getOwnIP() : 0u;
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
     const gbe::dota_lobby_state::LaunchInitPlan launch_plan = gbe::dota_lobby_state::compose_launch_init_plan(
-        GBE_local_lobby,
+        local_lobby_snapshot,
         GBE_GenerateDotaMatchId(),
         gbe::dota_custom_game::derive_practice_lobby_ip_server_id(launch_ip),
         gbe::proto_wire::format_dota_practice_lobby_connect_from_ip(launch_ip),
         static_cast<uint32>(std::time(nullptr)),
         GBE_kDotaLaunchPhaseRequested);
-    gbe::dota_lobby_state::apply_launch_init_plan(GBE_local_lobby, launch_plan);
+    local_lobby.apply("7041_launch_init", [&launch_plan](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_launch_init_plan(lobby, launch_plan);
+    });
     if (launch_init_actions.size() < 2u ||
         launch_init_actions[1].type != GBE_DotaActionType::SharedLobbyPublish ||
         !GBE_ExecuteDotaLifecycleActions({ launch_init_actions[1] }).succeeded)
         return true;
 
-    if (gbe::dota_custom_game::has_custom_game_details(GBE_local_lobby.custom_game)) {
+    if (gbe::dota_custom_game::has_custom_game_details(local_lobby_snapshot.custom_game)) {
         const gbe::dota_lobby_state::LaunchPresenceEvent presence_event = gbe::dota_lobby_state::compose_launch_serversetup_presence_event("7041_custom_game_launch_init");
         if (presence_event.update) {
             GBE_UpdateDotaPracticeLobbyLaunchRichPresence(presence_event.status.c_str(), presence_event.lobby_state.c_str(), presence_event.include_party);
@@ -419,7 +427,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyLaunchRequest(const std:
 
     const gbe::dota_lobby_state::PracticeLobbyLaunchEventPlan event_plan = gbe::dota_lobby_state::compose_practice_lobby_launch_event_plan(GBE_kDotaPracticeLobbyDetailsUpdate);
     std::string stage1_message;
-    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(GBE_local_lobby, GBE_local_lobby.owner_name, stage1_message, true)) {
+    if (!GBE_BuildAuthoritativeDotaPracticeLobbyDetailsUpdate(local_lobby_snapshot, local_lobby_snapshot.owner_name, stage1_message, true)) {
         GBE_GC_DebugLog(
             "GC_DOTA_LOBBY",
             "[LOBBY] Failed building initial 26 after 7041 LobbyID=%llu match_id=%llu server_id=%llu connect=%s",

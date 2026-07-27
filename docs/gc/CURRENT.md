@@ -3,7 +3,7 @@
 > 任何 Agent 动手前只先读这一份。深入表见文末阅读顺序。
 > 本文件描述代码现状，不声明“重构已完成 / 已验收”。
 
-**最后同步：** 2026-07-25（对照 `dll/`、`tools/` 与 `docs/gc/ACTIVE_QUEUE.md`）
+**最后同步：** 2026-07-26（对照 `dll/`、`tools/` 与 `docs/gc/ACTIVE_QUEUE.md`）
 
 ## 状态一句话
 
@@ -96,6 +96,20 @@
 **client lobby restore snapshot apply helper（2026-07-26）：** custom game lifecycle cross-GC mirror 的 client Local 快照恢复经 `apply_client_lobby_restore_snapshot(...)`，client target guard、active/lobby_id guard、launch peripheral reset 与 last launch state clear 顺序保持不变。
 
 **direct Local lobby write guard（2026-07-26）：** audit 10d 已禁止生产 `.cpp` 重新引入直接 `GBE_local_lobby = ...` 或 `GBE_local_lobby.<field> = ...` 写入，完整 Local 写回与字段写入须经命名 state helper。
+
+**direct target Local lobby parenthesized object write guard（2026-07-26）：** audit 10d 已覆盖 `(options.client_target->GBE_local_lobby) = lobby` target parenthesized object assignment 旁路，target Local 完整写回仍须经命名 state helper。
+
+**direct target Local lobby dereference-dot write guard（2026-07-26）：** audit 10d 的 target matcher 已覆盖 `(*options.client_target).GBE_local_lobby` object、field 与 indexed member 写入形式，target Local 写入须统一经命名 state helper。
+
+**direct target Local lobby parenthesized pointer write guard（2026-07-26）：** audit 10d 的 target matcher 已覆盖 `(options.client_target)->GBE_local_lobby` object、field 与 indexed member 写入形式，target Local 写入须统一经命名 state helper。
+
+**direct Local lobby double-parenthesized write guard（2026-07-26）：** audit 10d 已覆盖 `((GBE_local_lobby)) = lobby`、`((GBE_local_lobby)).state = ...` 与 indexed member 写入旁路，完整 Local 与字段写入须统一经命名 state helper。
+
+**direct Local lobby parenthesized mutating method guard（2026-07-26）：** audit 10d 已覆盖 `(GBE_local_lobby).members.clear()`、`((GBE_local_lobby)).members[0].slots.clear()` 与 target parenthesized mutating method 旁路，Local 容器 mutation 须统一经命名 state helper。
+
+**local apply value helper（2026-07-26）：** `gbe_dota_lobby_state.cpp` 的小型 Local apply helper 复用 file-local `apply_value_if_changed(...)` 与 `apply_nonzero_value_if_changed(...)`，generation、generic_lobby_id、server_id、SourceTV 与 custom game loading metadata 的 no-op / zero-preserve 语义保持不变。
+
+**owner apply value helper（2026-07-26）：** owner connected/team/slot/name 与 `launch_4511_seen` restore 的单字段 Local apply 复用 `apply_value_if_changed(...)`，shared restore 聚合与 once marker 语义保持不变。
 
 1. **新消息**只进 `GBE_ProductionDotaHandlerRegistry()`（`dll/gbe_dota_post_login_dispatcher.cpp`），不得只加 if-chain / template。
 2. **生产写 shared lobby** 只走 Store generation 门控 API；禁止裸 `publish` / `update` / `clear`（审计 `audit_store_write_discipline`）。

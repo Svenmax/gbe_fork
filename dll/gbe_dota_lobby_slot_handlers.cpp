@@ -19,6 +19,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_dota_custom_game.h"
@@ -75,31 +76,44 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbySetTeamSlotRequest(const
     }
 
     const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
+    const uint32 local_account_id = settings->get_local_steam_id().GetAccountID();
     const bool local_is_owner = local_steam_id != 0ull && local_steam_id == GBE_local_lobby.owner_steam_id;
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
     if (local_is_owner) {
-        if (request.has_team)
-            gbe::dota_lobby_state::apply_lobby_owner_team(GBE_local_lobby, request.team);
-        if (request.has_slot)
-            gbe::dota_lobby_state::apply_lobby_owner_slot(GBE_local_lobby, request.slot);
+        local_lobby.apply("7047_owner_team_slot", [&request](GBE_LocalLobby &lobby) {
+            if (request.has_team)
+                gbe::dota_lobby_state::apply_lobby_owner_team(lobby, request.team);
+            if (request.has_slot)
+                gbe::dota_lobby_state::apply_lobby_owner_slot(lobby, request.slot);
+        });
     }
-    gbe::dota_lobby_flow::apply_lobby_member_team_slot_update(
-        GBE_local_lobby.members,
-        local_steam_id,
-        settings->get_local_steam_id().GetAccountID(),
-        request.has_team,
-        request.team,
-        request.has_slot,
-        request.slot,
-        GBE_kDotaTeamPlayerPool,
-        GBE_local_lobby.state == 3u);
+    const bool lobby_finished = local_lobby.snapshot().state == 3u;
+    local_lobby.apply("7047_member_team_slot", [local_steam_id, local_account_id, lobby_finished, &request](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_flow::apply_lobby_member_team_slot_update(
+            lobby.members,
+            local_steam_id,
+            local_account_id,
+            request.has_team,
+            request.team,
+            request.has_slot,
+            request.slot,
+            GBE_kDotaTeamPlayerPool,
+            lobby_finished);
+    });
     if (request.has_bot_difficulty) {
         const uint32 bot_team = request.has_team ? request.team : GBE_local_lobby.owner_team;
-        gbe::dota_lobby_state::apply_lobby_bot_difficulty_for_team(
-            GBE_local_lobby,
-            bot_team,
-            request.bot_difficulty);
+        local_lobby.apply("7047_bot_difficulty", [bot_team, &request](GBE_LocalLobby &lobby) {
+            gbe::dota_lobby_state::apply_lobby_bot_difficulty_for_team(
+                lobby,
+                bot_team,
+                request.bot_difficulty);
+        });
     }
-    GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby);
+    {
+        local_lobby.apply("7047_normalize_member_slots", [this](GBE_LocalLobby &lobby) {
+            GBE_NormalizeDotaArcadeLobbyMemberSlots(lobby);
+        });
+    }
     GBE_PublishDotaPracticeLobbyLocalMemberData("7047_set_team_slot");
     GBE_PublishSharedDotaLobbyState("7047_set_team_slot");
 
@@ -182,7 +196,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyKickRequest(const std::s
         return true;
     }
 
-    const uint64 kicked_steam_id = gbe::dota_lobby_flow::find_lobby_member_steam_id_by_account_id(GBE_local_lobby.members, request.account_id);
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    const uint64 kicked_steam_id = gbe::dota_lobby_flow::find_lobby_member_steam_id_by_account_id(local_lobby_snapshot.members, request.account_id);
 
     if (kicked_steam_id == 0ull) {
         GBE_GC_DebugLog("GC_DOTA_LOBBY", "[LOBBY] Ignoring 7081 because target account_id=%u is not in Dota lobby LobbyID=%llu", request.account_id, static_cast<unsigned long long>(GBE_local_lobby.lobby_id));
@@ -195,7 +211,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyKickRequest(const std::s
         return true;
     }
 
-    GBE_LocalLobby before_lobby = GBE_local_lobby;
+    GBE_LocalLobby before_lobby = local_lobby_snapshot;
     gbe::dota_lobby_flow::clear_lobby_member_by_account_id(before_lobby.members, request.account_id);
 
     CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
@@ -212,7 +228,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyKickRequest(const std::s
         return true;
     }
 
-    gbe::dota_lobby_state::apply_lobby_member_kick_snapshot(GBE_local_lobby, before_lobby);
+    local_lobby.apply("7081_kick_member", [&before_lobby](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_member_kick_snapshot(lobby, before_lobby);
+    });
     GBE_PublishSharedDotaLobbyState("7081_kick_member");
 
     if (!GBE_SendDotaPracticeLobbyDetailsUpdate(wrapped, outer_session_field_raw, "7081"))

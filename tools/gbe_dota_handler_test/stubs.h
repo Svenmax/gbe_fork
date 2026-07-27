@@ -999,6 +999,11 @@ public:
     GBE_DotaDeferredTaskSlot GBE_pending_reset_after_cache_unsubscribed_slot;
 
     uint64 GBE_CurrentDotaLobbyGeneration() const { return GBE_dota_lobby_generation_counter.current().value; }
+    const GBE_LocalLobby &GBE_PeerLocalLobbySnapshot() const { return GBE_local_lobby; }
+    void GBE_ApplyPeerClientLobbyRestoreSnapshot(const GBE_LocalLobby &snapshot)
+    {
+        gbe::dota_lobby_state::apply_client_lobby_restore_snapshot(GBE_local_lobby, snapshot);
+    }
     uint32 GBE_GetGCVersion() const { return gc_version; }
     GBE_DotaGenerationAdvanceResult GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary boundary, const char *)
     {
@@ -1643,7 +1648,7 @@ public:
         }
         return true;
     }
-    bool GBE_ShouldHoldDotaLanLaunchForRemoteMembers(uint32 next_game_state, uint32 *remote_count_out, uint32 *connected_remote_count_out) const
+    bool GBE_ShouldHoldDotaLanLaunchForRemoteMembers(uint32 next_game_state, uint32 *remote_count_out, uint32 *connected_remote_count_out)
     {
         (void)next_game_state;
         if (remote_count_out) *remote_count_out = 0u;

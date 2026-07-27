@@ -88,7 +88,8 @@ bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(
     // update the Local working copy; publication stays at explicit call boundaries.
     const bool pure_snapshot_projection =
         mode == GBE_DotaLobbyCaptureMode::PureSnapshotProjection;
-    GBE_LocalLobby projected_lobby = GBE_local_lobby;
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    GBE_LocalLobby projected_lobby = local_lobby.snapshot();
     GBE_LocalLobby &captured_lobby = pure_snapshot_projection
         ? projected_lobby
         : GBE_local_lobby;
@@ -327,15 +328,20 @@ void Steam_Game_Coordinator::GBE_RecordDotaLobbyCacheSubscriptionState(const std
         return;
 
     const std::vector<std::uint32_t> cache_service_list(protomsg.service_list().begin(), protomsg.service_list().end());
-    gbe::dota_lobby_state::apply_cache_subscription_metadata(
-        GBE_local_lobby,
-        protomsg.has_version(),
-        protomsg.has_version() ? protomsg.version() : 0ull,
-        protomsg.has_service_id(),
-        protomsg.has_service_id() ? protomsg.service_id() : 0u,
-        cache_service_list,
-        protomsg.has_sync_version(),
-        protomsg.has_sync_version() ? protomsg.sync_version() : 0ull);
+    {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        local_lobby.apply(reason ? reason : "record_cache_subscribed_metadata", [&protomsg, &cache_service_list](GBE_LocalLobby &lobby) {
+            gbe::dota_lobby_state::apply_cache_subscription_metadata(
+                lobby,
+                protomsg.has_version(),
+                protomsg.has_version() ? protomsg.version() : 0ull,
+                protomsg.has_service_id(),
+                protomsg.has_service_id() ? protomsg.service_id() : 0u,
+                cache_service_list,
+                protomsg.has_sync_version(),
+                protomsg.has_sync_version() ? protomsg.sync_version() : 0ull);
+        });
+    }
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",
@@ -395,7 +401,9 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
     }
 
     GBE_DotaReconnectContext reconnect_context{};
-    const auto reconnect_source = gbe::dota_reconnect::source_from_local_lobby(GBE_local_lobby);
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    const auto reconnect_source = gbe::dota_reconnect::source_from_local_lobby(local_lobby_snapshot);
     if (gbe::dota_reconnect::build_context(reconnect_source, reconnect_context) ==
         gbe::dota_reconnect::RejectReason::None) {
         GBE_SetRecentDotaReconnectContext(reconnect_context);
@@ -560,10 +568,15 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyStateKey, scalar_publish_data.state.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStateKey, scalar_publish_data.game_state.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey, scalar_publish_data.match_id.c_str());
-    gbe::dota_lobby_state::apply_runtime_metadata(
-        GBE_local_lobby,
-        publish_data.connect,
-        publish_data.server_id);
+    {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        local_lobby.apply(reason ? reason : "publish_runtime_metadata", [&publish_data](GBE_LocalLobby &lobby) {
+            gbe::dota_lobby_state::apply_runtime_metadata(
+                lobby,
+                publish_data.connect,
+                publish_data.server_id);
+        });
+    }
     const auto shared_update_result = GBE_SharedLobbyStore().compare_update(
         GBE_local_lobby.generation,
         [&](GBE_SharedDotaLobbyState &shared_lobby) {

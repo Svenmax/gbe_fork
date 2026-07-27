@@ -19,6 +19,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_proto_buf_header.h"
@@ -28,6 +29,7 @@
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_dota_lifecycle_state_machine.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lobby_state_store.h"
 #include "gbe_dota_reconnect_context.h"
 #include "gbe_gc_config.h"
@@ -150,7 +152,10 @@ void Steam_Game_Coordinator::GBE_LeaveGenericLobby()
             steam_client->steam_matchmaking->LeaveLobby(generic_lobby_id);
     }
 
-    gbe::dota_lobby_state::apply_lobby_generic_lobby_id(GBE_local_lobby, 0ull);
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply("leave_generic_lobby", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_generic_lobby_id(lobby, 0ull);
+    });
     GBE_SyncSettingsLobbyFromGenericLobby("leave_generic_lobby");
 }
 
@@ -254,7 +259,10 @@ bool Steam_Game_Coordinator::GBE_TrySyncDotaLobbyServerIdFromGameServer(const ch
         return false;
 
     const uint64 previous_server_id = GBE_local_lobby.server_id;
-    gbe::dota_lobby_state::apply_lobby_server_id(GBE_local_lobby, derived_server_id);
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    local_lobby.apply(reason ? reason : "server_id_clear", [derived_server_id](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_lobby_server_id(lobby, derived_server_id);
+    });
     const auto shared_update_result = GBE_SharedLobbyStore().compare_update(
         GBE_local_lobby.generation,
         [&](GBE_SharedDotaLobbyState &shared_lobby) {

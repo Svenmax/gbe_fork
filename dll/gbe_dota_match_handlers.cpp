@@ -29,6 +29,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_dota_lobby_state.h"
@@ -340,16 +341,18 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Request(
 
         bool updated_owner_team_or_slot_from_7034 = false;
         if (!custom_game_launch && request.has_draft_steam_id && request.draft_steam_id == GBE_GetDotaLobbyOwnerSteamId()) {
-            if (request.has_draft_team &&
-                gbe::dota_lobby_state::apply_lobby_owner_team(GBE_local_lobby, request.draft_team)) {
-                updated_owner_team_or_slot_from_7034 = true;
-            }
-
             const uint32 draft_owner_slot = request.has_draft_team_slot ? (request.draft_team_slot + 1u) : 0u;
-            if (draft_owner_slot != 0u &&
-                gbe::dota_lobby_state::apply_lobby_owner_slot(GBE_local_lobby, draft_owner_slot)) {
-                updated_owner_team_or_slot_from_7034 = true;
-            }
+            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+            updated_owner_team_or_slot_from_7034 = local_lobby.apply(
+                "7034_draft_team_slot",
+                [&request, draft_owner_slot](GBE_LocalLobby &lobby) {
+                    bool changed = false;
+                    if (request.has_draft_team && gbe::dota_lobby_state::apply_lobby_owner_team(lobby, request.draft_team))
+                        changed = true;
+                    if (draft_owner_slot != 0u && gbe::dota_lobby_state::apply_lobby_owner_slot(lobby, draft_owner_slot))
+                        changed = true;
+                    return changed;
+                });
         }
 
         if (updated_owner_team_or_slot_from_7034) {
@@ -403,7 +406,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Request(
                 "7034_custom_runtime_member_refresh",
                 refreshed_lobby,
                 GBE_DotaLobbyCaptureMode::WithoutSharedRestore);
-            if (GBE_NormalizeDotaArcadeLobbyMemberSlots(GBE_local_lobby))
+            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+            if (local_lobby.apply("7034_custom_runtime_slot_normalize", [this](GBE_LocalLobby &lobby) {
+                return GBE_NormalizeDotaArcadeLobbyMemberSlots(lobby);
+            }))
                 GBE_PublishSharedDotaLobbyState("7034_custom_runtime_slot_normalize");
         }
 
@@ -735,19 +741,20 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirect7034Response(
 {
     Steam_Client *steam_client_ptr = get_steam_client();
     Steam_Game_Coordinator *client_gc_ptr = steam_client_ptr ? steam_client_ptr->steam_game_coordinator : nullptr;
+    const GBE_LocalLobby *client_lobby = client_gc_ptr ? &client_gc_ptr->GBE_PeerLocalLobbySnapshot() : nullptr;
     const uint64 owner_steam64 = GBE_GetDotaLobbyOwnerSteamId();
     bool restored_owner_hero = false;
-    if (client_gc_ptr &&
+    if (client_lobby &&
         gbe::dota_lobby_state::should_peer_restore_owner_hero_from_client(
             is_server,
             GBE_local_lobby,
-            client_gc_ptr->GBE_local_lobby)) {
+            *client_lobby)) {
         GBE_ExecuteDotaLifecycleActions(
             gbe::dota_lifecycle::decide_member_runtime_actions(
                 GBE_CurrentDotaLobbyGeneration(),
                 owner_steam64,
                 true,
-                client_gc_ptr->GBE_local_lobby.owner_hero_id,
+                client_lobby->owner_hero_id,
                 true,
                 "7034_restore_owner_hero_from_client"));
         GBE_GC_DebugLog(

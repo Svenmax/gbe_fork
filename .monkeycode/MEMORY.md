@@ -62,4 +62,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 改 emsg 路由必须同步 `docs/gc/MESSAGE_ROUTING_INVENTORY.md`；新消息只进 production registry。
   - 改 hero/wearable/showcase 必须同步 `docs/gc/HOST_AUTHORITY.md`，并跑 dual_gc H1–H5 与相关 GOLDEN_PATHS。
   - 行为改动在 PR/说明中点名 `docs/gc/GOLDEN_PATHS.md` 的 PathID；协作流程见 `docs/gc/AGENT_PLAYBOOK.md`。
-  - `follow-up-task-list.md` / `next-agent-task-list.md` / 长篇 delivery 仅作历史档案，不作权威入口。
+   - `follow-up-task-list.md` / `next-agent-task-list.md` / 长篇 delivery 仅作历史档案，不作权威入口。
+
+[默认工作目录]
+- Date: 2026-07-22
+- Context: 用户在当前会话中指定项目操作目录
+- Category: 工作流协作
+- Instructions:
+  - 后续项目操作默认以 `/workspace/gbe_fork` 作为工作目录。

@@ -1,7 +1,7 @@
 # 活跃队列（WIP ≤5）
 
 > 只保留进行中与本周明确不做。历史勾选见 archive 长文，不在此膨胀。
-> **最后更新：** 2026-07-25
+> **最后更新：** 2026-07-26
 
 ## WIP
 
@@ -21,6 +21,13 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-26 | owner apply value helper：owner connected/team/slot/name 与 `launch_4511_seen` restore 的单字段 Local apply 复用 `apply_value_if_changed(...)`，shared restore 聚合与 once marker 语义保持不变 | `dll/gbe_dota_lobby_state.cpp` |
+| 2026-07-26 | local apply value helper：`gbe_dota_lobby_state.cpp` 的小型 Local apply helper 复用 file-local `apply_value_if_changed(...)` 与 `apply_nonzero_value_if_changed(...)`，保持 generation、generic_lobby_id、server_id、SourceTV 与 custom game loading metadata 语义不变 | `dll/gbe_dota_lobby_state.cpp` |
+| 2026-07-26 | direct Local lobby parenthesized mutating method guard：audit 10d 覆盖 `(GBE_local_lobby).members.clear()`、`((GBE_local_lobby)).members[0].slots.clear()` 与 target parenthesized mutating method 旁路，Local 容器 mutation 仍须经命名 state helper | `tools/_audit_gc_refactor.py`、`tools/test_audit_gc_refactor.py` |
+| 2026-07-26 | direct Local lobby double-parenthesized write guard：audit 10d 覆盖 `((GBE_local_lobby)) = lobby`、`((GBE_local_lobby)).state = ...` 与 indexed member 写入旁路，Local 写入仍须经命名 state helper | `tools/_audit_gc_refactor.py`、`tools/test_audit_gc_refactor.py` |
+| 2026-07-26 | direct target Local lobby parenthesized pointer write guard：audit 10d 覆盖 `(options.client_target)->GBE_local_lobby` object、field 与 indexed member 写入旁路，target Local 写入仍须经命名 state helper | `tools/_audit_gc_refactor.py`、`tools/test_audit_gc_refactor.py` |
+| 2026-07-26 | direct target Local lobby dereference-dot write guard：audit 10d 覆盖 `(*options.client_target).GBE_local_lobby` object、field 与 indexed member 写入旁路，target Local 写入仍须经命名 state helper | `tools/_audit_gc_refactor.py`、`tools/test_audit_gc_refactor.py` |
+| 2026-07-26 | direct target Local lobby parenthesized object write guard：audit 10d 覆盖 `(options.client_target->GBE_local_lobby) = lobby` target parenthesized object assignment 旁路，完整 target Local 写回仍须经命名 state helper | `tools/_audit_gc_refactor.py`、`tools/test_audit_gc_refactor.py` |
 | 2026-07-26 | direct target Local lobby parenthesized indexed member write guard：补充 audit 10d 回归，显式覆盖 `(options.client_target->GBE_local_lobby).members[0].team = team` target parenthesized indexed member direct write 旁路，生产代码与 audit 实现保持不变 | `.monkeycode/specs/gc-direct-target-local-lobby-parenthesized-indexed-member-write-guard/`、`tools/test_audit_gc_refactor.py` |
 | 2026-07-26 | direct Local lobby parenthesized indexed member write guard：audit 10d 覆盖 `(GBE_local_lobby).members[0].team = team` parenthesized indexed member direct write 旁路，生产代码保持不变 | `.monkeycode/specs/gc-direct-local-lobby-parenthesized-indexed-member-write-guard/`、`tools/_audit_gc_refactor.py` |
 | 2026-07-26 | direct target Local lobby parenthesized indexed write guard：补充 audit 10d 回归，显式覆盖 `(options.client_target->GBE_local_lobby).members[0] = member` target parenthesized indexed direct write 旁路，生产代码与 audit 实现保持不变 | `.monkeycode/specs/gc-direct-target-local-lobby-parenthesized-indexed-write-guard/`、`tools/test_audit_gc_refactor.py` |

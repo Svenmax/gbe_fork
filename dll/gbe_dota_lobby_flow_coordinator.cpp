@@ -18,6 +18,7 @@
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
 #include "dll/callsystem.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_proto_buf_header.h"
@@ -27,6 +28,7 @@
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_dota_lifecycle_state_machine.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lobby_state_store.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
@@ -138,8 +140,10 @@ bool Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbySteamAuthAck(const c
     uint32 derived_ticket_crc = static_cast<uint32>(seed) ^ static_cast<uint32>(seed >> 32);
     if (derived_ticket_crc == 0u)
         derived_ticket_crc = 1u;
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
     const gbe::dota_lobby_state::SteamAuthAckLaunchPlan auth_ack_plan =
-        gbe::dota_lobby_state::compose_steam_auth_ack_launch_plan(GBE_local_lobby, derived_ticket_crc);
+        gbe::dota_lobby_state::compose_steam_auth_ack_launch_plan(local_lobby_snapshot, derived_ticket_crc);
     const uint32 ticket_crc = auth_ack_plan.ticket_crc;
     const uint32 message_sequence = auth_ack_plan.message_sequence;
 
@@ -162,7 +166,9 @@ bool Steam_Game_Coordinator::GBE_MaybeQueueDotaPracticeLobbySteamAuthAck(const c
     std::string auth_ack_message = build_protomsg_header(5575u | GBE_kProtoMask, request_job_id, k_GIDNil);
     auth_ack_message.append(auth_ack_body);
 
-    gbe::dota_lobby_state::apply_steam_auth_ack_launch_plan(GBE_local_lobby, auth_ack_plan);
+    local_lobby.apply(reason ? reason : "steam_auth_ack", [&auth_ack_plan](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_steam_auth_ack_launch_plan(lobby, auth_ack_plan);
+    });
     GBE_PublishSharedDotaLobbyState(reason ? reason : "steam_auth_ack");
 
     push_incoming_now(GBE_kSteamTicketAuthComplete | GBE_kProtoMask, auth_complete_message);
@@ -690,7 +696,8 @@ void Steam_Game_Coordinator::GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed
     const auto shared_lobby = GBE_SharedLobbyStore().snapshot();
     const uint64 shared_lobby_id = shared_lobby.lobby_id;
     const uint64 lobby_id = consumed_lobby_id != 0 ? consumed_lobby_id : shared_lobby_id;
-    const GBE_LocalLobby postgame_lobby = GBE_local_lobby;
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby postgame_lobby = local_lobby.snapshot();
     Steam_Game_Coordinator *client_target = this;
     if (is_server) {
         Steam_Client *steam_client = get_steam_client();

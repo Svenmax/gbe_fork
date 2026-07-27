@@ -29,6 +29,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_dota_custom_game.h"
@@ -231,7 +232,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(uint32 reques
         runtime_connect != GBE_local_lobby.connect;
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && !preserve_existing_lan_connect) {
         const std::string previous_connect = GBE_local_lobby.connect;
-        if (gbe::dota_lobby_state::apply_runtime_connect(GBE_local_lobby, runtime_connect)) {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        if (local_lobby.apply("4508_runtime_connect", [&runtime_connect](GBE_LocalLobby &lobby) {
+                return gbe::dota_lobby_state::apply_runtime_connect(lobby, runtime_connect);
+            })) {
             const auto shared_update_result = GBE_SharedLobbyStore().compare_update(
                 GBE_local_lobby.generation,
                 [&](GBE_SharedDotaLobbyState &shared_lobby) {
@@ -288,7 +292,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(uint32 reques
 
     // Store tv_secret_code and tv_port for SourceTV spectating
     if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
-        gbe::dota_lobby_state::apply_source_tv_metadata(GBE_local_lobby, tv_secret_code, tv_port);
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        local_lobby.apply("4508_source_tv_metadata", [tv_secret_code, tv_port](GBE_LocalLobby &lobby) {
+            gbe::dota_lobby_state::apply_source_tv_metadata(lobby, tv_secret_code, tv_port);
+        });
         GBE_PublishDotaPracticeLobbyMetadata("4508_game_server_info");
     }
 

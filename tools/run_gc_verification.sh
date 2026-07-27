@@ -5,15 +5,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FULL=1
 RUN_AUDIT=1
 RUN_STYLE=1
+RUN_PRODUCTION_TU_CHECK=1
 BASE_SHA=""
 
 usage() {
-    printf 'usage: %s [--fast] [--full] [--base-sha SHA] [--skip-audit] [--skip-style]\n' "$(basename "$0")"
+    printf 'usage: %s [--fast] [--full] [--base-sha SHA] [--skip-audit] [--skip-style] [--skip-production-tu-check]\n' "$(basename "$0")"
     printf '  --fast        run fast offline tests instead of --full\n'
     printf '  --full        run full offline tests (default)\n'
     printf '  --base-sha    check whitespace errors in BASE_SHA..HEAD\n'
     printf '  --skip-audit  skip tools/_audit_gc_refactor.py\n'
     printf '  --skip-style  skip git diff --check\n'
+    printf '  --skip-production-tu-check  skip production GC translation unit syntax check\n'
 }
 
 while [[ "$#" -gt 0 ]]; do
@@ -38,6 +40,9 @@ while [[ "$#" -gt 0 ]]; do
         --skip-style)
             RUN_STYLE=0
             ;;
+        --skip-production-tu-check)
+            RUN_PRODUCTION_TU_CHECK=0
+            ;;
         -h|--help)
             usage
             exit 0
@@ -60,6 +65,10 @@ fi
 
 if [[ "$RUN_AUDIT" -eq 1 ]]; then
     python3 tools/_audit_gc_refactor.py
+fi
+
+if [[ "$FULL" -eq 1 && "$RUN_PRODUCTION_TU_CHECK" -eq 1 ]]; then
+    bash tools/check_gc_production_tus.sh --jobs "${GC_TU_CHECK_JOBS:-4}"
 fi
 
 if [[ "$RUN_STYLE" -eq 1 ]]; then

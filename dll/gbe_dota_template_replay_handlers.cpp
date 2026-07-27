@@ -31,6 +31,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_dota_custom_game.h"
@@ -42,7 +43,6 @@
 #include "gbe_proto_wire.h"
 #include "dll/gbe_dota_reconnect_shared.h"
 #include "dll/gbe_dota_unlock_items.h"
-#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_template_replay_templates.h"
 #include "gbe_dota_payload_lobby_helpers.h"
 #include "gbe_dota_payload_wire_helpers.h"
@@ -64,47 +64,41 @@
 
 using namespace gamecoordinator::tf2;
 
-namespace {
-
-struct RegistryDefensiveTemplateReplayResult {
-    bool matched{};
-    bool handled{};
-};
-
-RegistryDefensiveTemplateReplayResult GBE_TryHandleDotaRegistryDefensiveTemplateReplay(
-    Steam_Game_Coordinator &coordinator,
+bool Steam_Game_Coordinator::GBE_TryHandleDotaRegistryDefensiveTemplateReplay(
     uint32 request_emsg,
     const uint8 *body,
     size_t body_size,
     bool has_source_job,
-    uint64 source_job)
+    uint64 source_job,
+    bool &handled)
 {
     switch (request_emsg) {
         case 8879:
-            return {true, coordinator.GBE_HandleDotaRankRequest(body, body_size, has_source_job, source_job)};
+            handled = GBE_HandleDotaRankRequest(body, body_size, has_source_job, source_job);
+            return true;
         case 8095:
-            return {true, coordinator.GBE_HandleDotaConductScorecardRequest(body, body_size, has_source_job, source_job)};
+            handled = GBE_HandleDotaConductScorecardRequest(body, body_size, has_source_job, source_job);
+            return true;
         case GBE_kDotaFindTopSourceTVGames:
-            return {true, coordinator.GBE_HandleDotaFindTopSourceTVGamesRequest(
+            handled = GBE_HandleDotaFindTopSourceTVGamesRequest(
                 std::string(reinterpret_cast<const char *>(body), body_size),
                 has_source_job,
                 source_job,
                 false,
-                nullptr)};
+                nullptr);
+            return true;
         case 7091:
-            return {true, coordinator.GBE_HandleDotaWatchGameRequest(
+            handled = GBE_HandleDotaWatchGameRequest(
                 std::string(reinterpret_cast<const char *>(body), body_size),
                 has_source_job,
                 source_job,
                 false,
-                nullptr)};
+                nullptr);
+            return true;
         default:
-            return {};
+            return false;
     }
 }
-
-}
-
 
 bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_emsg, const uint8 *body, size_t body_size, bool has_source_job, uint64 source_job) {
     const GBE_DotaLootListData &loot_data = GBE_GetDotaVpkLootData();
@@ -116,10 +110,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
     bool replace_steam_id = false;
     const char *response_note = "";
 
-    const RegistryDefensiveTemplateReplayResult registry_defensive =
-        GBE_TryHandleDotaRegistryDefensiveTemplateReplay(*this, request_emsg, body, body_size, has_source_job, source_job);
-    if (registry_defensive.matched)
-        return registry_defensive.handled;
+    bool registry_defensive_handled = false;
+    if (GBE_TryHandleDotaRegistryDefensiveTemplateReplay(request_emsg, body, body_size, has_source_job, source_job, registry_defensive_handled))
+        return registry_defensive_handled;
 
     switch (request_emsg) {
         // TEMPLATE_ONLY (canned)
@@ -284,8 +277,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
                     continue;
                 modes.push_back(gbe::gc_message::DotaJoinableCustomGameMode{snapshot.custom_game.game_id, static_cast<uint32>(snapshot.members.size())});
             }
-            if (GBE_local_lobby.active)
-                modes.push_back(gbe::gc_message::DotaJoinableCustomGameMode{GBE_local_lobby.custom_game.game_id, static_cast<uint32>(GBE_local_lobby.members.size())});
+            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+            const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+            if (local_lobby_snapshot.active)
+                modes.push_back(gbe::gc_message::DotaJoinableCustomGameMode{local_lobby_snapshot.custom_game.game_id, static_cast<uint32>(local_lobby_snapshot.members.size())});
             if (shared_lobby.valid && shared_lobby.active)
                 modes.push_back(gbe::gc_message::DotaJoinableCustomGameMode{shared_lobby.custom_game.game_id, static_cast<uint32>(shared_lobby.members.size())});
 
@@ -313,8 +308,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaTemplateReplayRequest(uint32 request_
             gbe::proto_wire::read_uint64_field(body, body_size, 2u, requested_custom_game_id);
 
             std::vector<GBE_LocalLobby> lobbies = GBE_GetDotaGenericLobbySnapshots("7468_joinable_custom_lobbies");
-            if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0ull)
-                lobbies.push_back(GBE_local_lobby);
+            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+            const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+            if (local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0ull)
+                lobbies.push_back(local_lobby_snapshot);
 
             std::vector<gbe::gc_message::DotaJoinableCustomLobby> joinable_lobbies;
             const uint32 now = static_cast<uint32>(std::time(nullptr));

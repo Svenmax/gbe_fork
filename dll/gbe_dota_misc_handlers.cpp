@@ -511,7 +511,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLanServerAvailableRequest(uint32 requ
 
     const bool matches_local_lobby = (lobby_id != 0 && lobby_id == GBE_local_lobby.lobby_id);
     if (matches_local_lobby) {
-        if (gbe::dota_lobby_state::mark_launch_4511_seen(GBE_local_lobby)) {
+        bool did_mark_launch_4511_seen = false;
+        {
+            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+            local_lobby.apply("4511_lan_server_available_seen", [&did_mark_launch_4511_seen](GBE_LocalLobby &lobby) {
+                did_mark_launch_4511_seen = gbe::dota_lobby_state::mark_launch_4511_seen(lobby);
+            });
+        }
+        if (did_mark_launch_4511_seen) {
             GBE_PublishSharedDotaLobbyState("4511_lan_server_available_seen");
         }
         GBE_TrySyncDotaLobbyServerIdFromGameServer("4511_lan_server_available");
@@ -775,23 +782,26 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaverDetectedRequest(const uint8 *bo
     );
 
     if (leaver_steam_id != 0ull && leaver_status != 0u) {
-        bool updated = false;
-        for (GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
-            if (member.steam_id == leaver_steam_id) {
-                if (member.leaver_status != leaver_status) {
-                    member.leaver_status = leaver_status;
-                    member.connected = false;
-                    updated = true;
-                    GBE_GC_DebugLog(
-                        "GC_DOTA_DIRECT",
-                        "updated member leaver_status steam_id=%llu leaver_status=%u",
-                        static_cast<unsigned long long>(leaver_steam_id),
-                        leaver_status
-                    );
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        const bool updated = local_lobby.apply("7072_leaver_detected", [this, leaver_steam_id, leaver_status](GBE_LocalLobby &lobby) {
+            for (GBE_DotaLobbyMemberState &member : lobby.members) {
+                if (member.steam_id == leaver_steam_id) {
+                    if (member.leaver_status != leaver_status) {
+                        member.leaver_status = leaver_status;
+                        member.connected = false;
+                        GBE_GC_DebugLog(
+                            "GC_DOTA_DIRECT",
+                            "updated member leaver_status steam_id=%llu leaver_status=%u",
+                            static_cast<unsigned long long>(leaver_steam_id),
+                            leaver_status
+                        );
+                        return true;
+                    }
+                    break;
                 }
-                break;
             }
-        }
+            return false;
+        });
 
         if (updated) {
             GBE_PublishSharedDotaLobbyState("7072_leaver_detected");

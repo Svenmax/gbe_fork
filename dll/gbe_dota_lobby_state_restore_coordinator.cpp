@@ -19,6 +19,7 @@
 
 #include "dll/steam_game_coordinator.h"
 #include "dll/dll.h"
+#include "gbe_dota_gc_diagnostics.h"
 #include "gbe_dota_protocol_constants.h"
 #include "gbe_dota_request_router.h"
 #include "gbe_proto_buf_header.h"
@@ -28,6 +29,7 @@
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
 #include "gbe_dota_lifecycle_state_machine.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_dota_lobby_state_store.h"
 #include "gbe_dota_reconnect_context.h"
 #include "gbe_gc_config.h"
@@ -113,17 +115,28 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 }
             }
 
-            gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared_lobby, false, true, GBE_local_lobby);
+            {
+                gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+                local_lobby.apply(reason ? reason : "restore_client_full_adopt", [&shared_lobby](GBE_LocalLobby &lobby) {
+                    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared_lobby, false, true, lobby);
+                });
+            }
             const std::uint64_t recovery_base_generation = std::max(
                 static_cast<std::uint64_t>(GBE_CurrentDotaLobbyGeneration()),
                 GBE_local_lobby.generation);
             GBE_dota_lobby_generation_counter = gbe::dota_lobby_generation::Counter(
                 gbe::dota_lobby_generation::Generation{recovery_base_generation});
             if (GBE_AdvanceDotaLobbyGeneration(gbe::dota_lobby_generation::Boundary::Recover, reason) == GBE_DotaGenerationAdvanceResult::Exhausted) {
-                gbe::dota_lobby_state::clear_local_lobby(GBE_local_lobby);
+                gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+                local_lobby.replace_for_reset(GBE_LocalLobby{});
                 return;
             }
-            gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, GBE_CurrentDotaLobbyGeneration());
+            {
+                gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+                local_lobby.apply(reason ? reason : "restore_client_full_adopt", [this](GBE_LocalLobby &lobby) {
+                    gbe::dota_lobby_state::apply_lobby_generation(lobby, GBE_CurrentDotaLobbyGeneration());
+                });
+            }
 
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
@@ -143,10 +156,12 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             return;
         }
 
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
         bool changed = false;
         const gbe::dota_lobby_state::SourceAwareSharedRuntimeRestorePlan runtime_restore_plan =
             gbe::dota_lobby_state::compose_source_aware_shared_runtime_restore_plan(
-                GBE_local_lobby,
+                local_lobby_snapshot,
                 shared_lobby,
                 GBE_kDotaLaunchPhaseRunQueued);
         const std::uint64_t synchronized_generation = std::max(
@@ -156,15 +171,19 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
             GBE_dota_lobby_generation_counter = gbe::dota_lobby_generation::Counter(
                 gbe::dota_lobby_generation::Generation{synchronized_generation});
         }
-        if (gbe::dota_lobby_state::restore_lobby_generation(
-                GBE_local_lobby,
-                synchronized_generation)) {
-            changed = true;
-        }
-        if (gbe::dota_lobby_state::restore_lobby_generic_lobby_id(
-                GBE_local_lobby,
-                shared_lobby.generic_lobby_id)) {
-            changed = true;
+        {
+            changed = local_lobby.apply(
+                reason ? reason : "restore_client_runtime_identity",
+                [synchronized_generation, &shared_lobby](GBE_LocalLobby &lobby) {
+                    bool local_changed = false;
+                    if (gbe::dota_lobby_state::restore_lobby_generation(lobby, synchronized_generation)) {
+                        local_changed = true;
+                    }
+                    if (gbe::dota_lobby_state::restore_lobby_generic_lobby_id(lobby, shared_lobby.generic_lobby_id)) {
+                        local_changed = true;
+                    }
+                    return local_changed;
+                }) || changed;
         }
         const uint64 previous_server_id = GBE_local_lobby.server_id;
         const std::string previous_connect = GBE_local_lobby.connect;
@@ -182,60 +201,47 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                 GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
             );
         }
-        changed = gbe::dota_lobby_state::apply_source_aware_shared_runtime_restore_plan(
-            GBE_local_lobby,
-            runtime_restore_plan) || changed;
-
-        changed = gbe::dota_lobby_state::apply_shared_lobby_options_restore_plan(
-            GBE_local_lobby,
-            gbe::dota_lobby_state::compose_shared_lobby_options_restore_plan(
-                GBE_local_lobby,
-                shared_lobby)) || changed;
-
-        if (gbe::dota_lobby_state::restore_lobby_custom_game(
-                GBE_local_lobby,
-                shared_lobby.custom_game)) {
-            changed = true;
+        {
+            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+            changed = local_lobby.apply(
+                reason ? reason : "restore_client_runtime",
+                [&runtime_restore_plan, &shared_lobby](GBE_LocalLobby &lobby) {
+                    bool local_changed = false;
+                    local_changed = gbe::dota_lobby_state::apply_source_aware_shared_runtime_restore_plan(
+                        lobby,
+                        runtime_restore_plan) || local_changed;
+                    local_changed = gbe::dota_lobby_state::apply_shared_lobby_options_restore_plan(
+                        lobby,
+                        gbe::dota_lobby_state::compose_shared_lobby_options_restore_plan(
+                            lobby,
+                            shared_lobby)) || local_changed;
+                    if (gbe::dota_lobby_state::restore_lobby_custom_game(lobby, shared_lobby.custom_game)) {
+                        local_changed = true;
+                    }
+                    if (gbe::dota_lobby_state::restore_lobby_owner_connected(lobby, shared_lobby.owner_connected)) {
+                        local_changed = true;
+                    }
+                    if (gbe::dota_lobby_state::restore_launch_4511_seen(lobby, shared_lobby.launch_4511_seen)) {
+                        local_changed = true;
+                    }
+                    if (gbe::dota_lobby_state::restore_lobby_owner_team(lobby, shared_lobby.owner_team)) {
+                        local_changed = true;
+                    }
+                    if (gbe::dota_lobby_state::restore_lobby_owner_slot(lobby, shared_lobby.owner_slot)) {
+                        local_changed = true;
+                    }
+                    local_changed = gbe::dota_lobby_state::apply_owner_hero_from_shared(lobby, shared_lobby) || local_changed;
+                    if (gbe::dota_lobby_state::restore_lobby_members(lobby, shared_lobby.members)) {
+                        local_changed = true;
+                    }
+                    local_changed = gbe::dota_lobby_state::apply_shared_lobby_cache_restore_plan(
+                        lobby,
+                        gbe::dota_lobby_state::compose_shared_lobby_cache_restore_plan(
+                            lobby,
+                            shared_lobby)) || local_changed;
+                    return local_changed;
+                }) || changed;
         }
-
-        if (gbe::dota_lobby_state::restore_lobby_owner_connected(
-                GBE_local_lobby,
-                shared_lobby.owner_connected)) {
-            changed = true;
-        }
-
-        if (gbe::dota_lobby_state::restore_launch_4511_seen(
-                GBE_local_lobby,
-                shared_lobby.launch_4511_seen)) {
-            changed = true;
-        }
-
-        if (gbe::dota_lobby_state::restore_lobby_owner_team(
-                GBE_local_lobby,
-                shared_lobby.owner_team)) {
-            changed = true;
-        }
-
-        if (gbe::dota_lobby_state::restore_lobby_owner_slot(
-                GBE_local_lobby,
-                shared_lobby.owner_slot)) {
-            changed = true;
-        }
-
-        if (gbe::dota_lobby_state::apply_owner_hero_from_shared(GBE_local_lobby, shared_lobby))
-            changed = true;
-
-        if (gbe::dota_lobby_state::restore_lobby_members(
-                GBE_local_lobby,
-                shared_lobby.members)) {
-            changed = true;
-        }
-
-        changed = gbe::dota_lobby_state::apply_shared_lobby_cache_restore_plan(
-            GBE_local_lobby,
-            gbe::dota_lobby_state::compose_shared_lobby_cache_restore_plan(
-                GBE_local_lobby,
-                shared_lobby)) || changed;
 
         if (changed) {
             GBE_GC_DebugLog(
@@ -269,7 +275,12 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
         return;
     }
 
-    gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared_lobby, true, false, GBE_local_lobby);
+    {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        local_lobby.apply(reason ? reason : "restore_server_or_full", [&shared_lobby](GBE_LocalLobby &lobby) {
+            gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared_lobby, true, false, lobby);
+        });
+    }
 
     GBE_GC_DebugLog(
         "GC_DOTA_SYNC",

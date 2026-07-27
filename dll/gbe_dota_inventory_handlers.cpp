@@ -681,14 +681,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
     }
 
     const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
+    const GBE_LocalLobby *server_lobby = server_gc ? &server_gc->GBE_PeerLocalLobbySnapshot() : nullptr;
     const bool has_host_server_lobby = is_dota_client && server_gc &&
         GBE_local_lobby.active &&
         GBE_local_lobby.lobby_id != 0u &&
         GBE_local_lobby.owner_steam_id == local_steam_id &&
-        server_gc->GBE_local_lobby.active &&
-        server_gc->GBE_local_lobby.lobby_id == GBE_local_lobby.lobby_id &&
-        server_gc->GBE_local_lobby.generation == GBE_local_lobby.generation &&
-        server_gc->GBE_local_lobby.owner_steam_id == local_steam_id;
+        server_lobby &&
+        server_lobby->active &&
+        server_lobby->lobby_id == GBE_local_lobby.lobby_id &&
+        server_lobby->generation == GBE_local_lobby.generation &&
+        server_lobby->owner_steam_id == local_steam_id;
 
     EquipItemsPlanningContext planning_context{};
     planning_context.is_dota_client = is_dota_client;
@@ -717,7 +719,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
 
     const uint32 equipped_hero_id = infer_equipped_hero_id(plan, items);
     if (has_host_server_lobby && equipped_hero_id != 0u) {
-        const uint32 previous_owner_hero_id = server_gc->GBE_local_lobby.owner_hero_id;
+        const uint32 previous_owner_hero_id = server_lobby->owner_hero_id;
         const std::uint64_t member_generation = GBE_CurrentDotaLobbyGeneration();
         GBE_ExecuteDotaLifecycleActions(
             gbe::dota_lifecycle::decide_member_runtime_actions(
@@ -735,7 +737,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
                 equipped_hero_id,
                 true,
                 "2569_owner_hero_inferred"));
-        const bool owner_hero_changed = execution.state_changed && previous_owner_hero_id != server_gc->GBE_local_lobby.owner_hero_id;
+        const bool owner_hero_changed = execution.state_changed && previous_owner_hero_id != server_gc->GBE_PeerLocalLobbySnapshot().owner_hero_id;
         if (owner_hero_changed) {
             GBE_GC_DebugLog(
                 "GC_DOTA_EQUIP_REFRESH",
