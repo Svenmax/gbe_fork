@@ -1663,6 +1663,8 @@ def audit_local_lobby_owner_boundary(source_texts=None):
     for helper, label in runtime_restore_helpers.items():
         if re.search(rf"{helper}\s*\(\s*GBE_local_lobby\s*,", restore_coordinator):
             issues.append(f"gbe_dota_lobby_state_restore_coordinator.cpp: {label} must route through LocalLobbyOwner::apply")
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|generation|state|game_state|server_id|connect|launch_phase|generic_lobby_id|match_id|owner_steam_id|owner_account_id|owner_team|owner_slot)\b", restore_coordinator):
+        issues.append("gbe_dota_lobby_state_restore_coordinator.cpp: restore guard/log/helper reads must route through LocalLobbyOwner::snapshot")
 
     chat_handlers = strip_comments(source_texts.get("gbe_dota_chat_handlers.cpp", ""))
     if re.search(r"apply_chat_channel\s*\(\s*GBE_local_lobby\s*,", chat_handlers):

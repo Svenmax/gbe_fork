@@ -1334,6 +1334,8 @@ void f()
     gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
     local_lobby.replace_for_reset(GBE_LocalLobby{});
     const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    if (snapshot.active && snapshot.lobby_id != 0 && snapshot.lobby_id != shared_lobby.lobby_id)
+        log(snapshot.generation, snapshot.state, snapshot.game_state, snapshot.server_id, snapshot.connect, snapshot.launch_phase, snapshot.generic_lobby_id, snapshot.match_id, snapshot.owner_steam_id, snapshot.owner_account_id, snapshot.owner_team, snapshot.owner_slot);
     gbe::dota_lobby_state::compose_source_aware_shared_runtime_restore_plan(snapshot, shared_lobby, launch_phase);
     local_lobby.apply("restore_client_full_adopt", [](GBE_LocalLobby &lobby) {
         gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared_lobby, false, true, lobby);
@@ -1650,6 +1652,8 @@ void f()
     gbe::dota_lobby_state::apply_shared_lobby_cache_restore_plan(GBE_local_lobby, cache_restore_plan);
     gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, generation);
     gbe::dota_lobby_state::apply_owner_hero_from_shared(GBE_local_lobby, shared_lobby);
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.lobby_id != shared_lobby.lobby_id)
+        log(GBE_local_lobby.generation, GBE_local_lobby.state, GBE_local_lobby.game_state, GBE_local_lobby.server_id, GBE_local_lobby.connect, GBE_local_lobby.launch_phase, GBE_local_lobby.generic_lobby_id, GBE_local_lobby.match_id, GBE_local_lobby.owner_steam_id, GBE_local_lobby.owner_account_id, GBE_local_lobby.owner_team, GBE_local_lobby.owner_slot);
 }
 """,
             "gbe_dota_chat_handlers.cpp": """
@@ -2094,6 +2098,10 @@ void f()
         ]
         for expected_issue in expected_restore_owner_issues:
             self.assertIn(expected_issue, issues)
+        self.assertIn(
+            "gbe_dota_lobby_state_restore_coordinator.cpp: restore guard/log/helper reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
         self.assertIn(
             "gbe_dota_chat_handlers.cpp: chat channel updates must route through LocalLobbyOwner::apply",
             issues,
