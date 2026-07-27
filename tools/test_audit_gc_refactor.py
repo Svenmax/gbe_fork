@@ -1482,6 +1482,7 @@ void f()
     gbe::dota_lobby_state::apply_postgame_lobby_state_plan(GBE_local_lobby, plan);
     gbe::dota_lobby_state::apply_lifecycle_lobby_state(GBE_local_lobby, lobby_state, lobby_game_state);
     gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, next_generation);
+    log(GBE_local_lobby.lobby_id, GBE_local_lobby.generation, GBE_local_lobby.server_id);
 }
 """,
             "gbe_dota_custom_game_lifecycle_handlers.cpp": """
@@ -1767,6 +1768,10 @@ void f()
         )
         self.assertIn(
             "gbe_dota_custom_game_lifecycle_coordinator.cpp: runtime clear generation must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_custom_game_lifecycle_coordinator.cpp: lifecycle diagnostic reads must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(

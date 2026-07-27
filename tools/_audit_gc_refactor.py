@@ -1498,6 +1498,8 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_custom_game_lifecycle_coordinator.cpp: lifecycle lobby state must route through LocalLobbyOwner::apply")
     if re.search(r"apply_lobby_generation\s*\(\s*GBE_local_lobby\s*,", custom_game_lifecycle):
         issues.append("gbe_dota_custom_game_lifecycle_coordinator.cpp: runtime clear generation must route through LocalLobbyOwner::apply")
+    if re.search(r"GBE_local_lobby\.(?:lobby_id|generation|server_id)\b", custom_game_lifecycle):
+        issues.append("gbe_dota_custom_game_lifecycle_coordinator.cpp: lifecycle diagnostic reads must route through LocalLobbyOwner::snapshot")
 
     custom_game_lifecycle_handlers = strip_comments(source_texts.get("gbe_dota_custom_game_lifecycle_handlers.cpp", ""))
     if re.search(r"apply_custom_game_loading_metadata\s*\(\s*GBE_local_lobby\s*,", custom_game_lifecycle_handlers):

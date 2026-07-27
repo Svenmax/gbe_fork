@@ -65,9 +65,11 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
     bool previous_action_succeeded = true;
     bool abort_execution = false;
     for (const GBE_DotaAction &action : actions) {
-        const std::uint64_t action_lobby_id = GBE_local_lobby.lobby_id;
-        const std::uint64_t action_generation = GBE_local_lobby.generation;
-        const std::uint64_t action_server_id = GBE_local_lobby.server_id;
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+        const std::uint64_t action_lobby_id = local_lobby_snapshot.lobby_id;
+        const std::uint64_t action_generation = local_lobby_snapshot.generation;
+        const std::uint64_t action_server_id = local_lobby_snapshot.server_id;
         if (action.only_when_previous_action_succeeded && !previous_action_succeeded) {
             GBE_LifecycleLogEvent(lifecycle_action_event(
                 action,
@@ -310,13 +312,15 @@ bool Steam_Game_Coordinator::GBE_ExecuteDotaCustomGameLifecycleTransition(
     options.wrapped = context.wrapped;
     options.outer_session_field_raw = context.outer_session_field_raw;
     const GBE_DotaActionList actions = gbe::dota_lifecycle::build_transition_actions(effects);
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
     gbe::dota_diagnostic::Event transition_event{
         "lifecycle.transition_decision",
         gbe::dota_diagnostic::reason_from_string(context.transition.reason),
         context.wrapped ? gbe::dota_diagnostic::Source::Wrapped : gbe::dota_diagnostic::Source::Direct,
-        GBE_local_lobby.lobby_id,
-        GBE_local_lobby.generation,
-        GBE_local_lobby.server_id,
+        local_lobby_snapshot.lobby_id,
+        local_lobby_snapshot.generation,
+        local_lobby_snapshot.server_id,
         {},
         actions.empty() ? "no_actions" : "planned",
     };
