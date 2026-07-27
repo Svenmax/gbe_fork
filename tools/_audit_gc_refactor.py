@@ -1664,6 +1664,20 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: local member publish must read members through LocalLobbyOwner::snapshot")
     if re.search(r"CSteamID\s+generic_lobby_id\s*\(\s*\(uint64\)\s*GBE_local_lobby\.generic_lobby_id\s*\)", local_member_publish_body):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: local member publish lobby id must route through LocalLobbyOwner::snapshot")
+    metadata_publish_match = re.search(
+        r"void\s+Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata\s*\([^)]*\)\s*\{(?P<body>.*?)\n\}",
+        publish_coordinator,
+        flags=re.DOTALL,
+    )
+    metadata_publish_body = metadata_publish_match.group("body") if metadata_publish_match else ""
+    if re.search(r"compose_lobby_scalar_publish_data\s*\([^;]*GBE_local_lobby\.", metadata_publish_body, flags=re.DOTALL):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: metadata scalar publish data must route through LocalLobbyOwner::snapshot")
+    if re.search(r"compose_lobby_options_publish_data\s*\([^;]*GBE_local_lobby\.", metadata_publish_body, flags=re.DOTALL):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: metadata options publish data must route through LocalLobbyOwner::snapshot")
+    if re.search(r"compose_custom_game_publish_data\s*\(\s*GBE_local_lobby\.custom_game\s*\)", metadata_publish_body):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: metadata custom game publish data must route through LocalLobbyOwner::snapshot")
+    if re.search(r"compare_update\s*\(\s*GBE_local_lobby\.generation", metadata_publish_body):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: metadata shared update generation must route through LocalLobbyOwner::snapshot")
     if re.search(r"GBE_LocalLobby\s*&\s*captured_lobby\s*=\s*[^;]*GBE_local_lobby", publish_coordinator, flags=re.DOTALL):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: capture mutable fallback must route through LocalLobbyOwner::apply")
     if not re.search(r"refresh_captured_lobby\s*=\s*\[&\]\s*\(\s*GBE_LocalLobby\s*&\s*captured_lobby\s*\)", publish_coordinator):

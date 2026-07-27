@@ -505,50 +505,53 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyLocalMemberData(const c
 
 void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *reason)
 {
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.generic_lobby_id == 0)
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+
+    if (!local_lobby_snapshot.active || local_lobby_snapshot.lobby_id == 0 || local_lobby_snapshot.generic_lobby_id == 0)
         return;
 
     Steam_Client *steam_client = get_steam_client();
     if (!steam_client || !steam_client->steam_matchmaking)
         return;
 
-    CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
+    CSteamID generic_lobby_id((uint64)local_lobby_snapshot.generic_lobby_id);
     if (!generic_lobby_id.IsLobby())
         return;
 
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMarkerKey, GBE_kDotaGenericLobbyMarkerValue);
     const GBE_DotaLobbyScalarPublishData scalar_publish_data = gbe::dota_lobby_flow::compose_lobby_scalar_publish_data(
-        GBE_local_lobby.lobby_id,
-        GBE_local_lobby.owner_steam_id,
-        GBE_local_lobby.owner_account_id,
-        GBE_local_lobby.state,
-        GBE_local_lobby.game_state,
-        GBE_local_lobby.match_id,
-        GBE_local_lobby.game_start_time,
-        GBE_local_lobby.tv_secret_code,
-        GBE_local_lobby.tv_port);
+        local_lobby_snapshot.lobby_id,
+        local_lobby_snapshot.owner_steam_id,
+        local_lobby_snapshot.owner_account_id,
+        local_lobby_snapshot.state,
+        local_lobby_snapshot.game_state,
+        local_lobby_snapshot.match_id,
+        local_lobby_snapshot.game_start_time,
+        local_lobby_snapshot.tv_secret_code,
+        local_lobby_snapshot.tv_port);
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyDotaLobbyIdKey, scalar_publish_data.dota_lobby_id.c_str());
-    const std::string normalized_connect = gbe::proto_wire::normalize_dota_practice_lobby_connect(GBE_local_lobby.connect);
+    const std::string normalized_connect = gbe::proto_wire::normalize_dota_practice_lobby_connect(local_lobby_snapshot.connect);
     const GBE_DotaLobbyMetadataPublishData publish_data = gbe::dota_lobby_flow::compose_lobby_metadata_publish_data(
-        GBE_local_lobby.room_name,
-        GBE_local_lobby.owner_name,
+        local_lobby_snapshot.room_name,
+        local_lobby_snapshot.owner_name,
         std::string(settings->get_local_name()),
-        GBE_local_lobby.match_id,
-        GBE_local_lobby.server_id,
+        local_lobby_snapshot.match_id,
+        local_lobby_snapshot.server_id,
         normalized_connect);
     const GBE_DotaLobbyOptionsPublishData options_publish_data = gbe::dota_lobby_flow::compose_lobby_options_publish_data(
-        GBE_local_lobby.game_mode,
-        GBE_local_lobby.server_region,
-        GBE_local_lobby.lan_host_ping_location,
-        GBE_local_lobby.pass_key,
-        GBE_local_lobby.allow_cheats,
-        GBE_local_lobby.fill_with_bots,
-        GBE_local_lobby.allow_spectating,
-        GBE_local_lobby.visibility,
-        GBE_local_lobby.bot_difficulty_radiant,
-        GBE_local_lobby.bot_difficulty_dire,
-        GBE_local_lobby.bot_radiant,
-        GBE_local_lobby.bot_dire);
+        local_lobby_snapshot.game_mode,
+        local_lobby_snapshot.server_region,
+        local_lobby_snapshot.lan_host_ping_location,
+        local_lobby_snapshot.pass_key,
+        local_lobby_snapshot.allow_cheats,
+        local_lobby_snapshot.fill_with_bots,
+        local_lobby_snapshot.allow_spectating,
+        local_lobby_snapshot.visibility,
+        local_lobby_snapshot.bot_difficulty_radiant,
+        local_lobby_snapshot.bot_difficulty_dire,
+        local_lobby_snapshot.bot_radiant,
+        local_lobby_snapshot.bot_dire);
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyRoomNameKey, publish_data.room_name.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameModeKey, options_publish_data.game_mode.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerRegionKey, options_publish_data.server_region.c_str());
@@ -562,7 +565,7 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyBotDifficultyDireKey, options_publish_data.bot_difficulty_dire.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyBotRadiantKey, options_publish_data.bot_radiant.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyBotDireKey, options_publish_data.bot_dire.c_str());
-    const GBE_DotaCustomGamePublishData custom_game_publish_data = gbe::dota_custom_game::compose_custom_game_publish_data(GBE_local_lobby.custom_game);
+    const GBE_DotaCustomGamePublishData custom_game_publish_data = gbe::dota_custom_game::compose_custom_game_publish_data(local_lobby_snapshot.custom_game);
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomGameModeKey, custom_game_publish_data.mode.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomMapNameKey, custom_game_publish_data.map_name.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyCustomDifficultyKey, custom_game_publish_data.difficulty.c_str());
@@ -578,23 +581,20 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyStateKey, scalar_publish_data.state.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStateKey, scalar_publish_data.game_state.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyMatchIdKey, scalar_publish_data.match_id.c_str());
-    {
-        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
-        local_lobby.apply(reason ? reason : "publish_runtime_metadata", [&publish_data](GBE_LocalLobby &lobby) {
-            gbe::dota_lobby_state::apply_runtime_metadata(
-                lobby,
-                publish_data.connect,
-                publish_data.server_id);
-        });
-    }
+    local_lobby.apply(reason ? reason : "publish_runtime_metadata", [&publish_data](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::apply_runtime_metadata(
+            lobby,
+            publish_data.connect,
+            publish_data.server_id);
+    });
     const auto shared_update_result = GBE_SharedLobbyStore().compare_update(
-        GBE_local_lobby.generation,
+        local_lobby_snapshot.generation,
         [&](GBE_SharedDotaLobbyState &shared_lobby) {
-            if (!shared_lobby.valid || shared_lobby.lobby_id != GBE_local_lobby.lobby_id)
+            if (!shared_lobby.valid || shared_lobby.lobby_id != local_lobby_snapshot.lobby_id)
                 return;
 
-            shared_lobby.connect = GBE_local_lobby.connect;
-            if (gbe::dota_lobby_flow::should_clear_lobby_server_id_for_metadata_publish(GBE_local_lobby.match_id))
+            shared_lobby.connect = local_lobby_snapshot.connect;
+            if (gbe::dota_lobby_flow::should_clear_lobby_server_id_for_metadata_publish(local_lobby_snapshot.match_id))
                 shared_lobby.server_id = 0ull;
         });
     if (shared_update_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
@@ -602,38 +602,38 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *re
             "GC_DOTA_SYNC",
             "skipped stale shared lobby metadata update reason=%s lobby_id=%llu generation=%llu",
             reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            static_cast<unsigned long long>(GBE_local_lobby.generation));
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+            static_cast<unsigned long long>(local_lobby_snapshot.generation));
     }
 
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyServerIdKey, std::to_string(publish_data.server_id).c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyConnectKey, publish_data.connect.c_str());
     steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyGameStartTimeKey, scalar_publish_data.game_start_time.c_str());
-    if (GBE_local_lobby.tv_secret_code != 0)
+    if (local_lobby_snapshot.tv_secret_code != 0)
         steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyTvSecretCodeKey, scalar_publish_data.tv_secret_code.c_str());
-    if (GBE_local_lobby.tv_port != 0)
+    if (local_lobby_snapshot.tv_port != 0)
         steam_client->steam_matchmaking->SetLobbyData(generic_lobby_id, GBE_kDotaGenericLobbyTvPortKey, scalar_publish_data.tv_port.c_str());
 
     GBE_GC_DebugLog(
         "GC_DOTA_LOBBY",
         "[LOBBY] Published generic lobby metadata reason=%s dota_lobby_id=%llu generic_lobby_id=%llu room=%s mode=%u region=%u pass_len=%zu cheats=%u bots=%u spectating=%u visibility=%u bot_diff_r=%u bot_diff_d=%u state=%u game_state=%u match_id=%llu server_id=%llu connect=%s",
         reason ? reason : "unknown",
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
-        GBE_local_lobby.room_name.c_str(),
-        GBE_local_lobby.game_mode,
-        GBE_local_lobby.server_region,
-        GBE_local_lobby.pass_key.size(),
-        GBE_local_lobby.allow_cheats ? 1u : 0u,
-        GBE_local_lobby.fill_with_bots ? 1u : 0u,
-        GBE_local_lobby.allow_spectating ? 1u : 0u,
-        GBE_local_lobby.visibility,
-        GBE_local_lobby.bot_difficulty_radiant,
-        GBE_local_lobby.bot_difficulty_dire,
-        GBE_local_lobby.state,
-        GBE_local_lobby.game_state,
-        static_cast<unsigned long long>(GBE_local_lobby.match_id),
-        static_cast<unsigned long long>(GBE_local_lobby.server_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.generic_lobby_id),
+        local_lobby_snapshot.room_name.c_str(),
+        local_lobby_snapshot.game_mode,
+        local_lobby_snapshot.server_region,
+        local_lobby_snapshot.pass_key.size(),
+        local_lobby_snapshot.allow_cheats ? 1u : 0u,
+        local_lobby_snapshot.fill_with_bots ? 1u : 0u,
+        local_lobby_snapshot.allow_spectating ? 1u : 0u,
+        local_lobby_snapshot.visibility,
+        local_lobby_snapshot.bot_difficulty_radiant,
+        local_lobby_snapshot.bot_difficulty_dire,
+        local_lobby_snapshot.state,
+        local_lobby_snapshot.game_state,
+        static_cast<unsigned long long>(local_lobby_snapshot.match_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.server_id),
         publish_data.connect.c_str()
     );
 }

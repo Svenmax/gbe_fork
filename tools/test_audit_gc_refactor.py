@@ -1359,6 +1359,17 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyLocalMemberData(const c
         gbe::dota_lobby_state::apply_runtime_metadata(lobby, connect, server_id);
     });
 }
+void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *reason)
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    gbe::dota_lobby_flow::compose_lobby_scalar_publish_data(snapshot.lobby_id, snapshot.owner_steam_id, snapshot.owner_account_id, snapshot.state, snapshot.game_state, snapshot.match_id, snapshot.game_start_time, snapshot.tv_secret_code, snapshot.tv_port);
+    gbe::dota_lobby_flow::compose_lobby_options_publish_data(snapshot.game_mode, snapshot.server_region, snapshot.lan_host_ping_location, snapshot.pass_key, snapshot.allow_cheats, snapshot.fill_with_bots, snapshot.allow_spectating, snapshot.visibility, snapshot.bot_difficulty_radiant, snapshot.bot_difficulty_dire, snapshot.bot_radiant, snapshot.bot_dire);
+    gbe::dota_custom_game::compose_custom_game_publish_data(snapshot.custom_game);
+    GBE_SharedLobbyStore().compare_update(snapshot.generation, [&](GBE_SharedDotaLobbyState &shared_lobby) {
+        shared_lobby.connect = snapshot.connect;
+    });
+}
 """,
         }
         self.assertEqual([], audit.audit_local_lobby_owner_boundary(sources))
@@ -1565,6 +1576,15 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyLocalMemberData(const c
         publish_member(member);
     }
     GBE_LocalLobby &captured_lobby = pure ? projected_lobby : GBE_local_lobby;
+}
+void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyMetadata(const char *reason)
+{
+    gbe::dota_lobby_flow::compose_lobby_scalar_publish_data(GBE_local_lobby.lobby_id, GBE_local_lobby.owner_steam_id, GBE_local_lobby.owner_account_id, GBE_local_lobby.state, GBE_local_lobby.game_state, GBE_local_lobby.match_id, GBE_local_lobby.game_start_time, GBE_local_lobby.tv_secret_code, GBE_local_lobby.tv_port);
+    gbe::dota_lobby_flow::compose_lobby_options_publish_data(GBE_local_lobby.game_mode, GBE_local_lobby.server_region, GBE_local_lobby.lan_host_ping_location, GBE_local_lobby.pass_key, GBE_local_lobby.allow_cheats, GBE_local_lobby.fill_with_bots, GBE_local_lobby.allow_spectating, GBE_local_lobby.visibility, GBE_local_lobby.bot_difficulty_radiant, GBE_local_lobby.bot_difficulty_dire, GBE_local_lobby.bot_radiant, GBE_local_lobby.bot_dire);
+    gbe::dota_custom_game::compose_custom_game_publish_data(GBE_local_lobby.custom_game);
+    GBE_SharedLobbyStore().compare_update(GBE_local_lobby.generation, [&](GBE_SharedDotaLobbyState &shared_lobby) {
+        shared_lobby.connect = GBE_local_lobby.connect;
+    });
 }
 """,
             "gbe_dota_lobby_list_handlers.cpp": """
@@ -1918,6 +1938,14 @@ void f()
             "gbe_dota_lobby_state_publish_coordinator.cpp: local member publish lobby id must route through LocalLobbyOwner::snapshot",
             issues,
         )
+        expected_metadata_publish_issues = [
+            "gbe_dota_lobby_state_publish_coordinator.cpp: metadata scalar publish data must route through LocalLobbyOwner::snapshot",
+            "gbe_dota_lobby_state_publish_coordinator.cpp: metadata options publish data must route through LocalLobbyOwner::snapshot",
+            "gbe_dota_lobby_state_publish_coordinator.cpp: metadata custom game publish data must route through LocalLobbyOwner::snapshot",
+            "gbe_dota_lobby_state_publish_coordinator.cpp: metadata shared update generation must route through LocalLobbyOwner::snapshot",
+        ]
+        for expected_issue in expected_metadata_publish_issues:
+            self.assertIn(expected_issue, issues)
         self.assertIn(
             "gbe_dota_lobby_state_publish_coordinator.cpp: capture mutable fallback must route through LocalLobbyOwner::apply",
             issues,
