@@ -1603,6 +1603,8 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_post_login_handlers.cpp: runtime connect must route through LocalLobbyOwner::apply")
     if re.search(r"apply_source_tv_metadata\s*\(\s*GBE_local_lobby\s*,", post_login_handlers):
         issues.append("gbe_dota_post_login_handlers.cpp: SourceTV metadata must route through LocalLobbyOwner::apply")
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|custom_game|lan|match_id|connect|generation|state|game_state|tv_secret_code|tv_port)\b", post_login_handlers):
+        issues.append("gbe_dota_post_login_handlers.cpp: post-login guard/log/SourceTV fallback reads must route through LocalLobbyOwner::snapshot")
 
     lobby_list_handlers = strip_comments(source_texts.get("gbe_dota_lobby_list_handlers.cpp", ""))
     if re.search(r"push_back\s*\(\s*GBE_local_lobby\s*\)", lobby_list_handlers):

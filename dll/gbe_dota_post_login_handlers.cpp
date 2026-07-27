@@ -219,42 +219,44 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(uint32 reques
 
     const std::string runtime_connect = gbe::proto_wire::normalize_dota_practice_lobby_connect(
         gbe::proto_wire::format_dota_practice_lobby_connect_from_ips(public_ip, private_ip, server_port));
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    GBE_LocalLobby local_lobby_snapshot = local_lobby.snapshot();
     // 4508 reports the engine's listen address, but peers that already have a
     // working LAN endpoint must keep it to avoid a post-connect P2P redirect.
     const bool preserve_existing_lan_connect =
-        GBE_local_lobby.active &&
-        GBE_local_lobby.lobby_id != 0 &&
-        GBE_local_lobby.custom_game.game_id == 0ull &&
-        GBE_local_lobby.lan &&
-        GBE_local_lobby.match_id != 0ull &&
-        gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(GBE_local_lobby.connect) != 0u &&
+        local_lobby_snapshot.active &&
+        local_lobby_snapshot.lobby_id != 0 &&
+        local_lobby_snapshot.custom_game.game_id == 0ull &&
+        local_lobby_snapshot.lan &&
+        local_lobby_snapshot.match_id != 0ull &&
+        gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(local_lobby_snapshot.connect) != 0u &&
         gbe::proto_wire::parse_dota_practice_lobby_connect_ipv4(runtime_connect) != 0u &&
-        runtime_connect != GBE_local_lobby.connect;
-    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && !preserve_existing_lan_connect) {
-        const std::string previous_connect = GBE_local_lobby.connect;
-        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        runtime_connect != local_lobby_snapshot.connect;
+    if (local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0 && !preserve_existing_lan_connect) {
+        const std::string previous_connect = local_lobby_snapshot.connect;
         if (local_lobby.apply("4508_runtime_connect", [&runtime_connect](GBE_LocalLobby &lobby) {
                 return gbe::dota_lobby_state::apply_runtime_connect(lobby, runtime_connect);
             })) {
+            local_lobby_snapshot = local_lobby.snapshot();
             const auto shared_update_result = GBE_SharedLobbyStore().compare_update(
-                GBE_local_lobby.generation,
-                [&](GBE_SharedDotaLobbyState &shared_lobby) {
-                    if (shared_lobby.valid && shared_lobby.lobby_id == GBE_local_lobby.lobby_id)
+                local_lobby_snapshot.generation,
+                [local_lobby_snapshot, &runtime_connect](GBE_SharedDotaLobbyState &shared_lobby) {
+                    if (shared_lobby.valid && shared_lobby.lobby_id == local_lobby_snapshot.lobby_id)
                         shared_lobby.connect = runtime_connect;
                 });
             if (shared_update_result == gbe::dota_lobby_state::StoreUpdateResult::StaleGeneration) {
                 GBE_GC_DebugLog(
                     "GC_DOTA_SYNC",
                     "skipped stale shared lobby connect update reason=4508_game_server_info lobby_id=%llu generation=%llu candidate=%s",
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    static_cast<unsigned long long>(GBE_local_lobby.generation),
+                    static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+                    static_cast<unsigned long long>(local_lobby_snapshot.generation),
                     runtime_connect.c_str());
             }
 
             GBE_GC_DebugLog(
                 "GC_DOTA_SYNC",
                 "adopted game server address as lobby connect reason=4508_game_server_info lobby_id=%llu previous=%s new=%s",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
                 previous_connect.c_str(),
                 runtime_connect.c_str()
             );
@@ -263,8 +265,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(uint32 reques
         GBE_GC_DebugLog(
             "GC_DOTA_SYNC",
             "preserved existing LAN lobby connect over 4508 runtime address lobby_id=%llu current=%s candidate=%s",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.connect.c_str(),
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+            local_lobby_snapshot.connect.c_str(),
             runtime_connect.c_str()
         );
     }
@@ -289,10 +291,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(uint32 reques
     );
 
     GBE_TrySyncDotaLobbyServerIdFromGameServer("4508_game_server_info");
+    local_lobby_snapshot = local_lobby.snapshot();
 
     // Store tv_secret_code and tv_port for SourceTV spectating
-    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0) {
-        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    if (local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0) {
         local_lobby.apply("4508_source_tv_metadata", [tv_secret_code, tv_port](GBE_LocalLobby &lobby) {
             gbe::dota_lobby_state::apply_source_tv_metadata(lobby, tv_secret_code, tv_port);
         });
@@ -302,7 +304,8 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerAssignmentRequest(uint32 reques
     if (GBE_HasDotaLaunchServerSetupSync())
         GBE_MarkDotaLaunchPhase(GBE_kDotaLaunchPhaseSetupSynced, "4508_game_server_info");
 
-    if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
+    local_lobby_snapshot = local_lobby.snapshot();
+    if (local_lobby_snapshot.state == 1u && local_lobby_snapshot.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
         if (GBE_TryAdvanceDotaLaunchToRun("runtime packet after 4508", request_emsg, source_job, "4508_launch_run"))
             return true;
     }
@@ -669,10 +672,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaWatchGameRequest(
             }
         }
     }
-    if (tv_secret_code == 0 && GBE_local_lobby.tv_secret_code != 0)
-        tv_secret_code = GBE_local_lobby.tv_secret_code;
-    if (GBE_local_lobby.tv_port != 0)
-        source_tv_port = GBE_local_lobby.tv_port;
+    {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+        if (tv_secret_code == 0 && local_lobby_snapshot.tv_secret_code != 0)
+            tv_secret_code = local_lobby_snapshot.tv_secret_code;
+        if (local_lobby_snapshot.tv_port != 0)
+            source_tv_port = local_lobby_snapshot.tv_port;
+    }
     if (!connect_str.empty()) {
         size_t colon = connect_str.find(':');
         std::string ip_str = (colon != std::string::npos) ? connect_str.substr(0, colon) : connect_str;

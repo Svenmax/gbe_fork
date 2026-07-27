@@ -1238,6 +1238,9 @@ void f()
 void f()
 {
     gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    if (snapshot.active && snapshot.lobby_id != 0 && snapshot.custom_game.game_id == 0ull && snapshot.lan && snapshot.match_id != 0ull)
+        log(snapshot.connect, snapshot.generation, snapshot.state, snapshot.game_state, snapshot.tv_secret_code, snapshot.tv_port);
     local_lobby.apply("4508_runtime_connect", [](GBE_LocalLobby &lobby) {
         return gbe::dota_lobby_state::apply_runtime_connect(lobby, runtime_connect);
     });
@@ -1573,6 +1576,8 @@ void f()
 {
     gbe::dota_lobby_state::apply_runtime_connect(GBE_local_lobby, runtime_connect);
     gbe::dota_lobby_state::apply_source_tv_metadata(GBE_local_lobby, tv_secret_code, tv_port);
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.custom_game.game_id == 0ull && GBE_local_lobby.lan && GBE_local_lobby.match_id != 0ull)
+        log(GBE_local_lobby.connect, GBE_local_lobby.generation, GBE_local_lobby.state, GBE_local_lobby.game_state, GBE_local_lobby.tv_secret_code, GBE_local_lobby.tv_port);
 }
 """,
             "gbe_dota_lobby_flow_coordinator.cpp": """
