@@ -65,35 +65,37 @@ void Steam_Game_Coordinator::on_client_connected(CSteamID steam_id)
 
         const uint64 connected_steam_id = steam_id.ConvertToUint64();
         const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
-        if (gc_initialized && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && connected_steam_id != 0 && connected_steam_id == owner_steam_id) {
-            if (GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+        if (gc_initialized && local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0 && connected_steam_id != 0 && connected_steam_id == owner_steam_id) {
+            if (GBE_ShouldSuppressDotaAbandonedLobby(local_lobby_snapshot.lobby_id)) {
                 GBE_GC_DebugLog(
                     "GC_DOTA_SYNC",
                     "ignoring owner reconnect for suppressed abandoned lobby steam_id=%llu lobby_id=%llu state=%u game_state=%u",
                     static_cast<unsigned long long>(connected_steam_id),
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state
+                    static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+                    local_lobby_snapshot.state,
+                    local_lobby_snapshot.game_state
                 );
                 return;
             }
-            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
             if (local_lobby.apply("owner_connected", [](GBE_LocalLobby &lobby) {
                     return gbe::dota_lobby_state::apply_lobby_owner_connected(lobby, true);
                 })) {
                 GBE_PublishSharedDotaLobbyState("owner_connected");
             }
-        } else if (gc_initialized && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && connected_steam_id != 0) {
+        } else if (gc_initialized && local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0 && connected_steam_id != 0) {
             if (GBE_SetDotaLobbyMemberConnected(connected_steam_id, true)) {
+                const GBE_LocalLobby &connected_lobby_snapshot = local_lobby.snapshot();
                 GBE_PublishSharedDotaLobbyState("member_connected");
                 GBE_GC_DebugLog(
                     "GC_DOTA_SYNC",
                     "marked Dota lobby member connected steam_id=%llu lobby_id=%llu state=%u game_state=%u members=%zu",
                     static_cast<unsigned long long>(connected_steam_id),
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state,
-                    GBE_local_lobby.members.size()
+                    static_cast<unsigned long long>(connected_lobby_snapshot.lobby_id),
+                    connected_lobby_snapshot.state,
+                    connected_lobby_snapshot.game_state,
+                    connected_lobby_snapshot.members.size()
                 );
             }
         }
@@ -113,18 +115,20 @@ void Steam_Game_Coordinator::on_client_disconnected(CSteamID steam_id)
     if (is_server && gc_profile == GC_PROFILE_DOTA2) {
         const uint64 disconnected_steam_id = steam_id.ConvertToUint64();
         const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
 
         // In PostGame (state >= 3), do NOT publish shared state for disconnect
         // events.  The 7004 signout finalize path handles PostGame cleanup.
         // Re-publishing state=3 here would race with finalize and leave stale
         // shared state that causes an initialize_gc adopt loop.
-        const bool postgame_suppress_publish = GBE_local_lobby.state >= 3u;
+        const bool postgame_suppress_publish = local_lobby_snapshot.state >= 3u;
 
-        if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && disconnected_steam_id != 0 && disconnected_steam_id == owner_steam_id) {
-            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        if (local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0 && disconnected_steam_id != 0 && disconnected_steam_id == owner_steam_id) {
             local_lobby.apply("owner_disconnected", [](GBE_LocalLobby &lobby) {
                 return gbe::dota_lobby_state::apply_lobby_owner_connected(lobby, false);
             });
+            const GBE_LocalLobby &disconnected_lobby_snapshot = local_lobby.snapshot();
             if (!postgame_suppress_publish)
                 GBE_PublishSharedDotaLobbyState("owner_disconnected");
 
@@ -133,25 +137,26 @@ void Steam_Game_Coordinator::on_client_disconnected(CSteamID steam_id)
                 "GC_DOTA_SYNC",
                 "preserving owner inventory cache across dota reconnect steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s abandon_postgame=%u postgame_suppress=%u",
                 static_cast<unsigned long long>(disconnected_steam_id),
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_local_lobby.state,
-                GBE_local_lobby.game_state,
-                GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
-                GBE_local_lobby.abandon_postgame_active ? 1u : 0u,
+                static_cast<unsigned long long>(disconnected_lobby_snapshot.lobby_id),
+                disconnected_lobby_snapshot.state,
+                disconnected_lobby_snapshot.game_state,
+                GBE_DescribeDotaLaunchPhase(disconnected_lobby_snapshot.launch_phase),
+                disconnected_lobby_snapshot.abandon_postgame_active ? 1u : 0u,
                 postgame_suppress_publish ? 1u : 0u
             );
-        } else if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && disconnected_steam_id != 0) {
+        } else if (local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0 && disconnected_steam_id != 0) {
             if (GBE_SetDotaLobbyMemberConnected(disconnected_steam_id, false)) {
+                const GBE_LocalLobby &disconnected_lobby_snapshot = local_lobby.snapshot();
                 if (!postgame_suppress_publish)
                     GBE_PublishSharedDotaLobbyState("member_disconnected");
                 GBE_GC_DebugLog(
                     "GC_DOTA_SYNC",
                     "marked Dota lobby member disconnected steam_id=%llu lobby_id=%llu state=%u game_state=%u members=%zu postgame_suppress=%u",
                     static_cast<unsigned long long>(disconnected_steam_id),
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state,
-                    GBE_local_lobby.members.size(),
+                    static_cast<unsigned long long>(disconnected_lobby_snapshot.lobby_id),
+                    disconnected_lobby_snapshot.state,
+                    disconnected_lobby_snapshot.game_state,
+                    disconnected_lobby_snapshot.members.size(),
                     postgame_suppress_publish ? 1u : 0u
                 );
             }

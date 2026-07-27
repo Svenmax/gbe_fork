@@ -1495,6 +1495,8 @@ def audit_local_lobby_owner_boundary(source_texts=None):
     connection_lifecycle = strip_comments(source_texts.get("gbe_dota_connection_lifecycle.cpp", ""))
     if re.search(r"apply_lobby_owner_connected\s*\(\s*GBE_local_lobby\s*,", connection_lifecycle):
         issues.append("gbe_dota_connection_lifecycle.cpp: owner connected updates must route through LocalLobbyOwner::apply")
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|state|game_state|launch_phase|abandon_postgame_active|members)\b", connection_lifecycle):
+        issues.append("gbe_dota_connection_lifecycle.cpp: connection lifecycle guard and log reads must route through LocalLobbyOwner::snapshot")
 
     custom_game_lifecycle = strip_comments(source_texts.get("gbe_dota_custom_game_lifecycle_coordinator.cpp", ""))
     if re.search(r"apply_postgame_lobby_state_plan\s*\(\s*GBE_local_lobby\s*,", custom_game_lifecycle):

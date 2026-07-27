@@ -1162,6 +1162,9 @@ void f()
 void f()
 {
     gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    if (snapshot.active && snapshot.lobby_id != 0 && snapshot.state < 3u)
+        log(snapshot.lobby_id, snapshot.state, snapshot.game_state, snapshot.launch_phase, snapshot.abandon_postgame_active, snapshot.members.size());
     local_lobby.apply("owner_connected", [](GBE_LocalLobby &lobby) {
         return gbe::dota_lobby_state::apply_lobby_owner_connected(lobby, true);
     });
@@ -1502,6 +1505,8 @@ void f()
 void f()
 {
     gbe::dota_lobby_state::apply_lobby_owner_connected(GBE_local_lobby, true);
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.state < 3u)
+        log(GBE_local_lobby.lobby_id, GBE_local_lobby.state, GBE_local_lobby.game_state, GBE_local_lobby.launch_phase, GBE_local_lobby.abandon_postgame_active, GBE_local_lobby.members.size());
 }
 """,
             "gbe_dota_custom_game_lifecycle_coordinator.cpp": """
@@ -1817,6 +1822,10 @@ void f()
         )
         self.assertIn(
             "gbe_dota_connection_lifecycle.cpp: owner connected updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_connection_lifecycle.cpp: connection lifecycle guard and log reads must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(
