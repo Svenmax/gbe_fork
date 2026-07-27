@@ -1511,6 +1511,14 @@ def audit_local_lobby_owner_boundary(source_texts=None):
     if re.search(r"decide_(?:ready_up|started_loading|finished_loading)\s*\([^;]*GBE_local_lobby", custom_game_lifecycle_handlers, flags=re.DOTALL):
         issues.append("gbe_dota_custom_game_lifecycle_handlers.cpp: lifecycle decision compose must route through LocalLobbyOwner::snapshot")
 
+    inventory_handlers = strip_comments(source_texts.get("gbe_dota_inventory_handlers.cpp", ""))
+    if re.search(r"GBE_HasActiveServerLobby\s*\(\s*GBE_local_lobby\.lobby_id", inventory_handlers):
+        issues.append("gbe_dota_inventory_handlers.cpp: set style server lobby guard reads must route through LocalLobbyOwner::snapshot")
+    if re.search(r"server_lobby->(?:lobby_id|generation)\s*==\s*GBE_local_lobby\.", inventory_handlers):
+        issues.append("gbe_dota_inventory_handlers.cpp: equip server lobby match reads must route through LocalLobbyOwner::snapshot")
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|owner_steam_id|generation|state|game_state)\b", inventory_handlers):
+        issues.append("gbe_dota_inventory_handlers.cpp: equip planning and log reads must route through LocalLobbyOwner::snapshot")
+
     launch_coordinator = strip_comments(source_texts.get("gbe_dota_lobby_launch_coordinator.cpp", ""))
     if re.search(r"apply_lobby_owner_connected\s*\(\s*GBE_local_lobby\s*,", launch_coordinator):
         issues.append("gbe_dota_lobby_launch_coordinator.cpp: owner connected updates must route through LocalLobbyOwner::apply")

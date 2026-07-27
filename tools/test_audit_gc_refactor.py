@@ -1496,6 +1496,16 @@ void f()
     decide_ready_up(request_state, machine_request, GBE_local_lobby, setup, run, reason);
 }
 """,
+            "gbe_dota_inventory_handlers.cpp": """
+void f()
+{
+    server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id);
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0u && GBE_local_lobby.owner_steam_id == local_steam_id && server_lobby->lobby_id == GBE_local_lobby.lobby_id && server_lobby->generation == GBE_local_lobby.generation)
+        forward();
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 2u)
+        refresh();
+}
+""",
             "gbe_dota_lobby_launch_coordinator.cpp": """
 void f()
 {
@@ -1792,6 +1802,18 @@ void f()
         )
         self.assertIn(
             "gbe_dota_custom_game_lifecycle_handlers.cpp: lifecycle decision compose must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_inventory_handlers.cpp: set style server lobby guard reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_inventory_handlers.cpp: equip server lobby match reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_inventory_handlers.cpp: equip planning and log reads must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(

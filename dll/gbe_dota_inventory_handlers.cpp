@@ -23,6 +23,7 @@
 #include "gbe_dota_custom_game.h"
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_dota_payload_item_helpers.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -433,7 +434,7 @@ void Steam_Game_Coordinator::GBE_ForwardDotaEquipItemsToServerGC(
         "forwarded equip to server GC: emsg21_count=%zu emsg26_size=%zu lobby_id=%llu",
         modified_item_ids.size(),
         update_message.size(),
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+        static_cast<unsigned long long>(gbe::dota_lobby_state::LocalLobbyOwner(GBE_local_lobby).snapshot().lobby_id)
     );
 }
 
@@ -623,7 +624,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaSetItemStyleRequest(const uint8 *body
             if (gc_profile == GC_PROFILE_DOTA2 && !is_server) {
                 Steam_Client *steam_client = get_steam_client();
                 Steam_Game_Coordinator *server_gc = steam_client ? steam_client->steam_gameserver_game_coordinator : nullptr;
-                if (server_gc && server_gc->GBE_HasActiveServerLobby(GBE_local_lobby.lobby_id)) {
+                gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+                const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+                if (server_gc && server_gc->GBE_HasActiveServerLobby(local_lobby_snapshot.lobby_id)) {
                     GBE_PushDotaPlayerEquippedItemsCacheToGC(server_gc, settings->get_local_steam_id(), items, true, "set_item_style_forward");
                 }
             }
@@ -681,23 +684,25 @@ bool Steam_Game_Coordinator::GBE_HandleDotaEquipItemsRequest(const uint8 *body, 
     }
 
     const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
     const GBE_LocalLobby *server_lobby = server_gc ? &server_gc->GBE_PeerLocalLobbySnapshot() : nullptr;
     const bool has_host_server_lobby = is_dota_client && server_gc &&
-        GBE_local_lobby.active &&
-        GBE_local_lobby.lobby_id != 0u &&
-        GBE_local_lobby.owner_steam_id == local_steam_id &&
+        local_lobby_snapshot.active &&
+        local_lobby_snapshot.lobby_id != 0u &&
+        local_lobby_snapshot.owner_steam_id == local_steam_id &&
         server_lobby &&
         server_lobby->active &&
-        server_lobby->lobby_id == GBE_local_lobby.lobby_id &&
-        server_lobby->generation == GBE_local_lobby.generation &&
+        server_lobby->lobby_id == local_lobby_snapshot.lobby_id &&
+        server_lobby->generation == local_lobby_snapshot.generation &&
         server_lobby->owner_steam_id == local_steam_id;
 
     EquipItemsPlanningContext planning_context{};
     planning_context.is_dota_client = is_dota_client;
     planning_context.server_gc_has_active_lobby = has_host_server_lobby;
     planning_context.lobby_snapshot_refresh_available = is_dota_client &&
-        GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 &&
-        GBE_local_lobby.state == 2u && GBE_local_lobby.game_state >= 2u &&
+        local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0 &&
+        local_lobby_snapshot.state == 2u && local_lobby_snapshot.game_state >= 2u &&
         GBE_HasReplayedDotaPrivateLobbySnapshot();
 
     EquipItemsPlan plan = plan_equip_items_request(
