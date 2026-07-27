@@ -25,6 +25,7 @@
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
 #include "gbe_proto_wire.h"
@@ -869,15 +870,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerHelloRequest(uint32 unMsgType, 
     const bool welcome_build_ok =
         GBE_BuildDirectDotaServerWelcome(steam_id, app_id, server_hello_context, welcome_message);
 
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
     const bool active_lobby_with_id =
-        is_server && GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0;
+        is_server && local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0;
 
     std::string runtime_cache_message;
     bool cache_build_ok = false;
     if (welcome_build_ok && active_lobby_with_id) {
         cache_build_ok = GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(
-            GBE_local_lobby,
-            GBE_local_lobby.owner_name,
+            local_lobby_snapshot,
+            local_lobby_snapshot.owner_name,
             runtime_cache_message,
             true);
     }
@@ -916,7 +919,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerHelloRequest(uint32 unMsgType, 
                 "GC_DOTA_SERVER_HELLO",
                 "queued immediate ServerWelcome for active lobby this=%p lobby_id=%llu size=%zu",
                 static_cast<void *>(this),
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
                 welcome_message.size());
         }
     }
@@ -925,17 +928,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerHelloRequest(uint32 unMsgType, 
         if (plan.push_cache_subscribed) {
             const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
             const uint32 owner_account_id = GBE_GetDotaLobbyOwnerAccountId();
-            const bool launch_started = GBE_local_lobby.match_id != 0;
+            const bool launch_started = local_lobby_snapshot.match_id != 0;
             GBE_RecordDotaLobbyCacheSubscriptionState(runtime_cache_message, "server_welcome_current_cache_subscribed");
             push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, runtime_cache_message);
             GBE_GC_DebugLog(
                 "GC_DOTA_SERVER_HELLO",
                 "queued synthetic CacheSubscribed after ServerWelcome lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu launch_started=%u owner_steam_id=%llu owner_account_id=%u size=%zu",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_local_lobby.state,
-                GBE_local_lobby.game_state,
-                static_cast<unsigned long long>(GBE_local_lobby.match_id),
-                static_cast<unsigned long long>(GBE_local_lobby.server_id),
+                static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+                local_lobby_snapshot.state,
+                local_lobby_snapshot.game_state,
+                static_cast<unsigned long long>(local_lobby_snapshot.match_id),
+                static_cast<unsigned long long>(local_lobby_snapshot.server_id),
                 launch_started ? 1u : 0u,
                 static_cast<unsigned long long>(owner_steam_id),
                 owner_account_id,
@@ -944,21 +947,21 @@ bool Steam_Game_Coordinator::GBE_HandleDotaServerHelloRequest(uint32 unMsgType, 
             GBE_GC_DebugLog(
                 "GC_DOTA_SERVER_HELLO",
                 "failed building synthetic CacheSubscribed after ServerWelcome lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                GBE_local_lobby.state,
-                GBE_local_lobby.game_state,
-                static_cast<unsigned long long>(GBE_local_lobby.match_id),
-                static_cast<unsigned long long>(GBE_local_lobby.server_id));
+                static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+                local_lobby_snapshot.state,
+                local_lobby_snapshot.game_state,
+                static_cast<unsigned long long>(local_lobby_snapshot.match_id),
+                static_cast<unsigned long long>(local_lobby_snapshot.server_id));
         }
 
         GBE_GC_DebugLog(
             "GC_DOTA_SERVER_HELLO",
             "skipping synthetic direct 7034 after ServerWelcome to match official launch timing lobby_id=%llu state=%u game_state=%u team=%u slot=%u",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            GBE_local_lobby.owner_team,
-            GBE_local_lobby.owner_slot);
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+            local_lobby_snapshot.state,
+            local_lobby_snapshot.game_state,
+            local_lobby_snapshot.owner_team,
+            local_lobby_snapshot.owner_slot);
     }
 
     return true;
@@ -1084,15 +1087,18 @@ void Steam_Game_Coordinator::GBE_MaybePrimeDotaServerWelcomeFromCache(const char
 
     GBE_RestoreSharedDotaLobbyState("prime_server_welcome");
 
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || welcome_received)
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+
+    if (!local_lobby_snapshot.active || local_lobby_snapshot.lobby_id == 0 || welcome_received)
         return;
 
-    if (GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
+    if (GBE_ShouldSuppressDotaAbandonedLobby(local_lobby_snapshot.lobby_id)) {
         GBE_GC_DebugLog(
             "GC_DOTA_SERVER_HELLO",
             "skipping cached ServerWelcome for suppressed abandoned lobby reason=%s lobby_id=%llu",
             reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id)
         );
         return;
     }
@@ -1114,7 +1120,7 @@ void Steam_Game_Coordinator::GBE_MaybePrimeDotaServerWelcomeFromCache(const char
             "GC_DOTA_SERVER_HELLO",
             "failed priming cached ServerWelcome reason=%s lobby_id=%llu",
             reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id)
         );
         return;
     }
@@ -1123,7 +1129,7 @@ void Steam_Game_Coordinator::GBE_MaybePrimeDotaServerWelcomeFromCache(const char
         "GC_DOTA_SERVER_HELLO",
         "priming cached ServerWelcome reason=%s lobby_id=%llu size=%zu active_version=%u",
         reason ? reason : "unknown",
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
         welcome_message.size(),
         server_hello_context.active_version
     );
@@ -1132,25 +1138,25 @@ void Steam_Game_Coordinator::GBE_MaybePrimeDotaServerWelcomeFromCache(const char
     std::string runtime_cache_message;
     const uint64 owner_steam_id = GBE_GetDotaLobbyOwnerSteamId();
     const uint32 owner_account_id = GBE_GetDotaLobbyOwnerAccountId();
-    const bool launch_started = GBE_local_lobby.match_id != 0;
+    const bool launch_started = local_lobby_snapshot.match_id != 0;
     const bool built_runtime_cache = GBE_BuildAuthoritativeDotaPracticeLobbyCacheSubscribed(
-        GBE_local_lobby,
-        GBE_local_lobby.owner_name,
+        local_lobby_snapshot,
+        local_lobby_snapshot.owner_name,
         runtime_cache_message,
         true);
 
-    if (built_runtime_cache && !GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id)) {
+    if (built_runtime_cache && !GBE_ShouldSuppressDotaAbandonedLobby(local_lobby_snapshot.lobby_id)) {
         GBE_RecordDotaLobbyCacheSubscriptionState(runtime_cache_message, "prime_server_welcome_current_cache_subscribed");
         push_incoming_now(GBE_kDotaCacheSubscribed | GBE_kProtoMask, runtime_cache_message);
         GBE_GC_DebugLog(
             "GC_DOTA_SERVER_HELLO",
             "queued synthetic CacheSubscribed after cached ServerWelcome reason=%s lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu launch_started=%u owner_steam_id=%llu owner_account_id=%u size=%zu",
             reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            static_cast<unsigned long long>(GBE_local_lobby.match_id),
-            static_cast<unsigned long long>(GBE_local_lobby.server_id),
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+            local_lobby_snapshot.state,
+            local_lobby_snapshot.game_state,
+            static_cast<unsigned long long>(local_lobby_snapshot.match_id),
+            static_cast<unsigned long long>(local_lobby_snapshot.server_id),
             launch_started ? 1u : 0u,
             static_cast<unsigned long long>(owner_steam_id),
             owner_account_id,
@@ -1161,22 +1167,22 @@ void Steam_Game_Coordinator::GBE_MaybePrimeDotaServerWelcomeFromCache(const char
             "GC_DOTA_SERVER_HELLO",
             "failed building synthetic CacheSubscribed after cached ServerWelcome reason=%s lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
             reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            static_cast<unsigned long long>(GBE_local_lobby.match_id),
-            static_cast<unsigned long long>(GBE_local_lobby.server_id)
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+            local_lobby_snapshot.state,
+            local_lobby_snapshot.game_state,
+            static_cast<unsigned long long>(local_lobby_snapshot.match_id),
+            static_cast<unsigned long long>(local_lobby_snapshot.server_id)
         );
     } else {
         GBE_GC_DebugLog(
             "GC_DOTA_SERVER_HELLO",
             "skipped synthetic CacheSubscribed after cached ServerWelcome for suppressed abandoned lobby reason=%s lobby_id=%llu state=%u game_state=%u match_id=%llu server_id=%llu",
             reason ? reason : "unknown",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            static_cast<unsigned long long>(GBE_local_lobby.match_id),
-            static_cast<unsigned long long>(GBE_local_lobby.server_id)
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+            local_lobby_snapshot.state,
+            local_lobby_snapshot.game_state,
+            static_cast<unsigned long long>(local_lobby_snapshot.match_id),
+            static_cast<unsigned long long>(local_lobby_snapshot.server_id)
         );
     }
 }

@@ -1393,6 +1393,16 @@ void f()
     });
 }
 """,
+            "gbe_dota_welcome_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    if (snapshot.active && snapshot.lobby_id != 0)
+        build(snapshot, snapshot.owner_name);
+    log(snapshot.lobby_id, snapshot.state, snapshot.game_state, snapshot.match_id, snapshot.server_id, snapshot.owner_team, snapshot.owner_slot);
+}
+""",
             "gbe_dota_lobby_state_publish_coordinator.cpp": """
 bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason, GBE_LocalLobby &snapshot, GBE_DotaLobbyCaptureMode mode)
 {
@@ -1699,6 +1709,14 @@ void f()
     for (GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
         member.leaver_status = leaver_status;
     }
+}
+""",
+            "gbe_dota_welcome_coordinator.cpp": """
+void f()
+{
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0)
+        build(GBE_local_lobby, GBE_local_lobby.owner_name);
+    log(GBE_local_lobby.lobby_id, GBE_local_lobby.state, GBE_local_lobby.game_state, GBE_local_lobby.match_id, GBE_local_lobby.server_id, GBE_local_lobby.owner_team, GBE_local_lobby.owner_slot);
 }
 """,
             "gbe_dota_lobby_state_publish_coordinator.cpp": """
@@ -2160,6 +2178,10 @@ void f()
         )
         self.assertIn(
             "gbe_dota_misc_handlers.cpp: misc guard/log/cache reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_welcome_coordinator.cpp: ServerWelcome lobby reads must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(

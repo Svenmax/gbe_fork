@@ -1688,6 +1688,10 @@ def audit_local_lobby_owner_boundary(source_texts=None):
     if re.search(r"GBE_local_lobby\.(?:active|lobby_id|state|game_state|launch_phase|match_id|server_id|has_cache_version|cache_version|has_cache_service_id|cache_service_id|cache_service_list|has_cache_sync_version|cache_sync_version)\b", misc_handlers):
         issues.append("gbe_dota_misc_handlers.cpp: misc guard/log/cache reads must route through LocalLobbyOwner::snapshot")
 
+    welcome_coordinator = strip_comments(source_texts.get("gbe_dota_welcome_coordinator.cpp", ""))
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|owner_name|state|game_state|match_id|server_id|owner_team|owner_slot)\b", welcome_coordinator):
+        issues.append("gbe_dota_welcome_coordinator.cpp: ServerWelcome lobby reads must route through LocalLobbyOwner::snapshot")
+
     snapshot_coordinator = strip_comments(source_texts.get("gbe_dota_lobby_snapshot_coordinator.cpp", ""))
     if re.search(r"preserve_lobby_owner_transfer_slots\s*\(\s*GBE_local_lobby\.members\s*,", snapshot_coordinator):
         issues.append("gbe_dota_lobby_snapshot_coordinator.cpp: owner transfer slot preservation must route through LocalLobbyOwner::apply")
