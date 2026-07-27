@@ -1650,6 +1650,10 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: reconnect source compose must route through LocalLobbyOwner::snapshot")
     if re.search(r"GBE_LocalLobby\s+projected_lobby\s*=\s*GBE_local_lobby", publish_coordinator):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: capture projection must route through LocalLobbyOwner::snapshot")
+    if re.search(r"publish_local_lobby_to_shared\s*\(\s*GBE_local_lobby\s*,", publish_coordinator):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: shared publish source must route through LocalLobbyOwner::snapshot")
+    if re.search(r"update_if_generation_current_or_newer\s*\(\s*GBE_local_lobby\.generation", publish_coordinator):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: shared publish generation must route through LocalLobbyOwner::snapshot")
     if re.search(r"GBE_LocalLobby\s*&\s*captured_lobby\s*=\s*[^;]*GBE_local_lobby", publish_coordinator, flags=re.DOTALL):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: capture mutable fallback must route through LocalLobbyOwner::apply")
     if not re.search(r"refresh_captured_lobby\s*=\s*\[&\]\s*\(\s*GBE_LocalLobby\s*&\s*captured_lobby\s*\)", publish_coordinator):

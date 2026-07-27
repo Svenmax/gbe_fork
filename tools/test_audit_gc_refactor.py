@@ -1342,6 +1342,9 @@ void f()
         captured_lobby.members = members;
     };
     refresh_captured_lobby(projected_lobby);
+    GBE_SharedLobbyStore().update_if_generation_current_or_newer(snapshot.generation, [&](GBE_SharedDotaLobbyState &shared_lobby) {
+        gbe::dota_lobby_state::publish_local_lobby_to_shared(snapshot, is_server, shared_lobby);
+    });
     local_lobby.apply("capture_current_lobby_state", [&](GBE_LocalLobby &captured_lobby) {
         refresh_captured_lobby(captured_lobby);
     });
@@ -1550,6 +1553,9 @@ void f()
     gbe::dota_lobby_state::apply_runtime_metadata(GBE_local_lobby, connect, server_id);
     gbe::dota_reconnect::source_from_local_lobby(GBE_local_lobby);
     GBE_LocalLobby projected_lobby = GBE_local_lobby;
+    GBE_SharedLobbyStore().update_if_generation_current_or_newer(GBE_local_lobby.generation, [&](GBE_SharedDotaLobbyState &shared_lobby) {
+        gbe::dota_lobby_state::publish_local_lobby_to_shared(GBE_local_lobby, is_server, shared_lobby);
+    });
     GBE_LocalLobby &captured_lobby = pure ? projected_lobby : GBE_local_lobby;
 }
 """,
@@ -1886,6 +1892,14 @@ void f()
         )
         self.assertIn(
             "gbe_dota_lobby_state_publish_coordinator.cpp: capture projection must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_publish_coordinator.cpp: shared publish source must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_publish_coordinator.cpp: shared publish generation must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(
