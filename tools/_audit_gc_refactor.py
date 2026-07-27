@@ -1559,6 +1559,8 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_lobby_launch_coordinator.cpp: runtime details projection must route through LocalLobbyOwner::snapshot")
     if re.search(r"should_hold_lan_launch_for_remote_members\s*\(\s*GBE_local_lobby\.members\s*,", launch_coordinator):
         issues.append("gbe_dota_lobby_launch_coordinator.cpp: LAN launch hold member reads must route through LocalLobbyOwner::snapshot")
+    if re.search(r"GBE_local_lobby\.(?:owner_steam_id|lobby_id|state|game_state|launch_phase|chat_channel_id|match_id|server_id|custom_game)\b", launch_coordinator):
+        issues.append("gbe_dota_lobby_launch_coordinator.cpp: launch guard/log reads must route through LocalLobbyOwner::snapshot")
 
     flow_coordinator = strip_comments(source_texts.get("gbe_dota_lobby_flow_coordinator.cpp", ""))
     if re.search(r"compose_steam_auth_ack_launch_plan\s*\(\s*GBE_local_lobby\s*,", flow_coordinator):

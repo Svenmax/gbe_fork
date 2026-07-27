@@ -1214,6 +1214,8 @@ void f()
     const GBE_LocalLobby &snapshot = local_lobby.snapshot();
     gbe::dota_lobby_state::compose_launch_run_plan(snapshot, setup_phase, run_phase, next_game_state);
     gbe::dota_lobby_state::compose_custom_game_launch_setup_plan(snapshot, setup_phase);
+    if (steam_id == snapshot.owner_steam_id || GBE_ShouldSuppressDotaAbandonedLobby(snapshot.lobby_id))
+        log(snapshot.lobby_id, snapshot.state, snapshot.game_state, snapshot.launch_phase, snapshot.chat_channel_id, snapshot.match_id, snapshot.server_id, snapshot.custom_game.game_id);
     GBE_LocalLobby wait_for_players_lobby = snapshot;
     GBE_LocalLobby next_lobby = snapshot;
     gbe::dota_lobby_flow::should_hold_lan_launch_for_remote_members(snapshot.members, owner_steam_id, remote_count, connected_remote_count);
@@ -1572,6 +1574,8 @@ void f()
     GBE_LocalLobby wait_for_players_lobby = GBE_local_lobby;
     GBE_LocalLobby next_lobby = GBE_local_lobby;
     gbe::dota_lobby_flow::should_hold_lan_launch_for_remote_members(GBE_local_lobby.members, owner_steam_id, remote_count, connected_remote_count);
+    if (steam_id == GBE_local_lobby.owner_steam_id || GBE_ShouldSuppressDotaAbandonedLobby(GBE_local_lobby.lobby_id))
+        log(GBE_local_lobby.lobby_id, GBE_local_lobby.state, GBE_local_lobby.game_state, GBE_local_lobby.launch_phase, GBE_local_lobby.chat_channel_id, GBE_local_lobby.match_id, GBE_local_lobby.server_id, GBE_local_lobby.custom_game.game_id);
 }
 """,
             "gbe_dota_post_login_handlers.cpp": """
