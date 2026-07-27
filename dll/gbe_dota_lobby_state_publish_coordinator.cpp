@@ -456,20 +456,23 @@ void Steam_Game_Coordinator::GBE_PublishSharedDotaLobbyState(const char *reason)
 
 void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyLocalMemberData(const char *reason)
 {
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0 || GBE_local_lobby.generic_lobby_id == 0)
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+
+    if (!local_lobby_snapshot.active || local_lobby_snapshot.lobby_id == 0 || local_lobby_snapshot.generic_lobby_id == 0)
         return;
 
     Steam_Client *steam_client = get_steam_client();
     if (!steam_client || !steam_client->steam_matchmaking)
         return;
 
-    CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
+    CSteamID generic_lobby_id((uint64)local_lobby_snapshot.generic_lobby_id);
     if (!generic_lobby_id.IsLobby())
         return;
 
     const uint64 local_steam_id = settings->get_local_steam_id().ConvertToUint64();
     const GBE_DotaLobbyMemberState *local_member = nullptr;
-    for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+    for (const GBE_DotaLobbyMemberState &member : local_lobby_snapshot.members) {
         if (member.steam_id == local_steam_id) {
             local_member = &member;
             break;
@@ -489,8 +492,8 @@ void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyLocalMemberData(const c
         "GC_DOTA_LOBBY",
         "[LOBBY] Published generic lobby member data reason=%s dota_lobby_id=%llu generic_lobby_id=%llu steam_id=%llu team=%u slot=%u hero=%u connected=%u name=%s",
         reason ? reason : "unknown",
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        static_cast<unsigned long long>(GBE_local_lobby.generic_lobby_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.generic_lobby_id),
         static_cast<unsigned long long>(local_member->steam_id),
         publish_data.team,
         publish_data.slot,

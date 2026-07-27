@@ -1654,6 +1654,16 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: shared publish source must route through LocalLobbyOwner::snapshot")
     if re.search(r"update_if_generation_current_or_newer\s*\(\s*GBE_local_lobby\.generation", publish_coordinator):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: shared publish generation must route through LocalLobbyOwner::snapshot")
+    local_member_publish_match = re.search(
+        r"void\s+Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyLocalMemberData\s*\([^)]*\)\s*\{(?P<body>.*?)\n\}",
+        publish_coordinator,
+        flags=re.DOTALL,
+    )
+    local_member_publish_body = local_member_publish_match.group("body") if local_member_publish_match else ""
+    if re.search(r"for\s*\([^)]*GBE_DotaLobbyMemberState\s+&[^)]*:\s*GBE_local_lobby\.members\s*\)", local_member_publish_body):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: local member publish must read members through LocalLobbyOwner::snapshot")
+    if re.search(r"CSteamID\s+generic_lobby_id\s*\(\s*\(uint64\)\s*GBE_local_lobby\.generic_lobby_id\s*\)", local_member_publish_body):
+        issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: local member publish lobby id must route through LocalLobbyOwner::snapshot")
     if re.search(r"GBE_LocalLobby\s*&\s*captured_lobby\s*=\s*[^;]*GBE_local_lobby", publish_coordinator, flags=re.DOTALL):
         issues.append("gbe_dota_lobby_state_publish_coordinator.cpp: capture mutable fallback must route through LocalLobbyOwner::apply")
     if not re.search(r"refresh_captured_lobby\s*=\s*\[&\]\s*\(\s*GBE_LocalLobby\s*&\s*captured_lobby\s*\)", publish_coordinator):

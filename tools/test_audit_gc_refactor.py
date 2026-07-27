@@ -1333,7 +1333,7 @@ void f()
 }
 """,
             "gbe_dota_lobby_state_publish_coordinator.cpp": """
-void f()
+void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyLocalMemberData(const char *reason)
 {
     gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
     const GBE_LocalLobby &snapshot = local_lobby.snapshot();
@@ -1345,6 +1345,10 @@ void f()
     GBE_SharedLobbyStore().update_if_generation_current_or_newer(snapshot.generation, [&](GBE_SharedDotaLobbyState &shared_lobby) {
         gbe::dota_lobby_state::publish_local_lobby_to_shared(snapshot, is_server, shared_lobby);
     });
+    CSteamID generic_lobby_id((uint64)snapshot.generic_lobby_id);
+    for (const GBE_DotaLobbyMemberState &member : snapshot.members) {
+        publish_member(member);
+    }
     local_lobby.apply("capture_current_lobby_state", [&](GBE_LocalLobby &captured_lobby) {
         refresh_captured_lobby(captured_lobby);
     });
@@ -1547,7 +1551,7 @@ void f()
 }
 """,
             "gbe_dota_lobby_state_publish_coordinator.cpp": """
-void f()
+void Steam_Game_Coordinator::GBE_PublishDotaPracticeLobbyLocalMemberData(const char *reason)
 {
     gbe::dota_lobby_state::apply_cache_subscription_metadata(GBE_local_lobby, has_version, version, has_service_id, service_id, service_list, has_sync_version, sync_version);
     gbe::dota_lobby_state::apply_runtime_metadata(GBE_local_lobby, connect, server_id);
@@ -1556,6 +1560,10 @@ void f()
     GBE_SharedLobbyStore().update_if_generation_current_or_newer(GBE_local_lobby.generation, [&](GBE_SharedDotaLobbyState &shared_lobby) {
         gbe::dota_lobby_state::publish_local_lobby_to_shared(GBE_local_lobby, is_server, shared_lobby);
     });
+    CSteamID generic_lobby_id((uint64)GBE_local_lobby.generic_lobby_id);
+    for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+        publish_member(member);
+    }
     GBE_LocalLobby &captured_lobby = pure ? projected_lobby : GBE_local_lobby;
 }
 """,
@@ -1900,6 +1908,14 @@ void f()
         )
         self.assertIn(
             "gbe_dota_lobby_state_publish_coordinator.cpp: shared publish generation must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_publish_coordinator.cpp: local member publish must read members through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_lobby_state_publish_coordinator.cpp: local member publish lobby id must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(
