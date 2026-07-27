@@ -457,14 +457,16 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLaunchAdvanceOrConsume(
     //  - If 4508 already advanced us to state=2, the state==1 check fails.
     //  - 4506 is "server available acknowledgement" / 5429 is "ticket auth
     //    complete", so the server IS ready.
-    if (GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (local_lobby_snapshot.state == 1u && local_lobby_snapshot.game_state == 0u && GBE_HasDotaLaunchServerSetupSync()) {
         GBE_GC_DebugLog(
             "GC_DOTA_DIRECT",
             "req=%u advancing stalled launch: lobby_id=%llu state=%u launch_phase=%s",
             request_emsg,
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase)
+            static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+            local_lobby_snapshot.state,
+            GBE_DescribeDotaLaunchPhase(local_lobby_snapshot.launch_phase)
         );
         if (GBE_TryAdvanceDotaLaunchToRun(advance_reason, request_emsg, source_job, advance_phase))
             return true;
@@ -477,12 +479,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLaunchAdvanceOrConsume(
         static_cast<unsigned long long>(source_job),
         consume_note,
         body_size,
-        GBE_local_lobby.active ? 1u : 0u,
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        GBE_local_lobby.state,
-        GBE_local_lobby.game_state,
-        static_cast<unsigned long long>(GBE_local_lobby.match_id),
-        static_cast<unsigned long long>(GBE_local_lobby.server_id)
+        local_lobby_snapshot.active ? 1u : 0u,
+        static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+        local_lobby_snapshot.state,
+        local_lobby_snapshot.game_state,
+        static_cast<unsigned long long>(local_lobby_snapshot.match_id),
+        static_cast<unsigned long long>(local_lobby_snapshot.server_id)
     );
     return true;
 }
@@ -490,15 +492,17 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLaunchAdvanceOrConsume(
 
 bool Steam_Game_Coordinator::GBE_HandleDota8870LaunchMarkerRequest(uint32 request_emsg, uint64 source_job)
 {
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
     GBE_GC_DebugLog(
         "GC_DOTA_DIRECT",
         "consumed req=%u source_job=%llu note=official 8870 launch marker without pending gate active=%u lobby_id=%llu state=%u game_state=%u",
         request_emsg,
         static_cast<unsigned long long>(source_job),
-        GBE_local_lobby.active ? 1u : 0u,
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        GBE_local_lobby.state,
-        GBE_local_lobby.game_state
+        local_lobby_snapshot.active ? 1u : 0u,
+        static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+        local_lobby_snapshot.state,
+        local_lobby_snapshot.game_state
     );
     return true;
 }
@@ -509,15 +513,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLanServerAvailableRequest(uint32 requ
     uint64 lobby_id = 0;
     gbe::proto_wire::read_uint64_field(body, body_size, 1u, lobby_id);
 
-    const bool matches_local_lobby = (lobby_id != 0 && lobby_id == GBE_local_lobby.lobby_id);
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &initial_lobby_snapshot = local_lobby.snapshot();
+    const bool matches_local_lobby = (lobby_id != 0 && lobby_id == initial_lobby_snapshot.lobby_id);
     if (matches_local_lobby) {
         bool did_mark_launch_4511_seen = false;
-        {
-            gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
-            local_lobby.apply("4511_lan_server_available_seen", [&did_mark_launch_4511_seen](GBE_LocalLobby &lobby) {
-                did_mark_launch_4511_seen = gbe::dota_lobby_state::mark_launch_4511_seen(lobby);
-            });
-        }
+        local_lobby.apply("4511_lan_server_available_seen", [&did_mark_launch_4511_seen](GBE_LocalLobby &lobby) {
+            did_mark_launch_4511_seen = gbe::dota_lobby_state::mark_launch_4511_seen(lobby);
+        });
         if (did_mark_launch_4511_seen) {
             GBE_PublishSharedDotaLobbyState("4511_lan_server_available_seen");
         }
@@ -531,7 +534,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLanServerAvailableRequest(uint32 requ
         GBE_GC_DebugLog(
             "GC_CALLBACK",
             "reposted GCMessageAvailable_t after 4511 lobby_id=%llu queued_emsg=%u queue_size=%zu size=%u",
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+            static_cast<unsigned long long>(initial_lobby_snapshot.lobby_id),
             GBE_GC_MaskedEMsg(incoming_messages.front().msg_type),
             incoming_messages.size(),
             data.m_nMessageSize
@@ -544,7 +547,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLanServerAvailableRequest(uint32 requ
         request_emsg,
         static_cast<unsigned long long>(source_job),
         static_cast<unsigned long long>(lobby_id),
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+        static_cast<unsigned long long>(initial_lobby_snapshot.lobby_id),
         matches_local_lobby ? 1u : 0u
     );
     return true;
@@ -691,11 +694,13 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCacheSubscriptionRefreshRequest(const
         gbe::proto_wire::read_uint64_field(reinterpret_cast<const uint8 *>(owner_soid.data()), owner_soid.size(), 2u, requested_owner_id);
     }
 
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
     const bool matches_lobby_owner =
-        GBE_local_lobby.active &&
+        local_lobby_snapshot.active &&
         requested_owner_type == 3u &&
         requested_owner_id != 0 &&
-        requested_owner_id == GBE_local_lobby.lobby_id;
+        requested_owner_id == local_lobby_snapshot.lobby_id;
 
     GBE_GC_DebugLog(
         "GC_DOTA_DIRECT",
@@ -704,31 +709,31 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCacheSubscriptionRefreshRequest(const
         static_cast<unsigned long long>(source_job),
         static_cast<unsigned long long>(requested_owner_type),
         static_cast<unsigned long long>(requested_owner_id),
-        GBE_local_lobby.active ? 1u : 0u,
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        GBE_local_lobby.state,
-        GBE_local_lobby.game_state,
+        local_lobby_snapshot.active ? 1u : 0u,
+        static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+        local_lobby_snapshot.state,
+        local_lobby_snapshot.game_state,
         gbe::proto_wire::format_hex_prefix(reinterpret_cast<const std::uint8_t *>(body), body_size, 32).c_str()
     );
 
     if (matches_lobby_owner) {
         std::string response_message;
         if (!gbe::gc_message::build_dota_lobby_cache_subscribed_up_to_date_payload(
-                GBE_local_lobby.lobby_id,
-                GBE_local_lobby.has_cache_version,
-                GBE_local_lobby.cache_version,
-                GBE_local_lobby.has_cache_service_id,
-                GBE_local_lobby.cache_service_id,
-                GBE_local_lobby.cache_service_list,
-                GBE_local_lobby.has_cache_sync_version,
-                GBE_local_lobby.cache_sync_version,
+                local_lobby_snapshot.lobby_id,
+                local_lobby_snapshot.has_cache_version,
+                local_lobby_snapshot.cache_version,
+                local_lobby_snapshot.has_cache_service_id,
+                local_lobby_snapshot.cache_service_id,
+                local_lobby_snapshot.cache_service_list,
+                local_lobby_snapshot.has_cache_sync_version,
+                local_lobby_snapshot.cache_sync_version,
                 response_message)) {
             GBE_GC_DebugLog(
                 "GC_DOTA_DIRECT",
                 "failed building reply req=%u resp=%u lobby_id=%llu",
                 GBE_kDotaCacheSubscriptionRefresh,
                 GBE_kDotaCacheSubscribedUpToDate,
-                static_cast<unsigned long long>(GBE_local_lobby.lobby_id)
+                static_cast<unsigned long long>(local_lobby_snapshot.lobby_id)
             );
             return true;
         }
@@ -742,10 +747,10 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCacheSubscriptionRefreshRequest(const
             response_message.size(),
             static_cast<unsigned long long>(requested_owner_type),
             static_cast<unsigned long long>(requested_owner_id),
-            GBE_local_lobby.has_cache_version ? 1u : 0u,
-            GBE_local_lobby.has_cache_service_id ? 1u : 0u,
-            GBE_local_lobby.cache_service_list.size(),
-            GBE_local_lobby.has_cache_sync_version ? 1u : 0u
+            local_lobby_snapshot.has_cache_version ? 1u : 0u,
+            local_lobby_snapshot.has_cache_service_id ? 1u : 0u,
+            local_lobby_snapshot.cache_service_list.size(),
+            local_lobby_snapshot.has_cache_sync_version ? 1u : 0u
         );
         GBE_PushDotaResponse(GBE_kDotaCacheSubscribedUpToDate, response_message, false, nullptr, "cache_subscribed_up_to_date_refresh");
     }
@@ -757,7 +762,9 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCacheSubscriptionRefreshRequest(const
 
 bool Steam_Game_Coordinator::GBE_HandleDotaLeaverDetectedRequest(const uint8 *body, size_t body_size, uint64 source_job)
 {
-    if (!GBE_local_lobby.active || GBE_local_lobby.lobby_id == 0) {
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (!local_lobby_snapshot.active || local_lobby_snapshot.lobby_id == 0) {
         GBE_GC_DebugLog("GC_DOTA_DIRECT", "ignoring 7072 because no local lobby is active");
         return true;
     }
@@ -776,13 +783,12 @@ bool Steam_Game_Coordinator::GBE_HandleDotaLeaverDetectedRequest(const uint8 *bo
         static_cast<unsigned long long>(leaver_steam_id),
         leaver_status,
         disconnect_reason,
-        static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-        GBE_local_lobby.state,
-        GBE_local_lobby.game_state
+        static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+        local_lobby_snapshot.state,
+        local_lobby_snapshot.game_state
     );
 
     if (leaver_steam_id != 0ull && leaver_status != 0u) {
-        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
         const bool updated = local_lobby.apply("7072_leaver_detected", [this, leaver_steam_id, leaver_status](GBE_LocalLobby &lobby) {
             for (GBE_DotaLobbyMemberState &member : lobby.members) {
                 if (member.steam_id == leaver_steam_id) {

@@ -1376,6 +1376,23 @@ void f()
     });
 }
 """,
+            "gbe_dota_misc_handlers.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &snapshot = local_lobby.snapshot();
+    if (snapshot.active && snapshot.lobby_id != 0 && snapshot.state == 1u && snapshot.game_state == 0u)
+        log(snapshot.launch_phase, snapshot.match_id, snapshot.server_id, snapshot.has_cache_version, snapshot.cache_version, snapshot.has_cache_service_id, snapshot.cache_service_id, snapshot.cache_service_list.size(), snapshot.has_cache_sync_version, snapshot.cache_sync_version);
+    local_lobby.apply("4511_lan_server_available_seen", [](GBE_LocalLobby &lobby) {
+        gbe::dota_lobby_state::mark_launch_4511_seen(lobby);
+    });
+    local_lobby.apply("7072_leaver_detected", [](GBE_LocalLobby &lobby) {
+        for (GBE_DotaLobbyMemberState &member : lobby.members) {
+            member.leaver_status = leaver_status;
+        }
+    });
+}
+""",
             "gbe_dota_lobby_state_publish_coordinator.cpp": """
 bool Steam_Game_Coordinator::GBE_CaptureCurrentDotaLobbyState(const char *reason, GBE_LocalLobby &snapshot, GBE_DotaLobbyCaptureMode mode)
 {
@@ -1677,6 +1694,8 @@ void f()
 void f()
 {
     gbe::dota_lobby_state::mark_launch_4511_seen(GBE_local_lobby);
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.state == 1u && GBE_local_lobby.game_state == 0u)
+        log(GBE_local_lobby.launch_phase, GBE_local_lobby.match_id, GBE_local_lobby.server_id, GBE_local_lobby.has_cache_version, GBE_local_lobby.cache_version, GBE_local_lobby.has_cache_service_id, GBE_local_lobby.cache_service_id, GBE_local_lobby.cache_service_list.size(), GBE_local_lobby.has_cache_sync_version, GBE_local_lobby.cache_sync_version);
     for (GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
         member.leaver_status = leaver_status;
     }
@@ -2137,6 +2156,10 @@ void f()
         )
         self.assertIn(
             "gbe_dota_misc_handlers.cpp: leaver member updates must route through LocalLobbyOwner::apply",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_misc_handlers.cpp: misc guard/log/cache reads must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(
