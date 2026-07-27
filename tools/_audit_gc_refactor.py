@@ -1406,6 +1406,7 @@ def audit_local_lobby_owner_boundary(source_texts=None):
             "gbe_dota_connection_lifecycle.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_connection_lifecycle.cpp")),
             "gbe_dota_custom_game_lifecycle_coordinator.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_custom_game_lifecycle_coordinator.cpp")),
             "gbe_dota_custom_game_lifecycle_handlers.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_custom_game_lifecycle_handlers.cpp")),
+            "gbe_dota_inventory_coordinator.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_inventory_coordinator.cpp")),
             "gbe_dota_lobby_launch_coordinator.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_launch_coordinator.cpp")),
             "gbe_dota_lobby_flow_coordinator.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_flow_coordinator.cpp")),
             "gbe_dota_lobby_lifecycle_handlers.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_lifecycle_handlers.cpp")),
@@ -1522,6 +1523,12 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         issues.append("gbe_dota_inventory_handlers.cpp: equip server lobby match reads must route through LocalLobbyOwner::snapshot")
     if re.search(r"GBE_local_lobby\.(?:active|lobby_id|owner_steam_id|generation|state|game_state)\b", inventory_handlers):
         issues.append("gbe_dota_inventory_handlers.cpp: equip planning and log reads must route through LocalLobbyOwner::snapshot")
+
+    inventory_coordinator = strip_comments(source_texts.get("gbe_dota_inventory_coordinator.cpp", ""))
+    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|state|game_state|launch_phase)\b", inventory_coordinator):
+        issues.append("gbe_dota_inventory_coordinator.cpp: cache callback guard and log reads must route through LocalLobbyOwner::snapshot")
+    if re.search(r"GBE_local_lobby\.(?:owner_steam_id|owner_hero_id|members)\b", inventory_coordinator):
+        issues.append("gbe_dota_inventory_coordinator.cpp: equipped item mirror member reads must route through LocalLobbyOwner::snapshot")
 
     launch_coordinator = strip_comments(source_texts.get("gbe_dota_lobby_launch_coordinator.cpp", ""))
     if re.search(r"apply_lobby_owner_connected\s*\(\s*GBE_local_lobby\s*,", launch_coordinator):

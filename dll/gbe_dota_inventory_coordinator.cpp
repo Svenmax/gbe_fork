@@ -25,6 +25,7 @@
 #include "gbe_dota_gc_router.h"
 #include "gbe_dota_gc_wire.h"
 #include "gbe_dota_lobby_flow.h"
+#include "gbe_dota_lobby_state.h"
 #include "gbe_dota_payload_item_helpers.h"
 #include "gbe_gc_config.h"
 #include "gbe_gc_message_utils.h"
@@ -312,9 +313,11 @@ void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const st
 
     if (is_server && gc_profile == GC_PROFILE_DOTA2) {
         GBE_RestoreSharedDotaLobbyState("callback_items_received");
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
 
-        if (GBE_local_lobby.active &&
-            GBE_local_lobby.lobby_id != 0 &&
+        if (local_lobby_snapshot.active &&
+            local_lobby_snapshot.lobby_id != 0 &&
             steam_id.BIndividualAccount() &&
             steam_id.ConvertToUint64() == GBE_GetDotaLobbyOwnerSteamId()) {
             // Skip the full generic CacheSubscribed (too large, e.g. 27k items / 706KB)
@@ -330,9 +333,9 @@ void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const st
                     "GC_DOTA_SYNC",
                     "pushed owner equipped-only CacheSubscribed for server (skipped full generic): steam_id=%llu lobby_id=%llu state=%u game_state=%u equipped=%zu total=%zu",
                     static_cast<unsigned long long>(steam_id.ConvertToUint64()),
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state,
+                    static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+                    local_lobby_snapshot.state,
+                    local_lobby_snapshot.game_state,
                     equipped_count,
                     items.size()
                 );
@@ -341,9 +344,9 @@ void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const st
                     "GC_DOTA_SYNC",
                     "skipping generic CacheSubscribed for active dota owner (no equipped items): steam_id=%llu lobby_id=%llu state=%u game_state=%u items=%zu",
                     static_cast<unsigned long long>(steam_id.ConvertToUint64()),
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-                    GBE_local_lobby.state,
-                    GBE_local_lobby.game_state,
+                    static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+                    local_lobby_snapshot.state,
+                    local_lobby_snapshot.game_state,
                     items.size()
                 );
             }
@@ -373,8 +376,8 @@ void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const st
                     "GC_DOTA_SYNC",
                     "skipping generic CacheSubscribed for host (fallback): steam_id=%llu lobby_active=%d lobby_id=%llu items=%zu match_by_id=%d match_by_inv=%d",
                     static_cast<unsigned long long>(steam_id.ConvertToUint64()),
-                    GBE_local_lobby.active ? 1 : 0,
-                    static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
+                    local_lobby_snapshot.active ? 1 : 0,
+                    static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
                     items.size(),
                     is_host_by_id ? 1 : 0,
                     is_host_by_inventory ? 1 : 0
@@ -435,10 +438,12 @@ void Steam_Game_Coordinator::GBE_MirrorDotaEquippedItemsForUser(
 
     std::uint32_t hero_id = 0u;
     const std::uint64_t steam64 = steam_id.ConvertToUint64();
-    if (steam64 == GBE_local_lobby.owner_steam_id) {
-        hero_id = GBE_local_lobby.owner_hero_id;
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (steam64 == local_lobby_snapshot.owner_steam_id) {
+        hero_id = local_lobby_snapshot.owner_hero_id;
     } else {
-        for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members) {
+        for (const GBE_DotaLobbyMemberState &member : local_lobby_snapshot.members) {
             if (member.steam_id == steam64) {
                 hero_id = member.hero_id;
                 break;
@@ -484,23 +489,25 @@ void Steam_Game_Coordinator::callback_items_removed(CSteamID steam_id)
     if (!gc_initialized)
         return;
 
-    if (gc_profile == GC_PROFILE_DOTA2 &&
-        GBE_local_lobby.active &&
-        GBE_local_lobby.lobby_id != 0 &&
-        GBE_local_lobby.state < 3u &&
-        steam_id.BIndividualAccount() &&
-        steam_id.ConvertToUint64() == GBE_GetDotaLobbyOwnerSteamId()) {
-        GBE_GC_DebugLog(
-            "GC_DOTA_SYNC",
-            "skipping generic CacheUnsubscribed for active dota owner steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s is_server=%u",
-            static_cast<unsigned long long>(steam_id.ConvertToUint64()),
-            static_cast<unsigned long long>(GBE_local_lobby.lobby_id),
-            GBE_local_lobby.state,
-            GBE_local_lobby.game_state,
-            GBE_DescribeDotaLaunchPhase(GBE_local_lobby.launch_phase),
-            is_server ? 1u : 0u
-        );
-        return;
+    if (gc_profile == GC_PROFILE_DOTA2 && steam_id.BIndividualAccount()) {
+        gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+        const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+        if (local_lobby_snapshot.active &&
+            local_lobby_snapshot.lobby_id != 0 &&
+            local_lobby_snapshot.state < 3u &&
+            steam_id.ConvertToUint64() == GBE_GetDotaLobbyOwnerSteamId()) {
+            GBE_GC_DebugLog(
+                "GC_DOTA_SYNC",
+                "skipping generic CacheUnsubscribed for active dota owner steam_id=%llu lobby_id=%llu state=%u game_state=%u launch_phase=%s is_server=%u",
+                static_cast<unsigned long long>(steam_id.ConvertToUint64()),
+                static_cast<unsigned long long>(local_lobby_snapshot.lobby_id),
+                local_lobby_snapshot.state,
+                local_lobby_snapshot.game_state,
+                GBE_DescribeDotaLaunchPhase(local_lobby_snapshot.launch_phase),
+                is_server ? 1u : 0u
+            );
+            return;
+        }
     }
 
     if (gc_version < 20110414) {

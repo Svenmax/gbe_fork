@@ -1191,6 +1191,19 @@ void f()
     });
 }
 """,
+            "gbe_dota_inventory_coordinator.cpp": """
+void f()
+{
+    gbe::dota_lobby_state::LocalLobbyOwner local_lobby(GBE_local_lobby);
+    const GBE_LocalLobby &local_lobby_snapshot = local_lobby.snapshot();
+    if (local_lobby_snapshot.active && local_lobby_snapshot.lobby_id != 0 && local_lobby_snapshot.state < 3u)
+        log(local_lobby_snapshot.lobby_id, local_lobby_snapshot.state, local_lobby_snapshot.game_state, local_lobby_snapshot.launch_phase);
+    if (steam64 == local_lobby_snapshot.owner_steam_id)
+        hero_id = local_lobby_snapshot.owner_hero_id;
+    for (const GBE_DotaLobbyMemberState &member : local_lobby_snapshot.members)
+        log(member.hero_id);
+}
+""",
             "gbe_dota_lobby_launch_coordinator.cpp": """
 void f()
 {
@@ -1521,6 +1534,17 @@ void f()
         refresh();
 }
 """,
+            "gbe_dota_inventory_coordinator.cpp": """
+void f()
+{
+    if (GBE_local_lobby.active && GBE_local_lobby.lobby_id != 0 && GBE_local_lobby.state < 3u)
+        log(GBE_local_lobby.lobby_id, GBE_local_lobby.state, GBE_local_lobby.game_state, GBE_local_lobby.launch_phase);
+    if (steam64 == GBE_local_lobby.owner_steam_id)
+        hero_id = GBE_local_lobby.owner_hero_id;
+    for (const GBE_DotaLobbyMemberState &member : GBE_local_lobby.members)
+        log(member.hero_id);
+}
+""",
             "gbe_dota_lobby_launch_coordinator.cpp": """
 void f()
 {
@@ -1837,6 +1861,14 @@ void f()
         )
         self.assertIn(
             "gbe_dota_inventory_handlers.cpp: equip planning and log reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_inventory_coordinator.cpp: cache callback guard and log reads must route through LocalLobbyOwner::snapshot",
+            issues,
+        )
+        self.assertIn(
+            "gbe_dota_inventory_coordinator.cpp: equipped item mirror member reads must route through LocalLobbyOwner::snapshot",
             issues,
         )
         self.assertIn(
