@@ -2219,6 +2219,68 @@ bool test_stale_generic_lobby_state_regression()
         ok &= expect_eq_str(local.owner_name, "shared-owner", "newer shared adopt applies owner name");
     }
 
+    // adopt_shared_lobby_to_local: same-generation cache metadata keeps Local cache fields.
+    {
+        GBE_LocalLobby local = make_active_lobby();
+        local.generation = 45ull;
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_cache_subscription_metadata(
+                local, true, 44ull, true, 55u, {3u, 4u}, true, 66ull),
+            "cache metadata apply records local cache fields before adopt");
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.active = true;
+        shared.generation = local.generation;
+        shared.has_cache_version = false;
+        shared.cache_version = 1ull;
+        shared.has_cache_service_id = false;
+        shared.cache_service_id = 2u;
+        shared.cache_service_list = {9u};
+        shared.has_cache_sync_version = false;
+        shared.cache_sync_version = 3ull;
+        gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, false, local);
+
+        ok &= expect_true(local.has_cache_version, "same-generation adopt keeps local cache version flag");
+        ok &= expect_eq_u64(local.cache_version, 44ull, "same-generation adopt keeps local cache version");
+        ok &= expect_true(local.has_cache_service_id, "same-generation adopt keeps local cache service id flag");
+        ok &= expect_eq_u32(local.cache_service_id, 55u, "same-generation adopt keeps local cache service id");
+        ok &= expect_true(local.cache_service_list.size() == 2u && local.cache_service_list[1] == 4u,
+            "same-generation adopt keeps local cache service list");
+        ok &= expect_true(local.has_cache_sync_version, "same-generation adopt keeps local cache sync flag");
+        ok &= expect_eq_u64(local.cache_sync_version, 66ull, "same-generation adopt keeps local cache sync version");
+    }
+
+    // adopt_shared_lobby_to_local: older cache metadata marker accepts shared cache fields.
+    {
+        GBE_LocalLobby local = make_active_lobby();
+        local.generation = 45ull;
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_cache_subscription_metadata(
+                local, true, 44ull, true, 55u, {3u, 4u}, true, 66ull),
+            "cache metadata apply records local cache fields before newer adopt");
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.active = true;
+        shared.generation = local.generation + 1ull;
+        shared.has_cache_version = false;
+        shared.cache_version = 1ull;
+        shared.has_cache_service_id = false;
+        shared.cache_service_id = 2u;
+        shared.cache_service_list = {9u};
+        shared.has_cache_sync_version = false;
+        shared.cache_sync_version = 3ull;
+        gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, false, local);
+
+        ok &= expect_false(local.has_cache_version, "newer shared adopt applies cache version flag");
+        ok &= expect_eq_u64(local.cache_version, 1ull, "newer shared adopt applies cache version");
+        ok &= expect_false(local.has_cache_service_id, "newer shared adopt applies cache service id flag");
+        ok &= expect_eq_u32(local.cache_service_id, 2u, "newer shared adopt applies cache service id");
+        ok &= expect_true(local.cache_service_list.size() == 1u && local.cache_service_list[0] == 9u,
+            "newer shared adopt applies cache service list");
+        ok &= expect_false(local.has_cache_sync_version, "newer shared adopt applies cache sync flag");
+        ok &= expect_eq_u64(local.cache_sync_version, 3ull, "newer shared adopt applies cache sync version");
+    }
+
     // compose_queued_lobby_state_apply_plan: preserve_monotonic_game_state prevents stale reset.
     {
         GBE_LocalLobby lobby = make_active_lobby();

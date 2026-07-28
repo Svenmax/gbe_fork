@@ -1901,6 +1901,9 @@ void adopt_shared_lobby_to_local(
     const bool preserve_local_owner_name =
         local.owner_name_generation != 0ull &&
         local.owner_name_generation == shared.generation;
+    const bool preserve_local_cache =
+        local.cache_metadata_generation != 0ull &&
+        local.cache_metadata_generation == shared.generation;
     local.active = shared.active;
     local.generation = shared.generation;
     local.lobby_id = shared.lobby_id;
@@ -1962,13 +1965,15 @@ void adopt_shared_lobby_to_local(
         local.broadcast_language_code = shared.broadcast_language_code;
     }
     local.pass_key = shared.pass_key;
-    local.has_cache_version = shared.has_cache_version;
-    local.cache_version = shared.cache_version;
-    local.has_cache_service_id = shared.has_cache_service_id;
-    local.cache_service_id = shared.cache_service_id;
-    local.cache_service_list = shared.cache_service_list;
-    local.has_cache_sync_version = shared.has_cache_sync_version;
-    local.cache_sync_version = shared.cache_sync_version;
+    if (!preserve_local_cache) {
+        local.has_cache_version = shared.has_cache_version;
+        local.cache_version = shared.cache_version;
+        local.has_cache_service_id = shared.has_cache_service_id;
+        local.cache_service_id = shared.cache_service_id;
+        local.cache_service_list = shared.cache_service_list;
+        local.has_cache_sync_version = shared.has_cache_sync_version;
+        local.cache_sync_version = shared.cache_sync_version;
+    }
 }
 
 bool build_dota_abandon_request_context(

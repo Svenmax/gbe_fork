@@ -21,6 +21,7 @@
 
 | 日期 | 摘要 | 链接 |
 |------|------|------|
+| 2026-07-28 | source-aware cache shared adopt：cache subscription metadata apply 记录同 generation 来源标记，full shared snapshot adopt 在同 generation 下保留 Local cache metadata 字段组 | `dll/gbe_dota_lobby_state.cpp`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-28 | source-aware bot difficulty restore：`apply_lobby_bot_difficulty_for_team()` 记录同 generation 来源标记，shared options restore 在同 generation 下保留 Local radiant/dire bot difficulty 字段组 | `dll/gbe_dota_lobby_state.cpp`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-28 | source-aware details update restore：`apply_lobby_details_update()` 按 runtime/options/custom_game 字段组记录同 generation 来源标记，shared runtime/options/custom_game restore 在同 generation 下保留 Local 7046 details update 结果 | `dll/gbe_dota_lobby_state.cpp`、`LOCAL_LOBBY_USAGE.md` |
 | 2026-07-28 | source-aware owner_name shared adopt：`apply_lobby_owner_name()` 记录同 generation 来源标记，shared snapshot adopt 在同 generation 下保留 Local owner_name，避免旧 shared snapshot 覆盖 owner adoption 结果 | `dll/gbe_dota_lobby_state.cpp`、`LOCAL_LOBBY_USAGE.md` |
