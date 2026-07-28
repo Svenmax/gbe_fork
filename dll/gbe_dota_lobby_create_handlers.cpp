@@ -279,7 +279,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaPracticeLobbyCreateRequest(const std:
     const bool parsed_create_request = gbe::proto_wire::parse_dota_practice_lobby_create_body(reinterpret_cast<const uint8 *>(request_body.data()), request_body.size(), request);
 
     gbe::dota_lobby_flow::CreateLobbyContext create_context{};
-    create_context.previous_lobby = GBE_local_lobby;
+    create_context.previous_lobby = gbe::dota_lobby_state::LocalLobbyOwner(GBE_local_lobby).snapshot();
     create_context.pre_reset_custom_game = pre_reset_custom_game;
     create_context.request = request;
     create_context.parsed_request = parsed_create_request;

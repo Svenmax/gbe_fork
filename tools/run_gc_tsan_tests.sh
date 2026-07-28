@@ -40,7 +40,6 @@ build_and_run \
     dll/gbe_dota_chat_flow.cpp \
     dll/gbe_dota_lobby_launch_flow.cpp \
     dll/gbe_dota_lobby_member_flow.cpp \
-    dll/gbe_dota_lobby_payload_flow.cpp \
     dll/gbe_dota_lobby_flow.cpp \
     dll/gbe_dota_lobby_state.cpp \
     dll/gbe_dota_custom_game.cpp \

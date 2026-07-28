@@ -360,7 +360,7 @@ bool Steam_Game_Coordinator::GBE_HandleDotaDirectPostLoginRequest(uint32 unMsgTy
             body_size,
             source_job,
             GBE_ShouldTrackDotaPracticeLobbyLateSteamChain(),
-            GBE_local_lobby);
+            GBE_PeerLocalLobbySnapshot());
     if (conditional_fallback.consumed)
         return true;
 

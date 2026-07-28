@@ -5,7 +5,9 @@
 #include "gbe_dota_lobby_state.h"
 #include "gbe_dota_types.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace gbe::dota_lobby_flow {
@@ -24,6 +26,24 @@ bool should_preserve_server_id_for_launch_state_push_target(
     std::uint64_t lobby_owner_steam_id,
     bool lobby_lan,
     std::uint64_t lobby_match_id);
+
+bool should_use_current_practice_lobby_payload_for_details_update(
+    std::uint64_t match_id,
+    bool lan,
+    std::size_t member_count,
+    std::uint64_t custom_game_id);
+
+bool should_use_current_practice_lobby_payload_for_cache_subscribed(
+    bool launch_started,
+    bool lan,
+    std::size_t member_count);
+
+GBE_DotaAuthoritativeLobbyPayloadData compose_authoritative_lobby_payload_data(
+    bool preserve_server_id,
+    bool launch_started,
+    std::uint64_t current_server_id,
+    std::uint64_t server_candidate_id,
+    const std::string &formatted_connect);
 
 struct LaunchStatePushPlanInput
 {

@@ -131,7 +131,6 @@ build_and_run \
     dll/gbe_dota_chat_flow.cpp \
     dll/gbe_dota_lobby_launch_flow.cpp \
     dll/gbe_dota_lobby_member_flow.cpp \
-    dll/gbe_dota_lobby_payload_flow.cpp \
     dll/gbe_dota_lobby_flow.cpp \
     dll/gbe_dota_custom_game.cpp \
     dll/gbe_dota_gc_wire.cpp \
@@ -166,7 +165,6 @@ build_and_run \
     dll/gbe_dota_chat_flow.cpp \
     dll/gbe_dota_lobby_launch_flow.cpp \
     dll/gbe_dota_lobby_member_flow.cpp \
-    dll/gbe_dota_lobby_payload_flow.cpp \
     dll/gbe_dota_lobby_flow.cpp \
     dll/gbe_dota_lobby_state.cpp \
     dll/gbe_dota_custom_game.cpp \
@@ -188,7 +186,6 @@ build_and_run \
     dll/gbe_dota_reconnect_context.cpp \
     dll/gbe_dota_lobby_launch_flow.cpp \
     dll/gbe_dota_lobby_member_flow.cpp \
-    dll/gbe_dota_lobby_payload_flow.cpp \
     dll/gbe_dota_lobby_flow.cpp \
     dll/gbe_dota_custom_game.cpp \
     dll/gbe_dota_custom_lobby_http.cpp \
@@ -264,11 +261,9 @@ if [[ "$FULL" -eq 1 ]]; then
         dll/gbe_dota_chat_flow.cpp \
         dll/gbe_dota_lobby_launch_flow.cpp \
         dll/gbe_dota_lobby_member_flow.cpp \
-        dll/gbe_dota_lobby_payload_flow.cpp \
         dll/gbe_dota_lobby_flow.cpp \
         dll/gbe_dota_lobby_state.cpp \
         dll/gbe_dota_reconnect_context.cpp \
-        dll/gbe_dota_lobby_publish.cpp \
         dll/gbe_dota_lobby_snapshot.cpp \
         dll/gbe_dota_custom_game.cpp \
         dll/gbe_dota_gc_wire.cpp \
@@ -284,7 +279,6 @@ if [[ "$FULL" -eq 1 ]]; then
         dll/gbe_dota_chat_flow.cpp \
         dll/gbe_dota_lobby_launch_flow.cpp \
         dll/gbe_dota_lobby_member_flow.cpp \
-        dll/gbe_dota_lobby_payload_flow.cpp \
         dll/gbe_dota_lobby_flow.cpp \
         dll/gbe_dota_custom_game.cpp \
         dll/gbe_dota_gc_wire.cpp \
@@ -309,12 +303,10 @@ printf '[build] %s\n' gbe_dota_gc_payload_helpers_test
     dll/gbe_dota_chat_flow.cpp \
     dll/gbe_dota_lobby_launch_flow.cpp \
     dll/gbe_dota_lobby_member_flow.cpp \
-    dll/gbe_dota_lobby_payload_flow.cpp \
     dll/gbe_dota_lobby_flow.cpp \
     dll/gbe_dota_lobby_state.cpp \
     dll/gbe_dota_lobby_state_store.cpp \
     dll/gbe_dota_reconnect_context.cpp \
-    dll/gbe_dota_lobby_publish.cpp \
     dll/gbe_dota_lobby_snapshot.cpp \
     dll/gbe_dota_custom_game.cpp \
     dll/gbe_dota_custom_lobby_http.cpp \
@@ -337,12 +329,10 @@ printf '[build] %s\n' gbe_dota_handler_test
     dll/gbe_dota_chat_flow.cpp \
     dll/gbe_dota_lobby_launch_flow.cpp \
     dll/gbe_dota_lobby_member_flow.cpp \
-    dll/gbe_dota_lobby_payload_flow.cpp \
     dll/gbe_dota_lobby_flow.cpp \
     dll/gbe_dota_lobby_state.cpp \
     dll/gbe_dota_lobby_state_store.cpp \
     dll/gbe_dota_reconnect_context.cpp \
-    dll/gbe_dota_lobby_publish.cpp \
     dll/gbe_dota_lobby_snapshot.cpp \
     dll/gbe_dota_custom_game.cpp \
     dll/gbe_dota_custom_lobby_http.cpp \
@@ -365,12 +355,10 @@ printf '[build] %s\n' gbe_dota_behavior_replay
     dll/gbe_dota_chat_flow.cpp \
     dll/gbe_dota_lobby_launch_flow.cpp \
     dll/gbe_dota_lobby_member_flow.cpp \
-    dll/gbe_dota_lobby_payload_flow.cpp \
     dll/gbe_dota_lobby_flow.cpp \
     dll/gbe_dota_lobby_state.cpp \
     dll/gbe_dota_lobby_state_store.cpp \
     dll/gbe_dota_reconnect_context.cpp \
-    dll/gbe_dota_lobby_publish.cpp \
     dll/gbe_dota_lobby_snapshot.cpp \
     dll/gbe_dota_custom_game.cpp \
     dll/gbe_dota_custom_lobby_http.cpp \

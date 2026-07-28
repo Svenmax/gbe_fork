@@ -86,7 +86,6 @@ SOURCE_LIST_AUDIT_EXEMPTIONS = {
     "gbe_dota_gc_payload_helpers.cpp": "compiled through payload helper test wrapper",
     "gbe_dota_inventory_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
     "gbe_dota_inventory_handlers.cpp": "compiled through handler test wrapper",
-    "gbe_dota_lobby_handlers.cpp": "empty shell after D.10.1 split; real handlers in create/list/join/invite/lifecycle/slot TUs",
     "gbe_dota_lobby_handler_helpers.cpp": "compiled through handler test wrapper",
     "gbe_dota_lobby_create_handlers.cpp": "compiled through handler test wrapper",
     "gbe_dota_lobby_list_handlers.cpp": "compiled through handler test wrapper",
@@ -97,11 +96,9 @@ SOURCE_LIST_AUDIT_EXEMPTIONS = {
     "gbe_dota_lobby_flow_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
     "gbe_dota_lobby_launch_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
     "gbe_dota_lobby_snapshot_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
-    "gbe_dota_lobby_state_coordinator.cpp": "empty shell after D.10.2 split; real coordinators in publish/member/restore/recover TUs",
     "gbe_dota_lobby_state_publish_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
     "gbe_dota_lobby_state_member_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
     "gbe_dota_lobby_state_restore_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
-    "gbe_dota_lobby_state_recover_coordinator.cpp": "production coordinator TU, not directly offline-buildable",
     "gbe_dota_match_handlers.cpp": "compiled through handler test wrapper",
     "gbe_dota_misc_handlers.cpp": "compiled through handler test wrapper",
     "gbe_dota_network_callbacks.cpp": "production callback TU, not directly offline-buildable",
@@ -179,9 +176,10 @@ PURE_DOTA_PLANNER_FILES = (
     "gbe_dota_lobby_flow.cpp",
     "gbe_dota_lobby_launch_flow.cpp",
     "gbe_dota_lobby_member_flow.cpp",
-    "gbe_dota_lobby_payload_flow.cpp",
     "gbe_dota_chat_flow.cpp",
 )
+LOBBY_STATE_COORDINATOR_PREFIX = "gbe_dota_lobby_state"
+LOBBY_STATE_COORDINATOR_SUFFIX = "_coordinator.cpp"
 PURE_DOTA_PLANNER_FORBIDDEN_TOKENS = (
     "push_incoming_now(",
     "sendToAllGameservers(",
@@ -453,6 +451,12 @@ CONCURRENCY_OWNERSHIP_TERMS = [
 def read(path):
     with open(path, "r", encoding="utf-8", errors="replace") as f:
         return f.read()
+
+
+def read_if_exists(path):
+    if not os.path.exists(path):
+        return ""
+    return read(path)
 
 
 def inventory_section(inventory_text, heading):
@@ -1410,18 +1414,32 @@ def audit_local_lobby_owner_boundary(source_texts=None):
             "gbe_dota_lobby_launch_coordinator.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_launch_coordinator.cpp")),
             "gbe_dota_lobby_flow_coordinator.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_flow_coordinator.cpp")),
             "gbe_dota_lobby_lifecycle_handlers.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_lifecycle_handlers.cpp")),
-            "gbe_dota_lobby_state_member_coordinator.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_state_member_coordinator.cpp")),
-            "gbe_dota_lobby_state_recover_coordinator.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_state_recover_coordinator.cpp")),
+            "gbe_dota_lobby_state_member_coordinator.cpp": read_if_exists(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_state_member_coordinator.cpp")),
             "gbe_dota_post_login_handlers.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_post_login_handlers.cpp")),
-            "gbe_dota_lobby_state_restore_coordinator.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_state_restore_coordinator.cpp")),
+            "gbe_dota_lobby_state_restore_coordinator.cpp": read_if_exists(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_state_restore_coordinator.cpp")),
             "gbe_dota_chat_handlers.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_chat_handlers.cpp")),
-            "gbe_dota_lobby_state_publish_coordinator.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_state_publish_coordinator.cpp")),
+            "gbe_dota_lobby_state_publish_coordinator.cpp": read_if_exists(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_state_publish_coordinator.cpp")),
             "gbe_dota_lobby_snapshot_coordinator.cpp": read(os.path.join(ROOT_DIR, "dll", "gbe_dota_lobby_snapshot_coordinator.cpp")),
         }
+        for path in glob.glob(os.path.join(ROOT_DIR, "dll", "gbe_dota_*.cpp")):
+            source_texts.setdefault(os.path.basename(path), read(path))
 
     header = strip_comments(source_texts.get("gbe_dota_lobby_state.h", ""))
     main_cpp = strip_comments(source_texts.get("steam_game_coordinator.cpp", ""))
     issues = []
+
+    def state_coordinator_sources():
+        return sorted(
+            (os.path.basename(name), strip_comments(source))
+            for name, source in source_texts.items()
+            if os.path.basename(name).startswith(LOBBY_STATE_COORDINATOR_PREFIX)
+            and os.path.basename(name).endswith(LOBBY_STATE_COORDINATOR_SUFFIX)
+        )
+
+    def append_state_coordinator_issue(pattern, label, flags=0):
+        for source_name, source in state_coordinator_sources():
+            if re.search(pattern, source, flags=flags):
+                issues.append(f"{source_name}: {label}")
 
     required_header_terms = [
         "class LocalLobbyOwner",
@@ -1582,6 +1600,86 @@ def audit_local_lobby_owner_boundary(source_texts=None):
     if re.search(r"GBE_local_lobby\.(?:active|lobby_id|match_id|game_start_time|state|game_state|abandon_postgame_active|pending_leave_after_7040|generic_lobby_id|launch_phase|owner_connected|server_id|custom_game|connect)\b", lifecycle_handlers):
         issues.append("gbe_dota_lobby_lifecycle_handlers.cpp: lifecycle guard/log reads must route through LocalLobbyOwner::snapshot")
 
+    append_state_coordinator_issue(
+        r"apply_lobby_owner_name\s*\(\s*GBE_local_lobby\s*,",
+        "owner name updates must route through LocalLobbyOwner::apply",
+    )
+    append_state_coordinator_issue(
+        r"adopt_lobby_owner_member\s*\(\s*GBE_local_lobby\.members\s*,",
+        "generic lobby owner member adoption must route through LocalLobbyOwner::apply",
+    )
+    append_state_coordinator_issue(
+        r"note_generic_lobby_local_member_seen\s*\(\s*GBE_local_lobby\s*\)",
+        "generic lobby local member seen flag must route through LocalLobbyOwner::apply",
+    )
+    generic_lobby_mark_helpers = {
+        "mark_generic_lobby_waiting_join_confirmation_logged": "generic lobby waiting join confirmation flag",
+        "mark_generic_lobby_kicked_suppressed_logged": "generic lobby kicked suppressed flag",
+        "mark_generic_lobby_owner_adoption_suppressed_logged": "generic lobby owner adoption suppressed flag",
+    }
+    for helper, label in generic_lobby_mark_helpers.items():
+        append_state_coordinator_issue(
+            rf"{helper}\s*\(\s*GBE_local_lobby\s*\)",
+            f"{label} must route through LocalLobbyOwner::apply",
+        )
+    append_state_coordinator_issue(
+        r"apply_lobby_generic_lobby_id\s*\(\s*GBE_local_lobby\s*,",
+        "generic lobby id reset must route through LocalLobbyOwner::apply",
+    )
+    append_state_coordinator_issue(
+        r"apply_lobby_server_id\s*\(\s*GBE_local_lobby\s*,",
+        "server id sync must route through LocalLobbyOwner::apply",
+    )
+    append_state_coordinator_issue(
+        r"GBE_local_lobby\.(?:active|lobby_id|generic_lobby_id|server_id|lan|connect|generation|match_id|custom_game)\b",
+        "recover guard/log/shared-update reads must route through LocalLobbyOwner::snapshot",
+    )
+    append_state_coordinator_issue(
+        r"compose_source_aware_shared_runtime_restore_plan\s*\(\s*GBE_local_lobby\s*,",
+        "source-aware shared runtime restore compose must route through LocalLobbyOwner::snapshot",
+    )
+    append_state_coordinator_issue(
+        r"adopt_shared_lobby_to_local\s*\([^;]*GBE_local_lobby\s*\)",
+        "shared lobby adopt must route through LocalLobbyOwner::apply",
+        flags=re.DOTALL,
+    )
+    append_state_coordinator_issue(
+        r"restore_lobby_generation\s*\(\s*GBE_local_lobby\s*,",
+        "runtime generation restore must route through LocalLobbyOwner::apply",
+    )
+    append_state_coordinator_issue(
+        r"restore_lobby_generic_lobby_id\s*\(\s*GBE_local_lobby\s*,",
+        "runtime generic lobby id restore must route through LocalLobbyOwner::apply",
+    )
+    append_state_coordinator_issue(
+        r"apply_lobby_generation\s*\(\s*GBE_local_lobby\s*,",
+        "full adopt generation must route through LocalLobbyOwner::apply",
+    )
+    append_state_coordinator_issue(
+        r"apply_owner_hero_from_shared\s*\(\s*GBE_local_lobby\s*,",
+        "owner hero restore must route through LocalLobbyOwner::apply",
+    )
+    runtime_restore_helpers = {
+        "apply_source_aware_shared_runtime_restore_plan": "source-aware runtime restore plan",
+        "apply_shared_lobby_options_restore_plan": "shared lobby options restore plan",
+        "restore_lobby_custom_game": "custom game restore",
+        "restore_lobby_owner_connected": "owner connected restore",
+        "restore_launch_4511_seen": "launch 4511 restore",
+        "restore_lobby_owner_team": "owner team restore",
+        "restore_lobby_owner_slot": "owner slot restore",
+        "restore_lobby_members": "member restore",
+        "apply_shared_lobby_cache_restore_plan": "shared lobby cache restore plan",
+    }
+    for helper, label in runtime_restore_helpers.items():
+        append_state_coordinator_issue(
+            rf"{helper}\s*\(\s*GBE_local_lobby\s*,",
+            f"{label} must route through LocalLobbyOwner::apply",
+        )
+    append_state_coordinator_issue(
+        r"GBE_local_lobby\.(?:active|lobby_id|generation|state|game_state|server_id|connect|launch_phase|generic_lobby_id|match_id|owner_steam_id|owner_account_id|owner_team|owner_slot)\b",
+        "restore guard/log/helper reads must route through LocalLobbyOwner::snapshot",
+    )
+
     member_coordinator = strip_comments(source_texts.get("gbe_dota_lobby_state_member_coordinator.cpp", ""))
     if re.search(r"apply_lobby_owner_name\s*\(\s*GBE_local_lobby\s*,", member_coordinator):
         issues.append("gbe_dota_lobby_state_member_coordinator.cpp: owner name updates must route through LocalLobbyOwner::apply")
@@ -1597,14 +1695,6 @@ def audit_local_lobby_owner_boundary(source_texts=None):
     for helper, label in generic_lobby_mark_helpers.items():
         if re.search(rf"{helper}\s*\(\s*GBE_local_lobby\s*\)", member_coordinator):
             issues.append(f"gbe_dota_lobby_state_member_coordinator.cpp: {label} must route through LocalLobbyOwner::apply")
-
-    recover_coordinator = strip_comments(source_texts.get("gbe_dota_lobby_state_recover_coordinator.cpp", ""))
-    if re.search(r"apply_lobby_generic_lobby_id\s*\(\s*GBE_local_lobby\s*,", recover_coordinator):
-        issues.append("gbe_dota_lobby_state_recover_coordinator.cpp: generic lobby id reset must route through LocalLobbyOwner::apply")
-    if re.search(r"apply_lobby_server_id\s*\(\s*GBE_local_lobby\s*,", recover_coordinator):
-        issues.append("gbe_dota_lobby_state_recover_coordinator.cpp: server id sync must route through LocalLobbyOwner::apply")
-    if re.search(r"GBE_local_lobby\.(?:active|lobby_id|generic_lobby_id|server_id|lan|connect|generation|match_id|custom_game)\b", recover_coordinator):
-        issues.append("gbe_dota_lobby_state_recover_coordinator.cpp: recover guard/log/shared-update reads must route through LocalLobbyOwner::snapshot")
 
     post_login_handlers = strip_comments(source_texts.get("gbe_dota_post_login_handlers.cpp", ""))
     if re.search(r"apply_runtime_connect\s*\(\s*GBE_local_lobby\s*,", post_login_handlers):

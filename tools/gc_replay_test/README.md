@@ -83,7 +83,7 @@ c++ -std=c++17 -I. -Ilibs tools/gc_replay_test/gc_replay_test.cpp tools/gc_repla
 /tmp/opencode/gc_replay_test tools/gc_replay_test/fixtures/minimal.txt --expect tools/gc_replay_test/fixtures/minimal.expected.txt
 /tmp/opencode/gc_replay_test tools/gc_replay_test/fixtures/practice_lobby.txt --expect tools/gc_replay_test/fixtures/practice_lobby.expected.txt
 
-c++ -std=c++17 -I. -Ilibs tools/gbe_dota_lobby_flow_test/gbe_dota_lobby_flow_test.cpp dll/gbe_dota_lobby_flow.cpp dll/gbe_dota_lobby_publish.cpp dll/gbe_dota_lobby_snapshot.cpp dll/gbe_dota_custom_game.cpp dll/gbe_proto_wire.cpp -o /tmp/opencode/gbe_dota_lobby_flow_test
+c++ -std=c++17 -I. -Ilibs tools/gbe_dota_lobby_flow_test/gbe_dota_lobby_flow_test.cpp dll/gbe_dota_lobby_flow.cpp dll/gbe_dota_lobby_snapshot.cpp dll/gbe_dota_custom_game.cpp dll/gbe_proto_wire.cpp -o /tmp/opencode/gbe_dota_lobby_flow_test
 /tmp/opencode/gbe_dota_lobby_flow_test
 
 c++ -std=c++17 -I. -Ilibs tools/gbe_dota_custom_game_test/gbe_dota_custom_game_test.cpp dll/gbe_dota_custom_game.cpp dll/gbe_dota_custom_lobby_http.cpp dll/gbe_proto_wire.cpp -o /tmp/opencode/gbe_dota_custom_game_test
