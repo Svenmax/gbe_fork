@@ -12,6 +12,7 @@
 | [AGENT_PLAYBOOK.md](./AGENT_PLAYBOOK.md) | 多 Agent 协作与停手信号 |
 | [REFACTOR_BASELINE.md](./REFACTOR_BASELINE.md) | 可复现重构基线与验证证据 |
 | [STATE_OWNERSHIP.md](./STATE_OWNERSHIP.md) | 状态所有权、Store 契约与锁域 |
+| [GC_DLL_DOMAIN_BOUNDARY_CLEANUP.md](./GC_DLL_DOMAIN_BOUNDARY_CLEANUP.md) | GC dll domain 收束方向与停手边界 |
 | [PROTOCOL_BEHAVIOR_MATRIX.md](./PROTOCOL_BEHAVIOR_MATRIX.md) | 生产协议入口、通道与 fixture 矩阵 |
 | [REFACTOR_EXECUTION_PLAN.md](./REFACTOR_EXECUTION_PLAN.md) | 阶段化重构目标与验收条件 |
 
