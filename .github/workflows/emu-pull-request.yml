@@ -75,6 +75,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: "Clone third-party deps (deps/common)"
+        uses: actions/checkout@v6
+        with:
+          ref: "third-party/deps/common"
+          path: "third-party/deps/common"
+
       - name: "Install required packages"
         shell: "bash"
         run: |
