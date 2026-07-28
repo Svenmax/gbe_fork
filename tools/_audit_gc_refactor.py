@@ -1663,10 +1663,8 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         "apply_source_aware_shared_runtime_restore_plan": "source-aware runtime restore plan",
         "apply_shared_lobby_options_restore_plan": "shared lobby options restore plan",
         "restore_lobby_custom_game": "custom game restore",
-        "restore_lobby_owner_connected": "owner connected restore",
+        "restore_lobby_owner_runtime_from_shared": "owner runtime restore",
         "restore_launch_4511_seen": "launch 4511 restore",
-        "restore_lobby_owner_team": "owner team restore",
-        "restore_lobby_owner_slot": "owner slot restore",
         "restore_lobby_members": "member restore",
         "apply_shared_lobby_cache_restore_plan": "shared lobby cache restore plan",
     }
@@ -1749,10 +1747,8 @@ def audit_local_lobby_owner_boundary(source_texts=None):
         "apply_source_aware_shared_runtime_restore_plan": "source-aware runtime restore plan",
         "apply_shared_lobby_options_restore_plan": "shared lobby options restore plan",
         "restore_lobby_custom_game": "custom game restore",
-        "restore_lobby_owner_connected": "owner connected restore",
+        "restore_lobby_owner_runtime_from_shared": "owner runtime restore",
         "restore_launch_4511_seen": "launch 4511 restore",
-        "restore_lobby_owner_team": "owner team restore",
-        "restore_lobby_owner_slot": "owner slot restore",
         "restore_lobby_members": "member restore",
         "apply_shared_lobby_cache_restore_plan": "shared lobby cache restore plan",
     }
@@ -2643,6 +2639,7 @@ LOCAL_SHARED_MERGE_ENTRYPOINTS = (
     ("restore_lobby_owner_connected", "gbe_dota_lobby_state.cpp", "owner runtime restore"),
     ("restore_lobby_owner_team", "gbe_dota_lobby_state.cpp", "owner runtime restore"),
     ("restore_lobby_owner_slot", "gbe_dota_lobby_state.cpp", "owner runtime restore"),
+    ("restore_lobby_owner_runtime_from_shared", "gbe_dota_lobby_state.cpp", "source-aware owner runtime restore"),
     ("restore_launch_4511_seen", "gbe_dota_lobby_state.cpp", "launch marker restore"),
 )
 

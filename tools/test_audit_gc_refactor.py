@@ -1356,10 +1356,8 @@ void f()
         gbe::dota_lobby_state::apply_source_aware_shared_runtime_restore_plan(lobby, runtime_restore_plan);
         gbe::dota_lobby_state::apply_shared_lobby_options_restore_plan(lobby, options_restore_plan);
         gbe::dota_lobby_state::restore_lobby_custom_game(lobby, custom_game);
-        gbe::dota_lobby_state::restore_lobby_owner_connected(lobby, owner_connected);
         gbe::dota_lobby_state::restore_launch_4511_seen(lobby, launch_4511_seen);
-        gbe::dota_lobby_state::restore_lobby_owner_team(lobby, owner_team);
-        gbe::dota_lobby_state::restore_lobby_owner_slot(lobby, owner_slot);
+        gbe::dota_lobby_state::restore_lobby_owner_runtime_from_shared(lobby, shared_lobby);
         gbe::dota_lobby_state::restore_lobby_members(lobby, members);
         gbe::dota_lobby_state::apply_shared_lobby_cache_restore_plan(lobby, cache_restore_plan);
         return gbe::dota_lobby_state::apply_owner_hero_from_shared(lobby, shared_lobby);
@@ -1692,10 +1690,8 @@ void f()
     gbe::dota_lobby_state::apply_source_aware_shared_runtime_restore_plan(GBE_local_lobby, runtime_restore_plan);
     gbe::dota_lobby_state::apply_shared_lobby_options_restore_plan(GBE_local_lobby, options_restore_plan);
     gbe::dota_lobby_state::restore_lobby_custom_game(GBE_local_lobby, custom_game);
-    gbe::dota_lobby_state::restore_lobby_owner_connected(GBE_local_lobby, owner_connected);
     gbe::dota_lobby_state::restore_launch_4511_seen(GBE_local_lobby, launch_4511_seen);
-    gbe::dota_lobby_state::restore_lobby_owner_team(GBE_local_lobby, owner_team);
-    gbe::dota_lobby_state::restore_lobby_owner_slot(GBE_local_lobby, owner_slot);
+    gbe::dota_lobby_state::restore_lobby_owner_runtime_from_shared(GBE_local_lobby, shared_lobby);
     gbe::dota_lobby_state::restore_lobby_members(GBE_local_lobby, members);
     gbe::dota_lobby_state::apply_shared_lobby_cache_restore_plan(GBE_local_lobby, cache_restore_plan);
     gbe::dota_lobby_state::apply_lobby_generation(GBE_local_lobby, generation);
@@ -2162,10 +2158,8 @@ void f()
             "gbe_dota_lobby_state_restore_coordinator.cpp: source-aware runtime restore plan must route through LocalLobbyOwner::apply",
             "gbe_dota_lobby_state_restore_coordinator.cpp: shared lobby options restore plan must route through LocalLobbyOwner::apply",
             "gbe_dota_lobby_state_restore_coordinator.cpp: custom game restore must route through LocalLobbyOwner::apply",
-            "gbe_dota_lobby_state_restore_coordinator.cpp: owner connected restore must route through LocalLobbyOwner::apply",
+            "gbe_dota_lobby_state_restore_coordinator.cpp: owner runtime restore must route through LocalLobbyOwner::apply",
             "gbe_dota_lobby_state_restore_coordinator.cpp: launch 4511 restore must route through LocalLobbyOwner::apply",
-            "gbe_dota_lobby_state_restore_coordinator.cpp: owner team restore must route through LocalLobbyOwner::apply",
-            "gbe_dota_lobby_state_restore_coordinator.cpp: owner slot restore must route through LocalLobbyOwner::apply",
             "gbe_dota_lobby_state_restore_coordinator.cpp: member restore must route through LocalLobbyOwner::apply",
             "gbe_dota_lobby_state_restore_coordinator.cpp: shared lobby cache restore plan must route through LocalLobbyOwner::apply",
         ]

@@ -590,6 +590,83 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u64(lobby.match_id, 22ull, "same-generation capture retains local match value");
     }
 
+    // Same-generation runtime metadata keeps Local connect/server_id over an older shared snapshot.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 15ull;
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_runtime_metadata(lobby, "local-connect", 77ull),
+            "runtime metadata records local identity change");
+        ok &= expect_eq_u64(
+            lobby.runtime_metadata_generation,
+            lobby.generation,
+            "runtime metadata records source generation");
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.generation = lobby.generation;
+        shared.connect = "shared-connect";
+        shared.server_id = 88ull;
+        const auto restore_plan = gbe::dota_lobby_state::compose_source_aware_shared_runtime_restore_plan(
+            lobby, shared, GBE_kDotaLaunchPhaseRunQueued);
+        ok &= expect_false(restore_plan.apply_connect, "same-generation runtime metadata keeps local connect");
+        ok &= expect_false(restore_plan.apply_server_id, "same-generation runtime metadata keeps local server id");
+        ok &= expect_true(
+            restore_plan.connect_source == gbe::dota_lobby_state::SharedLobbyRestoreSource::LocalRuntimeMetadata,
+            "same-generation runtime metadata records local connect source");
+        ok &= expect_true(
+            restore_plan.server_id_source == gbe::dota_lobby_state::SharedLobbyRestoreSource::LocalRuntimeMetadata,
+            "same-generation runtime metadata records local server id source");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_source_aware_shared_runtime_restore_plan(lobby, restore_plan),
+            "same-generation runtime metadata restore does not mutate Local lobby");
+        ok &= expect_eq_str(lobby.connect, "local-connect", "same-generation runtime metadata retains local connect");
+        ok &= expect_eq_u64(lobby.server_id, 77ull, "same-generation runtime metadata retains local server id");
+    }
+
+    // Same-generation generic capture keeps Local options/custom_game field groups over an older shared snapshot.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 10ull;
+        gbe::dota_lobby_state::GenericLobbyCaptureInput input{};
+        input.allow_cheats_raw = "1";
+        input.fill_with_bots_raw = "1";
+        input.visibility_raw = "2";
+        input.bot_radiant_raw = "7";
+        input.custom_game_mode = "local-mode";
+        input.custom_map_name = "local-map";
+        input.custom_game_id_raw = "88";
+        const auto capture_plan = gbe::dota_lobby_state::compose_generic_lobby_capture_plan(
+            lobby, input, GBE_kDotaLaunchPhaseSetupSynced);
+        gbe::dota_lobby_state::apply_generic_lobby_capture_plan(lobby, capture_plan);
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.generation = lobby.generation;
+        shared.allow_cheats = false;
+        shared.fill_with_bots = false;
+        shared.visibility = 0u;
+        shared.bot_radiant = 1ull;
+        shared.custom_game.mode = "shared-mode";
+        shared.custom_game.map_name = "shared-map";
+        shared.custom_game.game_id = 11ull;
+        const auto options_plan = gbe::dota_lobby_state::compose_shared_lobby_options_restore_plan(lobby, shared);
+        ok &= expect_false(options_plan.apply_allow_cheats, "same-generation capture keeps local allow_cheats");
+        ok &= expect_false(options_plan.apply_fill_with_bots, "same-generation capture keeps local fill_with_bots");
+        ok &= expect_false(options_plan.apply_visibility, "same-generation capture keeps local visibility");
+        ok &= expect_false(options_plan.apply_bot_radiant, "same-generation capture keeps local bot_radiant");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_shared_lobby_options_restore_plan(lobby, options_plan),
+            "same-generation capture does not apply shared options");
+        ok &= expect_false(
+            gbe::dota_lobby_state::restore_lobby_custom_game_from_shared(lobby, shared),
+            "same-generation capture does not apply shared custom game");
+        ok &= expect_true(lobby.allow_cheats, "same-generation capture retains local allow_cheats");
+        ok &= expect_true(lobby.fill_with_bots, "same-generation capture retains local fill_with_bots");
+        ok &= expect_eq_u32(lobby.visibility, 2u, "same-generation capture retains local visibility");
+        ok &= expect_eq_u64(lobby.bot_radiant, 7ull, "same-generation capture retains local bot_radiant");
+        ok &= expect_eq_u64(lobby.custom_game.game_id, 88ull, "same-generation capture retains local custom game id");
+        ok &= expect_true(lobby.custom_game.map_name == "local-map", "same-generation capture retains local custom game map");
+    }
+
     // steam auth ack: derive missing metadata and preserve values assigned earlier in the launch.
     {
         GBE_LocalLobby lobby = make_active_lobby();
@@ -609,12 +686,20 @@ bool test_valid_launch_progression()
     // mark_launch_4511_seen: mark once for publish deduplication.
     {
         GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 9ull;
         ok &= expect_true(gbe::dota_lobby_state::mark_launch_4511_seen(lobby), "4511 marker changes on first notification");
         ok &= expect_true(lobby.launch_4511_seen, "4511 marker is retained");
         ok &= expect_false(gbe::dota_lobby_state::mark_launch_4511_seen(lobby), "4511 marker rejects duplicate notification");
+        ok &= expect_eq_u64(lobby.launch_4511_generation, 9ull, "4511 marker records local source generation");
         ok &= expect_false(gbe::dota_lobby_state::restore_launch_4511_seen(lobby, true), "4511 restore keeps matching marker");
-        ok &= expect_true(gbe::dota_lobby_state::restore_launch_4511_seen(lobby, false), "4511 restore applies shared marker");
-        ok &= expect_false(lobby.launch_4511_seen, "4511 restore updates marker value");
+        ok &= expect_false(gbe::dota_lobby_state::restore_launch_4511_seen(lobby, false), "same-generation 4511 restore keeps local marker");
+        ok &= expect_true(lobby.launch_4511_seen, "same-generation 4511 restore retains marker value");
+
+        GBE_LocalLobby restore_lobby = make_active_lobby();
+        restore_lobby.generation = 10ull;
+        restore_lobby.launch_4511_seen = true;
+        ok &= expect_true(gbe::dota_lobby_state::restore_launch_4511_seen(restore_lobby, false), "4511 restore applies shared marker without local source");
+        ok &= expect_false(restore_lobby.launch_4511_seen, "4511 restore updates marker value without local source");
     }
 
     // Source-aware restore: shared identity fills Local values without a same-generation capture.
@@ -659,6 +744,40 @@ bool test_valid_launch_progression()
         ok &= expect_true(gbe::dota_lobby_state::restore_lobby_owner_slot(lobby, 4u), "owner slot restore applies shared value");
         ok &= expect_eq_u32(lobby.owner_slot, 4u, "owner slot restore updates local value");
 
+        GBE_LocalLobby owner_lobby = make_active_lobby();
+        owner_lobby.generation = 11ull;
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_owner_connected(owner_lobby, true),
+            "owner runtime local apply records owner connected source");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_owner_team(owner_lobby, 2u),
+            "owner runtime local apply records owner team source");
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_owner_slot(owner_lobby, 3u),
+            "owner runtime local apply records owner slot source");
+        GBE_SharedDotaLobbyState owner_shared{};
+        owner_shared.generation = owner_lobby.generation;
+        owner_shared.owner_connected = false;
+        owner_shared.owner_team = 4u;
+        owner_shared.owner_slot = 5u;
+        ok &= expect_false(
+            gbe::dota_lobby_state::restore_lobby_owner_runtime_from_shared(owner_lobby, owner_shared),
+            "same-generation owner runtime keeps local owner fields");
+        ok &= expect_true(owner_lobby.owner_connected, "same-generation owner runtime retains connected");
+        ok &= expect_eq_u32(owner_lobby.owner_team, 2u, "same-generation owner runtime retains team");
+        ok &= expect_eq_u32(owner_lobby.owner_slot, 3u, "same-generation owner runtime retains slot");
+
+        GBE_LocalLobby no_source_owner_lobby = make_active_lobby();
+        no_source_owner_lobby.owner_connected = true;
+        no_source_owner_lobby.owner_team = 2u;
+        no_source_owner_lobby.owner_slot = 3u;
+        ok &= expect_true(
+            gbe::dota_lobby_state::restore_lobby_owner_runtime_from_shared(no_source_owner_lobby, owner_shared),
+            "owner runtime restore applies shared fields without local source");
+        ok &= expect_false(no_source_owner_lobby.owner_connected, "owner runtime restore updates connected");
+        ok &= expect_eq_u32(no_source_owner_lobby.owner_team, 4u, "owner runtime restore updates team");
+        ok &= expect_eq_u32(no_source_owner_lobby.owner_slot, 5u, "owner runtime restore updates slot");
+
         GBE_DotaLobbyMemberState local_member{};
         local_member.steam_id = 1ull;
         local_member.account_id = 11u;
@@ -676,6 +795,17 @@ bool test_valid_launch_progression()
         ok &= expect_true(
             gbe::dota_lobby_flow::lobby_members_equal(lobby.members, {shared_member}),
             "members restore updates Local members");
+
+        GBE_LocalLobby sourced_members_lobby = make_active_lobby();
+        sourced_members_lobby.generation = 12ull;
+        sourced_members_lobby.members = {local_member};
+        sourced_members_lobby.members_generation = sourced_members_lobby.generation;
+        ok &= expect_false(
+            gbe::dota_lobby_state::restore_lobby_members(sourced_members_lobby, {shared_member}),
+            "same-generation members restore keeps local members");
+        ok &= expect_true(
+            gbe::dota_lobby_flow::lobby_members_equal(sourced_members_lobby.members, {local_member}),
+            "same-generation members restore retains local members");
     }
 
     // apply_lobby_owner_connected: local owner connection writes are idempotent.
@@ -766,6 +896,7 @@ bool test_valid_launch_progression()
         ok &= expect_true(
             gbe::dota_lobby_flow::lobby_members_equal(current.members, snapshot.members),
             "kick snapshot applies member list");
+        ok &= expect_eq_u64(current.members_generation, current.generation, "kick snapshot records members source generation");
         GBE_LocalLobby create_target = make_active_lobby();
         create_target.lobby_id = 99ull;
         gbe::dota_lobby_state::CreateLobbyStateApplyPlan create_apply_plan{};
@@ -794,6 +925,7 @@ bool test_valid_launch_progression()
     // apply_chat_channel / clear_chat_channel: local chat channel writes are grouped.
     {
         GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 21ull;
         ok &= expect_true(
             gbe::dota_lobby_state::apply_chat_channel(lobby, 42ull, "lobby", 3u),
             "chat channel apply reports initial channel change");
@@ -801,6 +933,10 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u64(lobby.chat_channel_id, 42ull, "chat channel apply updates channel id");
         ok &= expect_true(lobby.chat_channel_name == "lobby", "chat channel apply updates channel name");
         ok &= expect_eq_u32(lobby.chat_channel_type, 3u, "chat channel apply updates channel type");
+        ok &= expect_eq_u64(
+            lobby.chat_channel_generation,
+            lobby.generation,
+            "chat channel apply records source generation");
         ok &= expect_false(
             gbe::dota_lobby_state::apply_chat_channel(lobby, 42ull, "lobby", 3u),
             "chat channel apply keeps matching values");
@@ -811,6 +947,10 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u64(lobby.chat_channel_id, 0ull, "chat channel clear resets channel id");
         ok &= expect_true(lobby.chat_channel_name.empty(), "chat channel clear resets channel name");
         ok &= expect_eq_u32(lobby.chat_channel_type, 0u, "chat channel clear resets channel type");
+        ok &= expect_eq_u64(
+            lobby.chat_channel_generation,
+            lobby.generation,
+            "chat channel clear records source generation");
         ok &= expect_false(
             gbe::dota_lobby_state::clear_chat_channel(lobby),
             "chat channel clear keeps empty channel state");
@@ -819,6 +959,7 @@ bool test_valid_launch_progression()
     // apply_broadcast_channel / patch_broadcast_channel / clear_broadcast_channel: local broadcast writes are grouped.
     {
         GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 22ull;
         ok &= expect_true(
             gbe::dota_lobby_state::apply_broadcast_channel(lobby, 7u, "US", "cast", "en"),
             "broadcast apply reports initial channel change");
@@ -827,6 +968,10 @@ bool test_valid_launch_progression()
         ok &= expect_true(lobby.broadcast_country_code == "US", "broadcast apply updates country");
         ok &= expect_true(lobby.broadcast_description == "cast", "broadcast apply updates description");
         ok &= expect_true(lobby.broadcast_language_code == "en", "broadcast apply updates language");
+        ok &= expect_eq_u64(
+            lobby.broadcast_channel_generation,
+            lobby.generation,
+            "broadcast apply records source generation");
         ok &= expect_false(
             gbe::dota_lobby_state::apply_broadcast_channel(lobby, 7u, "US", "cast", "en"),
             "broadcast apply keeps matching values");
@@ -836,6 +981,10 @@ bool test_valid_launch_progression()
         ok &= expect_true(lobby.broadcast_country_code == "US", "broadcast patch preserves absent country");
         ok &= expect_true(lobby.broadcast_description == "cast2", "broadcast patch updates present description");
         ok &= expect_true(lobby.broadcast_language_code == "en", "broadcast patch preserves absent language");
+        ok &= expect_eq_u64(
+            lobby.broadcast_channel_generation,
+            lobby.generation,
+            "broadcast patch records source generation");
         ok &= expect_false(
             gbe::dota_lobby_state::patch_broadcast_channel(lobby, 7u, false, "", false, "", false, ""),
             "broadcast patch keeps matching id and absent optional fields");
@@ -847,6 +996,10 @@ bool test_valid_launch_progression()
         ok &= expect_true(lobby.broadcast_country_code.empty(), "broadcast clear resets country");
         ok &= expect_true(lobby.broadcast_description.empty(), "broadcast clear resets description");
         ok &= expect_true(lobby.broadcast_language_code.empty(), "broadcast clear resets language");
+        ok &= expect_eq_u64(
+            lobby.broadcast_channel_generation,
+            lobby.generation,
+            "broadcast clear records source generation");
     }
 
     // shared options restore: copy lobby options field group when shared differs.
@@ -966,6 +1119,41 @@ bool test_valid_launch_progression()
         ok &= expect_eq_u64(lobby.cache_sync_version, 0ull, "cache restore updates cache_sync_version");
     }
 
+    // Same-generation cache metadata capture keeps the Local cache field group over shared restore.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 6ull;
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_cache_subscription_metadata(
+                lobby, true, 44ull, true, 55u, {3u, 4u}, true, 66ull),
+            "cache metadata capture records local cache field group");
+        GBE_SharedDotaLobbyState shared{};
+        shared.generation = lobby.generation;
+        shared.has_cache_version = false;
+        shared.cache_version = 0ull;
+        shared.has_cache_service_id = false;
+        shared.cache_service_id = 0u;
+        shared.cache_service_list = {9u};
+        shared.has_cache_sync_version = false;
+        shared.cache_sync_version = 0ull;
+        const auto plan = gbe::dota_lobby_state::compose_shared_lobby_cache_restore_plan(lobby, shared);
+        ok &= expect_false(plan.apply_cache_version, "same-generation cache metadata keeps local cache version");
+        ok &= expect_false(plan.apply_cache_service_id, "same-generation cache metadata keeps local service id");
+        ok &= expect_false(plan.apply_cache_service_list, "same-generation cache metadata keeps local service list");
+        ok &= expect_false(plan.apply_cache_sync_version, "same-generation cache metadata keeps local sync version");
+        ok &= expect_false(
+            gbe::dota_lobby_state::apply_shared_lobby_cache_restore_plan(lobby, plan),
+            "same-generation cache metadata does not apply shared cache");
+        ok &= expect_true(lobby.has_cache_version, "same-generation cache metadata retains cache version flag");
+        ok &= expect_eq_u64(lobby.cache_version, 44ull, "same-generation cache metadata retains cache version");
+        ok &= expect_true(lobby.has_cache_service_id, "same-generation cache metadata retains service id flag");
+        ok &= expect_eq_u32(lobby.cache_service_id, 55u, "same-generation cache metadata retains service id");
+        ok &= expect_true(lobby.cache_service_list.size() == 2u && lobby.cache_service_list[1] == 4u,
+            "same-generation cache metadata retains service list");
+        ok &= expect_true(lobby.has_cache_sync_version, "same-generation cache metadata retains sync version flag");
+        ok &= expect_eq_u64(lobby.cache_sync_version, 66ull, "same-generation cache metadata retains sync version");
+    }
+
     // apply_cache_subscription_metadata: local cache metadata writes are grouped.
     {
         GBE_LocalLobby lobby = make_active_lobby();
@@ -1022,6 +1210,7 @@ bool test_valid_launch_progression()
     // apply_lobby_bot_difficulty_for_team: team selects radiant or dire field.
     {
         GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 26ull;
         lobby.bot_difficulty_radiant = 1u;
         lobby.bot_difficulty_dire = 2u;
         ok &= expect_true(
@@ -1029,6 +1218,10 @@ bool test_valid_launch_progression()
             "bot difficulty apply updates radiant team");
         ok &= expect_eq_u32(lobby.bot_difficulty_radiant, 3u, "bot difficulty apply stores radiant difficulty");
         ok &= expect_eq_u32(lobby.bot_difficulty_dire, 2u, "bot difficulty apply preserves dire difficulty");
+        ok &= expect_eq_u64(
+            lobby.bot_difficulty_generation,
+            lobby.generation,
+            "bot difficulty apply records source generation");
         ok &= expect_true(
             gbe::dota_lobby_state::apply_lobby_bot_difficulty_for_team(lobby, GBE_kDotaTeamBadGuys, 4u),
             "bot difficulty apply updates dire team");
@@ -1039,9 +1232,50 @@ bool test_valid_launch_progression()
             "bot difficulty apply keeps matching dire value");
     }
 
+    // Same-generation bot difficulty apply keeps Local options over older shared options.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 27ull;
+        lobby.bot_difficulty_radiant = 1u;
+        lobby.bot_difficulty_dire = 2u;
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_bot_difficulty_for_team(lobby, GBE_kDotaTeamGoodGuys, 3u),
+            "bot difficulty source apply updates local options");
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.generation = lobby.generation;
+        shared.server_region = 9u;
+        shared.bot_difficulty_radiant = 5u;
+        shared.bot_difficulty_dire = 6u;
+        const auto options_plan = gbe::dota_lobby_state::compose_shared_lobby_options_restore_plan(lobby, shared);
+        ok &= expect_true(options_plan.apply_server_region, "same-generation bot difficulty allows unrelated options");
+        ok &= expect_false(options_plan.apply_bot_difficulty_radiant, "same-generation bot difficulty keeps radiant");
+        ok &= expect_false(options_plan.apply_bot_difficulty_dire, "same-generation bot difficulty keeps dire");
+    }
+
+    // Older bot difficulty source marker accepts shared options.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 27ull;
+        lobby.bot_difficulty_radiant = 1u;
+        lobby.bot_difficulty_dire = 2u;
+        ok &= expect_true(
+            gbe::dota_lobby_state::apply_lobby_bot_difficulty_for_team(lobby, GBE_kDotaTeamGoodGuys, 3u),
+            "bot difficulty source apply updates local radiant");
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.generation = lobby.generation + 1ull;
+        shared.bot_difficulty_radiant = 5u;
+        shared.bot_difficulty_dire = 6u;
+        const auto options_plan = gbe::dota_lobby_state::compose_shared_lobby_options_restore_plan(lobby, shared);
+        ok &= expect_true(options_plan.apply_bot_difficulty_radiant, "newer shared restore applies radiant bot difficulty");
+        ok &= expect_true(options_plan.apply_bot_difficulty_dire, "newer shared restore applies dire bot difficulty");
+    }
+
     // apply_custom_game_loading_metadata: 8052 runtime metadata preserves absent values.
     {
         GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 14ull;
         lobby.custom_game.game_id = 10ull;
         lobby.game_start_time = 20u;
         ok &= expect_false(
@@ -1054,9 +1288,25 @@ bool test_valid_launch_progression()
             "custom game loading metadata reports changed values");
         ok &= expect_eq_u64(lobby.custom_game.game_id, 30ull, "custom game loading metadata updates game id");
         ok &= expect_eq_u32(lobby.game_start_time, 40u, "custom game loading metadata updates start time");
+        ok &= expect_eq_u64(lobby.custom_game_loading_generation, 14ull, "custom game loading metadata records local source generation");
         ok &= expect_false(
             gbe::dota_lobby_state::apply_custom_game_loading_metadata(lobby, 30ull, 40u),
             "custom game loading metadata keeps matching values");
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.generation = lobby.generation;
+        shared.custom_game.game_id = 50ull;
+        shared.game_start_time = 60u;
+        const auto runtime_plan = gbe::dota_lobby_state::compose_source_aware_shared_runtime_restore_plan(
+            lobby,
+            shared,
+            GBE_kDotaLaunchPhaseRunQueued);
+        ok &= expect_false(runtime_plan.apply_game_start_time, "same-generation custom game loading keeps local start time");
+        ok &= expect_false(
+            gbe::dota_lobby_state::restore_lobby_custom_game_from_shared(lobby, shared),
+            "same-generation custom game loading keeps local custom game");
+        ok &= expect_eq_u64(lobby.custom_game.game_id, 30ull, "same-generation custom game loading retains game id");
+        ok &= expect_eq_u32(lobby.game_start_time, 40u, "same-generation custom game loading retains start time");
     }
 
     // restore_lobby_generation / restore_lobby_generic_lobby_id: identity restore.
@@ -1145,6 +1395,10 @@ bool test_valid_launch_progression()
             "runtime metadata reports connect change");
         ok &= expect_eq_str(lobby.connect, "5.6.7.8:27015", "runtime metadata updates connect");
         ok &= expect_eq_u64(lobby.server_id, 20ull, "runtime metadata preserves matching server id");
+        ok &= expect_eq_u64(
+            lobby.runtime_metadata_generation,
+            lobby.generation,
+            "runtime metadata stores source generation after identity change");
         ok &= expect_false(
             gbe::dota_lobby_state::apply_runtime_metadata(lobby, "5.6.7.8:27015", 20ull),
             "runtime metadata keeps matching values");
@@ -1157,6 +1411,7 @@ bool test_valid_launch_progression()
     // apply_lobby_details_update: 7046 details update applies options and custom game fields.
     {
         GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 24ull;
         lobby.room_name = "old room";
         lobby.server_region = 1u;
         lobby.lan = false;
@@ -1185,6 +1440,90 @@ bool test_valid_launch_progression()
         ok &= expect_true(lobby.allow_cheats, "details update applies cheats flag");
         ok &= expect_eq_str(lobby.pass_key, "new", "details update applies pass key");
         ok &= expect_eq_u64(lobby.custom_game.game_id, 20ull, "details update applies custom game id");
+        ok &= expect_eq_u64(
+            lobby.details_runtime_generation,
+            lobby.generation,
+            "details update records runtime source generation");
+        ok &= expect_eq_u64(
+            lobby.details_options_generation,
+            lobby.generation,
+            "details update records options source generation");
+        ok &= expect_eq_u64(
+            lobby.details_custom_game_generation,
+            lobby.generation,
+            "details update records custom game source generation");
+    }
+
+    // Same-generation details update keeps Local room/options/custom_game over older shared fields.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 25ull;
+        gbe::proto_wire::DotaPracticeLobbyDetailsRequest details{};
+        details.has_room_name = true;
+        details.room_name = "local room";
+        details.has_server_region = true;
+        details.server_region = 5u;
+        details.has_allow_cheats = true;
+        details.allow_cheats = true;
+        details.has_custom_game_id = true;
+        details.custom_game_id = 90ull;
+        gbe::dota_lobby_state::apply_lobby_details_update(lobby, details);
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.generation = lobby.generation;
+        shared.room_name = "shared room";
+        shared.server_region = 2u;
+        shared.allow_cheats = false;
+        shared.custom_game.game_id = 10ull;
+        const auto runtime_plan = gbe::dota_lobby_state::compose_source_aware_shared_runtime_restore_plan(
+            lobby, shared, GBE_kDotaLaunchPhaseRunQueued);
+        const auto options_plan = gbe::dota_lobby_state::compose_shared_lobby_options_restore_plan(lobby, shared);
+
+        ok &= expect_false(runtime_plan.apply_room_name, "same-generation details update keeps local room");
+        ok &= expect_true(
+            runtime_plan.room_name_source == gbe::dota_lobby_state::SharedLobbyRestoreSource::LocalDetailsUpdate,
+            "same-generation details update records room source");
+        ok &= expect_false(options_plan.apply_server_region, "same-generation details update keeps local server region");
+        ok &= expect_false(options_plan.apply_allow_cheats, "same-generation details update keeps local cheats flag");
+        ok &= expect_false(
+            gbe::dota_lobby_state::restore_lobby_custom_game_from_shared(lobby, shared),
+            "same-generation details update keeps local custom game");
+        ok &= expect_eq_str(lobby.room_name, "local room", "details restore retains local room");
+        ok &= expect_eq_u32(lobby.server_region, 5u, "details restore retains local server region");
+        ok &= expect_true(lobby.allow_cheats, "details restore retains local cheats flag");
+        ok &= expect_eq_u64(lobby.custom_game.game_id, 90ull, "details restore retains local custom game id");
+    }
+
+    // Older details source markers accept shared room/options/custom_game fields.
+    {
+        GBE_LocalLobby lobby = make_active_lobby();
+        lobby.generation = 25ull;
+        gbe::proto_wire::DotaPracticeLobbyDetailsRequest details{};
+        details.has_room_name = true;
+        details.room_name = "local room";
+        details.has_server_region = true;
+        details.server_region = 5u;
+        details.has_allow_cheats = true;
+        details.allow_cheats = true;
+        details.has_custom_game_id = true;
+        details.custom_game_id = 90ull;
+        gbe::dota_lobby_state::apply_lobby_details_update(lobby, details);
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.generation = lobby.generation + 1ull;
+        shared.room_name = "shared room";
+        shared.server_region = 2u;
+        shared.allow_cheats = false;
+        shared.custom_game.game_id = 10ull;
+        const auto runtime_plan = gbe::dota_lobby_state::compose_source_aware_shared_runtime_restore_plan(
+            lobby, shared, GBE_kDotaLaunchPhaseRunQueued);
+        const auto options_plan = gbe::dota_lobby_state::compose_shared_lobby_options_restore_plan(lobby, shared);
+        ok &= expect_true(runtime_plan.apply_room_name, "newer shared restore applies room after details marker ages out");
+        ok &= expect_true(options_plan.apply_server_region, "newer shared restore applies server region after details marker ages out");
+        ok &= expect_true(options_plan.apply_allow_cheats, "newer shared restore applies cheats after details marker ages out");
+        ok &= expect_true(
+            gbe::dota_lobby_state::restore_lobby_custom_game_from_shared(lobby, shared),
+            "newer shared restore applies custom game after details marker ages out");
     }
 
     // apply_lobby_server_id: server id applies exact runtime identity.
@@ -1198,6 +1537,10 @@ bool test_valid_launch_progression()
             gbe::dota_lobby_state::apply_lobby_server_id(lobby, 20ull),
             "server id apply reports changed value");
         ok &= expect_eq_u64(lobby.server_id, 20ull, "server id apply updates local value");
+        ok &= expect_eq_u64(
+            lobby.runtime_metadata_generation,
+            lobby.generation,
+            "server id apply records runtime metadata generation");
         ok &= expect_true(
             gbe::dota_lobby_state::apply_lobby_server_id(lobby, 0ull),
             "server id apply clears local value");
@@ -1216,6 +1559,10 @@ bool test_valid_launch_progression()
             gbe::dota_lobby_state::apply_runtime_connect(lobby, "5.6.7.8:27015"),
             "runtime connect apply reports endpoint change");
         ok &= expect_true(lobby.connect == "5.6.7.8:27015", "runtime connect updates endpoint");
+        ok &= expect_eq_u64(
+            lobby.runtime_metadata_generation,
+            lobby.generation,
+            "runtime connect apply records runtime metadata generation");
         ok &= expect_false(
             gbe::dota_lobby_state::apply_runtime_connect(lobby, "5.6.7.8:27015"),
             "runtime connect apply reports matching endpoint as no-op");
@@ -1781,6 +2128,95 @@ bool test_stale_generic_lobby_state_regression()
         GBE_LocalLobby local{};
         gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, true, false, local);
         ok &= expect_eq_u64(local.server_id, 700ull, "adopt keeps server_id with match");
+    }
+
+    // adopt_shared_lobby_to_local: same-generation chat/broadcast local applies keep Local channel groups.
+    {
+        GBE_LocalLobby local = make_active_lobby();
+        local.generation = 33ull;
+        gbe::dota_lobby_state::apply_chat_channel(local, 42ull, "local-chat", 3u);
+        gbe::dota_lobby_state::apply_broadcast_channel(local, 7u, "US", "local-cast", "en");
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.active = true;
+        shared.generation = local.generation;
+        shared.has_chat_channel = true;
+        shared.chat_channel_id = 43ull;
+        shared.chat_channel_name = "shared-chat";
+        shared.chat_channel_type = 4u;
+        shared.has_broadcast_channel = true;
+        shared.broadcast_channel_id = 8u;
+        shared.broadcast_country_code = "GB";
+        shared.broadcast_description = "shared-cast";
+        shared.broadcast_language_code = "fr";
+        gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, false, local);
+
+        ok &= expect_true(local.has_chat_channel, "same-generation adopt keeps local chat present");
+        ok &= expect_eq_u64(local.chat_channel_id, 42ull, "same-generation adopt keeps local chat id");
+        ok &= expect_eq_str(local.chat_channel_name, "local-chat", "same-generation adopt keeps local chat name");
+        ok &= expect_eq_u32(local.chat_channel_type, 3u, "same-generation adopt keeps local chat type");
+        ok &= expect_true(local.has_broadcast_channel, "same-generation adopt keeps local broadcast present");
+        ok &= expect_eq_u32(local.broadcast_channel_id, 7u, "same-generation adopt keeps local broadcast id");
+        ok &= expect_eq_str(local.broadcast_country_code, "US", "same-generation adopt keeps local broadcast country");
+        ok &= expect_eq_str(local.broadcast_description, "local-cast", "same-generation adopt keeps local broadcast description");
+        ok &= expect_eq_str(local.broadcast_language_code, "en", "same-generation adopt keeps local broadcast language");
+    }
+
+    // adopt_shared_lobby_to_local: older local chat/broadcast source markers accept shared channel groups.
+    {
+        GBE_LocalLobby local = make_active_lobby();
+        local.generation = 33ull;
+        gbe::dota_lobby_state::apply_chat_channel(local, 42ull, "local-chat", 3u);
+        gbe::dota_lobby_state::apply_broadcast_channel(local, 7u, "US", "local-cast", "en");
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.active = true;
+        shared.generation = local.generation + 1ull;
+        shared.has_chat_channel = true;
+        shared.chat_channel_id = 43ull;
+        shared.chat_channel_name = "shared-chat";
+        shared.chat_channel_type = 4u;
+        shared.has_broadcast_channel = true;
+        shared.broadcast_channel_id = 8u;
+        shared.broadcast_country_code = "GB";
+        shared.broadcast_description = "shared-cast";
+        shared.broadcast_language_code = "fr";
+        gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, false, local);
+
+        ok &= expect_eq_u64(local.chat_channel_id, 43ull, "newer shared adopt applies chat id");
+        ok &= expect_eq_str(local.chat_channel_name, "shared-chat", "newer shared adopt applies chat name");
+        ok &= expect_eq_u32(local.broadcast_channel_id, 8u, "newer shared adopt applies broadcast id");
+        ok &= expect_eq_str(local.broadcast_description, "shared-cast", "newer shared adopt applies broadcast description");
+    }
+
+    // adopt_shared_lobby_to_local: same-generation owner name local apply keeps Local owner name.
+    {
+        GBE_LocalLobby local = make_active_lobby();
+        local.generation = 44ull;
+        gbe::dota_lobby_state::apply_lobby_owner_name(local, "local-owner");
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.active = true;
+        shared.generation = local.generation;
+        shared.owner_name = "shared-owner";
+        gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, false, local);
+
+        ok &= expect_eq_str(local.owner_name, "local-owner", "same-generation adopt keeps local owner name");
+    }
+
+    // adopt_shared_lobby_to_local: older owner name source marker accepts shared owner name.
+    {
+        GBE_LocalLobby local = make_active_lobby();
+        local.generation = 44ull;
+        gbe::dota_lobby_state::apply_lobby_owner_name(local, "local-owner");
+
+        GBE_SharedDotaLobbyState shared{};
+        shared.active = true;
+        shared.generation = local.generation + 1ull;
+        shared.owner_name = "shared-owner";
+        gbe::dota_lobby_state::adopt_shared_lobby_to_local(shared, false, false, local);
+
+        ok &= expect_eq_str(local.owner_name, "shared-owner", "newer shared adopt applies owner name");
     }
 
     // compose_queued_lobby_state_apply_plan: preserve_monotonic_game_state prevents stale reset.

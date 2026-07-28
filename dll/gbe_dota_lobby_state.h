@@ -90,6 +90,21 @@ struct GBE_LocalLobby
     bool ignored_early_arcade_launch{};
     std::uint64_t generic_launch_runtime_generation{};
     std::uint64_t generic_runtime_identity_generation{};
+    std::uint64_t generic_options_generation{};
+    std::uint64_t generic_custom_game_generation{};
+    std::uint64_t cache_metadata_generation{};
+    std::uint64_t owner_runtime_generation{};
+    std::uint64_t launch_4511_generation{};
+    std::uint64_t members_generation{};
+    std::uint64_t custom_game_loading_generation{};
+    std::uint64_t runtime_metadata_generation{};
+    std::uint64_t chat_channel_generation{};
+    std::uint64_t broadcast_channel_generation{};
+    std::uint64_t owner_name_generation{};
+    std::uint64_t details_runtime_generation{};
+    std::uint64_t details_options_generation{};
+    std::uint64_t details_custom_game_generation{};
+    std::uint64_t bot_difficulty_generation{};
     std::chrono::high_resolution_clock::time_point created{};
 };
 
@@ -329,6 +344,8 @@ struct GenericLobbyCapturePlan {
 enum class SharedLobbyRestoreSource {
     SharedSnapshot,
     LocalGenericCapture,
+    LocalRuntimeMetadata,
+    LocalDetailsUpdate,
     ReadyupRegression,
 };
 
@@ -797,6 +814,9 @@ bool apply_lobby_owner_team(
 bool restore_lobby_owner_slot(
     GBE_LocalLobby &lobby,
     std::uint32_t shared_owner_slot);
+bool restore_lobby_owner_runtime_from_shared(
+    GBE_LocalLobby &lobby,
+    const GBE_SharedDotaLobbyState &shared_lobby);
 bool restore_lobby_members(
     GBE_LocalLobby &lobby,
     const std::vector<GBE_DotaLobbyMemberState> &shared_members);
@@ -836,6 +856,9 @@ bool apply_lobby_bot_difficulty_for_team(
 bool restore_lobby_custom_game(
     GBE_LocalLobby &lobby,
     const GBE_DotaCustomGameDetails &shared_custom_game);
+bool restore_lobby_custom_game_from_shared(
+    GBE_LocalLobby &lobby,
+    const GBE_SharedDotaLobbyState &shared_lobby);
 bool apply_custom_game_loading_metadata(
     GBE_LocalLobby &lobby,
     std::uint64_t custom_game_id,

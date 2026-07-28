@@ -454,19 +454,13 @@ void Steam_Game_Coordinator::GBE_RestoreSharedDotaLobbyState(const char *reason)
                         gbe::dota_lobby_state::compose_shared_lobby_options_restore_plan(
                             lobby,
                             shared_lobby)) || local_changed;
-                    if (gbe::dota_lobby_state::restore_lobby_custom_game(lobby, shared_lobby.custom_game)) {
-                        local_changed = true;
-                    }
-                    if (gbe::dota_lobby_state::restore_lobby_owner_connected(lobby, shared_lobby.owner_connected)) {
+                    if (gbe::dota_lobby_state::restore_lobby_custom_game_from_shared(lobby, shared_lobby)) {
                         local_changed = true;
                     }
                     if (gbe::dota_lobby_state::restore_launch_4511_seen(lobby, shared_lobby.launch_4511_seen)) {
                         local_changed = true;
                     }
-                    if (gbe::dota_lobby_state::restore_lobby_owner_team(lobby, shared_lobby.owner_team)) {
-                        local_changed = true;
-                    }
-                    if (gbe::dota_lobby_state::restore_lobby_owner_slot(lobby, shared_lobby.owner_slot)) {
+                    if (gbe::dota_lobby_state::restore_lobby_owner_runtime_from_shared(lobby, shared_lobby)) {
                         local_changed = true;
                     }
                     local_changed = gbe::dota_lobby_state::apply_owner_hero_from_shared(lobby, shared_lobby) || local_changed;
