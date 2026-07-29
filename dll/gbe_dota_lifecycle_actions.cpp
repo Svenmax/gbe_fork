@@ -36,7 +36,7 @@ GBE_DotaActionList build_transition_actions(const TransitionEffects &effects)
         actions.push_back(std::move(action));
     }
 
-    if (transition.mark_launch_phase && !effects.local_lifecycle_pre_write) {
+    if (transition.mark_launch_phase) {
         GBE_DotaAction action;
         action.type = GBE_DotaActionType::LaunchPhaseMark;
         action.launch_phase = transition.launch_phase;

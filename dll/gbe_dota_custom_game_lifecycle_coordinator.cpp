@@ -103,7 +103,6 @@ gbe::dota_lifecycle::ExecutionResult Steam_Game_Coordinator::GBE_ExecuteDotaLife
                         action.lobby_state,
                         action.lobby_game_state);
                 });
-                GBE_MarkDotaLaunchPhase(action.launch_phase, action.reason.c_str(), false);
                 break;
             }
             case GBE_DotaActionType::LobbyStateApply: {

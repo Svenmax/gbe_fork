@@ -209,7 +209,7 @@ class LocalLobbyOwner {
 public:
     explicit LocalLobbyOwner(GBE_LocalLobby &lobby);
 
-    GBE_LocalLobby snapshot() const;
+    const GBE_LocalLobby &snapshot() const;
     void replace_for_reset(GBE_LocalLobby lobby);
 
     template <typename Apply>

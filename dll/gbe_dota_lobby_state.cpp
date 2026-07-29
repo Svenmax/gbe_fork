@@ -182,7 +182,7 @@ LocalLobbyOwner::LocalLobbyOwner(GBE_LocalLobby &lobby)
 {
 }
 
-GBE_LocalLobby LocalLobbyOwner::snapshot() const
+const GBE_LocalLobby &LocalLobbyOwner::snapshot() const
 {
     return lobby_;
 }

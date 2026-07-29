@@ -100,13 +100,14 @@ bool Steam_Game_Coordinator::GBE_HandleDotaCustomGameLifecycleRequest(const gbe:
             });
         }
 
-        request_state.has_launch_server_setup = gbe::dota_lobby_state::has_launch_server_setup_sync(local_lobby_snapshot);
+        const GBE_LocalLobby &loading_lobby_snapshot = local_lobby.snapshot();
+        request_state.has_launch_server_setup = gbe::dota_lobby_state::has_launch_server_setup_sync(loading_lobby_snapshot);
         gbe::dota_lifecycle_state_machine::CustomGameRequest machine_request{};
         machine_request.event = event_mapping.event;
         execute_decision(gbe::dota_custom_game_lifecycle::decide_started_loading(
             request_state,
             machine_request,
-            local_lobby_snapshot,
+            loading_lobby_snapshot,
             true,
             GBE_kDotaLaunchPhaseSetupSynced,
             GBE_kDotaLaunchPhaseRunQueued,
