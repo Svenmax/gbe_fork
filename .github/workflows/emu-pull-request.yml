@@ -50,3 +50,66 @@ jobs:
       matrix_prj: '["api_experimental"]'
       matrix_arch: '["x64"]'
       matrix_cfg: '["release"]'
+      emu_build_sha: ${{ github.event.pull_request.head.sha }}
+      continue_on_error: false
+
+  emu-linux-release:
+    name: "linux"
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    uses: "./.github/workflows/emu-build-all-linux.yml"
+    with:
+      matrix_prj: '["api_experimental"]'
+      matrix_arch: '["x64"]'
+      matrix_cfg: '["release"]'
+      emu_build_sha: ${{ github.event.pull_request.head.sha }}
+      continue_on_error: false
+
+  gc-verification:
+    name: "gc verification"
+    runs-on: "ubuntu-24.04"
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+
+    steps:
+      - name: "Checkout branch"
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: "Clone third-party deps (deps/common)"
+        uses: actions/checkout@v6
+        with:
+          ref: "third-party/deps/common"
+          path: "third-party/deps/common"
+
+      - name: "Install required packages"
+        shell: "bash"
+        run: |
+          sudo apt update -y
+          sudo apt install -y build-essential python3 protobuf-compiler libprotobuf-dev libcurl4-openssl-dev libmbedtls-dev libopus-dev portaudio19-dev
+
+      - name: "Run full GC verification"
+        shell: "bash"
+        working-directory: "${{ github.workspace }}"
+        run: bash tools/run_gc_verification.sh --full --base-sha "${{ github.event.pull_request.base.sha }}"
+
+  gc-tsan:
+    name: "gc thread sanitizer"
+    runs-on: "ubuntu-24.04"
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+
+    steps:
+      - name: "Checkout branch"
+        uses: actions/checkout@v6
+
+      - name: "Install Clang"
+        shell: "bash"
+        run: |
+          sudo apt update -y
+          sudo apt install -y clang
+
+      - name: "Run GC ThreadSanitizer tests"
+        shell: "bash"
+        working-directory: "${{ github.workspace }}"
+        env:
+          CXX: clang++
+        run: bash tools/run_gc_tsan_tests.sh

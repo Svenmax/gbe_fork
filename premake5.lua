@@ -124,6 +124,12 @@ newoption {
     description = "Add all header files from the third-party dependencies in the projects (no impact on build)",
 }
 
+newoption {
+    category = "tests",
+    trigger = "with-gc-tests",
+    description = "Generate optional Dota GC offline test projects",
+}
+
 -- windows options
 if os.target() == 'windows' then
 
@@ -1199,6 +1205,455 @@ project "tool_generate_interfaces"
         'libs/utfcpp/**',
     }
 -- End tool_generate_interfaces
+
+
+-- Project tool_gc_replay_test
+project "tool_gc_replay_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gc_replay_test"))
+    targetname "gc_replay_test_%{cfg.platform}"
+
+
+    -- common source & header files
+    ---------
+    files {
+        "tools/gc_replay_test/gc_replay_test.cpp",
+        "tools/gc_replay_test/gc_replay_summary.cpp",
+        "tools/gc_replay_test/gc_replay_summary.h",
+        "dll/gbe_gc_message_utils.cpp",
+        "dll/gbe_gc_message_utils.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gc_replay_test
+
+
+-- Project tool_gc_message_utils_test
+project "tool_gc_message_utils_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gc_message_utils_test"))
+    targetname "gc_message_utils_test_%{cfg.platform}"
+
+
+    -- common source & header files
+    ---------
+    files {
+        "tools/gc_message_utils_test/gc_message_utils_test.cpp",
+        "dll/gbe_gc_message_utils.cpp",
+        "dll/gbe_gc_message_utils.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gc_message_utils_test
+
+
+-- Project tool_gbe_gc_config_test
+project "tool_gbe_gc_config_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_gc_config_test"))
+    targetname "gbe_gc_config_test_%{cfg.platform}"
+
+
+    -- common source & header files
+    ---------
+    files {
+        "tools/gbe_gc_config_test/gbe_gc_config_test.cpp",
+        "dll/gbe_gc_config.cpp",
+        "dll/gbe_gc_config.h",
+    }
+-- End tool_gbe_gc_config_test
+
+
+-- Project tool_gbe_proto_wire_test
+project "tool_gbe_proto_wire_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_proto_wire_test"))
+    targetname "gbe_proto_wire_test_%{cfg.platform}"
+
+
+    -- common source & header files
+    ---------
+    files {
+        "tools/gbe_proto_wire_test/README.md",
+        "tools/gbe_proto_wire_test/gbe_proto_wire_test.cpp",
+        "dll/gbe_dota_gc_wire.cpp",
+        "dll/gbe_dota_gc_wire.h",
+        "dll/gbe_dota_gc_router.cpp",
+        "dll/gbe_dota_gc_router.h",
+        "dll/gbe_dota_custom_game.cpp",
+        "dll/gbe_dota_custom_game.h",
+        "dll/gbe_dota_custom_lobby_http.cpp",
+        "dll/gbe_dota_custom_lobby_http.h",
+        "dll/gbe_dota_chat_flow.cpp",
+        "dll/gbe_dota_chat_flow.h",
+        "dll/gbe_dota_lobby_launch_flow.cpp",
+        "dll/gbe_dota_lobby_launch_flow.h",
+        "dll/gbe_dota_lobby_member_flow.cpp",
+        "dll/gbe_dota_lobby_member_flow.h",
+        "dll/gbe_dota_lobby_payload_flow.h",
+        "dll/gbe_dota_lobby_flow.cpp",
+        "dll/gbe_dota_lobby_flow.h",
+        "dll/gbe_dota_lobby_state.cpp",
+        "dll/gbe_dota_lobby_state.h",
+        "dll/gbe_dota_reconnect_context.cpp",
+        "dll/gbe_dota_reconnect_context.h",
+        "dll/gbe_gc_message_utils.cpp",
+        "dll/gbe_gc_message_utils.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gbe_proto_wire_test
+
+
+-- Project tool_gbe_dota_custom_game_test
+project "tool_gbe_dota_custom_game_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_custom_game_test"))
+    targetname "gbe_dota_custom_game_test_%{cfg.platform}"
+
+
+    -- common source & header files
+    ---------
+    files {
+        "tools/gbe_dota_custom_game_test/gbe_dota_custom_game_test.cpp",
+        "dll/gbe_dota_custom_game.cpp",
+        "dll/gbe_dota_custom_game.h",
+        "dll/gbe_dota_custom_lobby_http.cpp",
+        "dll/gbe_dota_custom_lobby_http.h",
+        "dll/gbe_dota_types.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gbe_dota_custom_game_test
+
+
+-- Project tool_gbe_dota_lobby_flow_test
+project "tool_gbe_dota_lobby_flow_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_lobby_flow_test"))
+    targetname "gbe_dota_lobby_flow_test_%{cfg.platform}"
+
+
+    -- common source & header files
+    ---------
+    files {
+        "tools/gbe_dota_lobby_flow_test/gbe_dota_lobby_flow_test.cpp",
+        "dll/gbe_dota_chat_flow.cpp",
+        "dll/gbe_dota_chat_flow.h",
+        "dll/gbe_dota_lobby_launch_flow.cpp",
+        "dll/gbe_dota_lobby_launch_flow.h",
+        "dll/gbe_dota_lobby_member_flow.cpp",
+        "dll/gbe_dota_lobby_member_flow.h",
+        "dll/gbe_dota_lobby_payload_flow.h",
+        "dll/gbe_dota_lobby_flow.cpp",
+        "dll/gbe_dota_lobby_flow.h",
+        "dll/gbe_dota_lobby_state.cpp",
+        "dll/gbe_dota_lobby_state.h",
+        "dll/gbe_dota_reconnect_context.cpp",
+        "dll/gbe_dota_reconnect_context.h",
+        "dll/gbe_dota_gc_wire.cpp",
+        "dll/gbe_dota_gc_wire.h",
+        "dll/gbe_dota_lobby_publish.h",
+        "dll/gbe_dota_lobby_snapshot.cpp",
+        "dll/gbe_dota_lobby_snapshot.h",
+        "dll/gbe_dota_types.h",
+    }
+-- End tool_gbe_dota_lobby_flow_test
+
+
+-- Project tool_gbe_dota_lobby_state_test
+project "tool_gbe_dota_lobby_state_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_lobby_state_test"))
+    targetname "gbe_dota_lobby_state_test_%{cfg.platform}"
+
+
+    -- common source & header files
+    ---------
+    files {
+        "tools/gbe_dota_lobby_state_test/gbe_dota_lobby_state_test.cpp",
+        "tools/gbe_dota_header_compile_test/diagnostic_event_header_compile.cpp",
+        "tools/gbe_dota_header_compile_test/handler_registry_header_compile.cpp",
+        "tools/gbe_dota_header_compile_test/reconnect_shared_header_compile.cpp",
+        "tools/gbe_dota_header_compile_test/serialized_connection_state_header_compile.cpp",
+        "dll/gbe_dota_serialized_connection_state.cpp",
+        "dll/dll/gbe_dota_serialized_connection_state.h",
+        "dll/gbe_dota_connection_dedup_key.h",
+        "dll/gbe_dota_diagnostic_event.h",
+        "dll/gbe_dota_handler_registry.h",
+        "dll/gbe_dota_gc_router.h",
+        "dll/gbe_dota_reconnect_context.cpp",
+        "dll/gbe_dota_reconnect_context.h",
+        "dll/gbe_dota_lobby_state.cpp",
+        "dll/gbe_dota_lobby_state.h",
+        "dll/gbe_dota_lifecycle_actions.cpp",
+        "dll/gbe_dota_lifecycle_actions.h",
+        "dll/gbe_dota_chat_flow.cpp",
+        "dll/gbe_dota_chat_flow.h",
+        "dll/gbe_dota_lobby_launch_flow.cpp",
+        "dll/gbe_dota_lobby_launch_flow.h",
+        "dll/gbe_dota_lobby_member_flow.cpp",
+        "dll/gbe_dota_lobby_member_flow.h",
+        "dll/gbe_dota_lobby_payload_flow.h",
+        "dll/gbe_dota_lobby_flow.cpp",
+        "dll/gbe_dota_lobby_flow.h",
+        "dll/gbe_dota_custom_game.cpp",
+        "dll/gbe_dota_custom_game.h",
+        "dll/gbe_dota_gc_wire.cpp",
+        "dll/gbe_dota_gc_wire.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+        "dll/gbe_dota_types.h",
+    }
+-- End tool_gbe_dota_lobby_state_test
+
+
+-- Project tool_gbe_dota_lobby_state_store_test
+project "tool_gbe_dota_lobby_state_store_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_lobby_state_store_test"))
+    targetname "gbe_dota_lobby_state_store_test_%{cfg.platform}"
+
+    files {
+        "tools/gbe_dota_lobby_state_store_test/gbe_dota_lobby_state_store_test.cpp",
+        "tools/gbe_dota_header_compile_test/lobby_state_store_header_compile.cpp",
+        "dll/gbe_dota_lobby_state_store.cpp",
+        "dll/gbe_dota_lobby_state_store.h",
+        "dll/gbe_dota_lobby_state.h",
+        "dll/gbe_dota_types.h",
+    }
+-- End tool_gbe_dota_lobby_state_store_test
+
+
+-- Project tool_gbe_dota_composition_root_test
+project "tool_gbe_dota_composition_root_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_composition_root_test"))
+    targetname "gbe_dota_composition_root_test_%{cfg.platform}"
+
+    files {
+        "tools/gbe_dota_composition_root_test/gbe_dota_composition_root_test.cpp",
+        "tools/gbe_dota_header_compile_test/composition_root_header_compile.cpp",
+        "dll/gbe_dota_composition_root.cpp",
+        "dll/gbe_dota_composition_root.h",
+        "dll/gbe_dota_lobby_state_store.cpp",
+        "dll/gbe_dota_lobby_state_store.h",
+        "dll/gbe_dota_reconnect_network.cpp",
+        "dll/gbe_dota_reconnect_network.h",
+        "dll/gbe_dota_serialized_connection_state.cpp",
+        "dll/dll/gbe_dota_serialized_connection_state.h",
+        "dll/gbe_dota_handler_registry.h",
+        "dll/gbe_dota_gc_router.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gbe_dota_composition_root_test
+
+
+-- Project tool_gbe_dota_lifecycle_state_machine_test
+project "tool_gbe_dota_lifecycle_state_machine_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_lifecycle_state_machine_test"))
+    targetname "gbe_dota_lifecycle_state_machine_test_%{cfg.platform}"
+
+    files {
+        "tools/gbe_dota_lifecycle_state_machine_test/gbe_dota_lifecycle_state_machine_test.cpp",
+        "tools/gbe_dota_header_compile_test/lifecycle_state_machine_header_compile.cpp",
+        "dll/gbe_dota_lifecycle_state_machine.h",
+        "dll/gbe_dota_protocol_constants.h",
+    }
+-- End tool_gbe_dota_lifecycle_state_machine_test
+
+
+-- Project tool_gbe_dota_concurrency_stress_test
+project "tool_gbe_dota_concurrency_stress_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_concurrency_stress_test"))
+    targetname "gbe_dota_concurrency_stress_test_%{cfg.platform}"
+
+    files {
+        "tools/gbe_dota_concurrency_stress_test/gbe_dota_concurrency_stress_test.cpp",
+        "dll/gbe_dota_lobby_state_store.cpp",
+        "dll/gbe_dota_lobby_state_store.h",
+        "dll/gbe_dota_reconnect_context.cpp",
+        "dll/gbe_dota_reconnect_context.h",
+        "dll/gbe_dota_chat_flow.cpp",
+        "dll/gbe_dota_chat_flow.h",
+        "dll/gbe_dota_lobby_launch_flow.cpp",
+        "dll/gbe_dota_lobby_launch_flow.h",
+        "dll/gbe_dota_lobby_member_flow.cpp",
+        "dll/gbe_dota_lobby_member_flow.h",
+        "dll/gbe_dota_lobby_payload_flow.h",
+        "dll/gbe_dota_lobby_flow.cpp",
+        "dll/gbe_dota_lobby_flow.h",
+        "dll/gbe_dota_lobby_state.cpp",
+        "dll/gbe_dota_lobby_state.h",
+        "dll/gbe_dota_custom_game.cpp",
+        "dll/gbe_dota_custom_game.h",
+        "dll/gbe_dota_gc_wire.cpp",
+        "dll/gbe_dota_gc_wire.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+        "dll/gbe_dota_types.h",
+    }
+-- End tool_gbe_dota_concurrency_stress_test
+
+
+-- Project tool_gbe_dota_handler_registry_test
+project "tool_gbe_dota_handler_registry_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_handler_registry_test"))
+    targetname "gbe_dota_handler_registry_test_%{cfg.platform}"
+
+    files {
+        "tools/gbe_dota_handler_registry_test/gbe_dota_handler_registry_test.cpp",
+        "tools/gbe_dota_header_compile_test/handler_registry_header_compile.cpp",
+        "dll/gbe_dota_handler_registry.h",
+        "dll/gbe_dota_gc_router.h",
+    }
+-- End tool_gbe_dota_handler_registry_test
+
+
+-- Project tool_gbe_dota_reconnect_network_test
+project "tool_gbe_dota_reconnect_network_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_reconnect_network_test"))
+    targetname "gbe_dota_reconnect_network_test_%{cfg.platform}"
+
+    files {
+        "tools/gbe_dota_reconnect_network_test/gbe_dota_reconnect_network_test.cpp",
+        "tools/gbe_dota_header_compile_test/reconnect_network_header_compile.cpp",
+        "dll/gbe_dota_reconnect_network.cpp",
+        "dll/gbe_dota_reconnect_network.h",
+        "dll/gbe_dota_serialized_connection_state.cpp",
+        "dll/dll/gbe_dota_serialized_connection_state.h",
+        "dll/gbe_dota_connection_dedup_key.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gbe_dota_reconnect_network_test
+
+
+if _OPTIONS["with-gc-tests"] then
+group "tools/tests"
+
+-- Project tool_gbe_dota_gc_payload_helpers_test
+project "tool_gbe_dota_gc_payload_helpers_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_gc_payload_helpers_test"))
+    targetname "gbe_dota_gc_payload_helpers_test_%{cfg.platform}"
+
+    includedirs {
+        "tools/gbe_dota_gc_payload_helpers_test",
+        "tools/gbe_dota_gc_payload_helpers_test/pb_stubs",
+    }
+
+    files {
+        "tools/gbe_dota_gc_payload_helpers_test/test_wrapper.cpp",
+        "tools/gbe_dota_gc_payload_helpers_test/gbe_dota_gc_payload_helpers_test.cpp",
+        "tools/gbe_dota_gc_payload_helpers_test/stubs.h",
+        "tools/gbe_dota_gc_payload_helpers_test/pb_stubs/**.h",
+        "dll/gbe_dota_custom_game.cpp",
+        "dll/gbe_dota_custom_game.h",
+        "dll/gbe_dota_custom_lobby_http.cpp",
+        "dll/gbe_dota_custom_lobby_http.h",
+        "dll/gbe_dota_gc_router.cpp",
+        "dll/gbe_dota_gc_router.h",
+        "dll/gbe_dota_gc_wire.cpp",
+        "dll/gbe_dota_gc_wire.h",
+        "dll/gbe_dota_chat_flow.cpp",
+        "dll/gbe_dota_chat_flow.h",
+        "dll/gbe_dota_lobby_launch_flow.cpp",
+        "dll/gbe_dota_lobby_launch_flow.h",
+        "dll/gbe_dota_lobby_member_flow.cpp",
+        "dll/gbe_dota_lobby_member_flow.h",
+        "dll/gbe_dota_lobby_payload_flow.h",
+        "dll/gbe_dota_lobby_flow.cpp",
+        "dll/gbe_dota_lobby_flow.h",
+        "dll/gbe_dota_lobby_state.cpp",
+        "dll/gbe_dota_lobby_state.h",
+        "dll/gbe_dota_lobby_state_store.cpp",
+        "dll/gbe_dota_lobby_state_store.h",
+        "dll/gbe_dota_reconnect_context.cpp",
+        "dll/gbe_dota_reconnect_context.h",
+        "dll/gbe_dota_lobby_publish.h",
+        "dll/gbe_dota_lobby_snapshot.cpp",
+        "dll/gbe_dota_lobby_snapshot.h",
+        "dll/gbe_gc_message_utils.cpp",
+        "dll/gbe_gc_message_utils.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gbe_dota_gc_payload_helpers_test
+
+
+-- Project tool_gbe_dota_handler_test
+project "tool_gbe_dota_handler_test"
+    kind "ConsoleApp"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/gbe_dota_handler_test"))
+    targetname "gbe_dota_handler_test_%{cfg.platform}"
+
+    includedirs {
+        "tools/gbe_dota_handler_test",
+        "tools/gbe_dota_gc_payload_helpers_test/pb_stubs",
+    }
+
+    files {
+        "tools/gbe_dota_handler_test/test_wrapper.cpp",
+        "tools/gbe_dota_handler_test/free_func_stubs.cpp",
+        "tools/gbe_dota_handler_test/smoke_test.cpp",
+        "tools/gbe_dota_handler_test/stubs.h",
+        "tools/gbe_dota_gc_payload_helpers_test/pb_stubs/**.h",
+        "dll/gbe_dota_custom_game.cpp",
+        "dll/gbe_dota_custom_game.h",
+        "dll/gbe_dota_custom_lobby_http.cpp",
+        "dll/gbe_dota_custom_lobby_http.h",
+        "dll/gbe_dota_gc_router.cpp",
+        "dll/gbe_dota_gc_router.h",
+        "dll/gbe_dota_gc_wire.cpp",
+        "dll/gbe_dota_gc_wire.h",
+        "dll/gbe_dota_chat_flow.cpp",
+        "dll/gbe_dota_chat_flow.h",
+        "dll/gbe_dota_lobby_launch_flow.cpp",
+        "dll/gbe_dota_lobby_launch_flow.h",
+        "dll/gbe_dota_lobby_member_flow.cpp",
+        "dll/gbe_dota_lobby_member_flow.h",
+        "dll/gbe_dota_lobby_payload_flow.h",
+        "dll/gbe_dota_lobby_flow.cpp",
+        "dll/gbe_dota_lobby_flow.h",
+        "dll/gbe_dota_lobby_state.cpp",
+        "dll/gbe_dota_lobby_state.h",
+        "dll/gbe_dota_lobby_state_store.cpp",
+        "dll/gbe_dota_lobby_state_store.h",
+        "dll/gbe_dota_reconnect_context.cpp",
+        "dll/gbe_dota_reconnect_context.h",
+        "dll/gbe_dota_lobby_publish.h",
+        "dll/gbe_dota_lobby_snapshot.cpp",
+        "dll/gbe_dota_lobby_snapshot.h",
+        "dll/gbe_gc_message_utils.cpp",
+        "dll/gbe_gc_message_utils.h",
+        "dll/gbe_proto_wire.cpp",
+        "dll/gbe_proto_wire.h",
+    }
+-- End tool_gbe_dota_handler_test
+
+group ""
+end
 
 
 -- Project lib_steamnetworkingsockets START

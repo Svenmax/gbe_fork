@@ -56,11 +56,16 @@
 #include "steam_app_disable_update.h"
 #include "steam_billing.h"
 #include "steam_user_items.h"
+#include "gbe_dota_lobby_state_store.h"
+#include "gbe_dota_runtime_state.h"
+#include "gbe_dota_locator.h"
 
 #include "steam_gameserver.h"
 #include "steam_masterserver_updater.h"
 #include "steam_gameserverstats.h"
 #include "steam_gameserver_items.h"
+
+class GBE_DotaReconnectNetworkAdapter;
 
 #include "overlay/steam_overlay.h"
 #include "playtime.h"
@@ -125,6 +130,10 @@ private:
     std::map<CCallbackBase *, CCallBackWrapper> old_callbacks_map;
 
 public:
+    GBE_SharedDotaLobbyState dota_lobby_state{};
+    gbe::dota_lobby_state::Store dota_lobby_store;
+    gbe::dota::RuntimeState dota_runtime_state{};
+    std::unique_ptr<gbe::dota::LocatorBindingGuard> dota_locator_binding;
     Networking *network{};
     SteamCallResults *callback_results_server{}, *callback_results_client{};
     SteamCallBacks *callbacks_server{}, *callbacks_client{};
@@ -198,6 +207,11 @@ public:
     bool using_old_callbacks{};
 
     int client_user_ref_count{};
+
+    GBE_DotaReconnectNetworkAdapter *dota_reconnect_adapter_client{};
+    GBE_DotaReconnectNetworkAdapter *dota_reconnect_adapter_server{};
+    gbe::dota_lifecycle::CoordinatorExecutor *dota_lifecycle_executor_client{};
+    gbe::dota_lifecycle::CoordinatorExecutor *dota_lifecycle_executor_server{};
 
     template <class T>
     class Reusable_Numbers {

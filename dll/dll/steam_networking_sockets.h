@@ -47,6 +47,8 @@ struct Connect_Socket {
 
     int virtual_port{};
     int real_port{};
+    uint32 remote_ipv4{};
+    uint16 remote_port{};
 
     SteamNetworkingIdentity remote_identity{};
     HSteamNetConnection remote_id{};
@@ -93,6 +95,7 @@ public ISteamNetworkingSockets
 
     struct shared_between_client_server *sbcs{};
     std::chrono::steady_clock::time_point created{};
+    bool is_server_interface{};
 
     static const int SNS_DISABLED_PORT = -1;
 
@@ -116,6 +119,7 @@ public ISteamNetworkingSockets
 
     void set_steamnetconnectioninfo(std::map<HSteamNetConnection, Connect_Socket>::iterator connect_socket, SteamNetConnectionInfo_t *pInfo);
     void set_steamnetconnectioninfo_001(std::map<HSteamNetConnection, Connect_Socket>::iterator connect_socket, SteamNetConnectionInfo001_t* pInfo);
+    int64 normalize_dota_arcade_loopback_user_data(std::map<HSteamNetConnection, Connect_Socket>::iterator connect_socket, int64 requested_user_data, const char *reason);
 
 
     void launch_callback(HSteamNetConnection m_hConn, enum connect_socket_status old_status);

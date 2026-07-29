@@ -16,14 +16,58 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/steam_networking_socketsserialized.h"
+#include "dll/steam_networking_sockets.h"
 #include "dll/gbe_dota_reconnect_shared.h"
+#include "gbe_dota_lobby_state.h"
 
 #include <cstdio>
+#include <cstdint>
 #include <cstring>
+#include <algorithm>
+#include <string>
+#include <vector>
 
 namespace {
 
 constexpr int GBE_kSerializedRendezvousPort = -5434;
+
+template <typename T>
+const T *GBE_AsSerializedCallbackPayload(const void *data, uint32 size)
+{
+    if (!data)
+        return nullptr;
+
+    if (size == sizeof(T))
+        return static_cast<const T *>(data);
+
+    if (size == sizeof(int) + sizeof(T)) {
+        const auto *bytes = static_cast<const uint8_t *>(data);
+        int callback_id = 0;
+        std::memcpy(&callback_id, bytes, sizeof(callback_id));
+        if (callback_id == T::k_iCallback)
+            return reinterpret_cast<const T *>(bytes + sizeof(callback_id));
+    }
+
+    return nullptr;
+}
+
+template <typename T>
+bool GBE_PostSerializedCallbackPayload(SteamCallBacks *callbacks, const void *data, uint32 size, const char *name)
+{
+    const T *payload = GBE_AsSerializedCallbackPayload<T>(data, size);
+    if (!payload)
+        return false;
+
+    callbacks->addCBResult(T::k_iCallback, const_cast<T *>(payload), sizeof(T));
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "queued serialized callback id=%d type=%s size=%u",
+        T::k_iCallback,
+        name ? name : "unknown",
+        size
+    );
+    return true;
+}
 
 void GBE_LogSerializedNetSockTrace(const char *scope, uint64 local_id, uint64 remote_id, uint32 connection_id, uint32 size_or_reason)
 {
@@ -41,6 +85,321 @@ void GBE_LogSerializedNetSockTrace(const char *scope, uint64 local_id, uint64 re
         size_or_reason
     );
     std::fclose(file);
+}
+
+std::string GBE_FormatPayloadPrefix(const void *data, uint32 size)
+{
+    if (!data || size == 0)
+        return "";
+
+    const uint32 prefix_size = std::min<uint32>(size, 16u);
+    const unsigned char *bytes = static_cast<const unsigned char *>(data);
+    char buffer[(16u * 3u) + 1u] = {};
+    size_t offset = 0;
+    for (uint32 i = 0; i < prefix_size && offset < sizeof(buffer); ++i) {
+        const int written = std::snprintf(buffer + offset, sizeof(buffer) - offset, "%s%02X", i == 0 ? "" : " ", bytes[i]);
+        if (written <= 0)
+            break;
+        offset += static_cast<size_t>(written);
+    }
+    return buffer;
+}
+
+std::string GBE_FormatSerializedPayloadFields(const void *data, uint32 size)
+{
+    if (!data || size < 5)
+        return "";
+
+    const auto *bytes = static_cast<const uint8_t *>(data);
+    uint32 offset = 0;
+    uint32 fields_logged = 0;
+    std::string fields;
+    while (offset < size) {
+        uint64 key = 0;
+        uint32 shift = 0;
+        while (offset < size && shift < 64) {
+            const uint8_t byte = bytes[offset++];
+            key |= static_cast<uint64>(byte & 0x7f) << shift;
+            if ((byte & 0x80) == 0)
+                break;
+            shift += 7;
+        }
+
+        const uint32 field_number = static_cast<uint32>(key >> 3);
+        const uint32 wire_type = static_cast<uint32>(key & 0x7);
+        char field[96] = {};
+
+        if (wire_type == 0) {
+            uint64 value = 0;
+            shift = 0;
+            while (offset < size) {
+                const uint8_t byte = bytes[offset++];
+                value |= static_cast<uint64>(byte & 0x7f) << shift;
+                if ((byte & 0x80) == 0)
+                    break;
+                shift += 7;
+            }
+            std::snprintf(field, sizeof(field), "f%u:varint=%llu", field_number, (unsigned long long)value);
+        } else if (wire_type == 1) {
+            if (offset + 8 > size)
+                return fields;
+            uint64 value = 0;
+            std::memcpy(&value, bytes + offset, sizeof(value));
+            offset += 8;
+            std::snprintf(field, sizeof(field), "f%u:fixed64=%llu", field_number, (unsigned long long)value);
+        } else if (wire_type == 2) {
+            uint64 length = 0;
+            shift = 0;
+            while (offset < size && shift < 64) {
+                const uint8_t byte = bytes[offset++];
+                length |= static_cast<uint64>(byte & 0x7f) << shift;
+                if ((byte & 0x80) == 0)
+                    break;
+                shift += 7;
+            }
+            if (length > size - offset)
+                return fields;
+            offset += static_cast<uint32>(length);
+            std::snprintf(field, sizeof(field), "f%u:len=%llu", field_number, (unsigned long long)length);
+        } else if (wire_type == 5) {
+            if (offset + 4 > size)
+                return fields;
+            uint32 value = 0;
+            std::memcpy(&value, bytes + offset, sizeof(value));
+            offset += 4;
+            std::snprintf(field, sizeof(field), "f%u:fixed32=%u", field_number, value);
+        } else {
+            return fields;
+        }
+
+        if (field[0] != '\0') {
+            if (!fields.empty())
+                fields += " ";
+            fields += field;
+            ++fields_logged;
+            if (fields_logged >= 8)
+                break;
+        }
+    }
+
+    return fields;
+}
+
+std::string GBE_SanitizeSerializedLogString(const void *data, uint32 size)
+{
+    if (!data || size == 0)
+        return "";
+
+    const auto *bytes = static_cast<const uint8_t *>(data);
+    std::string sanitized;
+    sanitized.reserve(std::min<uint32>(size, 48u));
+    for (uint32 i = 0; i < size && i < 48u; ++i) {
+        const unsigned char byte = bytes[i];
+        sanitized.push_back(byte >= 32u && byte <= 126u ? static_cast<char>(byte) : '.');
+    }
+    if (size > 48u)
+        sanitized += "...";
+    return sanitized;
+}
+
+std::string GBE_FormatSerializedStateDetails(const void *data, uint32 size)
+{
+    if (!data || size < 5)
+        return "";
+
+    const auto *bytes = static_cast<const uint8_t *>(data);
+    uint32 offset = 0;
+    std::string details;
+    while (offset < size) {
+        uint64 key = 0;
+        uint32 shift = 0;
+        while (offset < size && shift < 64) {
+            const uint8_t byte = bytes[offset++];
+            key |= static_cast<uint64>(byte & 0x7f) << shift;
+            if ((byte & 0x80) == 0)
+                break;
+            shift += 7;
+        }
+
+        const uint32 field_number = static_cast<uint32>(key >> 3);
+        const uint32 wire_type = static_cast<uint32>(key & 0x7);
+        char field[128] = {};
+
+        if (wire_type == 0) {
+            uint64 value = 0;
+            shift = 0;
+            while (offset < size) {
+                const uint8_t byte = bytes[offset++];
+                value |= static_cast<uint64>(byte & 0x7f) << shift;
+                if ((byte & 0x80) == 0)
+                    break;
+                shift += 7;
+            }
+            if (field_number == 2u || field_number == 10u || field_number == 12u || field_number == 14u || field_number == 20u) {
+                std::snprintf(field, sizeof(field), "f%u=%llu", field_number, (unsigned long long)value);
+            }
+        } else if (wire_type == 1) {
+            if (offset + 8 > size)
+                return details;
+            uint64 value = 0;
+            std::memcpy(&value, bytes + offset, sizeof(value));
+            offset += 8;
+            if (field_number == 3u) {
+                std::snprintf(field, sizeof(field), "f%u_fixed64=%llu", field_number, (unsigned long long)value);
+            }
+        } else if (wire_type == 2) {
+            uint64 length = 0;
+            shift = 0;
+            while (offset < size && shift < 64) {
+                const uint8_t byte = bytes[offset++];
+                length |= static_cast<uint64>(byte & 0x7f) << shift;
+                if ((byte & 0x80) == 0)
+                    break;
+                shift += 7;
+            }
+            if (length > size - offset)
+                return details;
+            if (field_number == 4u || field_number == 15u || field_number == 16u || field_number == 23u) {
+                const std::string text = GBE_SanitizeSerializedLogString(bytes + offset, static_cast<uint32>(length));
+                std::snprintf(field, sizeof(field), "f%u_len=%llu_text=%s", field_number, (unsigned long long)length, text.c_str());
+            }
+            offset += static_cast<uint32>(length);
+        } else if (wire_type == 5) {
+            if (offset + 4 > size)
+                return details;
+            uint32 value = 0;
+            std::memcpy(&value, bytes + offset, sizeof(value));
+            offset += 4;
+            if (field_number == 3u) {
+                std::snprintf(field, sizeof(field), "f%u_fixed32=%u", field_number, value);
+            }
+        } else {
+            return details;
+        }
+
+        if (field[0] != '\0') {
+            if (!details.empty())
+                details += " ";
+            details += field;
+        }
+    }
+
+    return details;
+}
+
+static constexpr uint8_t GBE_kSerializedPublicKey[32] = {
+    0xd7, 0x5a, 0x98, 0x01, 0x82, 0xb1, 0x0a, 0xb7,
+    0xd5, 0x4b, 0xfe, 0xd3, 0xc9, 0x64, 0x07, 0x3a,
+    0x0e, 0xe1, 0x72, 0xf3, 0xda, 0xa6, 0x23, 0x25,
+    0xaf, 0x02, 0x1a, 0x68, 0xf7, 0x07, 0x51, 0x1a,
+};
+
+static constexpr uint8_t GBE_kSerializedPrivateKey[32] = {
+    0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60,
+    0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
+    0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19,
+    0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60,
+};
+
+int GBE_CopySerializedNetworkingJson(const char *json, void *buf, uint32 cbBuf)
+{
+    if (!json)
+        json = "{}";
+
+    const size_t required = std::strlen(json) + 1;
+    if (buf && cbBuf > 0) {
+        const size_t to_copy = std::min<size_t>(required, cbBuf);
+        std::memcpy(buf, json, to_copy);
+        reinterpret_cast<char *>(buf)[to_copy - 1] = '\0';
+    }
+
+    return static_cast<int>(required);
+}
+
+const char *GBE_GetSerializedNetworkingConfigJSON()
+{
+    return
+        "{\"revision\":1778707800,\"pops\":{"
+        "\"sgp\":{\"desc\":\"Singapore\",\"geo\":[103.83,1.28],\"partners\":3,\"tier\":0,"
+        "\"relays\":[{\"ipv4\":\"103.10.124.116\",\"port_range\":[27015,27060]}]}},"
+        "\"certs\":["
+        "\"Ii4IARIgSJbwDpn/07/GHiGMKio0Vh18VN3D/hKzQGh6n0Yx9qpF2uYEak3a6dB8KT6tfJIvitz8MkADsyKTi+VwxYwR6npnpWPd42q0AYGT5GY9Fje8AbrTFvsRwS6tNRX/1JQqpZZYhC/drdKjYcIPKUxa1KEgS/QO\","
+        "\"Ii4IARIgmuygThdRzmJo1WkALKHh+hstvCbTa06joAg603KCm4RF2uYEak3a6dB8KT6tfJIvitz8MkDiEksgJ+a351sr1F+N+GTvtboavJFRg/M2/x1B6Biro/BEgHskHZlIQJULbpvkDCvzBHBiZ+1L59hmdj32aucK\""
+        "],\"p2p_share_ip\":{\"default\":40,\"cn\":20,\"ru\":20},"
+        "\"relay_public_key\":\"5AC884C1045BA0FF44142AC8DCA51B8A98C8F1CB4FEE36284AFBE92FCF594932\","
+        "\"revoked_keys\":[\"11146342570456886677\"],\"typical_pings\":[],\"success\":true}";
+}
+
+void GBE_AppendVarint(std::vector<uint8_t> &out, uint64_t value)
+{
+    while (value >= 0x80) {
+        out.push_back(static_cast<uint8_t>(value | 0x80));
+        value >>= 7;
+    }
+    out.push_back(static_cast<uint8_t>(value));
+}
+
+void GBE_AppendFixed32(std::vector<uint8_t> &out, uint32_t value)
+{
+    for (int i = 0; i < 4; ++i) {
+        out.push_back(static_cast<uint8_t>((value >> (i * 8)) & 0xff));
+    }
+}
+
+void GBE_AppendFixed64(std::vector<uint8_t> &out, uint64_t value)
+{
+    for (int i = 0; i < 8; ++i) {
+        out.push_back(static_cast<uint8_t>((value >> (i * 8)) & 0xff));
+    }
+}
+
+void GBE_AppendBytes(std::vector<uint8_t> &out, uint32_t field, const void *data, size_t size)
+{
+    GBE_AppendVarint(out, (static_cast<uint64_t>(field) << 3) | 2);
+    GBE_AppendVarint(out, size);
+    const auto *bytes = reinterpret_cast<const uint8_t *>(data);
+    out.insert(out.end(), bytes, bytes + size);
+}
+
+std::vector<uint8_t> GBE_BuildSerializedNetworkingCert(CSteamID steam_id, uint32 app_id)
+{
+    const uint32 now = static_cast<uint32>(std::time(nullptr));
+    const uint32 expiry = now + 24u * 60u * 60u;
+    const uint64 steam_id64 = steam_id.ConvertToUint64();
+    const std::string identity = std::string("steamid:") + std::to_string(steam_id64);
+    std::vector<uint8_t> identity_binary;
+    GBE_AppendVarint(identity_binary, (16u << 3) | 1u);
+    GBE_AppendFixed64(identity_binary, steam_id64);
+
+    std::vector<uint8_t> cert;
+    cert.reserve(128);
+    GBE_AppendVarint(cert, (1u << 3) | 0u);
+    GBE_AppendVarint(cert, 1);
+    GBE_AppendBytes(cert, 2, GBE_kSerializedPublicKey, sizeof(GBE_kSerializedPublicKey));
+    GBE_AppendVarint(cert, (4u << 3) | 1u);
+    GBE_AppendFixed64(cert, steam_id64);
+    GBE_AppendVarint(cert, (8u << 3) | 5u);
+    GBE_AppendFixed32(cert, now);
+    GBE_AppendVarint(cert, (9u << 3) | 5u);
+    GBE_AppendFixed32(cert, expiry);
+    GBE_AppendVarint(cert, (10u << 3) | 0u);
+    GBE_AppendVarint(cert, app_id);
+    GBE_AppendBytes(cert, 11, identity_binary.data(), identity_binary.size());
+    GBE_AppendBytes(cert, 12, identity.data(), identity.size());
+    return cert;
+}
+
+std::string GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(const char *connect, uint64 local_steam_id, uint64 owner_steam_id)
+{
+    const std::string endpoint = connect ? connect : "";
+    if (endpoint.empty() || local_steam_id == 0ull || local_steam_id != owner_steam_id)
+        return endpoint;
+
+    const size_t port_pos = endpoint.rfind(':');
+    if (port_pos == std::string::npos || port_pos + 1 >= endpoint.size())
+        return endpoint;
+
+    return std::string("127.0.0.1") + endpoint.substr(port_pos);
 }
 
 }
@@ -62,18 +421,28 @@ void Steam_Networking_Sockets_Serialized::steam_run_every_runcb(void *object)
     steam_networkingsockets->RunCallbacks();
 }
 
-Steam_Networking_Sockets_Serialized::Steam_Networking_Sockets_Serialized(class Settings *settings, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb)
+Steam_Networking_Sockets_Serialized::Steam_Networking_Sockets_Serialized(
+    class Settings *settings,
+    class Networking *network,
+    class SteamCallResults *callback_results,
+    class SteamCallBacks *callbacks,
+    class RunEveryRunCB *run_every_runcb,
+    GBE_DotaReconnectContextProvider *context_provider,
+    GBE_DotaReconnectDirectConnector *direct_connector,
+    GBE_DotaReconnectCallbackQueue *callback_queue)
 {
     this->settings = settings;
     this->network = network;
     this->callback_results = callback_results;
     this->callbacks = callbacks;
     this->run_every_runcb = run_every_runcb;
+    this->reconnect_context_provider = context_provider;
+    this->reconnect_direct_connector = direct_connector;
+    this->reconnect_callback_queue = callback_queue;
 
     this->network->setCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
     this->network->setCallback(CALLBACK_ID_NETWORKING_SOCKETS, settings->get_local_steam_id(), &Steam_Networking_Sockets_Serialized::steam_callback, this);
     this->run_every_runcb->add(&Steam_Networking_Sockets_Serialized::steam_run_every_runcb, this);
-
 }
 
 Steam_Networking_Sockets_Serialized::~Steam_Networking_Sockets_Serialized()
@@ -87,7 +456,9 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_SEND_RENDEZVOUS", settings->get_local_steam_id().ConvertToUint64(), steamIDRemote.ConvertToUint64(), unConnectionIDSrc, cbRendezvous);
+    const uint64 local_id = settings->get_local_steam_id().ConvertToUint64();
+    const uint64 remote_id = steamIDRemote.ConvertToUint64();
+    GBE_LogSerializedNetSockTrace("NETSOCK_SERIALIZED_SEND_RENDEZVOUS", local_id, remote_id, unConnectionIDSrc, cbRendezvous);
 
     // --- Dota 2 LAN reconnect / initial connect interception ---
     // When Dota tries to connect via P2P relay using the server's SteamID,
@@ -106,36 +477,83 @@ void Steam_Networking_Sockets_Serialized::SendP2PRendezvous( CSteamID steamIDRem
     //   4. One-shot per connection_id to avoid firing repeatedly
     {
         GBE_DotaReconnectContext ctx{};
-        if (GBE_GetDotaReconnectContext(&ctx) &&
-            steamIDRemote.ConvertToUint64() == ctx.server_id &&
-            ctx.game_state >= 2 &&
-            ctx.connect[0] != '\0')
-        {
-            // One-shot: use eligible flag to avoid firing more than once per P2P attempt.
-            // The flag is set to true by default (always eligible) and cleared after firing.
-            // GetAuthSessionTicket resets it to true (new connection established).
-            // CancelAuthTicket also sets it to true (disconnect, ready for reconnect).
-            bool expected = true;
-            if (GBE_dota_reconnect_eligible.compare_exchange_strong(expected, false)) {
+        const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
+        const std::string selected_endpoint = GBE_SelectDotaArcadeConnectEndpointForLocalPlayer(ctx.connect, local_id, ctx.owner_steam_id);
+        const bool eligible_before = GBE_IsDotaReconnectEligible();
+        const auto decision = gbe::dota_lobby_state::compute_reconnect_interception_decision(
+            ctx,
+            has_ctx,
+            local_id,
+            remote_id,
+            eligible_before);
+        GBE_ReconnectLog(
+            "GBE_RECONNECT_DIAG",
+            "SendP2PRendezvous gate local_id=%llu remote_id=%llu connection_id=%u size=%u has_ctx=%u server_id=%llu game_state=%u custom_game_id=%llu arcade=%u remote_matches=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s endpoint_raw=%s local_is_owner=%u",
+            (unsigned long long)local_id,
+            (unsigned long long)remote_id,
+            unConnectionIDSrc,
+            cbRendezvous,
+            has_ctx ? 1u : 0u,
+            (unsigned long long)ctx.server_id,
+            ctx.game_state,
+            (unsigned long long)ctx.custom_game_id,
+            decision.arcade_context ? 1u : 0u,
+            decision.remote_matches_server ? 1u : 0u,
+            decision.state_ready ? 1u : 0u,
+            decision.has_connect ? 1u : 0u,
+            eligible_before ? 1u : 0u,
+            selected_endpoint.c_str(),
+            ctx.connect,
+            decision.local_is_owner ? 1u : 0u
+        );
+        if (decision.p2p_rendezvous_candidate) {
+            if (GBE_ConsumeDotaReconnectEligibility()) {
                 GBE_ReconnectLog("GBE_RECONNECT",
-                    "Intercepted SendP2PRendezvous: remote_id=%llu matches server_id=%llu, firing GameServerChangeRequested_t endpoint=%s",
-                    (unsigned long long)steamIDRemote.ConvertToUint64(),
+                    "Intercepted SendP2PRendezvous: remote_id=%llu matches server_id=%llu, firing GameServerChangeRequested_t endpoint=%s endpoint_raw=%s local_is_owner=%u",
+                    (unsigned long long)remote_id,
                     (unsigned long long)ctx.server_id,
-                    ctx.connect);
+                    selected_endpoint.c_str(),
+                    ctx.connect,
+                    decision.local_is_owner ? 1u : 0u);
 
-                // Fire GameServerChangeRequested_t with LAN IP
                 GameServerChangeRequested_t server_change{};
-                std::strncpy(server_change.m_rgchServer, ctx.connect, sizeof(server_change.m_rgchServer) - 1);
+                std::strncpy(server_change.m_rgchServer, selected_endpoint.c_str(), sizeof(server_change.m_rgchServer) - 1);
                 server_change.m_rgchServer[sizeof(server_change.m_rgchServer) - 1] = '\0';
                 callbacks->addCBResult(server_change.k_iCallback, &server_change, sizeof(server_change), 0.0);
+                GBE_ReconnectLog(
+                    "GBE_RECONNECT_DIAG",
+                    "queued callback id=%d type=GameServerChangeRequested delay=0.00 source=SendP2PRendezvous remote_id=%llu connection_id=%u endpoint=%s endpoint_raw=%s",
+                    server_change.k_iCallback,
+                    (unsigned long long)remote_id,
+                    unConnectionIDSrc,
+                    selected_endpoint.c_str(),
+                    ctx.connect
+                );
 
-                // Also fire GameRichPresenceJoinRequested_t for belt-and-suspenders
-                std::string connect_command = std::string("+connect ") + ctx.connect;
+                std::string connect_command = std::string("+connect ") + selected_endpoint;
                 GameRichPresenceJoinRequested_t rich_join{};
                 rich_join.m_steamIDFriend = CSteamID(static_cast<uint64>(ctx.owner_steam_id));
                 std::strncpy(rich_join.m_rgchConnect, connect_command.c_str(), sizeof(rich_join.m_rgchConnect) - 1);
                 rich_join.m_rgchConnect[sizeof(rich_join.m_rgchConnect) - 1] = '\0';
                 callbacks->addCBResult(rich_join.k_iCallback, &rich_join, sizeof(rich_join), 0.25);
+                GBE_ReconnectLog(
+                    "GBE_RECONNECT_DIAG",
+                    "queued callback id=%d type=GameRichPresenceJoinRequested delay=0.25 source=SendP2PRendezvous remote_id=%llu connection_id=%u command=%s owner=%llu",
+                    rich_join.k_iCallback,
+                    (unsigned long long)remote_id,
+                    unConnectionIDSrc,
+                    connect_command.c_str(),
+                    (unsigned long long)ctx.owner_steam_id
+                );
+            } else {
+                GBE_ReconnectLog(
+                    "GBE_RECONNECT_DIAG",
+                    "skipped intercept source=SendP2PRendezvous reason=not_eligible remote_id=%llu connection_id=%u endpoint=%s endpoint_raw=%s",
+                    (unsigned long long)remote_id,
+                    unConnectionIDSrc,
+                    selected_endpoint.c_str(),
+                    ctx.connect
+                );
             }
         }
     }
@@ -189,7 +607,41 @@ SteamAPICall_t Steam_Networking_Sockets_Serialized::GetCertAsync()
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     struct SteamNetworkingSocketsCert_t data = {};
-    data.m_eResult = k_EResultNoConnection;
+    GBE_DotaReconnectContext ctx{};
+    const bool has_ctx = GBE_GetDotaReconnectContext(&ctx);
+    const bool state_ready = has_ctx && GBE_DotaReconnectContextIsStarted(ctx);
+    const bool has_connect = has_ctx && ctx.connect[0] != '\0';
+    const bool is_arcade_context = has_ctx && ctx.custom_game_id != 0ull;
+    const bool cert_ready = state_ready && has_connect;
+    data.m_eResult = cert_ready ? k_EResultOK : k_EResultNoConnection;
+    if (cert_ready) {
+        const auto cert = GBE_BuildSerializedNetworkingCert(settings->get_local_steam_id(), settings->get_local_game_id().AppID());
+        data.m_cbCert = static_cast<uint32>(std::min<size_t>(cert.size(), sizeof(data.m_certOrMsg)));
+        if (data.m_cbCert) {
+            std::memcpy(data.m_certOrMsg, cert.data(), data.m_cbCert);
+        }
+
+        uint8_t private_key[sizeof(GBE_kSerializedPublicKey) + sizeof(GBE_kSerializedPrivateKey)] = {};
+        std::memcpy(private_key, GBE_kSerializedPublicKey, sizeof(GBE_kSerializedPublicKey));
+        std::memcpy(private_key + sizeof(GBE_kSerializedPublicKey), GBE_kSerializedPrivateKey, sizeof(GBE_kSerializedPrivateKey));
+        data.m_cbPrivKey = sizeof(private_key);
+        std::memcpy(data.m_privKey, private_key, sizeof(private_key));
+    }
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "GetCertAsync result=%d cert_size=%u privkey_size=%u has_ctx=%u server_id=%llu game_state=%u custom_game_id=%llu arcade=%u state_ready=%u has_connect=%u endpoint=%s",
+        data.m_eResult,
+        data.m_cbCert,
+        data.m_cbPrivKey,
+        has_ctx ? 1u : 0u,
+        (unsigned long long)ctx.server_id,
+        ctx.game_state,
+        (unsigned long long)ctx.custom_game_id,
+        is_arcade_context ? 1u : 0u,
+        state_ready ? 1u : 0u,
+        has_connect ? 1u : 0u,
+        ctx.connect
+    );
 
     auto ret = callback_results->addCallResult(data.k_iCallback, &data, sizeof(data));
     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
@@ -201,9 +653,15 @@ int Steam_Networking_Sockets_Serialized::GetNetworkConfigJSON( void *buf, uint32
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     (void)pszLauncherPartner;
-    if (buf && cbBuf > 0)
-        reinterpret_cast<char *>(buf)[0] = '\0';
-    return 0;
+    const int required = GBE_CopySerializedNetworkingJson(GBE_GetSerializedNetworkingConfigJSON(), buf, cbBuf);
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "GetNetworkConfigJSON cbBuf=%u required=%d partner=%s",
+        cbBuf,
+        required,
+        pszLauncherPartner ? pszLauncherPartner : ""
+    );
+    return required;
 }
 
 int Steam_Networking_Sockets_Serialized::GetNetworkConfigJSON( void *buf, uint32 cbBuf )
@@ -236,7 +694,156 @@ int Steam_Networking_Sockets_Serialized::GetCachedRelayTicket( uint32 idxTicket,
 void Steam_Networking_Sockets_Serialized::PostConnectionStateMsg( const void *pMsg, uint32 cbMsg )
 {
     PRINT_DEBUG_TODO();
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    std::unique_lock<std::recursive_mutex> lock(global_mutex);
+
+    if (GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsConfigUpdated_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsConfigUpdated") ||
+        GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsCert_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsCert") ||
+        GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsRecvP2PFailure_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsRecvP2PFailure") ||
+        GBE_PostSerializedCallbackPayload<SteamNetworkingSocketsRecvP2PRendezvous_t>(callbacks, pMsg, cbMsg, "SteamNetworkingSocketsRecvP2PRendezvous")) {
+        return;
+    }
+
+    const uint64 local_id = settings->get_local_steam_id().ConvertToUint64();
+    if (!reconnect_context_provider || !reconnect_direct_connector || !reconnect_callback_queue)
+        return;
+    GBE_DotaReconnectPostPlan reconnect_plan;
+    {
+        auto instance_lock = dota_connection_synchronizer.acquire();
+        reconnect_plan = GBE_PrepareDotaReconnectPostConnectionState(
+            local_id,
+            cbMsg,
+            *reconnect_context_provider,
+            dota_connection_state);
+    }
+    lock.unlock();
+    const GBE_DotaReconnectPostResult result = GBE_ExecuteDotaReconnectPostEffects(
+        std::move(reconnect_plan),
+        *reconnect_direct_connector,
+        *reconnect_callback_queue);
+    const GBE_DotaReconnectContext &ctx = result.context;
+    if (result.has_context) {
+        GBE_ReconnectLogEvent({
+            "reconnect.retry",
+            result.skip_reason,
+            gbe::dota_diagnostic::Source::SerializedState,
+            ctx.lobby_id,
+            ctx.generation,
+            ctx.server_id,
+            result.endpoint,
+            std::to_string(result.retry_count),
+        });
+    }
+    if (!result.has_context ||
+        result.skip_reason == GBE_DotaReconnectPostSkipReason::OrdinaryPracticeLobby ||
+        result.skip_reason == GBE_DotaReconnectPostSkipReason::ReconnectIneligible)
+        return;
+
+    const std::string payload_prefix = GBE_FormatPayloadPrefix(pMsg, cbMsg);
+    const std::string payload_fields = GBE_FormatSerializedPayloadFields(pMsg, cbMsg);
+    const std::string payload_details = GBE_FormatSerializedStateDetails(pMsg, cbMsg);
+    const auto decision = gbe::dota_lobby_state::compute_reconnect_interception_decision(
+        ctx,
+        result.has_context,
+        local_id,
+        ctx.server_id,
+        true);
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "PostConnectionStateMsg gate size=%u prefix=%s fields=%s details=%s has_ctx=%u server_id=%llu game_state=%u custom_game_id=%llu arcade=%u state_ready=%u has_connect=%u eligible=%u endpoint=%s endpoint_raw=%s local_is_owner=%u",
+        cbMsg,
+        payload_prefix.c_str(),
+        payload_fields.c_str(),
+        payload_details.c_str(),
+        result.has_context ? 1u : 0u,
+        (unsigned long long)ctx.server_id,
+        ctx.game_state,
+        (unsigned long long)ctx.custom_game_id,
+        decision.arcade_context ? 1u : 0u,
+        decision.state_ready ? 1u : 0u,
+        decision.has_connect ? 1u : 0u,
+        1u,
+        result.endpoint.c_str(),
+        ctx.connect,
+        decision.local_is_owner ? 1u : 0u
+    );
+
+    if (result.skip_reason == GBE_DotaReconnectPostSkipReason::StateNotReady ||
+        result.skip_reason == GBE_DotaReconnectPostSkipReason::MissingEndpoint)
+        return;
+
+    if (result.skip_reason == GBE_DotaReconnectPostSkipReason::LocalOwner) {
+        GBE_ReconnectLog(
+            "GBE_RECONNECT_DIAG",
+            "skipping PostConnectionStateMsg direct connect for local owner server_id=%llu endpoint=%s endpoint_raw=%s",
+            (unsigned long long)ctx.server_id,
+            result.endpoint.c_str(),
+            ctx.connect
+        );
+        return;
+    }
+
+    if (result.direct_connect_attempted) {
+        GBE_ReconnectLogEvent({
+            "reconnect.direct_connect",
+            result.direct_connect_parse_failed
+                ? gbe::dota_diagnostic::Reason::ParseFailed
+                : gbe::dota_diagnostic::Reason::None,
+            gbe::dota_diagnostic::Source::Direct,
+            ctx.lobby_id,
+            ctx.generation,
+            ctx.server_id,
+            result.endpoint,
+            result.direct_connect_parse_failed
+                ? "skipped"
+                : (result.direct_connect_succeeded ? "connected" : "failed"),
+        });
+    }
+
+    if (result.callback_already_queued) {
+        GBE_ReconnectLogEvent({
+            "reconnect.callback",
+            gbe::dota_diagnostic::Reason::AlreadyQueued,
+            gbe::dota_diagnostic::Source::CallbackQueue,
+            ctx.lobby_id,
+            ctx.generation,
+            ctx.server_id,
+            result.endpoint,
+            "deduplicated",
+        });
+        return;
+    }
+
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "skipped synthetic callback id=%d source=PostConnectionStateMsg reason=outgoing_state_blob_queue_engine_once retry=%u server_id=%llu size=%u prefix=%s fields=%s details=%s",
+        SteamNetworkingSocketsRecvP2PRendezvous_t::k_iCallback,
+        result.retry_count,
+        (unsigned long long)ctx.server_id,
+        cbMsg,
+        payload_prefix.c_str(),
+        payload_fields.c_str(),
+        payload_details.c_str()
+    );
+
+    GBE_ReconnectLogEvent({
+        "reconnect.callback",
+        gbe::dota_diagnostic::Reason::None,
+        gbe::dota_diagnostic::Source::CallbackQueue,
+        ctx.lobby_id,
+        ctx.generation,
+        ctx.server_id,
+        result.endpoint,
+        result.callback_queued ? "queued" : "skipped",
+    });
+
+    const std::string connect_command = std::string("+connect ") + result.endpoint;
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "skipping GameRichPresenceJoinRequested source=PostConnectionStateMsg reason=arcade_direct_connect_uses_server_change retry=%u command=%s owner=%llu",
+        result.retry_count,
+        connect_command.c_str(),
+        (unsigned long long)ctx.owner_steam_id
+    );
 }
 
 bool Steam_Networking_Sockets_Serialized::GetSTUNServer(int dont_know, char *buf, unsigned int len)

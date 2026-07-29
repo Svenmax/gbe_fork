@@ -99,6 +99,10 @@ private:
 
     std::vector<std::string> get_query_ugc_tags(UGCQueryHandle_t handle, uint32 index);
 
+    bool should_expose_mod_to_ugc(PublishedFileId_t id);
+
+    std::set<PublishedFileId_t> visible_ugc_mods(const std::set<PublishedFileId_t> &mods);
+
     void set_details(PublishedFileId_t id, SteamUGCDetails_t *pDetails, IUgcItfVersion ver);
 
     void read_ugc_favorites();

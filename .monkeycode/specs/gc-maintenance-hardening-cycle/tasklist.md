@@ -1,0 +1,80 @@
+# GC 维护加固周期实施计划
+
+- [x] 1. 固化始终有效的测试断言
+  - [x] 1.1 替换生命周期状态机测试中的标准 `assert`
+    - 使用不受 `NDEBUG` 影响的测试检查宏或函数。
+    - 保持现有状态机示例、完整表、属性和差分模型覆盖。
+    - 需求：R1。
+  - [x] 1.2 验证 Debug 和 `NDEBUG` 构建
+    - 分别构建并运行状态机测试。
+    - 验收：两种模式执行同一检查数量并在失败时返回非零。
+  - [x] 1.3 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：普通 C++17 构建和 `-DNDEBUG -O2` 构建均执行并通过完整状态机测试。
+
+- [x] 2. 加强并发和 PR 阻断门禁
+  - [x] 2.1 将 Lobby Store 多写者测试加入 TSAN
+    - 复用现有 Store test，避免复制并发场景。
+    - 需求：R2。
+  - [x] 2.2 将完整 GC offline suite 加入 PR 门禁
+    - 将 GC verification 从 fast 调整为 full，或拆分为等价的 blocking job。
+    - 需求：R3。
+  - [x] 2.3 验证 TSAN 和完整 offline suite
+    - 验收：两项命令均成功，TSAN 发现竞争时返回非零。
+  - [x] 2.4 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：扩展后的 Clang TSAN 通过 reconnect、Store 多写者和 concurrency stress；完整 offline suite 通过。
+
+- [x] 3. 建立 Production Dispatcher 集成测试
+  - [x] 3.1 提取窄 production dispatcher translation unit
+    - 原样迁移 production registry factory 和 dispatcher。
+    - 同步生产构建和架构审计 owner。
+    - 需求：R4。
+  - [x] 3.2 让 handler harness 编译 production dispatcher
+    - 扩充 stub coordinator 的最小 registry surface。
+    - 继续复用真实 handlers 和现有 ActionRecorder。
+  - [x] 3.3 增加 production dispatcher focused cases
+    - 覆盖 registry contract、`7009` direct/wrapped、session forwarding、`4523` direct-only、unknown 和 invalid context。
+  - [x] 3.4 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：fast offline suite 通过，handler tests 由 78 增至 81；真实 production registry、dispatcher、adapter 和 handlers 在同一 harness 中执行。
+
+- [x] 4. 增加关键 Lobby 行为 Replay
+  - [x] 4.1 提取可复用 handler test fixture
+    - 由 smoke tests 和 behavior replay 共享初始化与 reset 契约。
+    - 需求：R5。
+  - [x] 4.2 实现 Create、Launch、Leave 连续 Replay
+    - 输出 handler、状态前后快照和有序 effects。
+    - 对动态标识进行仅输出层归一化。
+  - [x] 4.3 添加 fixture、golden trace 和 offline runner 接入
+    - 行为 Replay 进入默认 GC offline gate。
+  - [x] 4.4 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：默认 GC offline suite 通过；81 个 handler tests 保持通过；Create、Launch、Leave 在同一 production dispatcher coordinator 上连续执行并与 golden trace 精确匹配。
+
+- [x] 5. 收紧 Locator 和 Store Generation 边界
+  - [x] 5.1 实现 Dota locator RAII binding guard
+    - 支持部分绑定失败回滚和构造异常自动解绑。
+    - 延后 `Steam_Client` locator 发布时机。
+    - 需求：R6。
+  - [x] 5.2 实现 generation-aware compare clear
+    - 清空状态保留单调 tombstone generation。
+    - 陈旧 clear 不修改较新状态。
+  - [x] 5.3 迁移 production runtime clear
+    - 在本地状态清空前捕获 generation。
+    - 记录 stale clear 诊断并保留较新共享状态。
+  - [x] 5.4 增加 Store 和 locator 生命周期回归测试
+    - 覆盖 stale clear、旧发布复活、部分绑定失败和正常解绑。
+  - [x] 5.5 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：默认 GC offline suite 通过，handler tests 为 82/82；Locator focused test 通过；Store compare clear、tombstone、stale clear 回归通过；Clang TSAN 全部通过。
+
+- [x] 6. 完成本周期验证和停止评估
+  - [x] 6.1 运行 GCC full verification
+    - 验收：全部 offline、audit 和 diff checks 通过。
+    - 验证：`CXX=c++ bash tools/run_gc_verification.sh --full` 完整通过。
+  - [x] 6.2 运行 Clang full verification 和 TSAN
+    - 验收：编译器差异检查和并发门禁通过。
+    - 验证：Clang full verification 与 `CXX=clang++ bash tools/run_gc_tsan_tests.sh` 完整通过。
+  - [x] 6.3 同步维护文档
+    - 更新 production dispatcher owner、测试层次、CI 门禁、Store clear 和 locator 生命周期契约。
+    - 验证：已同步 dispatcher owner、测试层次、CI full gate、Store compare clear/tombstone 和 locator RAII 生命周期契约。
+  - [x] 6.4 记录停止结论
+    - 明确本周期结束后进入需求驱动维护模式。
+    - 需求：R7。
+    - 结论：本周期结束，进入需求驱动维护模式；Composition Root 全面接管、状态机唯一权威和 Coordinator 深拆由真实功能压力触发。
