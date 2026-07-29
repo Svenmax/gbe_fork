@@ -1102,10 +1102,12 @@ bool test_valid_launch_progression()
         shared.has_cache_sync_version = false;
         shared.cache_sync_version = 0ull;
         const auto changed_plan = gbe::dota_lobby_state::compose_shared_lobby_cache_restore_plan(lobby, shared);
-        ok &= expect_true(changed_plan.apply_cache_version, "cache restore marks version change");
-        ok &= expect_true(changed_plan.apply_cache_service_id, "cache restore marks service id change");
-        ok &= expect_true(changed_plan.apply_cache_service_list, "cache restore marks service list change");
-        ok &= expect_true(changed_plan.apply_cache_sync_version, "cache restore marks sync version change");
+        ok &= expect_true(changed_plan.apply_cache_metadata, "cache restore marks cache metadata change");
+        ok &= expect_false(
+            gbe::dota_lobby_state::cache_metadata_equal(
+                gbe::dota_lobby_state::cache_metadata_from_lobby(lobby),
+                changed_plan.metadata),
+            "cache restore metadata differs from local cache group");
         ok &= expect_true(
             gbe::dota_lobby_state::apply_shared_lobby_cache_restore_plan(lobby, changed_plan),
             "cache restore reports field group change");
@@ -1137,10 +1139,7 @@ bool test_valid_launch_progression()
         shared.has_cache_sync_version = false;
         shared.cache_sync_version = 0ull;
         const auto plan = gbe::dota_lobby_state::compose_shared_lobby_cache_restore_plan(lobby, shared);
-        ok &= expect_false(plan.apply_cache_version, "same-generation cache metadata keeps local cache version");
-        ok &= expect_false(plan.apply_cache_service_id, "same-generation cache metadata keeps local service id");
-        ok &= expect_false(plan.apply_cache_service_list, "same-generation cache metadata keeps local service list");
-        ok &= expect_false(plan.apply_cache_sync_version, "same-generation cache metadata keeps local sync version");
+        ok &= expect_false(plan.apply_cache_metadata, "same-generation cache metadata keeps local cache group");
         ok &= expect_false(
             gbe::dota_lobby_state::apply_shared_lobby_cache_restore_plan(lobby, plan),
             "same-generation cache metadata does not apply shared cache");

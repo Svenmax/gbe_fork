@@ -108,6 +108,38 @@ struct GBE_LocalLobby
     std::chrono::high_resolution_clock::time_point created{};
 };
 
+struct GBE_LocalLobbyGenerationMarkers
+{
+    std::uint64_t generic_launch_runtime{};
+    std::uint64_t generic_runtime_identity{};
+    std::uint64_t generic_options{};
+    std::uint64_t generic_custom_game{};
+    std::uint64_t cache_metadata{};
+    std::uint64_t owner_runtime{};
+    std::uint64_t launch_4511{};
+    std::uint64_t members{};
+    std::uint64_t custom_game_loading{};
+    std::uint64_t runtime_metadata{};
+    std::uint64_t chat_channel{};
+    std::uint64_t broadcast_channel{};
+    std::uint64_t owner_name{};
+    std::uint64_t details_runtime{};
+    std::uint64_t details_options{};
+    std::uint64_t details_custom_game{};
+    std::uint64_t bot_difficulty{};
+};
+
+struct GBE_DotaLobbyCacheMetadata
+{
+    bool has_cache_version{};
+    std::uint64_t cache_version{};
+    bool has_cache_service_id{};
+    std::uint32_t cache_service_id{};
+    std::vector<std::uint32_t> cache_service_list;
+    bool has_cache_sync_version{};
+    std::uint64_t cache_sync_version{};
+};
+
 struct GBE_SharedDotaLobbyState {
     bool valid{};
     bool active{};
@@ -165,11 +197,19 @@ struct GBE_SharedDotaLobbyState {
 
 namespace gbe::dota_lobby_state {
 
+GBE_LocalLobbyGenerationMarkers generation_markers_from_lobby(const GBE_LocalLobby &lobby);
+bool generation_matches(std::uint64_t marker_generation, std::uint64_t generation);
+GBE_DotaLobbyCacheMetadata cache_metadata_from_lobby(const GBE_LocalLobby &lobby);
+GBE_DotaLobbyCacheMetadata cache_metadata_from_shared_lobby(const GBE_SharedDotaLobbyState &lobby);
+bool apply_cache_metadata_to_lobby(GBE_LocalLobby &lobby, const GBE_DotaLobbyCacheMetadata &metadata);
+void apply_cache_metadata_to_shared_lobby(GBE_SharedDotaLobbyState &lobby, const GBE_DotaLobbyCacheMetadata &metadata);
+bool cache_metadata_equal(const GBE_DotaLobbyCacheMetadata &lhs, const GBE_DotaLobbyCacheMetadata &rhs);
+
 class LocalLobbyOwner {
 public:
     explicit LocalLobbyOwner(GBE_LocalLobby &lobby);
 
-    const GBE_LocalLobby &snapshot() const;
+    GBE_LocalLobby snapshot() const;
     void replace_for_reset(GBE_LocalLobby lobby);
 
     template <typename Apply>
@@ -407,17 +447,8 @@ struct SharedLobbyOptionsRestorePlan {
 };
 
 struct SharedLobbyCacheRestorePlan {
-    bool apply_cache_version{};
-    bool has_cache_version{};
-    std::uint64_t cache_version{};
-    bool apply_cache_service_id{};
-    bool has_cache_service_id{};
-    std::uint32_t cache_service_id{};
-    bool apply_cache_service_list{};
-    std::vector<std::uint32_t> cache_service_list;
-    bool apply_cache_sync_version{};
-    bool has_cache_sync_version{};
-    std::uint64_t cache_sync_version{};
+    bool apply_cache_metadata{};
+    GBE_DotaLobbyCacheMetadata metadata;
 };
 
 struct SteamAuthAckLaunchPlan {

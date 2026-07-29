@@ -85,12 +85,104 @@ void apply_create_lobby_details(const proto_wire::DotaPracticeLobbyDetailsReques
 
 } // namespace
 
+GBE_LocalLobbyGenerationMarkers generation_markers_from_lobby(const GBE_LocalLobby &lobby)
+{
+    GBE_LocalLobbyGenerationMarkers markers{};
+    markers.generic_launch_runtime = lobby.generic_launch_runtime_generation;
+    markers.generic_runtime_identity = lobby.generic_runtime_identity_generation;
+    markers.generic_options = lobby.generic_options_generation;
+    markers.generic_custom_game = lobby.generic_custom_game_generation;
+    markers.cache_metadata = lobby.cache_metadata_generation;
+    markers.owner_runtime = lobby.owner_runtime_generation;
+    markers.launch_4511 = lobby.launch_4511_generation;
+    markers.members = lobby.members_generation;
+    markers.custom_game_loading = lobby.custom_game_loading_generation;
+    markers.runtime_metadata = lobby.runtime_metadata_generation;
+    markers.chat_channel = lobby.chat_channel_generation;
+    markers.broadcast_channel = lobby.broadcast_channel_generation;
+    markers.owner_name = lobby.owner_name_generation;
+    markers.details_runtime = lobby.details_runtime_generation;
+    markers.details_options = lobby.details_options_generation;
+    markers.details_custom_game = lobby.details_custom_game_generation;
+    markers.bot_difficulty = lobby.bot_difficulty_generation;
+    return markers;
+}
+
+bool generation_matches(std::uint64_t marker_generation, std::uint64_t generation)
+{
+    return marker_generation != 0ull && marker_generation == generation;
+}
+
+GBE_DotaLobbyCacheMetadata cache_metadata_from_lobby(const GBE_LocalLobby &lobby)
+{
+    GBE_DotaLobbyCacheMetadata metadata{};
+    metadata.has_cache_version = lobby.has_cache_version;
+    metadata.cache_version = lobby.cache_version;
+    metadata.has_cache_service_id = lobby.has_cache_service_id;
+    metadata.cache_service_id = lobby.cache_service_id;
+    metadata.cache_service_list = lobby.cache_service_list;
+    metadata.has_cache_sync_version = lobby.has_cache_sync_version;
+    metadata.cache_sync_version = lobby.cache_sync_version;
+    return metadata;
+}
+
+GBE_DotaLobbyCacheMetadata cache_metadata_from_shared_lobby(const GBE_SharedDotaLobbyState &lobby)
+{
+    GBE_DotaLobbyCacheMetadata metadata{};
+    metadata.has_cache_version = lobby.has_cache_version;
+    metadata.cache_version = lobby.cache_version;
+    metadata.has_cache_service_id = lobby.has_cache_service_id;
+    metadata.cache_service_id = lobby.cache_service_id;
+    metadata.cache_service_list = lobby.cache_service_list;
+    metadata.has_cache_sync_version = lobby.has_cache_sync_version;
+    metadata.cache_sync_version = lobby.cache_sync_version;
+    return metadata;
+}
+
+bool cache_metadata_equal(const GBE_DotaLobbyCacheMetadata &lhs, const GBE_DotaLobbyCacheMetadata &rhs)
+{
+    return lhs.has_cache_version == rhs.has_cache_version &&
+        lhs.cache_version == rhs.cache_version &&
+        lhs.has_cache_service_id == rhs.has_cache_service_id &&
+        lhs.cache_service_id == rhs.cache_service_id &&
+        lhs.cache_service_list == rhs.cache_service_list &&
+        lhs.has_cache_sync_version == rhs.has_cache_sync_version &&
+        lhs.cache_sync_version == rhs.cache_sync_version;
+}
+
+bool apply_cache_metadata_to_lobby(GBE_LocalLobby &lobby, const GBE_DotaLobbyCacheMetadata &metadata)
+{
+    const GBE_DotaLobbyCacheMetadata current = cache_metadata_from_lobby(lobby);
+    if (cache_metadata_equal(current, metadata))
+        return false;
+
+    lobby.has_cache_version = metadata.has_cache_version;
+    lobby.cache_version = metadata.cache_version;
+    lobby.has_cache_service_id = metadata.has_cache_service_id;
+    lobby.cache_service_id = metadata.cache_service_id;
+    lobby.cache_service_list = metadata.cache_service_list;
+    lobby.has_cache_sync_version = metadata.has_cache_sync_version;
+    lobby.cache_sync_version = metadata.cache_sync_version;
+    return true;
+}
+
+void apply_cache_metadata_to_shared_lobby(GBE_SharedDotaLobbyState &lobby, const GBE_DotaLobbyCacheMetadata &metadata)
+{
+    lobby.has_cache_version = metadata.has_cache_version;
+    lobby.cache_version = metadata.cache_version;
+    lobby.has_cache_service_id = metadata.has_cache_service_id;
+    lobby.cache_service_id = metadata.cache_service_id;
+    lobby.cache_service_list = metadata.cache_service_list;
+    lobby.has_cache_sync_version = metadata.has_cache_sync_version;
+    lobby.cache_sync_version = metadata.cache_sync_version;
+}
+
 LocalLobbyOwner::LocalLobbyOwner(GBE_LocalLobby &lobby)
     : lobby_(lobby)
 {
 }
 
-const GBE_LocalLobby &LocalLobbyOwner::snapshot() const
+GBE_LocalLobby LocalLobbyOwner::snapshot() const
 {
     return lobby_;
 }
@@ -685,21 +777,12 @@ SourceAwareSharedRuntimeRestorePlan compose_source_aware_shared_runtime_restore_
     std::uint32_t run_queued_launch_phase)
 {
     SourceAwareSharedRuntimeRestorePlan plan{};
-    const bool preserve_local_launch_runtime =
-        current_lobby.generic_launch_runtime_generation != 0ull &&
-        current_lobby.generic_launch_runtime_generation == shared_lobby.generation;
-    const bool preserve_local_runtime_identity =
-        current_lobby.generic_runtime_identity_generation != 0ull &&
-        current_lobby.generic_runtime_identity_generation == shared_lobby.generation;
-    const bool preserve_local_custom_game_loading =
-        current_lobby.custom_game_loading_generation != 0ull &&
-        current_lobby.custom_game_loading_generation == shared_lobby.generation;
-    const bool preserve_local_runtime_metadata =
-        current_lobby.runtime_metadata_generation != 0ull &&
-        current_lobby.runtime_metadata_generation == shared_lobby.generation;
-    const bool preserve_local_details_runtime =
-        current_lobby.details_runtime_generation != 0ull &&
-        current_lobby.details_runtime_generation == shared_lobby.generation;
+    const GBE_LocalLobbyGenerationMarkers markers = generation_markers_from_lobby(current_lobby);
+    const bool preserve_local_launch_runtime = generation_matches(markers.generic_launch_runtime, shared_lobby.generation);
+    const bool preserve_local_runtime_identity = generation_matches(markers.generic_runtime_identity, shared_lobby.generation);
+    const bool preserve_local_custom_game_loading = generation_matches(markers.custom_game_loading, shared_lobby.generation);
+    const bool preserve_local_runtime_metadata = generation_matches(markers.runtime_metadata, shared_lobby.generation);
+    const bool preserve_local_details_runtime = generation_matches(markers.details_runtime, shared_lobby.generation);
     plan.ignored_readyup_regression =
         dota_custom_game::has_custom_game_details(current_lobby.custom_game) &&
         current_lobby.match_id != 0ull &&
@@ -807,15 +890,13 @@ SharedLobbyOptionsRestorePlan compose_shared_lobby_options_restore_plan(
     const GBE_SharedDotaLobbyState &shared_lobby)
 {
     SharedLobbyOptionsRestorePlan plan{};
+    const GBE_LocalLobbyGenerationMarkers markers = generation_markers_from_lobby(current_lobby);
     const bool preserve_local_options =
-        (current_lobby.generic_options_generation != 0ull &&
-        current_lobby.generic_options_generation == shared_lobby.generation) ||
-        (current_lobby.details_options_generation != 0ull &&
-        current_lobby.details_options_generation == shared_lobby.generation);
+        generation_matches(markers.generic_options, shared_lobby.generation) ||
+        generation_matches(markers.details_options, shared_lobby.generation);
     const bool preserve_local_bot_difficulty =
         preserve_local_options ||
-        (current_lobby.bot_difficulty_generation != 0ull &&
-        current_lobby.bot_difficulty_generation == shared_lobby.generation);
+        generation_matches(markers.bot_difficulty, shared_lobby.generation);
     plan.game_mode = shared_lobby.game_mode;
     plan.apply_game_mode = current_lobby.game_mode != plan.game_mode && !preserve_local_options;
     plan.server_region = shared_lobby.server_region;
@@ -913,27 +994,11 @@ SharedLobbyCacheRestorePlan compose_shared_lobby_cache_restore_plan(
     const GBE_SharedDotaLobbyState &shared_lobby)
 {
     SharedLobbyCacheRestorePlan plan{};
-    const bool preserve_local_cache =
-        current_lobby.cache_metadata_generation != 0ull &&
-        current_lobby.cache_metadata_generation == shared_lobby.generation;
-    plan.has_cache_version = shared_lobby.has_cache_version;
-    plan.cache_version = shared_lobby.cache_version;
-    plan.apply_cache_version =
-        (current_lobby.has_cache_version != plan.has_cache_version ||
-        current_lobby.cache_version != plan.cache_version) && !preserve_local_cache;
-    plan.has_cache_service_id = shared_lobby.has_cache_service_id;
-    plan.cache_service_id = shared_lobby.cache_service_id;
-    plan.apply_cache_service_id =
-        (current_lobby.has_cache_service_id != plan.has_cache_service_id ||
-        current_lobby.cache_service_id != plan.cache_service_id) && !preserve_local_cache;
-    plan.cache_service_list = shared_lobby.cache_service_list;
-    plan.apply_cache_service_list =
-        current_lobby.cache_service_list != plan.cache_service_list && !preserve_local_cache;
-    plan.has_cache_sync_version = shared_lobby.has_cache_sync_version;
-    plan.cache_sync_version = shared_lobby.cache_sync_version;
-    plan.apply_cache_sync_version =
-        (current_lobby.has_cache_sync_version != plan.has_cache_sync_version ||
-        current_lobby.cache_sync_version != plan.cache_sync_version) && !preserve_local_cache;
+    const GBE_LocalLobbyGenerationMarkers markers = generation_markers_from_lobby(current_lobby);
+    const bool preserve_local_cache = generation_matches(markers.cache_metadata, shared_lobby.generation);
+    plan.metadata = cache_metadata_from_shared_lobby(shared_lobby);
+    plan.apply_cache_metadata =
+        !cache_metadata_equal(cache_metadata_from_lobby(current_lobby), plan.metadata) && !preserve_local_cache;
     return plan;
 }
 
@@ -941,27 +1006,10 @@ bool apply_shared_lobby_cache_restore_plan(
     GBE_LocalLobby &lobby,
     const SharedLobbyCacheRestorePlan &plan)
 {
-    bool changed = false;
-    if (plan.apply_cache_version) {
-        lobby.has_cache_version = plan.has_cache_version;
-        lobby.cache_version = plan.cache_version;
-        changed = true;
-    }
-    if (plan.apply_cache_service_id) {
-        lobby.has_cache_service_id = plan.has_cache_service_id;
-        lobby.cache_service_id = plan.cache_service_id;
-        changed = true;
-    }
-    if (plan.apply_cache_service_list) {
-        lobby.cache_service_list = plan.cache_service_list;
-        changed = true;
-    }
-    if (plan.apply_cache_sync_version) {
-        lobby.has_cache_sync_version = plan.has_cache_sync_version;
-        lobby.cache_sync_version = plan.cache_sync_version;
-        changed = true;
-    }
-    return changed;
+    if (!plan.apply_cache_metadata)
+        return false;
+
+    return apply_cache_metadata_to_lobby(lobby, plan.metadata);
 }
 
 bool apply_cache_subscription_metadata(
@@ -974,21 +1022,15 @@ bool apply_cache_subscription_metadata(
     bool has_cache_sync_version,
     std::uint64_t cache_sync_version)
 {
-    const bool changed =
-        lobby.has_cache_version != has_cache_version ||
-        lobby.cache_version != cache_version ||
-        lobby.has_cache_service_id != has_cache_service_id ||
-        lobby.cache_service_id != cache_service_id ||
-        lobby.cache_service_list != cache_service_list ||
-        lobby.has_cache_sync_version != has_cache_sync_version ||
-        lobby.cache_sync_version != cache_sync_version;
-    lobby.has_cache_version = has_cache_version;
-    lobby.cache_version = cache_version;
-    lobby.has_cache_service_id = has_cache_service_id;
-    lobby.cache_service_id = cache_service_id;
-    lobby.cache_service_list = cache_service_list;
-    lobby.has_cache_sync_version = has_cache_sync_version;
-    lobby.cache_sync_version = cache_sync_version;
+    GBE_DotaLobbyCacheMetadata metadata{};
+    metadata.has_cache_version = has_cache_version;
+    metadata.cache_version = cache_version;
+    metadata.has_cache_service_id = has_cache_service_id;
+    metadata.cache_service_id = cache_service_id;
+    metadata.cache_service_list = cache_service_list;
+    metadata.has_cache_sync_version = has_cache_sync_version;
+    metadata.cache_sync_version = cache_sync_version;
+    const bool changed = apply_cache_metadata_to_lobby(lobby, metadata);
     if (changed)
         lobby.cache_metadata_generation = lobby.generation;
     return changed;
@@ -1032,8 +1074,8 @@ bool restore_launch_4511_seen(
     GBE_LocalLobby &lobby,
     bool launch_4511_seen)
 {
-    if (lobby.launch_4511_generation != 0ull &&
-            lobby.launch_4511_generation == lobby.generation) {
+    const GBE_LocalLobbyGenerationMarkers markers = generation_markers_from_lobby(lobby);
+    if (generation_matches(markers.launch_4511, lobby.generation)) {
         return false;
     }
     return apply_value_if_changed(lobby.launch_4511_seen, launch_4511_seen);
@@ -1084,8 +1126,8 @@ bool restore_lobby_owner_runtime_from_shared(
     GBE_LocalLobby &lobby,
     const GBE_SharedDotaLobbyState &shared_lobby)
 {
-    if (lobby.owner_runtime_generation != 0ull &&
-            lobby.owner_runtime_generation == shared_lobby.generation) {
+    const GBE_LocalLobbyGenerationMarkers markers = generation_markers_from_lobby(lobby);
+    if (generation_matches(markers.owner_runtime, shared_lobby.generation)) {
         return false;
     }
     bool changed = false;
@@ -1099,8 +1141,8 @@ bool restore_lobby_members(
     GBE_LocalLobby &lobby,
     const std::vector<GBE_DotaLobbyMemberState> &shared_members)
 {
-    if (lobby.members_generation != 0ull &&
-            lobby.members_generation == lobby.generation) {
+    const GBE_LocalLobbyGenerationMarkers markers = generation_markers_from_lobby(lobby);
+    if (generation_matches(markers.members, lobby.generation)) {
         return false;
     }
     if (gbe::dota_lobby_flow::lobby_members_equal(lobby.members, shared_members))
@@ -1228,12 +1270,10 @@ bool restore_lobby_custom_game_from_shared(
     GBE_LocalLobby &lobby,
     const GBE_SharedDotaLobbyState &shared_lobby)
 {
-    if ((lobby.generic_custom_game_generation != 0ull &&
-            lobby.generic_custom_game_generation == shared_lobby.generation) ||
-            (lobby.details_custom_game_generation != 0ull &&
-            lobby.details_custom_game_generation == shared_lobby.generation) ||
-            (lobby.custom_game_loading_generation != 0ull &&
-            lobby.custom_game_loading_generation == shared_lobby.generation)) {
+    const GBE_LocalLobbyGenerationMarkers markers = generation_markers_from_lobby(lobby);
+    if (generation_matches(markers.generic_custom_game, shared_lobby.generation) ||
+            generation_matches(markers.details_custom_game, shared_lobby.generation) ||
+            generation_matches(markers.custom_game_loading, shared_lobby.generation)) {
         return false;
     }
     return restore_lobby_custom_game(lobby, shared_lobby.custom_game);
@@ -1520,13 +1560,7 @@ void apply_postgame_lobby_state_plan(
     lobby.postgame_chat_tombstone_active = plan.abandon_pre_postgame_chat_channel_id != 0ull;
     lobby.postgame_chat_tombstone_channel_id = plan.abandon_pre_postgame_chat_channel_id;
     lobby.postgame_chat_tombstone_generation = lobby.postgame_chat_tombstone_active ? lobby.generation : 0ull;
-    lobby.has_cache_version = false;
-    lobby.cache_version = 0;
-    lobby.has_cache_service_id = false;
-    lobby.cache_service_id = 0;
-    lobby.cache_service_list.clear();
-    lobby.has_cache_sync_version = false;
-    lobby.cache_sync_version = 0;
+    apply_cache_metadata_to_lobby(lobby, GBE_DotaLobbyCacheMetadata{});
     lobby.abandon_postgame_active = true;
 }
 
@@ -1876,13 +1910,7 @@ void publish_local_lobby_to_shared(const GBE_LocalLobby &local, bool is_server, 
     shared.broadcast_description = local.broadcast_description;
     shared.broadcast_language_code = local.broadcast_language_code;
     shared.pass_key = local.pass_key;
-    shared.has_cache_version = local.has_cache_version;
-    shared.cache_version = local.cache_version;
-    shared.has_cache_service_id = local.has_cache_service_id;
-    shared.cache_service_id = local.cache_service_id;
-    shared.cache_service_list = local.cache_service_list;
-    shared.has_cache_sync_version = local.has_cache_sync_version;
-    shared.cache_sync_version = local.cache_sync_version;
+    apply_cache_metadata_to_shared_lobby(shared, cache_metadata_from_lobby(local));
 }
 
 void adopt_shared_lobby_to_local(
@@ -1892,18 +1920,11 @@ void adopt_shared_lobby_to_local(
     GBE_LocalLobby &local)
 {
     const bool preserve_known_owner_hero = should_preserve_known_owner_hero_on_adopt(local, shared);
-    const bool preserve_local_chat_channel =
-        local.chat_channel_generation != 0ull &&
-        local.chat_channel_generation == shared.generation;
-    const bool preserve_local_broadcast_channel =
-        local.broadcast_channel_generation != 0ull &&
-        local.broadcast_channel_generation == shared.generation;
-    const bool preserve_local_owner_name =
-        local.owner_name_generation != 0ull &&
-        local.owner_name_generation == shared.generation;
-    const bool preserve_local_cache =
-        local.cache_metadata_generation != 0ull &&
-        local.cache_metadata_generation == shared.generation;
+    const GBE_LocalLobbyGenerationMarkers markers = generation_markers_from_lobby(local);
+    const bool preserve_local_chat_channel = generation_matches(markers.chat_channel, shared.generation);
+    const bool preserve_local_broadcast_channel = generation_matches(markers.broadcast_channel, shared.generation);
+    const bool preserve_local_owner_name = generation_matches(markers.owner_name, shared.generation);
+    const bool preserve_local_cache = generation_matches(markers.cache_metadata, shared.generation);
     local.active = shared.active;
     local.generation = shared.generation;
     local.lobby_id = shared.lobby_id;
@@ -1965,15 +1986,8 @@ void adopt_shared_lobby_to_local(
         local.broadcast_language_code = shared.broadcast_language_code;
     }
     local.pass_key = shared.pass_key;
-    if (!preserve_local_cache) {
-        local.has_cache_version = shared.has_cache_version;
-        local.cache_version = shared.cache_version;
-        local.has_cache_service_id = shared.has_cache_service_id;
-        local.cache_service_id = shared.cache_service_id;
-        local.cache_service_list = shared.cache_service_list;
-        local.has_cache_sync_version = shared.has_cache_sync_version;
-        local.cache_sync_version = shared.cache_sync_version;
-    }
+    if (!preserve_local_cache)
+        apply_cache_metadata_to_lobby(local, cache_metadata_from_shared_lobby(shared));
 }
 
 bool build_dota_abandon_request_context(
