@@ -1,0 +1,137 @@
+================================================================================
+PHASE 2.8: WELCOME/HELLO FUNCTIONS COUPLING ANALYSIS REPORT
+File: /workspace/dll/steam_game_coordinator.cpp (5667 lines)
+Purpose: Support refactoring — extracting 5 welcome/hello/login-sync
+         member functions to a new TU (gbe_dota_welcome_coordinator.cpp)
+================================================================================
+
+METHODOLOGY
+-----------
+- 5 target member function names were located by matching
+  `^.*Steam_Game_Coordinator::FUNC_NAME(` at column 0.
+- Function end was determined by brace-depth tracking.
+- All file-scope `static` symbols were collected & deduplicated by name.
+- Each static symbol's references were classified 'inside target' or 'elsewhere'.
+
+TARGET FUNCTIONS (incl. overloads)
+----------------------------------
+  GBE_PatchDotaLoginCacheSubscribedInventory     lines  3618- 3899  (282 lines)
+  callback_client_welcome                        lines  3935- 3948  (14 lines)
+  callback_server_welcome                        lines  3950- 3964  (15 lines)
+  GBE_MaybePrimeDotaServerWelcomeFromCache       lines  3966- 4071  (106 lines)
+  GBE_PushDotaLoginSyncMessages                  lines  4364- 4398  (35 lines)
+  TOTAL                                          452 lines across 5 definitions
+
+================================================================================
+LIST X — TARGET-ONLY STATICS (can move to new TU as `static`)
+Count: 1
+================================================================================
+These static symbols are referenced ONLY from within the target
+functions. They can be moved verbatim to the new TU and remain
+file-scope `static` there. (Verify no transitive List Z dependency!)
+
+ #  Def Line  Kind       Symbol Name                                  Target Ref Lines
+--  --------  ---------  -------------------------------------------  ----------------
+ 1       293  variable   GBE_kDotaCacheSubscribedTemplate             4374, 4375
+
+================================================================================
+LIST Y — SHARED STATICS (must be externalized before move)
+Count: 0
+================================================================================
+These static symbols are referenced from BOTH the target functions AND
+other code in the main file. They MUST have `static` removed and be
+declared `extern` in gbe_dota_gc_internal.h before the move.
+Definitions stay in steam_game_coordinator.cpp.
+NOTE: If a List Y function definition has a default argument, the
+`= value` must be stripped from the DEFINITION (header keeps it),
+else MSVC error C2572 (redefinition of default argument).
+
+  (none)
+
+================================================================================
+LIST Z — NON-TARGET STATICS (stay in main file unchanged)
+Count: 27
+================================================================================
+ #  Def Line  Kind       Symbol Name
+--  --------  ---------  -------------------------------------------
+ 1       193  variable   GBE_kDotaClientWelcomeTemplate
+ 2       252  variable   GBE_kOldDotaVersionVarint
+ 3       259  variable   GBE_kOldDotaPracticeLobbyLobbyIdVarint
+ 4       262  variable   GBE_kOldDotaPracticeLobbyGameStartTimeVarint
+ 5       263  variable   GBE_kOldDotaPracticeLobbyConnect
+ 6       271  variable   GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex
+ 7       768  variable   GBE_kDotaPracticeLobbyCacheSubscribedTemplate
+ 8       983  function   GBE_PatchDotaWelcomeAccountObjects
+ 9      1064  function   GBE_LogGCProtoBoundary
+10      1156  function   GBE_PatchDotaLobbyTemplateIdentifiers
+11      1180  function   GBE_PatchDotaLobbyTemplateIdentifiersIfPresent
+12      1200  function   GBE_ForceDotaLobbyCacheOwnerSOID
+13      1221  function   GBE_ForceDotaLobbyUpdateOwnerSOID
+14      1409  function   GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState
+15      1563  function   GBE_PatchDotaPracticeLobbyLaunchTemplate
+16      1875  function   GBE_AdaptDotaTopCustomGamesListPayload
+17      1952  function   GBE_IsDotaOtherLeftChannelPayloadForChannel
+18      2044  function   GBE_ComposeDotaPracticeLobbySOObjects
+19      2190  function   GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload
+20      2268  function   GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload
+21      2350  function   GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate
+22      2771  function   GBE_ExtractDotaHelloContext
+23      2867  function   GBE_ExtractDirectDotaHelloContext
+24      2906  function   GBE_ExtractDirectDotaServerHelloContext
+25      2983  function   GBE_PrepareDotaWelcomeBody
+26      3040  function   GBE_BuildDirectDotaClientWelcome
+27      3121  function   GBE_ComposeDotaClientWelcome
+
+================================================================================
+UNUSED — DEFINED BUT NEVER REFERENCED (dead code)
+Count: 0
+================================================================================
+  (none)
+
+================================================================================
+ALREADY-EXTERNALIZED SYMBOLS REFERENCED FROM TARGET FUNCTIONS
+Count: 5
+================================================================================
+ #  Symbol Name                                  Ref Lines (in target bodies)
+--  -------------------------------------------  --------------------------
+ 1  GBE_PrepareDotaDirectReplayMessage           4373
+ 2  GBE_BuildDirectDotaServerWelcome             3997
+ 3  GBE_vpk_loot_data                            3677, 3680, 3681
+ 4  GBE_GC_DebugLog                              3672, 3678, 3685, 3687, 3690, 3847, 3878, 3890, 3980, 4002, +7 more
+ 5  GBE_last_dota_server_hello_context           3968, 4000, 4017
+
+================================================================================
+STEAM_GAME_COORDINATOR:: MEMBER CALLS FROM TARGET FUNCTIONS
+================================================================================
+ #  Member Function                              Call Sites
+--  -------------------------------------------  ----------
+ 1  GBE_PatchDotaLoginCacheSubscribedInventory   4391
+ 2  GBE_ShouldSuppressDotaAbandonedLobby         3979, 4031
+ 3  build_protomsg_header                        3941, 3956
+ 4  initialize_gc                                3972
+ 5  push_incoming                                3947, 3963
+ 6  push_incoming_now                            4019, 4033, 4397
+
+================================================================================
+SYMBOL COUNT RECONCILIATION
+================================================================================
+  Total unique file-scope `static` symbols:  28
+  List X (target-only, move as static):      1
+  List Y (shared, must externalize):         0
+  List Z (non-target, stays):                27
+  Unused (dead code):                        0
+  Already-external referenced from target:   5
+
+================================================================================
+REFACTORING IMPLICATIONS
+================================================================================
+1. PHASE 2.8-step2 SKIPPABLE: No List Y symbols.
+
+2. PHASE 2.8-step3: Move 1 List X static symbols + 5 target
+   definitions to gbe_dota_welcome_coordinator.cpp.
+
+3. PREMAKE: No change needed — `dll/**` glob auto-collects sources.
+
+================================================================================
+END OF REPORT
+================================================================================

@@ -1,0 +1,74 @@
+gc_replay_test summary v1
+cases=8
+case 1
+label=cache_subscribed_single
+emsg=2147483672
+masked_emsg=24
+proto=1
+size=22
+fnv1a64=0x700a989fe11b80fb
+body_size=22
+fields=3:0:1=0
+case 2
+label=cache_subscribed_multi
+emsg=2147483672
+masked_emsg=24
+proto=1
+size=26
+fnv1a64=0xaa30900131ebc7d7
+body_size=26
+fields=3:0:1=0
+case 3
+label=cache_unsubscribed
+emsg=2147483673
+masked_emsg=25
+proto=1
+size=10
+fnv1a64=0xa08dd01ced12ec87
+body_size=10
+fields=3:1:8=0x0800000000000000
+case 4
+label=cache_refresh
+emsg=2147483676
+masked_emsg=28
+proto=1
+size=12
+fnv1a64=0x7565a21e7ec55ef2
+body_size=12
+fields=none
+case 5
+label=set_item_style
+emsg=2147486225
+masked_emsg=2577
+proto=1
+size=16
+fnv1a64=0xa28276ac92265d2e
+body_size=16
+fields=2:1:8=0x080000000000000a
+case 6
+label=unlock_item_style
+emsg=2147486219
+masked_emsg=2571
+proto=1
+size=13
+fnv1a64=0xcc5260ff48470a18
+body_size=13
+fields=none
+case 7
+label=add_socket_postgame
+emsg=2147484735
+masked_emsg=1087
+proto=1
+size=20
+fnv1a64=0xe3f90621a316a5cf
+body_size=20
+fields=none
+case 8
+label=cache_uptodate
+emsg=2147483677
+masked_emsg=29
+proto=1
+size=13
+fnv1a64=0xd012ef8c4d98d3c6
+body_size=13
+fields=3:5:4=0x00000000

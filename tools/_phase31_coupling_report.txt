@@ -1,0 +1,32 @@
+==============================================================================
+Phase 2.11 Coupling Analysis: on_client_connected/disconnected
+==============================================================================
+
+Main file: /workspace/dll/steam_game_coordinator.cpp (2900 lines)
+
+  on_client_connected: L1902-L1947 (46 lines, GBE_* refs=7)
+  on_client_disconnected: L1949-L2002 (54 lines, GBE_* refs=6)
+
+Referenced GBE_* symbols (excluding self/target set):
+  GBE_DescribeDotaLaunchPhase: HEADER(internal.h)
+  GBE_GC_DebugLog: HEADER(internal.h)
+  GBE_GetDotaLobbyOwnerSteamId: MEMBER(class)
+  GBE_PublishSharedDotaLobbyState: MEMBER(class)
+  GBE_RestoreSharedDotaLobbyState: MEMBER(class)
+  GBE_SetDotaLobbyMemberConnected: MEMBER(class)
+  GBE_ShouldSuppressDotaAbandonedLobby: MEMBER(class)
+  GBE_local_lobby: MEMBER(class)
+
+Classification:
+  List X (file-scope statics traveling): 0
+  List Y (need new extern declaration): 0
+
+Contiguity check: OK
+
+Extraction block: L1902-L2002 (101 lines)
+
+Original main file: 2900 lines
+New main file:      2799 lines (delta -101)
+New TU:             157 lines
+Definitions moved to new TU: 2/2
+Definitions remaining in main: 0 (expected 0)

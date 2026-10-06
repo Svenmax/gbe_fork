@@ -1,0 +1,134 @@
+================================================================================
+PHASE 2.9: STATIC HELPERS COUPLING ANALYSIS REPORT
+Main file: /workspace/dll/steam_game_coordinator.cpp (4739 lines)
+Split TUs scanned: 15
+Purpose: Support refactoring — extracting file-scope `static` helpers
+         to a new TU (gbe_dota_gc_payload_helpers.cpp).
+================================================================================
+
+METHODOLOGY
+-----------
+- All file-scope `static` symbols in main file collected (functions + vars).
+- Member function (Steam_Game_Coordinator::) ranges identified as 'stays'.
+- For each static symbol, references classified by source:
+    * main static defs (other targets)
+    * main member funcs (stays)  -> externalize required to move
+    * other split TUs            -> cross-TU (verify externalization)
+- List X: only static refs (move as `static`).
+- List Y: member-func refs (externalize to move, OR leave in main).
+- List Z: cross-TU refs (verify already external).
+
+================================================================================
+ALL FILE-SCOPE `static` SYMBOLS IN MAIN FILE
+Count: 28 definitions (27 unique names)
+================================================================================
+ #  Def Line  Kind       Symbol Name
+--  --------  ---------  -------------------------------------------
+ 1        65  function   GBE_ComposeDotaPracticeLobbySOObjects
+ 2       193  variable   GBE_kDotaClientWelcomeTemplate
+ 3       252  variable   GBE_kOldDotaVersionVarint
+ 4       259  variable   GBE_kOldDotaPracticeLobbyLobbyIdVarint
+ 5       262  variable   GBE_kOldDotaPracticeLobbyGameStartTimeVarint
+ 6       263  variable   GBE_kOldDotaPracticeLobbyConnect
+ 7       271  variable   GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex
+ 8       297  variable   GBE_kDotaPracticeLobbyCacheSubscribedTemplate
+ 9       512  function   GBE_PatchDotaWelcomeAccountObjects
+10       593  function   GBE_LogGCProtoBoundary
+11       685  function   GBE_PatchDotaLobbyTemplateIdentifiers
+12       709  function   GBE_PatchDotaLobbyTemplateIdentifiersIfPresent
+13       729  function   GBE_ForceDotaLobbyCacheOwnerSOID
+14       750  function   GBE_ForceDotaLobbyUpdateOwnerSOID
+15       938  function   GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState
+16      1092  function   GBE_PatchDotaPracticeLobbyLaunchTemplate
+17      1404  function   GBE_AdaptDotaTopCustomGamesListPayload
+18      1481  function   GBE_IsDotaOtherLeftChannelPayloadForChannel
+19      1573  function   GBE_ComposeDotaPracticeLobbySOObjects
+20      1719  function   GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload
+21      1797  function   GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload
+22      1879  function   GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate
+23      2300  function   GBE_ExtractDotaHelloContext
+24      2396  function   GBE_ExtractDirectDotaHelloContext
+25      2435  function   GBE_ExtractDirectDotaServerHelloContext
+26      2512  function   GBE_PrepareDotaWelcomeBody
+27      2569  function   GBE_BuildDirectDotaClientWelcome
+28      2650  function   GBE_ComposeDotaClientWelcome
+
+================================================================================
+LIST X — STATIC-ONLY REFS (can move to new TU as `static`)
+Count: 12
+================================================================================
+Referenced ONLY from other static helpers. Can move verbatim as `static`.
+CAUTION: verify transitive — callers must also move (else callers lose access).
+
+ #  Def Line  Kind       Symbol Name                                  Static Ref Lines
+--  --------  ---------  -------------------------------------------  ----------------
+ 1        65  function   GBE_ComposeDotaPracticeLobbySOObjects        984, 1757, 1839
+ 2       729  function   GBE_ForceDotaLobbyCacheOwnerSOID             1958, 2008
+ 3       685  function   GBE_PatchDotaLobbyTemplateIdentifiers        1943
+ 4       709  function   GBE_PatchDotaLobbyTemplateIdentifiersIfPresent  1948
+ 5       938  function   GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState  1961
+ 6       512  function   GBE_PatchDotaWelcomeAccountObjects           2542
+ 7      2512  function   GBE_PrepareDotaWelcomeBody                   2572, 2653
+ 8       193  variable   GBE_kDotaClientWelcomeTemplate               2514, 2515, 2520, 2521
+ 9       263  variable   GBE_kOldDotaPracticeLobbyConnect             1127, 1218
+10       262  variable   GBE_kOldDotaPracticeLobbyGameStartTimeVarint  1124
+11       259  variable   GBE_kOldDotaPracticeLobbyLobbyIdVarint       1116
+12       252  variable   GBE_kOldDotaVersionVarint                    2529, 2534
+
+================================================================================
+LIST Y — MEMBER-FUNC REFS (must externalize to move, OR leave in main)
+Count: 15
+================================================================================
+Referenced from main-file member functions (which stay). To move these,
+`static` must be removed and `extern` declared in gbe_dota_gc_internal.h.
+Alternatively, leave in main file if the helper is small or tightly coupled.
+
+ #  Def Line  Kind       Symbol Name                                  Member Refs  Static Refs  CrossTU
+--  --------  ---------  -------------------------------------------  -----------  -----------  -------
+ 1      1719  function   GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload            0            1        0
+ 2      1797  function   GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload            0            1        0
+ 3      1404  function   GBE_AdaptDotaTopCustomGamesListPayload                 1            0        0
+ 4      2569  function   GBE_BuildDirectDotaClientWelcome                       1            0        0
+ 5      2650  function   GBE_ComposeDotaClientWelcome                           1            0        0
+ 6      2396  function   GBE_ExtractDirectDotaHelloContext                      1            0        0
+ 7      2435  function   GBE_ExtractDirectDotaServerHelloContext                1            0        0
+ 8      2300  function   GBE_ExtractDotaHelloContext                            1            0        0
+ 9       750  function   GBE_ForceDotaLobbyUpdateOwnerSOID                      0            2        0
+10      1481  function   GBE_IsDotaOtherLeftChannelPayloadForChannel            1            0        0
+11       593  function   GBE_LogGCProtoBoundary                                 2            0        0
+12      1092  function   GBE_PatchDotaPracticeLobbyLaunchTemplate               0            1        0
+13      1879  function   GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate            0            1        0
+14       297  variable   GBE_kDotaPracticeLobbyCacheSubscribedTemplate            0            2        0
+15       271  variable   GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex            0            1        0
+
+================================================================================
+LIST Z — CROSS-TU REFS (verify externalization)
+Count: 0
+================================================================================
+Referenced from other split TUs. Since these are `static` (internal linkage),
+cross-TU refs would be a COMPILE ERROR unless the symbol is also defined or
+externalized. Usually means the name collides or is already external.
+
+  (none)
+
+================================================================================
+UNUSED — DEFINED BUT NEVER REFERENCED (dead code)
+Count: 0
+================================================================================
+  (none)
+
+================================================================================
+REFRACTORING IMPLICATIONS & SIZE ESTIMATE
+================================================================================
+  List X symbols total: 582 lines (move as static, no extern needed)
+  List Y symbols total: 853 lines (move + extern declaration in header)
+  Potential main-file reduction if all X+Y moved: 1435 lines
+
+NOTE: List Y symbols need extern declarations in gbe_dota_gc_internal.h.
+      List X symbols can move as `static` only if their callers also move.
+      If a List X symbol's caller is List Y, the List X symbol effectively
+      becomes part of the Y cluster (move + extern, or leave).
+
+================================================================================
+END OF REPORT
+================================================================================

@@ -34,6 +34,36 @@ static void GBE_LogSteamUserState(const char *scope, const char *message)
     std::fclose(file);
 }
 
+static const char *GBE_FormatSteamUserDotaContext(char *buffer, size_t buffer_size)
+{
+    if (!buffer || buffer_size == 0)
+        return "";
+
+    GBE_DotaReconnectContext ctx{};
+    if (GBE_GetDotaReconnectContext(&ctx)) {
+        std::snprintf(
+            buffer,
+            buffer_size,
+            "has_ctx=1 server_id=%llu game_state=%u custom_game_id=%llu owner=%llu endpoint=%s eligible=%u",
+            (unsigned long long)ctx.server_id,
+            ctx.game_state,
+            (unsigned long long)ctx.custom_game_id,
+            (unsigned long long)ctx.owner_steam_id,
+            ctx.connect,
+            GBE_IsDotaReconnectEligible() ? 1u : 0u
+        );
+    } else {
+        std::snprintf(
+            buffer,
+            buffer_size,
+            "has_ctx=0 eligible=%u",
+            GBE_IsDotaReconnectEligible() ? 1u : 0u
+        );
+    }
+
+    return buffer;
+}
+
 Steam_User::Steam_User(Settings *settings, Local_Storage *local_storage, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, bool is_server)
 {
     this->settings = settings;
@@ -668,19 +698,38 @@ HAuthTicket Steam_User::GetAuthSessionTicket( void *pTicket, int cbMaxTicket, ui
 {
     PRINT_DEBUG("%p [%i] %p", pTicket, cbMaxTicket, pcbTicket);
 
+    char dota_context[256];
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "GetAuthSessionTicket called max=%d has_ticket_buffer=%u has_size_out=%u has_identity=%u %s",
+        cbMaxTicket,
+        pTicket ? 1u : 0u,
+        pcbTicket ? 1u : 0u,
+        pSteamNetworkingIdentity ? 1u : 0u,
+        GBE_FormatSteamUserDotaContext(dota_context, sizeof(dota_context))
+    );
+
     // Clear reconnect eligibility -- a new auth session means a fresh connection is being established.
     // Reset reconnect interception flag: new connection established,
     // ready for next disconnect+reconnect cycle
-    if (!GBE_dota_reconnect_eligible.load()) {
-        GBE_dota_reconnect_eligible.store(true);
+    if (!GBE_IsDotaReconnectEligible()) {
+        GBE_SetDotaReconnectEligible(true);
         GBE_ReconnectLog("GBE_RECONNECT", "GetAuthSessionTicket: reset reconnect_eligible=true (new connection)");
     }
 
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     if (!pTicket) return k_HAuthTicketInvalid;
-    
-    return auth_manager->getTicket(pTicket, cbMaxTicket, pcbTicket);
+
+    HAuthTicket ticket = auth_manager->getTicket(pTicket, cbMaxTicket, pcbTicket);
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "GetAuthSessionTicket returned ticket=%u size=%u %s",
+        ticket,
+        pcbTicket ? *pcbTicket : 0u,
+        GBE_FormatSteamUserDotaContext(dota_context, sizeof(dota_context))
+    );
+    return ticket;
 }
 
 // Request a ticket which will be used for webapi "ISteamUserAuth\AuthenticateUserTicket"
@@ -699,9 +748,26 @@ HAuthTicket Steam_User::GetAuthTicketForWebApi( const char *pchIdentity )
 EBeginAuthSessionResult Steam_User::BeginAuthSession( const void *pAuthTicket, int cbAuthTicket, CSteamID steamID )
 {
     PRINT_DEBUG("%i %llu", cbAuthTicket, steamID.ConvertToUint64());
+    char dota_context[256];
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "BeginAuthSession called ticket_size=%d target=%llu has_ticket=%u %s",
+        cbAuthTicket,
+        (unsigned long long)steamID.ConvertToUint64(),
+        pAuthTicket ? 1u : 0u,
+        GBE_FormatSteamUserDotaContext(dota_context, sizeof(dota_context))
+    );
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    return auth_manager->beginAuth(pAuthTicket, cbAuthTicket, steamID);
+    EBeginAuthSessionResult result = auth_manager->beginAuth(pAuthTicket, cbAuthTicket, steamID);
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "BeginAuthSession returned result=%d target=%llu %s",
+        static_cast<int>(result),
+        (unsigned long long)steamID.ConvertToUint64(),
+        GBE_FormatSteamUserDotaContext(dota_context, sizeof(dota_context))
+    );
+    return result;
 }
 
 // Stop tracking started by BeginAuthSession - called when no longer playing game with this entity
@@ -717,6 +783,13 @@ void Steam_User::EndAuthSession( CSteamID steamID )
 void Steam_User::CancelAuthTicket( HAuthTicket hAuthTicket )
 {
     PRINT_DEBUG_ENTRY();
+    char dota_context[256];
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "CancelAuthTicket called ticket=%u %s",
+        hAuthTicket,
+        GBE_FormatSteamUserDotaContext(dota_context, sizeof(dota_context))
+    );
 
     // Mark as eligible for Dota LAN reconnect interception.
     // When the player disconnects from a game server, Dota calls CancelAuthTicket.
@@ -724,8 +797,8 @@ void Steam_User::CancelAuthTicket( HAuthTicket hAuthTicket )
     // GameServerChangeRequested_t with the LAN IP instead.
     {
         GBE_DotaReconnectContext ctx{};
-        if (GBE_GetDotaReconnectContext(&ctx) && ctx.game_state >= 2) {
-            GBE_dota_reconnect_eligible.store(true);
+        if (GBE_GetDotaReconnectContext(&ctx) && GBE_DotaReconnectContextIsStarted(ctx)) {
+            GBE_SetDotaReconnectEligible(true);
             GBE_ReconnectLog("GBE_RECONNECT", "CancelAuthTicket: set reconnect_eligible=true server_id=%llu connect=%s",
                 (unsigned long long)ctx.server_id, ctx.connect);
         }
@@ -758,6 +831,18 @@ bool Steam_User::BIsBehindNAT()
 void Steam_User::AdvertiseGame( CSteamID steamIDGameServer, uint32 unIPServer, uint16 usPortServer )
 {
     PRINT_DEBUG_ENTRY();
+    char dota_context[256];
+    GBE_ReconnectLog(
+        "GBE_RECONNECT_DIAG",
+        "AdvertiseGame server_id=%llu ip=%u.%u.%u.%u port=%u %s",
+        (unsigned long long)steamIDGameServer.ConvertToUint64(),
+        unIPServer & 0xFFu,
+        (unIPServer >> 8) & 0xFFu,
+        (unIPServer >> 16) & 0xFFu,
+        (unIPServer >> 24) & 0xFFu,
+        static_cast<unsigned int>(usPortServer),
+        GBE_FormatSteamUserDotaContext(dota_context, sizeof(dota_context))
+    );
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     Gameserver *server = new Gameserver();
     server->set_id(steamIDGameServer.ConvertToUint64());

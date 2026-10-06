@@ -1,0 +1,160 @@
+================================================================================
+PHASE 2.7: INVENTORY/ITEM FUNCTIONS COUPLING ANALYSIS REPORT
+File: /workspace/dll/steam_game_coordinator.cpp (6511 lines)
+Purpose: Support refactoring — extracting 20 inventory/item member
+         functions to a new TU (gbe_dota_inventory_coordinator.cpp)
+================================================================================
+
+METHODOLOGY
+-----------
+- 20 target member function names were located by matching
+  `^.*Steam_Game_Coordinator::FUNC_NAME(` at column 0.
+- Function end was determined by brace-depth tracking.
+- All file-scope `static` symbols were collected & deduplicated by name.
+- Each static symbol's references were classified 'inside target' or 'elsewhere'.
+
+TARGET FUNCTIONS (incl. overloads)
+----------------------------------
+  item_id_local_to_network                       lines  3928- 3947  (20 lines)
+  item_id_network_to_local                       lines  3949- 3960  (12 lines)
+  item_to_gcstruct                               lines  3962- 4001  (40 lines)
+  item_to_gcprotobuf                             lines  4003- 4060  (58 lines)
+  handle_set_item_pos                            lines  4062- 4076  (15 lines)
+  handle_delete_item                             lines  4078- 4091  (14 lines)
+  handle_set_item_style                          lines  4127- 4163  (37 lines)
+  handle_adjust_equip_state                      lines  4165- 4216  (52 lines)
+  handle_set_multiple_item_pos                   lines  4218- 4237  (20 lines)
+  callback_items_received                        lines  4377- 4494  (118 lines)
+  callback_items_removed                         lines  4496- 4536  (41 lines)
+  callback_item_updated                          lines  4538- 4577  (40 lines)
+  callback_item_deleted                          lines  4579- 4611  (33 lines)
+  load_items_from_file                           lines  4802- 4908  (107 lines)
+  save_items_to_file                             lines  4910- 4988  (79 lines)
+  set_item_pos                                   lines  4990- 5020  (31 lines)
+  delete_item                                    lines  5022- 5049  (28 lines)
+  request_user_items                             lines  5051- 5073  (23 lines)
+  find_items_request                             lines  5075- 5088  (14 lines)
+  remove_user_items                              lines  5090- 5104  (15 lines)
+  TOTAL                                          797 lines across 20 definitions
+
+================================================================================
+LIST X — TARGET-ONLY STATICS (can move to new TU as `static`)
+Count: 1
+================================================================================
+These static symbols are referenced ONLY from within the target
+functions. They can be moved verbatim to the new TU and remain
+file-scope `static` there. (Verify no transitive List Z dependency!)
+
+ #  Def Line  Kind       Symbol Name                                  Target Ref Lines
+--  --------  ---------  -------------------------------------------  ----------------
+ 1       818  function   ser_varstring                                3976, 3983
+
+================================================================================
+LIST Y — SHARED STATICS (must be externalized before move)
+Count: 1
+================================================================================
+These static symbols are referenced from BOTH the target functions AND
+other code in the main file. They MUST have `static` removed and be
+declared `extern` in gbe_dota_gc_internal.h before the move.
+Definitions stay in steam_game_coordinator.cpp.
+NOTE: If a List Y function definition has a default argument, the
+`= value` must be stripped from the DEFINITION (header keeps it),
+else MSVC error C2572 (redefinition of default argument).
+
+ #  Def Line  Kind       Symbol Name                                  Target Refs  Other Refs
+--  --------  ---------  -------------------------------------------  -----------  ----------
+ 1       830  function   deser_var                                              5           2
+                                              target refs: 4069, 4070, 4085, 4134, 4135
+                                              other  refs: 4100, 4101
+
+================================================================================
+LIST Z — NON-TARGET STATICS (stay in main file unchanged)
+Count: 25
+================================================================================
+ #  Def Line  Kind       Symbol Name
+--  --------  ---------  -------------------------------------------
+ 1       252  variable   GBE_kOldDotaVersionVarint
+ 2       259  variable   GBE_kOldDotaPracticeLobbyLobbyIdVarint
+ 3       262  variable   GBE_kOldDotaPracticeLobbyGameStartTimeVarint
+ 4       263  variable   GBE_kOldDotaPracticeLobbyConnect
+ 5       271  variable   GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex
+ 6      1017  function   GBE_PatchDotaWelcomeAccountObjects
+ 7      1098  function   GBE_LogGCProtoBoundary
+ 8      1190  function   GBE_PatchDotaLobbyTemplateIdentifiers
+ 9      1214  function   GBE_PatchDotaLobbyTemplateIdentifiersIfPresent
+10      1234  function   GBE_ForceDotaLobbyCacheOwnerSOID
+11      1255  function   GBE_ForceDotaLobbyUpdateOwnerSOID
+12      1443  function   GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState
+13      1597  function   GBE_PatchDotaPracticeLobbyLaunchTemplate
+14      1909  function   GBE_AdaptDotaTopCustomGamesListPayload
+15      1986  function   GBE_IsDotaOtherLeftChannelPayloadForChannel
+16      2078  function   GBE_ComposeDotaPracticeLobbySOObjects
+17      2224  function   GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload
+18      2302  function   GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload
+19      2384  function   GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate
+20      2805  function   GBE_ExtractDotaHelloContext
+21      2901  function   GBE_ExtractDirectDotaHelloContext
+22      2940  function   GBE_ExtractDirectDotaServerHelloContext
+23      3017  function   GBE_PrepareDotaWelcomeBody
+24      3074  function   GBE_BuildDirectDotaClientWelcome
+25      3155  function   GBE_ComposeDotaClientWelcome
+
+================================================================================
+UNUSED — DEFINED BUT NEVER REFERENCED (dead code)
+Count: 0
+================================================================================
+  (none)
+
+================================================================================
+ALREADY-EXTERNALIZED SYMBOLS REFERENCED FROM TARGET FUNCTIONS
+Count: 3
+================================================================================
+ #  Symbol Name                                  Ref Lines (in target bodies)
+--  -------------------------------------------  --------------------------
+ 1  GBE_DescribeDotaLaunchPhase                  4514
+ 2  GBE_PushDotaPlayerEquippedItemsCacheToGC     4392
+ 3  GBE_GC_DebugLog                              4398, 4409, 4441, 4507
+
+================================================================================
+STEAM_GAME_COORDINATOR:: MEMBER CALLS FROM TARGET FUNCTIONS
+================================================================================
+ #  Member Function                              Call Sites
+--  -------------------------------------------  ----------
+ 1  build_msg_header                             4458, 4522, 4545, 4586
+ 2  build_protomsg_header                        4480, 4528, 4567, 4598
+ 3  callback_item_deleted                        4089
+ 4  callback_item_updated                        4074, 4160, 4212, 4232
+ 5  callback_items_removed                       5103
+ 6  delete_item                                  4088
+ 7  item_id_local_to_network                     4892, 4893
+ 8  item_id_network_to_local                     4915, 4927
+ 9  item_to_gcprotobuf                           4488, 4572
+10  item_to_gcstruct                             4474
+11  parse_msg_header                             4068, 4084, 4133
+12  push_incoming                                4477, 4492, 4525, 4534, 4564, 4575, 4595, 4609
+13  save_items_to_file                           4143, 4215, 4236, 4998, 5029
+14  set_item_pos                                 4073, 4231
+
+================================================================================
+SYMBOL COUNT RECONCILIATION
+================================================================================
+  Total unique file-scope `static` symbols:  27
+  List X (target-only, move as static):      1
+  List Y (shared, must externalize):         1
+  List Z (non-target, stays):                25
+  Unused (dead code):                        0
+  Already-external referenced from target:   3
+
+================================================================================
+REFACTORING IMPLICATIONS
+================================================================================
+1. PHASE 2.7-step2 REQUIRED: Externalize 1 List Y static symbols.
+
+2. PHASE 2.7-step3: Move 1 List X static symbols + 20 target
+   definitions to gbe_dota_inventory_coordinator.cpp.
+
+3. PREMAKE: No change needed — `dll/**` glob auto-collects sources.
+
+================================================================================
+END OF REPORT
+================================================================================

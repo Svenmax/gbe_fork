@@ -1,0 +1,83 @@
+gc_replay_test summary v1
+cases=9
+case 1
+label=edge_empty_body
+emsg=2147490657
+masked_emsg=7009
+proto=1
+size=8
+fnv1a64=0xe3b1613bff2e432d
+body_size=8
+fields=none
+case 2
+label=edge_large_varint
+emsg=2147490657
+masked_emsg=7009
+proto=1
+size=14
+fnv1a64=0x8082d906f09d2eac
+body_size=14
+fields=12:1:8=0x080000000000001b
+case 3
+label=edge_max_varint
+emsg=2147490657
+masked_emsg=7009
+proto=1
+size=18
+fnv1a64=0x09deadfed2109658
+body_size=18
+fields=12:1:8=0x080000000000001b
+case 4
+label=edge_nested_3levels
+emsg=2147483672
+masked_emsg=24
+proto=1
+size=14
+fnv1a64=0x00c73ca7bcbdb089
+body_size=14
+fields=3:0:1=0
+case 5
+label=edge_all_wire_types
+emsg=2147490703
+masked_emsg=7055
+proto=1
+size=30
+fnv1a64=0xf9c6fafe36a46a2b
+body_size=30
+fields=none
+case 6
+label=edge_long_string
+emsg=2147490657
+masked_emsg=7009
+proto=1
+size=211
+fnv1a64=0x13588993b3e6d2da
+body_size=211
+fields=12:1:8=0x0a0000000000001b,25:0:1=65,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141,8:1:8=0x4141414141414141
+case 7
+label=edge_repeated_fields
+emsg=2147490703
+masked_emsg=7055
+proto=1
+size=14
+fnv1a64=0x28a12c8ec3d585e7
+body_size=14
+fields=none
+case 8
+label=edge_nonproto_raw
+emsg=7273
+masked_emsg=7273
+proto=0
+size=7
+fnv1a64=0x92cab274ad44564a
+body_size=7
+fields=1:0:1=42,2:2:3=0x726177
+case 9
+label=edge_empty_bytes
+emsg=2147490657
+masked_emsg=7009
+proto=1
+size=10
+fnv1a64=0xbb4f4e3e6a42563f
+body_size=10
+fields=12:1:8=0x0a0000000000001b

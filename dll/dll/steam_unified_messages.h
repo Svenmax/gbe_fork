@@ -28,6 +28,8 @@ public ISteamUnifiedMessages
     class SteamCallResults *callback_results{};
     class SteamCallBacks *callbacks{};
     class RunEveryRunCB *run_every_runcb{};
+    ClientUnifiedMessageHandle next_handle = 1;
+    std::map<ClientUnifiedMessageHandle, std::string> responses{};
 
     static void network_callback(void *object, Common_Message *msg);
     static void steam_runcb(void *object);

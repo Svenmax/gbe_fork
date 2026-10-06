@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "decision_date": "2026-07-11",
+  "recheck_triggers": [
+    "major_concurrency_expansion",
+    "major_lifecycle_state_machine_expansion"
+  ],
+  "concurrency": {
+    "tsan_race_reports": 0,
+    "lock_order_depth": 2,
+    "out_of_order_mutation_defects_in_phase": 0,
+    "unowned_cross_thread_business_writers": 0,
+    "actor_gate": "closed"
+  },
+  "state_machine": {
+    "state_count": 8,
+    "event_count": 13,
+    "state_event_pairs": 104,
+    "length_five_sequences_checked": 100000,
+    "differential_steps_checked": 4096,
+    "escaped_ordering_defects_in_phase": 0,
+    "active_transition_maintainers_in_release": 1,
+    "critical_irreversible_failure_scope": false,
+    "formal_model_gate": "closed"
+  },
+  "model_consistency": {
+    "maintained_formal_model": false,
+    "named_owner_and_reviewer": false,
+    "versioned_vector_schema": false,
+    "pinned_checker": false,
+    "model_ci_gate": "closed"
+  },
+  "ci_seconds": {
+    "local_fast_offline": 135.14,
+    "local_clang_tsan": 59.48,
+    "model_checker_limit": 600
+  }
+}

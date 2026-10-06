@@ -1,0 +1,166 @@
+================================================================================
+PHASE 2.6: LOBBY LAUNCH/TEARDOWN FLOW COUPLING ANALYSIS REPORT
+File: /workspace/dll/steam_game_coordinator.cpp (7159 lines)
+Purpose: Support refactoring — extracting 13 member functions to a new TU
+         (gbe_dota_lobby_launch_coordinator.cpp)
+================================================================================
+
+METHODOLOGY
+-----------
+- 13 target member function names were located by matching
+  `^.*Steam_Game_Coordinator::FUNC_NAME(` at column 0.
+- Overloads are ALL included (find_all_member_function_starts).
+- Function end was determined by brace-depth tracking (strings/comments
+  stripped per-line).
+- All file-scope `static` symbols (column-0 `static` keyword) were
+  collected, deduplicated by name (forward decl + definition merged).
+- Each static symbol's references were found with word-boundary regex
+  across the entire main file, excluding the definition's own span.
+- References were classified as 'inside target' or 'elsewhere'.
+
+TARGET FUNCTIONS (incl. overloads)
+----------------------------------
+  GBE_TryQueueDotaPrelaunch021                                  lines  5430- 5458  (29 lines)
+  GBE_SetDotaLobbyMemberConnected                               lines  5460- 5489  (30 lines)
+  GBE_SetDotaLobbyMemberRuntimeState                            lines  5491- 5506  (16 lines)
+  GBE_ShouldHoldDotaLanLaunchForRemoteMembers                   lines  5508- 5533  (26 lines)
+  GBE_TryQueueDotaRuntimeLobbyDetailsUpdate                     lines  5535- 5614  (80 lines)
+  GBE_HasDotaLaunchServerSetupSync                              lines  5616- 5619  (4 lines)
+  GBE_MarkDotaLaunchPhase                                       lines  5621- 5639  (19 lines)
+  GBE_TryAdvanceDotaLaunchToRun                                 lines  5641- 5659  (19 lines)
+  GBE_PushDotaLaunchStateToClientPeer                           lines  5776- 5915  (140 lines)
+  GBE_QueueDotaPostGameTeardown                                 lines  5932- 6036  (105 lines)
+  GBE_SendDotaPracticeLobbyDetailsUpdate                        lines  6038- 6098  (61 lines)
+  GBE_PushDotaResponse                                          lines  6100- 6141  (42 lines)
+  GBE_SendDotaCustomGameLaunchSetupFlow                         lines  6143- 6190  (48 lines)
+  TOTAL                                                         619 lines across 13 definitions
+  (13 unique names, 0 with overloads)
+
+================================================================================
+LIST X — TARGET-ONLY STATICS (can move to new TU as `static`)
+Count: 2
+================================================================================
+These static symbols are referenced ONLY from within the target
+functions. They can be moved verbatim to the new TU and remain
+file-scope `static` there.
+
+ #  Def Line  Kind       Symbol Name                                  Target Ref Lines
+--  --------  ---------  -------------------------------------------  ----------------
+ 1       267  variable   GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex  6016
+ 2      1599  function   GBE_GenerateDotaPostGameChatChannelId        5959
+
+================================================================================
+LIST Y — SHARED STATICS (must be externalized before move)
+Count: 0
+================================================================================
+These static symbols are referenced from BOTH the target functions AND
+other code in the main file. They MUST have `static` removed and be
+declared `extern` in gbe_dota_gc_internal.h before the move.
+Definitions stay in steam_game_coordinator.cpp.
+
+  (none)
+
+================================================================================
+LIST Z — NON-TARGET STATICS (stay in main file unchanged)
+Count: 27
+================================================================================
+These static symbols are NOT referenced from any target function.
+They stay in steam_game_coordinator.cpp with internal linkage unchanged.
+
+ #  Def Line  Kind       Symbol Name
+--  --------  ---------  -------------------------------------------
+ 1       252  variable   GBE_kOldDotaVersionVarint
+ 2       259  variable   GBE_kOldDotaPracticeLobbyLobbyIdVarint
+ 3       262  variable   GBE_kOldDotaPracticeLobbyGameStartTimeVarint
+ 4       263  variable   GBE_kOldDotaPracticeLobbyConnect
+ 5       273  variable   GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex
+ 6       820  function   ser_varstring
+ 7       832  function   deser_var
+ 8      1019  function   GBE_PatchDotaWelcomeAccountObjects
+ 9      1100  function   GBE_LogGCProtoBoundary
+10      1192  function   GBE_PatchDotaLobbyTemplateIdentifiers
+11      1216  function   GBE_PatchDotaLobbyTemplateIdentifiersIfPresent
+12      1236  function   GBE_ForceDotaLobbyCacheOwnerSOID
+13      1257  function   GBE_ForceDotaLobbyUpdateOwnerSOID
+14      1445  function   GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState
+15      1611  function   GBE_PatchDotaPracticeLobbyLaunchTemplate
+16      1923  function   GBE_AdaptDotaTopCustomGamesListPayload
+17      2000  function   GBE_IsDotaOtherLeftChannelPayloadForChannel
+18      2092  function   GBE_ComposeDotaPracticeLobbySOObjects
+19      2238  function   GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload
+20      2316  function   GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload
+21      2398  function   GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate
+22      2819  function   GBE_ExtractDotaHelloContext
+23      2915  function   GBE_ExtractDirectDotaHelloContext
+24      2954  function   GBE_ExtractDirectDotaServerHelloContext
+25      3031  function   GBE_PrepareDotaWelcomeBody
+26      3088  function   GBE_BuildDirectDotaClientWelcome
+27      3169  function   GBE_ComposeDotaClientWelcome
+
+================================================================================
+UNUSED — DEFINED BUT NEVER REFERENCED (dead code)
+Count: 0
+================================================================================
+  (none)
+
+================================================================================
+ALREADY-EXTERNALIZED SYMBOLS REFERENCED FROM TARGET FUNCTIONS
+Count: 5
+================================================================================
+These symbols were promoted to external linkage in Phase 2.2 / 2.3a / 2.4a / 2.5.
+Their presence here confirms the prep work covers the target functions'
+needs. No further action required for these.
+
+ #  Symbol Name                                  Ref Lines (in target bodies)
+--  -------------------------------------------  --------------------------
+ 1  GBE_LogDotaResponsePacket                    6129
+ 2  GBE_shared_dota_lobby_state                  5802, 5808
+ 3  GBE_PrepareDotaPersonaStatePeripheralMessage  6016
+ 4  GBE_DescribeDotaLaunchPhase                  5636, 5637, 6078
+ 5  GBE_GC_DebugLog                              5446, 5538, 5582, 5629, 5779, 5803, 5815, 5825, 5839, 5863, +16 more
+
+================================================================================
+STEAM_GAME_COORDINATOR:: MEMBER CALLS FROM TARGET FUNCTIONS
+================================================================================
+These are calls to other member functions of the same class. They are
+already shared via the class declaration in dll/steam_game_coordinator.h
+and require NO externalization. Listed for completeness.
+
+ #  Member Function                              Call Sites
+--  -------------------------------------------  ----------
+ 1  GBE_GetDotaLobbyOwnerName                    5562, 5862, 5877, 6089
+ 2  GBE_MarkDotaLaunchPhase                      5651, 6174
+ 3  GBE_PushDotaLaunchStateToClientPeer          5609
+ 4  GBE_PushDotaResponse                         5991, 6094, 6159, 6171
+ 5  GBE_SetDotaLobbyMemberConnected              5496
+ 6  GBE_ShouldSuppressDotaAbandonedLobby         5537, 5778, 5802, 6044
+ 7  GBE_TryQueueDotaRuntimeLobbyDetailsUpdate    5653
+ 8  push_incoming                                5566
+ 9  push_incoming_now                            5440, 5574, 5892, 5893, 6128
+
+================================================================================
+SYMBOL COUNT RECONCILIATION
+================================================================================
+  Total unique file-scope `static` symbols:  29
+  List X (target-only, move as static):      2
+  List Y (shared, must externalize):         0
+  List Z (non-target, stays):                27
+  Unused (dead code):                        0
+  Already-external referenced from target:   5
+
+================================================================================
+REFACTORING IMPLICATIONS
+================================================================================
+1. PHASE 2.6-step2 SKIPPABLE: No List Y symbols — earlier phases'
+   externalization work already covers all cross-TU sharing needs.
+
+2. PHASE 2.6-step3: Move 2 List X static symbols + 13 target
+   definitions to gbe_dota_lobby_launch_coordinator.cpp. List X symbols
+   keep their `static` keyword (internal to the new TU).
+
+3. PREMAKE: No change needed — premake5.lua's common_files uses
+   `"dll/**"` glob to auto-collect all sources under dll/.
+
+================================================================================
+END OF REPORT
+================================================================================

@@ -1,0 +1,177 @@
+================================================================================
+PHASE 2.4b: LOBBY-FLOW HELPER COUPLING ANALYSIS REPORT
+File: /workspace/dll/steam_game_coordinator.cpp (8399 lines)
+Purpose: Support refactoring — extracting 10 lobby-flow helper
+         member functions to a new TU (gbe_dota_lobby_flow_coordinator.cpp)
+================================================================================
+
+METHODOLOGY
+-----------
+- 10 target Steam_Game_Coordinator:: member functions were located by
+  matching `^.*Steam_Game_Coordinator::FUNC_NAME(` at column 0.
+- Function end was determined by brace-depth tracking (strings/comments
+  stripped per-line).
+- All file-scope `static` symbols (column-0 `static` keyword) were
+  collected, deduplicated by name (forward decl + definition merged).
+- Each static symbol's references were found with word-boundary regex
+  across the entire main file, excluding the definition's own span.
+- References were classified as 'inside target' or 'elsewhere' based on
+  whether the line index falls within any target function's span.
+
+TARGET FUNCTIONS
+----------------
+  GBE_ResetDotaPracticeLobbyLaunchPeripheralState               lines  7018- 7021  (4 lines)
+  GBE_ShouldTrackDotaPracticeLobbyLateSteamChain                lines  7023- 7028  (6 lines)
+  GBE_MaybeQueueDotaPracticeLobbySteamAuthAck                   lines  7030- 7106  (77 lines)
+  GBE_UpdateDotaPracticeLobbyLaunchRichPresence                 lines  7108- 7192  (85 lines)
+  GBE_ClearDotaPracticeLobbyLaunchRichPresence                  lines  7194- 7215  (22 lines)
+  GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback          lines  7217- 7346  (130 lines)
+  GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState             lines  7348- 7420  (73 lines)
+  GBE_ReapplyDotaPracticeLobbyLaunchRichPresence                lines  7422- 7532  (111 lines)
+  GBE_FinalizeDotaAbandonAfterOtherLeftChannel                  lines  7534- 7549  (16 lines)
+  GBE_FinalizeDotaNormalSignoutAfterCacheUnsubscribed           lines  7551- 7632  (82 lines)
+  TOTAL                                                         606 lines across 10 functions
+
+================================================================================
+LIST X — TARGET-ONLY STATICS (can move to new TU as `static`)
+Count: 4
+================================================================================
+These static symbols are referenced ONLY from within the 10 target
+functions. They can be moved verbatim to gbe_dota_lobby_flow_coordinator.cpp
+and remain file-scope `static` there.
+
+ #  Def Line  Kind       Symbol Name                                  Target Ref Lines
+--  --------  ---------  -------------------------------------------  ----------------
+ 1       271  variable   GBE_kDotaLaunchPersonaStateInitServerSetupHex  7358
+ 2       273  variable   GBE_kDotaLaunchPersonaStateFindingMatchServerSetupHex  7360
+ 3       275  variable   GBE_kDotaLaunchPersonaStateFindingMatchRunHex  7362
+ 4       277  variable   GBE_kDotaLaunchPersonaStatePrivateLobbyRunHex  7364
+
+================================================================================
+LIST Y — SHARED STATICS (must be externalized before move)
+Count: 0
+================================================================================
+These static symbols are referenced from BOTH the target functions AND
+other code in the main file. They MUST have `static` removed and be
+declared `extern` in gbe_dota_gc_internal.h before the move.
+Definitions stay in steam_game_coordinator.cpp.
+
+ #  Def Line  Kind       Symbol Name                                  Target Refs  Other Refs
+--  --------  ---------  -------------------------------------------  -----------  ----------
+
+================================================================================
+LIST Z — NON-TARGET STATICS (stay in main file unchanged)
+Count: 35
+================================================================================
+These static symbols are NOT referenced from any target function.
+They stay in steam_game_coordinator.cpp with internal linkage unchanged.
+
+ #  Def Line  Kind       Symbol Name
+--  --------  ---------  -------------------------------------------
+ 1       252  variable   GBE_kOldDotaVersionVarint
+ 2       259  variable   GBE_kOldDotaPracticeLobbyLobbyIdVarint
+ 3       262  variable   GBE_kOldDotaPracticeLobbyGameStartTimeVarint
+ 4       263  variable   GBE_kOldDotaPracticeLobbyConnect
+ 5       267  variable   GBE_kDotaAbandonPersonaStatePrivateLobbyNoLobbyHex
+ 6       279  variable   GBE_kDotaOfficial032PracticeLobby26Hex
+ 7       281  variable   GBE_kDotaPracticeLobbyLaunchCacheSubscribedOfficialHex
+ 8       828  function   ser_varstring
+ 9       840  function   deser_var
+10      1027  function   GBE_PatchDotaWelcomeAccountObjects
+11      1108  function   GBE_LogGCProtoBoundary
+12      1200  function   GBE_PatchDotaLobbyTemplateIdentifiers
+13      1224  function   GBE_PatchDotaLobbyTemplateIdentifiersIfPresent
+14      1244  function   GBE_ForceDotaLobbyCacheOwnerSOID
+15      1265  function   GBE_ForceDotaLobbyUpdateOwnerSOID
+16      1453  function   GBE_PatchDotaPracticeLobbyCacheSubscribedTemplateState
+17      1607  function   GBE_GenerateDotaPostGameChatChannelId
+18      1619  function   GBE_PatchDotaPracticeLobbyLaunchTemplate
+19      1760  function   GBE_ReplayDotaPracticeLobbyOfficial26Payload
+20      1931  function   GBE_AdaptDotaTopCustomGamesListPayload
+21      2008  function   GBE_IsDotaOtherLeftChannelPayloadForChannel
+22      2100  function   GBE_ComposeDotaPracticeLobbySOObjects
+23      2246  function   GBE_AdaptDotaPracticeLobbyCacheSubscribedPayload
+24      2324  function   GBE_AdaptDotaPracticeLobbyDetailsUpdatePurePayload
+25      2406  function   GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedFromWrappedTemplate
+26      2543  function   GBE_ReplayDotaPracticeLobbyLaunchCacheSubscribedTemplate
+27      2616  function   GBE_AdaptDotaPracticeLobbyDetailsUpdatePayload
+28      2827  function   GBE_ExtractDotaHelloContext
+29      2923  function   GBE_ExtractDirectDotaHelloContext
+30      2962  function   GBE_ExtractDirectDotaServerHelloContext
+31      3039  function   GBE_PrepareDotaWelcomeBody
+32      3096  function   GBE_BuildDirectDotaClientWelcome
+33      3177  function   GBE_ComposeDotaClientWelcome
+34      5266  function   GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedTemplateReplayImpl
+35      5410  function   GBE_BuildCurrentDotaPracticeLobbyCacheSubscribedPayloadImpl
+
+================================================================================
+UNUSED — DEFINED BUT NEVER REFERENCED (dead code)
+Count: 0
+================================================================================
+  (none)
+
+================================================================================
+ALREADY-EXTERNALIZED SYMBOLS REFERENCED FROM TARGET FUNCTIONS
+Count: 5
+================================================================================
+These symbols were promoted to external linkage in Phase 2.2 / 2.3a / 2.4a.
+Their presence here confirms the prep work covers the target functions'
+needs. No further action required for these.
+
+ #  Symbol Name                                  Ref Lines (in target bodies)
+--  -------------------------------------------  --------------------------
+ 1  GBE_GC_DebugLog                              7087, 7180, 7239, 7262, 7277, 7301, 7316, 7333, 7383, 7396, +11 more
+ 2  GBE_kSteamTicketAuthComplete                 7070, 7084
+ 3  GBE_PrepareDotaPersonaStatePeripheralMessage  7395, 7616
+ 4  GBE_kDotaAbandonPersonaStateInitHex          7616
+ 5  GBE_shared_dota_lobby_state                  7560, 7590
+
+================================================================================
+STEAM_GAME_COORDINATOR:: MEMBER CALLS FROM TARGET FUNCTIONS
+================================================================================
+These are calls to other member functions of the same class. They are
+already shared via the class declaration in dll/dll/steam_game_coordinator.h
+and require NO externalization. Listed for completeness.
+
+ #  Member Function                              Call Sites
+--  -------------------------------------------  ----------
+ 1  GBE_ClearDotaPracticeLobbyLaunchRichPresence  7593
+ 2  GBE_MaybeQueueDotaPracticeLobbyDirectConnectCallback  7477, 7531
+ 3  GBE_MaybeQueueDotaPracticeLobbyLaunchPersonaState  7530
+ 4  GBE_ResetDotaPracticeLobbyLaunchPeripheralState  7582, 7587
+ 5  GBE_ShouldSuppressDotaAbandonedLobby         7427
+ 6  GBE_UpdateDotaPracticeLobbyLaunchRichPresence  7529
+ 7  ResetGCMemory                                7548
+ 8  build_protomsg_header                        7070, 7078
+ 9  push_incoming_now                            7084, 7085, 7598
+
+================================================================================
+SYMBOL COUNT RECONCILIATION
+================================================================================
+  Total unique file-scope `static` symbols:  39
+  List X (target-only, move as static):      4
+  List Y (shared, must externalize):         0
+  List Z (non-target, stays):                35
+  Unused (dead code):                        0
+  Already-external referenced from target:   5
+
+================================================================================
+REFACTORING IMPLICATIONS
+================================================================================
+1. PHASE 2.4b-step2 SKIPPABLE: No List Y symbols — Phase 2.4a's prep
+   work (externalizing GBE_BuildDirectDotaServerWelcome and
+   GBE_last_dota_server_hello_context) plus earlier phases already
+   covers all cross-TU sharing needs.
+
+2. PHASE 2.4b-step3: Move 4 List X static symbols + 10 target
+   functions to gbe_dota_lobby_flow_coordinator.cpp. List X symbols
+   keep their `static` keyword (internal to the new TU).
+
+
+4. PREMAKE: After creating the new TU, update premake5.lua to include
+   dll/gbe_dota_lobby_flow_coordinator.cpp in the api_regular and
+   api_experimental project file lists (next to gbe_dota_handlers.cpp).
+
+================================================================================
+END OF REPORT
+================================================================================

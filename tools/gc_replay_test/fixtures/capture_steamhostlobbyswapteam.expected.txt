@@ -1,0 +1,65 @@
+gc_replay_test summary v1
+cases=7
+case 1
+label=001_out_k_EMsgClientToGC
+emsg=5452
+masked_emsg=5452
+proto=0
+size=53
+fnv1a64=0x53e80d637072e5b7
+body_size=53
+fields=none
+case 2
+label=002_in_k_EMsgClientFromGC
+emsg=5453
+masked_emsg=5453
+proto=0
+size=378
+fnv1a64=0x34d0eec1daf5f0cc
+body_size=378
+fields=9:5:4=0x14800015
+case 3
+label=003_out_k_EMsgClientToGC
+emsg=5452
+masked_emsg=5452
+proto=0
+size=53
+fnv1a64=0x53e80d637072e5b7
+body_size=53
+fields=none
+case 4
+label=004_in_k_EMsgClientFromGC
+emsg=5453
+masked_emsg=5453
+proto=0
+size=378
+fnv1a64=0x4e7b75081d6d8812
+body_size=378
+fields=9:5:4=0x14800015
+case 5
+label=005_out_k_EMsgClientToGC
+emsg=5452
+masked_emsg=5452
+proto=0
+size=53
+fnv1a64=0xb7d35f1b9483ee0e
+body_size=53
+fields=none
+case 6
+label=006_out_k_EMsgClientToGC
+emsg=5452
+masked_emsg=5452
+proto=0
+size=53
+fnv1a64=0x5bb8a0e9b101854c
+body_size=53
+fields=none
+case 7
+label=007_in_k_EMsgClientFromGC
+emsg=5453
+masked_emsg=5453
+proto=0
+size=376
+fnv1a64=0x86303bf2fa545a5f
+body_size=376
+fields=9:5:4=0x14800015

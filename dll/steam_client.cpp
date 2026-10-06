@@ -18,11 +18,34 @@
 #include "dll/steam_client.h"
 #include "dll/settings_parser.h"
 #include "dll/dll.h"
+#include "dll/gbe_dota_reconnect_network_adapter.h"
 
 namespace {
 
 uint32 GBE_local_ip_binding_ip{};
 uint16 GBE_local_ip_binding_port{};
+
+Steam_Game_Coordinator::Dependencies make_dota_coordinator_dependencies(
+    Settings *settings,
+    Networking *network,
+    Local_Storage *local_storage,
+    SteamCallBacks *callbacks,
+    RunEveryRunCB *run_every_runcb,
+    gbe::dota_lobby_state::Store &shared_lobby_store,
+    gbe::dota_handler_registry::View handler_registry,
+    gbe::dota_lifecycle::Executor &lifecycle_executor)
+{
+    return {
+        settings,
+        network,
+        local_storage,
+        callbacks,
+        run_every_runcb,
+        &shared_lobby_store,
+        handler_registry,
+        &lifecycle_executor,
+    };
+}
 
 }
 
@@ -61,6 +84,7 @@ void Steam_Client::background_thread_proc()
 }
 
 Steam_Client::Steam_Client()
+    : dota_lobby_store(dota_lobby_state, global_mutex)
 {
     PRINT_DEBUG("start ----------");
     uint32 appid = create_localstorage_settings(&settings_client, &settings_server, &local_storage);
@@ -142,9 +166,24 @@ Steam_Client::Steam_Client()
     steam_video = new Steam_Video();
     steam_parental = new Steam_Parental();
     steam_networking_sockets = new Steam_Networking_Sockets(settings_client, network, callback_results_client, callbacks_client, run_every_runcb, NULL);
-    steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
+    dota_reconnect_adapter_client = new GBE_DotaReconnectNetworkAdapter(callbacks_client, steam_networking_sockets);
+    steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_client, network, callback_results_client, callbacks_client, run_every_runcb, dota_reconnect_adapter_client, dota_reconnect_adapter_client, dota_reconnect_adapter_client);
     steam_networking_messages = new Steam_Networking_Messages(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
-    steam_game_coordinator = new Steam_Game_Coordinator(settings_client, network, local_storage, callbacks_client, run_every_runcb, false);
+    dota_locator_binding = std::make_unique<gbe::dota::LocatorBindingGuard>(dota_lobby_store, dota_runtime_state);
+    const auto dota_handler_registry = Steam_Game_Coordinator::GBE_ProductionDotaHandlerRegistry();
+    dota_lifecycle_executor_client = new gbe::dota_lifecycle::CoordinatorExecutor();
+    steam_game_coordinator = new Steam_Game_Coordinator(
+        make_dota_coordinator_dependencies(
+            settings_client,
+            network,
+            local_storage,
+            callbacks_client,
+            run_every_runcb,
+            GBE_GetSharedDotaLobbyStateStore(),
+            dota_handler_registry,
+            *dota_lifecycle_executor_client),
+        false);
+    steam_game_coordinator->start();
     steam_networking_utils = new Steam_Networking_Utils(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_unified_messages = new Steam_Unified_Messages(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_game_search = new Steam_Game_Search(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
@@ -170,9 +209,22 @@ Steam_Client::Steam_Client()
     steam_gameserver_ugc = new Steam_UGC(settings_server, ugc_bridge, local_storage, callback_results_server, callbacks_server);
     steam_gameserver_apps = new Steam_Apps(settings_server, callback_results_server, callbacks_server);
     steam_gameserver_networking_sockets = new Steam_Networking_Sockets(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, steam_networking_sockets->get_shared_between_client_server());
-    steam_gameserver_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
+    dota_reconnect_adapter_server = new GBE_DotaReconnectNetworkAdapter(callbacks_server, steam_gameserver_networking_sockets);
+    steam_gameserver_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, dota_reconnect_adapter_server, dota_reconnect_adapter_server, dota_reconnect_adapter_server);
     steam_gameserver_networking_messages = new Steam_Networking_Messages(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
-    steam_gameserver_game_coordinator = new Steam_Game_Coordinator(settings_server, network, local_storage, callbacks_server, run_every_runcb, true);
+    dota_lifecycle_executor_server = new gbe::dota_lifecycle::CoordinatorExecutor();
+    steam_gameserver_game_coordinator = new Steam_Game_Coordinator(
+        make_dota_coordinator_dependencies(
+            settings_server,
+            network,
+            local_storage,
+            callbacks_server,
+            run_every_runcb,
+            GBE_GetSharedDotaLobbyStateStore(),
+            dota_handler_registry,
+            *dota_lifecycle_executor_server),
+        true);
+    steam_gameserver_game_coordinator->start();
     steam_masterserver_updater = new Steam_Masterserver_Updater(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, steam_gameserver);
     steam_gameserver_gamestats = new Steam_GameStats(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
     steam_gameserver_items = new Steam_GameServer_Items(settings_server, callbacks_server, callback_results_server);
@@ -212,10 +264,14 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_gameserver_inventory);
     DEL_INST(steam_gameserver_ugc);
     DEL_INST(steam_gameserver_apps);
-    DEL_INST(steam_gameserver_networking_sockets);
-    DEL_INST(steam_gameserver_networking_sockets_serialized);
-    DEL_INST(steam_gameserver_networking_messages);
+    if (steam_gameserver_game_coordinator)
+        steam_gameserver_game_coordinator->stop();
     DEL_INST(steam_gameserver_game_coordinator);
+    DEL_INST(dota_lifecycle_executor_server);
+    DEL_INST(steam_gameserver_networking_sockets_serialized);
+    DEL_INST(dota_reconnect_adapter_server);
+    DEL_INST(steam_gameserver_networking_sockets);
+    DEL_INST(steam_gameserver_networking_messages);
     DEL_INST(steam_masterserver_updater);
     DEL_INST(steam_gameserver);
     DEL_INST(steam_gameserver_gamestats);
@@ -238,10 +294,14 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_inventory);
     DEL_INST(steam_video);
     DEL_INST(steam_parental);
-    DEL_INST(steam_networking_sockets);
-    DEL_INST(steam_networking_sockets_serialized);
-    DEL_INST(steam_networking_messages);
+    if (steam_game_coordinator)
+        steam_game_coordinator->stop();
     DEL_INST(steam_game_coordinator);
+    DEL_INST(dota_lifecycle_executor_client);
+    DEL_INST(steam_networking_sockets_serialized);
+    DEL_INST(dota_reconnect_adapter_client);
+    DEL_INST(steam_networking_sockets);
+    DEL_INST(steam_networking_messages);
     DEL_INST(steam_networking_utils);
     DEL_INST(steam_unified_messages);
     DEL_INST(steam_game_search);
@@ -269,6 +329,8 @@ Steam_Client::~Steam_Client()
 
     DEL_INST(run_every_runcb);
     DEL_INST(network);
+
+    dota_locator_binding.reset();
 
     #undef DEL_INST
 }
@@ -304,6 +366,8 @@ void Steam_Client::serverShutdown()
 
 void Steam_Client::clientShutdown()
 {
+    if (steam_game_coordinator)
+        steam_game_coordinator->shutdown_gc();
     callback_results_client->clear();
     user_logged_in = false;
 }
@@ -311,11 +375,13 @@ void Steam_Client::clientShutdown()
 void Steam_Client::setAppID(uint32 appid)
 {
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    bool appid_changed = false;
     if (appid && !settings_client->get_local_game_id().AppID()) {
         settings_client->set_game_id(CGameID(appid));
         settings_server->set_game_id(CGameID(appid));
         local_storage->setAppId(appid);
         network->setAppID(appid);
+        appid_changed = true;
 
         std::string appid_str(std::to_string(appid));
         set_env_variable("SteamAppId", appid_str);
@@ -326,7 +392,12 @@ void Steam_Client::setAppID(uint32 appid)
         }
     }
 
-    
+    if (appid_changed) {
+        if (steam_game_coordinator)
+            steam_game_coordinator->on_appid_changed(appid);
+        if (steam_gameserver_game_coordinator)
+            steam_gameserver_game_coordinator->on_appid_changed(appid);
+    }
 }
 
 // Creates a communication pipe to the Steam client.
@@ -1023,7 +1094,7 @@ void Steam_Client::UnregisterCallResult( class CCallbackBase *pCallback, SteamAP
 void Steam_Client::RunCallbacks(bool runClientCB, bool runGameserverCB)
 {
     PRINT_DEBUG("begin ------------------------------------------------------");
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    std::unique_lock<std::recursive_mutex> lock(global_mutex);
     cb_run_active = true;
 
     // PRINT_DEBUG("network *********");
@@ -1043,12 +1114,12 @@ void Steam_Client::RunCallbacks(bool runClientCB, bool runGameserverCB)
 
     if (runClientCB && IsUserLogIn()) {
         // PRINT_DEBUG("callback_results_client *********");
-        callback_results_client->runCallResults();
+        callback_results_client->runCallResults(lock);
     }
 
     if (runGameserverCB && IsServerInit()) {
         // PRINT_DEBUG("callback_results_server *********");
-        callback_results_server->runCallResults();
+        callback_results_server->runCallResults(lock);
     }
 
     // PRINT_DEBUG("callbacks_server *********");

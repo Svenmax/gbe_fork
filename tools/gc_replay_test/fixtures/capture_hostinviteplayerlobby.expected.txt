@@ -1,0 +1,38 @@
+gc_replay_test summary v1
+cases=4
+case 1
+label=001_out_k_EMsgClientToGC
+emsg=5452
+masked_emsg=5452
+proto=0
+size=59
+fnv1a64=0xae3c9e8866bb6538
+body_size=59
+fields=none
+case 2
+label=002_in_k_EMsgClientFromGC
+emsg=5453
+masked_emsg=5453
+proto=0
+size=61
+fnv1a64=0x7e6b3f97b3234cb1
+body_size=61
+fields=9:5:4=0x0e800015
+case 3
+label=003_in_k_EMsgClientFromGC
+emsg=5453
+masked_emsg=5453
+proto=0
+size=378
+fnv1a64=0x4dc5716319e3e3de
+body_size=378
+fields=9:5:4=0x0e800015
+case 4
+label=004_in_k_EMsgClientFromGC
+emsg=5453
+masked_emsg=5453
+proto=0
+size=70
+fnv1a64=0x2eccab282dfa31a5
+body_size=70
+fields=9:5:4=0x0e800015

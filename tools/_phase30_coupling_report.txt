@@ -1,0 +1,43 @@
+==============================================================================
+Phase 2.10 Coupling Analysis: network_callback_* extraction
+==============================================================================
+
+Main file: /workspace/dll/steam_game_coordinator.cpp (3270 lines)
+Internal header: /workspace/dll/gbe_dota_gc_internal.h (629 lines)
+Class header: /workspace/dll/dll/steam_game_coordinator.h (352 lines)
+
+Target member functions (to move to gbe_dota_network_callbacks.cpp):
+  - Steam_Game_Coordinator::network_callback_inventory_request
+  - Steam_Game_Coordinator::network_callback_inventory_response
+  - Steam_Game_Coordinator::network_callback_item_update
+  - Steam_Game_Coordinator::network_callback_item_deletion
+  - Steam_Game_Coordinator::network_callback_respawn_request
+  - Steam_Game_Coordinator::network_callback
+
+Function definition ranges (1-indexed inclusive):
+  network_callback_inventory_request: L2744-L2804  (61 lines, GBE_* refs=0)
+  network_callback_inventory_response: L2807-L2928  (122 lines, GBE_* refs=4)
+  network_callback_item_update: L2931-L2984  (54 lines, GBE_* refs=0)
+  network_callback_item_deletion: L2987-L3025  (39 lines, GBE_* refs=0)
+  network_callback_respawn_request: L3028-L3038  (11 lines, GBE_* refs=0)
+  network_callback: L3041-L3112  (72 lines, GBE_* refs=5)
+
+Referenced GBE_* symbols across all 6 function bodies (excluding self/target set):
+  GBE_GC_DebugLog: HEADER(internal.h)
+  GBE_GetDotaLobbyOwnerSteamId: MEMBER(class)
+  GBE_HandleDotaFriendLobbyInviteMessage: MEMBER(class)
+  GBE_HandleDotaNetworkChatMessage: MEMBER(class)
+  GBE_HandleDotaNetworkLobbyInviteMessage: MEMBER(class)
+  GBE_MaybeHandleDotaPracticeLobbyKicked: MEMBER(class)
+  GBE_MaybeNotifyDotaPracticeLobbyMembersChanged: MEMBER(class)
+  GBE_PushDotaPlayerEquippedItemsCacheToGC: HEADER(internal.h)
+  GBE_local_lobby: MEMBER(class)
+
+Classification:
+  List X (file-scope statics traveling with move): 0 (Phase 2.9 removed all file-scope statics from main file)
+  List Y (need new extern declaration): 0
+  List Z (referenced from other TUs, already external): N/A (members, not statics)
+
+Line-count preview (approx, excludes leading blanks/comments):
+  Total extracted lines: 359
+  Main file after extract: ~2911

@@ -34,8 +34,6 @@ struct ContextInitData {
     CSteamAPIContext ctx{};
 };
 
-static constexpr const char *GBE_kGcDebugLogPath = "C:\\Users\\Public\\gbe_gc_debug.log";
-
 extern bool GBE_GetSteamClientLocalIPBinding(uint32 *ip, uint16 *port);
 
 static void GBE_GC_DebugLog(const char *scope, const char *fmt, ...)

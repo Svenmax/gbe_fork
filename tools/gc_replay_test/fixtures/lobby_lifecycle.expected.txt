@@ -1,0 +1,74 @@
+gc_replay_test summary v1
+cases=8
+case 1
+label=lobby_list_request
+emsg=2147491659
+masked_emsg=8011
+proto=1
+size=8
+fnv1a64=0xf8d608b7ca706c97
+body_size=8
+fields=none
+case 2
+label=lobby_create_with_passkey
+emsg=2147490686
+masked_emsg=7038
+proto=1
+size=36
+fnv1a64=0xf9e70ab8ef2ea3c1
+body_size=36
+fields=none
+case 3
+label=lobby_create_minimal
+emsg=2147490686
+masked_emsg=7038
+proto=1
+size=10
+fnv1a64=0x01ef24ad56e91986
+body_size=10
+fields=none
+case 4
+label=lobby_join_by_id
+emsg=2147490692
+masked_emsg=7044
+proto=1
+size=19
+fnv1a64=0xe116ec87c2c5ea1d
+body_size=19
+fields=none
+case 5
+label=lobby_join_spectator
+emsg=2147490692
+masked_emsg=7044
+proto=1
+size=19
+fnv1a64=0xa025060db0cf340a
+body_size=19
+fields=none
+case 6
+label=lobby_leave
+emsg=2147490688
+masked_emsg=7040
+proto=1
+size=8
+fnv1a64=0x56787520fe680d2c
+body_size=8
+fields=432:0:1=0
+case 7
+label=lobby_destroy
+emsg=2147491894
+masked_emsg=8246
+proto=1
+size=17
+fnv1a64=0xc591f56f1ebbc93c
+body_size=17
+fields=none
+case 8
+label=lobby_kick_player
+emsg=2147490729
+masked_emsg=7081
+proto=1
+size=12
+fnv1a64=0xd3a2bfce5befed37
+body_size=12
+fields=437:1:8=0xb108000000000000

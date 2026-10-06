@@ -19,6 +19,8 @@
 #define __INCLUDED_STEAM_NETWORKING_SOCKETSERIALIZED_H__
 
 #include "base.h"
+#include "gbe_dota_reconnect_network.h"
+#include "gbe_dota_serialized_connection_state.h"
 
 class Steam_Networking_Sockets_Serialized :
 public ISteamNetworkingSocketsSerialized002,
@@ -31,12 +33,25 @@ public ISteamNetworkingSocketsSerialized005
     class SteamCallResults *callback_results{};
     class SteamCallBacks *callbacks{};
     class RunEveryRunCB *run_every_runcb{};
+    GBE_DotaReconnectContextProvider *reconnect_context_provider{};
+    GBE_DotaReconnectDirectConnector *reconnect_direct_connector{};
+    GBE_DotaReconnectCallbackQueue *reconnect_callback_queue{};
+    GBE_DotaSerializedConnectionSynchronizer dota_connection_synchronizer;
+    GBE_DotaSerializedConnectionState dota_connection_state{};
 
     static void steam_callback(void *object, Common_Message *msg);
     static void steam_run_every_runcb(void *object);
 
 public:
-    Steam_Networking_Sockets_Serialized(class Settings *settings, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb);
+    Steam_Networking_Sockets_Serialized(
+        class Settings *settings,
+        class Networking *network,
+        class SteamCallResults *callback_results,
+        class SteamCallBacks *callbacks,
+        class RunEveryRunCB *run_every_runcb,
+        GBE_DotaReconnectContextProvider *context_provider,
+        GBE_DotaReconnectDirectConnector *direct_connector,
+        GBE_DotaReconnectCallbackQueue *callback_queue);
     ~Steam_Networking_Sockets_Serialized();
 
     void SendP2PRendezvous( CSteamID steamIDRemote, uint32 unConnectionIDSrc, const void *pMsgRendezvous, uint32 cbRendezvous );

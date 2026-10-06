@@ -1,0 +1,570 @@
+# GC 后续重构实施计划
+
+- [x] 1. 固化当前 P0 修复基线
+  - [x] 1.1 复核并提交当前行为修复
+    - 范围：wrapped `8053` 行为一致性、跨大厅连接去重、reconnect `lobby_id` 传播、PR 生产构建门禁。
+    - 排除未跟踪目录 `docs/superpowers/`，只纳入本轮已验证的生产代码、测试和工作流文件。
+    - 依赖：无。
+    - 验收：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 和 `git diff --check` 通过。
+  - [x] 1.2 建立后续重构基线记录
+    - 记录基线 commit SHA、GC offline 测试数量、replay fixture 数量和 audit 结果。
+    - 后续每个阶段均与该基线比较行为、构建和测试结果。
+    - 验收：基线信息可由 Git 和验证脚本重复获取。
+  - [x] 1.3 检查点：确保所有测试通过，如有疑问请询问用户
+
+- [x] 2. P1 统一 direct/wrapped 自定义游戏生命周期执行器
+  - [x] 2.1 定义生命周期执行上下文
+    - 在 Dota domain/coordinator 边界定义共享 context，承载 transition decision、wrapped 模式、outer session、reason、request job 和 details update 参数。
+    - 保持 direct/wrapped 消息解析逻辑位于各自 adapter。
+    - 依赖：任务 1。
+    - 验收：context 不依赖具体 protobuf request 类型，不改变 wire payload。
+  - [x] 2.2 实现共享 `8052` transition executor
+    - 统一 launch phase、runtime lobby update、shared snapshot 和 details update 的执行顺序。
+    - 保留 wrapped session 字段和 direct response 语义。
+    - 验收：direct/wrapped handler 只负责 parse、context mapping、executor 调用和日志。
+  - [x] 2.3 实现共享 `8053` transition executor
+    - 固定执行顺序：更新 lobby state、更新 local member runtime、标记 launch phase、发布 local member metadata、发布 shared snapshot、发送 details update。
+    - 显式处理 load failure、lobby ID 不匹配、重复消息和 inactive lobby。
+    - 验收：direct/wrapped 不再分别维护同一组副作用调用。
+  - [x] 2.4 增加 direct/wrapped 表驱动单元测试
+    - 覆盖 `8052`、`8053` 成功、失败、重复、inactive lobby、lobby ID 匹配与不匹配。
+    - 对相同 transition 输入断言 direct/wrapped 的 domain action sequence 等价。
+    - 对 wrapped 路径额外断言 outer session 和 wrapped details update 参数。
+  - [x] 2.5 增加生命周期 action sequence 属性测试
+    - 属性 P1-A：成功 `8053` 中 runtime state 始终早于 local member publish，local member publish 始终早于 shared publish。
+    - 属性 P1-B：load failure 不产生 connected runtime state 或 loaded launch phase。
+    - 属性 P1-C：不匹配 lobby ID 不改变任何 lobby/runtime 状态。
+  - [x] 2.6 更新副作用审计基线
+    - 共享 executor 成为高风险副作用的批准 owner。
+    - 从 direct/wrapped handler 基线中移除已迁移的直接调用。
+    - 验收：audit 能阻止 handler 重新引入 publish/runtime 副作用直调。
+  - [x] 2.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；handler smoke 68/68，payload helpers 240/240，replay fixtures 7 组，audit 8 项 0 问题。
+
+- [x] 3. P3 收窄 reconnect 模块职责和头文件依赖
+  - [x] 3.1 创建 serialized connection state 窄模块
+    - 新建专用头文件和必要的实现文件，迁移 `GBE_DotaSerializedConnectionState`。
+    - 模块仅拥有 lobby/server/endpoint 代际、retry 和 callback/direct 去重状态。
+    - 依赖：任务 1；可与任务 2 独立实施。
+  - [x] 3.2 清理 reconnect shared 公共头文件
+    - `gbe_dota_reconnect_shared.h` 仅保留跨模块 context、snapshot、标量 helper 和公共函数声明。
+    - 移除连接实现状态及其 `<string>` 依赖传播。
+    - 验收：现有调用方只包含其实际需要的窄头文件。
+  - [x] 3.3 调整 production 与 offline test 源列表
+    - 更新 Premake、shell test source list 和 audit source ownership。
+    - 验收：production target 与 offline tests 使用同一个状态实现。
+  - [x] 3.4 增加 include 自包含编译测试
+    - 分别单独编译 reconnect shared header 和 serialized state header 的最小 translation unit。
+    - 验收：头文件不依赖 include 顺序或偶然的传递 include。
+  - [x] 3.5 保留并扩展状态对象单元测试
+    - 覆盖 lobby 切换、server 切换、endpoint 切换、双实例隔离、retry reset 和 callback/direct 双状态 reset。
+  - [x] 3.6 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：两个 reconnect 头文件自包含编译通过；`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；handler smoke 68/68，payload helpers 240/240，replay fixtures 7 组，audit 8 项 0 问题。
+
+- [x] 4. P4 统一 reconnect context 生产管线
+  - [x] 4.1 定义规范化 reconnect source model
+    - 建立 `GBE_DotaReconnectSource`，统一表示 shared、recent、local 和 generic lobby recovery 输入。
+    - 字段包含 source kind、lobby ID、server ID、state、game state、custom game、owner、endpoint 和 launch 状态。
+    - 依赖：任务 3。
+  - [x] 4.2 实现唯一 context builder
+    - 集中 eligibility 判断、endpoint 规范化、字段复制和 context 构造。
+    - 消除各生产路径的手工字段映射。
+    - 验收：新增 context 字段只需修改一个 builder。
+  - [x] 4.3 实现显式来源优先级策略
+    - 固定 shared、recent、generic recovery 的选择顺序和 fallback 条件。
+    - 返回 source kind 和拒绝原因，供日志与测试使用。
+  - [x] 4.4 迁移全部 reconnect context 调用方
+    - 迁移 payload helper、lobby coordinator、networking sockets、Steam user 和其他 context consumer。
+    - 删除旧的重复 mapping helper。
+  - [x] 4.5 增加来源矩阵单元测试
+    - 覆盖每种来源独立有效、多个来源同时有效、上游无效回退、endpoint 缺失、server 缺失和 inactive 状态。
+    - 断言全部字段包括 `lobby_id` 完整传播。
+  - [x] 4.6 增加 context builder 属性测试
+    - 属性 P4-A：有效输出始终包含非零 server ID 和非空规范化 endpoint。
+    - 属性 P4-B：输出字段全部来自被选中的单一 source，不发生跨 source 混合。
+    - 属性 P4-C：source 优先级对输入枚举顺序保持稳定。
+  - [x] 4.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；payload helpers 252/252，handler smoke 68/68，replay fixtures 7 组，audit 8 项 0 问题。
+
+- [x] 5. P8 建立可测试的 production reconnect 网络边界
+  - [x] 5.1 定义窄网络接口
+    - 定义 direct connector、callback queue 和 reconnect context provider 接口。
+    - 接口使用项目现有 Steam 类型和错误表达，避免复制网络协议模型。
+    - 依赖：任务 4。
+  - [x] 5.2 实现 production adapter
+    - adapter 封装 `ConnectByIPAddress`、callback 入队和 context 获取。
+    - 保持连接 options、callback 类型、delay 和日志字段不变。
+  - [x] 5.3 将依赖注入 serialized sockets
+    - production 构造路径注入真实 adapter，offline tests 注入 fake。
+    - 保证 client 和 gameserver serialized socket 实例各自拥有状态和依赖。
+  - [x] 5.4 重构 `PostConnectionStateMsg()` 为编排函数
+    - 分离 payload 诊断、context 决策、direct connect、callback dedup 和日志。
+    - 保持现有 public API 和调用时序。
+  - [x] 5.5 增加完整 production-path 单元测试
+    - 覆盖首次连接、同大厅重复、跨大厅复用 endpoint、同大厅 server/endpoint 变化、解析失败和缺少 context。
+    - 断言 connect options、callback body、调用次数和执行顺序。
+  - [x] 5.6 增加双实例与失败重试测试
+    - 验证 client/gameserver 实例互不抑制。
+    - 验证 direct connect 返回失败时的记录与后续 retry 策略符合设计。
+  - [x] 5.7 增加 reconnect 编排属性测试
+    - 属性 P8-A：同 generation、server、endpoint 最多入队一次 engine callback。
+    - 属性 P8-B：generation 变化后首个有效消息必定重新获得连接机会。
+    - 属性 P8-C：一个实例的输入不会改变另一个实例的决策。
+  - [x] 5.8 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 156/156，payload helpers 252/252，handler smoke 68/68，replay fixtures 7 组，audit 8 项 0 问题。
+
+- [x] 6. P5 将大厅生命周期副作用事务化
+  - [x] 6.1 定义 transition effects 和 action model
+    - 统一表达 runtime、launch phase、local publish、shared publish、details update、delayed update 和 response 动作。
+    - 依赖：任务 2 和任务 5。
+  - [x] 6.2 实现固定顺序的 lifecycle executor
+    - executor 接受不可变 plan 并执行 action list。
+    - 每个 action 记录 reason、lobby generation 和必要 session 数据。
+  - [x] 6.3 迁移 `7070`、`8052`、`8053`
+    - 将已统一的自定义游戏生命周期执行器落到通用 action model。
+    - 删除专用 executor 中重复的副作用编排。
+  - [x] 6.4 迁移 `7034` runtime 更新路径
+    - 统一 connected/disconnected、game state、hero state 和 launch poll 的 action 顺序。
+    - 保持 response 和 showcase repush guard 行为。
+  - [x] 6.5 增加 action executor 单元测试
+    - 覆盖每个可选 action、组合 action、失败前置条件和固定顺序。
+  - [x] 6.6 增加生命周期属性测试
+    - 属性 P5-A：同一 plan 多次序列化得到相同 action sequence。
+    - 属性 P5-B：action dependency 始终满足 runtime → local publish → shared publish → details update。
+    - 属性 P5-C：空 effects 不执行副作用。
+  - [x] 6.7 更新审计规则
+    - 只允许 executor owner 直接调用高风险生命周期副作用 API。
+    - 验收：handler 和 planner 新增直调会使 audit 失败。
+  - [x] 6.8 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 156/156，payload helpers 252/252，handler smoke 70/70，replay fixtures 7 组，audit 9 项 0 问题。
+
+- [x] 7. P6 引入显式 Lobby Generation
+  - [x] 7.1 定义 generation 类型和分配规则
+    - 明确创建、加入、离开、重置和恢复大厅时 generation 的变化规则。
+    - 使用单调递增值并定义进程生命周期内的溢出行为。
+    - 依赖：任务 4 和任务 6。
+    - 实现：`Generation` 使用 `uint64`，零值表示未分配；`Create/Join/Leave/Reset/Recover` 均推进一次 generation；达到 `UINT64_MAX` 后拒绝分配并保持最大值，禁止回绕复用旧代际。
+  - [x] 7.2 将 generation 加入 lobby snapshot 与 reconnect context
+    - `lobby_id` 保持协议身份，generation 专门用于本地异步状态代际。
+    - 更新 shared、recent、local、generic recovery 和 serialized state。
+    - 实现：local/shared lobby、shared reconnect/scalar snapshot、四类 reconnect source、recent/context 和 serialized connection state 均独立携带 generation；现有 lobby-ID 去重行为保留至 7.4。
+  - [x] 7.3 将 generation 加入延迟任务和 callback
+    - runtime lobby update、reconnect callback、postgame task 和延迟 publish 在执行前校验 generation。
+    - 旧 generation 的任务返回明确 stale reason。
+    - 实现：coordinator 在 Create、Join、Leave、Reset、Recover 提交边界分配 generation；延迟 lobby 消息捕获 `lobby_id + generation` 并在状态应用、publish 和入队前拒绝旧代际；postgame slot 返回 `Current/Stale/Empty`；reconnect callback 通过通用 execution guard 在实际 dispatch 前校验 generation。现有 lobby-ID 去重行为继续保留至 7.4。
+  - [x] 7.4 迁移现有 lobby ID 去重用途
+    - 连接和 callback 去重改用 generation，server/endpoint 继续作为同代际键。
+    - 保留 lobby ID 用于协议匹配和日志。
+    - 实现：serialized reconnect 和 lobby-flow callback bundle 使用类型化 `generation + server_id + endpoint` 键；generation 变化清除 retry、payload、direct-connect 和 callback 状态，同 generation 下 lobby ID 仅同步；callback 在实际 dispatch 前继续校验 generation。
+  - [x] 7.5 增加 generation 生命周期测试
+    - 覆盖快速退房重进、相同 lobby ID 复用、异步回调晚到、旧延迟任务和状态重置。
+    - 实现：handler smoke 通过真实 `Join -> Leave -> same-ID Join` 验证 generation `1 -> 2 -> 3` 严格变化，并拒绝首次 Join 捕获的 delayed runtime update；callsystem guard 覆盖已注册与晚注册 callback；既有 postgame、delayed runtime 和 reset 测试覆盖旧任务拒绝与新 generation 保留。
+  - [x] 7.6 增加 generation 属性测试
+    - 属性 P6-A：新大厅生命周期 generation 严格变化。
+    - 属性 P6-B：旧 generation action 永远不能修改当前 lobby state。
+    - 属性 P6-C：generation 变化清除所有代际内去重记录。
+    - 实现：P6-A 对 64 条序列各执行 32 次混合 Create/Join/Leave/Reset/Recover boundary，断言每次严格加一；P6-B 对 64 个同 lobby ID 场景推进不同 boundary 后投递旧 runtime action，断言状态与 incoming queue 不变；P6-C 对 64 组 serialized connection state 断言 generation 变化清除 retry、payload、server、direct-connect 和 callback 去重状态。
+  - [x] 7.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 165/165，callsystem guard 4/4，payload helpers 257/257，handler smoke 75/75，replay fixtures 7 组，audit 9 项 0 问题。
+
+- [x] 8. P7 收敛全局大厅共享状态访问
+  - [x] 8.1 定义 lobby state store 接口
+    - 提供 immutable snapshot、publish/update、clear 和 generation-aware compare/update 操作。
+    - 依赖：任务 7。
+    - 实现：新增 dependency-free `gbe::dota_lobby_state::Store`，通过值快照隔离调用方，支持完整 publish、clear、复制后原子 update，以及 generation 不匹配时跳过 mutator 并返回 `StaleGeneration` 的 compare/update。
+  - [x] 8.2 实现线程安全 store
+    - 集中 `global_mutex` 使用和状态拷贝规则。
+    - 禁止向调用方暴露可变共享状态引用。
+    - 实现：production accessor 将唯一 store 实例绑定到既有 `GBE_shared_dota_lobby_state + global_mutex` 同步域，底层 clear 已经由 store 执行；并发 reader/writer 测试验证每个值快照只包含一个完整版本的跨字段数据。
+  - [x] 8.3 迁移 shared lobby 读取路径
+    - 迁移 reconnect、payload、rich presence、postgame、lobby ownership 和诊断读取。
+    - 每个业务操作使用单个一致 snapshot。
+    - 实现：新增完整值快照 facade 并委托 production store；scalar/reconnect helper、arcade 判断、完整 restore、direct/wrapped watch 与 spectate response、joinable modes、normal signout、owner fallback 和 coordinator 诊断均在业务操作入口捕获一次快照后使用。
+  - [x] 8.4 迁移 shared lobby 写入路径
+    - 迁移 publish、clear、runtime member update 和 lifecycle state update。
+    - generation 不匹配的写入返回 stale 结果。
+    - 实现：完整 shared publish 在既有 `global_mutex` 同步域内构造候选快照，并通过 generation 单调 publish 拒绝旧代际覆盖；generic metadata、4508 runtime connect 和 gameserver-derived server ID 使用 `compare_update(local.generation)`，代际不匹配时跳过写入并记录 stale 诊断；clear 继续统一委托 store。
+  - [x] 8.5 移除 production 中的直接全局访问
+    - 保留 store implementation 和必要测试 fixture 的受控访问。
+    - 增加 audit，阻止新增 `GBE_shared_dota_lobby_state` 直读直写。
+    - 实现：移除 internal header 的 mutable extern，将 production backing state 收口为 store accessor 内的函数局部静态对象；诊断日志改为记录稳定 store 地址；Audit 10 扫描全部 GC production TUs 与 internal header，发现旧全局符号即失败，测试 fixture 继续保留受控独立状态。
+  - [x] 8.6 增加 store 单元与并发测试
+    - 覆盖 snapshot 一致性、generation compare/update、clear、并发 reader/writer 和 stale write。
+    - 实现：focused suite 覆盖 snapshot 值隔离、完整 publish/clear、matching 与 stale generation compare/update、单调 publish 和 delayed stale writer；新增 4 个 matching writer 并发提交 2,000 次跨字段 update，同时拒绝 500 次 stale update，并由 4 个 reader 验证 1,000 次 publish/clear 交替只能暴露完整空状态或完整发布版本。
+  - [x] 8.7 增加 store 属性测试
+    - 属性 P7-A：snapshot 始终表示一次完整状态版本。
+    - 属性 P7-B：失败的 stale update 不改变 store。
+    - 属性 P7-C：clear 后所有 valid-gated ID helper 返回零。
+    - 实现：P7-A 对 64 个 seed 各发布并读取 32 个跨 scalar/string/vector 字段版本，断言每个 snapshot 完整匹配单一版本；P7-B 对 64 个当前 generation 投递旧一代 compare/update，断言 mutator 从未执行且完整状态逐字段保持；P7-C 对 64 组非零 lobby/generic lobby ID 通过真实 store clear facade 清空，断言两个 valid-gated ID helper 均返回零。
+  - [x] 8.8 检查点：确保所有测试通过，如有疑问请询问用户
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 75/75，replay fixtures 7 组，audit 10 项 0 问题。
+
+- [x] 9. P9 建立类型化 GC Handler Registry
+  - [x] 9.1 定义 registry entry 类型
+    - 字段包含 message ID、direct/wrapped 模式、session 策略、生命周期分类、adapter 和 handler。
+    - 依赖：任务 2 和任务 6。
+    - 实现：新增 dependency-light `gbe_dota_handler_registry.h`，定义强类型 `RequestMode`、`SessionPolicy`、`LifecycleClass`、`HandlerId`、统一 adapter 函数指针和聚合 `Entry`；constexpr helper 统一 direct/wrapped path 匹配与 wrapped session 转发判断，独立 header compile test 验证自包含与类型契约。
+  - [x] 9.2 迁移 post-login dispatch 映射
+    - 使用 registry 驱动 direct 与 wrapped 分发。
+    - 保持未知消息 fallback 和日志行为。
+    - 实现：现有 24 项表全部迁移为 typed `Entry`；16 项声明 `DirectAndWrapped + ForwardWrappedSession`，8 项声明 `Direct + Ignore`，查找同时匹配 message ID 与 request path，session pointer 按 policy 生成；adapter、线性扫描顺序、成功命中后的日志文本和未命中返回 false fallback 保持稳定。
+  - [x] 9.3 从 registry 生成审计数据
+    - audit 直接读取或解析 registry，移除手工维护的平行 dispatch 清单。
+    - 实现：Audit 4 直接解析 production `kTable` 的六个 typed 字段，并按 adapter 名称提取 lambda 与实际 `GBE_HandleDota*Request` 调用；自动检查 entry 解析完整性、adapter 存在性与孤立项、单 handler 调用、direct path guard、session policy、handler identity 和 lifecycle class，entry 总数由 registry 自动计算，Python 中两份 24 项平行清单已移除。
+  - [x] 9.4 建立 fixture 关联机制
+    - 每个高风险 registry entry 关联 smoke/replay fixture 标识。
+    - CI 审计缺失 fixture 的新增高风险 handler。
+    - 实现：`Entry` 增加 dependency-light `const char *fixture` 元数据；13 个 `LobbyMutation`/`LobbyLifecycle` 条目全部关联真实 `smoke:<test_name>` 或 `replay:<fixture>:<label>` 标识，InviteToLobby 与 LobbyInviteResponse 补充真实 handler smoke 覆盖；Audit 4 动态读取 smoke 函数和 replay fixture 文件，拒绝高风险空关联、未知标识格式、缺失测试函数、缺失 replay 文件或失效 label。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，24 项 typed registry 与 13 项高风险 fixture 关联通过审计，audit 10 项 0 问题。
+  - [x] 9.5 增加 registry 单元测试
+    - 覆盖 message ID 唯一性、模式匹配、session 策略、未知消息和 handler 选择。
+    - 实现：dependency-light registry contract 增加 constexpr `find_entry()` 与 `has_unique_message_ids_per_mode()`；production dispatcher 改用同一查找 helper；新增独立 `gbe_dota_handler_registry_test`，通过 direct-only、wrapped-only、dual-mode、同 ID 分离 mode 和重复 mode 合成表覆盖 message ID 唯一性、全部 path 匹配、session policy、unknown fallback 和 handler identity 选择，并接入 shell/Premake 测试源列表。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；registry assertions 19/19，reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
+  - [x] 9.6 增加 registry 属性测试
+    - 属性 P9-A：同一 mode 下 message ID 唯一。
+    - 属性 P9-B：每个高风险 lifecycle entry 都有测试 fixture。
+    - 属性 P9-C：registry 顺序不影响按 ID 查找结果。
+    - 实现：registry contract 增加 constexpr `is_high_risk()`、`has_test_fixture()` 和 `all_high_risk_entries_have_fixture()`；P9-A 对 64 个 seed 各生成 16 项唯一 mode 表并注入一项同 mode 重叠重复，分别断言通过与失败；P9-B 对 64 个 seed 生成混合 lifecycle 表，断言完整高风险 fixture 通过并在移除首个高风险 fixture 后失败；P9-C 对 64 个 seed 生成 16 项唯一 registry，执行确定性 Fisher-Yates 重排，并逐项比较 direct/wrapped handler、policy、lifecycle 和 fixture 选择结果。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；registry assertions 339/339，其中新增属性断言 320 条；production Audit 4 同时验证 24 项 registry 与 13 项真实高风险 fixture；reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
+  - [x] 9.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - 检查点：复核 P9.1 至 P9.6 的六个连续提交、24 项 production typed registry、13 项高风险真实 fixture 关联、339 条 focused/property assertions 和唯一 registry 审计来源；未发现 dispatch 行为、session policy、unknown fallback、fixture 真实性或顺序无关性疑点。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 阶段级复跑通过；registry assertions 339/339，reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
+
+- [x] 10. P10 标准化 GC 观测与诊断事件
+  - [x] 10.1 定义结构化事件模型
+    - 统一 event、reason、source、lobby ID、generation、server ID、endpoint、decision、message ID 和 job ID 字段。
+    - 依赖：任务 4、任务 7 和任务 9。
+    - 实现：新增 dependency-light `gbe_dota_diagnostic_event.h`，以纯聚合 `gbe::dota_diagnostic::Event` 统一承载 event、reason、source、lobby ID、generation、server ID、endpoint、decision、message ID 和 job ID；message/job ID 使用独立 presence 位，保留合法零值并区分字段缺失；constexpr `with_message_id()` 与 `with_job_id()` 支持无副作用构造。独立 header compile test 验证自包含、聚合初始化、全部字段和零值 job ID presence 语义，shell/Premake 已接线。production 日志尚未迁移，既有文本和控制流保持稳定。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；新增 `diagnostic_event_header_compile` 构建通过，registry assertions 339/339，reconnect network 165/165，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
+  - [x] 10.2 定义 reason/source 强类型枚举
+    - 替换 reconnect 和 lifecycle 核心路径中的自由字符串分支判断。
+    - 保留稳定字符串序列化用于日志与现有测试。
+    - 实现：`gbe_dota_diagnostic_event.h` 新增统一 `Reason` 与 `Source` 枚举、constexpr `describe_reason()`/`reason_from_string()` 和 `describe_source()`/`source_from_string()`；reconnect `SourceKind`、context reject reason 和 post skip reason 复用统一类型，既有 describe API 委托集中序列化。lifecycle 核心路径将 runtime reset reconnect 保留、7034 custom runtime member refresh、7272 chat leave kick 判定，以及 7034 launch poll/8053 loading result details suppression 从 `strcmp` 分支迁移为枚举比较。原始 reason/source 字符串保持稳定，未知值统一映射 `Unknown`。
+    - 测试：reconnect focused suite 增加 58 条断言，覆盖 20 个 reason、8 个 source、双向字符串映射、unknown fallback 和 legacy skip describe API；runtime reset 单测改为直接传入强类型 reason。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 223/223，registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
+  - [x] 10.3 迁移 reconnect 诊断日志
+    - 覆盖 context source selection、connect、dedup、callback、retry 和 stale generation。
+    - 实现：新增集中 `format_event()` 与 `GBE_ReconnectLogEvent()` sink adapter，按固定顺序输出 event、reason、source、lobby ID、generation、server ID、endpoint、decision、message ID 和 job ID；缺失文本与可选 ID 使用稳定 `-` 占位。context selection、direct connect、callback dedup/queue、retry、callback generation guard、queued lobby message 和 delayed task stale-generation 拒绝点已迁移到结构化事件；endpoint 仅记录规范化连接地址，message ID 使用 masked ID，日志不携带 serialized payload、raw state、session 或密码。
+    - 测试：reason/source inventory 扩展为 23 个 reason 和 10 个 source；reconnect focused suite 增加 13 条断言，覆盖新增映射往返、固定字段顺序、合法零值 message/job ID、缺失字段占位和敏感字段排除，断言总数增至 236/236。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 236/236，registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
+  - [x] 10.4 迁移生命周期诊断日志
+    - 覆盖 transition decision、action execution、skip、failure 和 delayed task。
+    - 实现：将结构化 sink 扩展为通用 `GBE_DiagnosticLogEvent()`，reconnect 与 lifecycle 分别使用稳定 scope。custom-game transition 入口记录 planned/no-actions decision、direct/wrapped source、trigger message 和 source job；统一 lifecycle executor 为每个 action 记录 execution/failure，为 conditional follow-up 记录 previous-action-failed 或 runtime-update-queued skip，为 runtime details update 记录 delayed-task queued/failure。action decision 来自覆盖全部 33 个 action type 的 constexpr 稳定名称；lobby ID、generation 和 server ID 在 action 执行前捕获，避免 reset/clear 后身份漂移。lifecycle 结构化事件不记录 endpoint、payload、outer session 或自由 reason 文本。
+    - 测试：diagnostic reason inventory 增加 `previous_action_failed`、`runtime_update_queued` 和 `action_failed` 的稳定序列化与往返断言；handler focused suite 增加 state、delayed、push 三类 action 名称稳定性断言。reconnect focused suite 增至 242/242，handler smoke 仍为 77/77。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，replay fixtures 7 组，audit 10 项 0 问题。
+  - [x] 10.5 增加事件格式与字段测试
+    - 断言关键事件字段齐全、reason 稳定、敏感 payload 不进入结构化日志。
+    - 测试：在统一 formatter focused suite 增加 11 条断言，精确覆盖 reconnect callback、lifecycle transition decision、action execution、conditional skip、action failure 和 delayed-task queued 六类关键事件。每个样本断言固定十字段顺序、lobby/generation/server 身份、direct/wrapped/delayed source、稳定 reason、action decision，以及 message/job presence；另对 `payload=`、`session=`、`password=`、`raw_state=`、`endpoint_raw=` 和 `reason_text=` 六类敏感或自由文本字段执行排除断言。reconnect focused suite 从 242 增至 253/253。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
+  - [x] 10.6 更新 reason inventory 审计
+    - 从枚举或集中表生成 inventory，检查测试覆盖和重复值。
+    - 实现：Audit 8 从 `gbe_dota_diagnostic_event.h` 的 `Reason` 枚举和 `describe_reason()` 集中映射直接派生 typed diagnostic inventory，检查枚举缺失映射、映射缺失枚举、重复稳定值、focused serialization inventory 缺项、额外项和序列化值漂移。原有 14 项高风险业务 reason 继续通过 `reason-trace-governance.md` 治理，避免与 typed diagnostic reason 混为一套手工清单。
+    - 测试：新增 6 个 Python focused regression tests，覆盖完整唯一 inventory 通过，以及缺失映射、额外映射、重复稳定值、focused coverage 缺失和 focused 值漂移五类失败；测试接入 fast/full offline 门禁。Audit 8 当前自动验证 26 项 typed diagnostic reason 和 14 项历史高风险业务 reason。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；audit helper 6/6，reconnect network 253/253，registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 10 项 0 问题。
+  - [x] 10.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - 检查点：P10.1-P10.6 已完成，结构化 reconnect/lifecycle 事件、typed reason/source、固定字段格式、敏感字段排除和自动派生 inventory 审计均已落地。完整 GC 验证通过，未发现需要用户裁决的协议、日志或兼容性疑问。
+
+- [x] 11. P11 明确并验证并发模型
+  - [x] 11.1 标注状态线程所有权和锁边界
+    - 为 lobby store、recent context、serialized state、callback queue 和 delayed tasks 定义 owner 与访问规则。
+    - 依赖：任务 5、任务 7 和任务 8。
+    - 实现：新增 `docs/gc/concurrency-ownership.md`，明确 shared lobby store、recent reconnect context、per-instance serialized connection state、reconnect adapter probe cache、callback queue、delayed reconnect callback、per-coordinator delayed GC message 和 deferred lifecycle slot 的 owner、同步域、允许入口与异步 generation 校验。六个 owner 类型和共享接口增加 source-level 边界注释；当前 `global_mutex` 外层域、store 内部加锁、callback 解锁执行和 per-instance 状态约束均按现状记录，P11.2/P11.3 风险边界单独列出。
+    - 审计：新增 Audit 11，要求 14 项关键 owner、入口和后续边界持续存在；audit helper regression suite 增至 7 个测试。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 253/253，registry assertions 339/339，callsystem guard 4/4，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit 11 项 0 问题。
+  - [x] 11.2 收敛锁获取顺序
+    - 定义统一 lock order，消除持有全局锁时调用外部 callback/network API 的路径。
+    - 实现：`PostConnectionStateMsg()` 使用 `unique_lock<recursive_mutex>` 在 `global_mutex` 内执行 reconnect context 读取、serialized state 更新和 direct/callback dedup 预留，随后显式释放 process lock，再按既有 `connect -> callback queue` 顺序执行 network/callback effects。callback queue adapter 在自身入口重新进入既有 `global_mutex` 同步域，避免锁外访问 callback 容器。
+    - callback：`SteamCallResults::runCallResults()` 接收 owning `unique_lock`，通过统一 exception-safe RAII 边界在锁外执行普通 callback、call-result callback、completed callback 和 `cb_all`，返回后恢复锁并继续队列遍历；生产路径已移除裸 `global_mutex.unlock()/lock()`。
+    - 测试与审计：reconnect focused fake 断言 prepare 阶段不执行外部 effect、锁内预留 dedup 且 effects 保持顺序；callsystem 使用另一线程 `try_lock()` 证明已注册、late-registration replay 和 `cb_all` 均在 process lock 外执行。Audit 11 禁止 callsystem 裸锁操作并要求 production reconnect 保持 prepare/unlock/effects 顺序。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 259/259，callsystem guard 8/8，registry assertions 339/339，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit helper 8/8，audit 11 项 0 问题。
+  - [x] 11.3 将 serialized 实例状态限制在实例同步域
+    - 明确 callback 与 `PostConnectionStateMsg()` 的串行化要求。
+    - 必要时使用实例 mutex 或现有 run-callback 序列保证。
+    - 实现：新增 dependency-light `GBE_DotaSerializedConnectionSynchronizer`，每个 `Steam_Networking_Sockets_Serialized` 实例持有独立 mutex。`PostConnectionStateMsg()` 在既有 `global_mutex` 域内获取实例锁，完成 context/probe cache 读取和 connection state prepare 与 dedup 预留；随后依次释放实例锁和 process lock，再执行 direct connect 与 callback queue effects。
+    - 锁序：统一为 `global_mutex -> serialized instance mutex`，兼容可能已持有递归 process lock 的入口。同实例 connection state 与 recovery probe cache 在 prepare 期间串行，client 与 gameserver serialized sockets 使用独立实例域；锁外 effects 依靠锁内 dedup 预留保持单次提交语义。
+    - 测试与审计：focused concurrency test 通过受控条件变量证明同一 synchronizer 阻止重叠操作并在释放后推进下一操作，同时证明两个独立 synchronizer 可同时进入。Audit 11 要求实例 synchronizer 成员存在，并固定 production `process lock -> instance lock -> prepare -> process unlock -> effects` 顺序。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 262/262，callsystem guard 8/8，registry assertions 339/339，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit helper 8/8，audit 11 项 0 问题。
+  - [x] 11.4 增加并发压力单元测试
+    - 有界并发执行 snapshot/read/update/clear/context build，断言无崩溃、无 torn snapshot、无 stale write 生效。
+    - 实现：新增独立 `gbe_dota_concurrency_stress_test`，以 1 个 writer 和 4 个 reader 执行 1,000 个 generation 的有界历史。writer 交替执行完整 monotonic publish、matching compare/update、stale compare/update 和周期 clear；reader 每次只读取一个 immutable snapshot，校验 generation、lobby/server/custom game/owner/endpoint/string/vector 字段属于同一完整版本，并从该版本通过 production reconnect source/context builder 生成 context。
+    - 验收：断言 reader 全部执行、torn snapshot 为零、context identity 漂移为零、999 次 stale update 全部返回 `StaleGeneration`、stale mutator 调用为零，并验证最终 generation 1001 的完整状态。测试接入 fast/full shell 门禁与 Premake target；Audit 11 要求关键操作、零错误断言和双入口接线持续存在。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；concurrency stress 通过，reconnect network 262/262，callsystem guard 8/8，registry assertions 339/339，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit helper 8/8，audit 11 项 0 问题。
+  - [x] 11.5 增加 ThreadSanitizer CI target
+    - 构建最小 GC state/reconnect 测试集并执行 TSAN。
+    - 将确定性 data race 作为 PR 阻断条件。
+    - 实现：新增 `tools/run_gc_tsan_tests.sh`，以 `-fsanitize=thread -O1 -g -fno-omit-frame-pointer -pthread` 构建并运行 reconnect network/state focused test 与 P11.4 shared lobby/reconnect context stress test。`TSAN_OPTIONS=halt_on_error=1:exitcode=66` 使首个 race 报告立即以非零状态失败。
+    - CI：PR workflow 新增独立必过 `gc-tsan` job，在 Ubuntu 24.04 安装 Clang 并以 `CXX=clang++` 执行最小门禁。Audit 11 要求 sanitizer flags、race 退出策略、两个 focused target 和 PR workflow 接线持续存在；audit helper 增至 9/9。
+    - 验证：`CXX=c++ bash tools/run_gc_tsan_tests.sh` 在当前环境通过，reconnect network 262/262，concurrency stress 通过且无 ThreadSanitizer 报告。Clang TSAN 由 PR `gc-tsan` job 持续执行。
+  - [x] 11.6 增加并发属性测试
+    - 属性 P11-A：任意并发历史中的已接受 generation update 可线性化。
+    - 属性 P11-B：callback/network fake 在 store lock 外被调用。
+    - 属性 P11-C：跨实例 serialized state 不共享可变内存。
+    - P11-A：64 个确定性 seed 各自运行 2 个乱序 monotonic publisher 与 2 个 matching generation updater；断言最终 snapshot 位于最大 generation 的 publish 线性化点，并且该 generation 的每个已接受 update 仅贡献一次完整 state mutation。
+    - P11-B：64 个 seed 通过 prepare/effects seam 在 store lock 内完成 context/state/dedup 预留，释放后执行 connector 和 callback queue fake；fake 从另一线程 `try_lock` 同一 mutex，证明两类外部 effect 均位于 store lock 外。
+    - P11-C：64 组双实例并发历史各自拥有 synchronizer、serialized state、connector 和 callback queue；断言各自 generation/lobby/dedup 历史独立，后续仅修改实例 A 时实例 B 的全部可变字段保持不变。Audit 11 要求 P11-A/B/C 的关键属性标签持续存在。
+  - [x] 11.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - 检查点：P11.1-P11.6 已完成。shared lobby store、recent reconnect context、serialized state、callback queue 和 delayed task 的 ownership 与访问规则已固化；production lock order 为 `global_mutex -> serialized instance mutex -> prepare/dedup reservation -> release instance mutex -> release global_mutex -> external effects`。
+    - 并发门禁：有界 1 writer/4 reader 压力历史通过；P11-A generation 线性化、P11-B 锁外 network/callback effect、P11-C 跨实例隔离属性各运行 64 个确定性 seed；PR workflow 具备独立阻断式 Clang TSAN job。
+    - 终验：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 均通过；reconnect network 774/774，callsystem guard 8/8，registry 339/339，payload 449/449，handler 77/77，replay fixtures 7 组，audit helper 9/9，audit 11 项 0 问题，TSAN 无 race 报告。未发现需要用户裁决的协议、并发或兼容性疑问。
+
+- [x] 12. P12 删除过渡层并固化架构门禁
+  - [x] 12.1 删除生命周期重复 handler 逻辑
+    - 清理 direct/wrapped 中已被 planner/executor/registry 替代的分支和 helper。
+    - 依赖：任务 2、任务 6 和任务 9。
+    - 实现：将 7070、8052、8053 注册为 `DirectAndWrapped` 的 `LobbyLifecycle` typed registry entry，通过单一 `GBE_HandleDotaCustomGameLifecycleRequest(context)` 解析请求并调用共享 lifecycle executor。删除三个 direct handler、一个 wrapped 多分支入口，以及 post-login 中六条 direct/wrapped 手工 fallback；统一实现文件改名为 `gbe_dota_custom_game_lifecycle_handlers.cpp`。
+    - 兼容性：direct 7070 继续直接返回 7170，wrapped 7070 继续保留 outer session；8052/8053 保持 direct/wrapped reason、runtime update note、lobby ID 过滤、load-failure 分支和 action sequence。现有 direct/wrapped equivalence、session forwarding、inactive/mismatched lobby 和 duplicate determinism smoke tests继续通过。
+    - 门禁：Audit 4 动态验证 27 项 typed registry 与 16 项高风险 fixture。Audit 9 新增退役层审计，拒绝四个旧 handler 符号或 7070/8052/8053 post-login 手工 fallback 回流；审计 helper 增至 11/11。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 通过；reconnect network 774/774，callsystem guard 8/8，registry assertions 339/339，payload helpers 449/449，handler smoke 77/77，replay fixtures 7 组，audit helper 11/11，audit 11 项 0 问题。
+  - [x] 12.2 删除 reconnect 重复 mapping 与旧状态 API
+    - 清理旧 context builder、全局连接状态、lobby ID 代际兼容路径和未使用声明。
+    - 依赖：任务 3、任务 4、任务 5 和任务 7。
+    - mapping 收口：删除 `GBE_DotaReconnectSharedStateSnapshot`、`GBE_GetSharedDotaReconnectStateSnapshot()`、`source_from_shared_snapshot()` 和 `gbe::dota_lobby_state::build_reconnect_context()`。shared/local/generic/recent source 全部通过 `gbe_dota_reconnect_context.cpp` 中的 typed source adapter 和唯一 `build_context()` 管线，shared adapter 直接消费 immutable `GBE_SharedDotaLobbyState` snapshot，endpoint 继续仅在 canonical builder 中解析。
+    - 状态 API：serialized reconnect state 删除未被生产读取的 `lobby_id` 和默认 generation 兼容参数，`begin_lobby(lobby_id, generation)` 收紧为显式 `begin_generation(generation)`。dedup identity 继续为 `generation + server_id + endpoint`；同 generation 的 lobby ID 变化保留 retry/dedup 状态，generation 变化清理 server、retry、payload、callback 和 direct-connect 状态。
+    - 声明清理：删除零调用的 `describe_source_kind()`、`describe_reject_reason()` 和 `GBE_DescribeDotaReconnectPostSkipReason()`，统一使用 typed diagnostic `describe_source()` / `describe_reason()`。recent reconnect context 与 reconnect eligibility 仍承担 shared clear 后 fallback 和 one-shot interception 生命周期语义，继续保留；shared scalar facade 归 12.3 清理。
+    - 门禁：新增 Audit 12，拒绝 7 个退役 reconnect transition symbol、serialized `lobby_id`、`begin_lobby` 和默认 generation 回流，并要求 `begin_generation` 持续存在。正反 fixture 将 audit helper 增至 13/13。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 通过；reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 448/448，handler smoke 77/77，replay fixtures 7 组，audit helper 13/13，audit 12 项 0 问题，TSAN 无 race。
+  - [x] 12.3 删除 shared lobby 全局直访兼容层
+    - production 统一通过 lobby state store。
+    - 依赖：任务 8。
+    - Store 收口：删除 `GBE_DotaSharedLobbyScalarSnapshot`、scalar/snapshot/has/id/arcade predicate/clear 等 10 个 compatibility facade。production shared lobby 仅由 `GBE_GetSharedDotaLobbyStateStore()` 暴露，读取使用单次完整 immutable `snapshot()`，发布与 generation-guarded 更新继续使用 Store contract，runtime reset 直接调用 `clear()`。
+    - 行为保持：reconnect selection、queued-state preapply、invite fallback、7272 stale republish 判定、launch suppression、arcade networking fallback、post-login/template/lobby flow 均改为每个操作捕获一次完整 snapshot。invite 的 valid/lobby/generic identity 和其他跨字段 predicate 来自同一版本，避免多次 scalar getter 观察不同版本。
+    - 测试 harness：payload helper 与 handler smoke harness 使用真实 `gbe::dota_lobby_state::Store` owner，删除测试内旧 facade 和 mutable backing global；shell 与 Premake target 显式链接 `gbe_dota_lobby_state_store.cpp`。payload Store contract 覆盖增至 546/546，handler smoke 保持 77/77。
+    - 门禁：新增 Audit 13，拒绝 10 个退役 shared lobby compatibility symbol 和 `GBE_shared_dota_lobby_state` 回流；正反 fixture 将 audit helper 增至 15/15。production `dll/**/*.{h,cpp}` 无退役符号残留。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 通过；reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 546/546，handler smoke 77/77，replay fixtures 7 组，audit helper 15/15，audit 13 项 0 问题，TSAN 无 race。
+  - [x] 12.4 收紧架构 audit
+    - 禁止 handler 高风险副作用直调、共享状态直访、平行 dispatch 表和 reconnect 手工字段映射。
+    - 验收：为每条规则添加正反 fixture，确保 audit 能真实失败。
+    - 实现：Audit 7 的 handler side-effect scanner 支持注入 source text 与独立 baseline，保留 production 49 次调用和 20 项显式基线。新增 Audit 14，限制 typed post-login registry 只能位于 `steam_game_coordinator.cpp` 的 canonical owner，拒绝该 owner 旁的第二张 registry 表和 post-login owner 中基于 `request_emsg`/`inner_emsg` 的 message switch；template replay 的合法 `switch (request_emsg)` 保持允许。
+    - reconnect 与 shared 边界：Audit 14 拒绝 `gbe_dota_reconnect_context.cpp` 之外对 `GBE_DotaReconnectSource`/`GBE_DotaReconnectContext` canonical 字段的逐字段赋值，并复用 Audit 13 的退役 shared lobby facade/global 检查，避免维护平行符号库存。
+    - fixtures：新增 approved executor seam、canonical registry、canonical reconnect owner 和 Store snapshot 正例，以及 handler 直调、额外 registry、post-login switch、owner 外 reconnect mapping 和退役 shared facade 反例；审计 helper 增至 21/21。
+    - 验证：`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 通过；reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 546/546，handler smoke 77/77，replay fixtures 7 组，audit helper 21/21，audit 14 项 0 问题，TSAN 无 race。
+  - [x] 12.5 完善分层 CI 门禁
+    - 快速层：offline unit、property、replay、audit、diff check。
+    - 生产层：Windows/Linux `api_experimental` x64 release。
+    - 并发层：TSAN 最小目标。
+    - 快速层：PR `gc-verification` 使用 `run_gc_verification.sh --fast --base-sha <PR base>`，运行 header compile、unit/property、4 组高信号 replay、audit helper、production audit 和 base diff check。完整 7 组 replay 与附加 domain suites 保留在 `--full` 阶段闸口。
+    - 生产层：保留独立 reusable Windows/Linux jobs，均以 `continue_on_error: false` 构建 `api_experimental`、x64、release，避免 offline pass 掩盖 production integration failure。
+    - 并发层：保留独立 Ubuntu Clang TSAN job，执行 reconnect network 与 shared-store/reconnect stress 最小目标，`halt_on_error=1:exitcode=66` 在首个 race 阻断。
+    - 门禁：新增 Audit 15 和可注入正反 fixtures，拒绝 fast job 回退到 `--full` 或缺少 base SHA、Windows/Linux release matrix 漂移、production failure 非阻断、TSAN 编译器/脚本漂移，以及 fast verification 缺失 offline/audit/diff 或关键 unit/property/replay target；审计 helper 增至 23/23。
+    - 验证：`bash tools/run_gc_verification.sh --fast --base-sha origin/dev`、`bash tools/run_gc_verification.sh --full --base-sha origin/dev` 与 `CXX=c++ bash tools/run_gc_tsan_tests.sh` 通过；reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 546/546，handler smoke 77/77，full replay fixtures 7 组，audit helper 23/23，audit 15 项 0 问题，TSAN 无 race。
+  - [x] 12.6 执行全仓回归验证
+    - 运行 full GC verification、生产构建、Clang/GCC 编译、replay fixtures 和 TSAN。
+    - 对比任务 1 基线，确认 message mapping、payload summary 和 action sequence 保持稳定。
+    - 双编译器：GCC 12.2 与 Clang 14 分别执行 `bash tools/run_gc_verification.sh --full --base-sha origin/dev`，均通过 header compile、offline suites、7 组 replay、23/23 audit helper、15 项 production audit 和 base diff check。Clang 发现的 shared diagnostic `SourceKind` 非 reconnect 枚举 warning 已通过显式 fallback priority 收敛，选择语义保持默认优先级 4。
+    - 并发：`CXX=clang++ bash tools/run_gc_tsan_tests.sh` 通过 reconnect network 与 shared-state/reconnect stress，TSAN 无 race。
+    - P0 mapping：基线 commit `f9d7bc484bf0f57d24a01d5b94e1fbdd7a3a35be` 的 24 项 post-login registry 映射全部按原序保留；当前新增 7070、8052、8053 三项，将原 registry 外 direct/wrapped lifecycle 特判统一到 canonical typed registry。Audit 4 验证当前 27 项均解析到唯一 adapter。
+    - P0 payload/replay：`tools/gc_replay_test/fixtures` 相对 P0 无 diff，7 组 replay summary 全部匹配；payload helper 546/546，wire payload 与 unknown-message fallback 由完整 offline/replay gate 保持。
+    - P0 action sequence：P0 的 64 个 handler smoke 测试函数全部保留，当前 77/77 通过；新增 direct/wrapped lifecycle event-order equivalence、duplicate determinism、generation 和 stale-work assertions，原有 action-order 断言继续通过。
+    - 生产构建：Windows/Linux `api_experimental` x64 release 继续由独立 blocking CI jobs 承担。本地 Debian glibc 2.36 无法运行仓库中要求 GLIBC 2.38 的 bundled Linux Premake，且当前环境无 Windows runner；第三方二进制权限已恢复，所有 submodule 保持干净。
+    - 最终计数：reconnect network 772/772，callsystem guard 8/8，registry assertions 339/339，payload helpers 546/546，handler smoke 77/77，replay fixtures 7 组，audit helper 23/23，audit 15 项 0 问题，`git diff --check` 通过。
+  - [x] 12.7 检查点：确保所有测试通过，如有疑问请询问用户
+    - P12 回归、行为基线、架构审计和并发门禁均已关闭，无待确认的协议、payload、action-order 或并发语义问题。production integration 由已配置的 blocking Windows/Linux release jobs 最终执行。
+
+- [x] 13. P13 建立 GC Composition Root
+  - [x] 13.1 定义应用级依赖容器
+    - 建立唯一 GC/Dota composition root，集中拥有 lobby store、reconnect service、lifecycle executor、handler registry、callback scheduler 和 production adapters。
+    - 依赖：任务 12。
+    - 保持 Steam API 对外入口和现有对象 ABI 稳定。
+    - 实现：新增 `gbe::dota::CompositionRoot`，内嵌拥有 shared lobby backing state、mutex 和 `dota_lobby_state::Store`；通过 `unique_ptr` 拥有 lifecycle executor、client/server callback scheduler，以及每个 role 的 reconnect context provider、direct connector 和 callback queue。root 从 canonical production table 复制并拥有 immutable typed handler registry entries，对外仅暴露只读 `HandlerRegistryView`。
+    - role 边界：`RoleContext` 为 client/server 分别拥有 scheduler 与 reconnect adapters，同时共享同一个 application lobby Store。`ReconnectService` 复用现有 prepare/effects 管线，提供分阶段和组合执行入口，保持外部效果边界不变。
+    - ABI 边界：本任务仅定义并验证容器，不修改 `Steam_Game_Coordinator`、Steam API 接口或 production 对象布局；production 构造顺序、owner 接入和调用链注入分别留给 13.2、13.3。
+    - 测试：新增 header self-containment 与 focused composition-root tests，覆盖六类依赖绑定、ownership 转移后的引用稳定、client/server Store 共享、双 root 状态隔离，以及 reconnect service 对 owned adapters 的调用。
+    - 构建：新模块接入 fast/full shell gate 和独立 Premake test target；Audit 6 识别的 testable split GC TU 从 17 增至 18，shell/Premake source-list 均完整。
+    - 验证：GCC `run_gc_verification.sh --full`、Clang fast offline gate 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 23/23，15 项 audit 0 问题，TSAN 无 race。
+  - [x] 13.2 明确对象生命周期和构造顺序
+    - 定义 settings、network、callbacks、store、services、coordinator 的初始化和销毁顺序。
+    - 禁止 service 在构造期间访问尚未完成初始化的依赖。
+    - 契约：`LifecycleStage` 以单一 canonical 序列定义 `Settings -> Network -> Callbacks -> Store -> Services -> Coordinator`；销毁严格反向执行，避免维护第二份平行清单。
+    - production：保留 client/server direct sockets、serialized sockets、game coordinator 的现有构造相对顺序；销毁顺序调整为 coordinator 先于 serialized/direct sockets，确保 coordinator 始终位于其 GC services 和 network infrastructure 生命周期内。
+    - 构造安全：focused composition-root test 通过带调用计数的 fakes 断言 root 构造只接管依赖，不查询 reconnect context、不执行 direct network effect、不入队 callback。
+    - 架构门禁：新增 Audit 15，直接检查 `Steam_Client` 的 client/gameserver production 构造和销毁顺序；注入式正反 fixtures 验证 coordinator 提前构造或延后销毁均会失败。layered CI gate 顺延为 Audit 16。
+    - 验证：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 26/26，16 项 production audit 零问题，TSAN 无 race。
+  - [x] 13.3 将业务依赖改为显式注入
+    - 从 reconnect、lifecycle、registry 和 store 调用链开始迁移构造参数或窄 context 引用。
+    - Steam 兼容入口只定位所属实例并转发调用。
+    - Store 切片：`Steam_Client` 将 production shared lobby Store 显式传入 client/server coordinator；coordinator-owned handlers 和 flow/coordinator TUs 统一通过实例窄访问器读取或更新 Store。Audit 14 禁止这些业务路径回退到全局 accessor。提交：`6cab09f8`。
+    - Reconnect 切片：client/server production reconnect adapter 改由 `Steam_Client` 明确拥有，并通过三个窄接口注入 serialized sockets；serialized service 不再内嵌隐藏 production adapter。Audit 15 校验 direct sockets、adapter、serialized service、coordinator 的正向构造与反向销毁顺序。提交：`ea91926f`。
+    - Registry 切片：`GBE_ProductionDotaHandlerRegistry()` 唯一拥有 canonical 27 项 typed table，`Steam_Client` 将同一只读 view 显式注入 client/server coordinator，dispatcher 仅通过实例 view 执行查找。Audit 4 从 factory 派生 mapping，Audit 14 拒绝 dispatcher 恢复 static table 或绕过注入 view。提交：`8444af45`。
+    - Lifecycle 切片：新增 `dota_lifecycle::Executor` 窄 port 与 production `CoordinatorExecutor` adapter；`Steam_Client` 为 client/server 分别拥有 executor，并在 coordinator 构造时以引用显式注入。业务调用继续经稳定 `GBE_ExecuteDotaLifecycleActions()` 入口转发，原副作用循环保留为 coordinator 私有 effect implementation。Audit 15 锁定 `serialized service -> lifecycle executor -> coordinator` 构造和精确反向销毁顺序。提交：`7c4a8e23`。
+    - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 28/28，16 项 production audit 零问题，TSAN 无 race。
+  - [x] 13.4 收敛业务 singleton 和文件级可变 static
+    - 将业务状态迁移到 composition root 所拥有的实例。
+    - 保留协议常量、immutable lookup table 和受控进程基础设施。
+    - Shared Store 切片：`Steam_Client` 直接拥有 lobby backing state 和 Store；compatibility locator 仅保存非 owning 指针，隐藏 function-local singleton 已移除。提交：`b4d8932a`。
+    - Runtime state 切片：`Steam_Client` 直接拥有 `gbe::dota::RuntimeState`，承载 recent reconnect context、eligibility 和 last server-hello context；现有 free-function 入口只定位已绑定实例。提交：`f9b38ea0`。
+    - Cache 切片：VPK loot、item definitions、style unlock、load/disable flags 与 equip cache version 全部迁入同一 application runtime owner；welcome/inventory 每次操作捕获一次 owner 引用，协议与副作用顺序保持稳定。
+    - 架构门禁：Audit 15 扫描 main coordinator、welcome 和 inventory split TU，拒绝十个 retired 文件级业务状态回流；注入式负向 fixtures 覆盖 split TU 失败路径。
+    - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 31/31，16 项 production audit 零问题，TSAN 无 race。
+  - [x] 13.5 增加 composition root 构造测试
+    - 覆盖 client、gameserver、offline fake 三种组装方式。
+    - 断言实例间 store、reconnect state、callback scheduler 和 adapters 互相隔离。
+    - Client/gameserver：分别驱动对应 role 的 reconnect service，断言 context provider、direct connector 和 callback queue 只在所属 role 被调用，generation 准确转发。
+    - Offline fake：构造两个独立 root，断言 lobby Store、callback scheduler、context provider、direct connector 和 callback queue 的对象身份与调用状态完全隔离。
+    - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 31/31，16 项 production audit 零问题，TSAN 无 race。
+  - [x] 13.6 增加生命周期销毁测试
+    - 验证 delayed task 和 callback 不会在依赖销毁后访问悬空对象。
+    - 验证重复创建/销毁应用上下文不会继承上一实例业务状态。
+    - 销毁探针：九个 root-owned lifecycle dependencies 使用共享外置计数器记录存活与析构；root 离开作用域后全部释放且每个对象只析构一次。
+    - 异步边界：delayed work 与 callback 闭包仅持有弱生命周期引用；root 销毁后执行闭包成为安全空操作，未产生 effect 或 callback。
+    - 重建隔离：首个 root 写入 lobby state 并执行 reconnect 后销毁；新 root 的 Store、context 调用计数、connector、callback history 和 generation 均从初始状态开始。
+    - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 31/31，16 项 production audit 零问题，TSAN 无 race。
+  - [x] 13.7 增加全局状态架构审计
+    - 禁止新增业务可变 namespace/global/static 状态。
+    - 为允许的 immutable 常量和底层兼容入口维护最小显式白名单。
+    - 新增 Audit 16：按顶层声明扫描全部 `gbe_dota_*.cpp` 与 `steam_game_coordinator.cpp`，默认拒绝可变 file static 和 namespace/global 状态；类型定义、alias、函数、`extern` 与 const/constexpr immutable data 自动分类。
+    - 最小白名单仅包含 `GBE_shared_dota_lobby_store` 与 `GBE_dota_runtime_state` 两个非 owning compatibility locator，并记录其存在理由；layered CI 顺延为 Audit 17。
+    - 注入式 fixtures：接受 immutable table/function 与两个 locator；拒绝业务 file static、namespace business state 和第三个未授权 locator。audit helper 由 31 增至 35。
+    - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题，TSAN 无 race。
+  - [x] 13.8 检查点：确保所有测试通过，如有疑问请询问用户
+    - P13.1-P13.7 的应用级 owner、生命周期顺序、显式依赖注入、业务状态收敛、组装/销毁测试和全局状态审计均已关闭。
+    - 最终门禁：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题，TSAN 无 race。
+    - 本地 production generation 继续受 bundled Premake GLIBC 2.38 要求和缺少 Windows runner 限制；blocking Windows/Linux release jobs 保持最终 production integration gate。无待确认的 ABI、协议、payload、action-order、ownership 或并发语义问题。
+
+- [x] 14. 核心 P15 建立显式纯状态机
+  - [x] 14.1 定义 Lobby lifecycle 状态与事件
+    - 将 create、join、setup、loading、loaded、run、postgame、leave、abandon 和 reset 表达为强类型 state/event。
+    - 依赖：任务 6、任务 7 和任务 13。
+    - direct/wrapped 消息映射为相同 domain event。
+    - 实现：新增 dependency-light `gbe::dota_lifecycle_state_machine` domain contract；`State` 覆盖 idle、created、joined、setup、loading、loaded、running 和 postgame，`EventKind` 覆盖任务要求的十类 lifecycle event，`EventSource` 区分 internal、direct 和 wrapped 来源。
+    - Transport mapping：create `7038`、join `7044`、setup `7041`、loading `8052`、loaded `8053`、run `7070`、postgame `7004`、leave `7040`、abandon `7035` 映射到统一 domain kind；direct/wrapped 仅保留来源元数据，unknown EMsg 明确返回 unmapped，reset 由内部 event factory 产生。
+    - 边界：本任务只固定 domain vocabulary 和 transport-to-domain mapping，不引入 transition 规则或 production handler 接线；后续 14.2 和 14.4 分别负责纯 transition 与核心路径迁移。
+    - 测试与构建：新增 header self-containment 和 focused mapping test，覆盖九类 transport event 的 direct/wrapped 等价、source 保留、unknown mapping 与 internal reset，并接入 fast/full shell gate 和独立 Premake target。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
+  - [x] 14.2 实现纯 transition 函数
+    - 输入 immutable state 和 event，输出 new state、effects、decision reason 和 accepted/rejected 状态。
+    - transition 内禁止执行网络、callback、日志、文件或全局状态副作用。
+    - 实现：新增 `constexpr transition(State, const Event&)`，输入仅为值语义 state/event，返回 `TransitionResult`，其中包含 next state、固定容量 effect list、typed `DecisionReason` 和 `DecisionStatus`。
+    - 基础 progression：idle 可进入 created 或 joined，created/joined 可进入 setup，随后按 loading、loaded、running、postgame、idle 单向推进；leave/abandon 从任意 active state 进入 postgame，reset 仅从 postgame 返回 idle。
+    - 决策：accepted transition 产生一个纯 `StateChanged` effect；重复目标状态返回稳定 `AlreadyInState`，乱序或非法 progression 返回 `InvalidTransition`，拒绝结果保持原状态且 effects 为空。
+    - 纯度边界：实现为 header-only constexpr 值变换，不引用 Store、coordinator、network、callback、logger、filesystem 或 mutable global state。当前 effect 仅描述 domain state change，production action 生成与执行留给 14.4。
+    - 测试：覆盖 create/join 双入口、完整正常 progression、leave/abandon teardown、reset、重复事件、乱序 loading/loaded，以及编译期 transition 求值。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
+  - [x] 14.3 将 generation 与 reconnect 规则纳入状态机
+    - 建模 generation 创建、复用、失效、旧 callback、重复消息和乱序事件。
+    - reconnect dedup 状态变化由明确 event 驱动。
+    - 状态模型：新增 `MachineState`，组合 lifecycle state、当前 generation、generation-scoped reconnect key 和 callback queued 标记；`MachineTransitionResult` 保持纯值语义输出。
+    - Generation 边界：create、join、leave、reset 和 recover 明确推进 generation，并清空 reconnect dedup 状态；setup/loading/loaded/run/postgame 等普通同步事件复用当前 generation。达到 `uint64_t` 上限时返回稳定 `GenerationExhausted`。
+    - 异步安全：event generation 为 `0` 表示普通同步输入未携带代际；callback/reconnect 等异步输入携带非零 generation 并与当前值精确匹配，旧代际返回 `StaleGeneration`，状态与 effects 均保持不变。
+    - Reconnect dedup：新增显式 `Reconnect` event，key 由 generation、server id 和 endpoint key 组成；相同 key 返回 `ReconnectAlreadyQueued`，server/endpoint 或 generation 变化重新产生 `ReconnectQueued` effect。recover/new generation 清空旧 key。
+    - 测试：覆盖 generation 创建和复用、旧 callback 拒绝、同 key 去重、endpoint 变化、recover 后重新排队、dedup 清空和 generation exhaustion。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 77/77，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
+  - [x] 14.4 迁移核心 lifecycle planner
+    - 迁移 `7070`、`8052`、`8053`、`7034` 和 teardown 高风险路径。
+    - executor 只消费 transition effects，store 只提交被接受的新状态。
+    - 已迁移 `7034` launch poll、runtime member/game-state update 与 `7070/8052/8053` custom lifecycle；production 仅在 accepted typed effect 存在时调用既有 planner/executor，payload、session、reason 和 action order 保持稳定。
+    - Teardown：新增纯 `transition_teardown` authorization，覆盖 `7040` leave、`7035` abandon、`7004` signout、delayed/finalize 和 player postgame cleanup；stale generation、重复/缺失 pending 状态和 generation exhaustion 返回稳定 typed reason。
+    - Generation ownership：teardown transition 保持 generation 不变并仅产生 `LegacyTeardownActionsRequested`；既有 `GcMemoryReset` 或 `DotaLobbyRuntimeClear` action 继续作为每条 teardown 路径的唯一 generation advance owner，避免 leave/reset 双推进。
+    - 顺序保持：既有 `25`、postgame `7010`、shared/runtime clear、generic lobby leave、settings clear 和 rich presence clear 顺序未变；executor 继续消费原 action lists。
+    - 验证：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题，TSAN 无 race。
+  - [x] 14.5 建立 transition table 完整性检查
+    - 对每个 state/event 组合定义 accept、reject 或 ignore 结果。
+    - 编译期或测试期检查未覆盖组合，防止隐式 default 行为。
+    - Canonical domain：`State::Count`、`EventKind::Count` 与 `all_states`、`all_event_kinds` 固定 8 个 lifecycle state 和 13 个 event，新增枚举值时必须同步进入 canonical 集合和 exhaustive switch。
+    - 分类契约：`TransitionDisposition` 将 `TransitionApplied` 分类为 accepted、`AlreadyInState` 分类为 ignored、`InvalidTransition` 分类为 rejected；每种分类同时检查 accepted flag、reason 和 effect presence。
+    - 完整性：`constexpr transition_table_complete()` 编译期遍历全部 104 个 state/event 组合，并由 `static_assert` 阻止遗漏或不一致结果进入构建。
+    - Focused test：固定当前 transition table 分布为 26 accepted、10 ignored、68 rejected，并断言总数为 104。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
+  - [x] 14.6 增加状态机示例测试
+    - 覆盖正常 launch、load failure、重复 loading/loaded、乱序 loaded、postgame、leave、abandon 和 reconnect。
+    - 正常 launch：场景化串联 `Create -> Setup -> Loading -> Loaded -> Run -> PostGame`，逐步断言 lifecycle state，并确认 create 后 generation 只推进一次。
+    - Load failure：通过 custom-game transition 验证 failed `8053` 保持 Loading 和当前 generation，仅产生 legacy lifecycle action effect，不产生 `StateChanged`。
+    - 重复与乱序：重复 loading/loaded 稳定返回 `AlreadyInState`，setup 阶段提前 loaded 稳定返回 `InvalidTransition`。
+    - Teardown：postgame 保持 generation，leave 进入 PostGame 并推进 generation，abandon 进入 PostGame 并复用 generation，符合当前 generation boundary contract。
+    - Reconnect：首次 generation/server/endpoint key 产生 `ReconnectQueued`，重复 key 返回 `ReconnectAlreadyQueued`，lifecycle 与 generation 保持稳定。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
+  - [x] 14.7 增加状态机属性测试
+    - 属性 P15-A：任意事件序列都不能绕过合法 launch progression 进入 loaded/run。
+    - 属性 P15-B：旧 generation 事件不能改变当前状态或产生当前代际 effects。
+    - 属性 P15-C：重复事件保持幂等，或返回稳定的明确拒绝结果。
+    - 属性 P15-D：load failure 永远不产生 connected/loaded effects。
+    - 属性 P15-E：teardown 最终进入可重复清理的稳定状态。
+    - P15-A：从 Idle 对十类 lifecycle event 穷举长度 5 的 100,000 条确定性序列；任何进入 Loaded 的 transition 必须来自 Loading，任何进入 Running 的 transition 必须来自 Loaded。
+    - P15-B：遍历全部 8 state x 13 event 的 stale-generation 输入，断言 lifecycle、generation、reconnect key/queued 状态保持不变且 effects 为空。
+    - P15-C：遍历全部 state 与十类 transport lifecycle event，重复执行后必须返回稳定 `AlreadyInState` 或 `InvalidTransition`；reconnect 重复 key 必须返回 `ReconnectAlreadyQueued`。
+    - P15-D：对全部 lifecycle state 执行 failed `8053` custom-game transition，断言 state/generation 保持且不产生 `StateChanged` loaded effect。
+    - P15-E：从每个 active state 分别执行 leave 和 abandon，再 reset 到 Idle；重复 reset 稳定返回 `AlreadyInState`，状态保持 Idle 且 effects 为空。
+    - 可复现性：属性输入使用固定 canonical event/state 集合与确定性枚举，不依赖随机数或时间，失败序列可由循环索引直接复现。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
+  - [x] 14.8 增加 model-based differential test
+    - 使用简化 reference transition table 生成事件序列，与 C++ transition 比较状态、effects 和 reason。
+    - 保存失败随机种子，保证回归可重复。
+    - Reference model：测试侧独立实现 lifecycle target、合法前置状态、generation boundary、stale generation、recover 和 reconnect dedup，不调用 production `transition()` 或辅助分类函数。
+    - 输入生成：使用固定 xorshift64 与 8 个常量种子，每个种子执行 512 步，共比较 4,096 次 transition；event 来自 canonical 13 项集合，generation 覆盖 zero/current/stale/future，server/endpoint key 覆盖重复与变化。
+    - 比较契约：逐步比较 lifecycle、generation、reconnect key/queued、decision status、reason，以及每个 effect 的 kind/from/to/generation。
+    - 可复现输出：mismatch 会输出 seed、step、event 和 input generation 后终止；开发期间 seed `1`、step `36` 曾定位 reference model 对 RuntimePoll 分类错误，修复后全部固定序列一致。
+    - 验证：GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 35/35，17 项 production audit 零问题。
+  - [x] 14.9 更新架构审计
+    - 禁止核心 lifecycle handler、executor 和 store 绕过 transition 函数直接决定状态转移。
+    - Audit 18 固化 5 个 migrated lifecycle owner 的 transition/effect gates：custom-game handler、match handler、lobby handler、lobby flow coordinator 和 lobby state coordinator。
+    - 审计单元测试覆盖完整 gate、缺失 transition call 和缺失 typed effect 三类场景；audit helper 由 35 项增至 38 项。
+  - [x] 14.10 检查点：确保所有测试通过，如有疑问请询问用户
+    - GCC full verification 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 38/38，18 项 production audit 零问题。
+    - P14 显式纯状态机阶段完成：typed vocabulary、纯 transition、generation/reconnect、production effect gates、完整 transition table、示例/属性/differential 测试和架构审计均已关闭。
+
+- [x] 15. 设置 P14、P16、P17 条件决策门禁
+  - [x] 15.1 建立 P14 Actor 触发条件检查
+    - 汇总 TSAN 结果、锁复杂度、乱序 callback 缺陷和跨线程状态访问数量。
+    - 当存在持续竞态、锁顺序难以稳定或多线程直接写业务状态时，创建 P14 单一状态所有者实施清单。
+    - 当前条件未触发时维持 store、generation 和显式锁模型。
+    - 门禁记录：`docs/gc/architecture-investment-gates.md` 定义四个客观触发条件：现有 ownership/lock contract 下可复现 TSAN race、超过两层或循环/逆序锁需求、单阶段两个 generation guard 后仍发生的乱序 callback mutation 缺陷、以及 Store/queue/generation-guarded slot 之外的跨线程业务状态 writer。
+    - 当前判定：Clang TSAN reconnect 772/772 与 concurrency stress 通过且零 race；锁序维持 `global_mutex -> serialized instance mutex` 并在 external effects 前释放；未发现单阶段两个确认的乱序 mutation 缺陷；共享与延迟状态均位于既有 owner 边界。Actor 门禁关闭，继续使用 Store、generation、queue 和显式锁模型。
+  - [x] 15.2 建立 P16 形式化验证触发条件检查
+    - 评估状态组合规模、重复/乱序缺陷数量、故障代价和多人长期维护需求。
+    - 条件触发时仅对 Lobby lifecycle、generation 和 reconnect dedup 建立 TLA+/Alloy 模型。
+    - 触发阈值：状态机超过 16 states、24 event kinds 或 384 reachable pairs；单阶段两个 duplicate/stale/out-of-order escaped defects；不可逆持久化数据、隔离边界或远端协议损坏；同一 release cycle 至少三名 active maintainer 持续修改 transition contract。前两类与多人维护条件至少命中两项，critical failure 可单独触发。
+    - 当前判定：8 states、13 events、104 pairs 全部具备 compile-time completeness；100,000 条长度 5 序列、全 stale-generation 矩阵和 4,096 步 differential model 已覆盖重复/乱序核心不变量；拒绝 transition 保持 state 且无 effects，generation guard 丢弃 stale work；未记录 post-P14 escaped defect 或三人并行维护压力。形式化模型门禁关闭。
+  - [x] 15.3 建立 P17 模型一致性门禁触发条件检查
+    - P16 模型进入长期维护后，再增加模型生成测试向量、C++ differential test 和 CI model checker。
+    - 模型未成为受维护交付物时，不建立双轨 CI。
+    - 启用条件：P16 门禁已开启且模型已提交；具名 owner/reviewer；版本化 machine-readable vector schema；C++ test 消费 generated vectors 并保留独立 reference model；pinned checker 与确定性本地命令在 CI 10 分钟内完成且失败可定位。
+    - 当前判定：P16 门禁关闭，仓库中无 maintained TLA+/Alloy deliverable、owner、vector schema、pinned checker 或 runtime baseline。P17 门禁关闭，继续使用现有 offline/property/differential/audit、Windows/Linux production build 和 Clang TSAN 分层 CI。
+  - [x] 15.4 将决策依据固化为可重复检查
+    - 使用 TSAN 报告、缺陷记录、状态机覆盖率和 CI 时间作为输入。
+    - 每次重大并发或状态机扩展后重新执行该决策检查。
+    - 机器可读输入：`docs/gc/architecture-investment-inputs.json` 记录 schema/date、TSAN race、lock depth、乱序与跨线程 writer 缺陷、8 x 13 = 104 状态空间、100,000 序列、4,096 differential steps、maintainer/critical scope、model readiness 和 CI wall-clock。
+    - 初始成本基线：本地 fast offline 135.14 秒，Clang TSAN 59.48 秒；model checker 上限 600 秒。数值用于投资判断，不作为性能 SLA。
+    - Audit 19 校验完整字段、非负/正数约束、state/event pair 乘积、gate 枚举和 concurrency/state-machine 两类重大扩展复查 trigger；审计 helper 增至 42 项。
+  - [x] 15.5 检查点：确保所有测试通过，如有疑问请询问用户
+    - 决策结果：Actor、formal model 和 model consistency CI 三个可选投资门禁均关闭；当前证据支持继续使用 Store/generation/显式锁、constexpr transition/properties/differential model，以及现有分层 CI。
+    - 可重复性：门禁规则位于 `docs/gc/architecture-investment-gates.md`，版本化输入位于 `docs/gc/architecture-investment-inputs.json`，Audit 19 在重大 concurrency 或 lifecycle state-machine expansion 后要求刷新输入。
+    - 终验：GCC full verification 与 Clang TSAN 通过；reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，audit helper 42/42，19 项 production audit 零问题，TSAN 无 race。
+
+- [x] 16. 完成后续重构架构验收
+  - [x] 16.1 验收 handler 职责边界
+    - handler 只执行 registry dispatch、parse、context mapping、planner/executor 调用和结构化日志。
+    - 验收解释：handler 继续保留历史 wire response adaptation/push 与 5 个 local-lobby commit compatibility seam，避免为物理纯化改写稳定协议顺序；新增业务状态或副作用 ownership 必须进入 coordinator/executor。
+    - Audit 20 去注释后统计 direct `push_incoming_now`、inventory network broadcast、`GBE_local_lobby` assignment 和 Store accessor；当前 34 个已知 compatibility operations 只能保持或收缩，任何新增 direct operation 阻断。审计 helper 增至 46 项。
+  - [x] 16.2 验收状态与副作用边界
+    - domain planner 保持纯决策；executor 拥有副作用；store 拥有共享状态；network adapter 拥有 Steam 网络调用。
+    - 验收结果：6 个 pure flow/action planner 不含 response push、callback、Steam network、Store accessor 或 shared publish/details side effect；lifecycle coordinator executor 保持六个 canonical effect API；Dota reconnect `ConnectByIPAddress` 仅由 network adapter 调用；Audit 10/13 继续保证共享状态只能通过 Store contract。
+    - Audit 21 固化 planner purity、executor effect inventory 和 reconnect network owner，正反 fixtures 覆盖 pure planner side effect、executor API 缺失和 adapter bypass；审计 helper 增至 50 项。
+  - [x] 16.3 验收依赖与对象生命周期
+    - composition root 拥有业务对象和可变状态，业务 service 使用显式依赖，实例之间保持隔离。
+    - 验收结果：production `Steam_Client` 继续拥有 shared lobby backing state/Store、runtime state、client/gameserver reconnect adapters 与 lifecycle executors；offline `CompositionRoot` 自有 backing state、mutex、Store、executor、registry copy 和双角色 context。
+    - Audit 22 固化 root ownership、`RoleContext`/`ReconnectService`/`Steam_Game_Coordinator` 显式构造依赖和 lifecycle executor 非空门禁；composition-root 集成测试持续覆盖双 root 隔离、client/gameserver 角色隔离、销毁后延迟工作失效和重建无状态泄漏。审计 helper 增至 54 项。
+  - [x] 16.4 验收核心状态机
+    - Lobby lifecycle、generation 和 reconnect 的核心转移只由纯 transition 函数产生。
+    - 验收结果：lifecycle 使用 dependency-light `constexpr` typed transitions；generation 增量只通过 `Counter::advance` 和 coordinator canonical owner，恢复同步保留 2 个显式 counter reconstruction；reconnect generation/dedup mutation 只位于 prepare planner，网络与 callback effects 位于 execute boundary。
+    - Audit 23 固化 6 个核心 lifecycle transition API、generation advance/synchronization owner 和 reconnect planner/executor owner；正反 fixtures 覆盖纯 transition 丢失、generation advance bypass 和 reconnect state bypass。审计 helper 增至 58 项。
+  - [x] 16.5 验收代际与异步安全
+    - 所有延迟任务、reconnect callback 和 runtime update 都携带并校验 generation。
+    - 验收结果：延迟 GC message 在入队时捕获 lobby ID/generation，并在 immediate、delay-expired 和 incoming-queue 边界校验；3 个 deferred lifecycle slot 在消费时校验 generation；reconnect callback 复制 generation guard 并在最终交付前读取当前 context；runtime member/game-state/poll transitions 携带当前 generation。
+    - Audit 24 固化延迟消息、deferred slot、reconnect callback 和 runtime transition generation gates，并要求 fast leave/rejoin、stale postgame 和 stale delayed runtime 三项回归持续执行。审计 helper 增至 62 项。
+  - [x] 16.6 验收测试可信度
+    - 每条高风险 lifecycle/reconnect 路径同时具备纯逻辑测试、executor 测试和 production-path fake 集成测试。
+    - 核心状态机具备属性测试和 model-based differential test。
+    - 验收结果：lifecycle 由 state-machine examples/properties/differential、executor 行为测试和 direct/wrapped handler 集成覆盖；reconnect 由 prepare/dedup 状态断言、connector/callback fake executor 覆盖，以及 composition-root/serialized production-path fake 隔离与锁边界覆盖。
+    - Audit 25 固化 15 个高风险测试入口及 reconnect、composition-root、lifecycle-state-machine、handler 四个 offline runner targets，确保测试同时定义、执行并接入统一门禁。审计 helper 增至 66 项。
+  - [x] 16.7 验收 CI 门禁
+    - offline、audit、Windows/Linux production build 和 TSAN 均为明确且可定位失败的检查项。
+    - 验收结果：PR workflow 保持 Windows release、Linux release、GC verification 和 GC ThreadSanitizer 四个独立 blocking job；fast job 运行 offline/audit/diff，production reusable workflows 构建 `api_experimental` x64 release，TSAN 使用 Clang dedicated script。
+    - Audit 26 固化四个稳定 job/step 名称、reusable workflow 与 blocking token，并要求 verification/TSAN scripts 使用 `set -euo pipefail`；Audit 17 继续保证分层内容完整。审计 helper 增至 69 项。
+  - [x] 16.8 验收投资边界
+    - P14、P16、P17 依据任务 15 的客观触发条件决定，避免默认扩大重构范围。
+    - 验收结果：当前证据重新推导 Actor、formal model 和 model consistency CI 三项门禁均关闭；维持 Store/generation/显式锁、constexpr transition/properties/differential，以及现有分层 CI。
+    - Audit 27 按 TSAN race、锁深度、乱序缺陷、跨线程 writer、状态空间、escaped defects、critical scope、maintainer 与 model readiness 重新计算三项门禁，并校验 JSON、门禁文档和任务清单结论一致。审计 helper 增至 73 项。
+  - [x] 16.9 最终检查点：确保所有测试通过，如有疑问请询问用户
+    - 架构验收：handler responsibility、state/effect ownership、dependency/object lifecycle、core state machine、generation-scoped async work、test credibility、CI localization 和 investment boundaries 全部关闭；Audit 20-27 持续阻断边界回退。
+    - GCC full verification 通过：reconnect 772/772，callsystem 8/8，registry 339/339，payload 546/546，handler 78/78，7 组 replay，composition-root/state-machine/concurrency tests 通过，audit helper 73/73，27 项 production audit 零问题。
+    - Clang TSAN 通过：reconnect 772/772 与 bounded concurrency stress 均通过，零 race report。
+    - 行为与协议保持：P0 replay baseline 无漂移，typed registry 仍为 post-login mapping 唯一来源，wire response ordering、unknown fallback、public Steam API 和 client/gameserver 初始化语义保持稳定。

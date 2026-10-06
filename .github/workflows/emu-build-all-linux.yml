@@ -3,8 +3,46 @@ name: "Build emu (Linux)"
 on:
   workflow_call:
     # needed since it allows this to become a reusable workflow
+    inputs:
+      matrix_prj:
+        required: false
+        type: string
+        default: '["api_regular","steamclient_regular","api_experimental","steamclient_experimental","tool_lobby_connect","tool_generate_interfaces","test_gamepad_linux"]'
+      matrix_arch:
+        required: false
+        type: string
+        default: '["x64","x86"]'
+      matrix_cfg:
+        required: false
+        type: string
+        default: '["debug","release"]'
+      emu_build_sha:
+        required: false
+        type: string
+        default: ""
+      continue_on_error:
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
     # allows manual trigger
+    inputs:
+      matrix_prj:
+        required: false
+        type: string
+        default: '["api_regular","steamclient_regular","api_experimental","steamclient_experimental","tool_lobby_connect","tool_generate_interfaces","test_gamepad_linux"]'
+      matrix_arch:
+        required: false
+        type: string
+        default: '["x64","x86"]'
+      matrix_cfg:
+        required: false
+        type: string
+        default: '["debug","release"]'
+      continue_on_error:
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: "write"
@@ -31,26 +69,14 @@ jobs:
     needs: ["deps"]
     runs-on: "ubuntu-24.04"
     if: ${{ !cancelled() }}
-    continue-on-error: true
+    continue-on-error: ${{ inputs.continue_on_error }}
 
     strategy:
       fail-fast: false
       matrix:
-        prj: [
-            # regular api
-            "api_regular",
-            "steamclient_regular",
-            # api + client (experimental)
-            "api_experimental",
-            "steamclient_experimental",
-            # tools
-            "tool_lobby_connect",
-            "tool_generate_interfaces",
-            # tests
-            "test_gamepad_linux",
-          ]
-        arch: ["x64", "x86"]
-        cfg: ["debug", "release"]
+        prj: ${{ fromJSON(inputs.matrix_prj) }}
+        arch: ${{ fromJSON(inputs.matrix_arch) }}
+        cfg: ${{ fromJSON(inputs.matrix_cfg) }}
 
     steps:
       # clone branch
@@ -91,7 +117,7 @@ jobs:
         working-directory: "${{ github.workspace }}"
         run: |
           sudo chmod 777 ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5
-          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --emubuild=${{ github.sha }} --os=linux gmake
+          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --emubuild=${{ inputs.emu_build_sha || github.sha }} --os=linux gmake
 
       # mandatory Linux packages
       - name: "Install required packages"
@@ -123,7 +149,7 @@ jobs:
       - name: "Upload target package"
         uses: actions/upload-artifact@v7
         with:
-          name: "emu-linux-${{ matrix.prj }}-${{ matrix.cfg }}-${{ matrix.arch }}-${{ github.sha }}"
+          name: "emu-linux-${{ matrix.prj }}-${{ matrix.cfg }}-${{ matrix.arch }}-${{ inputs.emu_build_sha || github.sha }}"
           path: "build/linux"
           if-no-files-found: "error"
           compression-level: 9
