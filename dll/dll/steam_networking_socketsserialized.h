@@ -31,12 +31,13 @@ public ISteamNetworkingSocketsSerialized005
     class SteamCallResults *callback_results{};
     class SteamCallBacks *callbacks{};
     class RunEveryRunCB *run_every_runcb{};
+    class Steam_Networking_Sockets *direct_sockets{};
 
     static void steam_callback(void *object, Common_Message *msg);
     static void steam_run_every_runcb(void *object);
 
 public:
-    Steam_Networking_Sockets_Serialized(class Settings *settings, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb);
+    Steam_Networking_Sockets_Serialized(class Settings *settings, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, class Steam_Networking_Sockets *direct_sockets);
     ~Steam_Networking_Sockets_Serialized();
 
     void SendP2PRendezvous( CSteamID steamIDRemote, uint32 unConnectionIDSrc, const void *pMsgRendezvous, uint32 cbRendezvous );

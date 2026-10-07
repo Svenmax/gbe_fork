@@ -34,6 +34,7 @@ public ISteamApps
     class Settings *settings{};
     class SteamCallResults *callback_results{};
     class SteamCallBacks *callbacks{};
+	std::string launch_command_line{};
 	
 	void FillProofOfPurchaseKey( AppProofOfPurchaseKeyResponse_t& data, AppId_t nAppID, bool ok_result, std::string key = "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd" );
 	void FillProofOfPurchaseKey( AppProofOfPurchaseKeyResponse007_t& data, AppId_t nAppID, bool ok_result, std::string key = "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd" );
@@ -130,6 +131,7 @@ public:
 	//
 	// If game was already running and launched again, the NewUrlLaunchParameters_t will be fired.
 	int GetLaunchCommandLine( char *pszCommandLine, int cubCommandLine );
+	void QueueLaunchCommandLine( const char *command_line );
 
 	// Check if user borrowed this game via Family Sharing, If true, call GetAppOwner() to get the lender SteamID
 	bool BIsSubscribedFromFamilySharing();

@@ -1,0 +1,159 @@
+# GC 维护性重构实施计划
+
+- [ ] 1. 固化当前 GC 重构基线
+  - 明确本轮重构目标：降低 `dll/steam_game_coordinator.cpp` 的职责密度，提升 Dota GC 后续维护、更新和 bug 定位效率。
+  - 记录当前高风险区域：Dota direct/wrapped 双入口分发、lobby state/shared state 手工同步、Dota lobby handler 过长、响应构造与队列发送混合。
+  - 建立当前验证基线：`gc_message_utils_test`、`gbe_proto_wire_test`、`gc_replay_test`、`gbe_dota_lobby_flow_test`、`gbe_dota_custom_game_test` 全部通过。
+  - 保持已有纯逻辑模块边界：`gbe_proto_wire.*` 负责 wire 级解析与编码，`gbe_gc_message_utils.*` 负责 GC payload 构造，`gbe_dota_gc_wire.*` 负责 Dota 模板改写，`gbe_dota_lobby_flow.*` 负责 lobby 流程纯规则，`gbe_dota_custom_game.*` 负责 custom game 纯规则。
+
+- [x] 2. 修正并集中离线测试命令
+  - [x] 2.1 更新 GC 测试文档中的手工编译命令
+    - 修改 `tools/gc_replay_test/README.md` 中 `gbe_proto_wire_test` 命令，补充 `dll/gbe_dota_gc_wire.cpp`。
+    - 补充 Dota 纯逻辑测试命令，包含 `-Ilibs`、`dll/gbe_dota_lobby_publish.cpp`、`dll/gbe_dota_lobby_snapshot.cpp`、`dll/gbe_dota_custom_game.cpp`、`dll/gbe_proto_wire.cpp` 等依赖。
+    - 目标是让后续 Agent 能直接复制命令完成 GC 离线回归。
+  - [x] 2.2 新增一个 GC 离线测试脚本或聚合说明
+    - 优先新增轻量脚本，例如 `tools/run_gc_offline_tests.sh`，按固定顺序编译并运行现有 GC/Dota 测试。
+    - 脚本输出应保留每个测试目标名称和失败退出码。
+    - 脚本仅依赖当前仓库源码和系统 C++ 编译器。
+  - [ ]* 2.3 为测试脚本增加最小自检
+    - 验证脚本在缺少编译器、缺少 fixture 或编译失败时返回非零退出码。
+    - 将失败信息保持为可定位的单行或短段文本。
+
+- [x] 3. 检查点 - 确保所有测试通过
+  - 确保所有测试通过,如有疑问请询问用户
+
+- [x] 4. 抽离 Dota GC 消息分发上下文
+  - [x] 4.1 定义统一的 Dota 请求上下文结构
+    - 新增 `dll/gbe_dota_gc_router.h/.cpp` 或同等命名模块。
+    - 定义 `DotaGcRequestContext`，统一表达 direct 与 wrapped 请求共有字段：inner emsg、body、source job、wrapped 标记、outer session raw、local steam id。
+    - 将 direct/wrapped 入口中的重复字段提取逻辑收束到上下文构造函数或解析函数。
+  - [x] 4.2 保留 `Steam_Game_Coordinator` 作为依赖边界
+    - handler 仍通过 `Steam_Game_Coordinator` 访问队列、settings、matchmaking、network 等现有依赖。
+    - 本阶段只统一路由输入形态，避免同步搬迁业务逻辑。
+  - [x] 4.3 将 direct 与 wrapped 的公共分发项映射到同一处理表
+    - 覆盖现有重复请求：7009、7038、7042、7044、7046、7047、7040、7041、7081、7149、7367、8054、4512、4513、8011、7111。
+    - 每个 emsg 在表中只声明一次 handler 入口。
+    - 对 wrapped 专有 envelope 行为保留在统一上下文的 response helper 中。
+  - [ ]* 4.4 为路由上下文编写单元测试
+    - 使用最小 direct protobuf header 和最小 wrapped payload fixture 验证解析结果一致。
+    - 属性 P1：同一个 inner emsg 在 direct 与 wrapped 输入中解析出的业务 emsg 一致。
+    - 属性 P2：缺失 wrapped session 字段时返回明确失败状态，业务 handler 不执行。
+
+- [x] 5. 拆分 Dota 响应包装与队列发送
+  - [x] 5.1 新增 Dota 响应发送辅助模块
+    - 将 `GBE_PushDotaResponse`、`GBE_SendDotaPracticeLobbyDetailsUpdate`、`GBE_SendDotaPracticeLobbyLaunchMessage` 中的 direct/wrapped 包装共性提取为可复用 helper。
+    - helper 输入包含 inner emsg、inner payload、wrapped session、apply lobby state、延迟策略和 reason。
+    - 保持 `push_incoming_now` 和 `push_incoming` 的实际队列操作留在 `Steam_Game_Coordinator` 内部或薄适配层。
+  - [x] 5.2 统一响应日志字段
+    - 固定日志字段顺序：reason、path、inner emsg、wrapped 标记、payload size、lobby id、state、game state。
+    - 将重复的 body prefix/packet prefix 日志封装到一个短 helper，减少 handler 内日志噪声。
+  - [x]* 5.3 增加响应包装测试
+    - 验证 direct 响应保留原 inner payload。
+    - 验证 wrapped 响应使用相同 outer session raw 构造 outer 5453 消息。
+    - 属性 P3：给定同一 inner payload，多次包装输出稳定且 inner emsg 可解析回原值。
+
+- [x] 6. 抽离 Dota lobby 状态同步映射
+  - [x] 6.1 新增 local/shared state 映射函数
+    - 在 `gbe_dota_lobby_flow.*`、`gbe_dota_lobby_snapshot.*` 或新模块中集中实现 `GBE_LocalLobby` 到 `GBE_SharedDotaLobbyState` 的字段映射。
+    - 当前 [GBE_PublishSharedDotaLobbyState](/workspace/gbe_fork/dll/steam_game_coordinator.cpp:7711) 中的手工字段复制应迁移到单一 helper。
+    - helper 返回映射结果和是否更新 reconnect context 的决策数据。
+  - [x] 6.2 抽离 reconnect context 生成逻辑
+    - 将 active lobby、server id、connect endpoint、owner steam id 等 reconnect 条件集中到一个纯函数。
+    - `Steam_Game_Coordinator` 只负责写入 `GBE_recent_dota_reconnect_context` 和日志。
+  - [x] 6.3 收束 publish/restore/capture 的字段一致性
+    - 对 `GBE_PublishSharedDotaLobbyState`、`GBE_RestoreSharedDotaLobbyState`、`GBE_CaptureCurrentDotaLobbyState` 做字段清单对齐。
+    - 对新增字段建立单点映射路径，降低漏同步概率。
+  - [x]* 6.4 增加状态映射单元测试
+    - 构造覆盖 owner、members、custom game、cache metadata、launch phase、broadcast、connect 的 lobby fixture。
+    - 属性 P4：local -> shared -> restored local 后关键业务字段保持一致。
+    - 属性 P5：server 侧 state/game_state/server_id 优先规则稳定，client 侧只在更高状态时推进。
+
+- [x] 7. 拆分 Dota lobby handler 流程
+  - [x] 7.1 抽离 create handler 的纯状态构建部分
+    - 从 [GBE_HandleDotaPracticeLobbyCreateRequest](/workspace/gbe_fork/dll/steam_game_coordinator.cpp:12895) 中提取请求解析、默认 lobby 初始化、custom game normalize、owner member 初始化。
+    - 输出一个可测试的 lobby creation plan，包含新 lobby 状态、是否替换运行中的 practice lobby、需要发送的 cache unsubscribe 决策。
+  - [x] 7.2 抽离 join/invite handler 的 generic lobby 匹配逻辑
+    - 将 `GBE_FindDotaGenericLobbyByDotaLobbyId` 调用前后的 owner、member、pass key、snapshot 合并规则集中到 helper。
+    - join 与 invite accept 共享匹配和成员合并逻辑。
+  - [x] 7.3 抽离 launch handler 的阶段推进逻辑
+    - 将 launch phase、state/game_state、readyup、server setup、run queued 的判断抽成纯规则函数。
+    - 输出需要发送的 24、26、7034、Steam auth ack、rich presence 事件列表。
+    - [x] 已抽离 7041 launch init 与 custom game READYUP/SERVERSETUP 状态 plan。
+    - [x] 已抽离 RUN queued gate 与 queued apply 的 state/game_state/launch_phase 规则。
+    - [x] 已抽离 7041 普通/custom setup 输出事件 plan，覆盖 26、Steam auth ack、rich presence 参数。
+  - [x] 7.4 保持外部行为兼容
+    - 每个 handler 拆分后保持 emsg 响应顺序、延迟策略、apply lobby state 标记、日志 reason 不变。
+    - 每次只迁移一个 handler，迁移后运行 GC 离线测试。
+  - [x]* 7.5 增加 handler 纯规则测试
+    - create：验证 practice 与 custom game 两类 lobby 默认字段。
+    - join：验证 owner、remote member、pass key、snapshot merge。
+    - launch：验证 phase 推进与输出事件顺序。
+    - [x] 已覆盖 7041 launch init 与 custom game READYUP/SERVERSETUP 状态 plan。
+    - [x] 已覆盖 RUN queued gate、缺失 setup 拒绝、queued apply phase 推进和 monotonic game_state。
+    - [x] 已覆盖 7041 普通/custom setup 输出事件 reason、顺序、apply state 与 rich presence 参数。
+
+- [x] 8. 拆分 Dota custom lobby HTTP JSON 输出
+  - [x] 8.1 移出公共头文件中的 JSON 依赖
+    - 将 `compose_joinable_custom_lobby_json_item` 从 `gbe_dota_custom_game.*` 移到 `gbe_dota_custom_lobby_http.*` 或类似模块。
+    - `gbe_dota_custom_game.h` 保持纯规则数据接口，减少 `<json/json.hpp>` 传染范围。
+  - [x] 8.2 让 `GBE_GetDotaJoinableCustomLobbiesHTTPJSON` 只组装输入数据
+    - JSON item 字段生成集中在 HTTP helper。
+    - lobby 过滤规则继续复用 `should_include_joinable_custom_lobby`。
+  - [x]* 8.3 增加 JSON 输出字段测试
+    - 验证 `lobby_id`、`custom_game_id`、`member_count`、`leader_account_id`、`custom_game_crc`、`lan_host_ping_location` 等字段稳定。
+    - 属性 P6：同一 lobby 输入多次序列化输出字段集合一致。
+
+- [x] 9. 收束 GC profile 与 Dota 自动启用逻辑
+  - [x] 9.1 抽离 GC 配置解析
+    - 将 [parse_gc_config](/workspace/gbe_fork/dll/steam_game_coordinator.cpp:4561) 的 JSON 解析、profile name normalize、Dota app fallback 迁移到小型 helper。
+    - helper 返回 profile、version、is_portal2、fallback reason。
+  - [x] 9.2 明确 Dota profile 与 TF2 profile 初始化差异
+    - 保持 Dota constructor eager initialize 行为。
+    - 保持 TF2 welcome 和 inventory 初始化流程在 `initialize_gc` 中。
+  - [x]* 9.3 增加 GC 配置解析测试
+    - 覆盖 `tf2`、`dota2`、`dota`、`portal2`、未知 profile、缺失配置且 appid 为 570 的场景。
+
+- [x] 10. 检查点 - 确保所有测试通过
+  - 确保所有测试通过,如有疑问请询问用户
+
+- [ ] 11. 逐步降低 `Steam_Game_Coordinator` 公开/私有方法数量
+  - [x] 11.1 清理已迁移的私有函数声明
+    - 从 `dll/dll/steam_game_coordinator.h` 移除迁移到新模块后的 helper 声明。
+    - 保留真正需要访问实例依赖的成员函数。
+    - 已移除 `GBE_SendDotaPracticeLobbyLaunchMessage` 转发方法，custom launch 直接复用统一 response helper。
+  - [ ] 11.2 将局部 static helper 分组迁移
+    - 优先迁移与 Dota wire、lobby state、HTTP JSON、路由表相关的 static helper。
+    - 保持 TF2 item GC 逻辑位置稳定，降低无关回归面。
+    - 已完成前置分组：GC router、lobby state、custom lobby HTTP、GC config 均已有独立模块入口。
+    - 已迁移 custom game practice lobby connect 规范化 helper 到 `gbe_dota_custom_game`，并补充普通 lobby、custom lobby、空指针路径测试。
+    - 已迁移 custom game practice lobby IP server_id 派生 helper 到 `gbe_dota_custom_game`，并补充 zero IP 与 loopback IP 的 SteamID 位布局测试。
+  - [x] 11.3 建立文件职责注释
+    - 在新模块头文件顶部用短注释说明职责边界。
+    - 注释只描述模块边界和输入输出，避免复制实现细节。
+
+- [x] 12. 建立重构完成度度量
+  - [x] 12.1 记录主文件规模变化
+    - 每阶段记录 `dll/steam_game_coordinator.cpp` 行数、`Steam_Game_Coordinator` 私有 Dota 方法数量、Dota direct/wrapped 重复分支数量。
+    - 目标是让复杂度变化可见，便于判断继续拆分的收益。
+    - 当前基线：`dll/steam_game_coordinator.cpp` 17301 行，`dll/dll/steam_game_coordinator.h` 318 行。
+    - 当前基线：`Steam_Game_Coordinator` 私有 Dota/GC 相关声明约 97 个。
+    - 当前基线：`steam_game_coordinator.cpp` 中 wrapped/outer session 相关候选点约 188 处，后续优先继续收束到 `GBE_PushDotaResponse` 和 `gbe_dota_gc_router`。
+    - 新增模块规模：`gbe_dota_gc_router.cpp` 108 行，`gbe_dota_lobby_state.cpp` 516 行，`gbe_dota_custom_lobby_http.cpp` 43 行，`gbe_gc_config.cpp` 63 行。
+  - [x] 12.2 记录测试覆盖入口
+    - 每个新模块至少有一个离线测试入口或被现有离线测试覆盖。
+    - 聚合测试脚本作为每次 GC 改动后的默认回归命令。
+    - 默认回归命令：`tools/run_gc_offline_tests.sh`。
+    - 覆盖入口：`gc_message_utils_test`、`gbe_gc_config_test`、`gbe_proto_wire_test`、`gc_replay_test minimal`、`gc_replay_test practice_lobby`、`gbe_dota_lobby_flow_test`、`gbe_dota_custom_game_test`。
+    - 新增模块覆盖：router/outbound/state/launch plan 由 `gbe_proto_wire_test` 覆盖，GC config 由 `gbe_gc_config_test` 覆盖，custom lobby HTTP JSON 由 `gbe_dota_custom_game_test` 覆盖。
+  - [x] 12.3 记录行为兼容清单
+    - 每个迁移阶段记录受影响 emsg、响应顺序、关键日志 reason、状态字段。
+    - 用 fixture 或测试覆盖可稳定验证的部分。
+    - 兼容清单：direct/wrapped 公共 Dota post-login route 保持原 handler 分发和特殊请求兜底；response 包装保持原 direct emsg、wrapped `ClientFromGC` 外层和 apply lobby state 参数。
+    - 兼容清单：Dota lobby create/join/launch 保持原 reason、emsg 顺序、state/game_state、launch phase、Steam auth ack 和 rich presence 参数。
+    - 兼容清单：custom lobby HTTP JSON 保持原字段集合和字符串化 `lobby_id/custom_game_id/custom_game_crc`。
+    - 兼容清单：GC config 保持 `tf2`、`dota2`、`dota`、`portal2` 映射和 appid 570 Dota fallback 行为。
+
+- [x] 13. 最终检查点 - 确保所有测试通过
+  - 确保所有测试通过,如有疑问请询问用户
+  - 已通过：`tools/run_gc_offline_tests.sh`。
+  - 已通过：`git diff --check`。

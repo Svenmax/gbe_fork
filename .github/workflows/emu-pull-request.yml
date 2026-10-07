@@ -50,3 +50,4 @@ jobs:
       matrix_prj: '["api_experimental"]'
       matrix_arch: '["x64"]'
       matrix_cfg: '["release"]'
+      emu_build_sha: ${{ github.event.pull_request.head.sha }}

@@ -17,6 +17,600 @@
 
 #include "dll/steam_ugc.h"
 #include "dll/dll.h"
+#include "gbe_dota_custom_game.h"
+
+#include <cctype>
+#include <fstream>
+
+static std::string GBE_DotaWorkshopParentPath(const std::string &path)
+{
+    if (path.empty()) return {};
+
+    std::filesystem::path fs_path = std::filesystem::u8path(path);
+    std::filesystem::path parent = fs_path.parent_path();
+    if (parent.empty() || parent == fs_path) return {};
+    return canonical_path(parent.u8string());
+}
+
+static void GBE_DotaAppendUniqueSeedPath(std::vector<std::string> &seed_paths, std::set<std::string> &seen_paths, const std::string &path)
+{
+    const std::string normalized = canonical_path(path);
+    if (normalized.empty()) return;
+    if (seen_paths.insert(normalized).second) seed_paths.push_back(normalized);
+}
+
+static bool GBE_DotaParseWorkshopId(const std::string &folder_name, PublishedFileId_t &workshop_id)
+{
+    if (folder_name.empty()) return false;
+
+    try {
+        size_t consumed = 0;
+        const unsigned long long parsed = std::stoull(folder_name, &consumed, 10);
+        if (consumed != folder_name.size() || parsed == 0ull) return false;
+        workshop_id = static_cast<PublishedFileId_t>(parsed);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+static PublishedFileId_t GBE_DotaLocalAddonPublishedFileId(const std::string &addon_path)
+{
+    constexpr uint64 base_id = 570000000ull;
+    constexpr uint64 hash_range = 3000000000ull;
+    uint64 hash = 14695981039346656037ull;
+
+    for (unsigned char ch : canonical_path(addon_path)) {
+        hash ^= ch;
+        hash *= 1099511628211ull;
+    }
+
+    PublishedFileId_t id = static_cast<PublishedFileId_t>(base_id + (hash % hash_range));
+    return id == k_PublishedFileIdInvalid ? base_id + 1ull : id;
+}
+
+static bool GBE_DotaIsLocalAddonFolder(const std::string &addon_path)
+{
+    if (addon_path.empty()) return false;
+
+    const std::filesystem::path root = std::filesystem::u8path(addon_path);
+    return common_helpers::file_exist(root / "addoninfo.txt")
+        || common_helpers::file_exist(root / "addoninfo.gi")
+        || common_helpers::dir_exist(root / "maps")
+        || common_helpers::dir_exist(root / "scripts");
+}
+
+static std::string GBE_DotaLocalAddonMapName(const std::string &addon_path, const std::string &fallback)
+{
+    const std::filesystem::path maps_path = std::filesystem::u8path(addon_path) / "maps";
+    try {
+        if (common_helpers::dir_exist(maps_path)) {
+            for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(maps_path, std::filesystem::directory_options::follow_directory_symlink)) {
+                if (!std::filesystem::is_regular_file(dir_entry))
+                    continue;
+
+                const std::filesystem::path map_path = dir_entry.path();
+                const std::string extension = common_helpers::to_lower(map_path.extension().u8string());
+                if (extension == ".vmap" || extension == ".vmap_c" || extension == ".bsp" || extension == ".vpk")
+                    return map_path.stem().u8string();
+            }
+        }
+    } catch (...) { }
+
+    return fallback;
+}
+
+static bool GBE_DotaIsMapResourcePath(const std::filesystem::path &path)
+{
+    const std::string extension = common_helpers::to_lower(path.extension().u8string());
+    if (extension != ".vmap" && extension != ".vmap_c" && extension != ".bsp") return false;
+
+    const std::string generic_path = common_helpers::to_lower(path.generic_u8string());
+    return generic_path.find("maps/") != std::string::npos || generic_path.find("maps\\") != std::string::npos;
+}
+
+static std::string GBE_DotaReadVpkCString(std::ifstream &input)
+{
+    std::string value;
+    char ch = 0;
+    while (input.read(&ch, 1) && ch != '\0') value.push_back(ch);
+    return value;
+}
+
+static bool GBE_DotaReadVpkUint16(std::ifstream &input, uint16 &value)
+{
+    unsigned char bytes[2]{};
+    if (!input.read(reinterpret_cast<char *>(bytes), sizeof(bytes))) return false;
+    value = static_cast<uint16>(bytes[0] | (bytes[1] << 8));
+    return true;
+}
+
+static bool GBE_DotaReadVpkUint32(std::ifstream &input, uint32 &value)
+{
+    unsigned char bytes[4]{};
+    if (!input.read(reinterpret_cast<char *>(bytes), sizeof(bytes))) return false;
+    value = static_cast<uint32>(bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24));
+    return true;
+}
+
+static std::string GBE_DotaMapNameFromVpk(const std::filesystem::path &vpk_path)
+{
+    std::ifstream input(vpk_path, std::ios::binary);
+    if (!input.is_open()) return {};
+
+    uint32 signature = 0;
+    uint32 version = 0;
+    uint32 tree_size = 0;
+    if (!GBE_DotaReadVpkUint32(input, signature) || !GBE_DotaReadVpkUint32(input, version) || !GBE_DotaReadVpkUint32(input, tree_size)) return {};
+    if (signature != 0x55aa1234u || tree_size == 0u) return {};
+    if (version >= 2u) {
+        uint32 ignored = 0;
+        for (int i = 0; i < 4; ++i) {
+            if (!GBE_DotaReadVpkUint32(input, ignored)) return {};
+        }
+    }
+
+    while (input.good()) {
+        const std::string extension = GBE_DotaReadVpkCString(input);
+        if (extension.empty()) break;
+
+        while (input.good()) {
+            const std::string path = GBE_DotaReadVpkCString(input);
+            if (path.empty()) break;
+
+            while (input.good()) {
+                const std::string filename = GBE_DotaReadVpkCString(input);
+                if (filename.empty()) break;
+
+                uint32 crc = 0;
+                uint16 preload_bytes = 0;
+                uint16 archive_index = 0;
+                uint32 offset = 0;
+                uint32 length = 0;
+                uint16 terminator = 0;
+                if (!GBE_DotaReadVpkUint32(input, crc) || !GBE_DotaReadVpkUint16(input, preload_bytes) || !GBE_DotaReadVpkUint16(input, archive_index) || !GBE_DotaReadVpkUint32(input, offset) || !GBE_DotaReadVpkUint32(input, length) || !GBE_DotaReadVpkUint16(input, terminator)) return {};
+
+                if (preload_bytes > 0) input.seekg(preload_bytes, std::ios::cur);
+
+                const std::string full_path = path + "/" + filename + "." + extension;
+                const std::filesystem::path resource_path = std::filesystem::u8path(full_path);
+                if (GBE_DotaIsMapResourcePath(resource_path)) return resource_path.stem().u8string();
+            }
+        }
+    }
+
+    return {};
+}
+
+static std::string GBE_DotaWorkshopModMapName(const std::string &mod_path, const std::string &fallback)
+{
+    try {
+        const std::filesystem::path root = std::filesystem::u8path(mod_path);
+        if (common_helpers::dir_exist(root)) {
+            for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+                if (!std::filesystem::is_regular_file(dir_entry)) continue;
+                if (GBE_DotaIsMapResourcePath(dir_entry.path())) return dir_entry.path().stem().u8string();
+            }
+            for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+                if (!std::filesystem::is_regular_file(dir_entry)) continue;
+                const std::string extension = common_helpers::to_lower(dir_entry.path().extension().u8string());
+                if (extension != ".vpk") continue;
+                std::string map_name = GBE_DotaMapNameFromVpk(dir_entry.path());
+                if (!map_name.empty()) return map_name;
+            }
+        }
+    } catch (...) { }
+
+    return fallback;
+}
+
+static bool GBE_DotaIsNumericString(const std::string &value)
+{
+    return !value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; });
+}
+
+static bool GBE_DotaIsReadableAddonName(const std::string &value)
+{
+    return !value.empty()
+        && !GBE_DotaIsNumericString(value)
+        && value != "dota"
+        && value != "publish_data"
+        && value != "addoninfo"
+        && value != "preview"
+        && value != "thumbnail";
+}
+
+static std::string GBE_DotaWorkshopFallbackDisplayName(const std::string &workshop_id)
+{
+    if (GBE_DotaIsNumericString(workshop_id))
+        return "Workshop " + workshop_id;
+    return workshop_id;
+}
+
+static std::string GBE_DotaExtractAddonInfoValue(const std::string &line, const std::string &key);
+
+static void GBE_DotaAddUniquePath(std::vector<std::filesystem::path> &paths, std::set<std::string> &seen, const std::filesystem::path &path)
+{
+    const std::string normalized = common_helpers::to_lower(path.u8string());
+    if (!normalized.empty() && seen.insert(normalized).second)
+        paths.push_back(path);
+}
+
+static std::string GBE_DotaReadableTitleNearWorkshopId(const std::filesystem::path &path, const std::string &workshop_id)
+{
+    try {
+        if (!common_helpers::file_exist(path)) return {};
+        const auto file_size = std::filesystem::file_size(path);
+        if (file_size == 0 || file_size > 16u * 1024u * 1024u) return {};
+
+        std::ifstream input(path);
+        if (!input.is_open()) return {};
+
+        std::vector<std::string> recent_lines;
+        recent_lines.reserve(80);
+        bool near_item = false;
+        size_t remaining = 0;
+        for (std::string line; std::getline(input, line); ) {
+            const std::string stripped = common_helpers::string_strip(line);
+            if (stripped.find(workshop_id) != std::string::npos) {
+                for (const std::string &recent_line : recent_lines) {
+                    for (const char *key : { "title", "name", "display_name" }) {
+                        const std::string value = GBE_DotaExtractAddonInfoValue(recent_line, key);
+                        if (GBE_DotaIsReadableAddonName(value)) return value;
+                    }
+                }
+                near_item = true;
+                remaining = 160;
+            }
+
+            if (!near_item) {
+                recent_lines.push_back(stripped);
+                if (recent_lines.size() > 80) recent_lines.erase(recent_lines.begin());
+                continue;
+            }
+
+            for (const char *key : { "title", "name", "display_name" }) {
+                const std::string value = GBE_DotaExtractAddonInfoValue(stripped, key);
+                if (GBE_DotaIsReadableAddonName(value)) return value;
+            }
+
+            if (remaining == 0) {
+                near_item = false;
+                continue;
+            }
+            --remaining;
+            recent_lines.push_back(stripped);
+            if (recent_lines.size() > 80) recent_lines.erase(recent_lines.begin());
+        }
+    } catch (...) { }
+
+    return {};
+}
+
+static std::string GBE_DotaWorkshopCachedTitle(const std::string &mod_path, const std::string &workshop_id)
+{
+    if (workshop_id.empty()) return {};
+
+    std::vector<std::filesystem::path> candidates;
+    std::set<std::string> seen;
+
+    try {
+        std::filesystem::path cursor = std::filesystem::u8path(mod_path);
+        for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
+            GBE_DotaAddUniquePath(candidates, seen, cursor / "appworkshop_570.acf");
+            GBE_DotaAddUniquePath(candidates, seen, cursor / "workshop" / "appworkshop_570.acf");
+            GBE_DotaAddUniquePath(candidates, seen, cursor / "steamapps" / "workshop" / "appworkshop_570.acf");
+            GBE_DotaAddUniquePath(candidates, seen, cursor / "appcache" / "workshop" / "appworkshop_570.acf");
+            GBE_DotaAddUniquePath(candidates, seen, cursor / "appcache" / "workshop" / (workshop_id + ".acf"));
+            GBE_DotaAddUniquePath(candidates, seen, cursor / "appcache" / "workshop" / (workshop_id + ".json"));
+            cursor = cursor.parent_path();
+        }
+
+        const std::filesystem::path root = std::filesystem::u8path(mod_path);
+        if (common_helpers::dir_exist(root)) {
+            for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+                if (!std::filesystem::is_regular_file(dir_entry)) continue;
+                const std::string filename = common_helpers::to_lower(dir_entry.path().filename().u8string());
+                if (filename == "publish_data" || filename == "publish_data.txt" || filename == "addoninfo.txt" || filename == "addoninfo.gi")
+                    GBE_DotaAddUniquePath(candidates, seen, dir_entry.path());
+            }
+        }
+
+        for (const auto &candidate : candidates) {
+            const std::string title = GBE_DotaReadableTitleNearWorkshopId(candidate, workshop_id);
+            if (GBE_DotaIsReadableAddonName(title)) return title;
+        }
+    } catch (...) { }
+
+    return {};
+}
+
+static std::string GBE_DotaWorkshopFileStemName(const std::string &mod_path)
+{
+    try {
+        const std::filesystem::path root = std::filesystem::u8path(mod_path);
+        if (!common_helpers::dir_exist(root)) return {};
+
+        for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+            if (!std::filesystem::is_regular_file(dir_entry)) continue;
+
+            const std::string extension = common_helpers::to_lower(dir_entry.path().extension().u8string());
+            if (extension != ".vpk" && extension != ".vmap" && extension != ".vmap_c" && extension != ".bsp") continue;
+
+            const std::string stem = dir_entry.path().stem().u8string();
+            if (GBE_DotaIsReadableAddonName(stem)) return stem;
+        }
+    } catch (...) { }
+
+    return {};
+}
+
+static std::string GBE_DotaWorkshopManifestTitle(const std::string &mod_path, const std::string &workshop_id)
+{
+    if (workshop_id.empty()) return {};
+
+    try {
+        std::filesystem::path cursor = std::filesystem::u8path(mod_path);
+        for (int depth = 0; depth < 6 && !cursor.empty(); ++depth) {
+            const std::filesystem::path manifest_path = cursor / "appworkshop_570.acf";
+            if (common_helpers::file_exist(manifest_path)) {
+                std::ifstream input(manifest_path);
+                bool in_item = false;
+                int block_depth = 0;
+                for (std::string line; std::getline(input, line); ) {
+                    const std::string stripped = common_helpers::string_strip(line);
+                    if (stripped.find('"' + workshop_id + '"') != std::string::npos) {
+                        in_item = true;
+                        block_depth = 0;
+                    }
+                    if (in_item) {
+                        std::string title = GBE_DotaExtractAddonInfoValue(stripped, "title");
+                        if (GBE_DotaIsReadableAddonName(title)) return title;
+                        block_depth += static_cast<int>(std::count(stripped.begin(), stripped.end(), '{'));
+                        block_depth -= static_cast<int>(std::count(stripped.begin(), stripped.end(), '}'));
+                        if (block_depth < 0 || (block_depth == 0 && stripped.find('}') != std::string::npos)) in_item = false;
+                    }
+                }
+            }
+            cursor = cursor.parent_path();
+        }
+    } catch (...) { }
+
+    return {};
+}
+
+static std::string GBE_DotaExtractAddonInfoValue(const std::string &line, const std::string &key)
+{
+    const std::string lower_line = common_helpers::to_lower(line);
+
+    std::vector<std::string> quoted_tokens;
+    for (size_t pos = 0; pos < line.size(); ) {
+        const size_t first_quote = line.find('"', pos);
+        if (first_quote == std::string::npos) break;
+        const size_t second_quote = line.find('"', first_quote + 1);
+        if (second_quote == std::string::npos) break;
+        quoted_tokens.push_back(line.substr(first_quote + 1, second_quote - first_quote - 1));
+        pos = second_quote + 1;
+    }
+    if (quoted_tokens.size() >= 2 && common_helpers::to_lower(quoted_tokens[0]) == key)
+        return quoted_tokens[1];
+
+    const size_t key_pos = lower_line.find(key);
+    if (key_pos == std::string::npos) return {};
+    const bool left_boundary = key_pos == 0 || (!std::isalnum(static_cast<unsigned char>(lower_line[key_pos - 1])) && lower_line[key_pos - 1] != '_');
+    const size_t key_end = key_pos + key.size();
+    const bool right_boundary = key_end >= lower_line.size() || (!std::isalnum(static_cast<unsigned char>(lower_line[key_end])) && lower_line[key_end] != '_');
+    if (!left_boundary || !right_boundary) return {};
+
+    if (!quoted_tokens.empty() && key_pos < line.find('"')) {
+        return quoted_tokens[0];
+    }
+
+    size_t value_pos = line.find('=', key_pos + key.size());
+    if (value_pos == std::string::npos)
+        value_pos = key_pos + key.size();
+    std::string value = common_helpers::string_strip(line.substr(value_pos + 1));
+    if (!value.empty() && value.front() == '"') value.erase(value.begin());
+    if (!value.empty() && value.back() == '"') value.pop_back();
+    return common_helpers::string_strip(value);
+}
+
+static std::string GBE_DotaLocalAddonDisplayName(const std::string &addon_path, const std::string &fallback)
+{
+    static constexpr const char *addoninfo_files[] = { "addoninfo.txt", "addoninfo.gi" };
+    static constexpr const char *title_keys[] = { "addontitle", "addon_title", "title", "name" };
+
+    for (const char *addoninfo_file : addoninfo_files) {
+        std::ifstream input(std::filesystem::u8path(addon_path) / addoninfo_file);
+        if (!input.is_open()) continue;
+
+        for (std::string line; std::getline(input, line); ) {
+            for (const char *title_key : title_keys) {
+                std::string value = GBE_DotaExtractAddonInfoValue(line, title_key);
+                if (!value.empty()) return value;
+            }
+        }
+    }
+
+    return fallback;
+}
+
+static std::string GBE_DotaWorkshopDisplayName(const std::string &mod_path, const std::string &fallback)
+{
+    const std::string cached_title = GBE_DotaWorkshopCachedTitle(mod_path, fallback);
+    if (!cached_title.empty()) return cached_title;
+
+    const std::string manifest_title = GBE_DotaWorkshopManifestTitle(mod_path, fallback);
+    if (!manifest_title.empty()) return manifest_title;
+
+    std::ifstream input(std::filesystem::u8path(mod_path) / "publish_data");
+    if (!input.is_open())
+        input.open(std::filesystem::u8path(mod_path) / "publish_data.txt");
+    if (!input.is_open()) {
+        const std::string file_stem = GBE_DotaWorkshopFileStemName(mod_path);
+        return file_stem.empty() ? fallback : file_stem;
+    }
+
+    for (std::string line; std::getline(input, line); ) {
+        std::string value = GBE_DotaExtractAddonInfoValue(line, "title");
+        if (GBE_DotaIsReadableAddonName(value)) return value;
+    }
+
+    const std::string file_stem = GBE_DotaWorkshopFileStemName(mod_path);
+    return file_stem.empty() ? fallback : file_stem;
+}
+
+static std::string GBE_DotaModMetadataValue(const Mod_entry &mod, const char *key, const std::string &fallback)
+{
+    if (mod.metadata.empty()) return fallback;
+
+    try {
+        nlohmann::json metadata = nlohmann::json::parse(mod.metadata);
+        return metadata.value(key, fallback);
+    } catch (...) {
+        return fallback;
+    }
+}
+
+static std::vector<std::pair<std::string, std::string>> GBE_DotaModKeyValueTags(const Mod_entry &mod)
+{
+    std::vector<std::pair<std::string, std::string>> tags;
+    auto add_tag = [&tags](const std::string &key, const std::string &value) {
+        if (!key.empty() && !value.empty()) tags.emplace_back(key, value);
+    };
+
+    const std::string addon_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);
+    const std::string display_name = GBE_DotaModMetadataValue(mod, "display_name", mod.title);
+    const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", addon_name);
+    add_tag("addon_name", addon_name);
+    add_tag("display_name", display_name);
+    add_tag("map_name", map_name);
+    add_tag("custom_map_name", map_name);
+    add_tag("custom_game_mode", addon_name);
+    add_tag("launch_command", "dota_launch_custom_game " + addon_name + " " + map_name);
+
+    if (!mod.metadata.empty()) {
+        try {
+            nlohmann::json metadata = nlohmann::json::parse(mod.metadata);
+            if (metadata.is_object()) {
+                for (auto it = metadata.begin(); it != metadata.end(); ++it) {
+                    if (it.value().is_string()) add_tag(it.key(), it.value().get<std::string>());
+                }
+            }
+        } catch (...) { }
+    }
+
+    std::sort(tags.begin(), tags.end(), [](const auto &left, const auto &right) { return left.first < right.first; });
+    tags.erase(std::unique(tags.begin(), tags.end(), [](const auto &left, const auto &right) { return left.first == right.first; }), tags.end());
+    return tags;
+}
+
+static void GBE_DotaEnsureWorkshopModsForUGC(class Settings *settings, class Ugc_Remote_Storage_Bridge *ugc_bridge)
+{
+    if (!settings || !ugc_bridge || settings->get_local_game_id().AppID() != 570u) return;
+
+    std::vector<std::string> seed_paths;
+    std::set<std::string> seen_seed_paths;
+
+    std::string app_install_path;
+    if (settings->getAppInstallPath(570u, app_install_path) && !app_install_path.empty())
+        GBE_DotaAppendUniqueSeedPath(seed_paths, seen_seed_paths, app_install_path);
+
+    const std::string steam_path = get_env_variable("SteamPath");
+    if (!steam_path.empty())
+        GBE_DotaAppendUniqueSeedPath(seed_paths, seen_seed_paths, steam_path);
+
+    GBE_DotaAppendUniqueSeedPath(seed_paths, seen_seed_paths, get_full_program_path());
+
+    std::vector<std::string> candidate_roots;
+    std::set<std::string> seen_roots;
+
+    for (const std::string &seed_path : seed_paths) {
+        std::string cursor = canonical_path(seed_path);
+        for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
+            const std::string root = cursor + PATH_SEPARATOR + "steamapps" + PATH_SEPARATOR + "workshop" + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "570";
+            if (seen_roots.insert(root).second) candidate_roots.push_back(root);
+
+            const std::string adjacent_root = cursor + PATH_SEPARATOR + "workshop" + PATH_SEPARATOR + "content" + PATH_SEPARATOR + "570";
+            if (seen_roots.insert(adjacent_root).second) candidate_roots.push_back(adjacent_root);
+
+            cursor = GBE_DotaWorkshopParentPath(cursor);
+        }
+    }
+
+    size_t added = 0;
+    for (const std::string &candidate_root : candidate_roots) {
+        const std::vector<std::string> workshop_folders = Local_Storage::get_folders_path(candidate_root);
+        if (workshop_folders.empty()) continue;
+
+        PRINT_DEBUG("[DOTA_UGC] scanning workshop root '%s' folders=%zu", candidate_root.c_str(), workshop_folders.size());
+        for (const std::string &workshop_folder : workshop_folders) {
+            PublishedFileId_t workshop_id = 0;
+            if (!GBE_DotaParseWorkshopId(workshop_folder, workshop_id)) continue;
+
+            const std::string mod_path = candidate_root + PATH_SEPARATOR + workshop_folder;
+            const std::string detected_name = GBE_DotaWorkshopDisplayName(mod_path, workshop_folder);
+            const std::string display_name = GBE_DotaIsReadableAddonName(detected_name)
+                ? detected_name
+                : GBE_DotaWorkshopFallbackDisplayName(workshop_folder);
+            const std::string map_name = GBE_DotaWorkshopModMapName(mod_path, "");
+            if (map_name.empty() || gbe::dota_custom_game::is_guide_only_workshop_mod({}, display_name, detected_name, mod_path)) {
+                PRINT_DEBUG("[DOTA_UGC] skipping workshop folder '%s' invalid map='%s' path='%s'", workshop_folder.c_str(), map_name.c_str(), mod_path.c_str());
+                continue;
+            }
+            Mod_entry mod{};
+            mod.id = workshop_id;
+            mod.title = display_name;
+            mod.path = mod_path;
+            mod.fileType = k_EWorkshopFileTypeCommunity;
+            mod.description = "auto-detected Dota2 workshop mod #" + workshop_folder;
+            mod.steamIDOwner = settings->get_local_steam_id().ConvertToUint64();
+            mod.timeCreated = 1554997000u;
+            mod.timeUpdated = 1555601800u;
+            mod.timeAddedToUserList = 1556206600u;
+            mod.visibility = k_ERemoteStoragePublishedFileVisibilityPublic;
+            mod.acceptedForUse = true;
+            mod.workshopItemURL = "https://steamcommunity.com/sharedfiles/filedetails/?id=" + workshop_folder;
+            mod.votesUp = 500u;
+            mod.votesDown = 12u;
+            mod.score = 0.97f;
+            if (!map_name.empty()) {
+                mod.tags = "Dota,Custom Game,Workshop";
+                nlohmann::json metadata = nlohmann::json::object();
+                metadata["addon_name"] = workshop_folder;
+                metadata["display_name"] = display_name;
+                metadata["map_name"] = map_name;
+                metadata["launch_command"] = "dota_launch_custom_game " + workshop_folder + " " + map_name;
+                mod.metadata = metadata.dump();
+                mod.description = mod.metadata;
+            }
+
+            const std::vector<std::string> primary_files = Local_Storage::get_filenames_path(mod.path);
+            if (!primary_files.empty()) {
+                mod.primaryFileName = primary_files[0];
+                size_t primary_file_size = 0;
+                if (common_helpers::file_size(std::filesystem::u8path(mod.path) / mod.primaryFileName, primary_file_size)) {
+                    mod.primaryFileSize = static_cast<int32>(primary_file_size);
+                }
+                mod.total_files_sizes = mod.primaryFileSize;
+            }
+
+            const bool already_installed = settings->isModInstalled(workshop_id);
+            settings->addMod(mod.id, mod.title, mod.path);
+            settings->addModDetails(mod.id, mod);
+            PRINT_DEBUG("[DOTA_UGC] auto-detected workshop mod '%s' title='%s' map='%s' path='%s'", workshop_folder.c_str(), mod.title.c_str(), GBE_DotaModMetadataValue(mod, "map_name", "").c_str(), mod.path.c_str());
+            if (!already_installed) {
+                ++added;
+            }
+
+            ugc_bridge->add_subbed_mod(workshop_id);
+        }
+
+        if (added > 0) break;
+    }
+
+    PRINT_DEBUG("[DOTA_UGC] workshop ensure complete candidates=%zu added=%zu subscribed=%zu", candidate_roots.size(), added, ugc_bridge->subbed_mods_count());
+}
 
 UGCQueryHandle_t Steam_UGC::new_ugc_query(EQueryType query_type, bool return_all_subscribed, uint32 page, bool next_cursor, const std::set<PublishedFileId_t> &return_only)
 {
@@ -75,12 +669,96 @@ std::vector<std::string> Steam_UGC::get_query_ugc_tags(UGCQueryHandle_t handle, 
 
 }
 
+bool Steam_UGC::should_expose_mod_to_ugc(PublishedFileId_t id)
+{
+    if (!settings->isModInstalled(id)) return false;
+    if (settings->get_local_game_id().AppID() != 570u) return true;
+
+    const Mod_entry mod = settings->getMod(id);
+    if (gbe::dota_custom_game::is_guide_only_workshop_mod(mod.metadata, mod.title, mod.description, mod.path))
+        return false;
+
+    const std::string metadata_map_name = GBE_DotaModMetadataValue(mod, "map_name", "");
+    const std::string detected_map_name = GBE_DotaWorkshopModMapName(mod.path, metadata_map_name);
+    return !detected_map_name.empty();
+}
+
+std::set<PublishedFileId_t> Steam_UGC::visible_ugc_mods(const std::set<PublishedFileId_t> &mods)
+{
+    std::set<PublishedFileId_t> visible;
+    for (PublishedFileId_t id : mods) {
+        if (should_expose_mod_to_ugc(id))
+            visible.insert(id);
+    }
+    return visible;
+}
+
+static uint64 GBE_UGCStatisticValue(const Mod_entry &mod, EItemStatistic eStatType)
+{
+    switch (eStatType) {
+        case k_EItemStatistic_NumSubscriptions:
+        case k_EItemStatistic_NumUniqueSubscriptions:
+            return mod.votesUp;
+
+        case k_EItemStatistic_NumFavorites:
+        case k_EItemStatistic_NumUniqueFavorites:
+            return std::max<uint32>(1u, mod.votesUp / 10u);
+
+        case k_EItemStatistic_NumFollowers:
+        case k_EItemStatistic_NumUniqueFollowers:
+            return std::max<uint32>(1u, mod.votesUp / 20u);
+
+        case k_EItemStatistic_NumUniqueWebsiteViews:
+            return std::max<uint32>(1u, mod.votesUp + mod.votesDown);
+
+        case k_EItemStatistic_ReportScore:
+            return static_cast<uint64>(std::max(0.0f, mod.score) * 100000.0f);
+
+        case k_EItemStatistic_NumSecondsPlayed:
+        case k_EItemStatistic_NumSecondsPlayedDuringTimePeriod:
+            return static_cast<uint64>(std::max<uint32>(1u, mod.votesUp)) * 60ull;
+
+        case k_EItemStatistic_NumPlaytimeSessions:
+        case k_EItemStatistic_NumPlaytimeSessionsDuringTimePeriod:
+            return std::max<uint32>(1u, mod.votesUp / 5u);
+
+        case k_EItemStatistic_NumComments:
+            return std::max<uint32>(1u, mod.votesDown);
+
+        default:
+            return 0ull;
+    }
+}
+
+static std::string GBE_DotaReadableModTitle(const Mod_entry &mod)
+{
+    if (GBE_DotaIsReadableAddonName(mod.title)) return mod.title;
+
+    const std::string display_name = GBE_DotaModMetadataValue(mod, "display_name", "");
+    if (GBE_DotaIsReadableAddonName(display_name)) return display_name;
+
+    const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", "");
+    if (GBE_DotaIsReadableAddonName(map_name)) return map_name;
+
+    const std::string addon_name = GBE_DotaModMetadataValue(mod, "addon_name", "");
+    if (GBE_DotaIsReadableAddonName(addon_name)) return addon_name;
+
+    const std::string file_stem = GBE_DotaWorkshopFileStemName(mod.path);
+    if (GBE_DotaIsReadableAddonName(file_stem)) return file_stem;
+
+    if (GBE_DotaIsNumericString(addon_name)) return GBE_DotaWorkshopFallbackDisplayName(addon_name);
+
+    if (GBE_DotaIsNumericString(mod.title)) return GBE_DotaWorkshopFallbackDisplayName(mod.title);
+
+    return mod.title;
+}
+
 void Steam_UGC::set_details(PublishedFileId_t id, SteamUGCDetails_t *pDetails, IUgcItfVersion ver)
 {
     if (pDetails) {
         pDetails->m_nPublishedFileId = id;
 
-        if (settings->isModInstalled(id)) {
+        if (should_expose_mod_to_ugc(id)) {
             PRINT_DEBUG("  mod is installed, setting details");
             pDetails->m_eResult = k_EResultOK;
 
@@ -109,13 +787,19 @@ void Steam_UGC::set_details(PublishedFileId_t id, SteamUGCDetails_t *pDetails, I
             auto copied_chars = mod.primaryFileName.copy(pDetails->m_pchFileName, sizeof(pDetails->m_pchFileName) - 1);
             pDetails->m_pchFileName[copied_chars] = 0;
 
-            copied_chars = mod.description.copy(pDetails->m_rgchDescription, sizeof(pDetails->m_rgchDescription) - 1);
+            const std::string details_description = settings->get_local_game_id().AppID() == 570u && !mod.metadata.empty()
+                ? mod.metadata
+                : mod.description;
+            copied_chars = details_description.copy(pDetails->m_rgchDescription, sizeof(pDetails->m_rgchDescription) - 1);
             pDetails->m_rgchDescription[copied_chars] = 0;
 
             copied_chars = mod.tags.copy(pDetails->m_rgchTags, sizeof(pDetails->m_rgchTags) - 1);
             pDetails->m_rgchTags[copied_chars] = 0;
 
-            copied_chars = mod.title.copy(pDetails->m_rgchTitle, sizeof(pDetails->m_rgchTitle) - 1);
+            const std::string details_title = settings->get_local_game_id().AppID() == 570u
+                ? GBE_DotaReadableModTitle(mod)
+                : mod.title;
+            copied_chars = details_title.copy(pDetails->m_rgchTitle, sizeof(pDetails->m_rgchTitle) - 1);
             pDetails->m_rgchTitle[copied_chars] = 0;
 
             // real steamclient64.dll may set this to null! (ex: item id 3366485326)
@@ -237,6 +921,8 @@ Steam_UGC::Steam_UGC(class Settings *settings, class Ugc_Remote_Storage_Bridge *
     this->local_storage = local_storage;
     this->callbacks = callbacks;
     this->callback_results = callback_results;
+
+    GBE_DotaEnsureWorkshopModsForUGC(settings, ugc_bridge);
 
     read_ugc_favorites();
 }
@@ -360,7 +1046,8 @@ SteamAPICall_t Steam_UGC::SendQueryUGCRequest( UGCQueryHandle_t handle )
     data.m_eResult = k_EResultOK;
     data.m_bCachedData = false;
 
-    std::set<PublishedFileId_t> all_subscribed = std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end());
+    std::set<PublishedFileId_t> all_subscribed = visible_ugc_mods(
+        std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end()));
 
     if (request->query_type == eUserUGCRequest) {
         if (request->return_all_subscribed) {
@@ -419,7 +1106,7 @@ SteamAPICall_t Steam_UGC::SendQueryUGCRequest( UGCQueryHandle_t handle )
     else if (request->query_type == eUGCDetailsRequest) {
         if (request->return_only.size()) {
             for (auto & s : request->return_only) {
-                if (ugc_bridge->has_subbed_mod(s)) {
+                if (ugc_bridge->has_subbed_mod(s) && should_expose_mod_to_ugc(s)) {
                     request->results.insert(s);
                 }
             }
@@ -564,26 +1251,33 @@ bool Steam_UGC::GetQueryUGCChildren( UGCQueryHandle_t handle, uint32 index, Publ
 
 bool Steam_UGC::GetQueryUGCStatistic( UGCQueryHandle_t handle, uint32 index, EItemStatistic eStatType, uint64 *pStatValue )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("%llu %u %i %p", handle, index, static_cast<int>(eStatType), pStatValue);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (handle == k_UGCQueryHandleInvalid) return false;
+    if (!pStatValue) return false;
 
-    auto request = std::find_if(ugc_queries.begin(), ugc_queries.end(), [&handle](struct UGC_query const& item) { return item.handle == handle; });
-    if (ugc_queries.end() == request) return false;
-    
-    return false;
+    auto res = get_query_ugc(handle, index);
+    if (!res.has_value()) return false;
+
+    *pStatValue = GBE_UGCStatisticValue(res.value(), eStatType);
+    PRINT_DEBUG("Steam_UGC:GetQueryUGCStatistic: file=%llu stat=%i value=%llu", res.value().id, static_cast<int>(eStatType), *pStatValue);
+    return true;
 }
 
 bool Steam_UGC::GetQueryUGCStatistic( UGCQueryHandle_t handle, uint32 index, EItemStatistic eStatType, uint32 *pStatValue )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("%llu %u %i %p", handle, index, static_cast<int>(eStatType), pStatValue);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (handle == k_UGCQueryHandleInvalid) return false;
+    if (!pStatValue) return false;
 
-    auto request = std::find_if(ugc_queries.begin(), ugc_queries.end(), [&handle](struct UGC_query const& item) { return item.handle == handle; });
-    if (ugc_queries.end() == request) return false;
-    
-    return false;
+    auto res = get_query_ugc(handle, index);
+    if (!res.has_value()) return false;
+
+    const uint64 stat_value = GBE_UGCStatisticValue(res.value(), eStatType);
+    *pStatValue = stat_value > UINT32_MAX ? UINT32_MAX : static_cast<uint32>(stat_value);
+    PRINT_DEBUG("Steam_UGC:GetQueryUGCStatistic: file=%llu stat=%i value=%u", res.value().id, static_cast<int>(eStatType), *pStatValue);
+    return true;
 }
 
 uint32 Steam_UGC::GetQueryUGCNumAdditionalPreviews( UGCQueryHandle_t handle, uint32 index )
@@ -629,10 +1323,12 @@ uint32 Steam_UGC::GetQueryUGCNumKeyValueTags( UGCQueryHandle_t handle, uint32 in
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (handle == k_UGCQueryHandleInvalid) return 0;
 
-    auto request = std::find_if(ugc_queries.begin(), ugc_queries.end(), [&handle](struct UGC_query const& item) { return item.handle == handle; });
-    if (ugc_queries.end() == request) return 0;
-    
-    return 0;
+    auto res = get_query_ugc(handle, index);
+    if (!res.has_value()) return 0;
+
+    auto key_value_tags = GBE_DotaModKeyValueTags(res.value());
+    PRINT_DEBUG("Steam_UGC:GetQueryUGCNumKeyValueTags: %u", static_cast<uint32>(key_value_tags.size()));
+    return static_cast<uint32>(key_value_tags.size());
 }
 
 
@@ -641,11 +1337,21 @@ bool Steam_UGC::GetQueryUGCKeyValueTag( UGCQueryHandle_t handle, uint32 index, u
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (handle == k_UGCQueryHandleInvalid) return false;
+    if (!pchKey || !cchKeySize || !pchValue || !cchValueSize) return false;
 
-    auto request = std::find_if(ugc_queries.begin(), ugc_queries.end(), [&handle](struct UGC_query const& item) { return item.handle == handle; });
-    if (ugc_queries.end() == request) return false;
-    
-    return false;
+    auto res = get_query_ugc(handle, index);
+    if (!res.has_value()) return false;
+
+    auto key_value_tags = GBE_DotaModKeyValueTags(res.value());
+    if (keyValueTagIndex >= key_value_tags.size()) return false;
+
+    const auto &key_value = key_value_tags[keyValueTagIndex];
+    memset(pchKey, 0, cchKeySize);
+    memset(pchValue, 0, cchValueSize);
+    key_value.first.copy(pchKey, cchKeySize - 1);
+    key_value.second.copy(pchValue, cchValueSize - 1);
+    PRINT_DEBUG("Steam_UGC:GetQueryUGCKeyValueTag: [%u] '%s'='%s'", keyValueTagIndex, key_value.first.c_str(), key_value.second.c_str());
+    return true;
 }
 
 bool Steam_UGC::GetQueryUGCKeyValueTag( UGCQueryHandle_t handle, uint32 index, const char *pchKey, STEAM_OUT_STRING_COUNT(cchValueSize) char *pchValue, uint32 cchValueSize )
@@ -653,11 +1359,19 @@ bool Steam_UGC::GetQueryUGCKeyValueTag( UGCQueryHandle_t handle, uint32 index, c
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (handle == k_UGCQueryHandleInvalid) return false;
+    if (!pchKey || !pchValue || !cchValueSize) return false;
 
-    auto request = std::find_if(ugc_queries.begin(), ugc_queries.end(), [&handle](struct UGC_query const& item) { return item.handle == handle; });
-    if (ugc_queries.end() == request) return false;
-    
-    return false;
+    auto res = get_query_ugc(handle, index);
+    if (!res.has_value()) return false;
+
+    auto key_value_tags = GBE_DotaModKeyValueTags(res.value());
+    auto tag = std::find_if(key_value_tags.begin(), key_value_tags.end(), [pchKey](const auto &item) { return item.first == pchKey; });
+    if (tag == key_value_tags.end()) return false;
+
+    memset(pchValue, 0, cchValueSize);
+    tag->second.copy(pchValue, cchValueSize - 1);
+    PRINT_DEBUG("Steam_UGC:GetQueryUGCKeyValueTag: '%s'='%s'", tag->first.c_str(), tag->second.c_str());
+    return true;
 }
 
 // TODO no public docs
@@ -1376,7 +2090,7 @@ SteamAPICall_t Steam_UGC::SubscribeItem( PublishedFileId_t nPublishedFileID )
 
     RemoteStorageSubscribePublishedFileResult_t data{};
     data.m_nPublishedFileId = nPublishedFileID;
-    if (settings->isModInstalled(nPublishedFileID)) {
+    if (should_expose_mod_to_ugc(nPublishedFileID)) {
         data.m_eResult = k_EResultOK;
         ugc_bridge->add_subbed_mod(nPublishedFileID);
     } else {
@@ -1414,7 +2128,8 @@ uint32 Steam_UGC::GetNumSubscribedItems( bool bIncludeLocallyDisabled )
     PRINT_DEBUG(" %d", (int)bIncludeLocallyDisabled);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     
-    std::set<PublishedFileId_t> subscribed_enabled = std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end());
+    std::set<PublishedFileId_t> subscribed_enabled = visible_ugc_mods(
+        std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end()));
     if (!bIncludeLocallyDisabled) {
         for (auto &sd : subscribed_disabled) {
             subscribed_enabled.erase(sd);
@@ -1438,7 +2153,8 @@ uint32 Steam_UGC::GetSubscribedItems( PublishedFileId_t* pvecPublishedFileID, ui
     PRINT_DEBUG("%p %u %d", pvecPublishedFileID, cMaxEntries, (int)bIncludeLocallyDisabled);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    std::set<PublishedFileId_t> subscribed_enabled = std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end());
+    std::set<PublishedFileId_t> subscribed_enabled = visible_ugc_mods(
+        std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end()));
     if (!bIncludeLocallyDisabled) {
         for (auto &sd : subscribed_disabled) {
             subscribed_enabled.erase(sd);
@@ -1463,7 +2179,7 @@ uint32 Steam_UGC::GetItemState( PublishedFileId_t nPublishedFileID )
     PRINT_DEBUG("%llu", nPublishedFileID);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     
-    if (!settings->isModInstalled(nPublishedFileID)) {
+    if (!should_expose_mod_to_ugc(nPublishedFileID)) {
         PRINT_DEBUG("  mod isn't found");
         return k_EItemStateNone;
     }
@@ -1492,7 +2208,7 @@ bool Steam_UGC::GetItemInstallInfo( PublishedFileId_t nPublishedFileID, uint64 *
     PRINT_DEBUG("%llu %p %p [%u] %p", nPublishedFileID, punSizeOnDisk, pchFolder, cchFolderSize, punTimeStamp);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (!cchFolderSize) return false;
-    if (!settings->isModInstalled(nPublishedFileID)) return false;
+    if (!should_expose_mod_to_ugc(nPublishedFileID)) return false;
 
     auto mod = settings->getMod(nPublishedFileID);
     
@@ -1520,7 +2236,7 @@ bool Steam_UGC::GetItemDownloadInfo( PublishedFileId_t nPublishedFileID, uint64 
 {
     PRINT_DEBUG("%llu", nPublishedFileID);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    if (!settings->isModInstalled(nPublishedFileID)) return false;
+    if (!should_expose_mod_to_ugc(nPublishedFileID)) return false;
 
     auto mod = settings->getMod(nPublishedFileID);
     if (punBytesDownloaded) *punBytesDownloaded = mod.primaryFileSize;
@@ -1561,7 +2277,7 @@ bool Steam_UGC::DownloadItem( PublishedFileId_t nPublishedFileID, bool bHighPrio
     PRINT_DEBUG("%llu %i // TODO", nPublishedFileID, (int)bHighPriority);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     
-    if (!settings->isModInstalled(nPublishedFileID)) {
+    if (!should_expose_mod_to_ugc(nPublishedFileID)) {
         DownloadItemResult_t data_fail{};
         data_fail.m_eResult = EResult::k_EResultFail;
         data_fail.m_nPublishedFileId = nPublishedFileID;
@@ -1777,7 +2493,8 @@ bool Steam_UGC::SetItemsDisabledLocally( PublishedFileId_t *pvecPublishedFileIDs
         return false; // real steam crashes the app
 
     bool modified = false;
-    std::set<PublishedFileId_t> all_subscribed = std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end());
+    std::set<PublishedFileId_t> all_subscribed = visible_ugc_mods(
+        std::set<PublishedFileId_t>(ugc_bridge->subbed_mods_itr_begin(), ugc_bridge->subbed_mods_itr_end()));
 
     for (uint32 i = 0; i < unNumPublishedFileIDs; ++i) {
         PublishedFileId_t id = pvecPublishedFileIDs[i];
@@ -1833,7 +2550,7 @@ uint32 Steam_UGC::GetNumDownloadedItems()
         return 0;
     }
 
-    return (uint32)settings->modSet().size(); // not sure if returning all mods is correct
+    return (uint32)visible_ugc_mods(settings->modSet()).size();
 }
 
 // Returns the ids of the items downloaded
@@ -1853,7 +2570,7 @@ uint32 Steam_UGC::GetDownloadedItems(PublishedFileId_t* pvecPublishedFileIDs, ui
         return 0;
     }
 
-    const auto all_mods = settings->modSet(); // not sure if using all mods is correct
+    const auto all_mods = visible_ugc_mods(settings->modSet());
     uint32 count = std::min<uint32>((uint32)all_mods.size(), cMaxEntries);
     std::copy_n(all_mods.cbegin(), count, pvecPublishedFileIDs);
 

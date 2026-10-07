@@ -16,9 +16,14 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/steam_http.h"
+#include "dll/dll.h"
 
+#include <array>
+#include <cctype>
 #include <cstdio>
+#include <fstream>
 
+#include "gbe_dota_custom_game.h"
 #include "steam/isteamnetworkingsocketsserialized.h"
 
 namespace {
@@ -41,6 +46,369 @@ bool GBE_IsSDRConfigURL(const std::string &url)
 {
     return url.find("/ISteamApps/GetSDRConfig/v1") != std::string::npos
         && (url.find("api.steampowered.com") != std::string::npos || url.find("api.steamchina.com") != std::string::npos);
+}
+
+bool GBE_IsDotaCustomGamesHTTPURL(const std::string &url)
+{
+    if (url.find("570") == std::string::npos && url.find("dota") == std::string::npos && url.find("DOTA") == std::string::npos)
+        return false;
+
+    return url.find("custom") != std::string::npos
+        || url.find("Custom") != std::string::npos
+        || url.find("arcade") != std::string::npos
+        || url.find("Arcade") != std::string::npos
+        || url.find("lobbies") != std::string::npos
+        || url.find("Lobbies") != std::string::npos;
+}
+
+bool GBE_IsDotaPopularGamesHTTPURL(const std::string &url)
+{
+    return url.find("/ICustomGames/GetPopularGames/") != std::string::npos;
+}
+
+bool GBE_IsDotaGamePlayerCountsHTTPURL(const std::string &url)
+{
+    return url.find("/ICustomGames/GetGamePlayerCounts/") != std::string::npos;
+}
+
+std::string GBE_DotaModMetadataValue(const Mod_entry &mod, const char *key, const std::string &fallback)
+{
+    if (mod.metadata.empty()) return fallback;
+
+    try {
+        nlohmann::json metadata = nlohmann::json::parse(mod.metadata);
+        return metadata.value(key, fallback);
+    } catch (...) {
+        return fallback;
+    }
+}
+
+bool GBE_DotaStringIsUnsignedInteger(const std::string &value)
+{
+    return !value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; });
+}
+
+std::string GBE_DotaWorkshopFallbackDisplayName(const std::string &workshop_id)
+{
+    if (GBE_DotaStringIsUnsignedInteger(workshop_id))
+        return "Workshop " + workshop_id;
+    return workshop_id;
+}
+
+bool GBE_DotaIsReadableCustomGameName(const std::string &value)
+{
+    return !value.empty()
+        && !GBE_DotaStringIsUnsignedInteger(value)
+        && value != "dota"
+        && value != "publish_data"
+        && value != "addoninfo"
+        && value != "preview"
+        && value != "thumbnail";
+}
+
+bool GBE_DotaHasWorkshopMapResource(const Mod_entry &mod)
+{
+    if (mod.path.empty()) return false;
+
+    try {
+        const std::filesystem::path root = std::filesystem::u8path(mod.path);
+        if (!common_helpers::dir_exist(root)) return false;
+
+        for (const auto &dir_entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::follow_directory_symlink)) {
+            if (!std::filesystem::is_regular_file(dir_entry)) continue;
+
+            const std::string extension = common_helpers::to_lower(dir_entry.path().extension().u8string());
+            if (extension == ".vmap" || extension == ".vmap_c" || extension == ".bsp")
+                return true;
+
+            if (extension != ".vpk")
+                continue;
+
+            std::ifstream input(dir_entry.path(), std::ios::binary);
+            if (!input.is_open())
+                continue;
+
+            uint32 signature = 0;
+            uint32 version = 0;
+            uint32 tree_size = 0;
+            input.read(reinterpret_cast<char *>(&signature), sizeof(signature));
+            input.read(reinterpret_cast<char *>(&version), sizeof(version));
+            input.read(reinterpret_cast<char *>(&tree_size), sizeof(tree_size));
+            if (!input.good() || signature != 0x55aa1234u || tree_size == 0u)
+                continue;
+
+            if (version >= 2u) {
+                uint32 ignored = 0;
+                for (int i = 0; i < 4; ++i) {
+                    input.read(reinterpret_cast<char *>(&ignored), sizeof(ignored));
+                    if (!input.good())
+                        break;
+                }
+                if (!input.good())
+                    continue;
+            }
+
+            auto read_cstring = [&input]() -> std::string {
+                std::string value;
+                char ch = 0;
+                while (input.read(&ch, 1) && ch != '\0') value.push_back(ch);
+                return value;
+            };
+
+            while (input.good()) {
+                const std::string extension_name = read_cstring();
+                if (extension_name.empty()) break;
+
+                while (input.good()) {
+                    const std::string path_name = read_cstring();
+                    if (path_name.empty()) break;
+
+                    while (input.good()) {
+                        const std::string filename = read_cstring();
+                        if (filename.empty()) break;
+
+                        uint32 crc = 0;
+                        uint16 preload_bytes = 0;
+                        uint16 archive_index = 0;
+                        uint32 offset = 0;
+                        uint32 length = 0;
+                        uint16 terminator = 0;
+                        input.read(reinterpret_cast<char *>(&crc), sizeof(crc));
+                        input.read(reinterpret_cast<char *>(&preload_bytes), sizeof(preload_bytes));
+                        input.read(reinterpret_cast<char *>(&archive_index), sizeof(archive_index));
+                        input.read(reinterpret_cast<char *>(&offset), sizeof(offset));
+                        input.read(reinterpret_cast<char *>(&length), sizeof(length));
+                        input.read(reinterpret_cast<char *>(&terminator), sizeof(terminator));
+                        if (!input.good()) return false;
+
+                        if (preload_bytes > 0)
+                            input.seekg(preload_bytes, std::ios::cur);
+
+                        const std::filesystem::path resource_path = std::filesystem::u8path(path_name + "/" + filename + "." + extension_name);
+                        const std::string resource_extension = common_helpers::to_lower(resource_path.extension().u8string());
+                        if (resource_extension == ".vmap" || resource_extension == ".vmap_c" || resource_extension == ".bsp")
+                            return true;
+                    }
+                }
+            }
+        }
+    } catch (...) { }
+
+    return false;
+}
+
+std::string GBE_DotaFileStem(const std::string &filename)
+{
+    size_t begin = filename.find_last_of("/\\");
+    begin = begin == std::string::npos ? 0u : begin + 1u;
+    size_t end = filename.find_last_of('.');
+    if (end == std::string::npos || end < begin)
+        end = filename.size();
+    return filename.substr(begin, end - begin);
+}
+
+std::string GBE_DotaModReadableName(const Mod_entry &mod)
+{
+    const std::string display_name = GBE_DotaModMetadataValue(mod, "display_name", mod.title);
+    if (GBE_DotaIsReadableCustomGameName(display_name))
+        return display_name;
+
+    const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", "");
+    if (GBE_DotaIsReadableCustomGameName(map_name))
+        return map_name;
+
+    const std::string addon_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);
+    if (GBE_DotaIsReadableCustomGameName(addon_name))
+        return addon_name;
+
+    const std::string primary_file_stem = GBE_DotaFileStem(mod.primaryFileName);
+    if (GBE_DotaIsReadableCustomGameName(primary_file_stem))
+        return primary_file_stem;
+
+    const std::vector<std::string> files = Local_Storage::get_filenames_path(mod.path);
+    for (const std::string &file : files) {
+        const std::string stem = GBE_DotaFileStem(file);
+        if (GBE_DotaIsReadableCustomGameName(stem))
+            return stem;
+    }
+
+    if (GBE_DotaStringIsUnsignedInteger(addon_name))
+        return GBE_DotaWorkshopFallbackDisplayName(addon_name);
+
+    if (GBE_DotaStringIsUnsignedInteger(mod.title))
+        return GBE_DotaWorkshopFallbackDisplayName(mod.title);
+
+    return display_name;
+}
+
+bool GBE_DotaShouldIncludeCustomGameMod(const Mod_entry &mod)
+{
+    const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", "");
+    return !map_name.empty()
+        && GBE_DotaHasWorkshopMapResource(mod)
+        && !gbe::dota_custom_game::is_guide_only_workshop_mod(mod.metadata, mod.title, mod.description, mod.path);
+}
+
+uint64 GBE_ParseDotaCustomGameIdFromHTTPURL(const std::string &url)
+{
+    const std::array<std::string, 3> keys = {
+        "custom_game_id=",
+        "custom_game_mode=",
+        "game_id=",
+    };
+
+    for (const std::string &key : keys) {
+        const size_t key_pos = url.find(key);
+        if (key_pos == std::string::npos)
+            continue;
+
+        const size_t value_begin = key_pos + key.size();
+        size_t value_end = value_begin;
+        while (value_end < url.size() && std::isdigit(static_cast<unsigned char>(url[value_end])))
+            ++value_end;
+
+        if (value_end > value_begin) {
+            try {
+                return static_cast<uint64>(std::stoull(url.substr(value_begin, value_end - value_begin)));
+            } catch (...) {
+                return 0ull;
+            }
+        }
+    }
+
+    return 0ull;
+}
+
+std::string GBE_GetOfflineDotaCustomGamesJSON(class Settings *settings, const std::string &url)
+{
+    nlohmann::json custom_games = nlohmann::json::array();
+
+    if (settings) {
+        for (PublishedFileId_t mod_id : settings->modSet()) {
+            Mod_entry mod = settings->getMod(mod_id);
+            const std::string map_name = GBE_DotaModMetadataValue(mod, "map_name", "");
+            if (!GBE_DotaShouldIncludeCustomGameMod(mod))
+                continue;
+
+            const std::string addon_name = GBE_DotaModMetadataValue(mod, "addon_name", mod.title);
+            const std::string display_name = GBE_DotaModReadableName(mod);
+
+            const std::string mode_name = GBE_DotaIsReadableCustomGameName(addon_name) ? addon_name : display_name;
+            if (GBE_IsDotaPopularGamesHTTPURL(url)) {
+                custom_games.push_back({
+                    {"id", std::to_string(mod.id)},
+                    {"title", display_name},
+                    {"name", display_name},
+                    {"display_name", display_name},
+                    {"addon_name", addon_name},
+                    {"custom_game_mode", mode_name},
+                    {"custom_game_mode_name", display_name},
+                    {"map_name", map_name},
+                    {"custom_map_name", map_name}
+                });
+                continue;
+            }
+
+            nlohmann::json item = nlohmann::json::object();
+            item["id"] = mod.id;
+            item["id_str"] = std::to_string(mod.id);
+            item["appid"] = 570;
+            item["publishedfileid"] = mod.id;
+            item["published_file_id"] = std::to_string(mod.id);
+            item["consumer_app_id"] = 570;
+            item["title"] = display_name;
+            item["name"] = display_name;
+            item["display_name"] = display_name;
+            item["description"] = mod.description;
+            item["addon_name"] = addon_name;
+            item["custom_game_mode"] = mode_name;
+            item["custom_game_mode_name"] = display_name;
+            item["map_name"] = map_name;
+            item["custom_map_name"] = map_name;
+            item["launch_command"] = "dota_launch_custom_game " + addon_name + " " + map_name;
+            item["file_url"] = mod.workshopItemURL;
+            item["preview_url"] = mod.previewURL;
+            item["install_path"] = mod.path;
+            item["tags"] = mod.tags.empty() ? nlohmann::json::array() : nlohmann::json::array({mod.tags});
+            item["time_created"] = mod.timeCreated;
+            item["time_updated"] = mod.timeUpdated;
+            item["subscriptions"] = mod.votesUp;
+            item["votes_up"] = mod.votesUp;
+            item["votes_down"] = mod.votesDown;
+            item["score"] = mod.score;
+            item["success"] = true;
+            nlohmann::json game_mode = nlohmann::json::object();
+            game_mode["id"] = mod.id;
+            game_mode["custom_game_id"] = mod.id;
+            game_mode["name"] = display_name;
+            game_mode["addon_name"] = addon_name;
+            game_mode["custom_game_mode"] = mode_name;
+            game_mode["map_name"] = map_name;
+            game_mode["custom_map_name"] = map_name;
+            game_mode["min_players"] = 1;
+            game_mode["max_players"] = 10;
+            item["game_modes"] = nlohmann::json::array();
+            item["game_modes"].push_back(std::move(game_mode));
+            custom_games.push_back(std::move(item));
+        }
+    }
+
+    if (GBE_IsDotaPopularGamesHTTPURL(url)) {
+        nlohmann::json response = nlohmann::json::object();
+        response["result"] = {
+            {"custom_games", custom_games},
+            {"item_count", custom_games.size()},
+            {"success", true}
+        };
+        return response.dump();
+    }
+
+    const uint64 requested_custom_game_id = GBE_ParseDotaCustomGameIdFromHTTPURL(url);
+    nlohmann::json response = nlohmann::json::object();
+    response["lobbies"] = nlohmann::json::array();
+
+    Steam_Client *steam_client = get_steam_client();
+    if (!steam_client || !steam_client->steam_game_coordinator)
+        return response.dump();
+
+    return steam_client->steam_game_coordinator->GBE_GetDotaJoinableCustomLobbiesHTTPJSON(requested_custom_game_id);
+}
+
+std::string GBE_GetOfflineDotaGamePlayerCountsJSON(class Settings *settings, const std::string &url)
+{
+    const uint64 requested_custom_game_id = GBE_ParseDotaCustomGameIdFromHTTPURL(url);
+    bool include_custom_game = false;
+
+    if (settings && requested_custom_game_id != 0ull && settings->isModInstalled(requested_custom_game_id)) {
+        include_custom_game = GBE_DotaShouldIncludeCustomGameMod(settings->getMod(requested_custom_game_id));
+    }
+
+    nlohmann::json response = nlohmann::json::object();
+    response["result"] = {
+        {"success", include_custom_game},
+        {"custom_game_id", std::to_string(requested_custom_game_id)},
+        {"player_count", 0},
+        {"lobby_count", 0}
+    };
+    return response.dump();
+}
+
+void GBE_SetDotaCustomGamesHTTPResponse(struct Steam_Http_Request &request, class Settings *settings)
+{
+    request.response = GBE_IsDotaGamePlayerCountsHTTPURL(request.url)
+        ? GBE_GetOfflineDotaGamePlayerCountsJSON(settings, request.url)
+        : GBE_GetOfflineDotaCustomGamesJSON(settings, request.url);
+    request.headers["Content-Type"] = "application/json; charset=utf-8";
+}
+
+std::map<std::string, std::string>::const_iterator GBE_FindHTTPHeaderCaseInsensitive(
+    const std::map<std::string, std::string> &headers,
+    const char *name
+)
+{
+    return std::find_if(headers.begin(), headers.end(), [name](const auto &header) {
+        return common_helpers::str_cmp_insensitive(header.first.c_str(), name);
+    });
 }
 
 void GBE_LogHTTPTrace(const char *scope, HTTPRequestHandle handle, const std::string &url, size_t response_size)
@@ -220,6 +588,11 @@ HTTPRequestHandle Steam_HTTP::CreateHTTPRequest( EHTTPMethod eHTTPRequestMethod,
         if (GBE_IsSDRConfigURL(request.url)) {
             request.response = GBE_GetOfflineSDRConfigJSON();
             GBE_LogHTTPTrace("HTTP_SDR_CONFIG_CREATE", request.handle, request.url, request.response.size());
+        } else if (GBE_IsDotaCustomGamesHTTPURL(request.url)) {
+            GBE_SetDotaCustomGamesHTTPResponse(request, settings);
+            GBE_LogHTTPTrace("HTTP_DOTA_CUSTOM_CREATE", request.handle, request.url, request.response.size());
+        } else {
+            GBE_LogHTTPTrace("HTTP_CREATE", request.handle, request.url, request.response.size());
         }
     } else if (file_index > 0) {
         PRINT_DEBUG("URL is a filepath");
@@ -544,6 +917,11 @@ bool Steam_HTTP::SendHTTPRequest( HTTPRequestHandle hRequest, SteamAPICall_t *pC
         request->response = GBE_GetOfflineSDRConfigJSON();
         GBE_LogHTTPTrace("HTTP_SDR_CONFIG_SEND", request->handle, request->url, request->response.size());
         GBE_PostNetworkingSocketsConfigUpdated(callbacks, *request);
+    } else if (GBE_IsDotaCustomGamesHTTPURL(request->url)) {
+        GBE_SetDotaCustomGamesHTTPResponse(*request, settings);
+        GBE_LogHTTPTrace("HTTP_DOTA_CUSTOM_SEND", request->handle, request->url, request->response.size());
+    } else {
+        GBE_LogHTTPTrace("HTTP_SEND", request->handle, request->url, request->response.size());
     }
 
     switch (request->protocol)
@@ -686,7 +1064,7 @@ bool Steam_HTTP::GetHTTPResponseHeaderSize( HTTPRequestHandle hRequest, const ch
     if (!request) {
         return false;
     }
-    const auto hdr = request->headers.find(pchHeaderName);
+    const auto hdr = GBE_FindHTTPHeaderCaseInsensitive(request->headers, pchHeaderName);
     if (request->headers.end() == hdr) return false;
 
     if (unResponseHeaderSize) *unResponseHeaderSize = (uint32)hdr->second.size();
@@ -708,7 +1086,7 @@ bool Steam_HTTP::GetHTTPResponseHeaderValue( HTTPRequestHandle hRequest, const c
     if (!request) {
         return false;
     }
-    const auto hdr = request->headers.find(pchHeaderName);
+    const auto hdr = GBE_FindHTTPHeaderCaseInsensitive(request->headers, pchHeaderName);
     if (request->headers.end() == hdr) return false;
     PRINT_DEBUG("  required header buffer size = %zu", hdr->second.size());
 

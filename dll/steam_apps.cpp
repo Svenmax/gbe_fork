@@ -18,6 +18,50 @@
 #include "dll/steam_apps.h"
 #include "sha/sha1.hpp"
 
+#include <cstdio>
+
+namespace {
+
+void GBE_LogDotaAppsTrace(const char *scope, AppId_t appID, const std::string &value)
+{
+    FILE *file = std::fopen("C:\\Users\\Public\\gbe_gc_debug.log", "a");
+    if (!file) return;
+
+    std::fprintf(file, "[%s] appid=%u value=%s\n", scope ? scope : "DOTA_APPS", appID, value.c_str());
+    std::fclose(file);
+}
+
+std::string GBE_PathParentOrEmpty(const std::string &path)
+{
+    if (path.empty()) return {};
+
+    std::filesystem::path fs_path = std::filesystem::u8path(path);
+    std::filesystem::path parent = fs_path.parent_path();
+    if (parent.empty() || parent == fs_path) return {};
+    return canonical_path(parent.u8string());
+}
+
+bool GBE_HasDotaGameLayout(const std::string &path)
+{
+    if (path.empty()) return false;
+
+    return common_helpers::dir_exist(std::filesystem::u8path(path + PATH_SEPARATOR + "dota"))
+        || common_helpers::dir_exist(std::filesystem::u8path(path + PATH_SEPARATOR + "game" + PATH_SEPARATOR + "dota"));
+}
+
+std::string GBE_NormalizeDotaInstallPath(const std::string &input_path)
+{
+    std::string cursor = canonical_path(input_path);
+    for (int depth = 0; depth < 8 && !cursor.empty(); ++depth) {
+        if (GBE_HasDotaGameLayout(cursor)) return cursor;
+        cursor = GBE_PathParentOrEmpty(cursor);
+    }
+
+    return canonical_path(input_path);
+}
+
+}
+
 
 void Steam_Apps::FillProofOfPurchaseKey( AppProofOfPurchaseKeyResponse_t& data, AppId_t nAppID, bool ok_result, std::string key )
 {
@@ -388,7 +432,12 @@ uint32 Steam_Apps::GetAppInstallDir( AppId_t appID, char *pchFolder, uint32 cchF
         return 0; // NOTE: empty path means we actively disable the path to the appid specified
     }
 
+    if (appID == 570u)
+        installed_path = GBE_NormalizeDotaInstallPath(installed_path);
+
     PRINT_DEBUG("  final path '%s'", installed_path.c_str());
+    if (appID == 570u)
+        GBE_LogDotaAppsTrace("DOTA_GET_APP_INSTALL_DIR", appID, installed_path);
     if (pchFolder && cchFolderBufferSize) {
         memset(pchFolder, 0, cchFolderBufferSize);
         installed_path.copy(pchFolder, cchFolderBufferSize - 1);
@@ -539,9 +588,30 @@ SteamAPICall_t Steam_Apps::GetFileDetails( const char* pszFileName )
 // If game was already running and launched again, the NewUrlLaunchParameters_t will be fired.
 int Steam_Apps::GetLaunchCommandLine( char *pszCommandLine, int cubCommandLine )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("%p %i", pszCommandLine, cubCommandLine);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return 0;
+    if (launch_command_line.empty())
+        return 0;
+
+    if (pszCommandLine && cubCommandLine > 0) {
+        std::snprintf(pszCommandLine, static_cast<size_t>(cubCommandLine), "%s", launch_command_line.c_str());
+    }
+
+    GBE_LogDotaAppsTrace("DOTA_APPS_LAUNCH_COMMAND_READ", settings->get_local_game_id().AppID(), launch_command_line);
+    return static_cast<int>(launch_command_line.size()) + 1;
+}
+
+void Steam_Apps::QueueLaunchCommandLine( const char *command_line )
+{
+    PRINT_DEBUG("%s", command_line ? command_line : "NULL");
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    launch_command_line = command_line ? command_line : "";
+
+    GBE_LogDotaAppsTrace("DOTA_APPS_LAUNCH_COMMAND_QUEUED", settings->get_local_game_id().AppID(), launch_command_line);
+    if (!launch_command_line.empty() && callbacks) {
+        NewUrlLaunchParameters_t data{};
+        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.0);
+    }
 }
 
 // Check if user borrowed this game via Family Sharing, If true, call GetAppOwner() to get the lender SteamID
